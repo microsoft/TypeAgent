@@ -91,7 +91,7 @@ export class SearchQueryExprBuilder {
 
     constructor(
         public conversation: IConversation,
-        public exactScoping: boolean = true,
+        public exactScoping: boolean = false,
     ) {
         this.queryExpressions = [{ selectExpressions: [] }];
         this.entityTermsAdded = new PropertyTermSet();
@@ -141,7 +141,6 @@ export class SearchQueryExprBuilder {
             termGroup.terms.push(
                 ...this.compileEntityTerms(filter.entitySearchTerms),
             );
-            //this.addEntityTermsToGroup(filter.entitySearchTerms, termGroup);
         }
         if (filter.actionSearchTerm) {
             this.addActionTermsToGroup(filter.actionSearchTerm, termGroup);
@@ -208,23 +207,7 @@ export class SearchQueryExprBuilder {
     ): SearchTermGroup[] {
         return entityTerms.map((et) => this.compileEntityTerm(et));
     }
-    /*
-    private addEntityTermsToGroup(
-        entityTerms: querySchema.EntityTerm[],
-        termGroup: SearchTermGroup,
-        exactMatchName: boolean = false,
-    ): void {
-        if (entityTerms && entityTerms.length > 0) {
-            for (const entityTerm of entityTerms) {
-                this.addEntityTermToGroup(
-                    entityTerm,
-                    termGroup,
-                    exactMatchName,
-                );
-            }
-        }
-    }
-*/
+
     private addEntityTermToGroup(
         entityTerm: querySchema.EntityTerm,
         termGroup: SearchTermGroup,
@@ -301,24 +284,12 @@ export class SearchQueryExprBuilder {
             } else {
                 // Use entity terms lookup to apply scopes
                 this.scopingEntityTerms.push(...actionTerm.targetEntities);
-                /*
-                this.addEntityTermsToGroup(
-                    actionTerm.targetEntities,
-                    termGroup,
-                );
-                */
                 termGroup.terms.push(
                     ...this.compileEntityTerms(actionTerm.targetEntities),
                 );
             }
 
             if (isEntityTermArray(actionTerm.additionalEntities)) {
-                /*
-                this.addEntityTermsToGroup(
-                    actionTerm.additionalEntities,
-                    termGroup,
-                );
-                */
                 termGroup.terms.push(
                     ...this.compileEntityTerms(actionTerm.additionalEntities),
                 );

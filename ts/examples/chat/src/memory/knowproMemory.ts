@@ -527,6 +527,7 @@ export async function createKnowproCommands(
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
+        def.options.exactScope = argBool("Exact scope", false);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -545,8 +546,8 @@ export async function createKnowproCommands(
             context.printer.writeError(result.message);
             return;
         }
-        let retried = false;
-        let exactScope = true;
+        let exactScope = namedArgs.exactScope;
+        let retried = !exactScope;
         const searchQuery = result.data;
         context.printer.writeJson(searchQuery, true);
         while (true) {

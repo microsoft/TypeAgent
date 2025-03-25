@@ -41,7 +41,9 @@ export type ActionTerm = {
     // the recipient or target of the action or information
     // Action verbs can imply relevant facet names on the targetEntity. E.g. write -> writer, sing -> singer etc.
     targetEntities?: EntityTerm[];
-    // additional entities participating in the action. E.g. in the phrase "Jane ate the spaghetti with the fork", "the fork" would be an additional entity
+    // additional entities participating in the action.
+    // E.g. in the phrase "Jane ate the spaghetti with the fork", "the fork" would be an additional entity
+    // E.g. in the phrase "Did Jane speak about Bach with Nina", "Bach" would be the additional entity "
     additionalEntities?: EntityTerm[];
 };
 
