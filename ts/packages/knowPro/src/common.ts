@@ -1,16 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DateRange, TextLocation, TextRange } from "./interfaces.js";
-import { SearchTerm } from "./search.js";
 /**
  * Common types and methods INTERNAL to the library.
  * Should not be exposed via index.ts
  */
+
+import { DateRange, TextLocation, TextRange } from "./interfaces.js";
+import { SearchTerm, SearchTermGroup } from "./search.js";
+
 export interface Scored<T = any> {
     item: T;
     score: number;
 }
+
 /**
  * Returns:
  *  0 if locations are equal
@@ -64,6 +67,7 @@ export function isInTextRange(
     );
     return cmpStart <= 0 && cmpEnd < 0;
 }
+
 export function compareDates(x: Date, y: Date): number {
     return x.getTime() - y.getTime();
 }
@@ -76,6 +80,15 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
         outerRange.end !== undefined ? compareDates(date, outerRange.end) : -1;
     return cmpStart <= 0 && cmpEnd <= 0;
 }
+
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
+}
+
+export function createAndTermGroup(): SearchTermGroup {
+    return { booleanOp: "and", terms: [] };
+}
+
+export function createOrTermGroup(): SearchTermGroup {
+    return { booleanOp: "or", terms: [] };
 }
