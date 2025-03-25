@@ -87,6 +87,7 @@ export function compileSearchQueryForConversation(
 export class SearchQueryExprBuilder {
     private entityTermsAdded: PropertyTermSet;
     public queryExpressions: SearchQueryExpr[];
+    private scopingTermGroups: SearchTermGroup[];
     private scopingEntityTerms: querySchema.EntityTerm[];
 
     constructor(
@@ -96,6 +97,7 @@ export class SearchQueryExprBuilder {
         this.queryExpressions = [{ selectExpressions: [] }];
         this.entityTermsAdded = new PropertyTermSet();
         this.scopingEntityTerms = [];
+        this.scopingTermGroups = [];
     }
 
     public compileQuery(query: querySchema.SearchQuery): SearchQueryExpr[] {
@@ -153,6 +155,11 @@ export class SearchQueryExprBuilder {
 
     private compileWhen(filter: querySchema.SearchFilter) {
         let when: WhenFilter | undefined;
+        if (this.scopingTermGroups.length > 0) {
+            when ??= {};
+            when.scopeDefiningTerms = createAndTermGroup();
+            when.scopeDefiningTerms.terms.push(...this.scopingTermGroups);
+        }
         if (filter.actionSearchTerm) {
             if (
                 isEntityTermArray(filter.actionSearchTerm.additionalEntities) &&
@@ -262,6 +269,7 @@ export class SearchQueryExprBuilder {
         if (actionTerm.actionVerbs) {
             const verbTerms = this.compileVerbTerms(actionTerm.actionVerbs);
             termGroup.terms.push(verbTerms);
+            this.scopingTermGroups.push(verbTerms);
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(

@@ -391,10 +391,7 @@ class QueryCompiler {
                 }
                 searchTermsUsed.push(term.propertyValue);
             } else if (isSearchGroupTerm(term)) {
-                const [termsUsed, groupExpr] = this.compileSearchGroup(
-                    term,
-                    scopeExpr,
-                );
+                const [termsUsed, groupExpr] = this.compileSearchGroup(term);
                 searchTermsUsed.push(...termsUsed);
                 termExpressions.push(groupExpr);
             } else {
