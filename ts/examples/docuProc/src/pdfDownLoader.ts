@@ -31,7 +31,7 @@ interface ArxivPaper {
 
 const PAPER_CATALOG_PATH = path.join(
     __dirname,
-    "papers",
+    "papers/downloads",
     "downloaded_papers.json",
 );
 function loadDownloadedPapers(): Set<string> {
@@ -46,7 +46,7 @@ function loadDownloadedPapers(): Set<string> {
     return new Set();
 }
 
-function saveDownloadedPapers(downloadedPapers: Set<string>) {
+function saveDownloadedPapersCatalog(downloadedPapers: Set<string>) {
     try {
         fs.writeFileSync(
             PAPER_CATALOG_PATH,
@@ -126,7 +126,7 @@ export async function downloadArxivPapers(
                         async (paper) => await downloadArxivPaper(paper),
                     ),
                 );
-                saveDownloadedPapers(downloadedPapers);
+                saveDownloadedPapersCatalog(downloadedPapers);
             }
             return papers;
         }
@@ -197,17 +197,14 @@ export async function downloadArxivPaper(
 ): Promise<string | undefined> {
     const arxivInfo = getPdfUrlFromId(paper.id);
 
-    const outputDir = path.join(__dirname, "papers");
+    const outputDir = path.join(__dirname, "papers/downloads");
     const filePath = path.join(
         outputDir,
         `${getValidFilename(arxivInfo.paperId)}.pdf`,
     );
 
     try {
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-        }
-
+        createFolderIfNotExists(outputDir);
         const options: RequestInit = {
             method: "GET",
             headers: {
@@ -222,7 +219,7 @@ export async function downloadArxivPaper(
 
         const pdfBlob = await response.data.blob();
         const buffer = Buffer.from(await pdfBlob.arrayBuffer());
-        fs.writeFileSync(filePath, buffer);
+        fs.writeFileSync(filePath, buffer, { flag: "w" });
 
         console.log(`Downloaded paper: ${filePath}`);
         return filePath;
