@@ -85,14 +85,13 @@ class Podcast(
     messages: list[PodcastMessage] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     semantic_refs: list[interfaces.SemanticRef] = field(default_factory=list)  # type: ignore  # TODO
+    settings: ConversationSettings = field(default_factory=ConversationSettings)
+    semantic_ref_index: convindex.ConversationIndex = field(default_factory=convindex.ConversationIndex)  # type: ignore  # TODO
 
-    settings: ConversationSettings = field(init=False)
-    semantic_ref_index: convindex.ConversationIndex = field(init=False)
     secondary_indexes: interfaces.IConversationSecondaryIndexes = field(init=False)
 
     def __post_init__(self) -> None:
-        self.settings = ConversationSettings()
-        self.semantic_ref_index = convindex.ConversationIndex()  # type: ignore  # TODO
+        # This needs self.settings, so can't use field(default_factor=...)
         self.secondary_indexes = secindex.ConversationSecondaryIndexes(self.settings.related_term_index_settings)  # type: ignore  # TODO
 
     def add_metadata_to_index(self) -> None:
