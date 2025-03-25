@@ -415,6 +415,11 @@ export function createKnowledgeProcessor(
     chatModel ??= createKnowledgeModel();
     const extractor = kpLib.createKnowledgeExtractor(chatModel, {
         maxContextLength: 4096,
+        /**
+         * This should *ALWAYS* be false.
+         * Merging is handled during indexing:
+         * TODO: remove flag from knowledgeExtractor
+         */
         mergeActionKnowledge: false,
     });
     return extractor;

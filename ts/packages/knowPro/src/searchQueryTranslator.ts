@@ -250,13 +250,19 @@ export class SearchQueryExprBuilder {
         termGroup: SearchTermGroup,
     ): void {
         if (actionTerm.actionVerbs) {
+            const verbTerms: SearchTermGroup = { booleanOp: "or", terms: [] };
             for (const verb of actionTerm.actionVerbs.words) {
                 this.addPropertyTermToGroup(
                     PropertyNames.Verb,
                     verb,
-                    termGroup,
+                    verbTerms,
                 );
             }
+            this.addSearchTermsToGroup(
+                [...actionTerm.actionVerbs.words],
+                verbTerms,
+            );
+            termGroup.terms.push(verbTerms);
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(

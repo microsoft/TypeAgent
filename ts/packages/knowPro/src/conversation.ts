@@ -9,7 +9,7 @@ import {
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
 } from "./secondaryIndexes.js";
-import { openai } from "aiclient";
+import { openai, TextEmbeddingModel } from "aiclient";
 import {
     TextEmbeddingIndexSettings,
     createTextEmbeddingIndexSettings,
@@ -23,9 +23,12 @@ export type ConversationSettings = {
     messageTextIndexSettings: MessageTextIndexSettings;
 };
 
-export function createConversationSettings(): ConversationSettings {
-    let embeddingModel = openai.createEmbeddingModel();
-    const embeddingSize = 1536;
+export function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel | undefined,
+    embeddingSize?: number,
+): ConversationSettings {
+    embeddingModel ??= openai.createEmbeddingModel();
+    embeddingSize ??= 1536;
     const minCosineSimilarity = 0.85;
     return {
         relatedTermIndexSettings: {

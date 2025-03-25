@@ -40,10 +40,10 @@ export type SearchTerm = {
  * A Group of search terms
  */
 export type SearchTermGroup = {
-    /**
-     * And will enforce that all terms match
-     */
-    booleanOp: "and" | "or";
+    booleanOp:
+        | "and" // Intersect matches for each term, adding up scores
+        | "or"; // Union matches for each term, adding up scores
+
     terms: (SearchTerm | PropertySearchTerm | SearchTermGroup)[];
 };
 
