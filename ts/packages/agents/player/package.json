@@ -13,7 +13,6 @@
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
     "./agent/manifest": "./src/agent/playerManifest.json",
     "./agent/handlers": "./dist/agent/playerHandlers.js"
   },

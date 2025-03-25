@@ -61,13 +61,13 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             const message = messages[i];
             let messageOrdinal = baseMessageOrdinal + i;
             for (
-                let chunkIndex = 0;
-                chunkIndex < message.textChunks.length;
-                ++chunkIndex
+                let chunkOrdinal = 0;
+                chunkOrdinal < message.textChunks.length;
+                ++chunkOrdinal
             ) {
                 allChunks.push([
-                    message.textChunks[chunkIndex],
-                    { messageOrdinal, chunkOrdinal: chunkIndex },
+                    message.textChunks[chunkOrdinal],
+                    { messageOrdinal, chunkOrdinal },
                 ]);
             }
         }
