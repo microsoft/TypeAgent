@@ -1240,6 +1240,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      body-parser:
+        specifier: 1.20.3
+        version: 1.20.3
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
@@ -1274,6 +1277,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.23.8)
     devDependencies:
+      '@types/body-parser':
+        specifier: 1.19.5
+        version: 1.19.5
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12

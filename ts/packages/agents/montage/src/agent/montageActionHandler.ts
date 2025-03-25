@@ -19,21 +19,21 @@ import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { copyFileSync } from "node:fs";
-//import registerDebug from "debug";
-
-//const debugAgent = registerDebug("typeagent:agent:montage");
 
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeMontageContext,
         updateAgentContext: updateMontageContext,
         executeAction: executeMontageAction,
-        //validateWildcardMatch: markdownValidateWildcardMatch,
+        closeAgentContext: closeMontageContext
     };
 }
 
+const montageFile: string = "montages.json";
+
 // The agent context
 type MontageActionContext = {
+    montages: PhotoMontage[];
     montage: PhotoMontage | undefined;
     imageCollection: im.ImageCollection | undefined;
     viewProcess: ChildProcess | undefined;
@@ -42,9 +42,12 @@ type MontageActionContext = {
     }
 };
 
-type PhotoMontage = {
+// Montage definition
+export type PhotoMontage = {
+    id: number;
     title: string;
     files: string[];
+    selected: string[];
 }
 
 async function executeMontageAction(
@@ -64,33 +67,74 @@ async function initializeMontageContext() {
     };
 }
 
+/**
+ * Called when the agent is shutting down, writes the montages to disk
+ * @param context The session context
+ */
+async function closeMontageContext(context: SessionContext<MontageActionContext>) {
+    // merge the "working montage" into the saved montages
+    if (context.agentContext.montages.length > 0 && context.agentContext.montage !== undefined) {
+        if (context.agentContext.montages[context.agentContext.montages.length - 1].id == context.agentContext.montage.id) {
+            // replace
+            context.agentContext.montages[context.agentContext.montages.length -1] = context.agentContext.montage;
+        } else {
+            context.agentContext.montages.push(context.agentContext.montage);
+        }
+    } else {
+        if (context.agentContext.montage !== undefined) {
+            context.agentContext.montages.push(context.agentContext.montage);
+        }
+    }
+
+    // save the montage state for later
+    await context.sessionStorage?.write(montageFile, JSON.stringify(context.agentContext.montages));
+}
+
 async function updateMontageContext(
     enable: boolean,
     context: SessionContext<MontageActionContext>,
 ): Promise<void> {
     if (enable) {
 
-        // create a new montage
-        context.agentContext.montage = {
-            title: "Untitled Montage",
-            files: []
+        // Load all montages from disk
+        context.agentContext.montages = [];
+        if (await context.sessionStorage?.exists(montageFile)) {
+            const data = await context.sessionStorage?.read(montageFile, "utf8");
+            if (data) {
+                context.agentContext.montages = JSON.parse(data);
+            }
+        }
+
+        // if there are montages, load the last one otherwise create a new one
+        if (context.agentContext.montages.length > 0) {
+            context.agentContext.montage = context.agentContext.montages[context.agentContext.montages.length - 1];
+        } else {
+            // create a new montage
+            context.agentContext.montage = {
+                id: context.agentContext.montages.length,
+                title: "Untitled Montage",
+                files: [],
+                selected: []
+            }
         }
 
         // Load the image index from disk
-        // TODO: make dynamic, load from session storage
+        // TODO: allow swapping between montages
         if (!context.agentContext.imageCollection) {
             context.agentContext.imageCollection = await im.ImageCollection.readFromFile("f:\\pictures_index", "index");
         }
 
-        // Create the montage
-        // TODO: get from project memory
-        if (!context.agentContext.montage) {
-            context.agentContext.montage = { title: "Untitled Montage", files: [] };
-        }
-
         if (!context.agentContext.viewProcess) {
-            context.agentContext.viewProcess = await createViewServiceHost();
-            // TODO: send rehydrated state
+            context.agentContext.viewProcess = await createViewServiceHost((montage: PhotoMontage) => {
+                // harvest the id
+                montage.id = context.agentContext.montage!.id;
+
+                // overwite the working montage with the updated monage
+                context.agentContext.montage = montage;
+            });
+
+            // send initial state
+            context.agentContext.viewProcess?.send(context.agentContext.montage);
         }
     } else {
         // shut down service
@@ -113,10 +157,8 @@ async function handleMontageAction(
     }
 
     switch (action.actionName) {
-
+        // TODO: undo action?
         case "changeTitle": {
-            actionContext.sessionContext.agentContext.montage!.title = action.parameters.title;
-
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
             result = createActionResult(`Changed title to ${action.parameters.title}`)
             break;
@@ -138,10 +180,6 @@ async function handleMontageAction(
             } else {
                 result = createActionResultFromError("Unable to search images, no image index available.");
             }
-
-            // remove them from the montage
-            // TODO: implement
-            //actionContext.sessionContext.agentContext.montage!.files = actionContext.sessionContext.agentContext.montage?.files.filter((value) => !action.parameters.files?.includes(value))!;
 
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
@@ -191,7 +229,6 @@ async function handleMontageAction(
             }
 
             // TODO: update project state with this action
-            // TODO: update montage with this data and save it's state
             actionContext.sessionContext.agentContext.montage!.files = [...new Set([...actionContext.sessionContext.agentContext.montage!.files, ...action.parameters.files!])];
 
             // send select to the visualizer/client
@@ -220,17 +257,21 @@ async function handleMontageAction(
 
         case "startSlideShow": {
 
-            // TODO: dynamically get
-            // create slide show dir
-            actionContext.sessionContext.agentContext.montage!.files.forEach((file) => copyFileSync(file, path.join("f:\\slideshow", path.basename(file))));
+            if (process.platform != "win32") {
+                // TODO: dynamically get
+                // create slide show dir
+                actionContext.sessionContext.agentContext.montage!.files.forEach((file) => copyFileSync(file, path.join("f:\\slideshow", path.basename(file))));
 
-            // copy files into slideshow dir 
+                // copy files into slideshow dir 
 
-            // start screen saver
-            try {
-                spawn("c:\\Windows\\System32\\PhotoScreensaver.scr", [ "/s"]);
-            } catch (e) {
-                console.log(e);
+                // start screen saver
+                try {
+                    spawn(`${process.env['SystemRoot']}\\System32\\PhotoScreensaver.scr`, [ "/s"]);
+                } catch (e) {
+                    console.log(e);
+                }
+            } else {
+                result = createActionResultFromError(`This action is not supported on platform '${process.platform}'.`);
             }
 
             break;
@@ -310,7 +351,7 @@ function filterToSearchTerm(filters: string[]): kp.SearchTerm[] {
     return terms;
 }
 
-export async function createViewServiceHost() {
+export async function createViewServiceHost(montageUpdatedCallback: (montage: PhotoMontage) => void) {
     let timeoutHandle: NodeJS.Timeout;
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
@@ -337,6 +378,11 @@ export async function createViewServiceHost() {
                         resolve(childProcess);
                     } else if (message === "Failure") {
                         resolve(undefined);
+                    } else {
+                        const mon: PhotoMontage | undefined = message as PhotoMontage;
+                        if (mon) {
+                            montageUpdatedCallback(mon);
+                        }
                     }
                 });
 

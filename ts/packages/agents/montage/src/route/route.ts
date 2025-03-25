@@ -4,6 +4,7 @@
 //import Server from "webpack-dev-server";
 import express, { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
+import bodyParser from "body-parser";
 import { fileURLToPath } from "url";
 import path from "path";
 import sharp from "sharp";
@@ -13,16 +14,19 @@ import fs from "node:fs";
 const app: Express = express();
 const port = process.env.PORT || 9012;
 
+// limit request rage
 const limiter = rateLimit({
     windowMs: 1000,
     max: 1000, // limit each IP to 100 requests per windowMs
 });
+app.use(limiter);
 
 // Serve static content
 const staticPath = fileURLToPath(new URL("../", import.meta.url));
-
-app.use(limiter);
 app.use(express.static(staticPath));
+
+// Accept JSON POST body data
+app.use(bodyParser.json())
 
 /**
  * Gets the root document
@@ -96,15 +100,18 @@ app.get("/knowlegeResponse", (req: Request, res: Response) => {
 });
 
 /**
- * Allows the client to tell us which files are currently being shown
+ * Allows the client to send the updated montage data
  */
-app.post("/files", (req: Request, res: Response) => {
-    console.log(req.body());
+app.post("/montageUpdated", (req: Request, res: Response) => {
     res.status(200);
     res.send();
+
+    // send the host process the montage data
+    process.send?.(req.body);
 });
 
 let clients: any[] = [];
+let messageQueue: any[] = [];
 //let filePath: string;
 
 app.get("/events", (req, res) => {
@@ -114,6 +121,11 @@ app.get("/events", (req, res) => {
     res.flushHeaders();
 
     clients.push(res);
+
+    // drain any messages in the message queue
+    while (messageQueue.length > 0) {
+        sendDataToClients(messageQueue.shift());
+    }
 
     req.on("close", () => {
         clients = clients.filter((client) => client !== res);
@@ -129,9 +141,15 @@ app.get("/cmd", async (req, res) => {
  * @param message The message to forward to the clients
  */
 function sendDataToClients(message: any) {
-    clients.forEach((client) => {
-        client.write(`data: ${JSON.stringify(message)}\n\n`);
-    });
+
+    // when no client is here just queue messages to drain later
+    if (clients.length == 0) {
+        messageQueue.push(message);
+    } else {
+        clients.forEach((client) => {
+            client.write(`data: ${JSON.stringify(message)}\n\n`);
+        });
+    }
 }
 
 /**

@@ -3,6 +3,7 @@
 
 //import { SearchInput } from "./searchInput";
 import { ChangeTitleAction, FindPhotosAction, RemovePhotosAction, SelectPhotosAction } from "../agent/montageActionSchema.js";
+import { PhotoMontage } from "../agent/montageActionHandler.js";
 
 //const eventSource = new EventSource("/events");
 
@@ -24,42 +25,43 @@ document.addEventListener("DOMContentLoaded", function () {
     eventSource.onmessage = function (event: MessageEvent) {        
         const e = JSON.parse(event.data);
         console.log(e);
-        switch (e.actionName) {
+
+        // check to see if we are getting initial data and handle that, otherwise process actions        
+        if (e.actionName !== undefined && e.actionName !== "") {
+            processAction(e);
+        } else {
+            
+            const montage = e as PhotoMontage            
+            montage.selected.forEach((value) => selected.add(value));
+            setTitle(montage.title);
+            addImages(montage.files, true);
+        }
+    };
+
+    /**
+     * Processes the supplied action
+     * @param action The action to process
+     */
+    function processAction(action) {
+        switch (action.actionName) {
 
             case "findPhotos":
             case "listPhotos": {
-                const msg: FindPhotosAction = e as FindPhotosAction;
+                const msg: FindPhotosAction = action as FindPhotosAction;
 
-                if (msg.parameters.files) {
-                    msg.parameters.files.forEach(async (f) => {
-                        if (!imgMap.has(f)) {                            
-                            const img: HTMLImageElement = document.createElement("img");
-                            img.src = "/thumbnail?path=" + f;
-                            img.setAttribute("path", f);
-                            imgMap.set(f, img);
-
-                            // get the image caption
-                            const res = await fetch(`/knowlegeResponse?path=${f}`);
-                            const ii = await res.json();
-                            img.title = ii.fileName + " - " + ii.altText; 
-
-                            mainContainer.append(img);                            
-                        }
-                    });
-                }
+                addImages(msg.parameters.files);
                 
                 break;
             }
 
             case "changeTitle": {
-                const msg: ChangeTitleAction = e as ChangeTitleAction;
-                const title: HTMLElement = document.getElementById("title");
-                title.innerHTML = msg.parameters.title;
+                const msg: ChangeTitleAction = action as ChangeTitleAction;
+                setTitle(msg.parameters.title);
                 break;
             }
 
             case "selectPhotos": {
-                const msg: SelectPhotosAction = e as SelectPhotosAction;
+                const msg: SelectPhotosAction = action as SelectPhotosAction;
                 // select image by indicies first
                 if (msg.parameters.indicies) {
                     for(let i = 0; i < msg.parameters.indicies.length; i++) {
@@ -69,31 +71,13 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
 
                 // select specifically mentioned images
-                if (msg.parameters.files) {
-                    for(let i = 0; i < msg.parameters.files.length; i++) {
-                        if (imgMap.has(msg.parameters.files[i])) {
-                            imgMap.get(msg.parameters.files[i]).classList.add("selected");
-                            selected.add(msg.parameters.files[i]);
-                        }
-                    }
-                }
-
-                // remove or add "unselected" as needed
-                if (selected.size > 0) {
-                    for (let i = 0; i < mainContainer.children.length; i++) {
-                        if (selected.has(mainContainer.children[i].getAttribute("path"))) {
-                            mainContainer.children[i].classList.remove("unselected");
-                        } else {
-                            mainContainer.children[i].classList.add("unselected");
-                        }
-                    } 
-                }
+                selectFiles(msg.parameters.files);
 
                 break;
             }
 
             case "removePhotos": {
-                const msg: RemovePhotosAction = e as RemovePhotosAction;
+                const msg: RemovePhotosAction = action as RemovePhotosAction;
 
                 // remove all selected images
                 if (msg.parameters.selected === "selected" || msg.parameters.selected === "all") {
@@ -178,15 +162,96 @@ document.addEventListener("DOMContentLoaded", function () {
                 }                
                 break;
             }
+        }    
+        
+        // let the server know which files are being shown
+        updateFileList(imgMap, selected);
+    }
+
+    /**
+     * Adds the supplied images to the main container.
+     * @param files The images to add to the main container
+     * @param setSelectionState Flag indicating if we shoud set the selection state of the image elements
+     */
+    function addImages(files: string[] | undefined, setSelectionState: boolean = false) {
+        if (files !== undefined) {
+            files.forEach(async (f) => {
+                if (!imgMap.has(f)) {                            
+                    const img: HTMLImageElement = document.createElement("img");
+                    img.src = "/thumbnail?path=" + f;
+                    img.setAttribute("path", f);
+                    imgMap.set(f, img);
+        
+                    // get the image caption
+                    const res = await fetch(`/knowlegeResponse?path=${f}`);
+                    const ii = await res.json();
+                    img.title = ii.fileName + " - " + ii.altText; 
+        
+                    mainContainer.append(img);
+
+                    // does it need to be selected or unselected?
+                    if (setSelectionState && selected.size > 0) {
+                        select(img);
+                    }
+                }
+            });
+        }
+    }  
+    
+    /**
+     * The files to select
+     * @param files the files to select
+     */
+    function selectFiles(files: string[] | undefined) {
+        if (files !== undefined) {
+            for(let i = 0; i < files.length; i++) {
+                if (imgMap.has(files[i])) {
+                    imgMap.get(files[i]).classList.add("selected");
+                    selected.add(files[i]);
+                }
+            }
         }
 
-        // tell the server what images are being show
-        fetch("/files", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ files: [...imgMap.keys()]})
-        });
-    };
+        // remove or add "unselected" as needed
+        if (selected.size > 0) {
+            for (let i = 0; i < mainContainer.children.length; i++) {
+                if (selected.has(mainContainer.children[i].getAttribute("path"))) {
+                    mainContainer.children[i].classList.remove("unselected");
+                } else {
+                    mainContainer.children[i].classList.add("unselected");
+                }
+            } 
+        }
+    }
+
+    function select(img: Element) {
+        if (selected.has(img.getAttribute("path"))) {
+            img.classList.add("selected");
+        } else {
+            img.classList.add("unselected");
+        }
+    }
+
+    function setTitle(newTitle) {
+        const title: HTMLElement = document.getElementById("title");
+        title.innerHTML = newTitle;
+    }
 });
+
+/** 
+ * Notify the server of the files in the viewer
+ */
+function updateFileList(files: Map<string, HTMLImageElement>, selected: Set<string>) {
+    // tell the server what images are being show
+    fetch("/montageUpdated", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+            title: document.getElementById("title").innerHTML, 
+            files: [...files.keys()], 
+            selected: [...selected.values()]
+        })
+    });
+}
