@@ -98,7 +98,7 @@ const handlers: CommandHandlerTable = {
                             displayWarn("Not logged in to Spotify.", context);
                             return;
                         }
-                        
+
                         disableSpotify(sessionContext, true);
                         displaySuccess("Logged out from Spotify.", context);
                     },
