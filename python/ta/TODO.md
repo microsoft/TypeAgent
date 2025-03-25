@@ -18,10 +18,11 @@ For robustness -- TypeChat already retries, but embeddings don't.
 
 ## Small functionality
 
-- Implement merge_action_knowledge() in convknowledge.py
 - Implement sharing an embedding model between vectorbases (requires model and emb.size in TextEmbeddingSettings)
 - Move the embeddings cache into the model so it can be shared between different vector bases
 - Implement Podcast._build_caches(), by implementing create_term_embedding_cache()
+  - But Umesh wants to redo this
+  - Flag on add functionality whether to cache the key/embedding or not, so we don't cache full message text
 
 ## Refactoring implementations
 
@@ -39,4 +40,8 @@ For robustness -- TypeChat already retries, but embeddings don't.
 
 ## Low priority
 
-- Various remove...() or delete...() methods (so far unused in TS knowPro)
+- Tombstones for deletions.
+
+## Maybe...
+
+- Add docstrings etc.

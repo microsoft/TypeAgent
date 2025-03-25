@@ -52,9 +52,6 @@ class ConversationThreads(IConversationThreads):
             for match in matches
         ]
 
-    def remove_thread(self, thread_ordinal: int) -> None:
-        raise NotImplementedError  # TODO: Requires support for removal in vectorbase.py.
-
     def clear(self) -> None:
         self.threads = []
         self.vector_base.clear()
