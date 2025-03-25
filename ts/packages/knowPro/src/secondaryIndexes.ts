@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { IConversationThreadData } from "./conversationThread.js";
-import { ConversationSettings } from "./import.js";
+import { ConversationSettings } from "./conversation.js";
 import {
     IConversation,
     IConversationData,
@@ -11,11 +11,14 @@ import {
     SecondaryIndexingResults,
     Term,
 } from "./interfaces.js";
-import { buildMessageIndex, IMessageTextIndexData } from "./messageIndex.js";
+import {
+    buildMessageIndex,
+    IMessageTextIndexData,
+    MessageTextIndex,
+} from "./messageIndex.js";
 import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
 import {
     buildRelatedTermsIndex,
-    RelatedTermIndexSettings,
     RelatedTermsIndex,
 } from "./relatedTermsIndex.js";
 import {
@@ -28,7 +31,9 @@ export async function buildSecondaryIndexes(
     conversationSettings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
 ): Promise<SecondaryIndexingResults> {
-    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
+        conversationSettings,
+    );
     let result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
         conversation,
         conversationSettings,
@@ -60,7 +65,9 @@ export function buildTransientSecondaryIndexes(
     conversation: IConversation,
     conversationSettings: ConversationSettings,
 ): SecondaryIndexingResults {
-    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
+        conversationSettings,
+    );
     const result: SecondaryIndexingResults = {};
     result.properties = buildPropertyIndex(conversation);
     result.timestamps = buildTimestampIndex(conversation);
@@ -73,11 +80,19 @@ export class ConversationSecondaryIndexes
     public propertyToSemanticRefIndex: PropertyIndex;
     public timestampIndex: TimestampToTextRangeIndex;
     public termToRelatedTermsIndex: RelatedTermsIndex;
+    public messageIndex: MessageTextIndex | undefined;
 
-    constructor(settings: RelatedTermIndexSettings = {}) {
+    constructor(conversationSettings: ConversationSettings) {
         this.propertyToSemanticRefIndex = new PropertyIndex();
         this.timestampIndex = new TimestampToTextRangeIndex();
-        this.termToRelatedTermsIndex = new RelatedTermsIndex(settings);
+        this.termToRelatedTermsIndex = new RelatedTermsIndex(
+            conversationSettings.relatedTermIndexSettings,
+        );
+        if (conversationSettings.messageTextIndexSettings) {
+            this.messageIndex = new MessageTextIndex(
+                conversationSettings.messageTextIndexSettings,
+            );
+        }
     }
 }
 

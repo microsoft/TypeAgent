@@ -316,11 +316,14 @@ export class SearchQueryExprBuilder {
         termGroup: SearchTermGroup,
     ): void {
         for (const entityTerm of entityTerms) {
-            this.addEntityTermToGroup(
-                entityTerm,
-                termGroup,
-                this.exactScoping /* true => exact match name */,
-            );
+            // TODO: handle pronouns
+            if (!entityTerm.isNamePronoun) {
+                this.addEntityTermToGroup(
+                    entityTerm,
+                    termGroup,
+                    this.exactScoping /* true => exact match name */,
+                );
+            }
         }
     }
 

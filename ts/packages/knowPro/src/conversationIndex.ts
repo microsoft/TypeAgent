@@ -25,7 +25,7 @@ import { ChatModel, openai } from "aiclient";
 import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
-import { ConversationSettings } from "./import.js";
+import { ConversationSettings } from "./conversation.js";
 
 /**
  * Returns the text range represented by a message (and an optional chunk ordinal)

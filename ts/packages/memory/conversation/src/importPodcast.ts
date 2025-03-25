@@ -185,7 +185,7 @@ export class Podcast implements IConversation<PodcastMessage> {
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
             threadData: this.secondaryIndexes.threads.serialize(),
-            messageIndexData: this.secondaryIndexes.messageIndex.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
         };
         return data;
     }
@@ -317,14 +317,10 @@ export class Podcast implements IConversation<PodcastMessage> {
 
 export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
     public threads: ConversationThreads;
-    public messageIndex: MessageTextIndex;
 
     constructor(settings: ConversationSettings) {
-        super(settings.relatedTermIndexSettings);
+        super(settings);
         this.threads = new ConversationThreads(settings.threadSettings);
-        this.messageIndex = new MessageTextIndex(
-            settings.messageTextIndexSettings,
-        );
     }
 }
 

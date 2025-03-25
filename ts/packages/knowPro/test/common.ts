@@ -14,6 +14,11 @@ import {
 import path from "path";
 import os from "node:os";
 import { DeletionInfo, IMessage } from "../src/interfaces.js";
+import {
+    ConversationSettings,
+    createConversationFromData,
+} from "../src/conversation.js";
+import { readConversationDataFromFile } from "../src/serialization.js";
 
 export class TestMessage implements IMessage {
     constructor(
@@ -81,5 +86,27 @@ export function createTestModels(): TestModels {
 }
 
 export function getRootDataPath() {
-    return path.join(os.tmpdir(), "/data/tests");
+    return path.join(os.tmpdir(), "/data/test");
+}
+
+export function getRelativePath(relativePath: string): string {
+    return path.join(process.cwd(), relativePath);
+}
+
+export async function createConversationFromFile(
+    dirPath: string,
+    baseFileName: string,
+    settings: ConversationSettings,
+) {
+    const data = await readConversationDataFromFile(
+        dirPath,
+        baseFileName,
+        settings.relatedTermIndexSettings.embeddingIndexSettings?.embeddingSize,
+    );
+    if (data === undefined) {
+        throw new Error(
+            `Corrupt test data ${path.join(dirPath, baseFileName)}`,
+        );
+    }
+    return createConversationFromData(data, settings);
 }

@@ -3,6 +3,53 @@
 
 import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
+import { ConversationIndex } from "./conversationIndex.js";
+import {
+    buildTransientSecondaryIndexes,
+    ConversationSecondaryIndexes,
+    IConversationDataWithIndexes,
+} from "./secondaryIndexes.js";
+import { openai } from "aiclient";
+import {
+    TextEmbeddingIndexSettings,
+    createTextEmbeddingIndexSettings,
+} from "./fuzzyIndex.js";
+import { MessageTextIndexSettings } from "./messageIndex.js";
+import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
+
+export type ConversationSettings = {
+    relatedTermIndexSettings: RelatedTermIndexSettings;
+    threadSettings: TextEmbeddingIndexSettings;
+    messageTextIndexSettings: MessageTextIndexSettings;
+};
+
+export function createConversationSettings(): ConversationSettings {
+    let embeddingModel = openai.createEmbeddingModel();
+    const embeddingSize = 1536;
+    const minCosineSimilarity = 0.85;
+    return {
+        relatedTermIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+                minCosineSimilarity,
+                50,
+            ),
+        },
+        threadSettings: createTextEmbeddingIndexSettings(
+            embeddingModel,
+            embeddingSize,
+            minCosineSimilarity,
+        ),
+        messageTextIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+                minCosineSimilarity,
+            ),
+        },
+    };
+}
 
 /**
  * Returns the time range for a conversation: the timestamps of the first and last messages
@@ -38,4 +85,33 @@ export function getTimeRangePromptSectionForConversation(
         ];
     }
     return [];
+}
+
+export async function createConversationFromData(
+    data: IConversationDataWithIndexes,
+    conversationSettings: ConversationSettings,
+): Promise<IConversation> {
+    const conversation: IConversation = {
+        nameTag: data.nameTag,
+        tags: data.tags,
+        messages: data.messages,
+        semanticRefs: data.semanticRefs,
+        semanticRefIndex: data.semanticIndexData
+            ? new ConversationIndex(data.semanticIndexData)
+            : undefined,
+    };
+    const secondaryIndexes = new ConversationSecondaryIndexes(
+        conversationSettings,
+    );
+    conversation.secondaryIndexes = secondaryIndexes;
+    if (data.relatedTermsIndexData) {
+        secondaryIndexes.termToRelatedTermsIndex.deserialize(
+            data.relatedTermsIndexData,
+        );
+    }
+    if (data.messageIndexData) {
+        secondaryIndexes.messageIndex!.deserialize(data.messageIndexData);
+    }
+    await buildTransientSecondaryIndexes(conversation, conversationSettings);
+    return conversation;
 }

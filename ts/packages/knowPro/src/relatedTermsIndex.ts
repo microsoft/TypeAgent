@@ -26,7 +26,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { createEmbeddingCache } from "knowledge-processor";
-import { ConversationSettings } from "./import.js";
+import { ConversationSettings } from "./conversation.js";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
