@@ -14,10 +14,8 @@ import {
 import path from "path";
 import os from "node:os";
 import { DeletionInfo, IMessage } from "../src/interfaces.js";
-import {
-    ConversationSettings,
-    createConversationFromData,
-} from "../src/conversation.js";
+import { ConversationSettings } from "../src/conversation.js";
+import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 
 export class TestMessage implements IMessage {

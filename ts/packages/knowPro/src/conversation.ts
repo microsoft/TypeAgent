@@ -3,12 +3,6 @@
 
 import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
-import { ConversationIndex } from "./conversationIndex.js";
-import {
-    buildTransientSecondaryIndexes,
-    ConversationSecondaryIndexes,
-    IConversationDataWithIndexes,
-} from "./secondaryIndexes.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import {
     TextEmbeddingIndexSettings,
@@ -88,33 +82,4 @@ export function getTimeRangePromptSectionForConversation(
         ];
     }
     return [];
-}
-
-export async function createConversationFromData(
-    data: IConversationDataWithIndexes,
-    conversationSettings: ConversationSettings,
-): Promise<IConversation> {
-    const conversation: IConversation = {
-        nameTag: data.nameTag,
-        tags: data.tags,
-        messages: data.messages,
-        semanticRefs: data.semanticRefs,
-        semanticRefIndex: data.semanticIndexData
-            ? new ConversationIndex(data.semanticIndexData)
-            : undefined,
-    };
-    const secondaryIndexes = new ConversationSecondaryIndexes(
-        conversationSettings,
-    );
-    conversation.secondaryIndexes = secondaryIndexes;
-    if (data.relatedTermsIndexData) {
-        secondaryIndexes.termToRelatedTermsIndex.deserialize(
-            data.relatedTermsIndexData,
-        );
-    }
-    if (data.messageIndexData) {
-        secondaryIndexes.messageIndex!.deserialize(data.messageIndexData);
-    }
-    await buildTransientSecondaryIndexes(conversation, conversationSettings);
-    return conversation;
 }

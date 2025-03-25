@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
+import { createAndTermGroup } from "./common.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
@@ -425,19 +426,18 @@ class QueryCompiler {
         }
         // Actions are inherently scope selecting. If any present in the query, use them
         // to restrict scope
-        const actionTermsGroup =
-            this.getActionTermsFromSearchGroup(searchGroup);
+        let actionTermsGroup = this.getActionTermsFromSearchGroup(searchGroup);
+        // If additional scoping terms were provided
+        if (filter && filter.scopeDefiningTerms !== undefined) {
+            if (actionTermsGroup !== undefined) {
+                actionTermsGroup.terms.push(...filter.scopeDefiningTerms.terms);
+            } else {
+                actionTermsGroup = filter.scopeDefiningTerms;
+            }
+        }
         if (actionTermsGroup !== undefined) {
             scopeSelectors ??= [];
             this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
-        }
-        // If additional scoping terms were provided
-        if (filter && filter.scopeDefiningTerms !== undefined) {
-            scopeSelectors ??= [];
-            this.addTermsScopeSelector(
-                filter.scopeDefiningTerms,
-                scopeSelectors,
-            );
         }
         // If a thread index is available...
         const threads = this.secondaryIndexes?.threads;
@@ -517,10 +517,7 @@ class QueryCompiler {
         let actionGroup: SearchTermGroup | undefined;
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term) && isActionPropertyTerm(term)) {
-                actionGroup ??= {
-                    booleanOp: "and",
-                    terms: [],
-                };
+                actionGroup ??= createAndTermGroup();
                 actionGroup.terms.push(term);
             }
         }

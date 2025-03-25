@@ -195,10 +195,49 @@ export class SearchQueryExprBuilder {
                 PropertyNames.Verb,
                 verb,
                 verbTermGroup,
+                false,
             );
         }
         this.addSearchTermsToGroup([...actionVerbs.words], verbTermGroup);
         return verbTermGroup;
+    }
+
+    private compileSubjectTerms(
+        entityTerms: querySchema.EntityTerm[],
+    ): SearchTermGroup {
+        const objectTermGroup = createOrTermGroup();
+        this.addEntityNamesToGroup(
+            entityTerms,
+            PropertyNames.Subject,
+            objectTermGroup,
+            true,
+        );
+        this.addEntityNamesToGroup(
+            entityTerms,
+            PropertyNames.EntityName,
+            objectTermGroup,
+            true,
+        );
+        return objectTermGroup;
+    }
+
+    private compileObjectTerms(
+        entityTerms: querySchema.EntityTerm[],
+    ): SearchTermGroup {
+        const objectTermGroup = createOrTermGroup();
+        this.addEntityNamesToGroup(
+            entityTerms,
+            PropertyNames.Object,
+            objectTermGroup,
+            true,
+        );
+        this.addEntityNamesToGroup(
+            entityTerms,
+            PropertyNames.EntityName,
+            objectTermGroup,
+            true,
+        );
+        return objectTermGroup;
     }
 
     private compileEntityTerm(
@@ -232,6 +271,7 @@ export class SearchQueryExprBuilder {
                     PropertyNames.EntityType,
                     type,
                     termGroup,
+                    true,
                 );
             }
         }
@@ -244,18 +284,21 @@ export class SearchQueryExprBuilder {
                         facetTerm.facetName,
                         facetTerm.facetValue,
                         termGroup,
+                        true,
                     );
                 } else if (nameWildcard) {
                     this.addPropertyTermToGroup(
                         PropertyNames.FacetValue,
                         facetTerm.facetValue,
                         termGroup,
+                        true,
                     );
                 } else if (valueWildcard) {
                     this.addPropertyTermToGroup(
                         PropertyNames.FacetName,
                         facetTerm.facetName,
                         termGroup,
+                        true,
                     );
                 }
             }
@@ -272,36 +315,23 @@ export class SearchQueryExprBuilder {
             this.scopingTermGroups.push(verbTerms);
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
-            this.addEntityNamesToGroup(
+            const subjectTerms = this.compileSubjectTerms(
                 actionTerm.actorEntities,
-                PropertyNames.Subject,
-                termGroup,
             );
+            termGroup.terms.push(subjectTerms);
+            this.scopingTermGroups.push(subjectTerms);
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
-            const hasAdditionalEntities = isEntityTermArray(
-                actionTerm.additionalEntities,
+            const objectTerms = this.compileObjectTerms(
+                actionTerm.targetEntities,
             );
-            if (hasAdditionalEntities) {
-                // If additional entities, then assume the targetEntities represent an Object in an action
-                this.addEntityNamesToGroup(
-                    actionTerm.targetEntities,
-                    PropertyNames.Object,
-                    termGroup,
-                );
-            } else {
-                // Use entity terms lookup to apply scopes
-                this.scopingEntityTerms.push(...actionTerm.targetEntities);
-                termGroup.terms.push(
-                    ...this.compileEntityTerms(actionTerm.targetEntities),
-                );
-            }
-
-            if (isEntityTermArray(actionTerm.additionalEntities)) {
-                termGroup.terms.push(
-                    ...this.compileEntityTerms(actionTerm.additionalEntities),
-                );
-            }
+            termGroup.terms.push(objectTerms);
+            this.scopingTermGroups.push(objectTerms);
+        }
+        if (isEntityTermArray(actionTerm.additionalEntities)) {
+            termGroup.terms.push(
+                ...this.compileEntityTerms(actionTerm.additionalEntities),
+            );
         }
     }
 
@@ -325,12 +355,14 @@ export class SearchQueryExprBuilder {
         entityTerms: querySchema.EntityTerm[],
         propertyName: PropertyNames,
         termGroup: SearchTermGroup,
+        dedupe: boolean,
     ): void {
         for (const entityTerm of entityTerms) {
             this.addPropertyTermToGroup(
                 propertyName,
                 entityTerm.name,
                 termGroup,
+                dedupe,
             );
         }
     }
@@ -339,6 +371,7 @@ export class SearchQueryExprBuilder {
         propertyName: string,
         propertyValue: string,
         termGroup: SearchTermGroup,
+        dedupe: boolean,
         exactMatchValue: boolean = false,
     ): void {
         if (
@@ -349,7 +382,10 @@ export class SearchQueryExprBuilder {
             return;
         }
         // Dedupe any terms already added to the group earlier
-        if (!this.entityTermsAdded.has(propertyName, propertyValue)) {
+        if (
+            !dedupe ||
+            !this.entityTermsAdded.has(propertyName, propertyValue)
+        ) {
             const searchTerm = createPropertySearchTerm(
                 propertyName,
                 propertyValue,

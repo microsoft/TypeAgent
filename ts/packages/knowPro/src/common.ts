@@ -3,11 +3,23 @@
 
 /**
  * Common types and methods INTERNAL to the library.
- * Should not be exposed via index.ts
+ * These should not be exposed via index.ts
  */
 
-import { DateRange, TextLocation, TextRange } from "./interfaces.js";
+import { ConversationSettings } from "./conversation.js";
+import { ConversationIndex } from "./conversationIndex.js";
+import {
+    DateRange,
+    IConversation,
+    TextLocation,
+    TextRange,
+} from "./interfaces.js";
 import { SearchTerm, SearchTermGroup } from "./search.js";
+import {
+    IConversationDataWithIndexes,
+    ConversationSecondaryIndexes,
+    buildTransientSecondaryIndexes,
+} from "./secondaryIndexes.js";
 
 export interface Scored<T = any> {
     item: T;
@@ -91,4 +103,33 @@ export function createAndTermGroup(): SearchTermGroup {
 
 export function createOrTermGroup(): SearchTermGroup {
     return { booleanOp: "or", terms: [] };
+}
+
+export async function createConversationFromData(
+    data: IConversationDataWithIndexes,
+    conversationSettings: ConversationSettings,
+): Promise<IConversation> {
+    const conversation: IConversation = {
+        nameTag: data.nameTag,
+        tags: data.tags,
+        messages: data.messages,
+        semanticRefs: data.semanticRefs,
+        semanticRefIndex: data.semanticIndexData
+            ? new ConversationIndex(data.semanticIndexData)
+            : undefined,
+    };
+    const secondaryIndexes = new ConversationSecondaryIndexes(
+        conversationSettings,
+    );
+    conversation.secondaryIndexes = secondaryIndexes;
+    if (data.relatedTermsIndexData) {
+        secondaryIndexes.termToRelatedTermsIndex.deserialize(
+            data.relatedTermsIndexData,
+        );
+    }
+    if (data.messageIndexData) {
+        secondaryIndexes.messageIndex!.deserialize(data.messageIndexData);
+    }
+    await buildTransientSecondaryIndexes(conversation, conversationSettings);
+    return conversation;
 }

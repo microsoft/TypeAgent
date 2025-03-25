@@ -3,7 +3,7 @@
 
 import { createConversationSettings } from "../src/conversation.js";
 import { IConversation } from "../src/interfaces.js";
-import { createConversationFromFile, getRelativePath } from "./common.js";
+import { createConversationFromFile, getRelativePath } from "./testCommon.js";
 
 describe("Search Tests", () => {
     let conversation: IConversation;

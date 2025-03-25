@@ -597,6 +597,11 @@ export async function createKnowproCommands(
             selectExpr.when ??= {};
             selectExpr.when.knowledgeType = namedArgs.ktype;
         }
+        context.printer.writeInColor(chalk.gray, () => {
+            context.printer.writeHeading("Compiled query");
+            context.printer.writeJson(selectExpr);
+            context.printer.writeLine();
+        });
         const searchResults = await kp.searchConversation(
             context.conversation!,
             selectExpr.searchTermGroup,
