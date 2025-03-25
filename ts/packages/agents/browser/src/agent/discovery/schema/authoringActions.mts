@@ -10,6 +10,7 @@ export type CreateOrUpdateWebPlan = {
         nextPrompt?: string;
         // the proposed name for the plan
         webPlanName?: string;
+        // Give a goal for the action e.g. "This will book a shuttle on campus"
         webPlanDescription?: string;
         // the list of plan steps provided by the user. Each entry is a clear, concise description of an operation
         // that the user would run on a web page.
@@ -31,4 +32,8 @@ export type RunCurrentWebPlan = {
     };
 };
 
-export type PlanAuthoringActions = CreateOrUpdateWebPlan | RunCurrentWebPlan;
+export type SaveCurrentWebPlan = {
+    actionName: "saveCurrentWebPlan";
+};
+
+export type PlanAuthoringActions = CreateOrUpdateWebPlan | RunCurrentWebPlan | SaveCurrentWebPlan;
