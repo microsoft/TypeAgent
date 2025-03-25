@@ -26,11 +26,11 @@ class ConversationThreads(IConversationThreads):
 
     def __init__(self, settings: TextEmbeddingIndexSettings | None = None):
         self.threads = []
-        self.vector_base = VectorBase()  # TODO: pass settings
+        self.vector_base = VectorBase(settings)
 
     async def add_thread(self, thread: Thread) -> None:
         assert len(self.threads) == len(self.vector_base)
-        await self.vector_base.add_key(thread.description)
+        await self.vector_base.add_key(thread.description, cache=False)
         self.threads.append(thread)
 
     async def lookup_thread(
@@ -58,4 +58,4 @@ class ConversationThreads(IConversationThreads):
 
     async def build_index(self) -> None:
         self.vector_base.clear()  # Just in case
-        await self.vector_base.add_keys([t.description for t in self.threads])
+        await self.vector_base.add_keys([t.description for t in self.threads], cache=False)

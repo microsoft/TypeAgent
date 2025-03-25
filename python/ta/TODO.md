@@ -2,30 +2,28 @@
 
 ## Big functionality
 
-### Serialization and deserialization
+    ### Serialization and deserialization
 
-Do this before queries, since fully re-indexing takes too long.
+    Do this before queries, since fully re-indexing takes too long.
 
-### Queries and searches
+    ### Queries and searches
 
-So we can finally do some end-to-end testing.
+    So we can finally do some end-to-end testing.
 
-### Retries for embeddings
+    ### Retries for embeddings
 
-For robustness -- TypeChat already retries, but embeddings don't.
+    For robustness -- TypeChat already retries, but embeddings don't.
 
 ---
 
 ## Small functionality
 
-- Implement sharing an embedding model between vectorbases (requires model and emb.size in TextEmbeddingSettings)
-- Move the embeddings cache into the model so it can be shared between different vector bases
-- Implement Podcast._build_caches(), by implementing create_term_embedding_cache()
-  - But Umesh wants to redo this
-  - Flag on add functionality whether to cache the key/embedding or not, so we don't cache full message text
+- Implement Podcast._build_caches(), by implementing TermEmbeddingCache?
+  - Umesh wants to redo this
 
 ## Refactoring implementations
 
+- Move various create_blah() functions into  Blah.__init__()
 - Change some inconsistent module names
 - Rewrite podcast parsing without regexes
 
