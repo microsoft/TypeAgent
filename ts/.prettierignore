@@ -17,6 +17,8 @@ tsconfig.json
 packages/defaultAgentProvider/test/data
 packages/defaultAgentProvider/test/repo
 packages/defaultAgentProvider/data/**/*.json
+packages/knowPro/test/data
+packages/knowPro/test/data/**/*.json
 
 # Test result
 packages/shell/test-results/*
