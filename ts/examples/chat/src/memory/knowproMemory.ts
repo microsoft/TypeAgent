@@ -532,7 +532,7 @@ export async function createKnowproCommands(
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
-        def.options.exactScope = argBool("Exact scope", true);
+        def.options.exactScope = argBool("Exact scope", false);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();

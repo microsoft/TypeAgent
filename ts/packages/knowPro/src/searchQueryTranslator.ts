@@ -205,7 +205,6 @@ export class SearchQueryExprBuilder {
                     PropertyNames.Verb,
                     verb,
                     termGroup,
-                    false,
                 );
             }
         }
@@ -225,16 +224,14 @@ export class SearchQueryExprBuilder {
                     termGroup,
                 );
             } else {
-                /*
-                const persons = actionTerm.targetEntities.filter(
-                    (e) => e.isPerson,
-                );
-                this.addEntityNamesToGroup(
-                    persons,
-                    PropertyNames.Object,
-                    termGroup,
-                );
-                */
+                let objects = this.extractObjects(actionTerm.targetEntities);
+                if (objects.length > 0) {
+                    this.addEntityNamesToGroup(
+                        objects,
+                        PropertyNames.Object,
+                        termGroup,
+                    );
+                }
             }
         }
         return termGroup;
@@ -287,13 +284,16 @@ export class SearchQueryExprBuilder {
         entityTerms: querySchema.EntityTerm[],
         termGroup: SearchTermGroup,
     ): void {
+        /*
         for (const entityTerm of entityTerms) {
-            this.addEntityTermToGroup(
-                entityTerm,
+            this.addPropertyTermToGroup(
+                PropertyNames.EntityName,
+                entityTerm.name,
                 termGroup,
-                this.exactScoping /* exact match name */,
+                this.exactScoping,
             );
         }
+        */
     }
 
     private addEntityTermToGroup(
@@ -313,7 +313,6 @@ export class SearchQueryExprBuilder {
                     PropertyNames.EntityType,
                     type,
                     termGroup,
-                    false,
                 );
             }
         }
@@ -321,26 +320,23 @@ export class SearchQueryExprBuilder {
             for (const facetTerm of entityTerm.facets) {
                 const nameWildcard = isWildcard(facetTerm.facetName);
                 const valueWildcard = isWildcard(facetTerm.facetValue);
-                if (!(nameWildcard && valueWildcard)) {
+                if (!(nameWildcard || valueWildcard)) {
                     this.addPropertyTermToGroup(
                         facetTerm.facetName,
                         facetTerm.facetValue,
                         termGroup,
-                        true,
                     );
                 } else if (nameWildcard) {
                     this.addPropertyTermToGroup(
                         PropertyNames.FacetValue,
                         facetTerm.facetValue,
                         termGroup,
-                        true,
                     );
                 } else if (valueWildcard) {
                     this.addPropertyTermToGroup(
                         PropertyNames.FacetName,
                         facetTerm.facetName,
                         termGroup,
-                        true,
                     );
                 }
             }
@@ -418,37 +414,23 @@ export class SearchQueryExprBuilder {
                 return true;
         }
     }
-    /*
-    private doesPropertyExist(
-        propertyName: PropertyNames,
-        propertyValue: string,
-    ): boolean {
-        const propertyIndex =
-            this.conversation.secondaryIndexes?.propertyToSemanticRefIndex;
-        if (!propertyIndex) {
-            return false;
-        }
-        if (isKnownProperty(propertyIndex, propertyName, propertyValue)) {
-            return true;
-        }
-        const aliasIndex =
-            this.conversation.secondaryIndexes?.termToRelatedTermsIndex
-                ?.aliases;
-        if (aliasIndex) {
-            const propertyAliases = aliasIndex.lookupTerm(propertyValue);
-            if (propertyAliases && propertyAliases.length > 0) {
-                for (const alias of propertyAliases) {
-                    if (
-                        isKnownProperty(propertyIndex, propertyName, alias.text)
-                    ) {
-                        return true;
-                    }
-                }
+
+    private extractObjects(
+        entities: querySchema.EntityTerm[],
+    ): querySchema.EntityTerm[] {
+        let persons: querySchema.EntityTerm[] = [];
+        let i = 0;
+        while (i < entities.length) {
+            const term = entities[i];
+            if (term.isPerson) {
+                entities.splice(i, 1);
+                persons.push(term);
+            } else {
+                ++i;
             }
         }
-        return false;
+        return persons;
     }
-        */
 }
 
 const Wildcard = "*";
