@@ -132,11 +132,13 @@ export function createSchemaAuthoringAgent(
             action.parameters.webPlanSteps.length === 0
         ) {
             const htmlFragments = await browser.getHtmlFragments();
+            const screenshot = await browser.getCurrentPageScreenshot();
             const suggestedStepsResponse = await agent.getWebPlanSuggestedSteps(
                 action.parameters.webPlanName!,
                 action.parameters.webPlanDescription!,
                 action.parameters.webPlanSteps,
                 htmlFragments,
+                screenshot
             );
 
             if (suggestedStepsResponse.success) {
@@ -230,12 +232,14 @@ export function createSchemaAuthoringAgent(
                 );
 
                 const htmlFragments = await browser.getHtmlFragments();
+                const screenshot = await browser.getCurrentPageScreenshot();
 
                 const evaluationResult = await agent.getWebPlanRunResult(
                     action.parameters.webPlanName!,
                     action.parameters.webPlanDescription!,
                     paramsMap,
                     htmlFragments,
+                    screenshot
                 );
 
                 if (evaluationResult.success) {

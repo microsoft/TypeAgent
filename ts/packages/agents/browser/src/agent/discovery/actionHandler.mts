@@ -71,8 +71,7 @@ export async function handleSchemaDiscoveryAction(
 
     async function handleFindUserActions(action: any) {
         const htmlFragments = await browser.getHtmlFragments();
-        // const screenshot = await browser.getCurrentPageScreenshot();
-        const screenshot = "";
+        const screenshot = await browser.getCurrentPageScreenshot();
         let pageSummary = "";
 
         const summaryResponse = await agent.getPageSummary(
@@ -316,9 +315,10 @@ export async function handleSchemaDiscoveryAction(
 
     async function handleGetPageSummary(action: any) {
         const htmlFragments = await browser.getHtmlFragments();
+        const screenshot = await browser.getCurrentPageScreenshot();
         const timerName = `Summarizing page`;
         console.time(timerName);
-        const response = await agent.getPageSummary(undefined, htmlFragments);
+        const response = await agent.getPageSummary(undefined, htmlFragments, screenshot);
 
         if (!response.success) {
             console.error("Attempt to get page summary failed");
@@ -334,9 +334,10 @@ export async function handleSchemaDiscoveryAction(
 
     async function handleGetPageComponents(action: any) {
         const htmlFragments = await browser.getHtmlFragments();
+        const screenshot = await browser.getCurrentPageScreenshot();
         const timerName = `Getting page layout`;
         console.time(timerName);
-        const response = await agent.getPageLayout(undefined, htmlFragments);
+        const response = await agent.getPageLayout(undefined, htmlFragments, screenshot);
 
         if (!response.success) {
             console.error("Attempt to get page layout failed");
@@ -353,13 +354,14 @@ export async function handleSchemaDiscoveryAction(
 
     async function handleGetPageType(action: any) {
         const htmlFragments = await browser.getHtmlFragments();
+        const screenshot = await browser.getCurrentPageScreenshot();
 
         const timerName = `Getting page type`;
         console.time(timerName);
         const response = await agent.getPageType(
             undefined,
             htmlFragments,
-            undefined,
+            screenshot,
         );
 
         if (!response.success) {
@@ -377,13 +379,14 @@ export async function handleSchemaDiscoveryAction(
 
     async function handleGetSiteType(action: any) {
         const htmlFragments = await browser.getHtmlFragments();
+        const screenshot = await browser.getCurrentPageScreenshot();
 
         const timerName = `Getting website category`;
         console.time(timerName);
         const response = await agent.getSiteType(
             undefined,
             htmlFragments,
-            undefined,
+            screenshot,
         );
 
         if (!response.success) {
@@ -465,7 +468,7 @@ export async function handleSchemaDiscoveryAction(
                     action.parameters.recordedActionName,
                     action.parameters.recordedActionDescription,
                     action.parameters.fragments,
-                    "",
+                    action.parameters.screenshot,
                 );
             if (descriptionResponse.success) {
                 console.log(descriptionResponse.data);
@@ -483,8 +486,7 @@ export async function handleSchemaDiscoveryAction(
             action.parameters.recordedActionDescription,
             recordedSteps,
             action.parameters.fragments,
-            // action.parameters.screenshot,
-            "",
+            action.parameters.screenshot,
         );
 
         if (!intentResponse.success) {
@@ -512,8 +514,7 @@ export async function handleSchemaDiscoveryAction(
             intentData,
             recordedSteps,
             action.parameters.fragments,
-            // action.parameters.screenshot,
-            "",
+            action.parameters.screenshot,
         );
 
         if (!stepsResponse.success) {
