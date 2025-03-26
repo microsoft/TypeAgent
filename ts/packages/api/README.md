@@ -10,7 +10,7 @@ After setting up and building at the workspace root, there are several ways to s
 
 ### Docker Image
 
-It is also possible to use the [docker image](../../Dockerfile) to host TypeAgent either locally or in a cloud hosted environment such as [Azure App Service](https://learn.microsoft.com/en-us/azure/app-service/quickstart-custom-container?tabs=dotnet&pivots=container-linux-vscode).
+It is possible to use the [docker image](../../Dockerfile) to host TypeAgent either locally or in a cloud hosted environment such as [Azure App Service](https://learn.microsoft.com/en-us/azure/app-service/quickstart-custom-container?tabs=dotnet&pivots=container-linux-vscode).
 
 ### Locally
 
