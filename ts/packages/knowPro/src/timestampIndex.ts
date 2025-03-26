@@ -57,8 +57,8 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult {
         for (let i = 0; i < messageTimestamps.length; ++i) {
-            const [messageIndex, timestamp] = messageTimestamps[i];
-            this.insertTimestamp(messageIndex, timestamp, false);
+            const [messageOrdinal, timestamp] = messageTimestamps[i];
+            this.insertTimestamp(messageOrdinal, timestamp, false);
         }
         this.ranges.sort(this.compareTimestampedRange);
         return { numberCompleted: messageTimestamps.length };
@@ -68,7 +68,7 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
         messageOrdinal: MessageOrdinal,
         timestamp: string | undefined,
         inOrder: boolean,
-    ) {
+    ): boolean {
         if (!timestamp) {
             return false;
         }

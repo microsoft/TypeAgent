@@ -249,6 +249,14 @@ export async function createAgentRpcClient(
             const storage = getStorage(param, context);
             return (await storage.getTokenCachePersistence()).save(param.token);
         },
+        tokenCacheDelete: async (param: {
+            contextId: number;
+            session: boolean;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            const storage = getStorage(param, context);
+            return (await storage.getTokenCachePersistence()).delete();
+        },
     };
 
     const agentContextCallHandlers: AgentContextCallFunctions = {

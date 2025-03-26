@@ -18,8 +18,9 @@ import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
-import { copyFileSync } from "node:fs";
-import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
+import Registry from "winreg";
+import koffi from 'koffi';
 
 export function instantiate(): AppAgent {
     return {
@@ -242,19 +243,10 @@ async function handleMontageAction(
         }
 
         case "startSlideShow": {
-            if (process.platform != "win32") {
-                // create slide show dir
-                actionContext.sessionContext.agentContext.montage!.files.forEach((file) => copyFileSync(file, path.join("f:\\slideshow", path.basename(file))));
 
-                // copy files into slideshow dir and start it
-                // TODO: implement
-
-                // start screen saver
-                try {
-                    spawn(`${process.env['SystemRoot']}\\System32\\PhotoScreensaver.scr`, [ "/s"]);
-                } catch (e) {
-                    console.log(e);
-                }
+            if (process.platform == "win32") {
+                // start the slide show
+                startSlideShow(actionContext.sessionContext.agentContext);
             } else {
                 result = createActionResultFromError(`This action is not supported on platform '${process.platform}'.`);
             }
@@ -482,22 +474,140 @@ export async function createViewServiceHost(montageUpdatedCallback: (montage: Ph
     });
 }
 
-async function saveMontages(context: SessionContext<MontageActionContext>) {
-    // merge the "working montage" into the saved montages
-    if (context.agentContext.montages.length > 0 && context.agentContext.montage !== undefined) {
-        if (context.agentContext.montages[context.agentContext.montages.length - 1].id == context.agentContext.montage.id) {
-            // replace
-            context.agentContext.montages[context.agentContext.montages.length - 1] = context.agentContext.montage;
-        } else {
-            context.agentContext.montages.push(context.agentContext.montage);
-        }
-    } else {
-        if (context.agentContext.montage !== undefined) {
-            context.agentContext.montages.push(context.agentContext.montage);
-        }
+/**
+ * Starts the built-in windows slideshow screensaver
+ * @param folder The optional folder to lanch the slideshow for
+ */
+function startSlideShow(context: MontageActionContext) {
+
+    // copy images into slide show folder
+    const slideShowDir = path.join(process.env["TEMP"]!, "typeagent_slideshow");
+    if (existsSync(slideShowDir)) {
+        rmdirSync(slideShowDir, { recursive: true });
     }
 
-    // save the montage state for later
-    await context.sessionStorage?.write(montageFile, JSON.stringify(context.agentContext.montages));
+    // make the new dir
+    mkdirSync(slideShowDir);
+
+    // copy images into slideshow dir
+    context.montage?.files.forEach(file => copyFileSync(file, path.join(slideShowDir, path.basename(file))));
+
+    // update slideshow screen saver directory
+    const key = new Registry({
+        hive: Registry.HKCU,
+        key: 'Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\Screensaver'
+      });
+      
+    // set the registry value
+    const pidl = createPIDLFromPath(slideShowDir)
+    if (pidl) {
+        key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
+            if (err) {
+                console.error('Error reading registry value:', err);
+            }
+        });
+    }
+    
+    // start slideshow screen saver
+    try {
+        spawn(`${process.env['SystemRoot']}\\System32\\PhotoScreensaver.scr`, [ "/s"]);
+    } catch (e) {
+        console.log(e);
+    }    
 }
+
+// const ITEMIDLIST = koffi.struct('IDLIST_ABSOLUTE', {
+//  mkid: koffi.struct('SHITEMID', {
+//     cb: 'ushort',
+//     abID: koffi.array('char', 1, 'Array')
+//  })
+// });
+const ITEMIDLIST = koffi.struct('IDLIST_ABSOLUTE', {
+    mkid: 'intptr'
+   });
+
+// const SHITEMID = koffi.struct('SHITEMID', {
+//     cb: 'ushort',
+//     abID: koffi.array('char', 1, 'Array')
+// });
+
+const SHITEMID = koffi.struct('SHITEMID', {
+    cb: 'ushort',
+    abID: 'intptr'
+});
+
+function createPIDLFromPath(path: string) {
+    // Define the ILCreateFromPath function
+    //const user32 = koffi.load('user32.dll');
+    const shell32: koffi.IKoffiLib = koffi.load('shell32.dll');
+    //const MessageBoxA_1 = user32.func('__stdcall', 'MessageBoxA', 'int', ['void *', 'str', 'str', 'uint']);
+    //const MessageBoxA_2 = user32.func('int __stdcall MessageBoxA(void *hwnd, str text, str caption, uint type)');
+    //const ILCreateFromPath = shell32.func('PIDLIST_ABSOLUTE ILCreateFromPath(PCTSTR pszPath)');
+    const ILCreateFromPath = shell32.func('__stdcall', "ILCreateFromPath", ITEMIDLIST, ['str16']);
+    const ILCreateFromPath2 = shell32.func('IDLIST_ABSOLUTE* ILCreateFromPath(char16_t* pszPath)');
+    //console.log(MessageBoxA_1);
+    //console.log(MessageBoxA_2);
+    //console.log(ILCreateFromPath);
+    const r = ILCreateFromPath(path);
+    console.log(r);
+    const ss = koffi.as(r, "SHITEMID");
+    console.log(ss);
+
+    //const sh = koffi.decode(r.mkid, "SHITEMID");
+    //console.log(sh);
+    console.log(SHITEMID);
+    const r2 = ILCreateFromPath2(path);
+    console.log(r2);
+    // const ILCreateFromPath = shell32.func(
+    //     'ILCreateFromPath', 
+    //     'PIDLIST_ABSOLUTE', 
+    //     ['PCTSTR']);
+    
+    // Call the ILCreateFromPath function
+    // const bindCtx = null; // You can create a bind context if needed
+    // const pidl = koffi.alloc(koffi.types.PIDLIST_ABSOLUTE, path.length);
+    // const sfgaoIn = 0;
+    // const sfgaoOut = koffi.alloc(koffi.types.sfgaoOut, 1024);
+    
+    // const result = SHParseDisplayName(path, bindCtx, pidl, sfgaoIn, sfgaoOut);
+    //const result = ILCreateFromPath(path);
+    
+    // if (result === 0) {
+    //     console.log('SHParseDisplayName succeeded');
+    // } else {
+    //     console.error('SHParseDisplayName failed with error code:', result);
+    // }
+ 
+    return null;
+}
+
+// const LPWSTR = ref.types.CString;
+// const LPITEMIDLIST = ref.refType(ref.types.void);
+// const HRESULT = ref.types.int32;
+
+// // Load the Shell32 DLL
+// const shell32 = ffi.Library('shell32', {
+//     'SHParseDisplayName': [HRESULT, [LPWSTR, 'void', LPITEMIDLIST, 'uint32', 'void']],
+//     'CoTaskMemFree': ['void', [LPITEMIDLIST]]
+// });
+
+// /**
+//  * Creates a PIDL from a directory name
+//  * @param path The dir to encrypt
+//  */
+// function createPIDLFromDirectoryName(path: string): Buffer | null {  
+//     const pidlBuffer = ref.alloc(LPITEMIDLIST);
+//     const hr = shell32.SHParseDisplayName(path, null, pidlBuffer, 0, null);
+//     if (hr === 0) { // S_OK
+//       return pidlBuffer.deref() as any as Buffer;
+//     } else {
+//         console.log("Failed to create PIDL!");
+//         return null;
+//     }
+// }
+
+// function freePIDL(pidl: Buffer): void {
+//     shell32.CoTaskMemFree(pidl as ref.Pointer<void>);
+// }
+  
 

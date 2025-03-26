@@ -205,6 +205,12 @@ export function createAgentRpcServer(
                     token,
                 });
             },
+            delete: async (): Promise<boolean> => {
+                return rpc.invoke("tokenCacheDelete", {
+                    contextId,
+                    session,
+                });
+            },
         };
         return {
             read: (
