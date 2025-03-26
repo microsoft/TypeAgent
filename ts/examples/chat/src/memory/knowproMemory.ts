@@ -421,17 +421,22 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const timer = new StopWatch();
-            timer.start();
-            const matches = await kp.searchConversationKnowledge(
-                conversation,
-                createSearchGroup(
+            const selectExpr: kp.SearchSelectExpr = {
+                searchTermGroup: createSearchGroup(
                     termArgs,
                     namedArgs,
                     commandDef,
                     namedArgs.andTerms,
                 ),
-                whenFilterFromNamedArgs(namedArgs, commandDef),
+                when: whenFilterFromNamedArgs(namedArgs, commandDef),
+            };
+            context.printer.writeSelectExpr(selectExpr);
+            const timer = new StopWatch();
+            timer.start();
+            const matches = await kp.searchConversationKnowledge(
+                conversation,
+                selectExpr.searchTermGroup,
+                selectExpr.when,
                 {
                     exactMatch: namedArgs.exact,
                     usePropertyIndex: namedArgs.usePropertyIndex,
@@ -523,7 +528,7 @@ export async function createKnowproCommands(
         def.options.showMessages = argBool("Show message matches", false);
         def.options.knowledgeTopK = argNum(
             "How many top K knowledge matches",
-            25,
+            50,
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
@@ -597,11 +602,7 @@ export async function createKnowproCommands(
             selectExpr.when ??= {};
             selectExpr.when.knowledgeType = namedArgs.ktype;
         }
-        context.printer.writeInColor(chalk.gray, () => {
-            context.printer.writeHeading("Compiled query");
-            context.printer.writeJson(selectExpr);
-            context.printer.writeLine();
-        });
+        context.printer.writeSelectExpr(selectExpr);
         const searchResults = await kp.searchConversation(
             context.conversation!,
             selectExpr.searchTermGroup,
@@ -611,6 +612,8 @@ export async function createKnowproCommands(
                 maxKnowledgeMatches: namedArgs.knowledgeTopK,
                 maxMessageMatches: namedArgs.messageTopK,
                 maxMessageCharsInBudget: namedArgs.charBudget,
+                usePropertyIndex: true,
+                useTimestampIndex: true,
             },
             searchQueryExpr.rawQuery,
         );

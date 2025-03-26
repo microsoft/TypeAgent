@@ -427,17 +427,17 @@ class QueryCompiler {
         // Actions are inherently scope selecting. If any present in the query, use them
         // to restrict scope
         let actionTermsGroup = this.getActionTermsFromSearchGroup(searchGroup);
-        // If additional scoping terms were provided
-        if (filter && filter.scopeDefiningTerms !== undefined) {
-            if (actionTermsGroup !== undefined) {
-                actionTermsGroup.terms.push(...filter.scopeDefiningTerms.terms);
-            } else {
-                actionTermsGroup = filter.scopeDefiningTerms;
-            }
-        }
         if (actionTermsGroup !== undefined) {
             scopeSelectors ??= [];
             this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
+        }
+        // If additional scoping terms were provided
+        if (filter && filter.scopeDefiningTerms !== undefined) {
+            scopeSelectors ??= [];
+            this.addTermsScopeSelector(
+                filter.scopeDefiningTerms,
+                scopeSelectors,
+            );
         }
         // If a thread index is available...
         const threads = this.secondaryIndexes?.threads;

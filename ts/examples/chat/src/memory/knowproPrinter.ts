@@ -341,6 +341,14 @@ export class KnowProPrinter extends ChatPrinter {
         }
     }
 
+    public writeSelectExpr(selectExpr: kp.SearchSelectExpr) {
+        this.writeInColor(chalk.gray, () => {
+            this.writeHeading("Compiled query");
+            this.writeJson(selectExpr);
+            this.writeLine();
+        });
+    }
+
     private writeResultDistinct(
         conversation: kp.IConversation,
         type: kp.KnowledgeType,
