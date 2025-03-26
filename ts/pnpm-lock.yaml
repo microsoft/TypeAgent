@@ -688,9 +688,6 @@ importers:
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
       string-compare:
         specifier: ^1.1.2
         version: 1.1.2
@@ -725,6 +722,9 @@ importers:
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
       typescript:
         specifier: ^5.4.2
         version: 5.4.5
@@ -1514,9 +1514,6 @@ importers:
       node-http:
         specifier: 0.0.5
         version: 0.0.5
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
       telemetry:
         specifier: workspace:*
         version: link:../telemetry
@@ -1557,6 +1554,9 @@ importers:
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
 
   packages/cache:
     dependencies:
@@ -1703,9 +1703,6 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
-      rimraf:
-        specifier: ^5.0.5
-        version: 5.0.5
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@18.18.7)(typescript@5.4.5)
@@ -1728,6 +1725,9 @@ importers:
       prettier:
         specifier: ^3.2.5
         version: 3.2.5
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.5
       typescript:
         specifier: ^5.4.2
         version: 5.4.5
