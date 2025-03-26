@@ -136,6 +136,7 @@ export type StorageListOptions = {
 export interface TokenCachePersistence {
     load(): Promise<string | null>;
     save(token: string): Promise<void>;
+    delete(): Promise<boolean>;
 }
 
 export interface Storage {

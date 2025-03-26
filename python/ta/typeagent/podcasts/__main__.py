@@ -2,23 +2,27 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# Check Python version before importing anything else.
 import sys
-
 minver = (3, 12)
-assert sys.version_info >= minver, f"Needs Python {minver[0]}.{minver[1]}+"
+if sys.version_info < minver:
+    sys.exit(f"Error: Python {minver[0]}.{minver[1]}+ required")
 del minver
 
 import argparse
-from datetime import datetime as Datetime
+import json
 import os
-import sys
-from typing import cast
 
 import dotenv
 
 from ..knowpro.convindex import ConversationIndex
-from ..knowpro.interfaces import IndexingEventHandlers, TextLocation
-from .import_podcasts import import_podcast
+from ..knowpro.interfaces import (
+    Datetime,
+    IndexingEventHandlers,
+    MessageOrdinal,
+    TextLocation,
+)
+from .podcast_import import import_podcast
 
 
 async def main():
@@ -32,6 +36,7 @@ async def main():
     if not args.filename:
         args.filename = os.path.expanduser("~/TypeAgent/python/ta/testdata/npr.txt")
     pod = import_podcast(args.filename, None, Datetime.now(), 3.0)
+    print()
     print("Name-Tag:", pod.name_tag)
     print("Tags:", ", ".join(pod.tags))
     for msg in pod.messages:
@@ -54,21 +59,34 @@ async def main():
         print("Text indexed:", text_and_locations)
         return True
 
+    def on_message_started(message_order: MessageOrdinal) -> bool:
+        print("\nMESSAGE STARTED:", message_order)
+        return True
+
     handler = IndexingEventHandlers(
         on_knowledge_extracted,
         on_embeddings_created,
         on_text_indexed,
+        on_message_started,
     )
+
     indexing_result = await pod.build_index(handler)
+
+    print()
     print(indexing_result)
     if indexing_result.semantic_refs is not None:
         if error := indexing_result.semantic_refs.error:
-            raise SystemExit(error)
-    if pod.semantic_ref_index is not None:
-        data = pod.semantic_ref_index.serialize()
-        new = ConversationIndex(data)
-        assert new.serialize() == data
-        # print(json.dumps(data, indent=2))
+            raise RuntimeError(error)
+
+    print()
+    data = await pod.serialize()
+    print(json.dumps(data))  # This checks that the serialization is valid JSON.
+
+    # if pod.semantic_ref_index is not None:
+    #     data = pod.semantic_ref_index.serialize()
+    #     # new = ConversationIndex(data)
+    #     # assert new.serialize() == data
+    #     # print(json.dumps(data, indent=2))
 
     # print(await pod.serialize())
 

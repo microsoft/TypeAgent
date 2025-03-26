@@ -1,12 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    IClientContext,
-    getClientContext,
-    PlayerAction,
-    handleCall,
-} from "music";
+import { IClientContext, getClientContext, handleCall } from "../client.js";
 import chalk from "chalk";
 import {
     AppAgent,
@@ -28,6 +23,10 @@ import {
     SpotifyQuery,
     toQueryString,
 } from "../search.js";
+import { PlayerAction } from "./playerSchema.js";
+import registerDebug from "debug";
+
+const debugSpotify = registerDebug("typeagent:spotify");
 
 export function instantiate(): AppAgent {
     return {
@@ -64,7 +63,7 @@ async function executePlayerAction(
     }
 
     return createActionResultFromError(
-        "Action translated but not performed. Spotify integration is not enabled.",
+        "Not logged in to Spotify.  Use the command '@player spotify login' to log in.",
     );
 }
 
@@ -73,25 +72,51 @@ async function updatePlayerContext(
     context: SessionContext<PlayerActionContext>,
 ) {
     if (enable) {
-        const user = await enableSpotify(context);
-        context.notify(
-            AppAgentEvent.Info,
-            chalk.blue(`Spotify integration enabled. Logged in as ${user}.`),
-        );
-    } else {
-        const timeoutId = context.agentContext.spotify?.userData?.timeoutId;
-        if (timeoutId !== undefined) {
-            clearTimeout(timeoutId);
+        if (context.agentContext.spotify) {
+            return;
         }
-        context.agentContext.spotify = undefined;
+        try {
+            const user = await enableSpotify(context, true);
+            const message = `Spotify logged in as ${user}.`;
+            debugSpotify(message);
+            context.notify(AppAgentEvent.Info, chalk.green(message));
+        } catch (e: any) {
+            const message = `Spotify not logged in.  Error: ${e.message}`;
+            debugSpotify(message);
+            context.notify(AppAgentEvent.Error, chalk.red(message));
+        }
+    } else {
+        disableSpotify(context);
     }
 }
 
-async function enableSpotify(context: SessionContext<PlayerActionContext>) {
-    const clientContext = await getClientContext(context.instanceStorage);
+export async function enableSpotify(
+    context: SessionContext<PlayerActionContext>,
+    silent: boolean = false,
+) {
+    const clientContext = await getClientContext(
+        context.instanceStorage,
+        silent,
+    );
     context.agentContext.spotify = clientContext;
-
     return clientContext.service.retrieveUser().username;
+}
+
+export async function disableSpotify(
+    context: SessionContext<PlayerActionContext>,
+    clearToken: boolean = false,
+) {
+    const clientContext = context.agentContext.spotify;
+    if (clientContext !== undefined) {
+        const timeoutId = clientContext.userData?.timeoutId;
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+        if (clearToken) {
+            await clientContext.service.tokenProvider.clearRefreshToken();
+        }
+        context.agentContext.spotify = undefined;
+    }
 }
 
 async function validatePlayerWildcardMatch(
@@ -100,7 +125,7 @@ async function validatePlayerWildcardMatch(
 ) {
     const clientContext = context.agentContext.spotify;
     if (clientContext === undefined) {
-        // Can't validate without context, assume true
+        // REVIEW: Can't validate without context, assume true
         return true;
     }
     switch (action.actionName) {

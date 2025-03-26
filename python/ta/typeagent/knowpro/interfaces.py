@@ -1,33 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# TODO:
-# - See TODOs in kplib.py.
-# - Do the Protocol classes need to be @runtime_checkable?
-#
-# NOTE:
-# - I took some liberty with index types and made them int.
-# - I rearranged the order in some cases to ensure def-before-ref.
-# - I translated readonly to @property.
-
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime as Datetime
+from datetime import datetime as Datetime, timedelta as Timedelta
 from typing import (
+    Any,
     Callable,
     Literal,
     NotRequired,
     Protocol,
-    runtime_checkable,
     Self,
     TypedDict,
 )
 
+from ..aitools.vectorbase import ITextEmbeddingIndexData, VectorBase
 from . import kplib
 
 
 # An object that can provide a KnowledgeResponse structure.
-@runtime_checkable
 class IKnowledgeSource(Protocol):
     def get_knowledge(self) -> kplib.KnowledgeResponse:
         raise NotImplementedError
@@ -42,7 +33,6 @@ class DeletionInfo:
 type MessageOrdinal = int
 
 
-@runtime_checkable
 class IMessage(IKnowledgeSource, Protocol):
     # The text of the message, split into chunks.
     text_chunks: list[str]
@@ -67,12 +57,13 @@ class ScoredSemanticRefOrdinal:
             semanticRefOrdinal=self.semantic_ref_ordinal, score=self.score
         )
 
-    @staticmethod
-    def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
-        return ScoredSemanticRefOrdinal(
-            semantic_ref_ordinal=data["semanticRefOrdinal"],
-            score=data["score"],
-        )
+    # TODO: deserialize
+    # @staticmethod
+    # def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
+    #     return ScoredSemanticRefOrdinal(
+    #         semantic_ref_ordinal=data["semanticRefOrdinal"],
+    #         score=data["score"],
+    #     )
 
 
 @dataclass
@@ -81,7 +72,6 @@ class ScoredMessageOrdinal:
     score: float
 
 
-@runtime_checkable
 class ITermToSemanticRefIndex(Protocol):
     def get_terms(self) -> Sequence[str]:
         raise NotImplementedError
@@ -116,6 +106,12 @@ class Tag:
 type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 
 
+class TextLocationData(TypedDict):
+    messageOrdinal: MessageOrdinal
+    chunkOrdinal: int
+    charOrdinal: int
+
+
 @dataclass(order=True)
 class TextLocation:
     # The ordinal of the message.
@@ -127,6 +123,18 @@ class TextLocation:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal}, {self.char_ordinal})"
+
+    def serialize(self) -> TextLocationData:
+        return TextLocationData(
+            messageOrdinal=self.message_ordinal,
+            chunkOrdinal=self.chunk_ordinal,
+            charOrdinal=self.char_ordinal,
+        )
+
+
+class TextRangeData(TypedDict):
+    start: TextLocationData
+    end: NotRequired[TextLocationData | None]
 
 
 # A text range within a session.
@@ -148,6 +156,27 @@ class TextRange:
         selfend = self.end or self.start
         return self.start <= other.start and otherend <= selfend
 
+    def serialize(self) -> TextRangeData:
+        if self.end is None:
+            return TextRangeData(start=self.start.serialize())
+        else:
+            return TextRangeData(
+                start=self.start.serialize(),
+                end=self.end.serialize(),
+            )
+
+
+# TODO: Implement serializing KnowledgeData (or import from kplib).
+class KnowledgeData(TypedDict):
+    pass
+
+
+class SemanticRefData(TypedDict):
+    semanticRefOrdinal: SemanticRefOrdinal
+    range: TextRangeData
+    knowledgeType: KnowledgeType
+    knowledge: KnowledgeData
+
 
 @dataclass
 class SemanticRef:
@@ -158,6 +187,14 @@ class SemanticRef:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.range}, {self.knowledge_type!r}, {self.knowledge})"
+
+    def serialize(self) -> SemanticRefData:
+        return SemanticRefData(
+            semanticRefOrdinal=self.semantic_ref_ordinal,
+            range=self.range.serialize(),
+            knowledgeType=self.knowledge_type,
+            knowledge=KnowledgeData(),  # TODO: self.knowledge.serialize()
+        )
 
 
 @dataclass
@@ -178,11 +215,18 @@ class DateRange:
         return self.start <= datetime <= self.end
 
 
-@dataclass
+# Term must be hashable to allow using it as a dict key or set member.
+@dataclass(unsafe_hash=True)
 class Term:
     text: str
     # Optional weighting for these matches.
     weight: float | None = None
+
+    def serialize(self) -> "TermData":
+        if self.weight is None:
+            return TermData(text=self.text)
+        else:
+            return TermData(text=self.text, weight=self.weight)
 
 
 @dataclass
@@ -193,9 +237,8 @@ class ScoredKnowledge:
 
 
 # Allows for faster retrieval of name, value properties
-@runtime_checkable
 class IPropertyToSemanticRefIndex(Protocol):
-    def get_values(self) -> Sequence[str]:
+    def get_values(self) -> list[str]:
         raise NotImplementedError
 
     def add_property(
@@ -219,27 +262,24 @@ class TimestampedTextRange:
 
 
 # Return text ranges in the given date range.
-@runtime_checkable
 class ITimestampToTextRangeIndex(Protocol):
     def add_timestamp(self, message_ordinal: MessageOrdinal, timestamp: str) -> bool:
         raise NotImplementedError
 
     def add_timestamps(
-        self, message_imestamps: Sequence[tuple[MessageOrdinal, str]]
-    ) -> None:
+        self, message_timestamps: list[tuple[MessageOrdinal, str]]
+    ) -> "ListIndexingResult":
         raise NotImplementedError
 
-    def lookup_range(self, date_range: DateRange) -> Sequence[TimestampedTextRange]:
+    def lookup_range(self, date_range: DateRange) -> list[TimestampedTextRange]:
         raise NotImplementedError
 
 
-@runtime_checkable
 class ITermToRelatedTerms(Protocol):
     def lookup_term(self, text: str) -> Sequence[Term] | None:
         raise NotImplementedError
 
 
-@runtime_checkable
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
         self, terms: Sequence[str], event_handler: "IndexingEventHandlers | None" = None
@@ -263,15 +303,22 @@ class ITermToRelatedTermsFuzzy(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
 class ITermToRelatedTermsIndex(Protocol):
     @property
     def aliases(self) -> ITermToRelatedTerms | None:
         raise NotImplementedError
 
     @property
-    def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None:
+    def fuzzy_index(self) -> VectorBase | None:
         raise NotImplementedError
+
+    def serialize(self) -> "ITermsToRelatedTermsIndexData":
+        raise NotImplementedError
+
+
+class ThreadData(TypedDict):
+    description: str
+    ranges: list[TextRangeData]
 
 
 # A Thread is a set of text ranges in a conversation.
@@ -279,6 +326,12 @@ class ITermToRelatedTermsIndex(Protocol):
 class Thread:
     description: str
     ranges: Sequence[TextRange]
+
+    def serialize(self) -> ThreadData:
+        return ThreadData(
+            description=self.description,
+            ranges=[range.serialize() for range in self.ranges],
+        )
 
 
 type ThreadOrdinal = int
@@ -290,11 +343,8 @@ class ScoredThreadOrdinal:
     score: float
 
 
-@runtime_checkable
 class IConversationThreads(Protocol):
-    @property
-    def threads(self) -> Sequence[Thread]:
-        raise NotImplementedError
+    threads: list[Thread]
 
     async def add_thread(self, thread: Thread) -> None:
         raise NotImplementedError
@@ -307,8 +357,10 @@ class IConversationThreads(Protocol):
     ) -> Sequence[ScoredThreadOrdinal] | None:
         raise NotImplementedError
 
+    def serialize(self) -> "IConversationThreadData":
+        raise NotImplementedError
 
-@runtime_checkable
+
 class IMessageTextIndex(Protocol):
 
     async def add_messages(
@@ -336,16 +388,14 @@ class IMessageTextIndex(Protocol):
         raise NotImplementedError
 
 
-@runtime_checkable
 class IConversationSecondaryIndexes(Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
     timestamp_index: ITimestampToTextRangeIndex | None
     term_to_related_terms_index: ITermToRelatedTermsIndex | None
-    threads: IConversationThreads | None
+    threads: IConversationThreads | None = None
     message_index: IMessageTextIndex | None = None
 
 
-@runtime_checkable
 class IConversation[
     TMessage: IMessage,
     TTermToSemanticRefIndex: ITermToSemanticRefIndex,
@@ -364,6 +414,36 @@ class IConversation[
 # --------------------------------------------------
 
 
+class IThreadDataItem(TypedDict):
+    thread: ThreadData
+    embedding: list[
+        list[float]
+    ]  # TODO: What's the compatible serialization type for NormalizedEmbedding?
+
+
+class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):
+    threads: list[TThreadDataItem] | None
+
+
+class TermData(TypedDict):
+    text: str
+    weight: NotRequired[float | None]
+
+
+class ITermsToRelatedTermsDataItem(TypedDict):
+    termText: str
+    relatedTerms: list[TermData]
+
+
+class ITermToRelatedTermsData(TypedDict):
+    relatedTerms: NotRequired[list[ITermsToRelatedTermsDataItem] | None]
+
+
+class ITermsToRelatedTermsIndexData(TypedDict):
+    aliasData: NotRequired[ITermToRelatedTermsData]
+    textEmbeddingData: NotRequired[ITextEmbeddingIndexData]
+
+
 class ScoredSemanticRefOrdinalData(TypedDict):
     semanticRefOrdinal: SemanticRefOrdinal
     score: float
@@ -379,11 +459,11 @@ class TermToSemanticRefIndexData(TypedDict):
     items: list[TermToSemanticRefIndexItemData]
 
 
-class IConversationData[TMessage](TypedDict):
-    name_tag: str
-    messages: list[TMessage]
+class IConversationData[TMessageData](TypedDict):
+    nameTag: str
+    messages: list[TMessageData]
     tags: list[str]
-    semanticRefs: list[SemanticRef]
+    semanticRefs: list[SemanticRefData] | None
     semanticIndexData: NotRequired[TermToSemanticRefIndexData | None]
 
 
@@ -427,11 +507,12 @@ class IndexingEventHandlers:
         ]
         | None
     ) = None
+    on_message_started: Callable[[MessageOrdinal], bool] | None = None
 
 
 @dataclass
 class TextIndexingResult:
-    completed_upto: TextLocation | None = None
+    completed_upto: TextLocation | None = None  # Last message and chunk indexed
     error: str | None = None
 
 
@@ -443,8 +524,8 @@ class ListIndexingResult:
 
 @dataclass
 class SecondaryIndexingResults:
-    propertie: ListIndexingResult | None = None
-    timestamp: ListIndexingResult | None = None
+    properties: ListIndexingResult | None = None
+    timestamps: ListIndexingResult | None = None
     related_terms: ListIndexingResult | None = None
     message: TextIndexingResult | None = None
 

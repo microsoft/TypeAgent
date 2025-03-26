@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import os
 
 import typechat
@@ -60,11 +60,7 @@ class KnowledgeExtractor:
         self.translator = self.create_translator(self.model)
 
     async def extract(self, message: str) -> typechat.Result[kplib.KnowledgeResponse]:
-        result = await self.translator.translate(message)
-        # TODO
-        # if isinstance(result, typechat.Success):
-        #     self.merge_action_knowledge(result.data)
-        return result
+        return await self.translator.translate(message)
 
     def create_translator(
         self, model: typechat.TypeChatLanguageModel

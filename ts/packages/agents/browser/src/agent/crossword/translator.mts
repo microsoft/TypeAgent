@@ -5,7 +5,7 @@ import {
     createJsonTranslator,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
-    PromptSection,
+    MultimodalPromptContent,
 } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { Crossword } from "./schema/pageSchema.mjs";
@@ -24,9 +24,8 @@ export type HtmlFragments = {
 function getBootstrapPrefixPromptSection() {
     let prefixSection = [];
     prefixSection.push({
-        role: "system",
-        content:
-            "You are a virtual assistant that can help users to complete requests by interacting with the UI of a webpage.",
+        type: "text",
+        text: "You are a virtual assistant that can help users to complete requests by interacting with the UI of a webpage.",
     });
     return prefixSection;
 }
@@ -37,8 +36,8 @@ function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
         const textFragments = fragments.map((a) => a.content);
         const inputHtml = JSON.stringify(textFragments, undefined, 2);
         htmlSection.push({
-            role: "user",
-            content: `
+            type: "text",
+            text: `
           Here are HTML fragments from the page.
           '''
           ${inputHtml}
@@ -55,8 +54,8 @@ function getHtmlTextOnlyPromptSection(fragments: HtmlFragments[] | undefined) {
         const textFragments = fragments.map((a) => a.text);
         const inputText = JSON.stringify(textFragments, undefined, 2);
         htmlSection.push({
-            role: "user",
-            content: `
+            type: "text",
+            text: `
           Here are Text fragments from the page.
           '''
           ${inputText}
@@ -146,8 +145,8 @@ export class CrosswordPageTranslator<T extends object> {
             ...prefixSection,
             ...htmlSection,
             {
-                role: "user",
-                content: `
+                type: "text",
+                text: `
             Use the layout information provided to generate a "${this.schemaName}" response using the typescript schema below.Note that you must include the complete response.
             This MUST include all the clues in the crossword. 
             
@@ -173,8 +172,8 @@ export class CrosswordPageTranslator<T extends object> {
             ...prefixSection,
             ...htmlSection,
             {
-                role: "user",
-                content: `
+                type: "text",
+                text: `
             Here is the existing "Crossword" data generated from previous interactions. 
             
             '''
@@ -183,8 +182,8 @@ export class CrosswordPageTranslator<T extends object> {
         `,
             },
             {
-                role: "user",
-                content: `
+                type: "text",
+                text: `
             Use the layout information provided to generate updated "Crossword" response by adding CSS Selector information. Use the crossword clue information
             already identified above to locate the HTML elements that should be used in CSS Selectors. Here is the Typescript Schema for Crossword elements" 
             
@@ -207,8 +206,8 @@ export class CrosswordPageTranslator<T extends object> {
             ...prefixSection,
             ...htmlSection,
             {
-                role: "user",
-                content: `
+                type: "text",
+                text: `
             Use the layout information provided to generate a "${this.schemaName}" response using the typescript schema below.Note that you must include the complete response.
             This MUST include all the clues in the crossword. 
             
@@ -232,8 +231,8 @@ export class CrosswordPageTranslator<T extends object> {
             ...prefixSection,
             ...htmlSection,
             {
-                role: "user",
-                content: `
+                type: "text",
+                text: `
         Use the layout information provided to generate a "CrosswordPresence" response using the typescript schema below:
         
         '''
@@ -248,30 +247,37 @@ export class CrosswordPageTranslator<T extends object> {
     }
 
     async getCluesTextWithSelectors(fragments: HtmlFragments[]) {
-        const promptSections = this.getCluesTextWithSelectorsPromptSections(
-            fragments,
-        ) as PromptSection[];
+        const promptSections =
+            this.getCluesTextWithSelectorsPromptSections(fragments);
 
         // overtride default create prompt
         this.translator.createRequestPrompt = (input: string) => {
             return "";
         };
 
-        const response = await this.translator.translate("", promptSections);
+        const response = await this.translator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
         return response;
     }
 
     async getCluesText(fragments?: HtmlFragments[]) {
-        const promptSections = this.getCluesTextOnlyPromptSections(
-            fragments,
-        ) as PromptSection[];
+        const promptSections = this.getCluesTextOnlyPromptSections(fragments);
 
         // overtride default create prompt
         this.translator.createRequestPrompt = (input: string) => {
             return "";
         };
 
-        const response = await this.translator.translate("", promptSections);
+        const response = await this.translator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
         return response;
     }
 
@@ -282,14 +288,19 @@ export class CrosswordPageTranslator<T extends object> {
         const promptSections = this.getSelectorsForCluesTextSections(
             fragments,
             partialData,
-        ) as PromptSection[];
+        );
 
         // overtride default create prompt
         this.translator.createRequestPrompt = (input: string) => {
             return "";
         };
 
-        const response = await this.translator.translate("", promptSections);
+        const response = await this.translator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
         return response;
     }
 
@@ -323,9 +334,8 @@ export class CrosswordPageTranslator<T extends object> {
     }
 
     async checkIsCrosswordOnPage(fragments?: HtmlFragments[]) {
-        const promptSections = this.getIsCrosswordPresentPromptSections(
-            fragments,
-        ) as PromptSection[];
+        const promptSections =
+            this.getIsCrosswordPresentPromptSections(fragments);
 
         const validator = createTypeScriptJsonValidator(
             this.presenceSchema,
@@ -337,10 +347,12 @@ export class CrosswordPageTranslator<T extends object> {
             return "";
         };
 
-        const response = await bootstrapTranslator.translate(
-            "",
-            promptSections,
-        );
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
         return response;
     }
 }
