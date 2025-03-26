@@ -3,6 +3,7 @@
 
 import {
     createJsonTranslator,
+    MultimodalPromptContent,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
@@ -935,6 +936,89 @@ export class SchemaDiscoveryAgent<T extends object> {
 
         const response = await bootstrapTranslator.translate("", [
             { role: "user", content: JSON.stringify(promptSections) },
+        ]);
+        return response;
+    }
+
+    async getWebPlanRunResult(
+        recordedActionName: string,
+        recordedActionDescription: string,
+        parameters: Map<string, any>,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const packageRoot = path.join("..", "..", "..");
+        const resultsSchema = await fs.promises.readFile(
+            fileURLToPath(
+                new URL(
+                    path.join(
+                        packageRoot,
+                        "./src/agent/discovery/schema/evaluatePlan.mts",
+                    ),
+                    import.meta.url,
+                ),
+            ),
+            "utf8",
+        );
+
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "WebPlanResult",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getBootstrapPrefixPromptSection();
+        let requestSection = [];
+        requestSection.push({
+            type: "text",
+            text: `
+           
+        The user provided an example of how they would complete the ${recordedActionName} action on the webpage. 
+        They provided a description of the task below:
+        '''
+        ${recordedActionDescription}
+        '''
+
+        Thw task was run on the page using the parameters:
+        '''
+        ${JSON.stringify(Object.fromEntries(parameters))}
+        '''
+        `,
+        });
+
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+    Examine the layout information provided as well as the user action description. Use this information to determine whether the task goal has
+    been met in the provided webpage. Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+            
+    '''
+    ${bootstrapTranslator.validator.getSchemaText()}
+    '''
+    `,
+            },
+            ...requestSection,
+            {
+                type: "text",
+                text: `
+    The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+    `,
+            },
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
         ]);
         return response;
     }

@@ -64,7 +64,7 @@ export async function handleSchemaDiscoveryAction(
         case "registerPageDynamicAgent":
             actionData = await handleRegisterSiteSchema(action);
             break;
-        case "addUserAction":
+        case "startAuthoringSession":
             actionData = await handleRegisterAuthoringAgent(action);
             break;
     }

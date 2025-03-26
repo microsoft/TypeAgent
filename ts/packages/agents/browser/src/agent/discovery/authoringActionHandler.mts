@@ -11,15 +11,27 @@ import {
 } from "./schema/authoringActions.mjs";
 import { setupAuthoringActions } from "./authoringUtilities.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
+import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
+import { SchemaDiscoveryAgent } from "./translator.mjs";
+import { WebPlanResult } from "./schema/evaluatePlan.mjs";
+
+type WebPlanInfo = {
+    webPlanName?: string | undefined;
+    webPlanDescription?: string | undefined;
+    webPlanSteps?: string[] | undefined;
+    requiredParameterNames?: string[] | undefined;
+};
 
 export function createSchemaAuthoringAgent(
     browser: BrowserConnector,
-    agent: any,
+    agent: SchemaDiscoveryAgent<SchemaDiscoveryActions>,
     context: any,
 ): AppAgent {
     const actionUtils = setupAuthoringActions(browser, agent);
     let intentInfo: { intentJson: UserIntent; actions: any } | undefined =
         undefined;
+
+    let webPlanDraft: WebPlanInfo = {};
 
     return {
         async executeAction(
@@ -67,7 +79,22 @@ export function createSchemaAuthoringAgent(
             result.additionalInstructions = additionalInstructions;
         }
 
+        result.entities;
         return result;
+    }
+
+    function setQuestionWithFallback(
+        action: CreateOrUpdateWebPlan,
+        fallback: string,
+    ) {
+        if (
+            action.parameters.nextPrompt !== undefined &&
+            action.parameters.nextPrompt.length > 0
+        ) {
+            return action.parameters.nextPrompt;
+        } else {
+            return fallback;
+        }
     }
 
     async function getNextAuthoringQuestion(action: CreateOrUpdateWebPlan) {
@@ -75,20 +102,39 @@ export function createSchemaAuthoringAgent(
         let question =
             "Check the output in the browser. Is the task completed?";
 
+        webPlanDraft = {
+            webPlanName: action.parameters.webPlanName,
+            webPlanDescription: action.parameters.webPlanDescription,
+            webPlanSteps: action.parameters.webPlanSteps,
+            requiredParameterNames: action.parameters.requiredParameterNames,
+        };
         let additionalInstructions = [
-            `Current web plan data: ${JSON.stringify({
-                name: action.parameters.webPlanName,
-                description: action.parameters.webPlanDescription,
-                steps: action.parameters.webPlanSteps,
-            })}`,
+            `Current web plan data: ${JSON.stringify(webPlanDraft)}`,
         ];
-        if (action.parameters.webPlanName === undefined) {
-            question = "What name would you like to use for the new task?";
-        } else if (action.parameters.webPlanDescription === undefined) {
-            question = "Give a short description of the what the task does";
-        } else if (action.parameters.webPlanSteps === undefined) {
-            question =
-                "How would you complete this task? Describe the steps involved.";
+        if (
+            action.parameters.webPlanName === undefined ||
+            action.parameters.webPlanName.length === 0
+        ) {
+            question = setQuestionWithFallback(
+                action,
+                "What name would you like to use for the new task?",
+            );
+        } else if (
+            action.parameters.webPlanDescription === undefined ||
+            action.parameters.webPlanDescription.length === 0
+        ) {
+            question = setQuestionWithFallback(
+                action,
+                "Give a short description of the what the task does",
+            );
+        } else if (
+            action.parameters.webPlanSteps === undefined ||
+            action.parameters.webPlanSteps.length === 0
+        ) {
+            question = setQuestionWithFallback(
+                action,
+                "How would you complete this task? Describe the steps involved.",
+            );
         } else {
             question =
                 "I updated the task. Would you like to refine further or run the current plan?";
@@ -166,8 +212,23 @@ export function createSchemaAuthoringAgent(
                     intentInfo.actions,
                     paramsMap,
                 );
-                question =
-                    "Check the output in the browser. Is the task completed?";
+
+                const htmlFragments = await browser.getHtmlFragments();
+
+                const evaluationResult = await agent.getWebPlanRunResult(
+                    action.parameters.webPlanName!,
+                    action.parameters.webPlanDescription!,
+                    paramsMap,
+                    htmlFragments,
+                );
+
+                if (evaluationResult.success) {
+                    const resultData = evaluationResult.data as WebPlanResult;
+                    question = resultData.message;
+                } else {
+                    question =
+                        "Check the output in the browser. Is the task completed?";
+                }
             }
         } else {
             question =
