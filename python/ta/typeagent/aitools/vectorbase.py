@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Any, NamedTuple, TypedDict
+from typing import Any, NamedTuple, TypedDict, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -17,7 +17,7 @@ class ScoredOrdinal(NamedTuple):
 
 class ITextEmbeddingIndexData(TypedDict):
     textItems: list[str]
-    embeddings: list[Any]  # TODO: list[NormalizedEmbeddingData]
+    embeddings: list[list[float]]  # TODO: list[NormalizedEmbeddingData]
 
 
 class VectorBase:
@@ -94,7 +94,9 @@ class VectorBase:
             textItems=[],  # TODO: Where do I get a list[str] here?
             # TODO: Serialize the full embedding, not just the first 3 elements.
             # TODO: Serialize as binary data.
-            embeddings=[embedding[:3].tolist() for embedding in self._vectors],
+            embeddings=[
+                cast(list[float], embedding[:3].tolist()) for embedding in self._vectors
+            ],
         )
 
 

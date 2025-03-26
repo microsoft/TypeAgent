@@ -25,7 +25,6 @@
 
 ## Refactoring implementations
 
-- Move various create_blah() functions into  Blah.__init__()
 - Change some inconsistent module names
 - Rewrite podcast parsing without regexes
 
@@ -45,3 +44,10 @@
 ## Maybe...
 
 - Add docstrings etc.
+
+## Questions
+
+- Do the serialization data formats (which are TypedDicts, not Protocols):
+  - Really belong in interfaces.py?
+  - Need to have names starting with 'I'?
+  My answers for both are no, unless Steve explains why.

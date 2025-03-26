@@ -11,7 +11,9 @@ from .interfaces import (
     IConversationSecondaryIndexes,
     IMessage,
     IMessageTextIndex,
+    IMessageTextIndexData,
     ITermToSemanticRefIndex,
+    ITextToTextLocationIndexData,
     IndexingEventHandlers,
     ListIndexingResult,
     MessageOrdinal,
@@ -150,3 +152,8 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
                 matches.values(), key=lambda match: match.score, reverse=True
             )
         ]
+
+    def serialize(self) -> IMessageTextIndexData:
+        return IMessageTextIndexData(
+            indexData=self.text_location_index.serialize(),
+        )

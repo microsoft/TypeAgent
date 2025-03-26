@@ -16,7 +16,6 @@ from typing import (
 
 from ..aitools.vectorbase import (
     ITextEmbeddingIndexData,
-    NormalizedEmbeddings,
     VectorBase,
 )
 from . import kplib
@@ -391,6 +390,11 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
     ) -> list[ScoredMessageOrdinal]:
         raise NotImplementedError
 
+    # TODO: Others?
+
+    def serialize(self) -> "IMessageTextIndexData":
+        raise NotImplementedError
+
 
 class IConversationSecondaryIndexes[TMessage: IMessage](Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
@@ -471,8 +475,8 @@ class IConversationData[TMessageData](TypedDict):
 
 
 class ITextToTextLocationIndexData(TypedDict):
-    textLocations: list[TextLocation]
-    embeddings: NormalizedEmbeddings
+    textLocations: list[TextLocationData]
+    embeddings: ITextEmbeddingIndexData
 
 
 class IMessageTextIndexData(TypedDict):
@@ -480,7 +484,6 @@ class IMessageTextIndexData(TypedDict):
 
 
 class IConversationDataWithIndexes[TMessageData](IConversationData[TMessageData]):
-
     relatedTermsIndexData: NotRequired[ITermsToRelatedTermsIndexData | None]
     threadData: NotRequired[IConversationThreadData | None]
     messageIndexData: NotRequired[IMessageTextIndexData | None]

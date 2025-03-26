@@ -102,7 +102,9 @@ class Podcast(
     settings: ConversationSettings = field(default_factory=ConversationSettings)
     semantic_ref_index: convindex.ConversationIndex = field(default_factory=convindex.ConversationIndex)  # type: ignore  # TODO
 
-    secondary_indexes: interfaces.IConversationSecondaryIndexes = field(init=False)
+    secondary_indexes: interfaces.IConversationSecondaryIndexes[PodcastMessage] = field(
+        init=False
+    )
 
     def __post_init__(self) -> None:
         # This needs self.settings, so can't use field(default_factor=...)
