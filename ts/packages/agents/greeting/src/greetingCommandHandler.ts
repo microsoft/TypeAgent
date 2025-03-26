@@ -44,13 +44,19 @@ type GreetingAgentContext = {
 };
 
 async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
-    const result = execSync("az ad signed-in-user show");
-    const user = JSON.parse(result.toString());
+    let given = "";
+    let sur = "";
+    try {
+        const result = execSync("az ad signed-in-user show");
+        const user = JSON.parse(result.toString());
+        given = user.givenName;
+        sur = user.surname;
+    } catch (e) {}
 
     return {
         user: {
-            givenName: user.givenName,
-            surName: user.surname,
+            givenName: given,
+            surName: sur,
         },
     };
 }
