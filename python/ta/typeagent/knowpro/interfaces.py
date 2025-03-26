@@ -14,7 +14,11 @@ from typing import (
     TypedDict,
 )
 
-from ..aitools.vectorbase import ITextEmbeddingIndexData, VectorBase
+from ..aitools.vectorbase import (
+    ITextEmbeddingIndexData,
+    NormalizedEmbeddings,
+    VectorBase,
+)
 from . import kplib
 
 
@@ -467,9 +471,25 @@ class IConversationData[TMessageData](TypedDict):
     semanticIndexData: NotRequired[TermToSemanticRefIndexData | None]
 
 
-# ------------------------
-# Indexing
-# ------------------------
+class ITextToTextLocationIndexData(TypedDict):
+    textLocations: list[TextLocation]
+    embeddings: NormalizedEmbeddings
+
+
+class IMessageTextIndexData(TypedDict):
+    indexData: NotRequired[ITextToTextLocationIndexData | None]
+
+
+class IConversationDataWithIndexes[TMessageData](IConversationData[TMessageData]):
+
+    relatedTermsIndexData: NotRequired[ITermsToRelatedTermsIndexData | None]
+    threadData: NotRequired[IConversationThreadData | None]
+    messageIndexData: NotRequired[IMessageTextIndexData | None]
+
+
+# --------------------------------
+# Indexing helper data structures
+# --------------------------------
 
 
 # TODO: Should the callables become methods with a default implementation?

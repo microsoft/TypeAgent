@@ -7,18 +7,18 @@ from typing import Any, Protocol
 from ..aitools.embeddings import NormalizedEmbeddings
 from ..aitools.vectorbase import VectorBase
 from .importing import TextEmbeddingIndexSettings
-from .interfaces import IndexingEventHandlers, ListIndexingResult, TextLocation
+from .interfaces import (
+    ITextToTextLocationIndexData,
+    IndexingEventHandlers,
+    ListIndexingResult,
+    TextLocation,
+)
 
 
 @dataclass
 class ScoredTextLocation:
     text_location: TextLocation
     score: float
-
-
-class ITextToTextLocationIndexData(Protocol):
-    textLocations: list[TextLocation]
-    embeddings: NormalizedEmbeddings
 
 
 class ITextToTextLocationIndex(Protocol):

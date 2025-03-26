@@ -4,6 +4,7 @@
 
 # Check Python version before importing anything else.
 import sys
+
 minver = (3, 12)
 if sys.version_info < minver:
     sys.exit(f"Error: Python {minver[0]}.{minver[1]}+ required")

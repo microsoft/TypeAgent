@@ -92,7 +92,7 @@ class VectorBase:
     def serialize(self) -> ITextEmbeddingIndexData:
         return ITextEmbeddingIndexData(
             textItems=[],  # TODO: Where do I get a list[str] here?
-            # TODO: Serialize the full embedding, not just the first 3 elements. 
+            # TODO: Serialize the full embedding, not just the first 3 elements.
             # TODO: Serialize as binary data.
             embeddings=[embedding[:3].tolist() for embedding in self._vectors],
         )

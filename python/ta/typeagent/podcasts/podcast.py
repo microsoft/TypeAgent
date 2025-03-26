@@ -84,7 +84,7 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
         )
 
 
-class PodcastData(secindex.IConversationDataWithIndexes[PodcastMessageData]):
+class PodcastData(interfaces.IConversationDataWithIndexes[PodcastMessageData]):
     pass
 
 
@@ -161,8 +161,8 @@ class Podcast(
             )
         if self.secondary_indexes.threads:
             data["threadData"] = self.secondary_indexes.threads.serialize()
-        # if self.secondary_indexes.message_index:
-        #     data["messageIndexData"] = self.secondary_indexes.message_index.serialize()
+        if self.secondary_indexes.message_index:
+            data["messageIndexData"] = self.secondary_indexes.message_index.serialize()
         return data
 
     # TODO: deserialize
