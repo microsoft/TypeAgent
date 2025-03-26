@@ -22,6 +22,7 @@ export type CreateOrUpdateWebPlan = {
 export type RunCurrentWebPlan = {
     actionName: "runCurrentWebPlan";
     parameters: {
+        // the proposed name for the plan
         webPlanName?: string;
         // Set this value baderd on the web plan name, description and steps. The goal defines the
         // expected state of the website/webpage when the task is completed.
