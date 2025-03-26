@@ -38,7 +38,26 @@ export type SaveCurrentWebPlan = {
     actionName: "saveCurrentWebPlan";
 };
 
+export type GetSuggestedSteps = {
+    actionName: "getSuggestedSteps";
+    parameters: {
+        // the proposed name for the plan
+        webPlanName?: string;
+        // Set this value baderd on the web plan name, description and steps. The goal defines the
+        // expected state of the website/webpage when the task is completed.
+        webPlanDescription?: string;
+        // the list of plan steps that the agent suggest based on the current state of the page and the web plan goal.
+        // Each entry is a clear, concise description of an operation that the user would run on a web page.
+        sugggestedPlanSteps?: string[];
+
+        // use this field in cases where suggestedPlanSteps are provided. This will show a messge to the user
+        // with a summary of suggested steps and ask them if they want to include these in the plan.
+        message?: string;
+    };
+};
+
 export type PlanAuthoringActions =
     | CreateOrUpdateWebPlan
     | RunCurrentWebPlan
-    | SaveCurrentWebPlan;
+    | SaveCurrentWebPlan
+    | GetSuggestedSteps;

@@ -36,14 +36,24 @@ export enum CommercePageType {
     ProductDetails,
 }
 
-function getBootstrapPrefixPromptSection() {
-    // TODO: update this to use system role
+function getPrefixPromptSection() {
     let prefixSection = [];
     prefixSection.push({
         type: "text",
         text: "You are a virtual assistant that can help users to complete requests by interacting with the UI of a webpage.",
     });
     return prefixSection;
+}
+
+function getSuffixPromptSection() {
+    let suffixSection = [];
+    suffixSection.push({
+        type: "text",
+        text: `
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+`,
+    });
+    return suffixSection;
 }
 
 function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
@@ -96,36 +106,30 @@ function getScreenshotPromptSection(
     return screenshotSection;
 }
 
+async function getSchemaFileContents(fileName: string): Promise<string> {
+    const packageRoot = path.join("..", "..", "..");
+    return await fs.promises.readFile(
+        fileURLToPath(
+            new URL(
+                path.join(
+                    packageRoot,
+                    "./src/agent/discovery/schema",
+                    fileName,
+                ),
+                import.meta.url,
+            ),
+        ),
+        "utf8",
+    );
+}
+
 export async function createDiscoveryPageTranslator(
     model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
-    const packageRoot = path.join("..", "..", "..");
-
-    const userActionsPoolSchema = await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/discovery/schema/userActionsPool.mts",
-                ),
-                import.meta.url,
-            ),
-        ),
-        "utf8",
+    const userActionsPoolSchema = await getSchemaFileContents(
+        "userActionsPool.mts",
     );
-
-    const pageTypesSchema = await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/discovery/schema/pageTypes.mts",
-                ),
-                import.meta.url,
-            ),
-        ),
-        "utf8",
-    );
+    const pageTypesSchema = await getSchemaFileContents("pageTypes.mts");
 
     const agent = new SchemaDiscoveryAgent<SchemaDiscoveryActions>(
         userActionsPoolSchema,
@@ -178,7 +182,9 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+
         let requestSection = [];
         if (userRequest) {
             requestSection.push({
@@ -208,12 +214,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
         return promptSections;
     }
@@ -238,20 +239,8 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const componentsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/pageComponents.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
-        );
-
+        const componentsSchema =
+            await getSchemaFileContents("pageComponents.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
             componentTypeName,
             componentsSchema,
@@ -290,7 +279,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         if (userRequest) {
             requestSection.push({
@@ -333,12 +323,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -355,20 +340,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/pageSummary.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
-        );
-
+        const resultsSchema = await getSchemaFileContents("pageSummary.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
             "PageDescription",
             resultsSchema,
@@ -379,7 +351,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         if (userRequest) {
             requestSection.push({
@@ -409,12 +382,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -428,20 +396,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/PageLayout.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
-        );
-
+        const resultsSchema = await getSchemaFileContents("PageLayout.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
             "PageLayout",
             resultsSchema,
@@ -452,7 +407,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         if (userRequest) {
             requestSection.push({
@@ -482,12 +438,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -505,20 +456,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         screenshot?: string,
         pageSummary?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/pageTypes.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
-        );
-
+        const resultsSchema = await getSchemaFileContents("pageTypes.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
             "KnownPageTypes",
             resultsSchema,
@@ -529,7 +467,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         if (userRequest) {
             requestSection.push({
@@ -572,12 +511,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -595,20 +529,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         screenshot?: string,
         pageSummary?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/siteTypes.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
-        );
-
+        const resultsSchema = await getSchemaFileContents("siteTypes.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
             "WebsiteCategory",
             resultsSchema,
@@ -619,7 +540,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         if (userRequest) {
             requestSection.push({
@@ -662,12 +584,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -687,18 +604,8 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/recordedActions.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
+        const resultsSchema = await getSchemaFileContents(
+            "recordedActions.mts",
         );
 
         const bootstrapTranslator = this.getBootstrapTranslator(
@@ -711,7 +618,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         requestSection.push({
             type: "text",
@@ -770,12 +678,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -795,20 +698,9 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/recordedActions.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
+        const resultsSchema = await getSchemaFileContents(
+            "recordedActions.mts",
         );
-
         const bootstrapTranslator = this.getBootstrapTranslator(
             "PageActionsPlan",
             resultsSchema,
@@ -819,7 +711,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         requestSection.push({
             type: "text",
@@ -869,12 +762,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -892,20 +780,9 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/expandDescription.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
+        const resultsSchema = await getSchemaFileContents(
+            "expandDescription.mts",
         );
-
         const bootstrapTranslator = this.getBootstrapTranslator(
             "PageActionsList",
             resultsSchema,
@@ -916,7 +793,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         requestSection.push({
             type: "text",
@@ -947,12 +825,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         `,
             },
             ...requestSection,
-            {
-                type: "text",
-                text: `
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
-        `,
-            },
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [
@@ -971,20 +844,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         fragments?: HtmlFragments[],
         screenshot?: string,
     ) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/discovery/schema/evaluatePlan.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
-        );
-
+        const resultsSchema = await getSchemaFileContents("evaluatePlan.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
             "WebPlanResult",
             resultsSchema,
@@ -995,7 +855,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
         let requestSection = [];
         requestSection.push({
             type: "text",
@@ -1030,12 +891,81 @@ export class SchemaDiscoveryAgent<T extends object> {
     `,
             },
             ...requestSection,
+            ...suffixSection,
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response;
+    }
+
+    async getWebPlanSuggestedSteps(
+        recordedActionName: string,
+        recordedActionDescription: string,
+        currentSteps?: string[],
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+    ) {
+        const resultsSchema = await getSchemaFileContents("evaluatePlan.mts");
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "WebPlanSuggestions",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+        let requestSection = [];
+        requestSection.push({
+            type: "text",
+            text: `
+           
+        The user provided an example of how they would complete the ${recordedActionName} action on the webpage. 
+        They provided a description of the task below:
+        '''
+        ${recordedActionDescription}
+        '''
+        `,
+        });
+        if (currentSteps !== undefined && currentSteps.length > 0) {
+            requestSection.push({
+                type: "text",
+                text: `
+               
+            Here are the steps that are already included in the plan
+            '''
+            ${JSON.stringify(currentSteps)}
+            '''
+            `,
+            });
+        }
+
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
             {
                 type: "text",
                 text: `
-    The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+    Examine the layout information provided as well as the user action description. Use this information to determine whether the task goal has
+    been met in the provided webpage. If the goal has not been met, or if there are steps missing from the current list, suggest the next steps the user can take in the UI.
+    Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+            
+    '''
+    ${bootstrapTranslator.validator.getSchemaText()}
+    '''
     `,
             },
+            ...requestSection,
+            ...suffixSection,
         ];
 
         const response = await bootstrapTranslator.translate("", [

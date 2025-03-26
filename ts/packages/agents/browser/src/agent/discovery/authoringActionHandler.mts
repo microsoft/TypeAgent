@@ -13,7 +13,7 @@ import { setupAuthoringActions } from "./authoringUtilities.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { SchemaDiscoveryAgent } from "./translator.mjs";
-import { WebPlanResult } from "./schema/evaluatePlan.mjs";
+import { WebPlanResult, WebPlanSuggestions } from "./schema/evaluatePlan.mjs";
 
 type WebPlanInfo = {
     webPlanName?: string | undefined;
@@ -131,10 +131,26 @@ export function createSchemaAuthoringAgent(
             action.parameters.webPlanSteps === undefined ||
             action.parameters.webPlanSteps.length === 0
         ) {
-            question = setQuestionWithFallback(
-                action,
-                "How would you complete this task? Describe the steps involved.",
+            const htmlFragments = await browser.getHtmlFragments();
+            const suggestedStepsResponse = await agent.getWebPlanSuggestedSteps(
+                action.parameters.webPlanName!,
+                action.parameters.webPlanDescription!,
+                action.parameters.webPlanSteps,
+                htmlFragments,
             );
+
+            if (suggestedStepsResponse.success) {
+                const suggestedSteps =
+                    suggestedStepsResponse.data as WebPlanSuggestions;
+
+                console.log(suggestedSteps);
+            }
+            if (question === "") {
+                question = setQuestionWithFallback(
+                    action,
+                    "How would you complete this task? Describe the steps involved.",
+                );
+            }
         } else {
             question =
                 "I updated the task. Would you like to refine further or run the current plan?";
