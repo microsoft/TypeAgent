@@ -484,6 +484,24 @@ export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
     }
 }
 
+export class MatchTermsOrMaxExpr extends MatchTermsOrExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<SemanticRefAccumulator | undefined>[],
+        getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super(termExpressions, getScopeExpr);
+    }
+
+    public override eval(context: QueryEvalContext): SemanticRefAccumulator {
+        const matches = super.eval(context);
+        const maxHitCount = matches.getMaxHitCount();
+        if (maxHitCount > 1) {
+            matches.selectWithHitCount(maxHitCount);
+        }
+        return matches;
+    }
+}
+
 export class MatchTermsAndExpr extends MatchTermsBooleanExpr {
     constructor(
         public termExpressions: IQueryOpExpr<

@@ -105,6 +105,10 @@ export function createOrTermGroup(): SearchTermGroup {
     return { booleanOp: "or", terms: [] };
 }
 
+export function createOrMaxTermGroup(): SearchTermGroup {
+    return { booleanOp: "or_max", terms: [] };
+}
+
 export async function createConversationFromData(
     data: IConversationDataWithIndexes,
     conversationSettings: ConversationSettings,

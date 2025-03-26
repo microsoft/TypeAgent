@@ -43,7 +43,8 @@ export type SearchTerm = {
 export type SearchTermGroup = {
     booleanOp:
         | "and" // Intersect matches for each term, adding up scores
-        | "or"; // Union matches for each term, adding up scores
+        | "or" // Union matches for each term, adding up scores
+        | "or_max"; // Union matches for each term, add up scores, select matches with max hit count
 
     terms: (SearchTerm | PropertySearchTerm | SearchTermGroup)[];
 };
@@ -404,12 +405,35 @@ class QueryCompiler {
                 searchTermsUsed.push(term);
             }
         }
-        return [
-            searchTermsUsed,
-            searchGroup.booleanOp === "and"
-                ? new q.MatchTermsAndExpr(termExpressions, scopeExpr)
-                : new q.MatchTermsOrExpr(termExpressions, scopeExpr),
-        ];
+        let boolExpr = this.compileBooleanOp(
+            searchGroup,
+            termExpressions,
+            scopeExpr,
+        );
+        return [searchTermsUsed, boolExpr];
+    }
+
+    private compileBooleanOp(
+        searchGroup: SearchTermGroup,
+        termExpressions: q.IQueryOpExpr<SemanticRefAccumulator | undefined>[],
+        scopeExpr?: q.GetScopeExpr,
+    ) {
+        let boolExpr: q.MatchTermsBooleanExpr;
+        switch (searchGroup.booleanOp) {
+            case "and":
+                boolExpr = new q.MatchTermsAndExpr(termExpressions, scopeExpr);
+                break;
+            case "or":
+                boolExpr = new q.MatchTermsOrExpr(termExpressions, scopeExpr);
+                break;
+            case "or_max":
+                boolExpr = new q.MatchTermsOrMaxExpr(
+                    termExpressions,
+                    scopeExpr,
+                );
+                break;
+        }
+        return boolExpr;
     }
 
     private async compileScope(
