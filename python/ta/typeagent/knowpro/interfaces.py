@@ -365,11 +365,11 @@ class IConversationThreads(Protocol):
         raise NotImplementedError
 
 
-class IMessageTextIndex(Protocol):
+class IMessageTextIndex[TMessage: IMessage](Protocol):
 
     async def add_messages(
         self,
-        messages: list[IMessage],
+        messages: list[TMessage],
         event_handler: "IndexingEventHandlers | None" = None,
     ) -> "ListIndexingResult":
         raise NotImplementedError
@@ -392,25 +392,24 @@ class IMessageTextIndex(Protocol):
         raise NotImplementedError
 
 
-class IConversationSecondaryIndexes(Protocol):
+class IConversationSecondaryIndexes[TMessage: IMessage](Protocol):
     property_to_semantic_ref_index: IPropertyToSemanticRefIndex | None
     timestamp_index: ITimestampToTextRangeIndex | None
     term_to_related_terms_index: ITermToRelatedTermsIndex | None
     threads: IConversationThreads | None = None
-    message_index: IMessageTextIndex | None = None
+    message_index: IMessageTextIndex[TMessage] | None = None
 
 
 class IConversation[
     TMessage: IMessage,
     TTermToSemanticRefIndex: ITermToSemanticRefIndex,
-    TConversationSecondaryIndexes: IConversationSecondaryIndexes,
 ](Protocol):
     name_tag: str
     tags: list[str]
     messages: list[TMessage]
     semantic_refs: list[SemanticRef] | None
     semantic_ref_index: TTermToSemanticRefIndex | None
-    secondary_indexes: TConversationSecondaryIndexes | None
+    secondary_indexes: IConversationSecondaryIndexes[TMessage] | None
 
 
 # --------------------------------------------------

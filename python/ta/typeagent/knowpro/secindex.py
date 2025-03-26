@@ -29,10 +29,10 @@ class ConversationSecondaryIndexes(IConversationSecondaryIndexes):
 
 
 async def build_secondary_indexes[
-    TM: IMessage,
-    TT: ITermToSemanticRefIndex,
+    TMessage: IMessage,
+    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
 ](
-    conversation: IConversation[TM, TT, ConversationSecondaryIndexes],
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     conversation_settings: ConversationSettings,
     event_handler: IndexingEventHandlers | None,
 ) -> SecondaryIndexingResults:
@@ -56,9 +56,9 @@ async def build_secondary_indexes[
 
 
 def build_transient_secondary_indexes[
-    TM: IMessage, TT: ITermToSemanticRefIndex, TC: IConversationSecondaryIndexes
+    TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](
-    conversation: IConversation[TM, TT, TC],
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
 ) -> SecondaryIndexingResults:
     if conversation.secondary_indexes is None:
         conversation.secondary_indexes = ConversationSecondaryIndexes()  # type: ignore  # TODO

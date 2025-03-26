@@ -8,8 +8,10 @@ from ..aitools.embeddings import NormalizedEmbedding
 from .importing import ConversationSettings, MessageTextIndexSettings
 from .interfaces import (
     IConversation,
+    IConversationSecondaryIndexes,
     IMessage,
     IMessageTextIndex,
+    ITermToSemanticRefIndex,
     IndexingEventHandlers,
     ListIndexingResult,
     MessageOrdinal,
@@ -19,8 +21,11 @@ from .interfaces import (
 from .textlocationindex import ScoredTextLocation, TextToTextLocationIndex
 
 
-async def build_message_index(
-    conversation: IConversation,
+async def build_message_index[
+    TMessage: IMessage,
+    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
+](
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     settings: MessageTextIndexSettings | None = None,
     event_handler: IndexingEventHandlers | None = None,
 ) -> ListIndexingResult:
@@ -62,9 +67,9 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
     def __bool__(self) -> bool:
         return True
 
-    async def add_messages(
+    async def add_messages[TMessage: IMessage](
         self,
-        messages: list[IMessage],
+        messages: list[TMessage],
         event_handler: IndexingEventHandlers | None = None,
     ) -> ListIndexingResult:
         base_message_ordinal: MessageOrdinal = len(self.text_location_index)

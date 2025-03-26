@@ -93,7 +93,6 @@ class Podcast(
     interfaces.IConversation[
         PodcastMessage,
         convindex.ConversationIndex,
-        secindex.ConversationSecondaryIndexes,
     ]
 ):
     name_tag: str = ""

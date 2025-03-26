@@ -275,8 +275,8 @@ class ConversationIndex(ITermToSemanticRefIndex):
 # ...
 
 
-async def build_conversation_index[TM: IMessage, TC: IConversationSecondaryIndexes](
-    conversation: IConversation[TM, ConversationIndex, TC],
+async def build_conversation_index[TMessage: IMessage](
+    conversation: IConversation[TMessage, ConversationIndex],
     conversation_settings: importing.ConversationSettings,
     event_handler: IndexingEventHandlers | None = None,
 ) -> IndexingResults:
@@ -297,8 +297,8 @@ async def build_conversation_index[TM: IMessage, TC: IConversationSecondaryIndex
     return result
 
 
-async def build_semantic_ref_index[TM: IMessage, TC: IConversationSecondaryIndexes](
-    conversation: IConversation[TM, ConversationIndex, TC],
+async def build_semantic_ref_index[TM: IMessage](
+    conversation: IConversation[TM, ConversationIndex],
     extractor: convknowledge.KnowledgeExtractor | None = None,
     event_handler: IndexingEventHandlers | None = None,
 ) -> TextIndexingResult:
