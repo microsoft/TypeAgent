@@ -3,21 +3,32 @@
 
 import { createConversationSettings } from "../src/conversation.js";
 import { IConversation } from "../src/interfaces.js";
-import { createConversationFromFile, getRelativePath } from "./testCommon.js";
+import {
+    createConversationFromFile,
+    getRelativePath,
+    hasTestKeys,
+    testIf,
+} from "./testCommon.js";
 
-describe("Search Tests", () => {
-    let conversation: IConversation;
+describe("search", () => {
+    let conversation: IConversation | undefined;
     beforeAll(async () => {
-        let settings = createConversationSettings();
-        conversation = await createConversationFromFile(
-            getRelativePath("./test/data"),
-            "Episode_53_AdrianTchaikovsky_index",
-            settings,
-        );
+        if (hasTestKeys()) {
+            let settings = createConversationSettings();
+            conversation = await createConversationFromFile(
+                getRelativePath("./test/data"),
+                "Episode_53_AdrianTchaikovsky_index",
+                settings,
+            );
+        }
     });
-    test("lookup", () => {
-        const books = conversation.semanticRefIndex?.lookupTerm("book");
-        expect(books).toBeDefined();
-        expect(books!.length).toBeGreaterThan(0);
-    });
+    testIf(
+        "lookup",
+        () => hasTestKeys(),
+        () => {
+            const books = conversation!.semanticRefIndex?.lookupTerm("book");
+            expect(books).toBeDefined();
+            expect(books!.length).toBeGreaterThan(0);
+        },
+    );
 });
