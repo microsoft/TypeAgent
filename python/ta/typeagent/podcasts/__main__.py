@@ -80,7 +80,7 @@ async def main():
 
     print()
     data = await pod.serialize()
-    print(json.dumps(data, indent=2))
+    print(json.dumps(data))  # This checks that the serialization is valid JSON.
 
     # if pod.semantic_ref_index is not None:
     #     data = pod.semantic_ref_index.serialize()
