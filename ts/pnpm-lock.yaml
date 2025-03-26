@@ -1270,12 +1270,18 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
+      koffi:
+        specifier: ^2.10.1
+        version: 2.10.1
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.23.8)
+      winreg:
+        specifier: ^1.2.5
+        version: 1.2.5
     devDependencies:
       '@types/body-parser':
         specifier: 1.19.5
@@ -1292,6 +1298,9 @@ importers:
       '@types/node':
         specifier: ^18.18.7
         version: 18.18.7
+      '@types/winreg':
+        specifier: ^1.2.36
+        version: 1.2.36
       copy-webpack-plugin:
         specifier: ^12.0.1
         version: 12.0.2(webpack@5.94.0)
@@ -4879,6 +4888,9 @@ packages:
   '@types/whatwg-url@11.0.4':
     resolution: {integrity: sha512-lXCmTWSHJvf0TRSO58nm978b8HJ/EdsSsEKLd3ODHFjo+3VGAyyTp4v50nWvwtzBxSMQrVOK7tcuN0zGPLICMw==}
 
+  '@types/winreg@1.2.36':
+    resolution: {integrity: sha512-DtafHy5A8hbaosXrbr7YdjQZaqVewXmiasRS5J4tYMzt3s1gkh40ixpxgVFfKiQ0JIYetTJABat47v9cpr/sQg==}
+
   '@types/ws@8.5.10':
     resolution: {integrity: sha512-vmQSUcfalpIq0R9q7uTo2lXs6eGIpt9wtnLdMv9LVpIjCA/+ufZRozlVoVelIYixx1ugCBKDhn89vnsEGOCx9A==}
 
@@ -7557,6 +7569,9 @@ packages:
     resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
     engines: {node: '>=6'}
 
+  koffi@2.10.1:
+    resolution: {integrity: sha512-MjsM1/Xi/p4bjl8hThZ35QpuuWu4MurSDBu+diepnqGMNlUOx/m/hisaw25kr7y4g2GG24TLEOCQgHK3BZvfPg==}
+
   launch-editor@2.9.1:
     resolution: {integrity: sha512-Gcnl4Bd+hRO9P9icCP/RVVT2o8SFlPXofuCxvA2SaZuH45whSvf5p8x5oih5ftLiVhEI4sp5xDY+R+b3zJBh5w==}
 
@@ -9564,6 +9579,9 @@ packages:
 
   wildcard@2.0.1:
     resolution: {integrity: sha512-CC1bOL87PIWSBhDcTrdeLo6eGT7mCFtrg0uIJtqJUFyK+eJnzl8A1niH56uu7KMa5XFrtiV+AQuHO3n7DsHnLQ==}
+
+  winreg@1.2.5:
+    resolution: {integrity: sha512-uf7tHf+tw0B1y+x+mKTLHkykBgK2KMs3g+KlzmyMbLvICSHQyB/xOFjTT8qZ3oeTFyU7Bbj4FzXitGG6jvKhYw==}
 
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
@@ -12570,6 +12588,8 @@ snapshots:
   '@types/whatwg-url@11.0.4':
     dependencies:
       '@types/webidl-conversions': 7.0.3
+
+  '@types/winreg@1.2.36': {}
 
   '@types/ws@8.5.10':
     dependencies:
@@ -16085,6 +16105,8 @@ snapshots:
 
   kleur@3.0.3: {}
 
+  koffi@2.10.1: {}
+
   launch-editor@2.9.1:
     dependencies:
       picocolors: 1.1.1
@@ -18299,6 +18321,8 @@ snapshots:
       string-width: 7.2.0
 
   wildcard@2.0.1: {}
+
+  winreg@1.2.5: {}
 
   word-wrap@1.2.5: {}
 
