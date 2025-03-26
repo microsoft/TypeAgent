@@ -6,14 +6,14 @@ import { RequestAction } from "../requestAction.js";
 import { TypeChatAgent } from "../typeChatAgent.js";
 import { getPackageFilePath } from "../../utils/getPackageFilePath.js";
 import { PromptSection } from "typechat";
-import { form } from "./explanationV5.js";
+import { form, requestActionToPromptString } from "./explanationV5.js";
 import { ExplainerConfig } from "../genericExplainer.js";
 import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js";
 
 function createInstructions(requestAction: RequestAction): PromptSection[] {
     const instructions: string[] = [
-        form,
-        "Generate 4 request with added politeness prefix and suffix that doesn't change the action",
+        `${form} with the following value:\n${requestActionToPromptString(requestAction)}`,
+        "Generate 4 politeness prefix and suffix that can be added to the request but doesn't change the action",
     ];
 
     return [
@@ -24,7 +24,7 @@ function createInstructions(requestAction: RequestAction): PromptSection[] {
     ];
 }
 
-export type PolitenessGenerializer = TypeChatAgent<
+export type PolitenessGeneralizer = TypeChatAgent<
     RequestAction,
     PolitenessGeneralization,
     ExplainerConfig
@@ -32,7 +32,7 @@ export type PolitenessGenerializer = TypeChatAgent<
 
 export function createPolitenessGeneralizer(
     model?: string,
-): PolitenessGenerializer {
+): PolitenessGeneralizer {
     return new TypeChatAgent(
         "politeness generalization",
         () => {
@@ -45,6 +45,6 @@ export function createPolitenessGeneralizer(
             );
         },
         createInstructions,
-        (requestAction) => requestAction.toPromptString(),
+        (requestAction) => requestActionToPromptString(requestAction),
     );
 }

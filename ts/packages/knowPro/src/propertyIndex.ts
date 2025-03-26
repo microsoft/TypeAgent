@@ -3,9 +3,10 @@
 
 import {
     IConversation,
-    ScoredSemanticRef,
+    ListIndexingResult,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Tag,
 } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
@@ -28,19 +29,19 @@ export enum PropertyNames {
 function addFacet(
     facet: kpLib.Facet | undefined,
     propertyIndex: IPropertyToSemanticRefIndex,
-    semanticRefIndex: SemanticRefIndex,
+    semanticRefOrdinal: SemanticRefOrdinal,
 ) {
     if (facet !== undefined) {
         propertyIndex.addProperty(
             PropertyNames.FacetName,
             facet.name,
-            semanticRefIndex,
+            semanticRefOrdinal,
         );
         if (facet.value !== undefined) {
             propertyIndex.addProperty(
                 PropertyNames.FacetValue,
                 facetValueToString(facet),
-                semanticRefIndex,
+                semanticRefOrdinal,
             );
         }
     }
@@ -49,24 +50,24 @@ function addFacet(
 export function addEntityPropertiesToIndex(
     entity: kpLib.ConcreteEntity,
     propertyIndex: IPropertyToSemanticRefIndex,
-    semanticRefIndex: SemanticRefIndex,
+    semanticRefOrdinal: SemanticRefOrdinal,
 ) {
     propertyIndex.addProperty(
         PropertyNames.EntityName,
         entity.name,
-        semanticRefIndex,
+        semanticRefOrdinal,
     );
     for (const type of entity.type) {
         propertyIndex.addProperty(
             PropertyNames.EntityType,
             type,
-            semanticRefIndex,
+            semanticRefOrdinal,
         );
     }
     // add every facet name as a separate term
     if (entity.facets && entity.facets.length > 0) {
         for (const facet of entity.facets) {
-            addFacet(facet, propertyIndex, semanticRefIndex);
+            addFacet(facet, propertyIndex, semanticRefOrdinal);
         }
     }
 }
@@ -74,56 +75,60 @@ export function addEntityPropertiesToIndex(
 export function addActionPropertiesToIndex(
     action: kpLib.Action,
     propertyIndex: IPropertyToSemanticRefIndex,
-    semanticRefIndex: SemanticRefIndex,
+    semanticRefOrdinal: SemanticRefOrdinal,
 ) {
     propertyIndex.addProperty(
         PropertyNames.Verb,
         action.verbs.join(" "),
-        semanticRefIndex,
+        semanticRefOrdinal,
     );
     if (action.subjectEntityName !== "none") {
         propertyIndex.addProperty(
             PropertyNames.Subject,
             action.subjectEntityName,
-            semanticRefIndex,
+            semanticRefOrdinal,
         );
     }
     if (action.objectEntityName !== "none") {
         propertyIndex.addProperty(
             PropertyNames.Object,
             action.objectEntityName,
-            semanticRefIndex,
+            semanticRefOrdinal,
         );
     }
     if (action.indirectObjectEntityName !== "none") {
         propertyIndex.addProperty(
             PropertyNames.IndirectObject,
             action.indirectObjectEntityName,
-            semanticRefIndex,
+            semanticRefOrdinal,
         );
     }
 }
 
-export function buildPropertyIndex(conversation: IConversation) {
+export function buildPropertyIndex(
+    conversation: IConversation,
+): ListIndexingResult {
     if (conversation.secondaryIndexes && conversation.semanticRefs) {
         conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
             new PropertyIndex();
-        addToPropertyIndex(
+        return addToPropertyIndex(
             conversation.secondaryIndexes.propertyToSemanticRefIndex,
             conversation.semanticRefs,
             0,
         );
     }
+    return { numberCompleted: 0 };
 }
 
 export function addToPropertyIndex(
     propertyIndex: IPropertyToSemanticRefIndex,
     semanticRefs: SemanticRef[],
-    baseSemanticRefIndex: SemanticRefIndex,
-) {
+    baseSemanticRefOrdinal: SemanticRefOrdinal,
+): ListIndexingResult {
     for (let i = 0; i < semanticRefs.length; ++i) {
         const semanticRef = semanticRefs[i];
-        const semanticRefIndex: SemanticRefIndex = i + baseSemanticRefIndex;
+        const semanticRefOrdinal: SemanticRefOrdinal =
+            i + baseSemanticRefOrdinal;
         switch (semanticRef.knowledgeType) {
             default:
                 break;
@@ -131,14 +136,14 @@ export function addToPropertyIndex(
                 addActionPropertiesToIndex(
                     semanticRef.knowledge as kpLib.Action,
                     propertyIndex,
-                    semanticRefIndex,
+                    semanticRefOrdinal,
                 );
                 break;
             case "entity":
                 addEntityPropertiesToIndex(
                     semanticRef.knowledge as kpLib.ConcreteEntity,
                     propertyIndex,
-                    semanticRefIndex,
+                    semanticRefOrdinal,
                 );
                 break;
             case "tag":
@@ -146,15 +151,18 @@ export function addToPropertyIndex(
                 propertyIndex.addProperty(
                     PropertyNames.Tag,
                     tag.text,
-                    semanticRefIndex,
+                    semanticRefOrdinal,
                 );
                 break;
         }
     }
+    return {
+        numberCompleted: semanticRefs.length,
+    };
 }
 
 export class PropertyIndex implements IPropertyToSemanticRefIndex {
-    private map: Map<string, ScoredSemanticRef[]> = new Map();
+    private map: Map<string, ScoredSemanticRefOrdinal[]> = new Map();
 
     constructor() {}
 
@@ -174,20 +182,20 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
     public addProperty(
         propertyName: string,
         value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void {
         let termText = this.toPropertyTermText(propertyName, value);
-        if (typeof semanticRefIndex === "number") {
-            semanticRefIndex = {
-                semanticRefIndex: semanticRefIndex,
+        if (typeof semanticRefOrdinal === "number") {
+            semanticRefOrdinal = {
+                semanticRefOrdinal: semanticRefOrdinal,
                 score: 1,
             };
         }
         termText = this.prepareTermText(termText);
         if (this.map.has(termText)) {
-            this.map.get(termText)?.push(semanticRefIndex);
+            this.map.get(termText)?.push(semanticRefOrdinal);
         } else {
-            this.map.set(termText, [semanticRefIndex]);
+            this.map.set(termText, [semanticRefOrdinal]);
         }
     }
 
@@ -195,12 +203,12 @@ export class PropertyIndex implements IPropertyToSemanticRefIndex {
         this.map.clear();
     }
 
-    lookupProperty(
+    public lookupProperty(
         propertyName: string,
         value: string,
-    ): ScoredSemanticRef[] | undefined {
+    ): ScoredSemanticRefOrdinal[] | undefined {
         const termText = this.toPropertyTermText(propertyName, value);
-        return this.map.get(this.prepareTermText(termText)) ?? [];
+        return this.map.get(this.prepareTermText(termText));
     }
 
     /**
@@ -226,16 +234,34 @@ export function lookupPropertyInPropertyIndex(
     propertyValue: string,
     semanticRefs: SemanticRef[],
     rangesInScope?: TextRangesInScope,
-): ScoredSemanticRef[] | undefined {
+): ScoredSemanticRefOrdinal[] | undefined {
     let scoredRefs = propertyIndex.lookupProperty(propertyName, propertyValue);
     if (scoredRefs && scoredRefs.length > 0 && rangesInScope) {
         scoredRefs = scoredRefs.filter((sr) =>
             rangesInScope.isRangeInScope(
-                semanticRefs[sr.semanticRefIndex].range,
+                semanticRefs[sr.semanticRefOrdinal].range,
             ),
         );
     }
     return scoredRefs;
+}
+
+export function isKnownProperty(
+    propertyIndex: IPropertyToSemanticRefIndex | undefined,
+    propertyName: PropertyNames,
+    propertyValue: string,
+): boolean {
+    if (propertyIndex) {
+        const semanticRefsWithName = propertyIndex.lookupProperty(
+            propertyName,
+            propertyValue,
+        );
+        return (
+            semanticRefsWithName !== undefined &&
+            semanticRefsWithName.length > 0
+        );
+    }
+    return false;
 }
 
 const PropertyDelimiter = "@@";

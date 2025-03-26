@@ -1,0 +1,50 @@
+{
+  "name": "document-processor",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Document Processing Example",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/docuProc"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "pnpm run copy-data && copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" \"data/**/*\" dist && rimraf --glob 'copyfiles-*.done.build.log'",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log dist/data",
+    "copy-data": "copyfiles \"data/**/*\" dist",
+    "install-python-deps": "node -e \"const { execSync } = require('child_process'); try { execSync('python3 --version', { stdio: 'ignore' }); execSync('python3 -m pip install --user -qq -r requirements.txt', { stdio: 'inherit' }); } catch { try { execSync('python --version', { stdio: 'ignore' }); execSync('python -m pip install --user -qq -r requirements.txt', { stdio: 'inherit' }); } catch { console.log('Python not found, skipping...'); } }\"",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "prerun": "npm run install-python-deps",
+    "run": "node dist/main.js",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "aiclient": "workspace:*",
+    "canvas": "^3.1.0",
+    "chalk": "^5.3.0",
+    "dotenv": "^16.3.1",
+    "fast-xml-parser": "4.5.1",
+    "interactive-app": "workspace:*",
+    "knowledge-processor": "workspace:*",
+    "memory-providers": "workspace:*",
+    "pdfjs-dist": "^4.10.38",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1",
+    "typescript": "^5.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^18.18.7",
+    "copyfiles": "^2.4.1",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  }
+}

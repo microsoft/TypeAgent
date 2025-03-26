@@ -27,6 +27,7 @@ import {
     AppAgentManifest,
     AppAgent,
     TypeAgentAction,
+    AppAction,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -49,7 +50,12 @@ import {
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
-import { translatePendingRequestAction } from "../translation/translateRequest.js";
+import {
+    isSwitchEnabled,
+    translatePendingRequestAction,
+} from "../translation/translateRequest.js";
+import { getActionSchema } from "../internal.js";
+import { validateAction } from "action-schema";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -427,11 +433,7 @@ async function canExecute(
         );
 
         const config = systemContext.session.getConfig();
-        if (
-            !config.translation.switch.search &&
-            !config.translation.switch.embedding &&
-            !config.translation.switch.inline
-        ) {
+        if (!isSwitchEnabled(config)) {
             lines.push("");
             lines.push("Switching agents is disabled");
         } else {
@@ -625,18 +627,19 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
 
 function resolveEntities(
     action: TypeAgentAction<FullAction>,
+    resultEntityMap: Map<string, PromptEntity>,
     promptEntityMap: Map<string, PromptEntity> | undefined,
     promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
-    duplicate: boolean,
+    duplicateAction: boolean,
 ) {
     if (action.parameters === undefined) {
         return action;
     }
-    const result = duplicate ? { ...action } : action;
+    const result = duplicateAction ? { ...action } : action;
     const entities = getParameterObjectEntities(
         getAppAgentName(action.translatorName),
         action.parameters!,
-        new Map(),
+        resultEntityMap,
         promptEntityMap,
         promptNameEntityMap,
     );
@@ -670,7 +673,13 @@ export async function executeActions(
         const promptEntityMap = toPromptEntityMap(entities);
         const promptNameEntityMap = toPromptEntityNameMap(entities);
         commandResult.actions = actions.map(({ action }) =>
-            resolveEntities(action, promptEntityMap, promptNameEntityMap, true),
+            resolveEntities(
+                action,
+                new Map(),
+                promptEntityMap,
+                promptNameEntityMap,
+                true,
+            ),
         );
     }
 
@@ -706,7 +715,13 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.translatorName);
-        resolveEntities(action, promptEntityMap, promptNameEntityMap, false);
+        resolveEntities(
+            action,
+            resultEntityMap,
+            promptEntityMap,
+            promptNameEntityMap,
+            false,
+        );
         const result = await executeAction(
             executableAction,
             context,
@@ -719,9 +734,69 @@ export async function executeActions(
                     sourceAppAgentName: appAgentName,
                 });
             }
+
+            if (result.additionalActions !== undefined) {
+                try {
+                    const actions = getAdditionalExecutableActions(
+                        result.additionalActions,
+                        action.translatorName,
+                        systemContext,
+                    );
+                    // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
+                    actionQueue.unshift(
+                        ...toPendingActions(actions, undefined),
+                    );
+                } catch (e) {
+                    throw new Error(
+                        `${action.translatorName}.${action.actionName} returned an invalid action: ${e}`,
+                    );
+                }
+            }
         }
         actionIndex++;
     }
+}
+
+function getAdditionalExecutableActions(
+    actions: AppAction[],
+    sourceSchemaName: string,
+    context: CommandHandlerContext,
+) {
+    const appAgentName = getAppAgentName(sourceSchemaName);
+    const executableActions: ExecutableAction[] = [];
+    for (const newAction of actions) {
+        const fullAction = (
+            newAction.translatorName !== undefined
+                ? newAction
+                : {
+                      ...newAction,
+                      translatorName: sourceSchemaName,
+                  }
+        ) as FullAction;
+
+        if (appAgentName !== DispatcherName) {
+            // For non-dispatcher, action can only be trigger within the same agent.
+            const actionAppAgentName = getAppAgentName(
+                fullAction.translatorName,
+            );
+            if (actionAppAgentName !== appAgentName) {
+                throw new Error(
+                    `Cannot invoke actions from other agent '${actionAppAgentName}'.`,
+                );
+            }
+        }
+
+        const actionInfo = getActionSchema(fullAction, context.agents);
+        if (actionInfo === undefined) {
+            throw new Error(
+                `Action not found ${fullAction.translatorName}.${fullAction.actionName}`,
+            );
+        }
+        validateAction(actionInfo, fullAction);
+
+        executableActions.push({ action: fullAction });
+    }
+    return executableActions;
 }
 
 export async function validateWildcardMatch(
@@ -735,12 +810,17 @@ export async function validateWildcardMatch(
             continue;
         }
         const appAgentName = getAppAgentName(translatorName);
+        if (!context.agents.isActionActive(appAgentName)) {
+            // Assume validateWildcardMatch is true.
+            continue;
+        }
         const appAgent = context.agents.getAppAgent(appAgentName);
         const sessionContext = context.agents.getSessionContext(appAgentName);
-        if (
-            (await appAgent.validateWildcardMatch?.(action, sessionContext)) ===
-            false
-        ) {
+        const validate = await appAgent.validateWildcardMatch?.(
+            action,
+            sessionContext,
+        );
+        if (validate === false) {
             return false;
         }
     }

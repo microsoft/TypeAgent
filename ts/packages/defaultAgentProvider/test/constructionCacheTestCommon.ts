@@ -138,11 +138,19 @@ function getTestInputPart(testFileName: string) {
     };
 }
 
-function normalizeParams(action: JSONAction) {
+function normalizeParams(obj: any) {
+    for (const [name, value] of Object.entries(obj)) {
+        if (typeof value === "string") {
+            obj[name] = normalizeParamString(value);
+        } else if (typeof value === "object") {
+            normalizeParams(value);
+        }
+    }
+}
+
+function normalizeAction(action: JSONAction) {
     if (action.parameters !== undefined) {
-        action.parameters = JSON.parse(
-            normalizeParamString(JSON.stringify(action.parameters)), // normalize the lower case
-        );
+        normalizeParams(action.parameters);
     }
 }
 
@@ -150,9 +158,9 @@ function normalizeActions(actions: ExecutableAction[]) {
     const actionJSON = toJsonActions(actions);
 
     if (Array.isArray(actionJSON)) {
-        actionJSON.forEach(normalizeParams);
+        actionJSON.forEach(normalizeAction);
     } else {
-        normalizeParams(actionJSON);
+        normalizeAction(actionJSON);
     }
     return actionJSON;
 }
@@ -173,7 +181,11 @@ function expandActions(
         expandedActions.push(
             ...expandedActions.flatMap((e) =>
                 values.map((v) =>
-                    createActionProps([[name, normalizeParamValue(v)]], e),
+                    createActionProps(
+                        [[name, normalizeParamValue(v)]],
+                        undefined,
+                        e,
+                    ),
                 ),
             ),
         );

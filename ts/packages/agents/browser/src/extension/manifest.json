@@ -39,12 +39,13 @@
     {
       "matches": ["https://paleobiodb.org/*"],
       "js": ["sites/paleobiodb.js"],
+      "run_at": "document_start",
       "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["sites/paleobiodb.js"],
+      "resources": ["sites/paleobiodb.js", "sites/paleobiodbSchema.mts"],
       "matches": ["https://paleobiodb.org/*"]
     },
     {
@@ -71,6 +72,10 @@
     "16": "images/icon-16.png",
     "48": "images/icon-48.png",
     "128": "images/icon-128.png"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
   },
   "side_panel": {
     "default_path": "sidepanel.html"

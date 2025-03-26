@@ -126,7 +126,7 @@ function toTemplate(
         schemas,
         action.action.translatorName,
     );
-    const actionSchemas = actionSchemaFile.actionSchemas;
+    const actionSchemas = actionSchemaFile.parsedActionSchema.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
         typeEnum: Array.from(actionSchemas.keys()),

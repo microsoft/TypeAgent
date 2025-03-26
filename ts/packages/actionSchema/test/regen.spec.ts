@@ -6,8 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { parseActionSchemaSource } from "../src/parser.js";
 import {
-    toJSONActionSchemaFile,
-    fromJSONActionSchemaFile,
+    toJSONParsedActionSchema,
+    fromJSONParsedActionSchema,
 } from "../src/serialize.js";
 import { fileURLToPath } from "node:url";
 import { generateActionSchema } from "../src/generator.js";
@@ -32,6 +32,7 @@ const tests: {
 type Config = {
     schema?: {
         schemaFile: string;
+        originalSchemaFile?: string;
         schemaType: string;
     };
     subActionManifests?: Record<string, Config>;
@@ -57,7 +58,8 @@ function loadSchemaConfig(fileName: string) {
 function addTest(schemaName: string, config: Config, dir: string) {
     const schema = config.schema;
     if (schema) {
-        const fileName = path.resolve(dir, schema.schemaFile);
+        const schemaFile = schema.originalSchemaFile ?? schema.schemaFile;
+        const fileName = path.resolve(dir, schemaFile);
         const schemaConfig = loadSchemaConfig(fileName);
         tests.push({
             source: fs.readFileSync(fileName, "utf-8"),
@@ -117,7 +119,6 @@ describe("Action Schema Regeneration", () => {
             const actionSchemaFile = parseActionSchemaSource(
                 source,
                 schemaName,
-                "testHash", // Don't care about source hash in tests
                 typeName,
                 fileName,
                 schemaConfig,
@@ -136,7 +137,6 @@ describe("Action Schema Regeneration", () => {
             const actionSchemaFile = parseActionSchemaSource(
                 source,
                 schemaName,
-                "testHash", // Don't care about source hash in tests
                 typeName,
                 fileName,
             );
@@ -145,7 +145,6 @@ describe("Action Schema Regeneration", () => {
             const roundtrip = parseActionSchemaSource(
                 regenerated,
                 schemaName,
-                "testHash", // Don't care about source hash in tests
                 typeName,
             );
             const schema2 = await generateActionSchema(roundtrip);
@@ -161,21 +160,20 @@ describe("Action Schema Serialization", () => {
             const actionSchemaFile = parseActionSchemaSource(
                 source,
                 schemaName,
-                "testHash", // Don't care about source hash in tests
                 typeName,
                 fileName,
             );
-            const serialized = toJSONActionSchemaFile(actionSchemaFile);
-            const deserialized = fromJSONActionSchemaFile(
+            const serialized = toJSONParsedActionSchema(actionSchemaFile);
+            const deserialized = fromJSONParsedActionSchema(
                 structuredClone(serialized),
             );
 
             expect(deserialized).toEqual(actionSchemaFile);
 
-            const serialized2 = toJSONActionSchemaFile(actionSchemaFile);
+            const serialized2 = toJSONParsedActionSchema(actionSchemaFile);
             expect(serialized2).toEqual(serialized);
 
-            const deserialized2 = fromJSONActionSchemaFile(
+            const deserialized2 = fromJSONParsedActionSchema(
                 structuredClone(serialized),
             );
             expect(deserialized2).toEqual(deserialized);

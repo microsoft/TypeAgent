@@ -257,16 +257,6 @@ export class RequestAction {
         return `${this.request}${RequestAction.Separator}${executableActionsToString(this.actions)}`;
     }
 
-    public toPromptString() {
-        return JSON.stringify(
-            {
-                request: this.request,
-                actions: this.actions,
-            },
-            undefined,
-            2,
-        );
-    }
     public static fromString(input: string) {
         // Very simplistic parser for request/action.
         const trimmed = input.trim();

@@ -7,7 +7,7 @@ import { RequestAction, fromJsonActions } from "agent-cache";
 import {
     createActionConfigProvider,
     getCacheFactory,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
 } from "agent-dispatcher/internal";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
@@ -28,7 +28,7 @@ const testRequest = new RequestAction(
 
 const instanceDir = getInstanceDir();
 const defaultAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const schemaNames = getSchemaNamesForActionConfigProvider(
+const schemaNames = getAllSchemaNames(
     await createActionConfigProvider(defaultAgentProviders),
 );
 

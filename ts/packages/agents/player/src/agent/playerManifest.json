@@ -3,7 +3,8 @@
   "description": "Agent to play music",
   "schema": {
     "description": "Music Player agent that lets you search for, play and control music.",
-    "schemaFile": "./playerSchema.ts",
+    "schemaFile": "../../dist/agent/playerSchema.pas.json",
+    "originalSchemaFile": "playerSchema.ts",
     "schemaType": "PlayerAction"
   }
 }

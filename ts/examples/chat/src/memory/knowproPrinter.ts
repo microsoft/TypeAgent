@@ -5,7 +5,7 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import { ChatPrinter } from "../chatPrinter.js";
 import chalk from "chalk";
-import { textLocationToString } from "./knowproCommon.js";
+import { IMessageMetadata, textLocationToString } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 
@@ -23,8 +23,12 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeMetadata(metadata: any): KnowProPrinter {
-        this.write("Metadata: ").writeJson(metadata);
+    public writeMetadata(message: kp.IMessage): KnowProPrinter {
+        const msgMetadata: IMessageMetadata =
+            message as any as IMessageMetadata;
+        if (msgMetadata) {
+            this.write("Metadata: ").writeJson(msgMetadata.metadata);
+        }
         return this;
     }
 
@@ -33,7 +37,7 @@ export class KnowProPrinter extends ChatPrinter {
         try {
             this.writeNameValue("Timestamp", message.timestamp);
             this.writeList(message.tags, { type: "csv", title: "Tags" });
-            this.writeMetadata(message.metadata);
+            this.writeMetadata(message);
         } finally {
             this.setForeColor(prevColor);
         }
@@ -45,17 +49,17 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeScoredMessages(
-        messageIndexMatches: kp.ScoredMessageIndex[],
+        messageIndexMatches: kp.ScoredMessageOrdinal[],
         messages: kp.IMessage[],
         maxToDisplay: number,
     ) {
-        this.writeLine(
-            `Displaying ${maxToDisplay} matches of total ${messages.length}`,
-        );
         if (this.sortAsc) {
             this.writeLine(`Sorted in ascending order (lowest first)`);
         }
         const matchesToDisplay = messageIndexMatches.slice(0, maxToDisplay);
+        this.writeLine(
+            `Displaying ${matchesToDisplay.length} matches of total ${messageIndexMatches.length}`,
+        );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
             let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredMessage(
@@ -72,13 +76,13 @@ export class KnowProPrinter extends ChatPrinter {
     private writeScoredMessage(
         matchNumber: number,
         totalMatches: number,
-        scoredMessage: kp.ScoredMessageIndex,
+        scoredMessage: kp.ScoredMessageOrdinal,
         messages: kp.IMessage[],
     ) {
-        const message = messages[scoredMessage.messageIndex];
+        const message = messages[scoredMessage.messageOrdinal];
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageIndex}> [${scoredMessage.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageOrdinal}> [${scoredMessage.score}]`,
         );
         if (message) {
             this.writeMessage(message);
@@ -158,17 +162,17 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeScoredSemanticRefs(
-        semanticRefMatches: kp.ScoredSemanticRef[],
+        semanticRefMatches: kp.ScoredSemanticRefOrdinal[],
         semanticRefs: kp.SemanticRef[],
         maxToDisplay: number,
     ) {
-        this.writeLine(
-            `Displaying ${maxToDisplay} matches of total ${semanticRefMatches.length}`,
-        );
         if (this.sortAsc) {
             this.writeLine(`Sorted in ascending order (lowest first)`);
         }
         const matchesToDisplay = semanticRefMatches.slice(0, maxToDisplay);
+        this.writeLine(
+            `Displaying ${matchesToDisplay.length} matches of total ${semanticRefMatches.length}`,
+        );
         for (let i = 0; i < matchesToDisplay.length; ++i) {
             let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
             this.writeScoredRef(
@@ -207,13 +211,13 @@ export class KnowProPrinter extends ChatPrinter {
     private writeScoredRef(
         matchNumber: number,
         totalMatches: number,
-        scoredRef: kp.ScoredSemanticRef,
+        scoredRef: kp.ScoredSemanticRefOrdinal,
         semanticRefs: kp.SemanticRef[],
     ) {
-        const semanticRef = semanticRefs[scoredRef.semanticRefIndex];
+        const semanticRef = semanticRefs[scoredRef.semanticRefOrdinal];
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefIndex}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();
@@ -262,15 +266,35 @@ export class KnowProPrinter extends ChatPrinter {
                 maxToDisplay,
             );
         } else {
-            this.writeResult(conversation, "tag", results, maxToDisplay);
-            this.writeResult(conversation, "topic", results, maxToDisplay);
-            this.writeResult(conversation, "action", results, maxToDisplay);
-            this.writeResult(conversation, "entity", results, maxToDisplay);
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "tag",
+                results,
+                maxToDisplay,
+            );
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "action",
+                results,
+                maxToDisplay,
+            );
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "entity",
+                results,
+                maxToDisplay,
+            );
         }
         return this;
     }
 
-    private writeResult(
+    private writeKnowledgeSearchResult(
         conversation: kp.IConversation,
         type: kp.KnowledgeType,
         results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
@@ -286,6 +310,43 @@ export class KnowProPrinter extends ChatPrinter {
             );
         }
         return this;
+    }
+
+    public writeConversationSearchResult(
+        conversation: kp.IConversation,
+        searchResult: kp.ConversationSearchResult | undefined,
+        showKnowledge: boolean,
+        showMessages: boolean,
+        maxToDisplay: number,
+        distinct: boolean,
+    ) {
+        if (searchResult && searchResult.messageMatches.length > 0) {
+            if (showKnowledge) {
+                this.writeKnowledgeSearchResults(
+                    conversation,
+                    searchResult.knowledgeMatches,
+                    maxToDisplay,
+                    distinct,
+                );
+            }
+            if (showMessages) {
+                this.writeScoredMessages(
+                    searchResult.messageMatches,
+                    conversation.messages,
+                    maxToDisplay,
+                );
+            }
+        } else {
+            this.writeLine("No matches");
+        }
+    }
+
+    public writeSelectExpr(selectExpr: kp.SearchSelectExpr) {
+        this.writeInColor(chalk.gray, () => {
+            this.writeHeading("Compiled query");
+            this.writeJson(selectExpr);
+            this.writeLine();
+        });
     }
 
     private writeResultDistinct(
@@ -371,13 +432,63 @@ export class KnowProPrinter extends ChatPrinter {
     }
 
     public writeIndexingResults(results: kp.IndexingResults) {
-        if (results.chunksIndexedUpto) {
+        if (results.semanticRefs) {
+            this.writeTextIndexingResult(results.semanticRefs, "Semantic Refs");
+        }
+        if (results.secondaryIndexResults) {
+            if (results.secondaryIndexResults.properties) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.properties,
+                    "Properties",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.timestamps) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.timestamps,
+                    "Timestamps",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.relatedTerms) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.relatedTerms,
+                    "Related Terms",
+                );
+                this;
+            }
+        }
+        return this;
+    }
+
+    public writeTextIndexingResult(
+        result: kp.TextIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
+        if (result.completedUpto) {
             this.writeLine(
-                `Indexed upto: ${textLocationToString(results.chunksIndexedUpto)}`,
+                `Completed upto ${textLocationToString(result.completedUpto)}`,
             );
         }
-        if (results.error) {
-            this.writeError(results.error);
+        if (result.error) {
+            this.writeError(result.error);
+        }
+        return this;
+    }
+
+    public writeListIndexingResult(
+        result: kp.ListIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
+        this.writeLine(`Indexed ${result.numberCompleted} items`);
+        if (result.error) {
+            this.writeError(result.error);
         }
         return this;
     }
@@ -391,6 +502,7 @@ export class KnowProPrinter extends ChatPrinter {
         );
         this.writeLine();
         this.writeJson(action.parameters.filters);
+        return this;
     }
 }
 

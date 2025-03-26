@@ -28,34 +28,34 @@ export async function handleInstacartAction(
     const ui = setupPageActions(browser, agent);
 
     switch (action.actionName) {
-        case "searchForProductAction":
+        case "searchForProduct":
             await handleFindProduct(action);
             break;
-        case "addToCartAction":
+        case "addToCart":
             await handleAddToCart(action);
             break;
-        case "getShoppingCartAction":
+        case "getShoppingCart":
             await handleGetCart(action);
             break;
-        case "addToListAction":
+        case "addToList":
             await handleAddToList(action);
             break;
-        case "findNearbyStoreAction":
+        case "findNearbyStore":
             await handleFindStores(action);
             break;
-        case "searchForRecipeAction":
+        case "searchForRecipe":
             await handleFindRecipe(action);
             break;
-        case "buyAllInRecipeAction":
+        case "buyAllInRecipe":
             await handleBuyRecipeIngredients(action);
             break;
-        case "buyAllInListAction":
+        case "buyAllInList":
             await handleBuyListContents(action);
             break;
-        case "setPreferredStoreAction":
+        case "setPreferredStore":
             await handleSetPreferredStore(action);
             break;
-        case "buyItAgainAction":
+        case "buyItAgain":
             await handleBuyItAgain(action);
             break;
     }

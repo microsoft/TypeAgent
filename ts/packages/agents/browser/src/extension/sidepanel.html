@@ -8,6 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Schema Inspector</title>
     <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="vendor/prism/prism.css" />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
@@ -47,6 +48,16 @@
         position: absolute;
         right: 0px;
         top: 5px;
+      }
+
+      .toggle-button {
+        width: 50px;
+      }
+      .list-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
       }
 
       /* Timeline styling*/
@@ -164,27 +175,14 @@
         left: 0;
         right: -55.8px;
       }
+
+      :not(pre) > code[class*="language-"],
+      pre[class*="language-"] {
+        background: #f8f7f7;
+      }
     </style>
   </head>
   <body class="container">
-    <div class="d-flex gap-2">
-      <button
-        id="trySchema"
-        class="btn btn-sm btn-outline-primary"
-        title="Try Schema"
-      >
-        <i class="bi bi-play-circle"></i> Try Page Agent
-      </button>
-
-      <button
-        id="saveSchema"
-        class="btn btn-sm btn-outline-primary"
-        title="Save Schema"
-      >
-        <i class="bi bi-floppy"></i> Save
-      </button>
-    </div>
-
     <div class="mt-4"></div>
     <div class="d-flex justify-content-between align-items-center mt-3">
       <h3>Detected Actions</h3>
@@ -195,8 +193,9 @@
         <i class="bi bi-arrow-clockwise"></i>
       </button>
     </div>
-    <!-- Accordion for Schema -->
-    <div class="accordion" id="schemaAccordion"></div>
+    <div class="card">
+      <ul class="list-group list-group-flush" id="detectedSchemaItemsList"></ul>
+    </div>
 
     <!-- User Defined Actions -->
     <div id="userActionsContainer" class="mt-4">
@@ -229,31 +228,25 @@
       <div class="card">
         <div class="card-body">
           <div class="mb-3">
-            <label class="form-label">Action Name:</label>
-            <input
-              type="text"
-              id="actionName"
-              class="form-control"
-              placeholder="Enter action name"
-              required
-            />
+            <label class="form-label">Name:</label>
+            <input type="text" id="actionName" class="form-control" required />
           </div>
           <div class="mb-3">
-            <label class="form-label">Description:</label>
+            <label class="form-label hidden">Description:</label>
             <textarea
               id="actionDescription"
-              class="form-control"
+              class="form-control hidden"
               rows="5"
               placeholder="What does this action do?"
             ></textarea>
           </div>
           <div class="mb-3">
-            <label class="form-label">Steps:</label>
+            <label class="form-label">Details:</label>
             <textarea
               id="actionStepsDescription"
               class="form-control"
               rows="5"
-              placeholder="Give the steps to perform this action"
+              placeholder="Describe how you would complete this action on the website."
             ></textarea>
             <div
               id="stepsTimelineContainer"
@@ -299,5 +292,8 @@
 
     <script src="sidepanel.js"></script>
     <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="vendor/prism/prism.js"></script>
+    <script src="vendor/prism/prism-typescript.js"></script>
+    <script src="vendor/prism/prism-json.js"></script>
   </body>
 </html>

@@ -79,6 +79,7 @@ export function getStorage(name: string, baseDir: string): Storage {
                 return {
                     load: async () => null,
                     save: async () => {},
+                    delete: async () => false,
                 };
             }
         },

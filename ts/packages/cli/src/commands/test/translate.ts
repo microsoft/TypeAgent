@@ -6,7 +6,7 @@ import { fromJsonActions, toFullActions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import {
     readExplanationTestData,
-    getSchemaNamesForActionConfigProvider,
+    getAllSchemaNames,
     createActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
@@ -83,7 +83,8 @@ function summarizeResult(result: TestResultFile) {
 
 const modelNames = await getChatModelNames();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
-const schemaNames = getSchemaNamesForActionConfigProvider(
+const defaultConstructionProvider = getDefaultConstructionProvider();
+const schemaNames = getAllSchemaNames(
     await createActionConfigProvider(defaultAppAgentProviders),
 );
 const defaultRepeat = 5;
@@ -141,6 +142,11 @@ export default class TestTranslateCommand extends Command {
         schemaOptimization: Flags.boolean({
             description: "Enable schema optimization",
         }),
+        switchFixedInitial: Flags.string({
+            description:
+                "Use fixed schema group to determine the first schema to use",
+            options: schemaNames,
+        }),
         switchEmbedding: Flags.boolean({
             description: "Use embedding to determine the first schema to use",
             default: true, // follow DispatcherOptions default
@@ -161,6 +167,10 @@ export default class TestTranslateCommand extends Command {
             description: "Enable streaming",
             default: true, // follow DispatcherOptions default
             allowNo: true,
+        }),
+        cache: Flags.boolean({
+            description: "Enable caching",
+            default: false,
         }),
         concurrency: Flags.integer({
             char: "c",
@@ -284,7 +294,7 @@ export default class TestTranslateCommand extends Command {
             const files =
                 argv.length > 0
                     ? (argv as string[])
-                    : await getDefaultConstructionProvider().getImportTranslationFiles();
+                    : await defaultConstructionProvider.getImportTranslationFiles();
 
             const inputs = await Promise.all(
                 files.map(async (file) => {
@@ -368,15 +378,20 @@ export default class TestTranslateCommand extends Command {
                         },
                     },
                     switch: {
+                        fixed: flags.switchFixedInitial,
                         embedding: flags.switchEmbedding,
                         inline: flags.switchInline,
                         search: flags.switchSearch,
                     },
                 },
                 explainer: { enabled: false },
-                cache: { enabled: false },
+                cache: { enabled: flags.cache },
                 collectCommandResult: true,
+                constructionProvider: defaultConstructionProvider,
             });
+            if (flags.cache) {
+                await dispatcher.processCommand("@const import -t");
+            }
             while (requests.length > 0) {
                 const request = requests.shift()!;
 

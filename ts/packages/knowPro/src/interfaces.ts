@@ -5,23 +5,32 @@ import { conversation as kpLib } from "knowledge-processor";
 
 // an object that can provide a KnowledgeResponse structure
 export interface IKnowledgeSource {
-    getKnowledge(): kpLib.KnowledgeResponse;
+    getKnowledge(): kpLib.KnowledgeResponse | undefined;
 }
 
-export type MessageIndex = number;
+export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
+    readonly length: number;
+    get(ordinal: TOrdinal): T | undefined;
+    getMultiple(ordinals: TOrdinal[]): (T | undefined)[];
+    getAll(): T[];
+}
 
-export interface IMessage<TMeta extends IKnowledgeSource = any> {
+export type MessageOrdinal = number;
+
+/**
+ * A message in a conversation
+ * A Message contains one or more text chunks
+ */
+export interface IMessage extends IKnowledgeSource {
     // the text of the message, split into chunks
     textChunks: string[];
-    // for example, e-mail has a subject, from and to fields; a chat message has a sender and a recipient
-    metadata: TMeta;
     timestamp?: string | undefined;
     tags: string[];
-    deletionInfo?: DeletionInfo;
+    deletionInfo?: DeletionInfo | undefined;
 }
 
-export type ScoredMessageIndex = {
-    messageIndex: MessageIndex;
+export type ScoredMessageOrdinal = {
+    messageOrdinal: MessageOrdinal;
     score: number;
 };
 
@@ -33,10 +42,10 @@ export interface DeletionInfo {
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 
-export type SemanticRefIndex = number;
+export type SemanticRefOrdinal = number;
 
 export interface SemanticRef {
-    semanticRefIndex: SemanticRefIndex;
+    semanticRefOrdinal: SemanticRefOrdinal;
     range: TextRange;
     knowledgeType: KnowledgeType;
     knowledge: Knowledge;
@@ -50,17 +59,17 @@ export interface Tag {
     text: string;
 }
 
-export interface IConversation<TMeta extends IKnowledgeSource = any> {
+export interface IConversation<TMessage extends IMessage = IMessage> {
     nameTag: string;
     tags: string[];
-    messages: IMessage<TMeta>[];
+    messages: TMessage[];
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
-export type ScoredSemanticRef = {
-    semanticRefIndex: SemanticRefIndex;
+export type ScoredSemanticRefOrdinal = {
+    semanticRefOrdinal: SemanticRefOrdinal;
     score: number;
 };
 
@@ -68,26 +77,36 @@ export interface ITermToSemanticRefIndex {
     getTerms(): string[];
     addTerm(
         term: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
-    removeTerm(term: string, semanticRefIndex: SemanticRefIndex): void;
-    lookupTerm(term: string): ScoredSemanticRef[] | undefined;
+    removeTerm(term: string, semanticRefOrdinal: SemanticRefOrdinal): void;
+    lookupTerm(term: string): ScoredSemanticRefOrdinal[] | undefined;
 }
 
+/**
+ * Represents a specific location of within a text {@link IMessage}.
+ * A message can contain one or more text chunks
+ */
 export interface TextLocation {
-    // the index of the message
-    messageIndex: MessageIndex;
-    // the index of the chunk
-    chunkIndex?: number;
-    // the index of the character within the chunk
-    charIndex?: number;
+    // the ordinal of the message
+    messageOrdinal: MessageOrdinal;
+
+    // [Optional] The ordinal index of the chunk within the message.
+    chunkOrdinal?: number;
+
+    // [Optional] The ordinal index of the character within the chunk.
+    charOrdinal?: number;
 }
 
-// a text range within a session
+/**
+ * A text range within a conversation
+ * TextRange can represent both a text range and a point location
+ * If 'end' is undefined, the text range represents a point location, identified by 'start'
+ */
 export interface TextRange {
     // the start of the range
     start: TextLocation;
-    // the end of the range  (exclusive)
+    // the (optional)end of the range  (exclusive)
     end?: TextLocation | undefined;
 }
 
@@ -116,6 +135,7 @@ export interface IConversationSecondaryIndexes {
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
     threads?: IConversationThreads | undefined;
+    messageIndex?: IMessageTextIndex | undefined;
 }
 
 /**
@@ -126,12 +146,12 @@ export interface IPropertyToSemanticRefIndex {
     addProperty(
         propertyName: string,
         value: string,
-        semanticRefIndex: SemanticRefIndex | ScoredSemanticRef,
+        semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
     lookupProperty(
         propertyName: string,
         value: string,
-    ): ScoredSemanticRef[] | undefined;
+    ): ScoredSemanticRefOrdinal[] | undefined;
 }
 
 export type TimestampedTextRange = {
@@ -143,8 +163,10 @@ export type TimestampedTextRange = {
  * Return text ranges in the given date range
  */
 export interface ITimestampToTextRangeIndex {
-    addTimestamp(messageIndex: MessageIndex, timestamp: string): boolean;
-    addTimestamps(messageTimestamps: [MessageIndex, string][]): void;
+    addTimestamp(messageOrdinal: MessageOrdinal, timestamp: string): boolean;
+    addTimestamps(
+        messageTimestamps: [MessageOrdinal, string][],
+    ): ListIndexingResult;
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
@@ -156,7 +178,7 @@ export interface ITermToRelatedTermsFuzzy {
     addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
-    ): Promise<void>;
+    ): Promise<ListIndexingResult>;
     lookupTerm(
         text: string,
         maxMatches?: number,
@@ -182,10 +204,10 @@ export type Thread = {
     ranges: TextRange[];
 };
 
-export type ThreadIndex = number;
+export type ThreadOrdinal = number;
 
-export type ScoredThreadIndex = {
-    threadIndex: ThreadIndex;
+export type ScoredThreadOrdinal = {
+    threadOrdinal: ThreadOrdinal;
     score: number;
 };
 
@@ -197,8 +219,26 @@ export interface IConversationThreads {
         threadDescription: string,
         maxMatches?: number,
         thresholdScore?: number,
-    ): Promise<ScoredThreadIndex[] | undefined>;
-    removeThread(threadIndex: ThreadIndex): void;
+    ): Promise<ScoredThreadOrdinal[] | undefined>;
+    removeThread(threadOrdinal: ThreadOrdinal): void;
+}
+
+export interface IMessageTextIndex {
+    addMessages(
+        messages: IMessage[],
+        eventHandler?: IndexingEventHandlers,
+    ): Promise<ListIndexingResult>;
+    lookupMessages(
+        messageText: string,
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageOrdinal[]>;
+    lookupMessagesInSubset(
+        messageText: string,
+        ordinalsToSearch: MessageOrdinal[],
+        maxMatches?: number,
+        thresholdScore?: number,
+    ): Promise<ScoredMessageOrdinal[]>;
 }
 
 //------------------------
@@ -220,11 +260,11 @@ export interface ITermToSemanticRefIndexData {
 
 export interface ITermToSemanticRefIndexItem {
     term: string;
-    semanticRefIndices: ScoredSemanticRef[];
+    semanticRefOrdinals: ScoredSemanticRefOrdinal[];
 }
 
 //------------------------
-// Indexing
+// Indexing events and results
 //------------------------
 
 export interface IndexingEventHandlers {
@@ -237,9 +277,31 @@ export interface IndexingEventHandlers {
         batch: string[],
         batchStartAt: number,
     ) => boolean;
+    onTextIndexed?: (
+        textAndLocations: [string, TextLocation][],
+        batch: [string, TextLocation][],
+        batchStartAt: number,
+    ) => boolean;
 }
 
 export type IndexingResults = {
-    chunksIndexedUpto?: TextLocation | undefined;
+    semanticRefs?: TextIndexingResult | undefined;
+    secondaryIndexResults?: SecondaryIndexingResults | undefined;
+};
+
+export type SecondaryIndexingResults = {
+    properties?: ListIndexingResult | undefined;
+    timestamps?: ListIndexingResult | undefined;
+    relatedTerms?: ListIndexingResult | undefined;
+    message?: TextIndexingResult | undefined;
+};
+
+export type TextIndexingResult = {
+    completedUpto?: TextLocation | undefined;
+    error?: string | undefined;
+};
+
+export type ListIndexingResult = {
+    numberCompleted: number;
     error?: string | undefined;
 };

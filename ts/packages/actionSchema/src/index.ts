@@ -8,7 +8,7 @@ export {
     ActionSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaGroup,
-    ActionSchemaFile,
+    ParsedActionSchema,
     ActionSchemaObject,
     ActionSchemaUnion,
 } from "./type.js";
@@ -28,14 +28,12 @@ export {
 export { validateAction } from "./validate.js";
 export { getParameterType, getParameterNames } from "./utils.js";
 
-export { NodeType, SchemaParser, ISymbol, SymbolNode } from "./schemaParser.js";
-
 export * as ActionSchemaCreator from "./creator.js";
 
 export {
-    ActionSchemaFileJSON,
-    toJSONActionSchemaFile,
-    fromJSONActionSchemaFile,
+    ParsedActionSchemaJSON,
+    toJSONParsedActionSchema,
+    fromJSONParsedActionSchema,
 } from "./serialize.js";
 
 // Generic (non-action) Schema
@@ -43,3 +41,6 @@ export { validateType } from "./validate.js";
 
 // Schema Config
 export { SchemaConfig, ParamSpec, ActionParamSpecs } from "./schemaConfig.js";
+
+// Legacy (to be deprecated)
+export { NodeType, SchemaParser, ISymbol, SymbolNode } from "./schemaParser.js";

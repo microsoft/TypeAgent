@@ -1,16 +1,31 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DateRange, TextLocation, TextRange } from "./interfaces.js";
-import { SearchTerm } from "./search.js";
 /**
  * Common types and methods INTERNAL to the library.
- * Should not be exposed via index.ts
+ * These should not be exposed via index.ts
  */
+
+import { ConversationSettings } from "./conversation.js";
+import { ConversationIndex } from "./conversationIndex.js";
+import {
+    DateRange,
+    IConversation,
+    TextLocation,
+    TextRange,
+} from "./interfaces.js";
+import { SearchTerm, SearchTermGroup } from "./search.js";
+import {
+    IConversationDataWithIndexes,
+    ConversationSecondaryIndexes,
+    buildTransientSecondaryIndexes,
+} from "./secondaryIndexes.js";
+
 export interface Scored<T = any> {
     item: T;
     score: number;
 }
+
 /**
  * Returns:
  *  0 if locations are equal
@@ -22,15 +37,15 @@ export interface Scored<T = any> {
  */
 
 export function compareTextLocation(x: TextLocation, y: TextLocation): number {
-    let cmp = x.messageIndex - y.messageIndex;
+    let cmp = x.messageOrdinal - y.messageOrdinal;
     if (cmp !== 0) {
         return cmp;
     }
-    cmp = (x.chunkIndex ?? 0) - (y.chunkIndex ?? 0);
+    cmp = (x.chunkOrdinal ?? 0) - (y.chunkOrdinal ?? 0);
     if (cmp !== 0) {
         return cmp;
     }
-    return (x.charIndex ?? 0) - (y.charIndex ?? 0);
+    return (x.charOrdinal ?? 0) - (y.charOrdinal ?? 0);
 }
 
 export function compareTextRange(x: TextRange, y: TextRange) {
@@ -64,6 +79,7 @@ export function isInTextRange(
     );
     return cmpStart <= 0 && cmpEnd < 0;
 }
+
 export function compareDates(x: Date, y: Date): number {
     return x.getTime() - y.getTime();
 }
@@ -76,6 +92,48 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
         outerRange.end !== undefined ? compareDates(date, outerRange.end) : -1;
     return cmpStart <= 0 && cmpEnd <= 0;
 }
+
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
+}
+
+export function createAndTermGroup(): SearchTermGroup {
+    return { booleanOp: "and", terms: [] };
+}
+
+export function createOrTermGroup(): SearchTermGroup {
+    return { booleanOp: "or", terms: [] };
+}
+
+export function createOrMaxTermGroup(): SearchTermGroup {
+    return { booleanOp: "or_max", terms: [] };
+}
+
+export async function createConversationFromData(
+    data: IConversationDataWithIndexes,
+    conversationSettings: ConversationSettings,
+): Promise<IConversation> {
+    const conversation: IConversation = {
+        nameTag: data.nameTag,
+        tags: data.tags,
+        messages: data.messages,
+        semanticRefs: data.semanticRefs,
+        semanticRefIndex: data.semanticIndexData
+            ? new ConversationIndex(data.semanticIndexData)
+            : undefined,
+    };
+    const secondaryIndexes = new ConversationSecondaryIndexes(
+        conversationSettings,
+    );
+    conversation.secondaryIndexes = secondaryIndexes;
+    if (data.relatedTermsIndexData) {
+        secondaryIndexes.termToRelatedTermsIndex.deserialize(
+            data.relatedTermsIndexData,
+        );
+    }
+    if (data.messageIndexData) {
+        secondaryIndexes.messageIndex!.deserialize(data.messageIndexData);
+    }
+    await buildTransientSecondaryIndexes(conversation, conversationSettings);
+    return conversation;
 }
