@@ -59,15 +59,15 @@ async def build_related_terms_index(
     settings: ConversationSettings,
     event_handler: IndexingEventHandlers | None = None,
 ) -> ListIndexingResult:
-    csem = conversation.semantic_ref_index
-    csec = conversation.secondary_indexes
-    if csem and csec:
-        if csec.term_to_related_terms_index is None:
-            csec.term_to_related_terms_index = RelatedTermsIndex(
+    csr = conversation.semantic_ref_index
+    csi = conversation.secondary_indexes
+    if csr and csi:
+        if csi.term_to_related_terms_index is None:
+            csi.term_to_related_terms_index = RelatedTermsIndex(
                 settings.related_term_index_settings
             )
-        fuzzy_index = csec.term_to_related_terms_index.fuzzy_index
-        all_terms = csem.get_terms()
+        fuzzy_index = csi.term_to_related_terms_index.fuzzy_index
+        all_terms = csr.get_terms()
         if fuzzy_index and all_terms:
             await fuzzy_index.add_keys(all_terms)
         return ListIndexingResult(len(all_terms))
