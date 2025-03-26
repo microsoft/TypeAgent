@@ -1,6 +1,6 @@
-## memory-providers
+## memory-storage
 
-**Easy Stage Sample code** and early ideas on how to implement a backing store for knowledge-processor using sqlite.
+**Early Sample code**: experiments with how to implement a backing store for knowpro using sqlite.
 
 This code early is rapidly evolving.
 
