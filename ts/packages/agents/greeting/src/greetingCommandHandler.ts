@@ -38,22 +38,21 @@ export function instantiate(): AppAgent {
 
 type GreetingAgentContext = {
     user: {
-        givenName: string | undefined,
-        surName: string | undefined
-    }
-}
+        givenName: string | undefined;
+        surName: string | undefined;
+    };
+};
 
 async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
-
     const result = execSync("az ad signed-in-user show");
     const user = JSON.parse(result.toString());
 
     return {
         user: {
             givenName: user.givenName,
-            surName: user.surname
-        }
-    }
+            surName: user.surname,
+        },
+    };
 }
 
 const personalizedGreetingSchema = `
@@ -292,7 +291,9 @@ async function handlePersonalizedGreetingAction(
 //     return answer?.generatedText;
 // }
 
-async function getRecentChatHistory(context: ActionContext<GreetingAgentContext>): Promise<string[]> {
+async function getRecentChatHistory(
+    context: ActionContext<GreetingAgentContext>,
+): Promise<string[]> {
     const conversationManager: Conversation.ConversationManager = (
         context.sessionContext as any
     ).conversationManager;
@@ -334,10 +335,14 @@ async function getRecentChatHistory(context: ActionContext<GreetingAgentContext>
 
             chatHistory.push("###");
             if (context.sessionContext.agentContext.user.givenName) {
-                chatHistory.push(`The user's given name is '${context.sessionContext.agentContext.user.givenName}'.`);
+                chatHistory.push(
+                    `The user's given name is '${context.sessionContext.agentContext.user.givenName}'.`,
+                );
             }
             if (context.sessionContext.agentContext.user.surName) {
-                chatHistory.push(`The user's sur name is '${context.sessionContext.agentContext.user.surName}'.`);
+                chatHistory.push(
+                    `The user's sur name is '${context.sessionContext.agentContext.user.surName}'.`,
+                );
             }
 
             const matches =
