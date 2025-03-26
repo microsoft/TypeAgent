@@ -97,6 +97,8 @@ export class SearchQueryExprBuilder {
     }
 
     public compileQuery(query: querySchema.SearchQuery): SearchQueryExpr[] {
+        // Clone the query so we can modify it
+        query = { ...query };
         const queryExpressions: SearchQueryExpr[] = [];
         for (const searchExpr of query.searchExpressions) {
             queryExpressions.push(this.compileSearchExpr(searchExpr));
@@ -214,16 +216,26 @@ export class SearchQueryExprBuilder {
                 termGroup,
             );
         }
-        if (
-            actionTerm.targetEntities &&
-            this.shouldTreatTargetsAsObjects(actionTerm)
-        ) {
-            // If additional entities, then for now, assume the targetEntities represent an Object in an action
-            this.addEntityNamesToGroup(
-                actionTerm.targetEntities,
-                PropertyNames.Object,
-                termGroup,
-            );
+        if (actionTerm.targetEntities) {
+            if (this.shouldTreatTargetsAsObjects(actionTerm)) {
+                // If additional entities, then for now, assume the targetEntities represent an Object in an action
+                this.addEntityNamesToGroup(
+                    actionTerm.targetEntities,
+                    PropertyNames.Object,
+                    termGroup,
+                );
+            } else {
+                /*
+                const persons = actionTerm.targetEntities.filter(
+                    (e) => e.isPerson,
+                );
+                this.addEntityNamesToGroup(
+                    persons,
+                    PropertyNames.Object,
+                    termGroup,
+                );
+                */
+            }
         }
         return termGroup;
     }
@@ -253,13 +265,11 @@ export class SearchQueryExprBuilder {
     ): boolean {
         // TODO: Improve this
         // If additional entities, then for now, assume the targetEntities represent an Object in an action
-        if (isEntityTermArray(actionTerm.targetEntities)) {
-            if (
-                isEntityTermArray(actionTerm.additionalEntities) &&
-                actionTerm.additionalEntities.length > 0
-            ) {
-                return true;
-            }
+        if (
+            isEntityTermArray(actionTerm.additionalEntities) &&
+            actionTerm.additionalEntities.length > 0
+        ) {
+            return true;
         }
         return false;
     }
