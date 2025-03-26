@@ -50,7 +50,6 @@
     "copyfiles": "^2.4.1",
     "prettier": "^3.2.5",
     "rimraf": "^5.0.5",
-    "tsx": "^4.7.0",
     "typescript": "^5.4.2"
   }
 }
