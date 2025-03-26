@@ -80,8 +80,8 @@ async function updatePlayerContext(
             const message = `Spotify logged in as ${user}.`;
             debugSpotify(message);
             context.notify(AppAgentEvent.Info, chalk.green(message));
-        } catch (e) {
-            const message = `Spotify not logged in.  Error: ${e}`;
+        } catch (e: any) {
+            const message = `Spotify not logged in.  Error: ${e.message}`;
             debugSpotify(message);
             context.notify(AppAgentEvent.Error, chalk.red(message));
         }
