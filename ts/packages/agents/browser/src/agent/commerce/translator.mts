@@ -3,6 +3,7 @@
 
 import {
     createJsonTranslator,
+    MultimodalPromptContent,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
@@ -248,7 +249,10 @@ export class ECommerceSiteAgent<T extends object> {
         ) as ContentSection[];
 
         const response = await bootstrapTranslator.translate("", [
-            { role: "user", content: JSON.stringify(promptSections) },
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
         ]);
         return response;
     }
@@ -304,7 +308,10 @@ export class ECommerceSiteAgent<T extends object> {
         ];
 
         const response = await bootstrapTranslator.translate("", [
-            { role: "user", content: JSON.stringify(promptSections) },
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
         ]);
         return response;
     }
