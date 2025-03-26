@@ -1,13 +1,14 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import numpy as np
 from numpy.typing import NDArray
 
 from .embeddings import AsyncEmbeddingModel, NormalizedEmbedding, NormalizedEmbeddings
 from ..knowpro.importing import TextEmbeddingIndexSettings
+from ..knowpro.secindex import ITextEmbeddingIndexData
 
 
 class ScoredOrdinal(NamedTuple):
@@ -21,9 +22,8 @@ class VectorBase:
         if model is None:
             model = AsyncEmbeddingModel()
         self._model = model
-        self._vectors: NormalizedEmbeddings = np.array([], dtype=np.float32).reshape(
-            (0, 0)
-        )
+        # TODO: Using Any b/c pyright doesn't appear to understand NDArray.
+        self._vectors: Any = np.array([], dtype=np.float32).reshape((0, 0))
 
     async def get_embedding(self, key: str, cache: bool = True) -> NormalizedEmbedding:
         if cache:
@@ -81,6 +81,15 @@ class VectorBase:
 
     def clear(self) -> None:
         self._vectors = np.array([], dtype=np.float32).reshape((0, 0))
+
+    def serialize_embedding_at(self, ordinal: int) -> list[list[float]]:
+        return [self._vectors[ordinal].tolist()]
+
+    def serialize(self) -> ITextEmbeddingIndexData:
+        return ITextEmbeddingIndexData(
+            textItems=[],  # TODO: Where do I get a list[str] here?
+            embeddings=[embedding for embedding in self._vectors],
+        )
 
 
 async def main():

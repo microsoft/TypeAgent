@@ -7,10 +7,12 @@ from .interfaces import (
     IConversation,
     ITermToRelatedTerms,
     ITermToRelatedTermsIndex,
+    ITermsToRelatedTermsIndexData,
     IndexingEventHandlers,
     ListIndexingResult,
     Term,
 )
+from .secindex import ITermToRelatedTermsData, ITermsToRelatedTermsDataItem
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
@@ -37,7 +39,16 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     def clear(self) -> None:
         self.map.clear()
 
-    # serialize, deserialize
+    def serialize(self) -> ITermToRelatedTermsData:
+        related_terms: list[ITermsToRelatedTermsDataItem] = []
+        for key, value in self.map.items():
+            related_terms.append(
+                ITermsToRelatedTermsDataItem(
+                    termText=key,
+                    relatedTerms=[term.serialize() for term in value],
+                )
+            )
+        return ITermToRelatedTermsData(relatedTerms=related_terms)
 
 
 async def build_related_terms_index(
@@ -75,4 +86,8 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
     def fuzzy_index(self) -> VectorBase:
         return self._vector_base
 
-    # TODO: serialize, deserialize
+    def serialize(self) -> ITermsToRelatedTermsIndexData:
+        return ITermsToRelatedTermsIndexData(
+            aliasData=self._alias_map.serialize(),
+            textEmbeddingData=self._vector_base.serialize(),
+        )

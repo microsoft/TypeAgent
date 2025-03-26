@@ -1,23 +1,22 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Protocol
+from typing import Protocol, TypedDict
 
 from .importing import TextEmbeddingIndexSettings
-from .interfaces import IConversationThreads, ScoredThreadOrdinal, Thread
-from ..aitools.embeddings import NormalizedEmbedding
+from .interfaces import IConversationThreads, ScoredThreadOrdinal, Thread, ThreadData
 from ..aitools.vectorbase import VectorBase
 
 
-class IThreadDataItem(Protocol):
-    thread: Thread
-    embedding: NormalizedEmbedding
+class IThreadDataItem(TypedDict):
+    thread: ThreadData
+    embedding: list[
+        list[float]
+    ]  # TODO: What's the compatible serialization type for NormalizedEmbedding?
 
 
-class IConversationThreadData[TThreadDataItem: IThreadDataItem](Protocol):
-    """Abstract interface for conversation thread data."""
-
-    threads: list[TThreadDataItem] | None = None
+class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):
+    threads: list[TThreadDataItem] | None
 
 
 class ConversationThreads(IConversationThreads):
@@ -61,3 +60,17 @@ class ConversationThreads(IConversationThreads):
         await self.vector_base.add_keys(
             [t.description for t in self.threads], cache=False
         )
+
+    def serialize(self) -> IConversationThreadData[IThreadDataItem]:
+        thread_data: list[IThreadDataItem] = []
+        embedding_index = self.vector_base
+
+        for i, thread in enumerate(self.threads):
+            thread_data.append(
+                IThreadDataItem(
+                    thread=thread.serialize(),
+                    embedding=embedding_index.serialize_embedding_at(i),
+                )
+            )
+
+        return IConversationThreadData(threads=thread_data)

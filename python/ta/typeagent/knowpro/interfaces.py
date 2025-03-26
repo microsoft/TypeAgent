@@ -3,7 +3,16 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime as Datetime, timedelta as Timedelta  # For export!
+from datetime import datetime as Datetime, timedelta as Timedelta
+
+from ..aitools.vectorbase import VectorBase
+from .convthreads import (
+    IConversationThreadData as IConversationThreadData,
+)  # For export
+from . import kplib
+from .secindex import (
+    ITermsToRelatedTermsIndexData as ITermsToRelatedTermsIndexData,
+)  # For export
 from typing import (
     Any,
     Callable,
@@ -13,9 +22,6 @@ from typing import (
     Self,
     TypedDict,
 )
-from typing_extensions import ReadOnly
-
-from . import kplib
 
 
 # An object that can provide a KnowledgeResponse structure.
@@ -57,12 +63,13 @@ class ScoredSemanticRefOrdinal:
             semanticRefOrdinal=self.semantic_ref_ordinal, score=self.score
         )
 
-    @staticmethod
-    def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
-        return ScoredSemanticRefOrdinal(
-            semantic_ref_ordinal=data["semanticRefOrdinal"],
-            score=data["score"],
-        )
+    # TODO: deserialize
+    # @staticmethod
+    # def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
+    #     return ScoredSemanticRefOrdinal(
+    #         semantic_ref_ordinal=data["semanticRefOrdinal"],
+    #         score=data["score"],
+    #     )
 
 
 @dataclass
@@ -105,6 +112,12 @@ class Tag:
 type Knowledge = kplib.ConcreteEntity | kplib.Action | Topic | Tag
 
 
+class TextLocationData(TypedDict):
+    messageOrdinal: MessageOrdinal
+    chunkOrdinal: int
+    charOrdinal: int
+
+
 @dataclass(order=True)
 class TextLocation:
     # The ordinal of the message.
@@ -116,6 +129,18 @@ class TextLocation:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal}, {self.char_ordinal})"
+
+    def serialize(self) -> TextLocationData:
+        return TextLocationData(
+            messageOrdinal=self.message_ordinal,
+            chunkOrdinal=self.chunk_ordinal,
+            charOrdinal=self.char_ordinal,
+        )
+
+
+class TextRangeData(TypedDict):
+    start: TextLocationData
+    end: NotRequired[TextLocationData | None]
 
 
 # A text range within a session.
@@ -137,6 +162,27 @@ class TextRange:
         selfend = self.end or self.start
         return self.start <= other.start and otherend <= selfend
 
+    def serialize(self) -> TextRangeData:
+        if self.end is None:
+            return TextRangeData(start=self.start.serialize())
+        else:
+            return TextRangeData(
+                start=self.start.serialize(),
+                end=self.end.serialize(),
+            )
+
+
+# TODO: Implement serializing KnowledgeData (or import from kplib).
+class KnowledgeData(TypedDict):
+    pass
+
+
+class SemanticRefData(TypedDict):
+    semanticRefOrdinal: SemanticRefOrdinal
+    range: TextRangeData
+    knowledgeType: KnowledgeType
+    knowledge: KnowledgeData
+
 
 @dataclass
 class SemanticRef:
@@ -147,6 +193,14 @@ class SemanticRef:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.range}, {self.knowledge_type!r}, {self.knowledge})"
+
+    def serialize(self) -> SemanticRefData:
+        return SemanticRefData(
+            semanticRefOrdinal=self.semantic_ref_ordinal,
+            range=self.range.serialize(),
+            knowledgeType=self.knowledge_type,
+            knowledge=KnowledgeData(),  # TODO: self.knowledge.serialize()
+        )
 
 
 @dataclass
@@ -173,6 +227,12 @@ class Term:
     text: str
     # Optional weighting for these matches.
     weight: float | None = None
+
+    def serialize(self) -> "TermData":
+        if self.weight is None:
+            return TermData(text=self.text)
+        else:
+            return TermData(text=self.text, weight=self.weight)
 
 
 @dataclass
@@ -255,10 +315,16 @@ class ITermToRelatedTermsIndex(Protocol):
         raise NotImplementedError
 
     @property
-    def fuzzy_index(
-        self,
-    ) -> Any | None:  # TODO: ITermToRelatedTermsFuzzy | None; or VectorBase | None?
+    def fuzzy_index(self) -> VectorBase | None:
         raise NotImplementedError
+
+    def serialize(self) -> ITermsToRelatedTermsIndexData:
+        raise NotImplementedError
+
+
+class ThreadData(TypedDict):
+    description: str
+    ranges: list[TextRangeData]
 
 
 # A Thread is a set of text ranges in a conversation.
@@ -266,6 +332,12 @@ class ITermToRelatedTermsIndex(Protocol):
 class Thread:
     description: str
     ranges: Sequence[TextRange]
+
+    def serialize(self) -> ThreadData:
+        return ThreadData(
+            description=self.description,
+            ranges=[range.serialize() for range in self.ranges],
+        )
 
 
 type ThreadOrdinal = int
@@ -289,6 +361,9 @@ class IConversationThreads(Protocol):
         max_matches: int | None = None,
         threshold_score: float | None = None,
     ) -> Sequence[ScoredThreadOrdinal] | None:
+        raise NotImplementedError
+
+    def serialize(self) -> IConversationThreadData:
         raise NotImplementedError
 
 
@@ -345,6 +420,11 @@ class IConversation[
 # --------------------------------------------------
 
 
+class TermData(TypedDict):
+    text: str
+    weight: NotRequired[float | None]
+
+
 class ScoredSemanticRefOrdinalData(TypedDict):
     semanticRefOrdinal: SemanticRefOrdinal
     score: float
@@ -360,11 +440,11 @@ class TermToSemanticRefIndexData(TypedDict):
     items: list[TermToSemanticRefIndexItemData]
 
 
-class IConversationData[TMessage](TypedDict):
-    name_tag: str
-    messages: list[TMessage]
+class IConversationData[TMessageData](TypedDict):
+    nameTag: str
+    messages: list[TMessageData]
     tags: list[str]
-    semanticRefs: list[SemanticRef]
+    semanticRefs: list[SemanticRefData] | None
     semanticIndexData: NotRequired[TermToSemanticRefIndexData | None]
 
 
