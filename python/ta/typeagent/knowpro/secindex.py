@@ -80,7 +80,8 @@ def build_transient_secondary_indexes[
     return result
 
 
-class IConversationDataWithIndexes[TMessage: IMessage](IConversationData[TMessage]):
+# TODO: Why is this here and not in indexes.py?
+class IConversationDataWithIndexes[TMessageData](IConversationData[TMessageData]):
 
     relatedTermsIndexData: NotRequired[ITermsToRelatedTermsIndexData | None]
     threadData: NotRequired[IConversationThreadData | None]

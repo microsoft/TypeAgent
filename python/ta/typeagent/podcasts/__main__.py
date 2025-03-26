@@ -2,15 +2,15 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# Check Python version before importing anything else.
 import sys
-
-# Check Python version before importing anything else
 minver = (3, 12)
 if sys.version_info < minver:
     sys.exit(f"Error: Python {minver[0]}.{minver[1]}+ required")
 del minver
 
 import argparse
+import json
 import os
 
 import dotenv
@@ -71,16 +71,22 @@ async def main():
     )
 
     indexing_result = await pod.build_index(handler)
+
     print()
     print(indexing_result)
     if indexing_result.semantic_refs is not None:
         if error := indexing_result.semantic_refs.error:
             raise RuntimeError(error)
-    if pod.semantic_ref_index is not None:
-        data = pod.semantic_ref_index.serialize()
-        new = ConversationIndex(data)
-        assert new.serialize() == data
-        # print(json.dumps(data, indent=2))
+
+    print()
+    data = await pod.serialize()
+    print(json.dumps(data, indent=2))
+
+    # if pod.semantic_ref_index is not None:
+    #     data = pod.semantic_ref_index.serialize()
+    #     # new = ConversationIndex(data)
+    #     # assert new.serialize() == data
+    #     # print(json.dumps(data, indent=2))
 
     # print(await pod.serialize())
 

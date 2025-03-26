@@ -27,7 +27,7 @@ class VectorBase:
             model = AsyncEmbeddingModel()
         self._model = model
         # TODO: Using Any b/c pyright doesn't appear to understand NDArray.
-        self._vectors: Any = np.array([], dtype=np.float32).reshape((0, 0))
+        self._vectors = np.array([], dtype=np.float32).reshape((0, 0))
 
     async def get_embedding(self, key: str, cache: bool = True) -> NormalizedEmbedding:
         if cache:
@@ -92,7 +92,9 @@ class VectorBase:
     def serialize(self) -> ITextEmbeddingIndexData:
         return ITextEmbeddingIndexData(
             textItems=[],  # TODO: Where do I get a list[str] here?
-            embeddings=[embedding for embedding in self._vectors],
+            # TODO: Serialize the full embedding, not just the first 3 elements. 
+            # TODO: Serialize as binary data.
+            embeddings=[embedding[:3].tolist() for embedding in self._vectors],
         )
 
 

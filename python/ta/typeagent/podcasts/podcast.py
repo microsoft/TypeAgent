@@ -84,7 +84,7 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
         )
 
 
-class PodcastData(secindex.IConversationDataWithIndexes[PodcastMessage]):
+class PodcastData(secindex.IConversationDataWithIndexes[PodcastMessageData]):
     pass
 
 
@@ -144,7 +144,7 @@ class Podcast(
     async def serialize(self) -> PodcastData:
         data = PodcastData(
             nameTag=self.name_tag,
-            messages=self.messages,
+            messages=[m.serialize() for m in self.messages],
             tags=self.tags,
             semanticRefs=(
                 [r.serialize() for r in self.semantic_refs]
