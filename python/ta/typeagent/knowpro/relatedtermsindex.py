@@ -1,18 +1,21 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import NotRequired, TypedDict
 from ..aitools.vectorbase import VectorBase
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
     ITermToRelatedTerms,
+    ITermToRelatedTermsData,
     ITermToRelatedTermsIndex,
+    ITermsToRelatedTermsDataItem,
     ITermsToRelatedTermsIndexData,
     IndexingEventHandlers,
     ListIndexingResult,
     Term,
+    TermData,
 )
-from .secindex import ITermToRelatedTermsData, ITermsToRelatedTermsDataItem
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):

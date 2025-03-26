@@ -4,19 +4,15 @@
 from typing import Protocol, TypedDict
 
 from .importing import TextEmbeddingIndexSettings
-from .interfaces import IConversationThreads, ScoredThreadOrdinal, Thread, ThreadData
+from .interfaces import (
+    IConversationThreadData,
+    IConversationThreads,
+    IThreadDataItem,
+    ScoredThreadOrdinal,
+    Thread,
+    ThreadData,
+)
 from ..aitools.vectorbase import VectorBase
-
-
-class IThreadDataItem(TypedDict):
-    thread: ThreadData
-    embedding: list[
-        list[float]
-    ]  # TODO: What's the compatible serialization type for NormalizedEmbedding?
-
-
-class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):
-    threads: list[TThreadDataItem] | None
 
 
 class ConversationThreads(IConversationThreads):

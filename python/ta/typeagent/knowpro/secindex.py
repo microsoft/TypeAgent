@@ -11,6 +11,7 @@ from .interfaces import (
     IConversationSecondaryIndexes,
     IMessage,
     ITermToSemanticRefIndex,
+    ITermsToRelatedTermsIndexData,
     IndexingEventHandlers,
     SecondaryIndexingResults,
     TermData,
@@ -19,9 +20,11 @@ from .interfaces import (
 )
 from .messageindex import MessageTextIndex, build_message_index
 from .relatedtermsindex import RelatedTermsIndex, build_related_terms_index
+from .propindex import PropertyIndex, build_property_index
+from .relatedtermsindex import ITermToRelatedTermsData
 from .textlocationindex import ITextToTextLocationIndexData
 from .timestampindex import TimestampToTextRangeIndex, build_timestamp_index
-from .propindex import PropertyIndex, build_property_index
+from ..aitools.vectorbase import ITextEmbeddingIndexData
 
 
 class IMessageTextIndexData(TypedDict):
@@ -75,25 +78,6 @@ def build_transient_secondary_indexes[
     result.properties = build_property_index(conversation)
     result.timestamps = build_timestamp_index(conversation)
     return result
-
-
-class ITextEmbeddingIndexData(TypedDict):
-    textItems: list[str]
-    embeddings: list[Any]  # TODO: list[NormalizedEmbeddingData]
-
-
-class ITermsToRelatedTermsDataItem(TypedDict):
-    termText: str
-    relatedTerms: list[TermData]
-
-
-class ITermToRelatedTermsData(TypedDict):
-    relatedTerms: NotRequired[list[ITermsToRelatedTermsDataItem] | None]
-
-
-class ITermsToRelatedTermsIndexData(TypedDict):
-    aliasData: NotRequired[ITermToRelatedTermsData]
-    textEmbeddingData: NotRequired[ITextEmbeddingIndexData]
 
 
 class IConversationDataWithIndexes[TMessage: IMessage](IConversationData[TMessage]):

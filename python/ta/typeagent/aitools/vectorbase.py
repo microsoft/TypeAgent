@@ -1,19 +1,23 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypedDict
 
 import numpy as np
 from numpy.typing import NDArray
 
 from .embeddings import AsyncEmbeddingModel, NormalizedEmbedding, NormalizedEmbeddings
 from ..knowpro.importing import TextEmbeddingIndexSettings
-from ..knowpro.secindex import ITextEmbeddingIndexData
 
 
 class ScoredOrdinal(NamedTuple):
     ordinal: int
     score: float
+
+
+class ITextEmbeddingIndexData(TypedDict):
+    textItems: list[str]
+    embeddings: list[Any]  # TODO: list[NormalizedEmbeddingData]
 
 
 class VectorBase:

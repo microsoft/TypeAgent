@@ -4,15 +4,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta
-
-from ..aitools.vectorbase import VectorBase
-from .convthreads import (
-    IConversationThreadData as IConversationThreadData,
-)  # For export
-from . import kplib
-from .secindex import (
-    ITermsToRelatedTermsIndexData as ITermsToRelatedTermsIndexData,
-)  # For export
 from typing import (
     Any,
     Callable,
@@ -22,6 +13,9 @@ from typing import (
     Self,
     TypedDict,
 )
+
+from ..aitools.vectorbase import ITextEmbeddingIndexData, VectorBase
+from . import kplib
 
 
 # An object that can provide a KnowledgeResponse structure.
@@ -318,7 +312,7 @@ class ITermToRelatedTermsIndex(Protocol):
     def fuzzy_index(self) -> VectorBase | None:
         raise NotImplementedError
 
-    def serialize(self) -> ITermsToRelatedTermsIndexData:
+    def serialize(self) -> "ITermsToRelatedTermsIndexData":
         raise NotImplementedError
 
 
@@ -363,7 +357,7 @@ class IConversationThreads(Protocol):
     ) -> Sequence[ScoredThreadOrdinal] | None:
         raise NotImplementedError
 
-    def serialize(self) -> IConversationThreadData:
+    def serialize(self) -> "IConversationThreadData":
         raise NotImplementedError
 
 
@@ -420,9 +414,34 @@ class IConversation[
 # --------------------------------------------------
 
 
+class IThreadDataItem(TypedDict):
+    thread: ThreadData
+    embedding: list[
+        list[float]
+    ]  # TODO: What's the compatible serialization type for NormalizedEmbedding?
+
+
+class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):
+    threads: list[TThreadDataItem] | None
+
+
 class TermData(TypedDict):
     text: str
     weight: NotRequired[float | None]
+
+
+class ITermsToRelatedTermsDataItem(TypedDict):
+    termText: str
+    relatedTerms: list[TermData]
+
+
+class ITermToRelatedTermsData(TypedDict):
+    relatedTerms: NotRequired[list[ITermsToRelatedTermsDataItem] | None]
+
+
+class ITermsToRelatedTermsIndexData(TypedDict):
+    aliasData: NotRequired[ITermToRelatedTermsData]
+    textEmbeddingData: NotRequired[ITextEmbeddingIndexData]
 
 
 class ScoredSemanticRefOrdinalData(TypedDict):
