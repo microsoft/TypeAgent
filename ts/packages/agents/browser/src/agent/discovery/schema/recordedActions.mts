@@ -25,8 +25,9 @@ export type UserIntentParameter = {
     // HTML control only accepts a fixed set of values e.g. dropdown elements, radio-button lists etc.
     description: string;
 
-    // Indicates whether a parameter is required. If a parameter has a default value
-    // then it is not required.
+    // Indicates whether a parameter value must be provided by the end-user.
+    // NOTE: Parameters that are fixed on the page (such as the text of a button or link) should not be
+    // marked as required fields.
     required: boolean;
 };
 

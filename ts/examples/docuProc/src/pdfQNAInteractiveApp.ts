@@ -91,7 +91,7 @@ export async function interactiveDocQueryLoop(
     };
 
     iapp.addStandardHandlers(handlers);
-    const model = openai.createChatModelDefault("PdfDownloader");
+    const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
     const pdfDownloader = createPDFDownloadTranslator(model);
 
     function createPDFDownloadTranslator(

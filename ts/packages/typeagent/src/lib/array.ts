@@ -133,7 +133,8 @@ export function getInRange(
     values: any[], 
     startAt: any, 
     stopAt: any | undefined, 
-    compareFn: (x: any, y: any) => number): any[] 
+    compareFn: (x: any, y: any) => number,
+): any[]
 {
     let startIndex = binarySearchFirst(
         values,

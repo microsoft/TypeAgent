@@ -29,7 +29,7 @@ export async function buildSecondaryIndexes(
     eventHandler?: IndexingEventHandlers,
 ): Promise<SecondaryIndexingResults> {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes();
-    let result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
+    const result: SecondaryIndexingResults = buildTransientSecondaryIndexes(
         conversation,
         conversationSettings,
     );

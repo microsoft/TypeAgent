@@ -91,7 +91,6 @@ import {
 import { toTrackObjectFull } from "./spotifyUtils.js";
 
 const debugSpotify = registerDebug("typeagent:spotify");
-
 const debugSpotifyError = registerDebug("typeagent:spotify:error");
 
 function createWarningActionResult(message: string) {
@@ -346,10 +345,14 @@ async function updateTrackListAndPrint(
 
 export async function getClientContext(
     instanceStorage?: Storage,
+    silent: boolean = false,
 ): Promise<IClientContext> {
-    const service = new SpotifyService(
-        await createTokenProvider(instanceStorage),
-    );
+    const tokenProvider = await createTokenProvider(instanceStorage);
+
+    // Make sure we can get an access token, silently.
+    await tokenProvider.getAccessToken(silent);
+
+    const service = new SpotifyService(tokenProvider);
     await service.init();
     debugSpotify("Service initialized");
     const userdata = await getUserProfile(service);

@@ -32,21 +32,8 @@ export type RegisterPageDynamicAgent = {
     };
 };
 
-export type SaveUserActions = {
-    actionName: "saveUserActions";
-    parameters: {
-        actionListId?: string;
-        agentName?: string;
-    };
-};
-
-export type AddUserAction = {
-    actionName: "addUserAction";
-    parameters: {
-        actionName?: string;
-        actionDescription?: string;
-        agentName?: string;
-    };
+export type StartAuthoringSession = {
+    actionName: "startAuthoringSession";
 };
 
 export type HtmlFragments = {
@@ -75,6 +62,5 @@ export type SchemaDiscoveryActions =
     | GetPageType
     | RegisterPageDynamicAgent
     | SummarizePage
-    | SaveUserActions
-    | AddUserAction
+    | StartAuthoringSession
     | GetIntentFromRecording;
