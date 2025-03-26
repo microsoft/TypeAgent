@@ -21,7 +21,11 @@ import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
 import { IConversation } from "./interfaces.js";
 import { getTimeRangePromptSectionForConversation } from "./conversation.js";
-import { createAndTermGroup, createOrTermGroup } from "./common.js";
+import {
+    createAndTermGroup,
+    createOrMaxTermGroup,
+    createOrTermGroup,
+} from "./common.js";
 
 /*-------------------------------
 
@@ -273,9 +277,18 @@ export class SearchQueryExprBuilder {
     private compileEntityTerms(
         entityTerms: querySchema.EntityTerm[],
         termGroup: SearchTermGroup,
+        useOrMax: boolean = true,
     ): void {
-        for (const term of entityTerms) {
-            this.addEntityTermToGroup(term, termGroup);
+        if (useOrMax) {
+            const orMax = createOrMaxTermGroup();
+            for (const term of entityTerms) {
+                this.addEntityTermToGroup(term, orMax);
+            }
+            termGroup.terms.push(orMax);
+        } else {
+            for (const term of entityTerms) {
+                this.addEntityTermToGroup(term, termGroup);
+            }
         }
     }
 
@@ -412,6 +425,7 @@ export class SearchQueryExprBuilder {
             case "object":
             case "concept":
             case "idea":
+            case "entity":
                 return true;
         }
     }
