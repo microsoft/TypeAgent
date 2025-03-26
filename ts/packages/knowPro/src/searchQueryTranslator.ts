@@ -152,19 +152,38 @@ export class SearchQueryExprBuilder {
     }
 
     private compileWhen(filter: querySchema.SearchFilter) {
+        this.entityTermsAdded.clear();
+
         let when: WhenFilter | undefined;
-        let additionalEntities = filter.actionSearchTerm?.additionalEntities;
-        if (
-            isEntityTermArray(additionalEntities) &&
-            additionalEntities.length > 0
-        ) {
+        let scopeDefiningTerms = createAndTermGroup();
+
+        const actionTerm = filter.actionSearchTerm;
+        if (actionTerm) {
+            if (
+                actionTerm.targetEntities &&
+                !this.shouldTreatTargetsAsObjects(actionTerm)
+            ) {
+                // The entity term is not already an Object match
+                this.addScopingTermsToGroup(
+                    actionTerm.targetEntities,
+                    scopeDefiningTerms,
+                );
+            }
+            let additionalEntities =
+                filter.actionSearchTerm?.additionalEntities;
+            if (
+                isEntityTermArray(additionalEntities) &&
+                additionalEntities.length > 0
+            ) {
+                this.addScopingTermsToGroup(
+                    additionalEntities,
+                    scopeDefiningTerms,
+                );
+            }
+        }
+        if (scopeDefiningTerms.terms.length > 0) {
             when ??= {};
-            when.scopeDefiningTerms = createAndTermGroup();
-            this.entityTermsAdded.clear();
-            this.addScopingTermsToGroup(
-                additionalEntities,
-                when.scopeDefiningTerms,
-            );
+            when.scopeDefiningTerms = scopeDefiningTerms;
         }
         if (filter.timeRange) {
             when ??= {};
