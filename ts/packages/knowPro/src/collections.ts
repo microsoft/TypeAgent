@@ -435,11 +435,26 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
         return accumulator;
     }
 
+    public override addUnion(other: SemanticRefAccumulator): void {
+        super.addUnion(other);
+        addToSet(this.searchTermMatches, other.searchTermMatches.values());
+    }
+
     public override intersect(
         other: SemanticRefAccumulator,
     ): SemanticRefAccumulator {
         const intersection = new SemanticRefAccumulator();
         super.intersect(other, intersection);
+        if (intersection.size > 0) {
+            addToSet(
+                intersection.searchTermMatches,
+                this.searchTermMatches.values(),
+            );
+            addToSet(
+                intersection.searchTermMatches,
+                other.searchTermMatches.values(),
+            );
+        }
         return intersection;
     }
 
@@ -451,11 +466,12 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
             };
         }, 0);
     }
-
+    /*
     public override clearMatches() {
         super.clearMatches();
         this.searchTermMatches.clear();
     }
+    */
 }
 
 export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
@@ -792,6 +808,12 @@ function* union<T>(
     }
     for (const value of unionSet.values()) {
         yield value;
+    }
+}
+
+function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
+    for (const value of values) {
+        set.add(value);
     }
 }
 

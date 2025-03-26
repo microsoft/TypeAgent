@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageCollection } from "../src/collections.js";
-import { createMessage } from "./common.js";
+import { createMessage } from "./testCommon.js";
 
 describe("MessageCollection", () => {
     test("addMessage", () => {

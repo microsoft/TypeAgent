@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
+import { createAndTermGroup } from "./common.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
@@ -40,11 +41,11 @@ export type SearchTerm = {
  * A Group of search terms
  */
 export type SearchTermGroup = {
-    /**
-     * And will enforce that all terms match
-     */
-    booleanOp: "and" | "or";
-    terms: (SearchTerm | PropertySearchTerm)[];
+    booleanOp:
+        | "and" // Intersect matches for each term, adding up scores
+        | "or"; // Union matches for each term, adding up scores
+
+    terms: (SearchTerm | PropertySearchTerm | SearchTermGroup)[];
 };
 
 /**
@@ -376,7 +377,9 @@ class QueryCompiler {
         scopeExpr?: q.GetScopeExpr,
     ): [SearchTerm[], q.IQueryOpExpr<SemanticRefAccumulator>] {
         const searchTermsUsed: SearchTerm[] = [];
-        const termExpressions: q.MatchTermExpr[] = [];
+        const termExpressions: q.IQueryOpExpr<
+            SemanticRefAccumulator | undefined
+        >[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
                 termExpressions.push(new q.MatchPropertySearchTermExpr(term));
@@ -388,6 +391,10 @@ class QueryCompiler {
                         this.entityTermMatchWeight;
                 }
                 searchTermsUsed.push(term.propertyValue);
+            } else if (isSearchGroupTerm(term)) {
+                const [termsUsed, groupExpr] = this.compileSearchGroup(term);
+                searchTermsUsed.push(...termsUsed);
+                termExpressions.push(groupExpr);
             } else {
                 termExpressions.push(
                     new q.MatchSearchTermExpr(term, (term, sr, scored) =>
@@ -419,8 +426,7 @@ class QueryCompiler {
         }
         // Actions are inherently scope selecting. If any present in the query, use them
         // to restrict scope
-        const actionTermsGroup =
-            this.getActionTermsFromSearchGroup(searchGroup);
+        let actionTermsGroup = this.getActionTermsFromSearchGroup(searchGroup);
         if (actionTermsGroup !== undefined) {
             scopeSelectors ??= [];
             this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
@@ -511,10 +517,7 @@ class QueryCompiler {
         let actionGroup: SearchTermGroup | undefined;
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term) && isActionPropertyTerm(term)) {
-                actionGroup ??= {
-                    booleanOp: "and",
-                    terms: [],
-                };
+                actionGroup ??= createAndTermGroup();
                 actionGroup.terms.push(term);
             }
         }
@@ -623,7 +626,7 @@ class QueryCompiler {
 }
 
 function isPropertyTerm(
-    term: SearchTerm | PropertySearchTerm,
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
 ): term is PropertySearchTerm {
     return term.hasOwnProperty("propertyName");
 }
@@ -651,4 +654,10 @@ function isActionPropertyTerm(term: PropertySearchTerm): boolean {
     }
 
     return false;
+}
+
+function isSearchGroupTerm(
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
+): term is SearchTermGroup {
+    return term.hasOwnProperty("booleanOp");
 }

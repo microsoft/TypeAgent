@@ -17,6 +17,7 @@ export type FacetTerm = {
 export type EntityTerm = {
     // the name of the entity or thing such as "Bach", "Great Gatsby", "frog" or "piano" or "we", "I"; "*" means match any entity name
     name: string;
+    isPerson?: boolean;
     isNamePronoun?: boolean;
     // the specific types of the entity such as "book", "movie", "song", "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
     // Generic types like "object", "thing" etc. are NOT allowed
@@ -41,7 +42,9 @@ export type ActionTerm = {
     // the recipient or target of the action or information
     // Action verbs can imply relevant facet names on the targetEntity. E.g. write -> writer, sing -> singer etc.
     targetEntities?: EntityTerm[];
-    // additional entities participating in the action. E.g. in the phrase "Jane ate the spaghetti with the fork", "the fork" would be an additional entity
+    // additional entities participating in the action.
+    // E.g. in the phrase "Jane ate the spaghetti with the fork", "the fork" would be an additional entity
+    // E.g. in the phrase "Did Jane speak about Bach with Nina", "Bach" would be the additional entity "
     additionalEntities?: EntityTerm[];
 };
 
