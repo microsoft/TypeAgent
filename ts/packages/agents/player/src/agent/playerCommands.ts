@@ -11,8 +11,16 @@ import {
     CommandHandlerTable,
     CommandHandler,
 } from "@typeagent/agent-sdk/helpers/command";
-import { PlayerActionContext } from "./playerHandlers.js";
+import {
+    disableSpotify,
+    enableSpotify,
+    PlayerActionContext,
+} from "./playerHandlers.js";
 import { loadHistoryFile } from "../client.js";
+import {
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 
 const loadHandlerParameters = {
     args: {
@@ -55,6 +63,46 @@ const handlers: CommandHandlerTable = {
             description: "Configure spotify integration",
             commands: {
                 load: loadHandler,
+                login: {
+                    description: "Login to Spotify",
+                    run: async (
+                        context: ActionContext<PlayerActionContext>,
+                    ) => {
+                        const sessionContext = context.sessionContext;
+                        const agentContext = sessionContext.agentContext;
+                        const clientContext = agentContext.spotify;
+                        if (clientContext !== undefined) {
+                            const user =
+                                clientContext.service.retrieveUser().username;
+                            displayWarn(
+                                `Already logged in to Spotify as ${user}`,
+                                context,
+                            );
+                            return;
+                        }
+                        const user = await enableSpotify(sessionContext);
+                        displaySuccess(
+                            `Logged in to Spotify as ${user}`,
+                            context,
+                        );
+                    },
+                },
+                logout: {
+                    description: "Logout from Spotify",
+                    run: async (
+                        context: ActionContext<PlayerActionContext>,
+                    ) => {
+                        const sessionContext = context.sessionContext;
+                        const agentContext = sessionContext.agentContext;
+                        if (agentContext.spotify === undefined) {
+                            displayWarn("Not logged in to Spotify.", context);
+                            return;
+                        }
+
+                        disableSpotify(sessionContext, true);
+                        displaySuccess("Logged out from Spotify.", context);
+                    },
+                },
             },
         },
     },
