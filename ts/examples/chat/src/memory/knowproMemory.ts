@@ -7,8 +7,10 @@ import {
     arg,
     argBool,
     argNum,
+    askYesNo,
     CommandHandler,
     CommandMetadata,
+    InteractiveIo,
     NamedArgs,
     parseNamedArguments,
     ProgressBar,
@@ -44,7 +46,7 @@ export type KnowProContext = {
     podcast?: cm.Podcast | undefined;
     images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
-    searchTranslator: kp.SearchQueryTranslator;
+    queryTranslator: kp.SearchQueryTranslator;
 };
 
 export async function createKnowproCommands(
@@ -58,7 +60,7 @@ export async function createKnowproCommands(
             knowLib.conversation.createKnowledgeActionTranslator(
                 knowledgeModel,
             ),
-        searchTranslator: kp.createSearchQueryTranslator(knowledgeModel),
+        queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -419,17 +421,22 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const timer = new StopWatch();
-            timer.start();
-            const matches = await kp.searchConversationKnowledge(
-                conversation,
-                createSearchGroup(
+            const selectExpr: kp.SearchSelectExpr = {
+                searchTermGroup: createSearchGroup(
                     termArgs,
                     namedArgs,
                     commandDef,
                     namedArgs.andTerms,
                 ),
-                whenFilterFromNamedArgs(namedArgs, commandDef),
+                when: whenFilterFromNamedArgs(namedArgs, commandDef),
+            };
+            context.printer.writeSelectExpr(selectExpr);
+            const timer = new StopWatch();
+            timer.start();
+            const matches = await kp.searchConversationKnowledge(
+                conversation,
+                selectExpr.searchTermGroup,
+                selectExpr.when,
                 {
                     exactMatch: namedArgs.exact,
                     usePropertyIndex: namedArgs.usePropertyIndex,
@@ -521,72 +528,113 @@ export async function createKnowproCommands(
         def.options.showMessages = argBool("Show message matches", false);
         def.options.knowledgeTopK = argNum(
             "How many top K knowledge matches",
-            25,
+            50,
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
+        def.options.exactScope = argBool("(Future) Exact scope", false);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
-    async function search(args: string[]): Promise<void> {
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const textQuery = namedArgs.query;
-        const result = await kp.textQueryToSearchQueryExpr(
+        const result = await kp.createSearchQueryForConversation(
             context.conversation!,
-            context.searchTranslator,
+            context.queryTranslator,
             textQuery,
         );
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
         }
-        const [searchQueryExpr, searchQuery] = result.data;
+        let exactScope = namedArgs.exactScope;
+        let retried = !exactScope;
+        const searchQuery = result.data;
         context.printer.writeJson(searchQuery, true);
-        for (const queryExpr of searchQueryExpr) {
-            for (const selectExpr of queryExpr.selectExpressions) {
-                if (namedArgs.ktype) {
-                    selectExpr.when ??= {};
-                    selectExpr.when.knowledgeType = namedArgs.ktype;
-                }
-                const searchResults = await kp.searchConversation(
-                    context.conversation!,
-                    selectExpr.searchTermGroup,
-                    selectExpr.when,
-                    {
-                        exactMatch: namedArgs.exact,
-                        maxKnowledgeMatches: namedArgs.knowledgeTopK,
-                        maxMessageMatches: namedArgs.messageTopK,
-                        maxMessageCharsInBudget: namedArgs.charBudget,
-                    },
-                    queryExpr.rawQuery,
-                );
-                context.printer.writeLine("####");
-                context.printer.writeInColor(chalk.cyan, queryExpr.rawQuery!);
-                context.printer.writeLine("####");
-                if (searchResults && searchResults.messageMatches.length > 0) {
-                    if (namedArgs.showKnowledge) {
-                        context.printer.writeKnowledgeSearchResults(
-                            context.conversation!,
-                            searchResults.knowledgeMatches,
-                            namedArgs.maxToDisplay,
-                            namedArgs.distinct,
-                        );
+        while (true) {
+            const searchQueryExpressions = kp.compileSearchQueryForConversation(
+                context.conversation!,
+                searchQuery,
+                exactScope,
+            );
+            let countSelectMatches = 0;
+            for (const searchQueryExpr of searchQueryExpressions) {
+                for (const selectExpr of searchQueryExpr.selectExpressions) {
+                    if (
+                        await evalSelectQueryExpr(
+                            searchQueryExpr,
+                            selectExpr,
+                            namedArgs,
+                        )
+                    ) {
+                        countSelectMatches++;
                     }
-                    if (namedArgs.showMessages) {
-                        context.printer.writeScoredMessages(
-                            searchResults.messageMatches,
-                            context.conversation!.messages,
-                            namedArgs.maxToDisplay,
-                        );
-                    }
-                } else {
-                    context.printer.writeLine("No matches");
                 }
             }
+            if (countSelectMatches === 0) {
+                context.printer.writeLine("No matches");
+            }
+            if (countSelectMatches > 0 || retried) {
+                break;
+            }
+            retried = await askYesNo(
+                io,
+                chalk.cyan("Using exact scope. Try fuzzy instead?"),
+            );
+            if (retried) {
+                exactScope = false;
+            } else {
+                break;
+            }
         }
+    }
+
+    async function evalSelectQueryExpr(
+        searchQueryExpr: kp.SearchQueryExpr,
+        selectExpr: kp.SearchSelectExpr,
+        namedArgs: NamedArgs,
+    ): Promise<boolean> {
+        if (namedArgs.ktype) {
+            selectExpr.when ??= {};
+            selectExpr.when.knowledgeType = namedArgs.ktype;
+        }
+        context.printer.writeSelectExpr(selectExpr);
+        const searchResults = await kp.searchConversation(
+            context.conversation!,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+            {
+                exactMatch: namedArgs.exact,
+                maxKnowledgeMatches: namedArgs.knowledgeTopK,
+                maxMessageMatches: namedArgs.messageTopK,
+                maxMessageCharsInBudget: namedArgs.charBudget,
+                usePropertyIndex: true,
+                useTimestampIndex: true,
+            },
+            searchQueryExpr.rawQuery,
+        );
+        if (
+            searchResults === undefined ||
+            searchResults.messageMatches.length === 0
+        ) {
+            return false;
+        }
+        context.printer.writeLine("####");
+        context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
+        context.printer.writeLine("####");
+        context.printer.writeConversationSearchResult(
+            context.conversation!,
+            searchResults,
+            namedArgs.showKnowledge,
+            namedArgs.showMessages,
+            namedArgs.maxToDisplay,
+            namedArgs.distinct,
+        );
+        return true;
     }
 
     function ragDef(): CommandMetadata {

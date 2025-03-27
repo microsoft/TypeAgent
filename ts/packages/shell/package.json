@@ -64,10 +64,10 @@
     "cross-env": "^7.0.3",
     "electron": "^30.0.1",
     "electron-builder": "^24.13.2",
-    "electron-vite": "^2.1.0",
+    "electron-vite": "^3.1.0",
     "less": "^4.2.0",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2",
-    "vite": "^5.4.12"
+    "vite": "^6.2.3"
   }
 }

@@ -362,9 +362,7 @@ export class ImageCollection implements IConversation {
     ) {
         this.settings = createConversationSettings();
         this.semanticRefIndex = new ConversationIndex();
-        this.secondaryIndexes = new ConversationSecondaryIndexes(
-            this.settings.relatedTermIndexSettings,
-        );
+        this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
     }
 
     public addMetadataToIndex() {

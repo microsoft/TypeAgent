@@ -3,6 +3,50 @@
 
 import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
+import { openai, TextEmbeddingModel } from "aiclient";
+import {
+    TextEmbeddingIndexSettings,
+    createTextEmbeddingIndexSettings,
+} from "./fuzzyIndex.js";
+import { MessageTextIndexSettings } from "./messageIndex.js";
+import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
+
+export type ConversationSettings = {
+    relatedTermIndexSettings: RelatedTermIndexSettings;
+    threadSettings: TextEmbeddingIndexSettings;
+    messageTextIndexSettings: MessageTextIndexSettings;
+};
+
+export function createConversationSettings(
+    embeddingModel?: TextEmbeddingModel | undefined,
+    embeddingSize?: number,
+): ConversationSettings {
+    embeddingModel ??= openai.createEmbeddingModel();
+    embeddingSize ??= 1536;
+    const minCosineSimilarity = 0.85;
+    return {
+        relatedTermIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+                minCosineSimilarity,
+                50,
+            ),
+        },
+        threadSettings: createTextEmbeddingIndexSettings(
+            embeddingModel,
+            embeddingSize,
+            minCosineSimilarity,
+        ),
+        messageTextIndexSettings: {
+            embeddingIndexSettings: createTextEmbeddingIndexSettings(
+                embeddingModel,
+                embeddingSize,
+                minCosineSimilarity,
+            ),
+        },
+    };
+}
 
 /**
  * Returns the time range for a conversation: the timestamps of the first and last messages
