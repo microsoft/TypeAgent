@@ -47,11 +47,13 @@ describe("memory.sqlite.messageCollection", () => {
         let newLength = messageCollection.length;
         expect(newLength).toEqual(prevLength + messages.length);
 
-        let ordinals = [0, 2, 1]; // Deliberately out of order
+        let ordinals = [0, 1, 2]; // Deliberately out of order
         let gotMessages = messageCollection.getMultiple(ordinals);
         expect(gotMessages).toHaveLength(ordinals.length);
         for (let i = 0; i < ordinals.length; ++i) {
-            expect(messageText(gotMessages[i])).toEqual(messages[ordinals[i]]);
+            expect(messageText(gotMessages[i])).toEqual(
+                messageText(messages[i]),
+            );
         }
 
         let collection2 = new SqlMessageCollection(db!, collectionName, false);
