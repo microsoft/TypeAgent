@@ -6,6 +6,8 @@ import { AppAgent } from "@typeagent/agent-sdk";
 import { createAgentRpcClient } from "agent-rpc/client";
 import { createChannelProvider } from "agent-rpc/channel";
 import { fileURLToPath } from "url";
+import { createLimiter } from "common-utils";
+import os from "node:os";
 
 export type AgentProcess = {
     appAgent: AppAgent;
@@ -13,21 +15,24 @@ export type AgentProcess = {
     count: number;
 };
 
+const limiter = createLimiter(os.cpus().length);
 export async function createAgentProcess(
     agentName: string,
     modulePath: string,
 ): Promise<AgentProcess> {
-    const process = child_process.fork(
-        fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
-        [agentName, modulePath],
-    );
+    return limiter(async () => {
+        const process = child_process.fork(
+            fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
+            [agentName, modulePath],
+        );
 
-    return {
-        process,
-        appAgent: await createAgentRpcClient(
-            agentName,
-            createChannelProvider(process),
-        ),
-        count: 1,
-    };
+        return {
+            process,
+            appAgent: await createAgentRpcClient(
+                agentName,
+                createChannelProvider(process),
+            ),
+            count: 1,
+        };
+    });
 }
