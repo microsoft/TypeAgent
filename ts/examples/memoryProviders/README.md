@@ -1,6 +1,6 @@
 ## memory-providers
 
-**Easy Stage Sample code** and early ideas on how to implement a backing store for knowledge-processor using sqlite.
+**Early Stage Sample code** and early ideas on how to implement a backing store for knowledge-processor using sqlite.
 
 This code early is rapidly evolving.
 

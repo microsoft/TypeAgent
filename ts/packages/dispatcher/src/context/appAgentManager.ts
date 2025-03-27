@@ -30,6 +30,7 @@ import { callEnsureError } from "../utils/exceptions.js";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
+const debugLoad = registerDebug("typeagent:dispatcher:agents:load");
 
 type AppAgentRecord = {
     name: string;
@@ -648,7 +649,11 @@ export class AppAgentManager implements ActionConfigProvider {
                     `Internal error: no provider to load the app agent: ${record.name}`,
                 );
             }
+            const start = performance.now();
             record.appAgent = await record.provider.loadAppAgent(record.name);
+            debugLoad(
+                `App agent loaded: ${record.name} (${(performance.now() - start).toFixed(0)}ms)`,
+            );
         }
         return record.appAgent;
     }

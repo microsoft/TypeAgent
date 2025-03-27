@@ -442,6 +442,6 @@ function toPromptSections(
     const promptSections: PromptSection[] =
         typeof prompt === "string"
             ? [{ role: "user", content: prompt }]
-            : prompt ?? [];
+            : (prompt ?? []);
     return instructions.concat(promptSections);
 }

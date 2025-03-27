@@ -60,8 +60,8 @@ class SessionNewCommandHandler implements CommandHandler {
             systemContext,
             await Session.create(
                 flags.keep ? systemContext.session.getConfig() : undefined,
-                flags.persist ??
-                    systemContext.session.sessionDirPath !== undefined
+                (flags.persist ??
+                    systemContext.session.sessionDirPath !== undefined)
                     ? systemContext.persistDir
                     : undefined,
             ),

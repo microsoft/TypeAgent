@@ -3,8 +3,8 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
+    ICollection,
     IMessage,
-    IReadonlyCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -815,11 +815,6 @@ function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
     for (const value of values) {
         set.add(value);
     }
-}
-
-export interface ICollection<T, TOrdinal>
-    extends IReadonlyCollection<T, TOrdinal> {
-    push(...items: T[]): void;
 }
 
 export class Collection<T, TOrdinal extends number>

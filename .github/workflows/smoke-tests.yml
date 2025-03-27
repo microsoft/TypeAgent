@@ -59,6 +59,7 @@ jobs:
 
       - uses: dorny/paths-filter@v3
         id: filter
+        continue-on-error: true
         with:
           filters: |
             ts:
