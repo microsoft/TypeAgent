@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ self-hosted, 1ES.Pool=my-github-runner-pool, "ubuntu-latest", "windows-latest", "macos-latest"]
+        os: [ self-hosted, 1ES.Pool=typeagent-runner-pool, "ubuntu-latest", "windows-latest", "macos-latest"]
         version: [18, 20, 22]
 
     runs-on: ${{ matrix.os }}
