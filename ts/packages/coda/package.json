@@ -71,7 +71,7 @@
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",
     "mkdirp": "^3.0.1",
-    "prettier": "^3.2.5",
+    "prettier": "^3.5.3",
     "rimraf": "^5.0.5"
   },
   "engines": {

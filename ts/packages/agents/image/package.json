@@ -29,7 +29,7 @@
     "telemetry": "workspace:*"
   },
   "devDependencies": {
-    "prettier": "^3.2.5",
+    "prettier": "^3.5.3",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"
   }
