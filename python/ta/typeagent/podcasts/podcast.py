@@ -7,6 +7,7 @@ from typing import Sequence, TypedDict
 from ..knowpro.importing import ConversationSettings
 from ..knowpro import convindex, interfaces, kplib, secindex
 from ..knowpro.interfaces import Datetime, Timedelta
+from ..knowpro.serialization import write_conversation_data_to_file
 
 
 @dataclass
@@ -142,7 +143,7 @@ class Podcast(
                 await self.secondary_indexes.threads.build_index()  # type: ignore  # TODO
         return result
 
-    async def serialize(self) -> PodcastData:
+    def serialize(self) -> PodcastData:
         data = PodcastData(
             nameTag=self.name_tag,
             messages=[m.serialize() for m in self.messages],
@@ -165,6 +166,10 @@ class Podcast(
         if self.secondary_indexes.message_index:
             data["messageIndexData"] = self.secondary_indexes.message_index.serialize()
         return data
+
+    def write_to_file(self, filename: str) -> None:
+        data = self.serialize()
+        write_conversation_data_to_file(data, filename)
 
     # TODO: deserialize
     # async def deserialize(self, podcast_data: dict) -> None:
@@ -203,11 +208,6 @@ class Podcast(
     #             podcast_data["message_index_data"]
     #         )
     #     await self._build_transient_secondary_indexes(True)
-
-    # TODO: Implement write_conversation_data_to_file, read_conversation_data_from_file
-    async def write_to_file(self, dir_path: str, base_file_name: str) -> None:
-        data = await self.serialize()
-        # await write_conversation_data_to_file(data, dir_path, base_file_name)  # TODO
 
     # TODO: read_from_file
     # @staticmethod
