@@ -264,6 +264,7 @@ async function handleMontageAction(
             if (process.platform == "win32") {
                 // start the slide show
                 startSlideShow(actionContext.sessionContext.agentContext);
+                result = createActionResult(`Showing ${actionContext.sessionContext.agentContext.montage?.title}.`);
             } else {
                 result = createActionResultFromError(`This action is not supported on platform '${process.platform}'.`);
             }
