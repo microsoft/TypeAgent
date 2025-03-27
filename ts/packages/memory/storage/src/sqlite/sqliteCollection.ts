@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import * as sqlite from "better-sqlite3";
-import { ICollection } from "knowpro";
+import { ICollection, IMessage, MessageOrdinal } from "knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
 export class SqliteCollection<T, TOrdinal extends number>
@@ -19,7 +19,9 @@ export class SqliteCollection<T, TOrdinal extends number>
         ensureExists: boolean = true,
     ) {
         this.db = db;
-        this.ensureDb();
+        if (ensureExists) {
+            this.ensureDb();
+        }
         this.count = this.loadCount();
         this.sql_get = this.sqlGet();
         this.sql_push = this.sqlPush();
@@ -37,16 +39,25 @@ export class SqliteCollection<T, TOrdinal extends number>
     }
 
     public get(ordinal: TOrdinal): T | undefined {
-        return this.getObject(ordinal);
+        const actualOrdinal = ordinal + 1;
+        const row = this.sql_get.get(actualOrdinal);
+        if (row !== undefined) {
+            return this.deserializeObject(row);
+        }
+        return undefined;
     }
 
     public getMultiple(ordinals: TOrdinal[]): (T | undefined)[] {
+        let actualOrdinals: number[] = new Array<number>(ordinals.length);
+        for (let i = 0; i < ordinals.length; ++i) {
+            actualOrdinals[i] = ordinals[i] + 1;
+        }
         const placeholder = sql_makeInPlaceholders(ordinals.length);
         const sql = this.db.prepare(
             `SELECT value FROM ${this.tableName} WHERE ordinal IN (${placeholder})`,
         );
         const objects: (T | undefined)[] = [];
-        for (const row of sql.iterate(...ordinals)) {
+        for (const row of sql.iterate(...actualOrdinals)) {
             objects.push(this.deserializeObject(row));
         }
         return objects;
@@ -83,18 +94,10 @@ export class SqliteCollection<T, TOrdinal extends number>
         return count;
     }
 
-    private getObject(ordinal: number): T | undefined {
-        const row = this.sql_get.get(ordinal);
-        if (row !== undefined) {
-            return this.deserializeObject(row);
-        }
-        return undefined;
-    }
-
     private pushObject(obj: T): void {
         const json = JSON.stringify(obj);
-        const result = this.sql_push.run(json);
-        this.count = result.lastInsertRowid as number;
+        this.sql_push.run(json);
+        this.count++;
     }
 
     private deserializeObject(row: unknown): T | undefined {
@@ -110,8 +113,7 @@ export class SqliteCollection<T, TOrdinal extends number>
     private ensureDb() {
         const schemaSql = `CREATE TABLE IF NOT EXISTS ${this.tableName} (
             ordinal INTEGER PRIMARY KEY AUTOINCREMENT,
-            value TEXT NOT NULL,
-        )'`;
+            value TEXT NOT NULL)`;
         this.db.exec(schemaSql);
     }
 
@@ -134,3 +136,15 @@ type CollectionRow = {
     ordinal: number;
     value: string;
 };
+
+export class SqlMessageCollection<
+    TMessage extends IMessage,
+> extends SqliteCollection<TMessage, MessageOrdinal> {
+    constructor(
+        db: sqlite.Database,
+        tableName: string,
+        ensureExists: boolean = true,
+    ) {
+        super(db, tableName, ensureExists);
+    }
+}
