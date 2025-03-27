@@ -41,13 +41,11 @@ export function tablePath(rootName: string, name: string): string {
     return rootName + "_" + name;
 }
 
-export function sql_makeInClause(values: any[]): string {
-    let sql = "";
-    for (let i = 0; i < values.length; ++i) {
-        if (i > 0) {
-            sql += ", ";
-        }
-        sql += `'${values[i]}'`;
+export function sql_makeInPlaceholders(count: number): string {
+    if (count > 1) {
+        let placeholder = "?, ".repeat(count - 1);
+        placeholder += "?";
+        return placeholder;
     }
-    return sql;
+    return "?";
 }
