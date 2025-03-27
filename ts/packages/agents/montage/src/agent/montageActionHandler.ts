@@ -22,6 +22,9 @@ import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
 import Registry from "winreg";
 import koffi from 'koffi';
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:agent:montage");
 
 export function instantiate(): AppAgent {
     return {
@@ -60,6 +63,19 @@ async function executeMontageAction(
     let result = await handleMontageAction(action as MontageAction, context);
     return result;
 }
+
+// Define the nativew functions we'll be using function
+const shell32: koffi.IKoffiLib = koffi.load('shell32.dll');
+const crypt32: koffi.IKoffiLib = koffi.load('crypt32.dll');
+
+// define types
+koffi.opaque("ITEMIDLIST");
+
+// define functions
+const ILCreateFromPathW = shell32.func('ITEMIDLIST* ILCreateFromPathW(str16 pszPath)');
+const ILGetSize = shell32.func("uint ILGetSize(ITEMIDLIST* pidl)");
+const ILFree = shell32.func("void ILFree(ITEMIDLIST* pidl)");
+const CryptBinaryToStringW = crypt32.func("bool CryptBinaryToStringW(ITEMIDLIST* pbBinary, uint cbBinary, uint dwFlags, _Inout_ str16 pszString, _Inout_ uint* pcchString)");
 
 async function initializeMontageContext() {    
     return {
@@ -519,7 +535,7 @@ function startSlideShow(context: MontageActionContext) {
       });
       
     // set the registry value
-    const pidl = createPIDLFromPath(slideShowDir)
+    const pidl = createEncryptedPIDLFromPath(slideShowDir)
     if (pidl) {
         key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
             if (err) {
@@ -536,167 +552,23 @@ function startSlideShow(context: MontageActionContext) {
     }    
 }
 
-// const ITEMIDLIST = koffi.struct('IDLIST_ABSOLUTE', {
-//  mkid: koffi.struct('SHITEMID', {
-//     cb: 'ushort',
-//     abID: koffi.array('char', 1, 'Array')
-//  })
-// });
-// const ITEMIDLIST = koffi.struct('ITEMIDLIST', {
-//     mkid: 'intptr'
-// });
-
-// const SHITEMID = koffi.struct('SHITEMID', {
-//     cb: 'ushort',
-//     abID: koffi.array('char', 1, 'Array')
-// });
-
-// const SHITEMID = koffi.struct('SHITEMID', {
-//     cb: 'ushort',
-//     abID: 'intptr'
-// });
-
-function createPIDLFromPath(path: string) {
-    // Define the nativew functions we'll be using function
-    const shell32: koffi.IKoffiLib = koffi.load('shell32.dll');
-    const crypt32: koffi.IKoffiLib = koffi.load('crypt32.dll');
-
-    //const ITEMIDLIST = koffi.pointer('ITEMIDLIST', 'intptr');
-    const ITEMIDLIST = koffi.opaque("ITEMIDLIST");
-    const pITEMIDLIST = koffi.pointer("pITEMIDLIST", ITEMIDLIST, 1);
-    console.log(ITEMIDLIST);
-    console.log(pITEMIDLIST);
-    const TEST = koffi.struct("TEST", {
-        mkid: koffi.array('uchar', 613, 'Array')
-    });
-    console.log(TEST);
+/**
+ * Creats an encrypted PIDL for use with the Photo Viewer slideshow screensaver
+ * @param path - The path of the PIDL to create and encrypt
+ * @returns - The encrypted PIDL
+ */
+function createEncryptedPIDLFromPath(path: string) {    
+    const pidl = ILCreateFromPathW(path);
+    const size: number = ILGetSize(pidl);
+       
+    let stringBuffer = [""];
+    let requiredSize = [ 0 ];
+    if (!CryptBinaryToStringW(pidl, size, 1, stringBuffer, requiredSize)) {
+        debug(`ERROR encrypting PIDL for ${path}`);
+    }
     
-    const DWORD = koffi.alias('DWORD', 'uint32_t');
-    console.log(DWORD);
+    ILFree(pidl);
 
-    //const ILCreateFromPath = shell32.func('__stdcall', "ILCreateFromPathW", ITEMIDLIST, ['str16']);
-    const ILCreateFromPathW = shell32.func('ITEMIDLIST* ILCreateFromPathW(str16 pszPath)');
-    const ILGetSize = shell32.func("uint ILGetSize(ITEMIDLIST* pidl)");
-    const ILFree = shell32.func("void ILFree(intptr pidl)");
-    const CryptBinaryToStringW = crypt32.func("bool CryptBinaryToStringW(ITEMIDLIST* pbBinary, uint cbBinary, uint dwFlags, _Inout_ str16 pszString, _Inout_ uint* pcchString)");
-    
-    //const r = ILCreateFromPath(path);
-    const r = ILCreateFromPathW(path);
-    console.log(r);
-    //console.log(rr);
-
-    const size: number = ILGetSize(r);
-    console.log(size);
-    
-    const pidl = koffi.array('uchar', size, 'Array');
-    //const Pidl = koffi.pointer(pidl);
-    const PIDL = koffi.alias('PIDL', pidl);
-    //const tmep = koffi.as(r, TEST);
-    //console.log(tmep);
-    console.log(PIDL);
-    const ILCreateFromPathWW = shell32.func('PIDL* ILCreateFromPathW(str16 pszPath)');
-    const ww = ILCreateFromPathWW(path);
-    console.log(ww);
-
-    //const buffer: Buffer = Buffer.allocUnsafe(size);
-    //const my_byte_ptr = crypt32.symbol()
-    //const buffer = koffi.decode(ITEMIDLIST, 'char*', size);
-    const kk = koffi.array('char', size);
-    console.log(kk);
-    
-    let s: string = " ".repeat(2048);//new Array<string>();
-    //let c = new Array<string>(2048);
-    let c = [s];
-    let requiredSize = [ 2048 ];
-    let b = CryptBinaryToStringW(r, size, 1, c, requiredSize);
-    let out = ['\0'.repeat(requiredSize[0])];
-    b = CryptBinaryToStringW(r, size, 1, out, requiredSize);
-    console.log(b);
-
-    ILFree(r);
-
-
-
-    // //const s_pidl = " ".repeat(size);
-    // //const s_pidl2: string[] = Array<string>(size);
-    // const buffer = Buffer.allocUnsafe(size);
-    // let out = Array<string>(size);
-    // let out2 = ['\0'.repeat(size)];
-    // for(let i = 0; i < out.length; i++) {
-    //     out[i] = '\0';
-    // }
-    // //const b = SHGetPathFromIDListW(r.mkid, out);
-    // const s = koffi.decode(buffer, 'str16', size);
-    // console.log(s);
-
-    // //let sss = "";
-    // SHGetPathFromIDListW2(r.mkid, out2);
-    
-    // const rr = ILCreateFromPath2(path);
-    // console.log(rr);
-
-    // //console.log(b);
-
-    // console.log(ILGetSize);
-    // console.log(ILFree);
-
-    // //const sh = koffi.decode(r.mkid, "SHITEMID");
-    // //console.log(sh);
-    // console.log(SHITEMID);
-    // const r2 = ILCreateFromPath2(path);
-    // console.log(r2);
-
-
-    // const ILCreateFromPath = shell32.func(
-    //     'ILCreateFromPath', 
-    //     'PIDLIST_ABSOLUTE', 
-    //     ['PCTSTR']);
-    
-    // Call the ILCreateFromPath function
-    // const bindCtx = null; // You can create a bind context if needed
-    // const pidl = koffi.alloc(koffi.types.PIDLIST_ABSOLUTE, path.length);
-    // const sfgaoIn = 0;
-    // const sfgaoOut = koffi.alloc(koffi.types.sfgaoOut, 1024);
-    
-    // const result = SHParseDisplayName(path, bindCtx, pidl, sfgaoIn, sfgaoOut);
-    //const result = ILCreateFromPath(path);
-    
-    // if (result === 0) {
-    //     console.log('SHParseDisplayName succeeded');
-    // } else {
-    //     console.error('SHParseDisplayName failed with error code:', result);
-    // }
- 
-    return null;
+    return stringBuffer[0];
 }
-
-// const LPWSTR = ref.types.CString;
-// const LPITEMIDLIST = ref.refType(ref.types.void);
-// const HRESULT = ref.types.int32;
-
-// // Load the Shell32 DLL
-// const shell32 = ffi.Library('shell32', {
-//     'SHParseDisplayName': [HRESULT, [LPWSTR, 'void', LPITEMIDLIST, 'uint32', 'void']],
-//     'CoTaskMemFree': ['void', [LPITEMIDLIST]]
-// });
-
-// /**
-//  * Creates a PIDL from a directory name
-//  * @param path The dir to encrypt
-//  */
-// function createPIDLFromDirectoryName(path: string): Buffer | null {  
-//     const pidlBuffer = ref.alloc(LPITEMIDLIST);
-//     const hr = shell32.SHParseDisplayName(path, null, pidlBuffer, 0, null);
-//     if (hr === 0) { // S_OK
-//       return pidlBuffer.deref() as any as Buffer;
-//     } else {
-//         console.log("Failed to create PIDL!");
-//         return null;
-//     }
-// }
-
-// function freePIDL(pidl: Buffer): void {
-//     shell32.CoTaskMemFree(pidl as ref.Pointer<void>);
-// }
-  
 
