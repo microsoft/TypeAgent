@@ -21,6 +21,7 @@ import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledg
 import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
 import Registry from "winreg";
 import koffi from 'koffi';
+import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 
 export function instantiate(): AppAgent {
     return {
@@ -474,6 +475,25 @@ export async function createViewServiceHost(montageUpdatedCallback: (montage: Ph
     });
 }
 
+async function saveMontages(context: SessionContext<MontageActionContext>) {
+    // merge the "working montage" into the saved montages
+    if (context.agentContext.montages.length > 0 && context.agentContext.montage !== undefined) {
+        if (context.agentContext.montages[context.agentContext.montages.length - 1].id == context.agentContext.montage.id) {
+            // replace
+            context.agentContext.montages[context.agentContext.montages.length - 1] = context.agentContext.montage;
+        } else {
+            context.agentContext.montages.push(context.agentContext.montage);
+        }
+    } else {
+        if (context.agentContext.montage !== undefined) {
+            context.agentContext.montages.push(context.agentContext.montage);
+        }
+    }
+
+    // save the montage state for later
+    await context.sessionStorage?.write(montageFile, JSON.stringify(context.agentContext.montages));
+}
+
 /**
  * Starts the built-in windows slideshow screensaver
  * @param folder The optional folder to lanch the slideshow for
@@ -522,9 +542,9 @@ function startSlideShow(context: MontageActionContext) {
 //     abID: koffi.array('char', 1, 'Array')
 //  })
 // });
-const ITEMIDLIST = koffi.struct('IDLIST_ABSOLUTE', {
+const ITEMIDLIST = koffi.struct('ITEMIDLIST', {
     mkid: 'intptr'
-   });
+});
 
 // const SHITEMID = koffi.struct('SHITEMID', {
 //     cb: 'ushort',
@@ -543,21 +563,55 @@ function createPIDLFromPath(path: string) {
     //const MessageBoxA_1 = user32.func('__stdcall', 'MessageBoxA', 'int', ['void *', 'str', 'str', 'uint']);
     //const MessageBoxA_2 = user32.func('int __stdcall MessageBoxA(void *hwnd, str text, str caption, uint type)');
     //const ILCreateFromPath = shell32.func('PIDLIST_ABSOLUTE ILCreateFromPath(PCTSTR pszPath)');
-    const ILCreateFromPath = shell32.func('__stdcall', "ILCreateFromPath", ITEMIDLIST, ['str16']);
-    const ILCreateFromPath2 = shell32.func('IDLIST_ABSOLUTE* ILCreateFromPath(char16_t* pszPath)');
+    const ILCreateFromPath = shell32.func('__stdcall', "ILCreateFromPathW", ITEMIDLIST, ['str16']);
+    const ILCreateFromPath2 = shell32.func('intptr ILCreateFromPathW(str pszPath)');
+    const ILGetSize = shell32.func("uint ILGetSize(intptr pidl)");
+    const ILFree = shell32.func("void ILFree(intptr pidl)");
+    
+    //const SHGetPathFromIDListW = shell32.func("bool SHGetPathFromIDListW(intptr, _Inout_ str)");
+    //const SHGetPathFromIDListW = shell32.func("bool SHGetPathFromIDListW(intptr handle, _Out_ char* pszPath)");
+    const SHGetPathFromIDListW2 = shell32.func("bool SHGetPathFromIDListW(intptr handle, _Out_ char16* pszPath)");
+    
     //console.log(MessageBoxA_1);
     //console.log(MessageBoxA_2);
     //console.log(ILCreateFromPath);
     const r = ILCreateFromPath(path);
     console.log(r);
-    const ss = koffi.as(r, "SHITEMID");
-    console.log(ss);
+
+
+    const size = ILGetSize(r.mkid);
+    console.log(size);
+
+    //const s_pidl = " ".repeat(size);
+    //const s_pidl2: string[] = Array<string>(size);
+    const buffer = Buffer.allocUnsafe(size);
+    let out = Array<string>(size);
+    let out2 = ['\0'.repeat(size)];
+    for(let i = 0; i < out.length; i++) {
+        out[i] = '\0';
+    }
+    //const b = SHGetPathFromIDListW(r.mkid, out);
+    const s = koffi.decode(buffer, 'str16', size);
+    console.log(s);
+
+    //let sss = "";
+    SHGetPathFromIDListW2(r.mkid, out2);
+    
+    const rr = ILCreateFromPath2(path);
+    console.log(rr);
+
+    //console.log(b);
+
+    console.log(ILGetSize);
+    console.log(ILFree);
 
     //const sh = koffi.decode(r.mkid, "SHITEMID");
     //console.log(sh);
     console.log(SHITEMID);
     const r2 = ILCreateFromPath2(path);
     console.log(r2);
+
+
     // const ILCreateFromPath = shell32.func(
     //     'ILCreateFromPath', 
     //     'PIDLIST_ABSOLUTE', 
