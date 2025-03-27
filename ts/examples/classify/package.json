@@ -28,7 +28,6 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
-    "@types/node": "^18.18.7",
     "rimraf": "^5.0.5",
     "typescript": "^5.4.2"
   },

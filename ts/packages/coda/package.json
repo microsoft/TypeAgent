@@ -63,7 +63,6 @@
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/mocha": "^10.0.6",
-    "@types/node": "18.x",
     "@types/vscode": "^1.88.0",
     "@types/ws": "^8.5.10",
     "@vscode/test-cli": "^0.0.8",

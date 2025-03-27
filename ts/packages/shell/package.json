@@ -59,7 +59,6 @@
     "@playwright/test": "^1.49.1",
     "@types/debug": "^4.1.12",
     "@types/dompurify": "^3.0.5",
-    "@types/node": "^18.17.5",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^30.0.1",
