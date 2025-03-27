@@ -542,74 +542,109 @@ function startSlideShow(context: MontageActionContext) {
 //     abID: koffi.array('char', 1, 'Array')
 //  })
 // });
-const ITEMIDLIST = koffi.struct('ITEMIDLIST', {
-    mkid: 'intptr'
-});
+// const ITEMIDLIST = koffi.struct('ITEMIDLIST', {
+//     mkid: 'intptr'
+// });
 
 // const SHITEMID = koffi.struct('SHITEMID', {
 //     cb: 'ushort',
 //     abID: koffi.array('char', 1, 'Array')
 // });
 
-const SHITEMID = koffi.struct('SHITEMID', {
-    cb: 'ushort',
-    abID: 'intptr'
-});
+// const SHITEMID = koffi.struct('SHITEMID', {
+//     cb: 'ushort',
+//     abID: 'intptr'
+// });
 
 function createPIDLFromPath(path: string) {
-    // Define the ILCreateFromPath function
-    //const user32 = koffi.load('user32.dll');
+    // Define the nativew functions we'll be using function
     const shell32: koffi.IKoffiLib = koffi.load('shell32.dll');
-    //const MessageBoxA_1 = user32.func('__stdcall', 'MessageBoxA', 'int', ['void *', 'str', 'str', 'uint']);
-    //const MessageBoxA_2 = user32.func('int __stdcall MessageBoxA(void *hwnd, str text, str caption, uint type)');
-    //const ILCreateFromPath = shell32.func('PIDLIST_ABSOLUTE ILCreateFromPath(PCTSTR pszPath)');
-    const ILCreateFromPath = shell32.func('__stdcall', "ILCreateFromPathW", ITEMIDLIST, ['str16']);
-    const ILCreateFromPath2 = shell32.func('intptr ILCreateFromPathW(str pszPath)');
-    const ILGetSize = shell32.func("uint ILGetSize(intptr pidl)");
+    const crypt32: koffi.IKoffiLib = koffi.load('crypt32.dll');
+
+    //const ITEMIDLIST = koffi.pointer('ITEMIDLIST', 'intptr');
+    const ITEMIDLIST = koffi.opaque("ITEMIDLIST");
+    const pITEMIDLIST = koffi.pointer("pITEMIDLIST", ITEMIDLIST, 1);
+    console.log(ITEMIDLIST);
+    console.log(pITEMIDLIST);
+    const TEST = koffi.struct("TEST", {
+        mkid: koffi.array('uchar', 613, 'Array')
+    });
+    console.log(TEST);
+    
+    const DWORD = koffi.alias('DWORD', 'uint32_t');
+    console.log(DWORD);
+
+    //const ILCreateFromPath = shell32.func('__stdcall', "ILCreateFromPathW", ITEMIDLIST, ['str16']);
+    const ILCreateFromPathW = shell32.func('ITEMIDLIST* ILCreateFromPathW(str16 pszPath)');
+    const ILGetSize = shell32.func("uint ILGetSize(ITEMIDLIST* pidl)");
     const ILFree = shell32.func("void ILFree(intptr pidl)");
+    const CryptBinaryToStringW = crypt32.func("bool CryptBinaryToStringW(ITEMIDLIST* pbBinary, uint cbBinary, uint dwFlags, _Inout_ str16 pszString, _Inout_ uint* pcchString)");
     
-    //const SHGetPathFromIDListW = shell32.func("bool SHGetPathFromIDListW(intptr, _Inout_ str)");
-    //const SHGetPathFromIDListW = shell32.func("bool SHGetPathFromIDListW(intptr handle, _Out_ char* pszPath)");
-    const SHGetPathFromIDListW2 = shell32.func("bool SHGetPathFromIDListW(intptr handle, _Out_ char16* pszPath)");
-    
-    //console.log(MessageBoxA_1);
-    //console.log(MessageBoxA_2);
-    //console.log(ILCreateFromPath);
-    const r = ILCreateFromPath(path);
+    //const r = ILCreateFromPath(path);
+    const r = ILCreateFromPathW(path);
     console.log(r);
+    //console.log(rr);
 
-
-    const size = ILGetSize(r.mkid);
+    const size: number = ILGetSize(r);
     console.log(size);
-
-    //const s_pidl = " ".repeat(size);
-    //const s_pidl2: string[] = Array<string>(size);
-    const buffer = Buffer.allocUnsafe(size);
-    let out = Array<string>(size);
-    let out2 = ['\0'.repeat(size)];
-    for(let i = 0; i < out.length; i++) {
-        out[i] = '\0';
-    }
-    //const b = SHGetPathFromIDListW(r.mkid, out);
-    const s = koffi.decode(buffer, 'str16', size);
-    console.log(s);
-
-    //let sss = "";
-    SHGetPathFromIDListW2(r.mkid, out2);
     
-    const rr = ILCreateFromPath2(path);
-    console.log(rr);
+    const pidl = koffi.array('uchar', size, 'Array');
+    //const Pidl = koffi.pointer(pidl);
+    const PIDL = koffi.alias('PIDL', pidl);
+    //const tmep = koffi.as(r, TEST);
+    //console.log(tmep);
+    console.log(PIDL);
+    const ILCreateFromPathWW = shell32.func('PIDL* ILCreateFromPathW(str16 pszPath)');
+    const ww = ILCreateFromPathWW(path);
+    console.log(ww);
 
-    //console.log(b);
+    //const buffer: Buffer = Buffer.allocUnsafe(size);
+    //const my_byte_ptr = crypt32.symbol()
+    //const buffer = koffi.decode(ITEMIDLIST, 'char*', size);
+    const kk = koffi.array('char', size);
+    console.log(kk);
+    
+    let s: string = " ".repeat(2048);//new Array<string>();
+    //let c = new Array<string>(2048);
+    let c = [s];
+    let requiredSize = [ 2048 ];
+    let b = CryptBinaryToStringW(r, size, 1, c, requiredSize);
+    let out = ['\0'.repeat(requiredSize[0])];
+    b = CryptBinaryToStringW(r, size, 1, out, requiredSize);
+    console.log(b);
 
-    console.log(ILGetSize);
-    console.log(ILFree);
+    ILFree(r);
 
-    //const sh = koffi.decode(r.mkid, "SHITEMID");
-    //console.log(sh);
-    console.log(SHITEMID);
-    const r2 = ILCreateFromPath2(path);
-    console.log(r2);
+
+
+    // //const s_pidl = " ".repeat(size);
+    // //const s_pidl2: string[] = Array<string>(size);
+    // const buffer = Buffer.allocUnsafe(size);
+    // let out = Array<string>(size);
+    // let out2 = ['\0'.repeat(size)];
+    // for(let i = 0; i < out.length; i++) {
+    //     out[i] = '\0';
+    // }
+    // //const b = SHGetPathFromIDListW(r.mkid, out);
+    // const s = koffi.decode(buffer, 'str16', size);
+    // console.log(s);
+
+    // //let sss = "";
+    // SHGetPathFromIDListW2(r.mkid, out2);
+    
+    // const rr = ILCreateFromPath2(path);
+    // console.log(rr);
+
+    // //console.log(b);
+
+    // console.log(ILGetSize);
+    // console.log(ILFree);
+
+    // //const sh = koffi.decode(r.mkid, "SHITEMID");
+    // //console.log(sh);
+    // console.log(SHITEMID);
+    // const r2 = ILCreateFromPath2(path);
+    // console.log(r2);
 
 
     // const ILCreateFromPath = shell32.func(
