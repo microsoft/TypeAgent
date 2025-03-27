@@ -27,10 +27,37 @@ import {
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
 import { conversation as Conversation } from "knowledge-processor";
+import { execSync } from "child_process";
 
 export function instantiate(): AppAgent {
     return {
+        initializeAgentContext: initializeGreetingAgentContext,
         ...getCommandInterface(handlers),
+    };
+}
+
+type GreetingAgentContext = {
+    user: {
+        givenName: string | undefined;
+        surName: string | undefined;
+    };
+};
+
+async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
+    let given = "";
+    let sur = "";
+    try {
+        const result = execSync("az ad signed-in-user show");
+        const user = JSON.parse(result.toString());
+        given = user.givenName;
+        sur = user.surname;
+    } catch (e) {}
+
+    return {
+        user: {
+            givenName: given,
+            surName: sur,
+        },
     };
 }
 
@@ -57,6 +84,7 @@ export interface PersonalizedGreetingAction {
 
 // A typical greeting
 // Greetings can include some color commentary and or an initiator like "Wow, you're up late" or "I'm glad it's Friday"
+// Sometimes be playful with the user's name (i.e. if greeting with Hola, you can call the user Juan instead of John)
 export interface GenericGreeting {
     // The greeting response to the user such as "Top of the morning to ya!" or "Hey, how's it going?" or "What a nice day we're having, what's up!?" or "What are we going to do today?"
     // Be sure to make the greeting relevant to time of day (i.e. don't say good morning in the afternoon).
@@ -79,7 +107,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
      *
      * @param context The command context.
      */
-    public async run(context: ActionContext) {
+    public async run(context: ActionContext<GreetingAgentContext>) {
         // Initial output to let the user know the agent is thinking...
         displayStatus("...", context);
 
@@ -147,7 +175,7 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
     }
 
     async getTypeChatResponse(
-        context: ActionContext,
+        context: ActionContext<GreetingAgentContext>,
     ): Promise<Result<GreetingAction>> {
         // Create Model instance
         let chatModel = this.createModel(true);
@@ -194,7 +222,7 @@ const handlers: CommandHandlerTable = {
 
 async function handlePersonalizedGreetingAction(
     greetingAction: PersonalizedGreetingAction,
-    context: ActionContext,
+    context: ActionContext<GreetingAgentContext>,
 ): Promise<ActionResult> {
     let result = createActionResult("Hi!");
     if (greetingAction.parameters !== undefined) {
@@ -269,7 +297,9 @@ async function handlePersonalizedGreetingAction(
 //     return answer?.generatedText;
 // }
 
-async function getRecentChatHistory(context: ActionContext): Promise<string[]> {
+async function getRecentChatHistory(
+    context: ActionContext<GreetingAgentContext>,
+): Promise<string[]> {
     const conversationManager: Conversation.ConversationManager = (
         context.sessionContext as any
     ).conversationManager;
@@ -308,6 +338,18 @@ async function getRecentChatHistory(context: ActionContext): Promise<string[]> {
             searchResponse.response?.messages?.map((msg) => {
                 chatHistory.push(`- \"${msg.value.value}\"`);
             });
+
+            chatHistory.push("###");
+            if (context.sessionContext.agentContext.user.givenName) {
+                chatHistory.push(
+                    `The user's given name is '${context.sessionContext.agentContext.user.givenName}'.`,
+                );
+            }
+            if (context.sessionContext.agentContext.user.surName) {
+                chatHistory.push(
+                    `The user's sur name is '${context.sessionContext.agentContext.user.surName}'.`,
+                );
+            }
 
             const matches =
                 await conversationManager.generateAnswerForSearchResponse(
