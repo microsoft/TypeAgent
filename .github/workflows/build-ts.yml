@@ -8,11 +8,11 @@ name: build-ts
 on:
   workflow_dispatch:
   push:
-    branches: ["main", "dev/robgruen/selfhost_runners"]
-  pull_request:
-    branches: ["main"]
-  merge_group:
-    branches: ["main"]
+    branches: ["dev/robgruen/selfhost_runners"]
+  # pull_request:
+  #   branches: ["main"]
+  # merge_group:
+  #   branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
