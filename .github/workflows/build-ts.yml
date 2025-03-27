@@ -8,7 +8,7 @@ name: build-ts
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches: ["main", "dev/robgruen/selfhost_runners"]
   pull_request:
     branches: ["main"]
   merge_group:
@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        os: [ self-hosted, 1ES.Pool=my-github-runner-pool, "ubuntu-latest", "windows-latest", "macos-latest"]
         version: [18, 20, 22]
 
     runs-on: ${{ matrix.os }}
