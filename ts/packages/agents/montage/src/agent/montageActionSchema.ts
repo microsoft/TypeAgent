@@ -117,8 +117,10 @@ export type DeleteMontageAction = {
     parameters: {
         // The title of the montage to delete
         title?: string;
-        // The id (if known) of the montage to delete
-        id?: number;
+        // The ids (if known) of the montage to delete
+        id?: number[];
+        // A flag indicating to remove all montages
+        deleteAll?: boolean;
     }
 }
 

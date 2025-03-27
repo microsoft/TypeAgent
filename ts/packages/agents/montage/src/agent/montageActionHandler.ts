@@ -281,15 +281,21 @@ async function handleMontageAction(
             // update montage state
             actionContext.sessionContext.agentContext.viewProcess?.send(actionContext.sessionContext.agentContext.montage!);
 
-            result = createActionResult("Created new montage");
+            result = createActionResult("Created new montage", false, [entityFromMontage(actionContext.sessionContext.agentContext.montage)]);
             break;
         }
 
         case "deleteMontage": {
             const deleteMontageAction: DeleteMontageAction = action as DeleteMontageAction;
-            const currentMontageId: number = deleteMontageAction.parameters.id ? deleteMontageAction.parameters.id : actionContext.sessionContext.agentContext.montage!.id;
+            const montageIds: number[] = deleteMontageAction.parameters.id ? deleteMontageAction.parameters.id : [actionContext.sessionContext.agentContext.montage!.id];
+            const deleteAll: boolean = deleteMontageAction.parameters.deleteAll ? deleteMontageAction.parameters.deleteAll : false;
 
-            if (deleteMontageAction.parameters.title !== undefined) {
+            if (deleteAll) {
+                actionContext.sessionContext.agentContext.montages = [];
+
+                // create new active montage
+                actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);    
+            } else if (deleteMontageAction.parameters.title !== undefined) {
                 actionContext.sessionContext.agentContext.montages.filter((value) => {
                     // create new active montage if that's the one we are deleting
                     if (value.title == actionContext.sessionContext.agentContext.montage?.title) {
@@ -300,7 +306,7 @@ async function handleMontageAction(
                 });
             } else {
                 // no id/title specified, delete the active montage or the one with the supplied id
-                actionContext.sessionContext.agentContext.montages.filter(value => value.id !== currentMontageId);
+                actionContext.sessionContext.agentContext.montages.filter(value => montageIds.indexOf(value.id) !== -1);
 
                 // create new active montage
                 actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);    
@@ -348,7 +354,7 @@ async function handleMontageAction(
         case "listMontages": {
 
             const names: string[] = [];
-            actionContext.sessionContext.agentContext.montages.forEach(value => names.push(value.title));
+            actionContext.sessionContext.agentContext.montages.forEach(value => names.push(`${value.id}: ${value.title}`));
 
             displayResult(names, actionContext);
 
@@ -368,6 +374,19 @@ function createNewMontage(context: MontageActionContext, title: string = ""): Ph
         files: [],
         selected: []
     }    
+}
+
+/**
+ * Creates an entity for conversation memory based on the supplied montage
+ * @param montage - The montage to create an entity for
+ */
+function entityFromMontage(montage: PhotoMontage) {
+    return {
+        name: montage.title,
+        type: ["project", "montage"],
+        //additionalEntityText = montage.title;
+        uniqueId: montage.id.toString()
+    }
 }
 
 async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction, 
@@ -572,4 +591,3 @@ function createEncryptedPIDLFromPath(path: string) {
 
     return stringBuffer[0];
 }
-
