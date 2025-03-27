@@ -8,7 +8,12 @@ interface ActionResult {
     message: string;
 }
 
-async function execChangeEditorColumns(actionData: any) {
+async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
+    let actionResult: ActionResult = {
+        handled: true,
+        message: "Ok",
+    };
+
     if (actionData && actionData.columnCount) {
         switch (actionData.columnCount) {
             case "single":
@@ -27,11 +32,19 @@ async function execChangeEditorColumns(actionData: any) {
                 );
                 break;
             default:
-                return "Editor layout: Unknown column count";
+                actionResult.message = "Editor layout: Unknown column count";
+                actionResult.handled = false;
+                return actionResult;
         }
-        return "Changed editor columns to: " + actionData.columnCount;
+
+        actionResult.message =
+            "Changed editor columns to: " + actionData.columnCount;
+        return actionResult;
     }
-    return "Edit layout: Did not understand the request!";
+
+    actionResult.message = "Did not understand the request!";
+    actionResult.handled = false;
+    return actionResult;
 }
 
 export async function handleDebugActions(action: any): Promise<ActionResult> {
@@ -90,7 +103,7 @@ export async function handleDebugActions(action: any): Promise<ActionResult> {
             break;
         }
         default: {
-            actionResult.message = `Did not understand the request "${action.parameters.text}"`;
+            actionResult.message = `Did not understand the request for action: "${actionName}"`;
             actionResult.handled = false;
         }
     }
@@ -206,7 +219,7 @@ export async function handleDisplayKBActions(
             break;
         }
         default: {
-            actionResult.message = `Did not understand the request "${action.parameters.text}"`;
+            actionResult.message = `Did not understand the request for action: "${actionName}"`;
             actionResult.handled = false;
         }
     }
@@ -303,7 +316,7 @@ export async function handleGeneralKBActions(
         }
 
         default: {
-            actionResult.message = `Did not understand the request "${action.parameters.text}"`;
+            actionResult.message = `Did not understand the request for action: "${actionName}"`;
             actionResult.handled = false;
         }
     }
@@ -390,12 +403,13 @@ export async function handleBaseEditorActions(
         }
 
         case "changeEditorLayout": {
-            actionResult.message = await execChangeEditorColumns(actionData);
+            actionResult = await execChangeEditorColumns(actionData);
             break;
         }
 
         default: {
-            actionResult.message = `Did not understand the request "${action.parameters.text}"`;
+            actionResult.message = `Did not understand the request for action: "${actionName}"`;
+            actionResult.handled = false;
             break;
         }
     }
@@ -424,7 +438,7 @@ export async function handleVSCodeActions(action: any) {
         );
 
         const handledResult = results.find((result: any) => result.handled);
-        if (handledResult) {
+        if (handledResult !== undefined) {
             actionResult = handledResult;
         } else {
             actionResult.handled = false;

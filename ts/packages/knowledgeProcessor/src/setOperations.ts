@@ -535,7 +535,7 @@ export function createHitTable<T>(
     }
 
     function add(value: T, score?: number | undefined): number {
-        score = fixedScore ? fixedScore : score ?? 1.0;
+        score = fixedScore ? fixedScore : (score ?? 1.0);
         const key = getKey(value);
         let scoredItem = map.get(key);
         if (scoredItem) {

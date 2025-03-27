@@ -268,7 +268,9 @@ export class SchemaParser {
             } else {
                 let arrayNode = new SymbolNode(
                     nodeName,
-                    node.pos >= 0 ? node.getText() : nodeDecl?.getText() ?? "",
+                    node.pos >= 0
+                        ? node.getText()
+                        : (nodeDecl?.getText() ?? ""),
                     NodeType.Array,
                     NodeType.String,
                     symNode,

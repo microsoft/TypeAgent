@@ -28,7 +28,8 @@
     "pretest": "pnpm run build",
     "test-compile": "tsc -p ./src",
     "test:full": "vscode-test",
-    "vscode:prepublish": "pnpm run esbuild-base --minify"
+    "vscode:prepublish": "pnpm run esbuild-base --minify",
+    "watch": "tsc -w"
   },
   "contributes": {
     "commands": [
@@ -50,7 +51,7 @@
   "dependencies": {
     "axios": "^1.8.2",
     "body-parser": "^1.20.3",
-    "chalk": "^5.3.0",
+    "chalk": "^5.4.1",
     "cors": "^2.8.5",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
@@ -63,7 +64,6 @@
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/mocha": "^10.0.6",
-    "@types/node": "18.x",
     "@types/vscode": "^1.88.0",
     "@types/ws": "^8.5.10",
     "@vscode/test-cli": "^0.0.8",
@@ -71,8 +71,8 @@
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.25.0",
     "mkdirp": "^3.0.1",
-    "prettier": "^3.2.5",
-    "rimraf": "^5.0.5"
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1"
   },
   "engines": {
     "vscode": "^1.88.0"

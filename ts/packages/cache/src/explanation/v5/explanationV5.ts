@@ -856,7 +856,9 @@ function toPrettyString(explanation: Explanation) {
             createLine(
                 i === 0 ? "Synonyms" : "",
                 explanation.subPhrases.map((phrase) =>
-                    isPropertySubPhrase(phrase) ? "" : phrase.synonyms[i] ?? "",
+                    isPropertySubPhrase(phrase)
+                        ? ""
+                        : (phrase.synonyms[i] ?? ""),
                 ),
             ),
         );
