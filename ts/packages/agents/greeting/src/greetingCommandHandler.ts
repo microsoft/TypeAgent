@@ -47,7 +47,7 @@ async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
     let given = "";
     let sur = "";
     try {
-        const result = execSync("az ad signed-in-user show");
+        const result = execSync("az ad signed-in-user show", { stdio: "pipe" });
         const user = JSON.parse(result.toString());
         given = user.givenName;
         sur = user.surname;
