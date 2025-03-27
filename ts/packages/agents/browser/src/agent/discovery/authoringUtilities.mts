@@ -60,7 +60,7 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
             actionName,
             description,
             htmlFragments,
-            screenshot
+            screenshot,
         );
         if (descriptionResponse.success) {
             console.log(descriptionResponse.data);
@@ -75,7 +75,7 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
             description,
             recordedSteps,
             htmlFragments,
-            screenshot
+            screenshot,
         );
 
         if (!intentResponse.success) {
@@ -92,7 +92,7 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
             intentData,
             recordedSteps,
             htmlFragments,
-            screenshot
+            screenshot,
         );
 
         if (!stepsResponse.success) {

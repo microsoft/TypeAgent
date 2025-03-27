@@ -318,7 +318,11 @@ export async function handleSchemaDiscoveryAction(
         const screenshot = await browser.getCurrentPageScreenshot();
         const timerName = `Summarizing page`;
         console.time(timerName);
-        const response = await agent.getPageSummary(undefined, htmlFragments, screenshot);
+        const response = await agent.getPageSummary(
+            undefined,
+            htmlFragments,
+            screenshot,
+        );
 
         if (!response.success) {
             console.error("Attempt to get page summary failed");
@@ -337,7 +341,11 @@ export async function handleSchemaDiscoveryAction(
         const screenshot = await browser.getCurrentPageScreenshot();
         const timerName = `Getting page layout`;
         console.time(timerName);
-        const response = await agent.getPageLayout(undefined, htmlFragments, screenshot);
+        const response = await agent.getPageLayout(
+            undefined,
+            htmlFragments,
+            screenshot,
+        );
 
         if (!response.success) {
             console.error("Attempt to get page layout failed");
