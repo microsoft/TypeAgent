@@ -80,14 +80,6 @@ async def main():
             raise RuntimeError(error)
 
     print()
-    print("MessageIndex")
-    if pod.secondary_indexes and pod.secondary_indexes.message_index:
-        print(pod.secondary_indexes.message_index.serialize())
-
-    print()
-    print("PodCast")
-    data = pod.serialize()
-    print(json.dumps(data))  # This checks that the serialization is valid JSON.
     filename = "podcast"
     print(f"Dumping to {filename}")
     pod.write_to_file(filename)

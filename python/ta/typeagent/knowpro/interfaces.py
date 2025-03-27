@@ -423,9 +423,7 @@ class IConversation[
 
 class IThreadDataItem(TypedDict):
     thread: ThreadData
-    embedding: list[
-        list[float]
-    ]  # TODO: What's the compatible serialization type for NormalizedEmbedding?
+    embedding: bytes
 
 
 class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):
