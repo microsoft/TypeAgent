@@ -32,9 +32,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ "1ES.Pool=typeagent-runner-pool" ]
-        version: [18, 20, 22]
+        version: [22]
 
-    runs-on: ${{ matrix.os }}
+    runs-on: [ self-hosted, "1ES.Pool=typeagent-runner-pool"]
     steps:
       - if: runner.os == 'Linux'
         run: |
