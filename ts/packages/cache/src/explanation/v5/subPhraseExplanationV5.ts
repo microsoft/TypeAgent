@@ -8,7 +8,7 @@ import {
     RequestAction,
 } from "../requestAction.js";
 import { PropertyExplanation } from "./propertyExplanationSchemaV5WithContext.js";
-import { form } from "./explanationV5.js";
+import { form, requestActionToPromptString } from "./explanationV5.js";
 import {
     getActionDescription,
     getSubphraseExplanationInstruction,
@@ -72,7 +72,7 @@ export function createSubPhraseExplainer(model?: string) {
             );
         },
         createInstructions,
-        ([requestAction]) => requestAction.toPromptString(),
+        ([requestAction]) => requestActionToPromptString(requestAction),
         validateSubPhraseExplanationV5,
     );
 }

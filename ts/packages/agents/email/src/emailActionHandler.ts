@@ -184,7 +184,7 @@ async function handleEmailAction(
                 action.parameters.subject,
                 genContent.length > 0
                     ? genContent
-                    : action.parameters.body ?? "",
+                    : (action.parameters.body ?? ""),
                 to_addrs,
                 cc_addrs,
                 bcc_addrs,

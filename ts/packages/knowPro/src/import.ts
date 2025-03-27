@@ -2,26 +2,6 @@
 // Licensed under the MIT License.
 
 import { IMessage } from "./interfaces.js";
-import {
-    createTextEmbeddingIndexSettings,
-    TextEmbeddingIndexSettings,
-} from "./fuzzyIndex.js";
-import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
-
-export type ConversationSettings = {
-    relatedTermIndexSettings: RelatedTermIndexSettings;
-    threadSettings: TextEmbeddingIndexSettings;
-};
-
-export function createConversationSettings(): ConversationSettings {
-    const embeddingIndexSettings = createTextEmbeddingIndexSettings();
-    return {
-        relatedTermIndexSettings: {
-            embeddingIndexSettings,
-        },
-        threadSettings: embeddingIndexSettings,
-    };
-}
 
 /**
  * Text (such as a transcript) can be collected over a time range.

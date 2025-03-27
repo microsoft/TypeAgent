@@ -29,7 +29,7 @@ export async function handleCommerceAction(
     const agent = await createCommercePageTranslator("GPT_4_O_MINI");
 
     switch (action.actionName) {
-        case "searchForProductAction":
+        case "searchForProduct":
             await searchForProduct(action.parameters.productName);
             break;
         case "selectSearchResult":
@@ -38,16 +38,16 @@ export async function handleCommerceAction(
             }
             await selectSearchResult(action.parameters.productName);
             break;
-        case "addToCartAction":
+        case "addToCart":
             await handleAddToCart(action);
             break;
         case "getLocationInStore":
             await handleFindInStore(action);
             break;
-        case "findNearbyStoreAction":
+        case "findNearbyStore":
             await handleFindNearbyStore(action);
             break;
-        case "viewShoppingCartAction":
+        case "viewShoppingCart":
             await handleViewShoppingCart(action);
             break;
     }

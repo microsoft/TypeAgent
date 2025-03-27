@@ -3,24 +3,31 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
+    IMessage,
+    IReadonlyCollection,
     Knowledge,
     KnowledgeType,
-    MessageIndex,
-    ScoredMessageIndex,
-    ScoredSemanticRef,
+    MessageOrdinal,
+    ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
     SemanticRef,
-    SemanticRefIndex,
+    SemanticRefOrdinal,
     Term,
     TextRange,
 } from "./interfaces.js";
 import { compareTextRange, isInTextRange } from "./common.js";
+import { ScoredTextLocation } from "./textLocationIndex.js";
+import { getCountOfMessagesInCharBudget } from "./message.js";
 
+/**
+ * A matched value. Includes statistics for the quality and frequency of the match
+ */
 export interface Match<T = any> {
     value: T;
-    score: number;
-    hitCount: number;
-    relatedScore: number;
-    relatedHitCount: number;
+    score: number; // Overall cumulative score.
+    hitCount: number; // # of hits. Always set to at least 1
+    relatedScore: number; // Cumulative from matching related terms or phrases
+    relatedHitCount: number; // # of hits from related term matches or phrases
 }
 
 /**
@@ -31,6 +38,9 @@ export function sortMatchesByRelevance(matches: Match[]) {
     matches.sort((x, y) => y.score - x.score);
 }
 
+/**
+ * Accumulates matched values and Match statistics for each matched value
+ */
 export class MatchAccumulator<T = any> {
     private matches: Map<T, Match<T>>;
 
@@ -79,7 +89,6 @@ export class MatchAccumulator<T = any> {
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
-            //this.updateExisting(existingMatch, score, isExactMatch);
             if (isExactMatch) {
                 existingMatch.hitCount++;
                 existingMatch.score += score;
@@ -141,16 +150,10 @@ export class MatchAccumulator<T = any> {
         match.relatedScore += other.relatedScore;
     }
 
-    public calculateTotalScore(): void {
+    public calculateTotalScore(scorer?: (match: Match) => void): void {
+        scorer ??= addSmoothRelatedScoreToMatchScore;
         for (const match of this.getMatches()) {
-            if (match.relatedHitCount > 0) {
-                // Smooth the impact of multiple related term matches
-                // If we just add up scores, a larger number of moderately related
-                // but noisy matches can overwhelm a small # of highly related matches... etc
-                const avgScore = match.relatedScore / match.relatedHitCount;
-                const normalizedScore = Math.log(1 + avgScore);
-                match.score += normalizedScore;
-            }
+            scorer(match);
         }
     }
 
@@ -191,6 +194,10 @@ export class MatchAccumulator<T = any> {
         return [...this.matchesWithMinHitCount(minHitCount)];
     }
 
+    /**
+     * Iterate over all matches
+     * @param predicate
+     */
     public *getMatches(
         predicate?: (match: Match<T>) => boolean,
     ): IterableIterator<Match<T>> {
@@ -201,10 +208,25 @@ export class MatchAccumulator<T = any> {
         }
     }
 
+    /**
+     * Iterate over all matched values
+     */
+    public *getMatchedValues(): IterableIterator<T> {
+        for (const match of this.matches.values()) {
+            yield match.value;
+        }
+    }
+
     public clearMatches(): void {
         this.matches.clear();
     }
 
+    /**
+     * Selects and retains only top N scoring items.
+     * @param maxMatches
+     * @param minHitCount
+     * @returns
+     */
     public selectTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
@@ -214,6 +236,11 @@ export class MatchAccumulator<T = any> {
         return topN.length;
     }
 
+    /**
+     * Selects and retains only items with hitCount >= minHitCount.
+     * @param minHitCount
+     * @returns
+     */
     public selectWithHitCount(minHitCount: number): number {
         const matches = this.getWithHitCount(minHitCount);
         this.setMatches(matches, true);
@@ -229,9 +256,64 @@ export class MatchAccumulator<T = any> {
     }
 }
 
+/**
+    Return an score that smoothens a totalScore to compensate for multiple potentially noisy hits
+    
+    1. A totalScore is just all the individual scores from each hit added up. 
+    Unfortunately, a larger number of moderately related but noisy matches can overwhelm
+    a small # of very good matches merely by having a larger totalScore.
+    
+    2. We also want diminishing returns for too many hits. Too many hits which can be indicative of noise...as the
+    they can indicate low entropy of the thing being matched: its too common-place. 
+    We want to prevent runaway scores that result from too many matches
+
+    We currently adopt a simple but effective approach to smooth scores. 
+    We address (1) by taking an average: this gives a cheap way of measuring the utility of each hit
+    We address (2) by using a log function to get a hitCount that diminishes the impact of large # of hits.
+    Then we return the average multiplied by the smooth hitCount, giving us a smoother score
+    
+    This is by no means perfect, but is a good default. 
+    MatchAccumulator.calculateTotalScore allows you to pass in a smoothing function.
+    As the need arises, we can make that available to code at higher layers. 
+ */
+function getSmoothScore(totalScore: number, hitCount: number): number {
+    if (hitCount > 0) {
+        if (hitCount === 1) {
+            return totalScore;
+        }
+        const avg = totalScore / hitCount;
+        const smoothAvg = Math.log(hitCount + 1) * avg;
+        return smoothAvg;
+    }
+    return 0;
+}
+
+/**
+ * See {@link getSmoothScore}
+ * @param match
+ */
+function addSmoothRelatedScoreToMatchScore(match: Match): void {
+    if (match.relatedHitCount > 0) {
+        // Related term matches can be noisy and duplicative. Comments on getSmoothScore explain why
+        // we choose to smooth the impact of related term matches
+        const smoothRelatedScore = getSmoothScore(
+            match.relatedScore,
+            match.relatedHitCount,
+        );
+
+        match.score += smoothRelatedScore;
+    }
+}
+
+function smoothMatchScore(match: Match): void {
+    if (match.hitCount > 0) {
+        match.score = getSmoothScore(match.score, match.hitCount);
+    }
+}
+
 export type KnowledgePredicate<T extends Knowledge> = (knowledge: T) => boolean;
 
-export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
+export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal> {
     constructor(public searchTermMatches = new Set<string>()) {
         super();
     }
@@ -239,8 +321,8 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
     public addTermMatches(
         searchTerm: Term,
         scoredRefs:
-            | ScoredSemanticRef[]
-            | IterableIterator<ScoredSemanticRef>
+            | ScoredSemanticRefOrdinal[]
+            | IterableIterator<ScoredSemanticRefOrdinal>
             | undefined,
         isExactMatch: boolean,
         weight?: number,
@@ -249,7 +331,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
             weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
                 this.add(
-                    scoredRef.semanticRefIndex,
+                    scoredRef.semanticRefOrdinal,
                     scoredRef.score * weight,
                     isExactMatch,
                 );
@@ -258,16 +340,40 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         }
     }
 
+    public addTermMatchesIfNew(
+        searchTerm: Term,
+        scoredRefs:
+            | ScoredSemanticRefOrdinal[]
+            | IterableIterator<ScoredSemanticRefOrdinal>
+            | undefined,
+        isExactMatch: boolean,
+        weight?: number,
+    ) {
+        if (scoredRefs) {
+            weight ??= searchTerm.weight ?? 1;
+            for (const scoredRef of scoredRefs) {
+                if (!this.has(scoredRef.semanticRefOrdinal)) {
+                    this.add(
+                        scoredRef.semanticRefOrdinal,
+                        scoredRef.score * weight,
+                        isExactMatch,
+                    );
+                }
+            }
+            this.searchTermMatches.add(searchTerm.text);
+        }
+    }
+
     public override getSortedByScore(
         minHitCount?: number,
-    ): Match<SemanticRefIndex>[] {
+    ): Match<SemanticRefOrdinal>[] {
         return super.getSortedByScore(minHitCount);
     }
 
     public override getTopNScoring(
         maxMatches?: number,
         minHitCount?: number,
-    ): Match<SemanticRefIndex>[] {
+    ): Match<SemanticRefOrdinal>[] {
         return super.getTopNScoring(maxMatches, minHitCount);
     }
 
@@ -286,7 +392,7 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         semanticRefs: SemanticRef[],
         knowledgeType: KnowledgeType,
         predicate?: KnowledgePredicate<T>,
-    ): IterableIterator<Match<SemanticRefIndex>> {
+    ): IterableIterator<Match<SemanticRefOrdinal>> {
         for (const match of this.getMatches()) {
             const semanticRef = semanticRefs[match.value];
             if (semanticRef.knowledgeType === knowledgeType) {
@@ -329,57 +435,79 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefIndex> {
         return accumulator;
     }
 
+    public override addUnion(other: SemanticRefAccumulator): void {
+        super.addUnion(other);
+        addToSet(this.searchTermMatches, other.searchTermMatches.values());
+    }
+
     public override intersect(
         other: SemanticRefAccumulator,
     ): SemanticRefAccumulator {
         const intersection = new SemanticRefAccumulator();
         super.intersect(other, intersection);
+        if (intersection.size > 0) {
+            addToSet(
+                intersection.searchTermMatches,
+                this.searchTermMatches.values(),
+            );
+            addToSet(
+                intersection.searchTermMatches,
+                other.searchTermMatches.values(),
+            );
+        }
         return intersection;
     }
 
-    public toScoredSemanticRefs(): ScoredSemanticRef[] {
+    public toScoredSemanticRefs(): ScoredSemanticRefOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
-                semanticRefIndex: m.value,
+                semanticRefOrdinal: m.value,
                 score: m.score,
             };
         }, 0);
     }
-
+    /*
     public override clearMatches() {
         super.clearMatches();
         this.searchTermMatches.clear();
     }
+    */
 }
 
-export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
-    constructor(matches?: Match<MessageIndex>[]) {
+export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
+    constructor(matches?: Match<MessageOrdinal>[]) {
         super();
         if (matches && matches.length > 0) {
             this.setMatches(matches);
         }
     }
 
-    public override add(
-        value: number,
-        score: number,
-        isExactMatch: boolean,
+    public override add(value: number, score: number): void {
+        let match = this.getMatch(value);
+        if (match === undefined) {
+            match = {
+                value,
+                score,
+                hitCount: 1,
+                relatedHitCount: 0,
+                relatedScore: 0,
+            };
+            this.setMatch(match);
+        } else if (score > match.score) {
+            match.score = score;
+            match.hitCount++;
+        }
+    }
+
+    /**
+     * Add the message ordinals of the given text location
+     * @param scoredTextLocations
+     */
+    public addMessagesFromLocations(
+        scoredTextLocations: ScoredTextLocation[],
     ): void {
-        if (isExactMatch) {
-            let match = this.getMatch(value);
-            if (match === undefined) {
-                match = {
-                    value,
-                    score,
-                    hitCount: 1,
-                    relatedHitCount: 0,
-                    relatedScore: 0,
-                };
-                this.setMatch(match);
-            } else if (score > match.score) {
-                match.score = score;
-                match.hitCount++;
-            }
+        for (const sl of scoredTextLocations) {
+            this.add(sl.textLocation.messageOrdinal, sl.score);
         }
     }
 
@@ -387,38 +515,53 @@ export class MessageAccumulator extends MatchAccumulator<MessageIndex> {
         semanticRef: SemanticRef,
         score: number,
     ): void {
-        const messageIndexStart = semanticRef.range.start.messageIndex;
+        const messageOrdinalStart = semanticRef.range.start.messageOrdinal;
         if (semanticRef.range.end) {
-            const messageIndexEnd = semanticRef.range.end.messageIndex;
+            const messageOrdinalEnd = semanticRef.range.end.messageOrdinal;
             for (
-                let messageIndex = messageIndexStart;
-                messageIndex < messageIndexEnd;
-                ++messageIndex
+                let messageOrdinal = messageOrdinalStart;
+                messageOrdinal < messageOrdinalEnd;
+                ++messageOrdinal
             ) {
-                this.add(messageIndex, score, true);
+                this.add(messageOrdinal, score);
             }
         } else {
-            this.add(messageIndexStart, score, true);
+            this.add(messageOrdinalStart, score);
         }
     }
 
     public smoothScores() {
-        // Normalize the score relative to # of hits. Use log to reduce impact of very high score
+        // Normalize the score relative to # of hits.
         for (const match of this.getMatches()) {
-            if (match.hitCount > 0) {
-                const avgScore = match.score / match.hitCount;
-                match.score = Math.log(avgScore + 1);
-            }
+            smoothMatchScore(match);
         }
     }
 
-    public toScoredMessageIndexes(): ScoredMessageIndex[] {
+    public toScoredMessageOrdinals(): ScoredMessageOrdinal[] {
         return this.getSortedByScore(0).map((m) => {
             return {
-                messageIndex: m.value,
+                messageOrdinal: m.value,
                 score: m.score,
             };
         }, 0);
+    }
+
+    public selectMessagesInBudget(
+        messages: IMessage[],
+        maxCharsInBudget: number,
+    ): void {
+        let scoredMatches = this.getSortedByScore();
+        const rankedOrdinals = scoredMatches.map((m) => m.value);
+        const messageCountInBudget = getCountOfMessagesInCharBudget(
+            messages,
+            rankedOrdinals,
+            maxCharsInBudget,
+        );
+        this.clearMatches();
+        if (messageCountInBudget > 0) {
+            scoredMatches = scoredMatches.slice(0, messageCountInBudget);
+            this.setMatches(scoredMatches);
+        }
     }
 }
 
@@ -478,7 +621,9 @@ export class TextRangeCollection {
         // Now loop over all text ranges that start at rangeToMatch.start.messageIndex
         for (; i < this.ranges.length; ++i) {
             const range = this.ranges[i];
-            if (range.start.messageIndex > rangeToMatch.start.messageIndex) {
+            if (
+                range.start.messageOrdinal > rangeToMatch.start.messageOrdinal
+            ) {
                 break;
             }
             if (isInTextRange(range, rangeToMatch)) {
@@ -598,7 +743,7 @@ export class PropertyTermSet {
         }
     }
 
-    public has(propertyName: string, propertyValue: Term): boolean {
+    public has(propertyName: string, propertyValue: Term | string): boolean {
         const key = this.makeKey(propertyName, propertyValue);
         return this.terms.has(key);
     }
@@ -607,8 +752,17 @@ export class PropertyTermSet {
         this.terms.clear();
     }
 
-    private makeKey(propertyName: string, propertyValue: Term): string {
-        return propertyName + ":" + propertyValue.text;
+    private makeKey(
+        propertyName: string,
+        propertyValue: Term | string,
+    ): string {
+        return (
+            propertyName +
+            ":" +
+            (typeof propertyValue === "string"
+                ? propertyValue
+                : propertyValue.text)
+        );
     }
 }
 
@@ -656,3 +810,63 @@ function* union<T>(
         yield value;
     }
 }
+
+function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
+    for (const value of values) {
+        set.add(value);
+    }
+}
+
+export interface ICollection<T, TOrdinal>
+    extends IReadonlyCollection<T, TOrdinal> {
+    push(...items: T[]): void;
+}
+
+export class Collection<T, TOrdinal extends number>
+    implements ICollection<T, TOrdinal>
+{
+    protected items: T[];
+
+    constructor(items?: T[] | undefined) {
+        this.items = items ?? [];
+    }
+
+    public get length(): number {
+        return this.items.length;
+    }
+
+    public get(ordinal: TOrdinal): T | undefined {
+        return this.items[ordinal];
+    }
+
+    public getMultiple(ordinals: TOrdinal[]): (T | undefined)[] {
+        const items = new Array<T | undefined>(ordinals.length);
+        for (let i = 0; i < ordinals.length; ++i) {
+            items[i] = this.get(ordinals[i]);
+        }
+        return items;
+    }
+
+    public getAll(): T[] {
+        return this.items;
+    }
+
+    public push(...items: T[]): void {
+        for (const item of items) {
+            this.items.push(item);
+        }
+    }
+
+    public *[Symbol.iterator](): Iterator<T, any, any> {
+        return this.items[Symbol.iterator]();
+    }
+}
+
+export class MessageCollection<
+    TMessage extends IMessage = IMessage,
+> extends Collection<TMessage, MessageOrdinal> {}
+
+export class SemanticRefCollection extends Collection<
+    SemanticRef,
+    SemanticRefOrdinal
+> {}

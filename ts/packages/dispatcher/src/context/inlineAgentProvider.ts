@@ -9,26 +9,31 @@ import {
 } from "./dispatcher/dispatcherAgent.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import { systemAgent, systemManifest } from "./system/systemAgent.js";
+import {
+    createActionConfigProvider,
+    getSchemaNamesForAppAgentManifests,
+} from "../agentProvider/agentProviderUtils.js";
+import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 
-const inlineHandlers: Record<string, AppAgent> = {
+const builtinAgents: Record<string, AppAgent> = {
     dispatcher: dispatcherAgent,
     system: systemAgent,
 };
 
-export const inlineAgentManifests: Record<string, AppAgentManifest> = {
+const builtinAgentManifest: Record<string, AppAgentManifest> = {
     dispatcher: dispatcherManifest,
     system: systemManifest,
 };
 
-export function createInlineAppAgentProvider(
-    context?: CommandHandlerContext,
+export function createBuiltinAppAgentProvider(
+    context: CommandHandlerContext,
 ): AppAgentProvider {
     return {
         getAppAgentNames() {
-            return Object.keys(inlineAgentManifests);
+            return Object.keys(builtinAgentManifest);
         },
         async getAppAgentManifest(appAgentName: string) {
-            const manifest = inlineAgentManifests[appAgentName];
+            const manifest = builtinAgentManifest[appAgentName];
             if (manifest === undefined) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
@@ -38,17 +43,33 @@ export function createInlineAppAgentProvider(
             if (context === undefined) {
                 throw new Error("Context is required to load inline agent");
             }
-            const handlers = inlineHandlers[appAgentName];
-            if (handlers === undefined) {
+            const agent = builtinAgents[appAgentName];
+            if (agent === undefined) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
-            return { ...handlers, initializeAgentContext: async () => context };
+            return { ...agent, initializeAgentContext: async () => context };
         },
         unloadAppAgent(appAgentName: string) {
             // Inline agents are always loaded
-            if (inlineAgentManifests[appAgentName] === undefined) {
+            if (builtinAgentManifest[appAgentName] === undefined) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
         },
     };
+}
+
+const builtinSchemaNames =
+    getSchemaNamesForAppAgentManifests(builtinAgentManifest);
+
+export function getAllSchemaNames(provider: ActionConfigProvider): string[] {
+    return [
+        ...builtinSchemaNames,
+        ...provider
+            .getActionConfigs()
+            .map((actionConfig) => actionConfig.schemaName),
+    ];
+}
+
+export function getAllActionConfigProvider(providers: AppAgentProvider[]) {
+    return createActionConfigProvider(providers, builtinAgentManifest);
 }

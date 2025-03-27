@@ -16,10 +16,11 @@ export type AppAgentManifest = {
     commandDefaultEnabled?: boolean;
 } & ActionManifest;
 
+export type SchemaFormat = "ts" | "pas";
 export type SchemaManifest = {
     description: string;
     schemaType: string;
-    schemaFile: string | { type: "ts"; content: string };
+    schemaFile: string | { format: SchemaFormat; content: string };
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
@@ -135,6 +136,7 @@ export type StorageListOptions = {
 export interface TokenCachePersistence {
     load(): Promise<string | null>;
     save(token: string): Promise<void>;
+    delete(): Promise<boolean>;
 }
 
 export interface Storage {

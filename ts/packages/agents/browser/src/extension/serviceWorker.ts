@@ -10,36 +10,24 @@ import {
 } from "../../dist/common/webAgentMessageTypes.mjs";
 import { setStoredPageProperty, getStoredPageProperty } from "./storage";
 
-async function getConfigValues(): Promise<Record<string, string>> {
-    const envLocation = chrome.runtime.getURL(".env");
-    const content = await fetch(envLocation);
-    var vals: Record<string, string> = {};
-    var text = await content.text();
-    var lines = text.split(/[\r\n]+/g);
-    for (var i = 0; i < lines.length; i++) {
-        var splitPoint = lines[i].indexOf("=");
-        var key = lines[i].substring(0, splitPoint).trim();
-        var value = lines[i].substring(splitPoint + 1).trim();
-        if (value.startsWith("'") || value.startsWith('"')) {
-            value = value.slice(1, -1);
-        }
-
-        vals[key] = value;
-    }
-
-    return vals;
+async function getSettings(): Promise<Record<string, string>> {
+    const settings = await chrome.storage.sync.get({
+        websocketHost: "ws://localhost:8080/",
+    });
+    return settings;
 }
 
 let webSocket: any = null;
-let configValues: Record<string, string>;
+let settings: {
+    [key: string]: any;
+};
 
 export async function createWebSocket() {
-    if (!configValues) {
-        configValues = await getConfigValues();
+    if (!settings) {
+        settings = await getSettings();
     }
 
-    let socketEndpoint =
-        configValues["WEBSOCKET_HOST"] ?? "ws://localhost:8080/";
+    let socketEndpoint = settings.websocketHost ?? "ws://localhost:8080/";
 
     socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
@@ -123,18 +111,6 @@ async function ensureWebsocketConnected() {
                             }),
                         );
                     }
-                } else if (schema.startsWith("browser.")) {
-                    const message = await runSiteAction(schema, {
-                        actionName: actionName,
-                        parameters: data.params,
-                    });
-
-                    webSocket.send(
-                        JSON.stringify({
-                            id: data.id,
-                            result: message,
-                        }),
-                    );
                 }
             }
             console.log(`Browser websocket client received message: ${text}`);
@@ -182,20 +158,71 @@ export function reconnectWebSocket() {
     }, 5 * 1000);
 }
 
-async function getActiveTab(): Promise<chrome.tabs.Tab> {
-    let currentWindow = await chrome.windows.getCurrent();
+function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
+    return new Promise((resolve) => {
+        chrome.windows.getAll({ populate: true }, (windows) => {
+            // Filter out DevTools windows. These will sometimes intefere with automation operations
+            const contentWindows = windows.filter((window) => {
+                if (window.type === "devtools" || window.type === "panel") {
+                    return false;
+                }
 
-    const [tab] = await chrome.tabs.query({
-        active: true,
-        windowId: currentWindow.id,
+                // DevTools can also be of type 'normal' but with specific properties
+                if (window.type === "normal") {
+                    if (window.tabs && window.tabs.length > 0) {
+                        const firstTabUrl = window.tabs[0].url;
+                        if (
+                            firstTabUrl &&
+                            (firstTabUrl.startsWith("chrome-devtools://") ||
+                                (firstTabUrl.startsWith("chrome://") &&
+                                    firstTabUrl.includes("devtools")))
+                        ) {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            });
+
+            if (contentWindows.length === 0) {
+                resolve(undefined);
+                return;
+            }
+
+            const focusedWindow = contentWindows.find(
+                (window) => window.focused,
+            );
+            if (focusedWindow && focusedWindow.tabs) {
+                const activeTab = focusedWindow.tabs.find((tab) => tab.active);
+                if (activeTab) {
+                    resolve(activeTab);
+                    return;
+                }
+            }
+
+            // If we couldn't find a focused window or an active tab in it,
+            // fall back to the first active tab in any content window
+            for (const window of contentWindows) {
+                if (window.tabs) {
+                    const activeTab = window.tabs.find((tab) => tab.active);
+                    if (activeTab) {
+                        resolve(activeTab);
+                        return;
+                    }
+                }
+            }
+
+            resolve(undefined);
+        });
     });
-
-    return tab;
 }
 
-async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | null> {
+async function getTabByTitle(
+    title: string,
+): Promise<chrome.tabs.Tab | undefined> {
     if (!title) {
-        return null;
+        return undefined;
     }
 
     const getTabAction = {
@@ -218,7 +245,7 @@ async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | null> {
             return tabs[0];
         }
     }
-    return null;
+    return undefined;
 }
 
 async function awaitPageLoad(targetTab: chrome.tabs.Tab) {
@@ -253,31 +280,6 @@ async function awaitPageIncrementalUpdates(targetTab: chrome.tabs.Tab) {
 
     if (!loadingCompleted) {
         console.error("Incremental loading did not complete for this page.");
-    }
-}
-
-async function getLatLongForLocation(locationName: string) {
-    const vals = await getConfigValues();
-    const mapsApiKey = vals["BING_MAPS_API_KEY"];
-    const response = await fetch(
-        `http://dev.virtualearth.net/REST/v1/Locations/${locationName}?key=${mapsApiKey}`,
-        {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-            },
-        },
-    );
-    if (response.ok) {
-        const json = await response.json();
-        const coordinates = json.resourceSets[0].resources[0].point.coordinates;
-        return {
-            lat: coordinates[0],
-            long: coordinates[1],
-        };
-    } else {
-        console.log(response.statusText);
-        return undefined;
     }
 }
 
@@ -321,11 +323,9 @@ async function downloadImageAsFile(
 
 async function getTabScreenshot(downloadImage: boolean) {
     const targetTab = await getActiveTab();
-
-    //const dataUrl = await chrome.tabs.captureVisibleTab({quality:50});
     const dataUrl = await chrome.tabs.captureVisibleTab({ quality: 100 });
     if (downloadImage) {
-        await downloadImageAsFile(targetTab, dataUrl, "test.jpg");
+        await downloadImageAsFile(targetTab!, dataUrl, "test.jpg");
     }
 
     return dataUrl;
@@ -343,16 +343,15 @@ type BoundingBox = {
 async function getTabAnnotatedScreenshot(downloadImage: boolean) {
     const targetTab = await getActiveTab();
 
-    const boundingBoxes = await chrome.tabs.sendMessage(targetTab.id!, {
+    const boundingBoxes = await chrome.tabs.sendMessage(targetTab?.id!, {
         type: "get_element_bounding_boxes",
     });
 
-    //const dataUrl = await chrome.tabs.captureVisibleTab({quality:50});
-    const dataUrl = await chrome.tabs.captureVisibleTab(targetTab.windowId, {
+    const dataUrl = await chrome.tabs.captureVisibleTab(targetTab?.windowId!, {
         quality: 100,
     });
     if (downloadImage) {
-        await downloadImageAsFile(targetTab, dataUrl, "tabScreenshot.jpg");
+        await downloadImageAsFile(targetTab!, dataUrl, "tabScreenshot.jpg");
     }
 
     const annotate = async (dataUrl: string, boundingBoxes: any) => {
@@ -501,7 +500,7 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
 
     const annotationResults = await chrome.scripting.executeScript({
         func: annotate,
-        target: { tabId: targetTab.id! },
+        target: { tabId: targetTab?.id! },
         args: [dataUrl, boundingBoxes],
     });
 
@@ -509,7 +508,7 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
         const annotatedScreen = annotationResults[0];
         if (downloadImage) {
             await downloadImageAsFile(
-                targetTab,
+                targetTab!,
                 annotatedScreen.result,
                 "testAnnotated.jpg",
             );
@@ -521,105 +520,12 @@ async function getTabAnnotatedScreenshot(downloadImage: boolean) {
     return dataUrl;
 }
 
-async function getTabAccessibilityTree(targetTab: chrome.tabs.Tab) {
-    const debugTarget = { tabId: targetTab.id };
-    try {
-        await chrome.debugger.attach(debugTarget, "1.2");
-        await chrome.debugger.sendCommand(debugTarget, "Accessibility.enable");
-
-        const accessibilityTree = await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getFullAXTree",
-        );
-        console.log(accessibilityTree);
-
-        const rootNode = (await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getRootAXNode",
-        )) as any;
-        console.log(rootNode);
-
-        const partialTree = await chrome.debugger.sendCommand(
-            debugTarget,
-            "Accessibility.getPartialAXTree",
-            { backendNodeId: rootNode.node.backendDOMNodeId },
-        );
-        console.log(partialTree);
-    } finally {
-        await chrome.debugger.detach(debugTarget);
-    }
-}
-
-async function getTabHTML(
-    targetTab: chrome.tabs.Tab,
-    fullSize: boolean,
-    downloadAsFile: boolean,
-    useDebugAPI?: boolean,
-    useTimestampIds?: boolean,
-) {
-    if (!useDebugAPI) {
-        let outerHTML = await chrome.tabs.sendMessage(targetTab.id!, {
-            type: "get_reduced_html",
-            fullSize: fullSize,
-            frameId: 0,
-            useTimestampIds: useTimestampIds,
-        });
-
-        if (downloadAsFile) {
-            await downloadStringAsFile(targetTab, outerHTML, "tabHTML.html");
-        }
-
-        return outerHTML;
-    } else {
-        const debugTarget = { tabId: targetTab.id };
-        try {
-            await chrome.debugger.attach(debugTarget, "1.2");
-            await chrome.debugger.sendCommand(debugTarget, "DOM.enable");
-
-            const rootNode = (await chrome.debugger.sendCommand(
-                debugTarget,
-                "DOM.getDocument",
-                { depth: -1, pierce: true },
-            )) as any;
-            console.log(rootNode);
-
-            let outerHTML = (await chrome.debugger.sendCommand(
-                debugTarget,
-                "DOM.getOuterHTML",
-                { backendNodeId: rootNode.root.backendNodeId },
-            )) as any;
-
-            if (!fullSize) {
-                outerHTML = await chrome.tabs.sendMessage(targetTab.id!, {
-                    type: "get_reduced_html",
-                    inputHtml: outerHTML.outerHTML,
-                });
-            }
-
-            if (downloadAsFile) {
-                await downloadStringAsFile(
-                    targetTab,
-                    outerHTML,
-                    "tabHTML.html",
-                );
-            }
-
-            return outerHTML;
-        } finally {
-            await chrome.debugger.detach(debugTarget);
-        }
-    }
-
-    return undefined;
-}
-
 async function getTabHTMLFragments(
     targetTab: chrome.tabs.Tab,
-    fullSize: boolean,
-    downloadAsFile: boolean,
-    extractText: boolean,
-    useTimestampIds: boolean,
-    maxFragmentSize: 16000,
+    fullSize?: boolean,
+    downloadAsFile?: boolean,
+    extractText?: boolean,
+    useTimestampIds?: boolean,
 ) {
     const frames = await chrome.webNavigation.getAllFrames({
         tabId: targetTab.id!,
@@ -683,52 +589,6 @@ async function getTabHTMLFragments(
     return htmlFragments;
 }
 
-async function getTabHTMLFragmentsBySize(
-    targetTab: chrome.tabs.Tab,
-    fullSize: boolean,
-    downloadAsFile: boolean,
-    maxFragmentSize: 16000,
-) {
-    const frames = await chrome.webNavigation.getAllFrames({
-        tabId: targetTab.id!,
-    });
-    let htmlFragments: any[] = [];
-    if (frames) {
-        for (let i = 0; i < frames?.length; i++) {
-            if (frames[i].url == "about:blank") {
-                continue;
-            }
-            try {
-                const frameFragments = await chrome.tabs.sendMessage(
-                    targetTab.id!,
-                    {
-                        type: "get_maxSize_html_fragments",
-                        frameId: frames[i].frameId,
-                        maxFragmentSize: 16000,
-                    },
-                    { frameId: frames[i].frameId },
-                );
-
-                if (frameFragments) {
-                    if (downloadAsFile) {
-                        for (let j = 0; j < frameFragments.length; j++) {
-                            await downloadStringAsFile(
-                                targetTab,
-                                frameFragments[j].content,
-                                `tabHTML_${frames[i].frameId}_${j}.html`,
-                            );
-                        }
-                    }
-
-                    htmlFragments = htmlFragments.concat(frameFragments);
-                }
-            } catch {}
-        }
-    }
-
-    return htmlFragments;
-}
-
 async function getFilteredHTMLFragments(
     targetTab: chrome.tabs.Tab,
     inputHtmlFragments: any[],
@@ -766,18 +626,6 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
     await ensureWebsocketConnected();
     if (targetTab.url) {
         const host = new URL(targetTab.url).host;
-
-        if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
-            method = "enableSiteTranslator";
-            translatorName = "browser.paleoBioDb";
-            currentSiteTranslator = "browser.paleoBioDb";
-        } else {
-            if (currentSiteTranslator == "browser.paleoBioDb") {
-                method = "disableSiteTranslator";
-                translatorName = "browser.paleoBioDb";
-                currentSiteTranslator = "";
-            }
-        }
 
         if (
             targetTab.url.startsWith("https://embed.universaluclick.com/") ||
@@ -824,9 +672,9 @@ async function toggleSiteTranslator(targetTab: chrome.tabs.Tab) {
         }
 
         if (translatorName === "") {
-            // default to schemaFinder
+            // default to actionDiscovery
             method = "enableSiteTranslator";
-            translatorName = "browser.schemaFinder";
+            translatorName = "browser.actionDiscovery";
             currentSiteTranslator = translatorName;
         }
 
@@ -911,7 +759,7 @@ async function runBrowserAction(action: any) {
             break;
         }
         case "closeTab": {
-            let targetTab: chrome.tabs.Tab | null = null;
+            let targetTab: chrome.tabs.Tab | undefined = undefined;
             if (action.parameters?.title) {
                 targetTab = await getTabByTitle(action.parameters.title);
             } else {
@@ -947,7 +795,7 @@ async function runBrowserAction(action: any) {
         }
         case "followLinkByText": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "get_page_links_by_query",
                 query: action.parameters.keywords,
             });
@@ -958,7 +806,7 @@ async function runBrowserAction(action: any) {
                         url: response.url,
                     });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, {
+                    await chrome.tabs.update(targetTab?.id!, {
                         url: response.url,
                     });
                 }
@@ -970,7 +818,7 @@ async function runBrowserAction(action: any) {
         }
         case "followLinkByPosition": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "get_page_links_by_position",
                 position: action.parameters.position,
             });
@@ -981,7 +829,7 @@ async function runBrowserAction(action: any) {
                         url: response.url,
                     });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, {
+                    await chrome.tabs.update(targetTab?.id!, {
                         url: response.url,
                     });
                 }
@@ -993,26 +841,26 @@ async function runBrowserAction(action: any) {
         }
         case "scrollDown": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.sendMessage(targetTab.id!, {
+            await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "scroll_down_on_page",
             });
             break;
         }
         case "scrollUp": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.sendMessage(targetTab.id!, {
+            await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "scroll_up_on_page",
             });
             break;
         }
         case "goBack": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.goBack(targetTab.id!);
+            await chrome.tabs.goBack(targetTab?.id!);
             break;
         }
         case "goForward": {
             const targetTab = await getActiveTab();
-            await chrome.tabs.goForward(targetTab.id!);
+            await chrome.tabs.goForward(targetTab?.id!);
             break;
         }
         case "openFromHistory": {
@@ -1024,7 +872,7 @@ async function runBrowserAction(action: any) {
 
             if (historyItems && historyItems.length > 0) {
                 console.log(historyItems);
-                if (targetTab.id) {
+                if (targetTab?.id) {
                     chrome.tabs.update(targetTab.id, {
                         url: historyItems[0].url,
                     });
@@ -1053,7 +901,7 @@ async function runBrowserAction(action: any) {
         }
         case "readPage": {
             const targetTab = await getActiveTab();
-            const article = await chrome.tabs.sendMessage(targetTab.id!, {
+            const article = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "read_page_content",
             });
 
@@ -1084,7 +932,7 @@ async function runBrowserAction(action: any) {
         }
         case "zoomIn": {
             const targetTab = await getActiveTab();
-            if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
+            if (targetTab?.url?.startsWith("https://paleobiodb.org/")) {
                 const result = await chrome.tabs.sendMessage(targetTab.id!, {
                     type: "run_paleoBioDb_action",
                     action: action,
@@ -1105,7 +953,7 @@ async function runBrowserAction(action: any) {
         }
         case "zoomOut": {
             const targetTab = await getActiveTab();
-            if (targetTab.url?.startsWith("https://paleobiodb.org/")) {
+            if (targetTab?.url?.startsWith("https://paleobiodb.org/")) {
                 const result = await chrome.tabs.sendMessage(targetTab.id!, {
                     type: "run_paleoBioDb_action",
                     action: action,
@@ -1141,21 +989,15 @@ async function runBrowserAction(action: any) {
             break;
         }
 
-        case "getUITree": {
-            const targetTab = await getActiveTab();
-            responseObject = await getTabAccessibilityTree(targetTab);
-            break;
-        }
         case "getHTML": {
             const targetTab = await getActiveTab();
 
             responseObject = await getTabHTMLFragments(
-                targetTab,
+                targetTab!,
                 action.parameters?.fullHTML,
                 action.parameters?.downloadAsFile,
                 action.parameters?.extractText,
                 action.parameters?.useTimestampIds,
-                16000,
             );
             break;
         }
@@ -1163,7 +1005,7 @@ async function runBrowserAction(action: any) {
             const targetTab = await getActiveTab();
 
             responseObject = await getFilteredHTMLFragments(
-                targetTab,
+                targetTab!,
                 action.parameters.fragments,
                 action.parameters.cssSelectorsToKeep,
             );
@@ -1171,19 +1013,19 @@ async function runBrowserAction(action: any) {
         }
         case "getPageUrl": {
             const targetTab = await getActiveTab();
-            responseObject = targetTab.url;
+            responseObject = targetTab?.url;
             break;
         }
         case "awaitPageLoad": {
             const targetTab = await getActiveTab();
-            await awaitPageLoad(targetTab);
-            await awaitPageIncrementalUpdates(targetTab);
-            responseObject = targetTab.url;
+            await awaitPageLoad(targetTab!);
+            await awaitPageIncrementalUpdates(targetTab!);
+            responseObject = targetTab?.url;
             break;
         }
         case "clickOnElement": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_ui_event",
                 action: action,
             });
@@ -1191,7 +1033,7 @@ async function runBrowserAction(action: any) {
         }
         case "enterTextInElement": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_ui_event",
                 action: action,
             });
@@ -1199,7 +1041,15 @@ async function runBrowserAction(action: any) {
         }
         case "enterTextOnPage": {
             const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
+                type: "run_ui_event",
+                action: action,
+            });
+            break;
+        }
+        case "setDropdownValue": {
+            const targetTab = await getActiveTab();
+            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
                 type: "run_ui_event",
                 action: action,
             });
@@ -1207,7 +1057,7 @@ async function runBrowserAction(action: any) {
         }
         case "getPageSchema": {
             const targetTab = await getActiveTab();
-            const key = action.parameters.url ?? targetTab.url;
+            const key = action.parameters.url ?? targetTab?.url;
             const value = await chrome.storage.session.get(["pageSchema"]);
             if (value && Array.isArray(value.pageSchema)) {
                 const targetSchema = value.pageSchema.filter(
@@ -1259,71 +1109,12 @@ async function runBrowserAction(action: any) {
             );
             break;
         }
-        case "getConfiguration": {
-            responseObject = await getConfigValues();
-            break;
-        }
     }
 
     return {
         message: confirmationMessage,
         data: responseObject,
     };
-}
-
-async function runSiteAction(schemaName: string, action: any) {
-    let confirmationMessage = "OK";
-    switch (schemaName) {
-        case "browser.paleoBioDb": {
-            const targetTab = await getActiveTab();
-            const actionName =
-                action.actionName ?? action.fullActionName.split(".").at(-1);
-            if (
-                actionName == "setMapLocation" &&
-                action.parameters.locationName
-            ) {
-                const latLong = await getLatLongForLocation(
-                    action.parameters.locationName,
-                );
-                if (latLong) {
-                    action.parameters.latitude = latLong.lat;
-                    action.parameters.longitude = latLong.long;
-                }
-            }
-
-            const result = await chrome.tabs.sendMessage(targetTab.id!, {
-                type: "run_paleoBioDb_action",
-                action: action,
-            });
-
-            // to do: update confirmation to include current page screenshot.
-            break;
-        }
-        case "browser.crossword": {
-            const targetTab = await getActiveTab();
-
-            const result = await chrome.tabs.sendMessage(targetTab.id!, {
-                type: "run_crossword_action",
-                action: action,
-            });
-
-            // to do: update confirmation to include current page screenshot.
-            break;
-        }
-        case "browser.commerce": {
-            const targetTab = await getActiveTab();
-
-            const result = await chrome.tabs.sendMessage(targetTab.id!, {
-                type: "run_commerce_action",
-                action: action,
-            });
-
-            // to do: update confirmation to include current page screenshot.
-            break;
-        }
-    }
-
-    return confirmationMessage;
 }
 
 async function sendActionToAgent(action: AppAction) {
@@ -1453,7 +1244,7 @@ chrome.windows?.onFocusChanged.addListener(async (windowId) => {
     }
 
     const targetTab = await getActiveTab();
-    await toggleSiteTranslator(targetTab);
+    await toggleSiteTranslator(targetTab!);
 
     if (embeddingsInitializedWindowId !== windowId) {
         const tabs = await chrome.tabs.query({
@@ -1496,20 +1287,6 @@ chrome.runtime.onStartup.addListener(async () => {
         reconnectWebSocket();
     }
 });
-
-chrome.runtime.onMessageExternal.addListener(
-    (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-        async () => {
-            switch (message.type) {
-                case "crosswordAction": {
-                    const response = await runBrowserAction(message.body);
-                    sendResponse(response);
-                    break;
-                }
-            }
-        };
-    },
-);
 
 chrome.runtime.onMessage.addListener(
     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
@@ -1560,8 +1337,10 @@ chrome.runtime.onMessage.addListener(
                         actionName: "getIntentFromRecording",
                         parameters: {
                             recordedActionName: message.actionName,
-                            recordedActionDescription: message.description,
+                            recordedActionDescription:
+                                message.actionDescription,
                             recordedActionSteps: message.steps,
+                            existingActionNames: message.existingActionNames,
                             fragments: message.html,
                             screenshot: message.screenshot,
                         },
@@ -1569,6 +1348,7 @@ chrome.runtime.onMessage.addListener(
 
                     sendResponse({
                         intent: schemaResult.intent,
+                        intentJson: schemaResult.intentJson,
                         actions: schemaResult.actions,
                         intentTypeDefinition: schemaResult.intentTypeDefinition,
                     });
@@ -1577,7 +1357,7 @@ chrome.runtime.onMessage.addListener(
                 case "startRecording": {
                     const targetTab = await getActiveTab();
                     const response = await chrome.tabs.sendMessage(
-                        targetTab.id!,
+                        targetTab?.id!,
                         {
                             type: "startRecording",
                         },
@@ -1589,7 +1369,7 @@ chrome.runtime.onMessage.addListener(
                 case "stopRecording": {
                     const targetTab = await getActiveTab();
                     const response = await chrome.tabs.sendMessage(
-                        targetTab.id!,
+                        targetTab?.id!,
                         {
                             type: "stopRecording",
                         },
@@ -1607,43 +1387,52 @@ chrome.runtime.onMessage.addListener(
                     sendResponse(screenshotUrl);
                     break;
                 }
+                case "captureHtmlFragments": {
+                    const targetTab = await getActiveTab();
+
+                    const htmlFragments = await getTabHTMLFragments(targetTab!);
+                    sendResponse(htmlFragments);
+                    break;
+                }
                 case "saveAnnotatedScreenshot": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         annotatedScreenshot: message.screenshot,
                     });
                     sendResponse({});
                     break;
                 }
                 case "getAnnotatedScreenshot": {
-                    const data = await chrome.storage.local.get(
+                    const data = await chrome.storage.session.get(
                         "annotatedScreenshot",
                     );
                     sendResponse(data.annotatedScreenshot);
                     break;
                 }
                 case "saveRecordedActionPageHTML": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         recordedActionPageHTML: message.html,
                     });
                     sendResponse({});
                     break;
                 }
                 case "getRecordedActionPageHTML": {
-                    const data = await chrome.storage.local.get(
+                    const data = await chrome.storage.session.get(
                         "recordedActionPageHTML",
                     );
                     sendResponse(data.recordedActionPageHTML);
                     break;
                 }
                 case "saveRecordedActions": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         recordedActions: message.recordedActions,
+                        recordedActionPageHTML: message.recordedActionPageHTML,
+                        annotatedScreenshot: message.recordedActionScreenshot,
                     });
                     sendResponse({});
                     break;
                 }
                 case "recordingStopped": {
-                    await chrome.storage.local.set({
+                    await chrome.storage.session.set({
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
@@ -1653,17 +1442,26 @@ chrome.runtime.onMessage.addListener(
                     break;
                 }
                 case "getRecordedActions": {
-                    const data =
-                        await chrome.storage.local.get("recordedActions");
-                    sendResponse(data.recordedActions);
+                    const result = await chrome.storage.session.get([
+                        "recordedActions",
+                        "recordedActionPageHTML",
+                        "annotatedScreenshot",
+                    ]);
+
+                    sendResponse(result);
                     break;
                 }
                 case "clearRecordedActions": {
-                    const data =
-                        await chrome.storage.local.get("recordedActions");
-                    if (data) {
-                        await chrome.storage.local.remove("recordedActions");
+                    try {
+                        await chrome.storage.local.remove([
+                            "recordedActions",
+                            "recordedActionPageHTML",
+                            "annotatedScreenshot",
+                        ]);
+                    } catch (error) {
+                        console.error("Error clearing storage data:", error);
                     }
+
                     sendResponse({});
                     break;
                 }
@@ -1679,11 +1477,13 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Refresh crossword agent",
         id: "reInitCrosswordPage",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
         title: "Clear crossword cache",
         id: "clearCrosswordPageCache",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     // Add separator
@@ -1695,7 +1495,31 @@ chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         title: "Discover page Schema",
         id: "discoverPageSchema",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
+
+    chrome.contextMenus.create({
+        id: "sidepanel-registerAgent",
+        title: "Update Page Agent",
+        contexts: ["all"],
+        documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
+    });
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "sync" && changes.websocketHost) {
+        console.log("WebSocket host changed:", changes.websocketHost.newValue);
+
+        if (settings !== undefined && webSocket !== undefined) {
+            settings.websocketHost = changes.websocketHost.newValue;
+
+            // close the socket to force reconnect
+            try {
+                webSocket.close();
+                webSocket = undefined;
+            } catch {}
+        }
+    }
 });
 
 chrome.contextMenus?.onClicked.addListener(
@@ -1745,6 +1569,13 @@ chrome.contextMenus?.onClicked.addListener(
             }
             case "discoverPageSchema": {
                 await chrome.sidePanel.open({ tabId: tab.id! });
+                break;
+            }
+            case "sidepanel-registerAgent": {
+                const schemaResult = await sendActionToAgent({
+                    actionName: "registerPageDynamicAgent",
+                    parameters: {},
+                });
                 break;
             }
         }

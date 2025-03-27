@@ -8,15 +8,6 @@
     "schemaType": "BrowserActions"
   },
   "subActionManifests": {
-    "paleoBioDb": {
-      "defaultEnabled": false,
-      "transient": true,
-      "schema": {
-        "description": "This enables users to explore paleological data. Users can filter fossil data by location, by geological time and by taxon.",
-        "schemaFile": "./paleoBioDb/schema.mts",
-        "schemaType": "PaleoBioDbActions"
-      }
-    },
     "crossword": {
       "defaultEnabled": false,
       "transient": true,
@@ -44,7 +35,7 @@
         "schemaType": "InstacartActions"
       }
     },
-    "schemaFinder": {
+    "actionDiscovery": {
       "defaultEnabled": false,
       "transient": true,
       "schema": {

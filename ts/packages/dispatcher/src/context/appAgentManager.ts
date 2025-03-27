@@ -11,7 +11,10 @@ import {
     convertToActionConfig,
     ActionConfig,
 } from "../translation/actionConfig.js";
-import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
+import {
+    ActionConfigProvider,
+    ActionSchemaFile,
+} from "../translation/actionConfigProvider.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
@@ -22,12 +25,12 @@ import {
     EmbeddingCache,
 } from "../translation/actionSchemaSemanticMap.js";
 import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
-import { ActionSchemaFile } from "action-schema";
 import path from "path";
 import { callEnsureError } from "../utils/exceptions.js";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
+const debugLoad = registerDebug("typeagent:dispatcher:agents:load");
 
 type AppAgentRecord = {
     name: string;
@@ -254,7 +257,7 @@ export class AppAgentManager implements ActionConfigProvider {
                     this.transientAgents[schemaName] = false;
                 }
                 if (config.injected) {
-                    for (const actionName of actionSchemaFile.actionSchemas.keys()) {
+                    for (const actionName of actionSchemaFile.parsedActionSchema.actionSchemas.keys()) {
                         this.injectedSchemaForActionName.set(
                             actionName,
                             schemaName,
@@ -646,7 +649,11 @@ export class AppAgentManager implements ActionConfigProvider {
                     `Internal error: no provider to load the app agent: ${record.name}`,
                 );
             }
+            const start = performance.now();
             record.appAgent = await record.provider.loadAppAgent(record.name);
+            debugLoad(
+                `App agent loaded: ${record.name} (${(performance.now() - start).toFixed(0)}ms)`,
+            );
         }
         return record.appAgent;
     }
@@ -693,16 +700,17 @@ export function getAppAgentStateSettings(
     }
     const result: AppAgentStateSettings = {};
     if (typeof settings === "boolean" || Array.isArray(settings)) {
-        const entries = agents
-            .getAppAgentNames()
-            .map((name) => [
+        for (const key of appAgentStateKeys) {
+            const names =
+                key === "commands"
+                    ? agents.getAppAgentNames()
+                    : agents.getSchemaNames();
+            const entries = names.map((name) => [
                 name,
                 typeof settings === "boolean"
                     ? settings
-                    : settings.includes(name),
+                    : settings.includes(getAppAgentName(name)),
             ]);
-
-        for (const key of appAgentStateKeys) {
             const state = Object.fromEntries(entries);
             for (const name of alwaysEnabledAgents[key]) {
                 if (state[name] === false) {
@@ -719,16 +727,18 @@ export function getAppAgentStateSettings(
             continue;
         }
         const alwaysEnabled = alwaysEnabledAgents[key];
-        const entries = agents
-            .getAppAgentNames()
-            .map((name) => [
-                name,
-                alwaysEnabled.includes(name)
-                    ? true
-                    : typeof state === "boolean"
-                      ? state
-                      : state.includes(name),
-            ]);
+        const names =
+            key === "commands"
+                ? agents.getAppAgentNames()
+                : agents.getSchemaNames();
+        const entries = names.map((name) => [
+            name,
+            alwaysEnabled.includes(name)
+                ? true
+                : typeof state === "boolean"
+                  ? state
+                  : state.includes(name),
+        ]);
         result[key] = Object.fromEntries(entries);
     }
     return Object.keys(result).length === 0 ? undefined : result;

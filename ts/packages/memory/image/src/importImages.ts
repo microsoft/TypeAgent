@@ -18,6 +18,8 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
+    createTermEmbeddingCache,
+    buildTransientSecondaryIndexes,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -30,7 +32,7 @@ import { isDirectoryPath } from "typeagent";
 export interface ImageCollectionData
     extends IConversationDataWithIndexes<Image> {}
 
-export class Image implements IMessage<ImageMeta> {
+export class Image implements IMessage {
     public timestamp: string | undefined;
     constructor(
         public textChunks: string[],
@@ -38,6 +40,9 @@ export class Image implements IMessage<ImageMeta> {
         public tags: string[] = [],
     ) {
         this.timestamp = metadata.img.dateTaken;
+    }
+    getKnowledge(): kpLib.KnowledgeResponse {
+        return this.metadata.getKnowledge();
     }
 }
 
@@ -345,7 +350,7 @@ export class ImageMeta implements IKnowledgeSource {
     }
 }
 
-export class ImageCollection implements IConversation<ImageMeta> {
+export class ImageCollection implements IConversation {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
@@ -357,9 +362,7 @@ export class ImageCollection implements IConversation<ImageMeta> {
     ) {
         this.settings = createConversationSettings();
         this.semanticRefIndex = new ConversationIndex();
-        this.secondaryIndexes = new ConversationSecondaryIndexes(
-            this.settings.relatedTermIndexSettings,
-        );
+        this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
     }
 
     public addMetadataToIndex() {
@@ -391,11 +394,18 @@ export class ImageCollection implements IConversation<ImageMeta> {
         }
 
         this.addMetadataToIndex();
-        await buildSecondaryIndexes(this, true, eventHandler);
-
-        let indexingResult: IndexingResults = {
-            chunksIndexedUpto: { messageIndex: this.messages.length - 1 },
+        const indexingResult: IndexingResults = {
+            semanticRefs: {
+                completedUpto: { messageOrdinal: this.messages.length - 1 },
+            },
         };
+        indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
+            this,
+            this.settings,
+            eventHandler,
+        );
+        this.buildCaches();
+
         return indexingResult;
     }
 
@@ -415,6 +425,15 @@ export class ImageCollection implements IConversation<ImageMeta> {
     public async deserialize(data: ImageCollectionData): Promise<void> {
         this.nameTag = data.nameTag;
         this.messages = data.messages;
+        this.messages = data.messages.map((m) => {
+            const image = new Image(
+                m.textChunks,
+                new ImageMeta(m.metadata.fileName, m.metadata.img),
+                m.tags,
+            );
+            image.timestamp = m.timestamp;
+            return image;
+        });
         this.semanticRefs = data.semanticRefs;
         this.tags = data.tags;
         if (data.semanticIndexData) {
@@ -427,7 +446,16 @@ export class ImageCollection implements IConversation<ImageMeta> {
                 data.relatedTermsIndexData,
             );
         }
-        await buildSecondaryIndexes(this, false);
+        await buildTransientSecondaryIndexes(this, this.settings);
+        this.buildCaches();
+    }
+
+    private buildCaches(): void {
+        createTermEmbeddingCache(
+            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
+            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
+            64,
+        );
     }
 
     public async writeToFile(

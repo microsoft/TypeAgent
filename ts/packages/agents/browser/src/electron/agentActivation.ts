@@ -20,11 +20,6 @@ function setupSiteAgent() {
         const pageUrl = window.location.href;
         const host = new URL(pageUrl).host;
 
-        if (host === "paleobiodb.org" || host === "www.paleobiodb.org") {
-            siteAgent = "browser.paleoBioDb";
-            window.browserConnect.enableSiteAgent(siteAgent);
-        }
-
         if (
             pageUrl.startsWith("https://embed.universaluclick.com/") ||
             pageUrl.startsWith("https://data.puzzlexperts.com/puzzleapp") ||
@@ -64,8 +59,8 @@ function setupSiteAgent() {
         }
 
         if (siteAgent === "") {
-            // default to schemaFinder
-            siteAgent = "browser.schemaFinder";
+            // default to actionDiscovery
+            siteAgent = "browser.actionDiscovery";
             window.browserConnect.enableSiteAgent(siteAgent);
         }
 

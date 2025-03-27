@@ -264,7 +264,9 @@ async function persistSchemaDefinitions(
     });
     for (const definition of schemaDefinitions) {
         if (!writeStream.write(`${definition}\n\n`)) {
-            await new Promise((resolve) => writeStream.once("drain", resolve));
+            await new Promise<void>((resolve) =>
+                writeStream.once("drain", resolve),
+            );
         }
     }
     writeStream.end();
@@ -285,6 +287,11 @@ export async function processVscodeCommandsJsonFile(
     maxNodestoProcess: number = -1,
     verbose: boolean = false,
 ) {
+    if (!fs.existsSync(jsonFilePath)) {
+        console.error(`JSON file not found: ${jsonFilePath}`);
+        return;
+    }
+
     const jsonData = JSON.parse(fs.readFileSync(jsonFilePath, "utf8"));
     const embeddingModel = openai.createEmbeddingModel();
 
@@ -292,6 +299,7 @@ export async function processVscodeCommandsJsonFile(
     let processedNodeCount = 0;
     let schemaCount = 0;
     let aggrData: any = [];
+    let actionTypeNames: Set<string> = new Set();
 
     for (const node of jsonData) {
         try {
@@ -323,6 +331,8 @@ export async function processVscodeCommandsJsonFile(
                 schemaCount++;
 
                 let actionSchemaData: any = parseTypeComponents(schemaStr);
+                actionTypeNames.add(actionSchemaData.typeName);
+
                 const actionString: string = `${actionSchemaData.typeName} ${actionSchemaData.actionName} ${actionSchemaData.comments.join(" ")}`;
                 let actionEmbedding: Float32Array =
                     await generateEmbeddingWithRetry(
@@ -386,6 +396,13 @@ export async function processVscodeCommandsJsonFile(
         processedNodeCount,
         schemaCount,
     );
+
+    // print action type names separates by "|"
+    let actionTypeNamesStr = Array.from(actionTypeNames).join("|");
+    console.log("------------------------------------------------");
+    console.log(`Action Type Names: ${actionTypeNamesStr}\n`);
+    console.log(`Total action type names: ${actionTypeNames.size}\n`);
+    console.log("------------------------------------------------\n");
 
     if (aggrData.length > 0) {
         const jsonlFileName =

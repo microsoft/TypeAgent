@@ -7,8 +7,10 @@ import {
     arg,
     argBool,
     argNum,
+    askYesNo,
     CommandHandler,
     CommandMetadata,
+    InteractiveIo,
     NamedArgs,
     parseNamedArguments,
     ProgressBar,
@@ -31,10 +33,12 @@ import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
-import { matchFilterToConversation } from "./knowproCommon.js";
-import { TypeChatJsonTranslator } from "typechat";
+import {
+    createIndexingEventHandler,
+    matchFilterToConversation,
+} from "./knowproCommon.js";
 
-type KnowProContext = {
+export type KnowProContext = {
     knowledgeModel: ChatModel;
     knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
@@ -42,7 +46,7 @@ type KnowProContext = {
     podcast?: cm.Podcast | undefined;
     images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
-    searchTranslator: TypeChatJsonTranslator<kp.SearchFilter>;
+    queryTranslator: kp.SearchQueryTranslator;
 };
 
 export async function createKnowproCommands(
@@ -56,7 +60,7 @@ export async function createKnowproCommands(
             knowLib.conversation.createKnowledgeActionTranslator(
                 knowledgeModel,
             ),
-        searchTranslator: kp.createSearchTranslator(knowledgeModel),
+        queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -69,6 +73,7 @@ export async function createKnowproCommands(
     commands.kpSearchTerms = searchTerms;
     commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
+    commands.kpPodcastRag = podcastRag;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
     commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
@@ -416,17 +421,22 @@ export async function createKnowproCommands(
                 `Searching ${conversation.nameTag}...`,
             );
 
-            const timer = new StopWatch();
-            timer.start();
-            const matches = await kp.searchConversationKnowledge(
-                conversation,
-                createSearchGroup(
+            const selectExpr: kp.SearchSelectExpr = {
+                searchTermGroup: createSearchGroup(
                     termArgs,
                     namedArgs,
                     commandDef,
                     namedArgs.andTerms,
                 ),
-                whenFilterFromNamedArgs(namedArgs, commandDef),
+                when: whenFilterFromNamedArgs(namedArgs, commandDef),
+            };
+            context.printer.writeSelectExpr(selectExpr);
+            const timer = new StopWatch();
+            timer.start();
+            const matches = await kp.searchConversationKnowledge(
+                conversation,
+                selectExpr.searchTermGroup,
+                selectExpr.when,
                 {
                     exactMatch: namedArgs.exact,
                     usePropertyIndex: namedArgs.usePropertyIndex,
@@ -454,7 +464,7 @@ export async function createKnowproCommands(
     function searchDef(): CommandMetadata {
         return {
             description:
-                "Search using natural language and knowlege-processor search filters",
+                "Search using natural language and old knowlege-processor search filters",
             args: {
                 query: arg("Search query"),
             },
@@ -462,6 +472,7 @@ export async function createKnowproCommands(
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
+                distinct: argBool("Show distinct results", false),
             },
         };
     }
@@ -500,6 +511,7 @@ export async function createKnowproCommands(
                     context.conversation!,
                     searchResults,
                     namedArgs.maxToDisplay,
+                    namedArgs.distinct,
                 );
             } else {
                 context.printer.writeLine("No matches");
@@ -514,51 +526,322 @@ export async function createKnowproCommands(
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
+        def.options.knowledgeTopK = argNum(
+            "How many top K knowledge matches",
+            50,
+        );
+        def.options.messageTopK = argNum("How many top K message matches", 25);
+        def.options.charBudget = argNum("Maximum characters in budget", 8192);
+        def.options.exactScope = argBool("(Future) Exact scope", false);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
-    async function search(args: string[]): Promise<void> {
+    async function search(args: string[], io: InteractiveIo): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
-        const query = namedArgs.query;
-        const result = await kp.searchConversationWithNaturalLanguage(
+        const textQuery = namedArgs.query;
+        const result = await kp.createSearchQueryForConversation(
             context.conversation!,
-            context.searchTranslator,
-            query,
-            namedArgs.ktype,
-            {
-                exactMatch: namedArgs.exact,
-            },
+            context.queryTranslator,
+            textQuery,
         );
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
         }
-        const [searchResults, filter] = result.data;
-        if (filter) {
-            context.printer.writeJson(filter, true);
+        let exactScope = namedArgs.exactScope;
+        let retried = !exactScope;
+        const searchQuery = result.data;
+        context.printer.writeJson(searchQuery, true);
+        while (true) {
+            const searchQueryExpressions = kp.compileSearchQueryForConversation(
+                context.conversation!,
+                searchQuery,
+                exactScope,
+            );
+            let countSelectMatches = 0;
+            for (const searchQueryExpr of searchQueryExpressions) {
+                for (const selectExpr of searchQueryExpr.selectExpressions) {
+                    if (
+                        await evalSelectQueryExpr(
+                            searchQueryExpr,
+                            selectExpr,
+                            namedArgs,
+                        )
+                    ) {
+                        countSelectMatches++;
+                    }
+                }
+            }
+            if (countSelectMatches === 0) {
+                context.printer.writeLine("No matches");
+            }
+            if (countSelectMatches > 0 || retried) {
+                break;
+            }
+            retried = await askYesNo(
+                io,
+                chalk.cyan("Using exact scope. Try fuzzy instead?"),
+            );
+            if (retried) {
+                exactScope = false;
+            } else {
+                break;
+            }
         }
-        if (searchResults && searchResults.messageMatches.length > 0) {
-            if (namedArgs.showKnowledge) {
-                context.printer.writeKnowledgeSearchResults(
-                    context.conversation!,
-                    searchResults.knowledgeMatches,
-                    namedArgs.maxToDisplay,
-                );
-            }
-            if (namedArgs.showMessages) {
-                context.printer.writeScoredMessages(
-                    searchResults.messageMatches,
-                    context.conversation!.messages,
-                    namedArgs.maxToDisplay,
-                );
-            }
+    }
+
+    async function evalSelectQueryExpr(
+        searchQueryExpr: kp.SearchQueryExpr,
+        selectExpr: kp.SearchSelectExpr,
+        namedArgs: NamedArgs,
+    ): Promise<boolean> {
+        if (namedArgs.ktype) {
+            selectExpr.when ??= {};
+            selectExpr.when.knowledgeType = namedArgs.ktype;
+        }
+        context.printer.writeSelectExpr(selectExpr);
+        const searchResults = await kp.searchConversation(
+            context.conversation!,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+            {
+                exactMatch: namedArgs.exact,
+                maxKnowledgeMatches: namedArgs.knowledgeTopK,
+                maxMessageMatches: namedArgs.messageTopK,
+                maxMessageCharsInBudget: namedArgs.charBudget,
+                usePropertyIndex: true,
+                useTimestampIndex: true,
+            },
+            searchQueryExpr.rawQuery,
+        );
+        if (
+            searchResults === undefined ||
+            searchResults.messageMatches.length === 0
+        ) {
+            return false;
+        }
+        context.printer.writeLine("####");
+        context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
+        context.printer.writeLine("####");
+        context.printer.writeConversationSearchResult(
+            context.conversation!,
+            searchResults,
+            namedArgs.showKnowledge,
+            namedArgs.showMessages,
+            namedArgs.maxToDisplay,
+            namedArgs.distinct,
+        );
+        return true;
+    }
+
+    function ragDef(): CommandMetadata {
+        return {
+            description: "Classic rag",
+            args: {
+                query: arg("Search query"),
+            },
+            options: {
+                maxToDisplay: argNum("Maximum matches to display", 25),
+                minScore: argNum("Min threshold score"),
+            },
+        };
+    }
+    commands.kpPodcastRag.metadata = ragDef();
+    async function podcastRag(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const messageIndex =
+            context.conversation?.secondaryIndexes?.messageIndex;
+        if (!messageIndex) {
+            context.printer.writeError(
+                "No message text index. Run kpPodcastBuildMessageIndex",
+            );
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, ragDef());
+        const matches = await messageIndex.lookupMessages(
+            namedArgs.query,
+            undefined,
+            namedArgs.minScore,
+        );
+        if (matches.length > 0) {
+            context.printer.writeScoredMessages(
+                matches,
+                context.conversation?.messages!,
+                namedArgs.maxToDisplay,
+            );
         } else {
             context.printer.writeLine("No matches");
         }
     }
+
+    function entitiesDef(): CommandMetadata {
+        return searchTermsDef(
+            "Search entities in current conversation",
+            "entity",
+        );
+    }
+    commands.kpEntities.metadata = entitiesDef();
+    async function entities(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("entity");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const entities = conversation.semanticRefs?.filter(
+                    (sr) => sr.knowledgeType === "entity",
+                );
+                context.printer.writeSemanticRefs(entities);
+            }
+        }
+    }
+
+    function podcastBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build index",
+            options: {
+                maxMessages: argNum("Maximum messages to index"),
+                relatedOnly: argBool("Index related terms only", false),
+            },
+        };
+    }
+    commands.kpPodcastBuildIndex.metadata = podcastBuildIndexDef();
+    async function podcastBuildIndex(
+        args: string[] | NamedArgs,
+    ): Promise<void> {
+        if (!context.podcast) {
+            context.printer.writeError("No podcast loaded");
+            return;
+        }
+        const messageCount = context.podcast.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
+        // Build index
+        context.printer.writeLine();
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+        context.printer.writeLine(`Building Index`);
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const eventHandler = createIndexingEventHandler(
+            context.printer,
+            progress,
+            maxMessages,
+        );
+        // Build full index?
+        if (!namedArgs.relatedOnly) {
+            const indexResult = await context.podcast.buildIndex(eventHandler);
+            progress.complete();
+            context.printer.writeIndexingResults(indexResult);
+            return;
+        }
+        // Build partial index
+        context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
+        await kp.buildRelatedTermsIndex(
+            context.podcast,
+            context.podcast.settings,
+            eventHandler,
+        );
+        progress.complete();
+    }
+
+    function podcastBuildMessageIndexDef(): CommandMetadata {
+        return {
+            description: "Build fuzzy message index for the podcast",
+            options: {
+                maxMessages: argNum("Maximum messages to index"),
+                batchSize: argNum("Batch size", 4),
+            },
+        };
+    }
+    commands.kpPodcastBuildMessageIndex.metadata =
+        podcastBuildMessageIndexDef();
+    async function podcastBuildMessageIndex(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(
+            args,
+            podcastBuildMessageIndexDef(),
+        );
+        context.printer.writeLine(`Indexing messages`);
+
+        const podcast = context.podcast!;
+        const settings: kp.MessageTextIndexSettings = {
+            ...context.podcast!.settings.messageTextIndexSettings,
+        };
+        settings.embeddingIndexSettings.batchSize = namedArgs.batchSize;
+        let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
+        podcast.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+            settings,
+        );
+        const result = await kp.buildMessageIndex(
+            podcast,
+            settings,
+            createIndexingEventHandler(
+                context.printer,
+                progress,
+                namedArgs.maxMessages,
+            ),
+        );
+        progress.complete();
+        context.printer.writeListIndexingResult(result);
+    }
+
+    //-------------------------
+    // Index Image Building
+    //--------------------------
+    function imageCollectionBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build image collection index",
+            options: {
+                knowledge: argBool("Index knowledge", false),
+                related: argBool("Index related terms", false),
+                maxMessages: argNum("Maximum messages to index"),
+            },
+        };
+    }
+
+    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
+    async function imagesBuildIndex(args: string[] | NamedArgs): Promise<void> {
+        if (!context.images) {
+            context.printer.writeError("No image collection loaded");
+            return;
+        }
+        const messageCount = context.images.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(
+            args,
+            imageCollectionBuildIndexDef(),
+        );
+        // Build index
+        context.printer.writeLine();
+        context.printer.writeLine("Building index");
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const indexResult = await context.images?.buildIndex(
+            createIndexingEventHandler(context.printer, progress, maxMessages),
+        );
+        progress.complete();
+        context.printer.writeIndexingResults(indexResult);
+    }
+
+    /*---------- 
+      End COMMANDS
+    ------------*/
 
     function createSearchGroup(
         termArgs: string[],
@@ -644,151 +927,6 @@ export async function createKnowproCommands(
         return filter;
     }
 
-    function entitiesDef(): CommandMetadata {
-        return searchTermsDef(
-            "Search entities in current conversation",
-            "entity",
-        );
-    }
-    commands.kpEntities.metadata = entitiesDef();
-    async function entities(args: string[]): Promise<void> {
-        const conversation = ensureConversationLoaded();
-        if (!conversation) {
-            return;
-        }
-        if (args.length > 0) {
-            args.push("--ktype");
-            args.push("entity");
-            await searchTerms(args);
-        } else {
-            if (conversation.semanticRefs !== undefined) {
-                const entities = conversation.semanticRefs?.filter(
-                    (sr) => sr.knowledgeType === "entity",
-                );
-                context.printer.writeSemanticRefs(entities);
-            }
-        }
-    }
-
-    function podcastBuildIndexDef(): CommandMetadata {
-        return {
-            description: "Build index",
-            options: {
-                maxMessages: argNum("Maximum messages to index"),
-                relatedOnly: argBool("Index related terms only", false),
-            },
-        };
-    }
-    commands.kpPodcastBuildIndex.metadata = podcastBuildIndexDef();
-    async function podcastBuildIndex(
-        args: string[] | NamedArgs,
-    ): Promise<void> {
-        if (!context.podcast) {
-            context.printer.writeError("No podcast loaded");
-            return;
-        }
-        const messageCount = context.podcast.messages.length;
-        if (messageCount === 0) {
-            return;
-        }
-
-        const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
-        // Build index
-        context.printer.writeLine();
-        const maxMessages = namedArgs.maxMessages ?? messageCount;
-        context.printer.writeLine(`Building Index`);
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const eventHandler = createIndexingEventHandler(
-            context,
-            progress,
-            maxMessages,
-        );
-        // Build full index?
-        if (!namedArgs.relatedOnly) {
-            const indexResult = await context.podcast.buildIndex(eventHandler);
-            progress.complete();
-            context.printer.writeIndexingResults(indexResult);
-            return;
-        }
-        // Build partial index
-        context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
-        await kp.buildRelatedTermsIndex(context.podcast, eventHandler);
-        progress.complete();
-    }
-
-    function podcastBuildMessageIndexDef(): CommandMetadata {
-        return {
-            description: "Build fuzzy message index for the podcast",
-            options: {
-                maxMessages: argNum("Maximum messages to index"),
-                batchSize: argNum("Batch size", 4),
-            },
-        };
-    }
-    commands.kpPodcastBuildMessageIndex.metadata =
-        podcastBuildMessageIndexDef();
-    async function podcastBuildMessageIndex(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(
-            args,
-            podcastBuildMessageIndexDef(),
-        );
-        context.printer.writeLine(
-            `Indexing ${context.conversation?.messages.length} messages`,
-        );
-        let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
-        await context.podcast?.buildMessageIndex(
-            createIndexingEventHandler(
-                context,
-                progress,
-                namedArgs.maxMessages,
-            ),
-            namedArgs.batchSize,
-        );
-        progress.complete();
-    }
-
-    function imageCollectionBuildIndexDef(): CommandMetadata {
-        return {
-            description: "Build image collection index",
-            options: {
-                knowledge: argBool("Index knowledge", false),
-                related: argBool("Index related terms", false),
-                maxMessages: argNum("Maximum messages to index"),
-            },
-        };
-    }
-
-    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
-    async function imagesBuildIndex(args: string[] | NamedArgs): Promise<void> {
-        if (!context.images) {
-            context.printer.writeError("No image collection loaded");
-            return;
-        }
-        const messageCount = context.images.messages.length;
-        if (messageCount === 0) {
-            return;
-        }
-
-        const namedArgs = parseNamedArguments(
-            args,
-            imageCollectionBuildIndexDef(),
-        );
-        // Build index
-        context.printer.writeLine();
-        context.printer.writeLine("Building index");
-        const maxMessages = namedArgs.maxMessages ?? messageCount;
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const indexResult = await context.images?.buildIndex(
-            createIndexingEventHandler(context, progress, maxMessages),
-        );
-        progress.complete();
-        context.printer.writeIndexingResults(indexResult);
-    }
-
-    /*---------- 
-      End COMMANDS
-    ------------*/
-
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
             return context.conversation;
@@ -840,35 +978,4 @@ function splitTermValues(term: string): string[] {
         removeEmpty: true,
     });
     return allTermStrings;
-}
-
-function createIndexingEventHandler(
-    context: KnowProContext,
-    progress: ProgressBar,
-    maxMessages: number,
-): kp.IndexingEventHandlers {
-    let startedKnowledge = false;
-    let startedRelated = false;
-
-    return {
-        onKnowledgeExtracted() {
-            if (!startedKnowledge) {
-                context.printer.writeLine("Indexing knowledge");
-                startedKnowledge = true;
-            }
-            progress.advance();
-            return progress.count < maxMessages;
-        },
-        onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {
-            if (!startedRelated) {
-                progress.reset(sourceTexts.length);
-                context.printer.writeLine(
-                    `Creating ${sourceTexts.length} embeddings`,
-                );
-                startedRelated = true;
-            }
-            progress.advance(batch.length);
-            return true;
-        },
-    };
 }

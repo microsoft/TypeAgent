@@ -188,7 +188,7 @@
       "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
       "program": "./dist/main.js",
       "args": ["-dataprep"],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -199,7 +199,7 @@
       "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
       "program": "./dist/main.js",
       "args": ["-schemagen"],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -209,8 +209,8 @@
       "skipFiles": ["<node_internals>/**"],
       "cwd": "${workspaceFolder}/examples/vscodeSchemaGen",
       "program": "./dist/main.js",
-      "args": ["-schemagen-actionprefix=editor.action"],
-      "console": "externalTerminal",
+      "args": ["-schemagen-actionprefix=editor.action", "-maxNodesToProcess=10"],
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -227,7 +227,7 @@
         "-actionPrefix",
         "workbench.action"
       ],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -246,7 +246,7 @@
         "-schemaFile",
         ""
       ],
-      "console": "externalTerminal",
+      "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
@@ -304,6 +304,40 @@
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "disableOptimisticBPs": true
-    }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "vscode-jest-tests.v2",
+      "skipFiles": ["<node_internals>/**"],
+      "args": [
+        "--no-warnings",
+        "--experimental-vm-modules",
+        "./node_modules/jest/bin/jest.js",
+        "--runInBand",
+        "--watchAll=false",
+        "--testNamePattern",
+        "${jest.testNamePattern}",
+        "--runTestsByPath",
+        "${jest.testFile}"
+      ],
+      "cwd": "${workspaceFolder}/packages/knowpro",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "Launch Document Processor",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": [
+          "<node_internals>/**"
+      ],
+      "program": "${workspaceFolder}/examples/docuProc/src/main.ts",
+      "console": "integratedTerminal",
+      //"preLaunchTask": "pnpm: build",
+      "outFiles": [
+          "${workspaceFolder}/**/*.js"
+      ],
+    },
   ]
 }

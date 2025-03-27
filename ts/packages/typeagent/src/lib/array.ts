@@ -133,7 +133,8 @@ export function getInRange(
     values: any[], 
     startAt: any, 
     stopAt: any | undefined, 
-    compareFn: (x: any, y: any) => number): any[] 
+    compareFn: (x: any, y: any) => number,
+): any[]
 {
     let startIndex = binarySearchFirst(
         values,
@@ -353,5 +354,61 @@ export class CircularArray<T> implements Iterable<T> {
     private dropHead(): void {
         this.head = (this.head + 1) % this.buffer.length;
         --this.count;
+    }
+}
+
+export class SortedArray<T> implements Iterable<T> {
+    private array: T[];
+    private sorted: boolean;
+
+    constructor(public itemComparer: (x: T, y: T) => number, array?: T[] | undefined, isSorted: boolean = false) {
+        this.array = array ?? [];
+        this.sorted = isSorted;
+    }
+    public get length(): number {
+        return this.array.length;
+    }
+
+    public get(index: number): T {
+        this.ensureSorted();
+        return this.array[index];
+    }
+    
+    public set(index: number, value: T): void {
+        this.array[index] = value;
+    }
+
+    public push(value: T | T[]): void {
+        if (Array.isArray(value)) {
+            this.array.push(...value);
+        }
+        else {
+            this.array.push(value);
+        }
+        this.sorted = false;
+    }
+
+    public indexOf(value: T): number {
+        this.ensureSorted();
+        return binarySearch(this.array, value, this.itemComparer);
+    }
+
+    public findIndex<V = T>(value: T, compareFn: (x: T, other: V) => number): number {
+        this.ensureSorted();
+        return binarySearch(this.array, value, compareFn);
+    }
+
+    public *[Symbol.iterator](): Iterator<T, any, any> {
+        this.ensureSorted();
+        for (let i = 0; i < this.array.length; ++i) {
+            yield this.array[i];
+        }
+    }
+
+    private ensureSorted(): void {
+        if (!this.sorted) {
+            this.array.sort(this.itemComparer);
+            this.sorted = true;
+        }
     }
 }

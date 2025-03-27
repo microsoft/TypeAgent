@@ -309,7 +309,12 @@ async function getImportTranslationFiles(
 }
 
 async function expandPaths(paths: string[]) {
-    const expanded = await glob(paths.map((p) => path.resolve(p)));
+    const expanded = await glob(
+        paths.map((p) => path.resolve(p)),
+        {
+            windowsPathsNoEscape: true,
+        },
+    );
     // Resolve symlink and return unique paths.
     return Array.from(
         new Set(

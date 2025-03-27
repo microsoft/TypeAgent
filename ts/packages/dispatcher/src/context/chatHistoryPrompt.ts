@@ -37,7 +37,9 @@ export function createTypeAgentRequestPrompt(
         if (history !== undefined) {
             const promptSections: PromptSection[] = history.promptSections;
             if (promptSections.length > 1) {
-                prompts.push("The following is a summary of the chat history:");
+                prompts.push(
+                    "The following is a summary of the recent chat history:",
+                );
 
                 const promptEntities = history.entities;
                 if (promptEntities.length > 0) {
@@ -88,15 +90,24 @@ export function createTypeAgentRequestPrompt(
     prompts.push(`"""\n${request}\n"""`);
 
     prompts.push("###");
+    prompts.push(
+        "Parameter values should only use information in the user request or the recent chat history, unless the parameter is explicitly for generating new content.",
+    );
     if (context && history !== undefined) {
         prompts.push(
-            "Resolve all explicit and pronouns in the current user request with the recent entities in the chat history. Determine the entities implicitly referred in the current user request based on the chat history.",
-            "MUST not use the entity's name as parameter values. Use entities' id as parameter values when referring to entities",
-            "If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest. Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
+            "Resolve pronouns and references in the current user request with the recent entities in the chat history.",
+            "Determine the entities implicitly referred in the current user request based on the recent chat history.",
+            "If parameter values refers to an entity, use entities' id as parameter values when referring to entities instead of the entities' name",
+            "If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest.",
+            "Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
+            `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
+        );
+    } else {
+        prompts.push(
+            "Avoid clarifying unless absolutely necessary.",
+            "Based on the current user request, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:",
         );
     }
-    prompts.push(
-        `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
-    );
+
     return prompts.join("\n");
 }

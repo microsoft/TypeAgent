@@ -12,32 +12,37 @@ import { AppAgentManifest } from "@typeagent/agent-sdk";
 
 async function getAppAgentManifests(
     providers: AppAgentProvider[],
-): Promise<Map<string, AppAgentManifest>> {
-    const appAgentConfigs = new Map<string, AppAgentManifest>();
+): Promise<Record<string, AppAgentManifest>> {
+    const appAgentManifests: Record<string, AppAgentManifest> = {};
     for (const provider of providers) {
         for (const name of provider.getAppAgentNames()) {
             const manifest = await provider.getAppAgentManifest(name);
-            appAgentConfigs.set(name, manifest);
+            appAgentManifests[name] = manifest;
         }
     }
-    return appAgentConfigs;
+    return appAgentManifests;
 }
 
-async function getActionConfigs(
-    providers: AppAgentProvider[],
-): Promise<Record<string, ActionConfig>> {
+function getActionConfigs(
+    appAgentManifests: Record<string, AppAgentManifest>,
+): Record<string, ActionConfig> {
     const configs = {};
-    const appAgentConfigs = await getAppAgentManifests(providers);
-    for (const [name, config] of appAgentConfigs.entries()) {
-        convertToActionConfig(name, config, configs);
+    for (const [name, manifest] of Object.entries(appAgentManifests)) {
+        convertToActionConfig(name, manifest, configs);
     }
     return configs;
 }
 
 export async function createActionConfigProvider(
     providers: AppAgentProvider[],
+    additionalManifests?: Record<string, AppAgentManifest>,
 ): Promise<ActionConfigProvider> {
-    const actionConfigs = await getActionConfigs(providers);
+    const appAgentManifests = {
+        ...(await getAppAgentManifests(providers)),
+        ...additionalManifests,
+    };
+
+    const actionConfigs = getActionConfigs(appAgentManifests);
     const actionSchemaFileCache = new ActionSchemaFileCache();
     const actionConfigProvider: ActionConfigProvider = {
         tryGetActionConfig(schemaName: string) {
@@ -61,10 +66,8 @@ export async function createActionConfigProvider(
     return actionConfigProvider;
 }
 
-export function getSchemaNamesForActionConfigProvider(
-    provider: ActionConfigProvider,
+export function getSchemaNamesForAppAgentManifests(
+    appAgentManifests: Record<string, AppAgentManifest>,
 ): string[] {
-    return provider
-        .getActionConfigs()
-        .map((actionConfig) => actionConfig.schemaName);
+    return Object.keys(getActionConfigs(appAgentManifests));
 }

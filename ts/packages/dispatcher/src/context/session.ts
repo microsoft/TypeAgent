@@ -85,6 +85,7 @@ export type DispatcherConfig = {
             additionalInstructions: boolean;
         };
         switch: {
+            fixed: string; // fixed first schema to use, ignore embedding if set
             embedding: boolean; // use embedding to determine the first schema to use.
             inline: boolean;
             search: boolean;
@@ -154,6 +155,7 @@ const defaultSessionConfig: SessionConfig = {
             additionalInstructions: true,
         },
         switch: {
+            fixed: "",
             embedding: true,
             inline: true,
             search: true,
@@ -331,6 +333,7 @@ export class Session {
     public getSettings(): Readonly<SessionSettings> {
         return this.settings;
     }
+
     public updateSettings(options: SessionOptions): SessionChanged {
         const changed = mergeConfig(this.settings, options, true);
         if (changed) {
