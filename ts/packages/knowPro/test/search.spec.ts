@@ -10,7 +10,7 @@ import {
     testIf,
 } from "./testCommon.js";
 
-describe("search", () => {
+describe("knowpro.search", () => {
     let conversation: IConversation | undefined;
     beforeAll(async () => {
         if (hasTestKeys()) {
