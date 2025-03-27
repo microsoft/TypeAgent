@@ -31,10 +31,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ "1ES.Pool=typeagent-runner-pool" ]
+        os: [ "1ES.Pool=typeagent-runners-pool" ]
         version: [22]
 
-    runs-on: [ self-hosted, "1ES.Pool=typeagent-runner-pool"]
+    runs-on: [ self-hosted, "1ES.Pool=typeagent-runners-pool"]
     steps:
       - if: runner.os == 'Linux'
         run: |
