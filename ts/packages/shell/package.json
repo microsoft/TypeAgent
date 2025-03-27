@@ -36,7 +36,7 @@
     "@azure/msal-browser": "^3.26.1",
     "@electron-toolkit/preload": "^2.0.0",
     "@electron-toolkit/utils": "^2.0.0",
-    "@fontsource/lato": "^5.1.1",
+    "@fontsource/lato": "^5.2.5",
     "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "agent-rpc": "workspace:*",
@@ -65,7 +65,7 @@
     "electron-builder": "^24.13.2",
     "electron-vite": "^3.1.0",
     "less": "^4.2.0",
-    "rimraf": "^5.0.5",
+    "rimraf": "^6.0.1",
     "typescript": "^5.4.2",
     "vite": "^6.2.3"
   }
