@@ -7,7 +7,6 @@ import { createAgentRpcClient } from "agent-rpc/client";
 import { createChannelProvider } from "agent-rpc/channel";
 import { fileURLToPath } from "url";
 import { createLimiter } from "common-utils";
-import os from "node:os";
 
 export type AgentProcess = {
     appAgent: AppAgent;
@@ -15,7 +14,7 @@ export type AgentProcess = {
     count: number;
 };
 
-const limiter = createLimiter(os.cpus().length);
+const limiter = createLimiter(1);
 export async function createAgentProcess(
     agentName: string,
     modulePath: string,
