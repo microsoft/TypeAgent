@@ -22,10 +22,8 @@
     "prettier:fix": "prettier --write . --ignore-path ../../prettierignore",
     "tsc": "tsc -p src"
   },
-  "dependencies": {},
   "devDependencies": {
-    "@types/node": "^18.18.7",
-    "rimraf": "^5.0.5",
+    "rimraf": "^6.0.1",
     "typescript": "^5.4.2"
   },
   "engines": {

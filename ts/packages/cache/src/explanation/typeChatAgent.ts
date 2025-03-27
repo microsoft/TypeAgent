@@ -166,7 +166,7 @@ export class TypeChatAgent<InputType, ResultType extends object, ConfigType>
     ): PromptSection[] {
         return typeof prompt === "string"
             ? [{ role: "user", content: prompt }]
-            : prompt ?? [];
+            : (prompt ?? []);
     }
 
     async followUp(

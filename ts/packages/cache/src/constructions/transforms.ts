@@ -283,7 +283,7 @@ export class Transforms {
                     }
                     // Legacy format for count, convert to new format
                     const count =
-                        record.count ?? (record as any).original ? 1 : 0;
+                        (record.count ?? (record as any).original) ? 1 : 0;
                     const valueRecord = {
                         value: record.value,
                         count,
