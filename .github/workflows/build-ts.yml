@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        os: ["ubuntu-latest-large", "windows-latest-large", "macos-latest-large"]
         version: [18, 20, 22]
 
     runs-on: ${{ matrix.os }}
