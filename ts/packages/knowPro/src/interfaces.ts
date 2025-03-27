@@ -304,8 +304,8 @@ export type ListIndexingResult = {
 //---------------------
 export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
     readonly length: number;
-    get(ordinal: TOrdinal): T | undefined;
-    getMultiple(ordinals: TOrdinal[]): (T | undefined)[];
+    get(ordinal: TOrdinal): T;
+    getMultiple(ordinals: TOrdinal[]): T[];
     getAll(): T[];
 }
 
@@ -313,3 +313,6 @@ export interface ICollection<T, TOrdinal>
     extends IReadonlyCollection<T, TOrdinal> {
     push(...items: T[]): void;
 }
+
+export interface IMessageCollection<TMessage extends IMessage>
+    extends ICollection<TMessage, MessageOrdinal> {}

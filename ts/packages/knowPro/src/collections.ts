@@ -830,12 +830,12 @@ export class Collection<T, TOrdinal extends number>
         return this.items.length;
     }
 
-    public get(ordinal: TOrdinal): T | undefined {
+    public get(ordinal: TOrdinal): T {
         return this.items[ordinal];
     }
 
-    public getMultiple(ordinals: TOrdinal[]): (T | undefined)[] {
-        const items = new Array<T | undefined>(ordinals.length);
+    public getMultiple(ordinals: TOrdinal[]): T[] {
+        const items = new Array<T>(ordinals.length);
         for (let i = 0; i < ordinals.length; ++i) {
             items[i] = this.get(ordinals[i]);
         }
@@ -859,9 +859,17 @@ export class Collection<T, TOrdinal extends number>
 
 export class MessageCollection<
     TMessage extends IMessage = IMessage,
-> extends Collection<TMessage, MessageOrdinal> {}
+> extends Collection<TMessage, MessageOrdinal> {
+    constructor(messages?: TMessage[]) {
+        super(messages);
+    }
+}
 
 export class SemanticRefCollection extends Collection<
     SemanticRef,
     SemanticRefOrdinal
-> {}
+> {
+    constructor(semanticRefs?: SemanticRef[]) {
+        super(semanticRefs);
+    }
+}

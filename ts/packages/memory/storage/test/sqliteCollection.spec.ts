@@ -3,8 +3,14 @@
 
 import * as sqlite from "better-sqlite3";
 import { createDatabase } from "../src/sqlite/sqliteCommon.js";
-import { createMessage, ensureTestDir, testFilePath } from "./testCommon.js";
+import {
+    createMessages,
+    ensureTestDir,
+    messageText,
+    testFilePath,
+} from "./testCommon.js";
 import { SqlMessageCollection } from "../src/sqlite/sqliteCollection.js";
+import { IMessage } from "knowpro";
 
 describe("memory.sqlite.messageCollection", () => {
     const testTimeout = 1000 * 60 * 5;
@@ -26,33 +32,40 @@ describe("memory.sqlite.messageCollection", () => {
                 db!,
                 "messages_single",
             );
-            messageCollection.push(createMessage("One"));
-            expect(messageCollection).toHaveLength(1);
-            const m = messageCollection.get(0);
-            expect(m).toBeDefined();
+            const messages = createMessages(4);
+            messages.forEach((m) => testPush(messageCollection, m));
         },
         testTimeout,
     );
     test("addMessages", () => {
         const collectionName = "messages_multi";
         const messageCollection = new SqlMessageCollection(db!, collectionName);
-        const messages = [
-            createMessage("One"),
-            createMessage("Two"),
-            createMessage("Three"),
-        ];
-        messageCollection.push(...messages);
-        expect(messageCollection).toHaveLength(messages.length);
+        const messages = createMessages(4);
 
-        let ordinals = [0, 1];
+        let prevLength = messageCollection.length;
+        messageCollection.push(...messages);
+        let newLength = messageCollection.length;
+        expect(newLength).toEqual(prevLength + messages.length);
+
+        let ordinals = [0, 2, 1]; // Deliberately out of order
         let gotMessages = messageCollection.getMultiple(ordinals);
         expect(gotMessages).toHaveLength(ordinals.length);
-        messages.forEach((m) => expect(m).toBeDefined());
+        for (let i = 0; i < ordinals.length; ++i) {
+            expect(messageText(gotMessages[i])).toEqual(messages[ordinals[i]]);
+        }
 
         let collection2 = new SqlMessageCollection(db!, collectionName, false);
         expect(collection2).toHaveLength(messageCollection.length);
-        let message = collection2.get(2);
-        expect(message).toBeDefined();
-        expect(message?.textChunks[0]).toEqual("Three");
+        let gotMessage = collection2.get(2);
+        expect(messageText(gotMessage)).toEqual(messageText(messages[2]));
     });
+
+    function testPush(collection: SqlMessageCollection, message: IMessage) {
+        const prevLength = collection.length;
+        collection.push(message);
+        const newLength = collection.length;
+        expect(newLength).toEqual(prevLength + 1);
+        const messageAdded = collection.get(newLength - 1);
+        expect(messageText(messageAdded)).toBe(messageText(message));
+    }
 });

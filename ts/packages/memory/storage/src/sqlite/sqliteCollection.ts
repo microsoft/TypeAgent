@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import * as sqlite from "better-sqlite3";
 import { ICollection, IMessage, MessageOrdinal } from "knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
@@ -38,16 +39,18 @@ export class SqliteCollection<T, TOrdinal extends number>
         }
     }
 
-    public get(ordinal: TOrdinal): T | undefined {
+    public get(ordinal: TOrdinal): T {
         const actualOrdinal = ordinal + 1;
         const row = this.sql_get.get(actualOrdinal);
-        if (row !== undefined) {
-            return this.deserializeObject(row);
+        if (row === undefined) {
+            throw new Error(
+                `Ordinal ${ordinal} not found. Collection length is ${this.count}`,
+            );
         }
-        return undefined;
+        return this.deserializeObject(row);
     }
 
-    public getMultiple(ordinals: TOrdinal[]): (T | undefined)[] {
+    public getMultiple(ordinals: TOrdinal[]): T[] {
         let actualOrdinals: number[] = new Array<number>(ordinals.length);
         for (let i = 0; i < ordinals.length; ++i) {
             actualOrdinals[i] = ordinals[i] + 1;
@@ -56,22 +59,22 @@ export class SqliteCollection<T, TOrdinal extends number>
         const sql = this.db.prepare(
             `SELECT value FROM ${this.tableName} WHERE ordinal IN (${placeholder})`,
         );
-        const objects: (T | undefined)[] = [];
+        const objects: T[] = new Array<T>(ordinals.length);
+        let rowNumber = 0;
         for (const row of sql.iterate(...actualOrdinals)) {
-            objects.push(this.deserializeObject(row));
+            objects[rowNumber] = this.deserializeObject(row);
+            ++rowNumber;
+        }
+        if (rowNumber !== ordinals.length) {
+            throw new Error(
+                `Expected ${ordinals.length} ordinals, found ${rowNumber}`,
+            );
         }
         return objects;
     }
 
     public getAll(): T[] {
-        const objects: T[] = [];
-        for (const row of this.sql_getAll.iterate()) {
-            const value = this.deserializeObject(row);
-            if (value !== undefined) {
-                objects.push(value);
-            }
-        }
-        return objects;
+        return [...this];
     }
 
     public *[Symbol.iterator](): Iterator<T, any, any> {
@@ -100,14 +103,9 @@ export class SqliteCollection<T, TOrdinal extends number>
         this.count++;
     }
 
-    private deserializeObject(row: unknown): T | undefined {
-        try {
-            const data = row as CollectionRow;
-            if (data.value) {
-                return JSON.parse(data.value);
-            }
-        } catch {}
-        return undefined;
+    private deserializeObject(row: unknown): T {
+        const data = row as CollectionRow;
+        return JSON.parse(data.value);
     }
 
     private ensureDb() {
@@ -138,7 +136,7 @@ type CollectionRow = {
 };
 
 export class SqlMessageCollection<
-    TMessage extends IMessage,
+    TMessage extends IMessage = IMessage,
 > extends SqliteCollection<TMessage, MessageOrdinal> {
     constructor(
         db: sqlite.Database,

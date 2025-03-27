@@ -27,8 +27,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@elastic/elasticsearch": "^8.17.0",
     "better-sqlite3": "11.8.1",
+    "conversation-memory": "workspace:*",
     "debug": "^4.4.0",
     "knowpro": "workspace:*",
     "typeagent": "workspace:*"
