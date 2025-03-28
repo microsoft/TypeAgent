@@ -3,7 +3,6 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
-    ICollection,
     IMessageCollection,
     Knowledge,
     KnowledgeType,
@@ -814,53 +813,5 @@ function* union<T>(
 function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
     for (const value of values) {
         set.add(value);
-    }
-}
-
-export class Collection<T, TOrdinal extends number>
-    implements ICollection<T, TOrdinal>
-{
-    protected items: T[];
-
-    constructor(items?: T[] | undefined) {
-        this.items = items ?? [];
-    }
-
-    public get isPersistent(): boolean {
-        return false;
-    }
-
-    public get length(): number {
-        return this.items.length;
-    }
-
-    public get(ordinal: TOrdinal): T {
-        return this.items[ordinal];
-    }
-
-    public getSlice(start: TOrdinal, end: TOrdinal): T[] {
-        return this.items.slice(start, end);
-    }
-
-    public getMultiple(ordinals: TOrdinal[]): T[] {
-        const items = new Array<T>(ordinals.length);
-        for (let i = 0; i < ordinals.length; ++i) {
-            items[i] = this.get(ordinals[i]);
-        }
-        return items;
-    }
-
-    public getAll(): T[] {
-        return this.items;
-    }
-
-    public push(...items: T[]): void {
-        for (const item of items) {
-            this.items.push(item);
-        }
-    }
-
-    public *[Symbol.iterator](): Iterator<T, any, any> {
-        return this.items[Symbol.iterator]();
     }
 }

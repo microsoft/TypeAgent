@@ -300,7 +300,7 @@ export type ListIndexingResult = {
 };
 
 //---------------------
-// Collections
+// Storage
 //---------------------
 export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
     readonly length: number;
@@ -318,3 +318,17 @@ export interface ICollection<T, TOrdinal>
 
 export interface IMessageCollection<TMessage extends IMessage = IMessage>
     extends ICollection<TMessage, MessageOrdinal> {}
+
+export interface ISemanticRefCollection
+    extends ICollection<SemanticRef, SemanticRefOrdinal> {}
+
+export interface IStorageProvider {
+    createMessageCollection<
+        TMessage extends IMessage = IMessage,
+    >(): IMessageCollection<TMessage>;
+    createSemanticRefCollection(): ISemanticRefCollection;
+}
+
+// Also look at:
+// search.ts
+// searchQueryTranslator.ts
