@@ -27,7 +27,7 @@ import {
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
 import { conversation as Conversation } from "knowledge-processor";
-import { execSync } from "child_process";
+import { exec } from "child_process";
 
 export function instantiate(): AppAgent {
     return {
@@ -44,21 +44,35 @@ type GreetingAgentContext = {
 };
 
 async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
-    let given = "";
-    let sur = "";
-    try {
-        const result = execSync("az ad signed-in-user show", { stdio: "pipe" });
-        const user = JSON.parse(result.toString());
-        given = user.givenName;
-        sur = user.surname;
-    } catch (e) {}
+    let given = "",
+        sur = "";
+    let execPromiseResolve: (
+        value: GreetingAgentContext | PromiseLike<GreetingAgentContext>,
+    ) => void;
 
-    return {
-        user: {
-            givenName: given,
-            surName: sur,
-        },
-    };
+    // promise that is resolved when executable returns
+    let execPromise = new Promise<GreetingAgentContext>((resolve) => {
+        execPromiseResolve = resolve;
+    });
+
+    // non blocking execution call
+    exec("az ad signed-in-user show", (_error, stdout, _stderr) => {
+        const user = JSON.parse(stdout.toString());
+
+        if (user.givenName) {
+            given = user.givenName;
+            sur = user.surname;
+        }
+
+        execPromiseResolve({
+            user: {
+                givenName: given,
+                surName: sur,
+            },
+        });
+    });
+
+    return execPromise;
 }
 
 const personalizedGreetingSchema = `
