@@ -28,7 +28,7 @@ class TextEmbeddingIndexSettings:
         max_matches: int | None = None,
     ):
         if embedding_model is None:
-            embedding_model = AsyncEmbeddingModel()
+            embedding_model = AsyncEmbeddingModel(embedding_size)
         self.embedding_model = embedding_model
         self.embedding_size = embedding_size
         if min_score is None:
@@ -48,9 +48,9 @@ class ITextEmbeddingIndexData(TypedDict):
 
 class VectorBase:
     def __init__(self, settings: TextEmbeddingIndexSettings | None = None):
-        model = settings.embedding_model if settings is not None else None
+        model = settings.embedding_model if settings else None
         if model is None:
-            model = AsyncEmbeddingModel()
+            model = AsyncEmbeddingModel(settings.embedding_size if settings else None)
         self._model = model
         self._vectors: NormalizedEmbeddings | None = None
 
@@ -109,7 +109,7 @@ class VectorBase:
         return scored_ordinals[:max_hits]
 
     def clear(self) -> None:
-        self._vectors = np.array([], dtype=np.float32).reshape((0, 0))
+        self._vectors = None
 
     def serialize_embedding_at(self, ordinal: int) -> NormalizedEmbedding | None:
         return self._vectors[ordinal] if self._vectors is not None else None

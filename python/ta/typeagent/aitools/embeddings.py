@@ -17,7 +17,8 @@ type NormalizedEmbeddings = NDArray[np.float32]  # An array of embeddings
 
 
 class AsyncEmbeddingModel:
-    def __init__(self):
+    def __init__(self, embedding_size: int | None = None):
+        self.embedding_size = embedding_size if embedding_size else 1536
         self.azure_token_provider: AzureTokenProvider | None = None
         openai_key_name = "OPENAI_API_KEY"
         azure_key_name = "AZURE_OPENAI_API_KEY"
@@ -84,6 +85,8 @@ class AsyncEmbeddingModel:
             await self.async_client.embeddings.create(
                 input=input,
                 model="text-embedding-3-small",
+                encoding_format="float",
+                dimensions=self.embedding_size,
             )
         ).data
         assert len(data) == len(input), (len(data), "!=", len(input))
