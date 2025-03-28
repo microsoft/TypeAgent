@@ -3,11 +3,10 @@
 ## Big functionality
 
     ### Serialization and deserialization
-
-    - Serialize Knowledge!
-    - All of deserialization
-
     Do this before queries, since fully re-indexing takes too long.
+
+    - Serialization nearly done (gotta check TODO comments)
+    - All of deserialization is still TODO
 
     ### Queries and searches
 
