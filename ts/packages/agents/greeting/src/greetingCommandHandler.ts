@@ -37,6 +37,8 @@ export function instantiate(): AppAgent {
 }
 
 type GreetingAgentContext = {
+    getUserNameResolve?: (value: any) => void | undefined;
+    userPromise?: Promise<any> | undefined;
     user: {
         givenName: string | undefined;
         surName: string | undefined;
@@ -44,41 +46,36 @@ type GreetingAgentContext = {
 };
 
 async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
-    let given = "",
-        sur = "";
-    let execPromiseResolve: (
-        value: GreetingAgentContext | PromiseLike<GreetingAgentContext>,
-    ) => void;
+    let context: GreetingAgentContext = {
+        user: {
+            givenName: undefined,
+            surName: undefined,
+        },
+    };
 
     // promise that is resolved when executable returns
-    let execPromise = new Promise<GreetingAgentContext>((resolve) => {
-        execPromiseResolve = resolve;
+    context.userPromise = new Promise<GreetingAgentContext>((resolve) => {
+        context.getUserNameResolve = resolve;
     });
 
     // non blocking execution call
     exec(
         "az ad signed-in-user show",
-        { timeout: 5000 },
+        { timeout: 15000 },
         (_error, stdout, _stderr) => {
             try {
                 const user = JSON.parse(stdout.toString());
 
-                if (user.givenName) {
-                    given = user.givenName;
-                    sur = user.surname;
+                context.user.givenName = user.givenName;
+                context.user.surName = user.surname;
+                if (context.getUserNameResolve) {
+                    context.getUserNameResolve(user);
                 }
             } catch {}
-
-            execPromiseResolve({
-                user: {
-                    givenName: given,
-                    surName: sur,
-                },
-            });
         },
     );
 
-    return execPromise;
+    return context;
 }
 
 const personalizedGreetingSchema = `
@@ -130,6 +127,12 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<GreetingAgentContext>) {
         // Initial output to let the user know the agent is thinking...
         displayStatus("...", context);
+
+        // wait until we have the user's name
+        if (context.sessionContext.agentContext.userPromise) {
+            await context.sessionContext.agentContext.userPromise;
+            context.sessionContext.agentContext.userPromise = undefined;
+        }
 
         const response = await this.getTypeChatResponse(context);
 
@@ -360,12 +363,18 @@ async function getRecentChatHistory(
             });
 
             chatHistory.push("###");
-            if (context.sessionContext.agentContext.user.givenName) {
+            if (
+                context.sessionContext.agentContext.user.givenName &&
+                context.sessionContext.agentContext.user.givenName.length > 0
+            ) {
                 chatHistory.push(
                     `The user's given name is '${context.sessionContext.agentContext.user.givenName}'.`,
                 );
             }
-            if (context.sessionContext.agentContext.user.surName) {
+            if (
+                context.sessionContext.agentContext.user.surName &&
+                context.sessionContext.agentContext.user.surName.length > 0
+            ) {
                 chatHistory.push(
                     `The user's sur name is '${context.sessionContext.agentContext.user.surName}'.`,
                 );
