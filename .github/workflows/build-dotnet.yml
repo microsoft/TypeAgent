@@ -36,23 +36,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        continue-on-error: true
         with:
           filters: |
             dotnet:
               - "dotnet/**"
               - ".github/workflows/build-dotnet.yml"
       - name: Setup MSBuild
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         uses: microsoft/setup-msbuild@v2
       - name: Setup NuGet
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         uses: NuGet/setup-nuget@v2.0.0
       - name: Restore Packages
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: nuget restore autoShell/AutoShell.sln
       - name: Build Solution
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet
         run: |
           msbuild.exe autoShell/AutoShell.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"

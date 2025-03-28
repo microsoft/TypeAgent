@@ -108,7 +108,7 @@ export async function createKnowproCommands(
             namedArgs.maxMessages > 0
                 ? conversation.messages.slice(0, namedArgs.maxMessages)
                 : conversation.messages;
-        messages.forEach((m) => context.printer.writeMessage(m));
+        context.printer.writeMessages(messages);
     }
 
     function podcastImportDef(): CommandMetadata {
@@ -134,10 +134,13 @@ export async function createKnowproCommands(
             return;
         }
         const startAt = argToDate(namedArgs.startAt)!;
-        const endAt = dateTime.addMinutesToDate(startAt, namedArgs.length);
 
-        context.podcast = await cm.importPodcast(namedArgs.filePath);
-        cm.timestampMessages(context.podcast.messages, startAt, endAt);
+        context.podcast = await cm.importPodcast(
+            namedArgs.filePath,
+            getFileName(namedArgs.filePath),
+            startAt,
+            namedArgs.length,
+        );
 
         context.conversation = context.podcast;
         context.printer.conversation = context.conversation;
@@ -245,7 +248,7 @@ export async function createKnowproCommands(
             namedArgs.maxMessages > 0
                 ? conversation.messages.slice(0, namedArgs.maxMessages)
                 : conversation.messages;
-        messages.forEach((m) => context.printer.writeMessage(m));
+        context.printer.writeMessages(messages);
     }
 
     function imageImportDef(): CommandMetadata {

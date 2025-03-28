@@ -45,39 +45,40 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
         id: filter
+        continue-on-error: true
         with:
           filters: |
             ts:
               - "ts/**"
               - ".github/workflows/build-ts.yml"
       - uses: pnpm/action-setup@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         name: Install pnpm
         with:
           package_json_file: ts/package.json
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         with:
           node-version: ${{ matrix.version }}
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
       - name: Build
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           npm run build
       - name: Test
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           npm run test:local
       - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts == 'true' }}
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
           npm run lint

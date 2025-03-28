@@ -321,7 +321,9 @@
         "--runTestsByPath",
         "${jest.testFile}"
       ],
-      "cwd": "${workspaceFolder}/packages/knowpro",
+      //"cwd": "${workspaceFolder}/packages/knowpro",
+      //"cwd": "${workspaceFolder}/packages/memory/storage",
+      "cwd": "${workspaceFolder}/packages/memory/conversation",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
     },

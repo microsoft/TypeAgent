@@ -27,7 +27,7 @@ import {
     PersonalizedGreetingAction,
 } from "./greetingActionSchema.js";
 import { conversation as Conversation } from "knowledge-processor";
-import { execSync } from "child_process";
+import { exec } from "child_process";
 
 export function instantiate(): AppAgent {
     return {
@@ -37,6 +37,8 @@ export function instantiate(): AppAgent {
 }
 
 type GreetingAgentContext = {
+    getUserNameResolve?: (value: any) => void | undefined;
+    userPromise?: Promise<any> | undefined;
     user: {
         givenName: string | undefined;
         surName: string | undefined;
@@ -44,21 +46,36 @@ type GreetingAgentContext = {
 };
 
 async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
-    let given = "";
-    let sur = "";
-    try {
-        const result = execSync("az ad signed-in-user show", { stdio: "pipe" });
-        const user = JSON.parse(result.toString());
-        given = user.givenName;
-        sur = user.surname;
-    } catch (e) {}
-
-    return {
+    let context: GreetingAgentContext = {
         user: {
-            givenName: given,
-            surName: sur,
+            givenName: undefined,
+            surName: undefined,
         },
     };
+
+    // promise that is resolved when executable returns
+    context.userPromise = new Promise<GreetingAgentContext>((resolve) => {
+        context.getUserNameResolve = resolve;
+    });
+
+    // non blocking execution call
+    exec(
+        "az ad signed-in-user show",
+        { timeout: 15000 },
+        (_error, stdout, _stderr) => {
+            try {
+                const user = JSON.parse(stdout.toString());
+
+                context.user.givenName = user.givenName;
+                context.user.surName = user.surname;
+                if (context.getUserNameResolve) {
+                    context.getUserNameResolve(user);
+                }
+            } catch {}
+        },
+    );
+
+    return context;
 }
 
 const personalizedGreetingSchema = `
@@ -110,6 +127,12 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<GreetingAgentContext>) {
         // Initial output to let the user know the agent is thinking...
         displayStatus("...", context);
+
+        // wait until we have the user's name
+        if (context.sessionContext.agentContext.userPromise) {
+            await context.sessionContext.agentContext.userPromise;
+            context.sessionContext.agentContext.userPromise = undefined;
+        }
 
         const response = await this.getTypeChatResponse(context);
 
@@ -197,11 +220,20 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         );
 
         // get chat history
+        const days = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ];
         const history = await getRecentChatHistory(context);
         history.push("Hi!");
         history.push("###");
         history.push(
-            `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
+            `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}. It is ${days[new Date().getDay()]}`,
         );
 
         // make the request
@@ -340,12 +372,18 @@ async function getRecentChatHistory(
             });
 
             chatHistory.push("###");
-            if (context.sessionContext.agentContext.user.givenName) {
+            if (
+                context.sessionContext.agentContext.user.givenName &&
+                context.sessionContext.agentContext.user.givenName.length > 0
+            ) {
                 chatHistory.push(
                     `The user's given name is '${context.sessionContext.agentContext.user.givenName}'.`,
                 );
             }
-            if (context.sessionContext.agentContext.user.surName) {
+            if (
+                context.sessionContext.agentContext.user.surName &&
+                context.sessionContext.agentContext.user.surName.length > 0
+            ) {
                 chatHistory.push(
                     `The user's sur name is '${context.sessionContext.agentContext.user.surName}'.`,
                 );

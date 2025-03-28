@@ -3,10 +3,10 @@
 ## Big functionality
 
     ### Serialization and deserialization
-
     Do this before queries, since fully re-indexing takes too long.
 
-    Q: Should we serialize settings? Or are they intentionally not serialized?
+    - Serialization nearly done (gotta check TODO comments)
+    - All of deserialization is still TODO
 
     ### Queries and searches
 
@@ -21,11 +21,10 @@
 ## Small functionality
 
 - Implement Podcast._build_caches(), by implementing TermEmbeddingCache?
-  - Umesh wants to redo this
+  - Umesh wants to redo this anyway, so low priority
 
 ## Refactoring implementations
 
-- Move various create_blah() functions into  Blah.__init__()
 - Change some inconsistent module names
 - Rewrite podcast parsing without regexes
 
@@ -45,3 +44,10 @@
 ## Maybe...
 
 - Add docstrings etc.
+
+## Questions
+
+- Do the serialization data formats (which are TypedDicts, not Protocols):
+  - Really belong in interfaces.py?
+  - Need to have names starting with 'I'?
+  My answers for both are no, unless Steve explains why.
