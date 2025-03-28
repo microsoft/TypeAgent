@@ -119,11 +119,12 @@ function checkActionSchema(
     schemaConfig: SchemaConfig | undefined,
 ): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
+    
     if (definition.type.type !== "object") {
         throw new Error(
             `Schema Error: object type expect in action schema type ${name}, got ${definition.type.type}`,
         );
-    }
+    } 
 
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
@@ -146,7 +147,7 @@ function checkActionSchema(
     }
 
     const actionNameString = actionName.type.typeEnum[0];
-    const parameterFieldType = parameters?.type;
+    const parameterFieldType = resolveReference(parameters?.type);
     if (
         parameterFieldType !== undefined &&
         parameterFieldType.type !== "object"
@@ -428,6 +429,9 @@ class ActionParser {
                 return this.parseObjectType(node as ts.TypeLiteralNode);
             case ts.SyntaxKind.LiteralType:
                 return this.parseLiteralType(node as ts.LiteralTypeNode);
+            // TODO: Faithfully resolve intersection types
+            // case ts.SyntaxKind.IntersectionType:                
+            //     return this.parseIntersectionType(node as ts.IntersectionTypeNode);
             default:
                 throw new Error(
                     `Unhandled type node ${ts.SyntaxKind[node.kind]}`,
@@ -511,6 +515,43 @@ class ActionParser {
             ? this.parseStringUnionType(node)
             : this.parseTypeUnionType(node);
     }
+
+    // TOOD: Faithfully resolve intersection types 
+    // private parseIntersectionType(node: ts.IntersectionTypeNode): SchemaTypeObject {
+    //     const fields: SchemaObjectFields = {};
+    //     for (const type of node.types) {
+    //         const parsedType = this.parseType(type);
+    //         if (parsedType.type === "object") {
+    //             Object.assign(fields, parsedType.fields);
+    //         } else if (parsedType.type == "type-reference") {
+
+    //             const typeRef = this.typeMap.get(parsedType.name);
+
+    //             if (typeRef?.type.type !== 'object') {  
+    //                 throw new Error(
+    //                     `Unsupported type reference in intersection type: ${parsedType.name}`,
+    //                 );
+    //             }
+    //             Object.entries(typeRef.type.fields).forEach(([key, field]) => {
+    //                 fields[key] = {
+    //                     type: typeRef.type,
+    //                     optional: field.optional,
+    //                     comments: field.comments,
+    //                     trailingComments: field.trailingComments,
+    //                 };
+    //             });
+                
+    //         } else {
+    //             throw new Error(
+    //                 `Only object types are supported in intersection types. Received ${parsedType.type}`
+    //             );
+    //         }
+    //     }
+    //     return {
+    //         type: "object",
+    //         fields,
+    //     };
+    // }
 
     private parseObjectType(
         node: ts.TypeLiteralNode | ts.InterfaceDeclaration,
