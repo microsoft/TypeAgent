@@ -316,15 +316,6 @@ export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
         this.threads = new ConversationThreads(settings.threadSettings);
     }
 }
-//const DataFileSuffix = "_data.json";
-//const EmbeddingFileSuffix = "_embeddings.bin";
 
 export interface PodcastData
-    extends IConversationDataWithIndexes<PodcastMessage> {} /**
- * Text (such as a transcript) can be collected over a time range.
- * This text can be partitioned into blocks. However, timestamps for individual blocks are not available.
- * Assigns individual timestamps to blocks proportional to their lengths.
- * @param turns Transcript turns to assign timestamps to
- * @param startDate starting
- * @param endDate
- */
+    extends IConversationDataWithIndexes<PodcastMessage> {}

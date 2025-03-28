@@ -76,6 +76,14 @@ export async function importPodcast(
     return pod;
 }
 
+/**
+ * Text (such as a transcript) can be collected over a time range.
+ * This text can be partitioned into blocks. However, timestamps for individual blocks are not available.
+ * Assigns individual timestamps to blocks proportional to their lengths.
+ * @param turns Transcript turns to assign timestamps to
+ * @param startDate starting
+ * @param endDate
+ */
 export function timestampMessages(
     messages: IMessage[],
     startDate: Date,
