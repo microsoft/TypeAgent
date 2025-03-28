@@ -57,12 +57,14 @@ async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
 
     // non blocking execution call
     exec("az ad signed-in-user show", (_error, stdout, _stderr) => {
-        const user = JSON.parse(stdout.toString());
+        try {
+            const user = JSON.parse(stdout.toString());
 
-        if (user.givenName) {
-            given = user.givenName;
-            sur = user.surname;
-        }
+            if (user.givenName) {
+                given = user.givenName;
+                sur = user.surname;
+            }
+        } catch {}
 
         execPromiseResolve({
             user: {
