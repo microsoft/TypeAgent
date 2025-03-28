@@ -11,9 +11,6 @@ import {
 } from "./podcast.js";
 import { IMessage } from "knowpro";
 
-// /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
-export const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
-
 export function parsePodcastTranscript(
     transcriptText: string,
 ): [PodcastMessage[], Set<string>] {
@@ -24,6 +21,7 @@ export function parsePodcastTranscript(
     const participants = new Set<string>();
     const messages: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
+    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
     for (const line of transcriptLines) {
         const match = turnParserRegex.exec(line);
         if (match && match.groups) {

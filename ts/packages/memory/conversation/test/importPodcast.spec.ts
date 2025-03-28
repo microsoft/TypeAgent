@@ -2,12 +2,10 @@
 // Licensed under the MIT License.
 
 import { split } from "knowledge-processor";
-import {
-    parsePodcastTranscript,
-    turnParserRegex,
-} from "../src/importPodcast.js";
+import { parsePodcastTranscript } from "../src/importPodcast.js";
 
 describe("conversation.importPodcast", () => {
+    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
     const transcriptText = `  
 HAMLET: To be, or not to be: that is the question:  
 Whether 'tis nobler in the mind to suffer  
