@@ -6,7 +6,6 @@
  * These should not be exposed via index.ts
  */
 
-import { MessageCollection } from "./storageProvider.js";
 import { ConversationSettings } from "./conversation.js";
 import { ConversationIndex } from "./conversationIndex.js";
 import {
@@ -117,7 +116,7 @@ export async function createConversationFromData(
     const conversation: IConversation = {
         nameTag: data.nameTag,
         tags: data.tags,
-        messages: new MessageCollection(data.messages),
+        messages: data.messages,
         semanticRefs: data.semanticRefs,
         semanticRefIndex: data.semanticIndexData
             ? new ConversationIndex(data.semanticIndexData)

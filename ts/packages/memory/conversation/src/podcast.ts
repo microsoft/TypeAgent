@@ -23,7 +23,6 @@ import {
     createTermEmbeddingCache,
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
-    MessageCollection,
 } from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections } from "typeagent";
@@ -118,7 +117,7 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     constructor(
         public nameTag: string = "",
-        public messages: MessageCollection<PodcastMessage> = new MessageCollection<PodcastMessage>(),
+        public messages: PodcastMessage[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
@@ -131,7 +130,7 @@ export class Podcast implements IConversation<PodcastMessage> {
         if (this.semanticRefIndex) {
             // TODO: do ths using slices/batch so we don't have to load all messages
             addMetadataToIndex(
-                this.messages.getAll(),
+                this.messages,
                 this.semanticRefs,
                 this.semanticRefIndex,
             );
@@ -171,7 +170,7 @@ export class Podcast implements IConversation<PodcastMessage> {
     public async serialize(): Promise<PodcastData> {
         const data: PodcastData = {
             nameTag: this.nameTag,
-            messages: this.messages.getAll(),
+            messages: this.messages,
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -195,7 +194,7 @@ export class Podcast implements IConversation<PodcastMessage> {
                 m.timestamp,
             );
         });
-        this.messages = new MessageCollection<PodcastMessage>(podcastMessages);
+        this.messages = podcastMessages;
         this.semanticRefs = podcastData.semanticRefs;
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {

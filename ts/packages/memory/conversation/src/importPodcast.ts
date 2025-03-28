@@ -9,7 +9,7 @@ import {
     PodcastMessageMeta,
     assignMessageListeners,
 } from "./podcast.js";
-import { IMessage, MessageCollection } from "knowpro";
+import { IMessage } from "knowpro";
 
 export function turnsParserRegex() {
     return /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
@@ -78,11 +78,7 @@ export async function importPodcast(
             dateTime.addMinutesToDate(startDate, lengthMinutes),
         );
     }
-    const pod = new Podcast(
-        podcastName,
-        new MessageCollection<PodcastMessage>(messages),
-        [podcastName],
-    );
+    const pod = new Podcast(podcastName, messages, [podcastName]);
     // TODO: add more tags
     return pod;
 }

@@ -115,7 +115,7 @@ export function buildTimestampIndex(
         // TODO: do ths using slices/batch so we don't have to load all messages
         return addToTimestampIndex(
             conversation.secondaryIndexes.timestampIndex,
-            conversation.messages.getAll(),
+            conversation.messages,
             0,
         );
     }

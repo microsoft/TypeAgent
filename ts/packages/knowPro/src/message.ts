@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IMessage, IMessageCollection, MessageOrdinal } from "./interfaces.js";
+import { IMessage, MessageOrdinal } from "./interfaces.js";
 
 /**
  * Get the total number of a characters in a message.
@@ -26,7 +26,7 @@ export function getMessageCharCount(message: IMessage): number {
  * @returns
  */
 export function getCountOfMessagesInCharBudget(
-    messages: IMessageCollection,
+    messages: IMessage[],
     messageOrdinals: MessageOrdinal[],
     maxCharsInBudget: number,
 ): number {
@@ -35,7 +35,7 @@ export function getCountOfMessagesInCharBudget(
     // TODO: use batches
     for (; i < messageOrdinals.length; ++i) {
         const messageOrdinal = messageOrdinals[i];
-        const message = messages.get(messageOrdinal);
+        const message = messages[messageOrdinal];
         const messageCharCount = getMessageCharCount(message);
         if (messageCharCount + totalCharCount > maxCharsInBudget) {
             break;

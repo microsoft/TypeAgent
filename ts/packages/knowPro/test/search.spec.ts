@@ -97,7 +97,7 @@ describe("knowpro.search", () => {
 
     function verifyMessageOrdinals(scoredOrdinals: ScoredMessageOrdinal[]) {
         for (const ordinal of scoredOrdinals) {
-            const message = conversation?.messages.get(ordinal.messageOrdinal);
+            const message = conversation?.messages[ordinal.messageOrdinal];
             expect(message).toBeDefined();
         }
     }

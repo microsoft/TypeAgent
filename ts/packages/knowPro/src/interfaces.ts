@@ -55,7 +55,8 @@ export interface Tag {
 export interface IConversation<TMessage extends IMessage = IMessage> {
     nameTag: string;
     tags: string[];
-    messages: IMessageCollection<TMessage>;
+    messages: TMessage[];
+    //messages: IMessageCollection<TMessage>;
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
@@ -310,9 +311,13 @@ export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
     getAll(): T[];
 }
 
+/**
+ * ICollection is an APPEND ONLY collection
+ */
 export interface ICollection<T, TOrdinal>
     extends IReadonlyCollection<T, TOrdinal> {
     readonly isPersistent: boolean;
+
     push(...items: T[]): void;
 }
 

@@ -106,7 +106,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showMessagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
+                ? conversation.messages.slice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -246,7 +246,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showImagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
+                ? conversation.messages.slice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }

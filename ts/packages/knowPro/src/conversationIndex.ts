@@ -251,7 +251,7 @@ export async function buildSemanticRefIndex(
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageOrdinal: MessageOrdinal = i;
         const chunkOrdinal = 0;
-        const message = conversation.messages.get(messageOrdinal);
+        const message = conversation.messages[messageOrdinal];
         // only one chunk per message for now
         const text = message.textChunks[chunkOrdinal];
         const knowledgeResult = await async.callWithRetry(() =>

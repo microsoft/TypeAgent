@@ -20,7 +20,6 @@ import {
     readConversationDataFromFile,
     createTermEmbeddingCache,
     buildTransientSecondaryIndexes,
-    MessageCollection,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -357,7 +356,7 @@ export class ImageCollection implements IConversation {
     public secondaryIndexes: ConversationSecondaryIndexes;
     constructor(
         public nameTag: string = "",
-        public messages: MessageCollection<Image> = new MessageCollection(),
+        public messages: Image[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
@@ -369,7 +368,7 @@ export class ImageCollection implements IConversation {
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
             addMetadataToIndex(
-                this.messages.getAll(),
+                this.messages,
                 this.semanticRefs,
                 this.semanticRefIndex,
                 (type, knowledge) => {
@@ -413,7 +412,7 @@ export class ImageCollection implements IConversation {
     public async serialize(): Promise<ImageCollectionData> {
         const conversationData: ImageCollectionData = {
             nameTag: this.nameTag,
-            messages: this.messages.getAll(),
+            messages: this.messages,
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -434,7 +433,7 @@ export class ImageCollection implements IConversation {
             image.timestamp = m.timestamp;
             return image;
         });
-        this.messages = new MessageCollection<Image>(messages);
+        this.messages = messages;
         this.semanticRefs = data.semanticRefs;
         this.tags = data.tags;
         if (data.semanticIndexData) {
@@ -533,10 +532,7 @@ export async function importImages(
         }
     }
 
-    return new ImageCollection(
-        path.dirname(imagePath),
-        new MessageCollection<Image>(images),
-    );
+    return new ImageCollection(path.dirname(imagePath), images);
 }
 
 /**
