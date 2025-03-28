@@ -556,16 +556,23 @@ async function indexImages(
     // create the cache path if it doesn't exist
     if (!fs.existsSync(cachePath)) {
         fs.mkdirSync(cachePath);
-    }    
+    }
 
     // index each image
     const retVal: Image[] = [];
     for (let i = 0; i < fileNames.length; i++) {
-
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
 
         if (isDirectoryPath(fullFilePath)) {
-            retVal.push(... await indexImages(fullFilePath, path.join(cachePath, fileNames[i]), true, chatModel, callback));
+            retVal.push(
+                ...(await indexImages(
+                    fullFilePath,
+                    path.join(cachePath, fileNames[i]),
+                    true,
+                    chatModel,
+                    callback,
+                )),
+            );
         } else {
             // index the image
             const img = await indexImage(fullFilePath, cachePath, chatModel);

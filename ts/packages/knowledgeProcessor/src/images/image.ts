@@ -519,7 +519,10 @@ export async function loadImage(
         cacheFolder = path.dirname(fileName);
     }
 
-    const cachedFileName: string = path.join(cacheFolder, fileName + ".kr.json");
+    const cachedFileName: string = path.join(
+        cacheFolder,
+        fileName + ".kr.json",
+    );
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }
@@ -616,7 +619,6 @@ export async function loadImageWithKnowledge(
     model: ChatModel,
     loadCachedDetails: boolean = true,
 ): Promise<Image | undefined> {
-
     const cachedFileName: string = path.join(
         cachePath,
         path.basename(fileName) + ".kr.json",
