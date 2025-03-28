@@ -32,6 +32,7 @@ export function getCountOfMessagesInCharBudget(
 ): number {
     let i = 0;
     let totalCharCount = 0;
+    // TODO: use batches
     for (; i < messageOrdinals.length; ++i) {
         const messageOrdinal = messageOrdinals[i];
         const message = messages.get(messageOrdinal);

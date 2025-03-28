@@ -129,6 +129,7 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
+            // TODO: do ths using slices/batch so we don't have to load all messages
             addMetadataToIndex(
                 this.messages.getAll(),
                 this.semanticRefs,
