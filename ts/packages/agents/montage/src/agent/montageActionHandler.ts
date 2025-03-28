@@ -39,6 +39,7 @@ const montageFile: string = "montages.json";
 
 // The agent context
 type MontageActionContext = {
+    montageIdSeed: number;
     montages: PhotoMontage[];
     montage: PhotoMontage | undefined;
     imageCollection: im.ImageCollection | undefined;
@@ -105,7 +106,9 @@ async function updateMontageContext(
         if (await context.sessionStorage?.exists(montageFile)) {
             const data = await context.sessionStorage?.read(montageFile, "utf8");
             if (data) {
-                context.agentContext.montages = JSON.parse(data);
+                const d = JSON.parse(data);
+                context.agentContext.montageIdSeed = d.montageIdSeed;
+                context.agentContext.montages = JSON.parse(d.montages);
             }
         }
 
@@ -391,7 +394,7 @@ function updateMontageViewerState(context: MontageActionContext) {
 function createNewMontage(context: MontageActionContext, title: string = ""): PhotoMontage {
     // create a new montage
     return {
-        id: context.montages.length,
+        id: context.montageIdSeed++,
         title: title.length == 0 ? "Untitled" : title,
         files: [],
         selected: []
@@ -549,7 +552,7 @@ async function saveMontages(context: SessionContext<MontageActionContext>) {
     }
 
     // save the montage state for later
-    await context.sessionStorage?.write(montageFile, JSON.stringify(context.agentContext.montages));
+    await context.sessionStorage?.write(montageFile, JSON.stringify({ montageIdSeed: context.agentContext.montageIdSeed, montages: context.agentContext.montages }));
 }
 
 /**
