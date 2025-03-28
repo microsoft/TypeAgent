@@ -49,6 +49,12 @@ document.addEventListener("DOMContentLoaded", function () {
     function processAction(action) {
         switch (action.actionName) {
 
+            case "reset": {
+                mainContainer.innerHTML = "";
+                setTitle("");
+                break;
+            }
+
             case "findPhotos":
             case "listPhotos": {
                 const msg: FindPhotosAction = action as FindPhotosAction;

@@ -112,14 +112,6 @@ async function updateMontageContext(
         // if there are montages, load the last one otherwise create a new one
         if (context.agentContext.montages.length > 0) {
             context.agentContext.montage = context.agentContext.montages[context.agentContext.montages.length - 1];
-        } else {
-            // create a new montage
-            context.agentContext.montage = {
-                id: context.agentContext.montages.length,
-                title: "Untitled Montage",
-                files: [],
-                selected: []
-            }
         }
 
         // Load the image index from disk
@@ -138,7 +130,9 @@ async function updateMontageContext(
             });
 
             // send initial state
-            context.agentContext.viewProcess?.send(context.agentContext.montage);
+            if (context.agentContext.montage) {
+                context.agentContext.viewProcess?.send(context.agentContext.montage);
+            }
         }
     } else {
         // shut down service
@@ -289,35 +283,46 @@ async function handleMontageAction(
             const deleteMontageAction: DeleteMontageAction = action as DeleteMontageAction;
             const montageIds: number[] = deleteMontageAction.parameters.id ? deleteMontageAction.parameters.id : [actionContext.sessionContext.agentContext.montage!.id];
             const deleteAll: boolean = deleteMontageAction.parameters.deleteAll ? deleteMontageAction.parameters.deleteAll : false;
+            let deletedCount: number = 0;
 
             if (deleteAll) {
+                deletedCount = actionContext.sessionContext.agentContext.montages.length;
                 actionContext.sessionContext.agentContext.montages = [];
-
-                // create new active montage
-                actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);    
+                actionContext.sessionContext.agentContext.montage = undefined;
             } else if (deleteMontageAction.parameters.title !== undefined) {
                 actionContext.sessionContext.agentContext.montages.filter((value) => {
-                    // create new active montage if that's the one we are deleting
-                    if (value.title == actionContext.sessionContext.agentContext.montage?.title) {
-                        actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);            
+                    // // create new active montage if that's the one we are deleting
+                    // if (value.title == actionContext.sessionContext.agentContext.montage?.title) {
+                    //     actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);            
+                    // }
+
+                    if (value.title == deleteMontageAction.parameters.title) {
+                        deletedCount++;
+                        return true;
                     }
 
-                    return value.title == deleteMontageAction.parameters.title
+                    return false;
                 });
             } else {
-                // no id/title specified, delete the active montage or the one with the supplied id
-                actionContext.sessionContext.agentContext.montages.filter(value => montageIds.indexOf(value.id) !== -1);
+                // no id/title specified, delete the active montage or the ones with the supplied ids
+                if (actionContext.sessionContext.agentContext.montage) {
+                    if (montageIds.indexOf(actionContext.sessionContext.agentContext.montage?.id) !== -1) {
+                        actionContext.sessionContext.agentContext.montage = undefined;
+                    }
+                }
 
-                // create new active montage
-                actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);    
+                deletedCount = actionContext.sessionContext.agentContext.montages.length;                
+                actionContext.sessionContext.agentContext.montages.filter(value => montageIds.indexOf(value.id) !== -1);
+                deletedCount = actionContext.sessionContext.agentContext.montages.length;
             }
 
+            // save montage updates
             saveMontages(actionContext.sessionContext);
 
-            result = createActionResult("Montage deleted.");
+            result = createActionResult(`Deleted ${deletedCount} montages.`);
 
             // update montage state
-            actionContext.sessionContext.agentContext.viewProcess?.send(actionContext.sessionContext.agentContext.montage!);
+            updateMontageViewerState(actionContext.sessionContext.agentContext);
 
             break;
         }
@@ -346,24 +351,41 @@ async function handleMontageAction(
             }
 
             // update montage state
-            actionContext.sessionContext.agentContext.viewProcess?.send(actionContext.sessionContext.agentContext.montage!);
+            updateMontageViewerState(actionContext.sessionContext.agentContext);
 
             break;
         }
 
         case "listMontages": {
 
-            const names: string[] = [];
-            actionContext.sessionContext.agentContext.montages.forEach(value => names.push(`${value.id}: ${value.title}`));
+            if (actionContext.sessionContext.agentContext.montages.length > 0) {
+                const names: string[] = [];
+                actionContext.sessionContext.agentContext.montages.forEach(value => names.push(`${value.id}: ${value.title}`));
 
-            displayResult(names, actionContext);
+                displayResult(names, actionContext);
 
-            result = createActionResultNoDisplay("done!");
+                result = createActionResultNoDisplay("done!");
+            } else {
+                result = createActionResult("There are no montages.");
+            }
 
             break;
         }
     }
     return result;
+}
+
+/**
+ * Notifies the montage canvas to update with the supplied montage data (or reset)
+ * @param context - The agent context
+ */
+function updateMontageViewerState(context: MontageActionContext) {
+    // update montage state
+    if (context.montage !== undefined) {
+        context.viewProcess?.send(context.montage!);
+    } else {
+        context.viewProcess?.send({ actionName: "reset" });
+    }
 }
 
 function createNewMontage(context: MontageActionContext, title: string = ""): PhotoMontage {
