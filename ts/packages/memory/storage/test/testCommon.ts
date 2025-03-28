@@ -37,6 +37,18 @@ export function createMessage(messageText: string): TestMessage {
     return message;
 }
 
+export function createMessages(count: number): TestMessage[] {
+    const messages: TestMessage[] = [];
+    for (let i = 0; i < count; ++i) {
+        messages.push(createMessage(`Message ${i}`));
+    }
+    return messages;
+}
+
+export function messageText(message: IMessage): string {
+    return message.textChunks[0];
+}
+
 export function createTimestamp(): string {
     return new Date().toISOString();
 }

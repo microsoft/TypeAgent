@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import Database, * as sqlite from "better-sqlite3";
-import { removeFile } from "typeagent";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { removeFile } from "../fileSystem.js";
 
 function getDbOptions() {
     if (process?.versions?.electron !== undefined) {
@@ -19,22 +19,22 @@ function getDbOptions() {
     return { nativeBinding };
 }
 
-export async function createDatabase(
+export function createDatabase(
     filePath: string,
     createNew: boolean,
-): Promise<sqlite.Database> {
+): sqlite.Database {
     if (createNew) {
-        await deleteDatabase(filePath);
+        deleteDatabase(filePath);
     }
     const db = new Database(filePath, getDbOptions());
     db.pragma("journal_mode = WAL");
     return db;
 }
 
-export async function deleteDatabase(filePath: string): Promise<void> {
-    await removeFile(filePath);
-    await removeFile(filePath + "-shm");
-    await removeFile(filePath + "-wal");
+export function deleteDatabase(filePath: string): void {
+    removeFile(filePath);
+    removeFile(filePath + "-shm");
+    removeFile(filePath + "-wal");
 }
 
 export function tablePath(rootName: string, name: string): string {
