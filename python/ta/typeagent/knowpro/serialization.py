@@ -28,7 +28,7 @@ class EmbeddingFileHeader(TypedDict):
 
 
 class EmbeddingData(TypedDict):
-    embeddings: bytes | None
+    embeddings: NormalizedEmbeddings | None
 
 
 class ConversationJsonData(IConversationDataWithIndexes):
@@ -59,11 +59,12 @@ def write_conversation_data_to_file(
             with open(filename + EMBEDDING_FILE_SUFFIX, "wb") as f:
                 f.write(embeddings)
     with open(filename + DATA_FILE_SUFFIX, "w") as f:
+        # f.write(repr(file_data["jsonData"]))
         json.dump(file_data["jsonData"], f)
 
 
-def serialize_embeddings(embeddings: NormalizedEmbeddings) -> bytes:
-    return np.concatenate(embeddings).tobytes()
+def serialize_embeddings(embeddings: NormalizedEmbeddings) -> NormalizedEmbeddings:
+    return np.concatenate(embeddings)
 
 
 def to_conversation_file_data[IMessageData](
@@ -78,21 +79,21 @@ def to_conversation_file_data[IMessageData](
 
     buffer = bytearray()
 
-    related_terms_index_data = conversation_data.get("textEmbeddingData")
+    related_terms_index_data = conversation_data.get("relatedTermsIndexData")
     if related_terms_index_data is not None:
-        index_data = related_terms_index_data.get("indexData")
-        if index_data is not None:
-            embeddings = index_data.get("embeddings")
+        text_embedding_data = related_terms_index_data.get("textEmbeddingData")
+        if text_embedding_data is not None:
+            embeddings = text_embedding_data.get("embeddings")
             if embeddings is not None:
                 buffer.extend(embeddings)
-                index_data["embeddings"] = None
+                text_embedding_data["embeddings"] = None
                 embedding_file_header["relatedCount"] = len(embeddings)
 
     message_index_data = conversation_data.get("messageIndexData")
     if message_index_data is not None:
-        index_data = message_index_data.get("indexData")
-        if index_data is not None:
-            index_embeddings = index_data.get("embeddings")
+        text_embedding_data = message_index_data.get("indexData")
+        if text_embedding_data is not None:
+            index_embeddings = text_embedding_data.get("embeddings")
             if index_embeddings is not None:
                 embeddings = index_embeddings.get("embeddings")
                 if embeddings is not None:
@@ -108,16 +109,3 @@ def to_conversation_file_data[IMessageData](
     )
 
     return file_data
-
-
-def add_embeddings_to_binary_data(
-    buffer: bytearray,
-    embedding_data: EmbeddingData | None = None,
-) -> int | None:
-    if embedding_data is not None:
-        embeddings = embedding_data.get("embeddings")
-        if embeddings is not None:
-            buffer.extend(embeddings)
-            embedding_data["embeddings"] = None
-            return len(embeddings)
-    return None

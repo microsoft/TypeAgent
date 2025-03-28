@@ -14,6 +14,7 @@ from typing import (
     TypedDict,
 )
 
+from ..aitools.embeddings import NormalizedEmbedding
 from ..aitools.vectorbase import (
     ITextEmbeddingIndexData,
     VectorBase,
@@ -423,7 +424,7 @@ class IConversation[
 
 class IThreadDataItem(TypedDict):
     thread: ThreadData
-    embedding: bytes
+    embedding: NormalizedEmbedding | None
 
 
 class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):

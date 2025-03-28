@@ -5,6 +5,8 @@
 # Check Python version before importing anything else.
 import sys
 
+from ..knowpro import serialization
+
 minver = (3, 12)
 if sys.version_info < minver:
     sys.exit(f"Error: Python {minver[0]}.{minver[1]}+ required")
@@ -81,9 +83,11 @@ async def main():
 
     print()
     filename = "podcast"
-    print(f"Dumping to {filename}")
+    print(
+        f"Dumping to {filename}{serialization.DATA_FILE_SUFFIX}, {filename}{serialization.EMBEDDING_FILE_SUFFIX}..."
+    )
     pod.write_to_file(filename)
-    print(f"Dumped to {filename}")
+    print(f"Dump complete.")
     # if pod.semantic_ref_index is not None:
     #     data = pod.semantic_ref_index.serialize()
     #     # new = ConversationIndex(data)

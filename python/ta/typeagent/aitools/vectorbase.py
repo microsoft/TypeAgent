@@ -16,7 +16,7 @@ class ScoredOrdinal(NamedTuple):
 
 
 class ITextEmbeddingIndexData(TypedDict):
-    embeddings: bytes | None
+    embeddings: NormalizedEmbeddings | None
 
 
 class VectorBase:
@@ -85,11 +85,11 @@ class VectorBase:
     def clear(self) -> None:
         self._vectors = np.array([], dtype=np.float32).reshape((0, 0))
 
-    def serialize_embedding_at(self, ordinal: int) -> bytes:
-        return self._vectors[ordinal].tobytes() if self._vectors is not None else b""
+    def serialize_embedding_at(self, ordinal: int) -> NormalizedEmbedding | None:
+        return self._vectors[ordinal] if self._vectors is not None else None
 
-    def serialize(self) -> bytes:
-        return self._vectors.tobytes() if self._vectors is not None else b""
+    def serialize(self) -> NormalizedEmbeddings | None:
+        return self._vectors if self._vectors is not None else None
 
 
 async def main():
