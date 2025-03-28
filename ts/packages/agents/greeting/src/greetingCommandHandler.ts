@@ -220,11 +220,20 @@ export class GreetingCommandHandler implements CommandHandlerNoParams {
         );
 
         // get chat history
+        const days = [
+            "Sunday",
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+        ];
         const history = await getRecentChatHistory(context);
         history.push("Hi!");
         history.push("###");
         history.push(
-            `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
+            `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}. It is ${days[new Date().getDay()]}`,
         );
 
         // make the request
