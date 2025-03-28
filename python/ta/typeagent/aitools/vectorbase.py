@@ -52,7 +52,6 @@ class VectorBase:
         if model is None:
             model = AsyncEmbeddingModel()
         self._model = model
-        # TODO: Using Any b/c pyright doesn't appear to understand NDArray.
         self._vectors: NormalizedEmbeddings | None = None
 
     async def get_embedding(self, key: str, cache: bool = True) -> NormalizedEmbedding:
