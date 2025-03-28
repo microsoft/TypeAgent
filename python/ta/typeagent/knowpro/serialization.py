@@ -73,10 +73,6 @@ def to_conversation_file_data[IMessageData](
     file_header = create_file_header()
     embedding_file_header = EmbeddingFileHeader()
 
-    json_data = cast(ConversationJsonData, conversation_data.copy())
-    json_data["fileHeader"] = file_header
-    json_data["embeddingFileHeader"] = embedding_file_header
-
     buffer = bytearray()
 
     related_terms_index_data = conversation_data.get("relatedTermsIndexData")
@@ -102,7 +98,11 @@ def to_conversation_file_data[IMessageData](
                     embedding_file_header["messageCount"] = len(embeddings)
 
     binary_data = ConversationBinaryData(embeddings=buffer)
-
+    json_data = ConversationJsonData(
+        **conversation_data,
+        fileHeader=file_header,
+        embeddingFileHeader=embedding_file_header,
+    )
     file_data = ConversationFileData(
         jsonData=json_data,
         binaryData=binary_data,
