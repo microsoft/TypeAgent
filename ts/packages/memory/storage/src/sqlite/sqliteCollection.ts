@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import { ICollection, IMessage, MessageOrdinal } from "knowpro";
+import { ICollection } from "knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
 export class SqliteCollection<T, TOrdinal extends number>
@@ -153,15 +153,3 @@ type CollectionRow = {
     ordinal: number;
     value: string;
 };
-
-export class SqlMessageCollection<
-    TMessage extends IMessage = IMessage,
-> extends SqliteCollection<TMessage, MessageOrdinal> {
-    constructor(
-        db: sqlite.Database,
-        tableName: string,
-        ensureExists: boolean = true,
-    ) {
-        super(db, tableName, ensureExists);
-    }
-}

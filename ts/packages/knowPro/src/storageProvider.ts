@@ -59,18 +59,19 @@ export class Collection<T, TOrdinal extends number>
     }
 }
 
-export class SemanticRefCollection extends Collection<
-    SemanticRef,
-    SemanticRefOrdinal
-> {
+export class SemanticRefCollection
+    extends Collection<SemanticRef, SemanticRefOrdinal>
+    implements ISemanticRefCollection
+{
     constructor(semanticRefs?: SemanticRef[]) {
         super(semanticRefs);
     }
 }
 
-export class MessageCollection<
-    TMessage extends IMessage = IMessage,
-> extends Collection<TMessage, MessageOrdinal> {
+export class MessageCollection<TMessage extends IMessage = IMessage>
+    extends Collection<TMessage, MessageOrdinal>
+    implements IMessageCollection<TMessage>
+{
     constructor(messages?: TMessage[]) {
         super(messages);
     }

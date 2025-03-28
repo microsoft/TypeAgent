@@ -9,7 +9,7 @@ import {
     messageText,
     testFilePath,
 } from "./testCommon.js";
-import { SqlMessageCollection } from "../src/sqlite/sqliteCollection.js";
+import { SqlMessageCollection } from "../src/sqlite/sqliteProvider.js";
 import { IMessage } from "knowpro";
 
 describe("memory.sqlite.messageCollection", () => {
@@ -18,7 +18,7 @@ describe("memory.sqlite.messageCollection", () => {
 
     beforeAll(async () => {
         await ensureTestDir();
-        db = await createDatabase(testFilePath("collections.db"), true);
+        db = createDatabase(testFilePath("collections.db"), true);
     });
     afterAll(() => {
         if (db) {
