@@ -1002,6 +1002,52 @@ async function handleScriptAction(
     }
 }
 
+function extractMicrodata(): any[] {
+    const data: any[] = [];
+
+    // Find all elements with 'itemscope' attribute (Microdata)
+    document.querySelectorAll("[itemscope]").forEach((item) => {
+        const schemaType = item.getAttribute("itemtype");
+        const metadata: Record<string, any> = {
+            "@type": schemaType || "Unknown",
+        };
+
+        item.querySelectorAll("[itemprop]").forEach((prop) => {
+            const propName = prop.getAttribute("itemprop");
+            let value =
+                prop.getAttribute("content") || prop.textContent?.trim() || "";
+
+            if (prop.tagName === "IMG") {
+                value = (prop as HTMLImageElement).src;
+            }
+
+            if (propName) metadata[propName] = value;
+        });
+
+        data.push(metadata);
+    });
+
+    return data;
+}
+
+function extractJsonLd(): any[] {
+    const jsonLdData: any[] = [];
+
+    // Find all <script> tags with type="application/ld+json"
+    document
+        .querySelectorAll('script[type="application/ld+json"]')
+        .forEach((script) => {
+            try {
+                const json = JSON.parse(script.textContent || "{}");
+                jsonLdData.push(json);
+            } catch (error) {
+                console.error("Error parsing JSON-LD:", error);
+            }
+        });
+
+    return jsonLdData;
+}
+
 chrome.runtime?.onMessage.addListener(
     (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
         const handleMessage = async () => {
@@ -1062,5 +1108,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         recordedActions = restoredData.recordedActions;
         recordedActionScreenshot = restoredData.recordedActionScreenshot;
         recordedActionHtml = restoredData.recordedActionHtml;
+    }
+
+    // Extract both Microdata and JSON-LD
+    const microdata = extractMicrodata();
+    const jsonLdData = extractJsonLd();
+    const structuredData = [...microdata, ...jsonLdData];
+
+    if (structuredData.length > 0) {
+        chrome.runtime.sendMessage({
+            action: "microdataDetected",
+            data: structuredData,
+        });
+        // chrome.storage.local.set({ microdata: structuredData });
+        console.log(structuredData);
     }
 });
