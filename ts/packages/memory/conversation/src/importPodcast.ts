@@ -11,19 +11,18 @@ import {
 } from "./podcast.js";
 import { IMessage, MessageCollection } from "knowpro";
 
-export async function importPodcast(
-    transcriptFilePath: string,
-    podcastName?: string,
-    startDate?: Date,
-    lengthMinutes: number = 60,
-): Promise<Podcast> {
-    const transcriptText = await readAllText(transcriptFilePath);
-    podcastName ??= getFileName(transcriptFilePath);
+export function turnsParserRegex() {
+    return /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
+}
+
+export function parsePodcastTranscript(
+    transcriptText: string,
+): [PodcastMessage[], Set<string>] {
     const transcriptLines = split(transcriptText, /\r?\n/, {
         removeEmpty: true,
         trim: true,
     });
-    const turnParseRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
+    const turnParseRegex = turnsParserRegex();
     const participants = new Set<string>();
     const messages: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
@@ -59,6 +58,18 @@ export async function importPodcast(
     if (curMsg) {
         messages.push(curMsg);
     }
+    return [messages, participants];
+}
+
+export async function importPodcast(
+    transcriptFilePath: string,
+    podcastName?: string,
+    startDate?: Date,
+    lengthMinutes: number = 60,
+): Promise<Podcast> {
+    const transcriptText = await readAllText(transcriptFilePath);
+    podcastName ??= getFileName(transcriptFilePath);
+    const [messages, participants] = parsePodcastTranscript(transcriptText);
     assignMessageListeners(messages, participants);
     if (startDate) {
         timestampMessages(
