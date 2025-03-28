@@ -4,7 +4,7 @@
 import { split } from "knowledge-processor";
 import {
     parsePodcastTranscript,
-    turnsParserRegex,
+    turnParserRegex,
 } from "../src/importPodcast.js";
 
 describe("conversation.importPodcast", () => {
@@ -54,7 +54,7 @@ Ignorance is like a delicate exotic fruit; touch it and the bloom is gone.
     const participantCount = 5;
 
     test("regex", () => {
-        const regex = turnsParserRegex();
+        const regex = turnParserRegex;
         const transcriptLines = split(transcriptText, /\r?\n/, {
             removeEmpty: true,
             trim: true,
