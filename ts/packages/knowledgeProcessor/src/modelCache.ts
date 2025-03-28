@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TextEmbeddingModel } from "aiclient";
+import {
+    createTextEmbeddingModelWithCache,
+    TextEmbeddingModel,
+} from "aiclient";
 import { collections } from "typeagent";
-import { Result, success, error } from "typechat";
+import { Result } from "typechat";
 
 export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
     readonly cache: collections.Cache<string, number[]>;
@@ -12,80 +15,49 @@ export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
 
 /**
  * Create an embedding model that leverages a cache to improve performance
- * @param model
+ * @param innerModel
  * @param cacheSize
  * @returns
  */
 export function createEmbeddingCache(
-    model: TextEmbeddingModel,
+    innerModel: TextEmbeddingModel,
     cacheSize: number,
     embeddingLookup?: (text: string) => number[] | undefined,
 ): TextEmbeddingModelWithCache {
     const cache: collections.Cache<string, number[]> =
         collections.createLRUCache(cacheSize);
+    innerModel = createTextEmbeddingModelWithCache(
+        innerModel,
+        getFromCache,
+        putInCache,
+    );
     const modelWithCache: TextEmbeddingModelWithCache = {
         cache,
         generateEmbedding,
-        maxBatchSize: model.maxBatchSize,
+        maxBatchSize: innerModel.maxBatchSize,
     };
-    if (model.generateEmbeddingBatch) {
+    if (innerModel.generateEmbeddingBatch) {
         modelWithCache.generateEmbeddingBatch = generateEmbeddingBatch;
     }
     return modelWithCache;
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
-        let embedding = getFromCache(input);
-        if (embedding) {
-            return success(embedding);
-        }
-        const result = await model.generateEmbedding(input);
-        if (result.success) {
-            cache.put(input, result.data);
-        }
-        return result;
+        return innerModel.generateEmbedding(input);
     }
 
     async function generateEmbeddingBatch(
         inputs: string[],
     ): Promise<Result<number[][]>> {
-        let embeddingBatch: number[][] = new Array(inputs.length);
-        let inputBatch: string[] | undefined;
-        // First, grab any embeddings we already have
-        for (let i = 0; i < inputs.length; ++i) {
-            let input = inputs[i];
-            let embedding = getFromCache(input);
-            if (embedding === undefined) {
-                // This one needs embeddings
-                inputBatch ??= [];
-                inputBatch.push(input);
-            } else {
-                embeddingBatch[i] = embedding;
-            }
-        }
-        if (inputBatch && inputBatch.length > 0) {
-            const result = await model.generateEmbeddingBatch!(inputBatch);
-            if (!result.success) {
-                return result;
-            }
-            const newEmbeddings = result.data;
-            // Merge the batch into results
-            let iGenerated = 0;
-            embeddingBatch ??= new Array(inputs.length);
-            for (let i = 0; i < embeddingBatch.length; ++i) {
-                if (embeddingBatch[i] === undefined) {
-                    embeddingBatch[i] = newEmbeddings[iGenerated++];
-                    cache.put(inputs[i], embeddingBatch[i]);
-                }
-            }
-        }
-        return embeddingBatch && embeddingBatch.length > 0
-            ? success(embeddingBatch)
-            : error("Could not generated embeddings");
+        return innerModel.generateEmbeddingBatch!(inputs);
     }
 
     function getFromCache(text: string): number[] | undefined {
         let embedding = embeddingLookup ? embeddingLookup(text) : undefined;
         embedding ??= cache.get(text);
         return embedding;
+    }
+
+    function putInCache(text: string, embedding: number[]): void {
+        cache.put(text, embedding);
     }
 }
