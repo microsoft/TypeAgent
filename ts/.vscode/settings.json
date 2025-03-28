@@ -29,6 +29,7 @@
         {"name": "memoryProviders", "rootPath": "examples/memoryProviders"},
         {"name": "typeagent", "rootPath": "packages/typeagent"},
         {"name": "knowpro", "rootPath": "packages/knowpro"},
+        {"name": "knowpro-conversation", "rootPath": "packages/memory/conversation"},
         {"name": "knowpro-storage", "rootPath": "packages/memory/storage"},
     ],
     "jest.runMode": "on-demand",
