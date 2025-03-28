@@ -508,8 +508,33 @@ async function awaitPageIncrementalUpdates() {
 let recording = false;
 let recordedActions: any[] = [];
 let actionIndex = 1;
-let recordedActionHtml: string = "";
-let recordedActionScreenshot: string = "";
+let recordedHtmlIndex = 0;
+let recordedActionHtml: string[] = [];
+let recordedActionScreenshot: string[] = [];
+let lastUrl = window.location.href;
+
+const observeDOMChanges = () => {
+    const targetNode = document.body; // Observe the entire document
+    const observer = new MutationObserver(() => {
+        const currentUrl = window.location.href;
+
+        // Detect if URL has changed since last check
+        if (currentUrl !== lastUrl) {
+            console.log("Navigation detected! New URL:", currentUrl);
+            
+            // Update last known URL
+            lastUrl = currentUrl;
+
+            // Optional: Send message to background script
+            chrome.runtime.sendMessage({ action: "spaNavigationDetected", url: currentUrl });
+
+            window.dispatchEvent(new Event("spa-navigation"));
+        }
+    });
+
+    observer.observe(targetNode, { childList: true, subtree: true });
+};
+
 
 async function startRecording() {
     if (recording) return;
@@ -522,8 +547,9 @@ async function startRecording() {
     recordedActions = [];
     actionIndex = 1;
 
-    recordedActionHtml = "";
-    recordedActionScreenshot = "";
+    recordedActionHtml = [];
+    recordedActionScreenshot = [];
+    recordedHtmlIndex = 0;
 
     setIdsOnAllElements(0);
 
@@ -531,6 +557,14 @@ async function startRecording() {
     document.addEventListener("input", recordInput, true);
     // document.addEventListener("scroll", recordScroll, true);
     document.addEventListener("keyup", recordTextEntry, true);
+
+    observeDOMChanges();
+    
+    window.addEventListener("unload", recordNavigation);
+    window.addEventListener("beforeunload", recordNavigation);
+    window.addEventListener("popstate", recordNavigation);
+    window.addEventListener("hashchange", recordNavigation);
+
 }
 
 // Stop recording and return data
@@ -541,15 +575,17 @@ async function stopRecording() {
     // document.removeEventListener("scroll", recordScroll, true);
     document.removeEventListener("keyup", recordTextEntry, true);
 
-    await captureAnnotatedScreenshot();
+    window.removeEventListener("unload", recordNavigation, true);
+    window.removeEventListener("beforeunload", recordNavigation, true);
+    window.removeEventListener("popstate", recordNavigation, true);
+    window.removeEventListener("hashchange", recordNavigation, true);
+
+    const screenshot = await captureAnnotatedScreenshot();
+    recordedActionScreenshot.push(screenshot);
 
     const pageHTML = getPageHTML(false, "", 0, false);
-    recordedActionHtml = pageHTML;
-
-    await chrome.runtime.sendMessage({
-        type: "saveRecordedActionPageHTML",
-        html: pageHTML,
-    });
+    recordedActionHtml.push(pageHTML);
+    recordedHtmlIndex = recordedActionHtml.length;
 
     await chrome.runtime.sendMessage({
         type: "recordingStopped",
@@ -575,6 +611,7 @@ function recordClick(event: MouseEvent) {
         cssSelector,
         boundingBox,
         timestamp: Date.now(),
+        htmlIndex: recordedHtmlIndex,
     });
 
     saveRecordedActions();
@@ -596,6 +633,7 @@ function recordInput(event: Event) {
         cssSelector,
         boundingBox,
         timestamp: Date.now(),
+        htmlIndex: recordedHtmlIndex,
     });
 
     saveRecordedActions();
@@ -624,6 +662,7 @@ function recordTextEntry(event: KeyboardEvent) {
             selector: getCSSSelector(target),
             boundingBox: getBoundingBox(target),
             value: value, // Capture final text value
+            htmlIndex: recordedHtmlIndex,
         };
 
         recordedActions.push(action);
@@ -632,7 +671,7 @@ function recordTextEntry(event: KeyboardEvent) {
         if (
             recordedActions.length > 0 &&
             recordedActions[recordedActions.length - 1].type ===
-                "pageLevelTextInput"
+            "pageLevelTextInput"
         ) {
             // accumulate entered text value
             recordedActions[recordedActions.length - 1].value += event.key;
@@ -645,6 +684,7 @@ function recordTextEntry(event: KeyboardEvent) {
                 selector: "body",
                 boundingBox: getBoundingBox(target),
                 value: event.key,
+                htmlIndex: recordedHtmlIndex,
             };
 
             recordedActions.push(action);
@@ -662,73 +702,74 @@ function recordScroll() {
         scrollX: window.scrollX,
         scrollY: window.scrollY,
         timestamp: Date.now(),
+        htmlIndex: recordedHtmlIndex,
     });
 
     saveRecordedActions();
 }
 
 async function recordNavigation() {
-    await captureAnnotatedScreenshot();
-    const pageHTML = getPageHTML(false, "", 0, false);
-    chrome.runtime.sendMessage({
-        type: "saveRecordedActionPageHTML",
-        html: pageHTML,
-    });
-
     recordedActions.push({
         id: actionIndex++,
         type: "navigation",
         url: window.location.href,
         timestamp: Date.now(),
+        htmlIndex: recordedHtmlIndex,
     });
 
+    const screenshot = await captureAnnotatedScreenshot();
+    recordedActionScreenshot.push(screenshot);
+
+    const pageHTML = getPageHTML(false, "", 0, false);
+
+    recordedActionHtml.push(pageHTML);
+
+    recordedHtmlIndex = recordedActionHtml.length;
     saveRecordedActions();
 }
 
-async function captureAnnotatedScreenshot() {
-    const screenshotUrl = await chrome.runtime.sendMessage({
-        type: "takeScreenshot",
+async function captureAnnotatedScreenshot(): Promise<string> {
+    return new Promise(async (resolve, reject) => {
+        const screenshotUrl = await chrome.runtime.sendMessage({
+            type: "takeScreenshot",
+        });
+
+        if (!screenshotUrl) {
+            console.error("Failed to capture screenshot");
+            resolve("");
+        } else {
+            const img = new Image();
+            img.src = screenshotUrl;
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d")!;
+                canvas.width = img.width;
+                canvas.height = img.height;
+
+                ctx.drawImage(img, 0, 0);
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+                recordedActions.forEach((action) => {
+                    if (action.boundingBox) {
+
+                        const { left, top, width, height } = action.boundingBox;
+                        ctx.strokeStyle = "red";
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(left, top, width, height);
+
+                        ctx.fillStyle = "red";
+                        ctx.font = "bold 14px Arial";
+                        var textWidth = ctx.measureText(action.cssSelector).width;
+
+                        ctx.fillText(action.cssSelector, left + width - textWidth, top - 5);
+                    }
+                });
+
+                const annotatedScreenshot = canvas.toDataURL("image/png");
+                resolve(annotatedScreenshot)
+            };
+        }
     });
-
-    if (!screenshotUrl) {
-        console.error("Failed to capture screenshot");
-        return;
-    }
-
-    const img = new Image();
-    img.src = screenshotUrl;
-    img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d")!;
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        ctx.drawImage(img, 0, 0);
-        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-
-        recordedActions.forEach((action) => {
-            if (!action.boundingBox) return;
-
-            const { left, top, width, height } = action.boundingBox;
-            ctx.strokeStyle = "red";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(left, top, width, height);
-
-            ctx.fillStyle = "red";
-            ctx.font = "bold 14px Arial";
-            var textWidth = ctx.measureText(action.cssSelector).width;
-
-            ctx.fillText(action.cssSelector, left + width - textWidth, top - 5);
-        });
-
-        const annotatedScreenshot = canvas.toDataURL("image/png");
-        chrome.runtime.sendMessage({
-            type: "saveAnnotatedScreenshot",
-            screenshot: annotatedScreenshot,
-        });
-
-        recordedActionScreenshot = annotatedScreenshot;
-    };
 }
 
 async function saveRecordedActions() {
@@ -737,13 +778,9 @@ async function saveRecordedActions() {
         recordedActions,
         recordedActionScreenshot,
         recordedActionHtml,
+        actionIndex,
     });
 }
-
-// Detect navigation and push it as an action
-window.addEventListener("beforeunload", recordNavigation);
-window.addEventListener("popstate", recordNavigation);
-window.addEventListener("hashchange", recordNavigation);
 
 function getCSSSelector(element: HTMLElement): string {
     if (element.id) {
@@ -1062,5 +1099,47 @@ document.addEventListener("DOMContentLoaded", async () => {
         recordedActions = restoredData.recordedActions;
         recordedActionScreenshot = restoredData.recordedActionScreenshot;
         recordedActionHtml = restoredData.recordedActionHtml;
+        if(recordedActionHtml !== undefined && recordedActionHtml.length >0){
+            recordedHtmlIndex = recordedActionHtml.length;
+        }
+
+        actionIndex = restoredData.actionIndex ?? 0;
+    }
+
+    
+});
+
+// Helper function to dispatch custom event on SPA navigation
+const interceptHistory = (method: "pushState" | "replaceState") => {
+    const original = history[method];
+    return function (this: History, ...args: any) {
+        const result = original.apply(this, args);
+        window.dispatchEvent(new Event("spa-navigation"));
+        return result;
+    };
+};
+
+// Override history methods
+history.pushState = interceptHistory("pushState");
+history.replaceState = interceptHistory("replaceState");
+
+// Listen for navigation events (SPA)
+window.addEventListener("spa-navigation", async () => {
+    console.log("SPA navigation detected!");
+
+    // Capture page HTML before content changes
+    const pageHTML = document.documentElement.outerHTML;
+    console.log("Captured HTML before SPA navigation:", pageHTML);
+
+
+    if(recording){
+        const screenshot = await captureAnnotatedScreenshot();
+        recordedActionScreenshot.push(screenshot);
+
+        const pageHTML = getPageHTML(false, "", 0, false);
+        recordedActionHtml.push(pageHTML);
+        recordedHtmlIndex = recordedActionHtml.length;
+
+        saveRecordedActions();
     }
 });

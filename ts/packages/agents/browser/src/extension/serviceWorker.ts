@@ -1394,39 +1394,12 @@ chrome.runtime.onMessage.addListener(
                     sendResponse(htmlFragments);
                     break;
                 }
-                case "saveAnnotatedScreenshot": {
-                    await chrome.storage.session.set({
-                        annotatedScreenshot: message.screenshot,
-                    });
-                    sendResponse({});
-                    break;
-                }
-                case "getAnnotatedScreenshot": {
-                    const data = await chrome.storage.session.get(
-                        "annotatedScreenshot",
-                    );
-                    sendResponse(data.annotatedScreenshot);
-                    break;
-                }
-                case "saveRecordedActionPageHTML": {
-                    await chrome.storage.session.set({
-                        recordedActionPageHTML: message.html,
-                    });
-                    sendResponse({});
-                    break;
-                }
-                case "getRecordedActionPageHTML": {
-                    const data = await chrome.storage.session.get(
-                        "recordedActionPageHTML",
-                    );
-                    sendResponse(data.recordedActionPageHTML);
-                    break;
-                }
                 case "saveRecordedActions": {
                     await chrome.storage.session.set({
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
+                        actionIndex:message.actionIndex,
                     });
                     sendResponse({});
                     break;
@@ -1436,6 +1409,7 @@ chrome.runtime.onMessage.addListener(
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
+                        actionIndex:message.actionIndex,
                     });
 
                     sendResponse({});
@@ -1446,6 +1420,7 @@ chrome.runtime.onMessage.addListener(
                         "recordedActions",
                         "recordedActionPageHTML",
                         "annotatedScreenshot",
+                        "actionIndex",
                     ]);
 
                     sendResponse(result);
@@ -1453,10 +1428,11 @@ chrome.runtime.onMessage.addListener(
                 }
                 case "clearRecordedActions": {
                     try {
-                        await chrome.storage.local.remove([
+                        await chrome.storage.session.remove([
                             "recordedActions",
                             "recordedActionPageHTML",
                             "annotatedScreenshot",
+                            "actionIndex",
                         ]);
                     } catch (error) {
                         console.error("Error clearing storage data:", error);
