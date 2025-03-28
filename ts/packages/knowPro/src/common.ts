@@ -6,7 +6,7 @@
  * These should not be exposed via index.ts
  */
 
-import { MessageCollection } from "./message.js";
+import { MessageCollection } from "./conversation.js";
 import { ConversationSettings } from "./conversation.js";
 import { ConversationIndex } from "./conversationIndex.js";
 import {

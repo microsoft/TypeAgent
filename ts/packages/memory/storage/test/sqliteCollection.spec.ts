@@ -49,17 +49,44 @@ describe("memory.sqlite.messageCollection", () => {
 
         let ordinals = [0, 1, 2]; // Deliberately out of order
         let gotMessages = messageCollection.getMultiple(ordinals);
-        expect(gotMessages).toHaveLength(ordinals.length);
-        for (let i = 0; i < ordinals.length; ++i) {
-            expect(messageText(gotMessages[i])).toEqual(
-                messageText(messages[i]),
-            );
-        }
+        verifyMessages(messages, gotMessages, 0, ordinals.length);
 
         let collection2 = new SqlMessageCollection(db!, collectionName, false);
         expect(collection2).toHaveLength(messageCollection.length);
         let gotMessage = collection2.get(2);
         expect(messageText(gotMessage)).toEqual(messageText(messages[2]));
+    });
+    test("sliceMessages", () => {
+        const collectionName = "messages_slice";
+        const messageCollection = new SqlMessageCollection(db!, collectionName);
+        const messages = createMessages(10);
+        messageCollection.push(...messages);
+
+        let sliceLength = 5;
+        let startAt = 0;
+        let gotMessages = messageCollection.getSlice(
+            startAt,
+            startAt + sliceLength,
+        );
+        verifyMessages(messages, gotMessages, startAt, sliceLength);
+        startAt = 4;
+        gotMessages = messageCollection.getSlice(
+            startAt,
+            startAt + sliceLength,
+        );
+        verifyMessages(messages, gotMessages, startAt, sliceLength);
+        startAt = 5;
+        gotMessages = messageCollection.getSlice(
+            startAt,
+            startAt + sliceLength,
+        );
+        verifyMessages(messages, gotMessages, startAt, sliceLength);
+        startAt = 6;
+        gotMessages = messageCollection.getSlice(
+            startAt,
+            startAt + sliceLength,
+        );
+        verifyMessages(messages, gotMessages, startAt, sliceLength - 1);
     });
 
     function testPush(collection: SqlMessageCollection, message: IMessage) {
@@ -69,5 +96,19 @@ describe("memory.sqlite.messageCollection", () => {
         expect(newLength).toEqual(prevLength + 1);
         const messageAdded = collection.get(newLength - 1);
         expect(messageText(messageAdded)).toBe(messageText(message));
+    }
+
+    function verifyMessages(
+        messages: IMessage[],
+        gotMessages: IMessage[],
+        startAt: number,
+        expectedLength: number,
+    ) {
+        expect(gotMessages).toHaveLength(expectedLength);
+        for (let i = 0; i < expectedLength; ++i) {
+            expect(messageText(gotMessages[i])).toEqual(
+                messageText(messages[i + startAt]),
+            );
+        }
     }
 });

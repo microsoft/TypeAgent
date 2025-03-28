@@ -834,6 +834,10 @@ export class Collection<T, TOrdinal extends number>
         return this.items[ordinal];
     }
 
+    public getSlice(start: TOrdinal, end: TOrdinal): T[] {
+        return this.items.slice(start, end);
+    }
+
     public getMultiple(ordinals: TOrdinal[]): T[] {
         const items = new Array<T>(ordinals.length);
         for (let i = 0; i < ordinals.length; ++i) {
@@ -854,14 +858,5 @@ export class Collection<T, TOrdinal extends number>
 
     public *[Symbol.iterator](): Iterator<T, any, any> {
         return this.items[Symbol.iterator]();
-    }
-}
-
-export class SemanticRefCollection extends Collection<
-    SemanticRef,
-    SemanticRefOrdinal
-> {
-    constructor(semanticRefs?: SemanticRef[]) {
-        super(semanticRefs);
     }
 }

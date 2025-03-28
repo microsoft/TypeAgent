@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Collection } from "./collections.js";
 import { IMessage, IMessageCollection, MessageOrdinal } from "./interfaces.js";
 
 /**
@@ -43,12 +42,4 @@ export function getCountOfMessagesInCharBudget(
         totalCharCount += messageCharCount;
     }
     return i;
-}
-
-export class MessageCollection<
-    TMessage extends IMessage = IMessage,
-> extends Collection<TMessage, MessageOrdinal> {
-    constructor(messages?: TMessage[]) {
-        super(messages);
-    }
 }

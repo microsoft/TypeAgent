@@ -2,7 +2,14 @@
 // Licensed under the MIT License.
 
 import { PromptSection } from "typechat";
-import { IConversation, DateRange } from "./interfaces.js";
+import {
+    IConversation,
+    DateRange,
+    SemanticRef,
+    SemanticRefOrdinal,
+    IMessage,
+    MessageOrdinal,
+} from "./interfaces.js";
 import { openai, TextEmbeddingModel } from "aiclient";
 import {
     TextEmbeddingIndexSettings,
@@ -10,6 +17,7 @@ import {
 } from "./fuzzyIndex.js";
 import { MessageTextIndexSettings } from "./messageIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
+import { Collection } from "./collections.js";
 
 export type ConversationSettings = {
     relatedTermIndexSettings: RelatedTermIndexSettings;
@@ -82,4 +90,21 @@ export function getTimeRangePromptSectionForConversation(
         ];
     }
     return [];
+}
+
+export class SemanticRefCollection extends Collection<
+    SemanticRef,
+    SemanticRefOrdinal
+> {
+    constructor(semanticRefs?: SemanticRef[]) {
+        super(semanticRefs);
+    }
+}
+
+export class MessageCollection<
+    TMessage extends IMessage = IMessage,
+> extends Collection<TMessage, MessageOrdinal> {
+    constructor(messages?: TMessage[]) {
+        super(messages);
+    }
 }

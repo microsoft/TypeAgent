@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MessageCollection } from "../src/message.js";
+import { MessageCollection } from "../src/conversation.js";
 import { createMessage } from "./testCommon.js";
 
 describe("knowpro.MessageCollection", () => {
