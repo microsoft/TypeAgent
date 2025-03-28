@@ -312,6 +312,7 @@ export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
 
 export interface ICollection<T, TOrdinal>
     extends IReadonlyCollection<T, TOrdinal> {
+    readonly isPersistent: boolean;
     push(...items: T[]): void;
 }
 

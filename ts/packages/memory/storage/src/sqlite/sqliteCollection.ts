@@ -31,6 +31,10 @@ export class SqliteCollection<T, TOrdinal extends number>
         this.sql_slice = this.sqlSlice();
     }
 
+    public get isPersistent(): boolean {
+        return true;
+    }
+
     public get length(): number {
         return this.count;
     }

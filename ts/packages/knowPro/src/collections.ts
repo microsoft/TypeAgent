@@ -826,6 +826,10 @@ export class Collection<T, TOrdinal extends number>
         this.items = items ?? [];
     }
 
+    public get isPersistent(): boolean {
+        return false;
+    }
+
     public get length(): number {
         return this.items.length;
     }
