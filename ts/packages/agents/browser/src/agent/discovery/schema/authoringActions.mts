@@ -6,9 +6,9 @@ export type CreateOrUpdateWebPlan = {
     parameters: {
         // use this field to ask for clarification from the user if needed
         nextPrompt: string;
-        // the proposed name for the plan
+        // This is the USER-provided proposed name for the plan
         webPlanName: string;
-        // This is the user-provided description of what the task does. It describes the state of the page at the
+        // This is the USER-provided description of what the task does. It describes the state of the page at the
         // begining of the task and the target state of the page at the end of the task.
         webPlanDescription: string;
         // the list of plan steps provided by the user. Each entry is a clear, concise description of an operation

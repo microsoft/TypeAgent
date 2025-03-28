@@ -82,7 +82,7 @@ export const rules = [
             const result = validatePackageName(file.json.name);
             return result.validForNewPackages
                 ? true
-                : result.errors ?? result.warnings;
+                : (result.errors ?? result.warnings);
         },
     },
     {

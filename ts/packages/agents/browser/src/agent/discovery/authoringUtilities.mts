@@ -24,11 +24,12 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
         selectionCondition?: string,
     ) {
         const htmlFragments = await browser.getHtmlFragments();
+        const screenshot = await browser.getCurrentPageScreenshot();
         const response = await agent.getPageComponentSchema(
             componentType,
             selectionCondition,
             htmlFragments,
-            undefined,
+            screenshot,
         );
 
         if (!response.success) {
@@ -53,11 +54,13 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
         description: string,
     ) {
         const htmlFragments = await browser.getHtmlFragments();
+        const screenshot = await browser.getCurrentPageScreenshot();
         let recordedSteps = "";
         const descriptionResponse = await agent.getDetailedStepsFromDescription(
             actionName,
             description,
             htmlFragments,
+            screenshot,
         );
         if (descriptionResponse.success) {
             console.log(descriptionResponse.data);
@@ -72,6 +75,7 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
             description,
             recordedSteps,
             htmlFragments,
+            screenshot,
         );
 
         if (!intentResponse.success) {
@@ -88,6 +92,7 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
             intentData,
             recordedSteps,
             htmlFragments,
+            screenshot,
         );
 
         if (!stepsResponse.success) {

@@ -264,7 +264,9 @@ async function persistSchemaDefinitions(
     });
     for (const definition of schemaDefinitions) {
         if (!writeStream.write(`${definition}\n\n`)) {
-            await new Promise((resolve) => writeStream.once("drain", resolve));
+            await new Promise<void>((resolve) =>
+                writeStream.once("drain", resolve),
+            );
         }
     }
     writeStream.end();

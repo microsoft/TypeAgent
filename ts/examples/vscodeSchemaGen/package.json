@@ -23,7 +23,7 @@
   "dependencies": {
     "action-schema": "workspace:*",
     "aiclient": "workspace:*",
-    "chalk": "^5.3.0",
+    "chalk": "^5.4.1",
     "copyfiles": "^2.4.1",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
@@ -32,8 +32,7 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
-    "@types/node": "^18.18.7",
-    "rimraf": "^5.0.5",
+    "rimraf": "^6.0.1",
     "typescript": "^5.4.2"
   },
   "engines": {
