@@ -114,7 +114,7 @@ export function buildTimestampIndex(
             new TimestampToTextRangeIndex();
         return addToTimestampIndex(
             conversation.secondaryIndexes.timestampIndex,
-            conversation.messages,
+            conversation.messages.getAll(),
             0,
         );
     }

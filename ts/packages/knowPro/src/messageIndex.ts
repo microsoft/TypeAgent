@@ -165,7 +165,7 @@ export async function buildMessageIndex(
         );
         const messageIndex = conversation.secondaryIndexes.messageIndex;
         const messages = conversation.messages;
-        return messageIndex.addMessages(messages, eventHandler);
+        return messageIndex.addMessages(messages.getAll(), eventHandler);
     }
     return {
         numberCompleted: 0,

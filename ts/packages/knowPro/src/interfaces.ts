@@ -55,7 +55,7 @@ export interface Tag {
 export interface IConversation<TMessage extends IMessage = IMessage> {
     nameTag: string;
     tags: string[];
-    messages: TMessage[];
+    messages: IMessageCollection<TMessage>;
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
@@ -314,5 +314,5 @@ export interface ICollection<T, TOrdinal>
     push(...items: T[]): void;
 }
 
-export interface IMessageCollection<TMessage extends IMessage>
+export interface IMessageCollection<TMessage extends IMessage = IMessage>
     extends ICollection<TMessage, MessageOrdinal> {}

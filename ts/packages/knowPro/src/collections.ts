@@ -5,6 +5,7 @@ import { collections, createTopNList } from "typeagent";
 import {
     ICollection,
     IMessage,
+    IMessageCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -547,7 +548,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     }
 
     public selectMessagesInBudget(
-        messages: IMessage[],
+        messages: IMessageCollection,
         maxCharsInBudget: number,
     ): void {
         let scoredMatches = this.getSortedByScore();
