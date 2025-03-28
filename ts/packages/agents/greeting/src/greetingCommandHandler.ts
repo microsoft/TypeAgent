@@ -56,24 +56,27 @@ async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
     });
 
     // non blocking execution call
-    //exec("az ad signed-in-user show", (_error, stdout, _stderr) => {
-    exec("echo test", (_error, stdout, _stderr) => {
-        try {
-            const user = JSON.parse(stdout.toString());
+    exec(
+        "az ad signed-in-user show",
+        { timeout: 5000 },
+        (_error, stdout, _stderr) => {
+            try {
+                const user = JSON.parse(stdout.toString());
 
-            if (user.givenName) {
-                given = user.givenName;
-                sur = user.surname;
-            }
-        } catch {}
+                if (user.givenName) {
+                    given = user.givenName;
+                    sur = user.surname;
+                }
+            } catch {}
 
-        execPromiseResolve({
-            user: {
-                givenName: given,
-                surName: sur,
-            },
-        });
-    });
+            execPromiseResolve({
+                user: {
+                    givenName: given,
+                    surName: sur,
+                },
+            });
+        },
+    );
 
     return execPromise;
 }
