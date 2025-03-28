@@ -4,7 +4,6 @@
 import { collections, createTopNList } from "typeagent";
 import {
     ICollection,
-    IMessage,
     IMessageCollection,
     Knowledge,
     KnowledgeType,
@@ -855,14 +854,6 @@ export class Collection<T, TOrdinal extends number>
 
     public *[Symbol.iterator](): Iterator<T, any, any> {
         return this.items[Symbol.iterator]();
-    }
-}
-
-export class MessageCollection<
-    TMessage extends IMessage = IMessage,
-> extends Collection<TMessage, MessageOrdinal> {
-    constructor(messages?: TMessage[]) {
-        super(messages);
     }
 }
 

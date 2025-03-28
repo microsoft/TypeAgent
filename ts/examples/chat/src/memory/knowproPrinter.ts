@@ -50,7 +50,7 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeScoredMessages(
         messageIndexMatches: kp.ScoredMessageOrdinal[],
-        messages: kp.IMessage[],
+        messages: kp.IMessageCollection,
         maxToDisplay: number,
     ) {
         if (this.sortAsc) {
@@ -77,9 +77,9 @@ export class KnowProPrinter extends ChatPrinter {
         matchNumber: number,
         totalMatches: number,
         scoredMessage: kp.ScoredMessageOrdinal,
-        messages: kp.IMessage[],
+        messages: kp.IMessageCollection,
     ) {
-        const message = messages[scoredMessage.messageOrdinal];
+        const message = messages.get(scoredMessage.messageOrdinal);
         this.writeInColor(
             chalk.green,
             `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageOrdinal}> [${scoredMessage.score}]`,

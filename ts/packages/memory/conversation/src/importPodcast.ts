@@ -9,7 +9,7 @@ import {
     PodcastMessageMeta,
     assignMessageListeners,
 } from "./podcast.js";
-import { IMessage } from "knowpro";
+import { IMessage, MessageCollection } from "knowpro";
 
 export async function importPodcast(
     transcriptFilePath: string,
@@ -25,7 +25,7 @@ export async function importPodcast(
     });
     const turnParseRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const participants = new Set<string>();
-    const msgs: PodcastMessage[] = [];
+    const messages: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
     for (const line of transcriptLines) {
         const match = turnParseRegex.exec(line);
@@ -34,7 +34,7 @@ export async function importPodcast(
             let speech = match.groups["speech"];
             if (curMsg) {
                 if (speaker) {
-                    msgs.push(curMsg);
+                    messages.push(curMsg);
                     curMsg = undefined;
                 } else {
                     curMsg.addContent("\n" + speech);
@@ -57,17 +57,21 @@ export async function importPodcast(
         }
     }
     if (curMsg) {
-        msgs.push(curMsg);
+        messages.push(curMsg);
     }
-    assignMessageListeners(msgs, participants);
-    const pod = new Podcast(podcastName, msgs, [podcastName]);
+    assignMessageListeners(messages, participants);
     if (startDate) {
         timestampMessages(
-            pod.messages,
+            messages,
             startDate,
             dateTime.addMinutesToDate(startDate, lengthMinutes),
         );
     }
+    const pod = new Podcast(
+        podcastName,
+        new MessageCollection<PodcastMessage>(messages),
+        [podcastName],
+    );
     // TODO: add more tags
     return pod;
 }

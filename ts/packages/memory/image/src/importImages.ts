@@ -20,6 +20,7 @@ import {
     readConversationDataFromFile,
     createTermEmbeddingCache,
     buildTransientSecondaryIndexes,
+    MessageCollection,
 } from "knowpro";
 import { conversation as kpLib, image } from "knowledge-processor";
 import fs from "node:fs";
@@ -356,7 +357,7 @@ export class ImageCollection implements IConversation {
     public secondaryIndexes: ConversationSecondaryIndexes;
     constructor(
         public nameTag: string = "",
-        public messages: Image[] = [],
+        public messages: MessageCollection<Image> = new MessageCollection(),
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
@@ -368,7 +369,7 @@ export class ImageCollection implements IConversation {
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
             addMetadataToIndex(
-                this.messages,
+                this.messages.getAll(),
                 this.semanticRefs,
                 this.semanticRefIndex,
                 (type, knowledge) => {
@@ -412,7 +413,7 @@ export class ImageCollection implements IConversation {
     public async serialize(): Promise<ImageCollectionData> {
         const conversationData: ImageCollectionData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -424,8 +425,7 @@ export class ImageCollection implements IConversation {
 
     public async deserialize(data: ImageCollectionData): Promise<void> {
         this.nameTag = data.nameTag;
-        this.messages = data.messages;
-        this.messages = data.messages.map((m) => {
+        const messages = data.messages.map((m) => {
             const image = new Image(
                 m.textChunks,
                 new ImageMeta(m.metadata.fileName, m.metadata.img),
@@ -434,6 +434,7 @@ export class ImageCollection implements IConversation {
             image.timestamp = m.timestamp;
             return image;
         });
+        this.messages = new MessageCollection<Image>(messages);
         this.semanticRefs = data.semanticRefs;
         this.tags = data.tags;
         if (data.semanticIndexData) {
@@ -532,7 +533,10 @@ export async function importImages(
         }
     }
 
-    return new ImageCollection(path.dirname(imagePath), images);
+    return new ImageCollection(
+        path.dirname(imagePath),
+        new MessageCollection<Image>(images),
+    );
 }
 
 /**

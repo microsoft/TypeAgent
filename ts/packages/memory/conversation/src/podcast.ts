@@ -23,6 +23,7 @@ import {
     createTermEmbeddingCache,
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
+    MessageCollection,
 } from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections } from "typeagent";
@@ -117,7 +118,7 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     constructor(
         public nameTag: string = "",
-        public messages: PodcastMessage[] = [],
+        public messages: MessageCollection<PodcastMessage> = new MessageCollection<PodcastMessage>(),
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
@@ -129,7 +130,7 @@ export class Podcast implements IConversation<PodcastMessage> {
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
             addMetadataToIndex(
-                this.messages,
+                this.messages.getAll(),
                 this.semanticRefs,
                 this.semanticRefIndex,
             );
@@ -169,7 +170,7 @@ export class Podcast implements IConversation<PodcastMessage> {
     public async serialize(): Promise<PodcastData> {
         const data: PodcastData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -183,7 +184,7 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     public async deserialize(podcastData: PodcastData): Promise<void> {
         this.nameTag = podcastData.nameTag;
-        this.messages = podcastData.messages.map((m) => {
+        const podcastMessages = podcastData.messages.map((m) => {
             const metadata = new PodcastMessageMeta(m.metadata.speaker);
             metadata.listeners = m.metadata.listeners;
             return new PodcastMessage(
@@ -193,6 +194,7 @@ export class Podcast implements IConversation<PodcastMessage> {
                 m.timestamp,
             );
         });
+        this.messages = new MessageCollection<PodcastMessage>(podcastMessages);
         this.semanticRefs = podcastData.semanticRefs;
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {
