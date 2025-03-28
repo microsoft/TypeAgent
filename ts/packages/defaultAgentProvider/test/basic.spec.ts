@@ -11,6 +11,6 @@ describe("AppAgentProvider", () => {
                 appAgentProviders: [getDefaultAppAgentProvider()],
             });
             await dispatcher.close();
-        }, 60000); // take longer time to start up on CI's small machines.
+        }, 30000); // take longer time to start up on CI's small machines.
     });
 });
