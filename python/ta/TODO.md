@@ -2,11 +2,9 @@
 
 ## Big functionality
 
-    ### Serialization and deserialization
+    ### Serialization (done) and deserialization (TODO)
 
     Do this before queries, since fully re-indexing takes too long.
-
-    Q: Should we serialize settings? Or are they intentionally not serialized?
 
     ### Queries and searches
 
@@ -21,7 +19,7 @@
 ## Small functionality
 
 - Implement Podcast._build_caches(), by implementing TermEmbeddingCache?
-  - Umesh wants to redo this
+  - Umesh wants to redo this anyway, so low priority
 
 ## Refactoring implementations
 
