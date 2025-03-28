@@ -1006,15 +1006,18 @@ function extractMicrodata(): any[] {
     const data: any[] = [];
 
     // Find all elements with 'itemscope' attribute (Microdata)
-    document.querySelectorAll('[itemscope]').forEach((item) => {
-        const schemaType = item.getAttribute('itemtype');
-        const metadata: Record<string, any> = { '@type': schemaType || 'Unknown' };
+    document.querySelectorAll("[itemscope]").forEach((item) => {
+        const schemaType = item.getAttribute("itemtype");
+        const metadata: Record<string, any> = {
+            "@type": schemaType || "Unknown",
+        };
 
-        item.querySelectorAll('[itemprop]').forEach((prop) => {
-            const propName = prop.getAttribute('itemprop');
-            let value = prop.getAttribute('content') || prop.textContent?.trim() || '';
+        item.querySelectorAll("[itemprop]").forEach((prop) => {
+            const propName = prop.getAttribute("itemprop");
+            let value =
+                prop.getAttribute("content") || prop.textContent?.trim() || "";
 
-            if (prop.tagName === 'IMG') {
+            if (prop.tagName === "IMG") {
                 value = (prop as HTMLImageElement).src;
             }
 
@@ -1031,14 +1034,16 @@ function extractJsonLd(): any[] {
     const jsonLdData: any[] = [];
 
     // Find all <script> tags with type="application/ld+json"
-    document.querySelectorAll('script[type="application/ld+json"]').forEach((script) => {
-        try {
-            const json = JSON.parse(script.textContent || '{}');
-            jsonLdData.push(json);
-        } catch (error) {
-            console.error('Error parsing JSON-LD:', error);
-        }
-    });
+    document
+        .querySelectorAll('script[type="application/ld+json"]')
+        .forEach((script) => {
+            try {
+                const json = JSON.parse(script.textContent || "{}");
+                jsonLdData.push(json);
+            } catch (error) {
+                console.error("Error parsing JSON-LD:", error);
+            }
+        });
 
     return jsonLdData;
 }
@@ -1111,7 +1116,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     const structuredData = [...microdata, ...jsonLdData];
 
     if (structuredData.length > 0) {
-        chrome.runtime.sendMessage({ action: 'microdataDetected', data: structuredData });
+        chrome.runtime.sendMessage({
+            action: "microdataDetected",
+            data: structuredData,
+        });
         // chrome.storage.local.set({ microdata: structuredData });
         console.log(structuredData);
     }
