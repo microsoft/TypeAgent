@@ -56,6 +56,7 @@ export interface IConversation<TMessage extends IMessage = IMessage> {
     nameTag: string;
     tags: string[];
     messages: TMessage[];
+    //messages: IMessageCollection<TMessage>;
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
@@ -300,16 +301,39 @@ export type ListIndexingResult = {
 };
 
 //---------------------
-// Collections
+// Storage
 //---------------------
 export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
     readonly length: number;
-    get(ordinal: TOrdinal): T | undefined;
-    getMultiple(ordinals: TOrdinal[]): (T | undefined)[];
+    get(ordinal: TOrdinal): T;
+    getMultiple(ordinals: TOrdinal[]): T[];
+    getSlice(start: TOrdinal, end: TOrdinal): T[];
     getAll(): T[];
 }
 
+/**
+ * ICollection is an APPEND ONLY collection
+ */
 export interface ICollection<T, TOrdinal>
     extends IReadonlyCollection<T, TOrdinal> {
-    push(...items: T[]): void;
+    readonly isPersistent: boolean;
+
+    append(...items: T[]): void;
 }
+
+export interface IMessageCollection<TMessage extends IMessage = IMessage>
+    extends ICollection<TMessage, MessageOrdinal> {}
+
+export interface ISemanticRefCollection
+    extends ICollection<SemanticRef, SemanticRefOrdinal> {}
+
+export interface IStorageProvider {
+    createMessageCollection<
+        TMessage extends IMessage = IMessage,
+    >(): IMessageCollection<TMessage>;
+    createSemanticRefCollection(): ISemanticRefCollection;
+}
+
+// Also look at:
+// search.ts
+// searchQueryTranslator.ts

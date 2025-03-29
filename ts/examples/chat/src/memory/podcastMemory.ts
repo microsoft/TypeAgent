@@ -223,7 +223,7 @@ export function createPodcastCommands(
             });
         }
 
-        const kpPodcast = new cm.Podcast("AllEpisodes", []);
+        const kpPodcast = new cm.Podcast("AllEpisodes");
         kp.addToConversationIndex(
             kpPodcast,
             podcastMessages,

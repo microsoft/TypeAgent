@@ -51,7 +51,7 @@ export type GetIntentFromRecording = {
         recordedActionSteps?: string;
         existingActionNames: string[];
         fragments?: HtmlFragments[];
-        screenshot?: string;
+        screenshots?: string[];
     };
 };
 

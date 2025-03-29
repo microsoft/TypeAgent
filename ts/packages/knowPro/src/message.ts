@@ -20,7 +20,7 @@ export function getMessageCharCount(message: IMessage): number {
 /**
  * Given a set of message ordinals, returns the count of messages whose cumulative
  * text length is < than the given character budget
- * @param messages
+ * @param messages messageOrdinals reference messages in this collection
  * @param messageOrdinals Can be in arbitrary sort order (often in rank order)
  * @param maxCharsInBudget
  * @returns
@@ -32,6 +32,7 @@ export function getCountOfMessagesInCharBudget(
 ): number {
     let i = 0;
     let totalCharCount = 0;
+    // TODO: use batches
     for (; i < messageOrdinals.length; ++i) {
         const messageOrdinal = messageOrdinals[i];
         const message = messages[messageOrdinal];

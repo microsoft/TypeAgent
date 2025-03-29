@@ -11,30 +11,25 @@ import {
 } from "./podcast.js";
 import { IMessage } from "knowpro";
 
-export async function importPodcast(
-    transcriptFilePath: string,
-    podcastName?: string,
-    startDate?: Date,
-    lengthMinutes: number = 60,
-): Promise<Podcast> {
-    const transcriptText = await readAllText(transcriptFilePath);
-    podcastName ??= getFileName(transcriptFilePath);
+export function parsePodcastTranscript(
+    transcriptText: string,
+): [PodcastMessage[], Set<string>] {
     const transcriptLines = split(transcriptText, /\r?\n/, {
         removeEmpty: true,
         trim: true,
     });
-    const turnParseRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const participants = new Set<string>();
-    const msgs: PodcastMessage[] = [];
+    const messages: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
+    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
     for (const line of transcriptLines) {
-        const match = turnParseRegex.exec(line);
+        const match = turnParserRegex.exec(line);
         if (match && match.groups) {
             let speaker = match.groups["speaker"];
             let speech = match.groups["speech"];
             if (curMsg) {
                 if (speaker) {
-                    msgs.push(curMsg);
+                    messages.push(curMsg);
                     curMsg = undefined;
                 } else {
                     curMsg.addContent("\n" + speech);
@@ -57,21 +52,41 @@ export async function importPodcast(
         }
     }
     if (curMsg) {
-        msgs.push(curMsg);
+        messages.push(curMsg);
     }
-    assignMessageListeners(msgs, participants);
-    const pod = new Podcast(podcastName, msgs, [podcastName]);
+    return [messages, participants];
+}
+
+export async function importPodcast(
+    transcriptFilePath: string,
+    podcastName?: string,
+    startDate?: Date,
+    lengthMinutes: number = 60,
+): Promise<Podcast> {
+    const transcriptText = await readAllText(transcriptFilePath);
+    podcastName ??= getFileName(transcriptFilePath);
+    const [messages, participants] = parsePodcastTranscript(transcriptText);
+    assignMessageListeners(messages, participants);
     if (startDate) {
         timestampMessages(
-            pod.messages,
+            messages,
             startDate,
             dateTime.addMinutesToDate(startDate, lengthMinutes),
         );
     }
+    const pod = new Podcast(podcastName, messages, [podcastName]);
     // TODO: add more tags
     return pod;
 }
 
+/**
+ * Text (such as a transcript) can be collected over a time range.
+ * This text can be partitioned into blocks. However, timestamps for individual blocks are not available.
+ * Assigns individual timestamps to blocks proportional to their lengths.
+ * @param turns Transcript turns to assign timestamps to
+ * @param startDate starting
+ * @param endDate
+ */
 export function timestampMessages(
     messages: IMessage[],
     startDate: Date,

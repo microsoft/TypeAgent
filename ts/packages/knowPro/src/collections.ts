@@ -3,7 +3,6 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
-    ICollection,
     IMessage,
     Knowledge,
     KnowledgeType,
@@ -816,52 +815,3 @@ function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
         set.add(value);
     }
 }
-
-export class Collection<T, TOrdinal extends number>
-    implements ICollection<T, TOrdinal>
-{
-    protected items: T[];
-
-    constructor(items?: T[] | undefined) {
-        this.items = items ?? [];
-    }
-
-    public get length(): number {
-        return this.items.length;
-    }
-
-    public get(ordinal: TOrdinal): T | undefined {
-        return this.items[ordinal];
-    }
-
-    public getMultiple(ordinals: TOrdinal[]): (T | undefined)[] {
-        const items = new Array<T | undefined>(ordinals.length);
-        for (let i = 0; i < ordinals.length; ++i) {
-            items[i] = this.get(ordinals[i]);
-        }
-        return items;
-    }
-
-    public getAll(): T[] {
-        return this.items;
-    }
-
-    public push(...items: T[]): void {
-        for (const item of items) {
-            this.items.push(item);
-        }
-    }
-
-    public *[Symbol.iterator](): Iterator<T, any, any> {
-        return this.items[Symbol.iterator]();
-    }
-}
-
-export class MessageCollection<
-    TMessage extends IMessage = IMessage,
-> extends Collection<TMessage, MessageOrdinal> {}
-
-export class SemanticRefCollection extends Collection<
-    SemanticRef,
-    SemanticRefOrdinal
-> {}

@@ -4,7 +4,10 @@
     "composite": true
   },
   "include": [],
-  "references": [{ "path": "./src" }],
+  "references": [
+    { "path": "./src" },
+    { "path": "./test" }
+  ],
   "ts-node": {
     "esm": true
   }

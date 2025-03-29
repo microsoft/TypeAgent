@@ -48,6 +48,12 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    public writeMessages(messages: Iterable<kp.IMessage> | kp.IMessage[]) {
+        for (const message of messages) {
+            this.writeMessage(message);
+        }
+    }
+
     public writeScoredMessages(
         messageIndexMatches: kp.ScoredMessageOrdinal[],
         messages: kp.IMessage[],

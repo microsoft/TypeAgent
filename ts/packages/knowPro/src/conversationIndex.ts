@@ -247,6 +247,7 @@ export async function buildSemanticRefIndex(
     extractor ??= createKnowledgeProcessor();
     const maxRetries = 4;
     let indexingResult: TextIndexingResult = {};
+    // TODO: Support batching
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageOrdinal: MessageOrdinal = i;
         const chunkOrdinal = 0;

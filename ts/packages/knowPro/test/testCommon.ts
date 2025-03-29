@@ -13,10 +13,29 @@ import {
 
 import path from "path";
 import os from "node:os";
-import { DeletionInfo, IMessage } from "../src/interfaces.js";
-import { ConversationSettings } from "../src/conversation.js";
+import {
+    DeletionInfo,
+    IConversation,
+    IConversationSecondaryIndexes,
+    IMessage,
+    ITermToSemanticRefIndex,
+    SemanticRef,
+} from "../src/interfaces.js";
+import {
+    ConversationSettings,
+    createConversationSettings,
+} from "../src/conversation.js";
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
+import {
+    createSearchTerm,
+    PropertySearchTerm,
+    SemanticRefSearchResult,
+} from "../src/search.js";
+import { matchPropertySearchTermToEntity } from "../src/query.js";
+import { PropertyNames } from "../src/propertyIndex.js";
+import { Result } from "typechat";
+import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 
 export class TestMessage implements IMessage {
     constructor(
@@ -29,6 +48,22 @@ export class TestMessage implements IMessage {
     public getKnowledge() {
         return undefined;
     }
+}
+
+export class TestConversation implements IConversation<TestMessage> {
+    public semanticRefs: SemanticRef[] | undefined;
+    public semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    public secondaryIndexes?: IConversationSecondaryIndexes | undefined;
+
+    constructor(
+        public nameTag: string,
+        public tags: string[] = [],
+        public messages: TestMessage[] = [],
+    ) {}
+}
+
+export function emptyConversation() {
+    return new TestConversation("Empty Conversation");
 }
 
 export function createMessage(messageText: string): TestMessage {
@@ -45,6 +80,40 @@ export type TestModels = {
     chat: ChatModel;
     embeddings: TextEmbeddingModel;
 };
+
+export class NullEmbeddingModel implements TextEmbeddingModel {
+    constructor(public maxBatchSize: number = 1) {}
+
+    public generateEmbeddingBatch?(
+        inputs: string[],
+    ): Promise<Result<number[][]>> {
+        throw nullMethodError();
+    }
+    public generateEmbedding(input: string): Promise<Result<number[]>> {
+        throw nullMethodError();
+    }
+}
+
+export function createOfflineConversationSettings(
+    getCache: () => TextEmbeddingCache | undefined,
+) {
+    const cachingModel = createEmbeddingCache(
+        new NullEmbeddingModel(),
+        32,
+        getCache,
+    );
+    return createConversationSettings(cachingModel);
+}
+
+export function loadTestConversation(
+    settings: ConversationSettings,
+): Promise<IConversation> {
+    return createConversationFromFile(
+        getRelativePath("./test/data"),
+        "Episode_53_AdrianTchaikovsky_index",
+        settings,
+    );
+}
 
 export function testIf(
     name: string,
@@ -107,4 +176,32 @@ export async function createConversationFromFile(
         );
     }
     return createConversationFromData(data, settings);
+}
+
+export function getSemanticRefsForSearchResult(
+    conversation: IConversation,
+    result: SemanticRefSearchResult,
+): SemanticRef[] {
+    return conversation.semanticRefs
+        ? result.semanticRefMatches.map(
+              (m) => conversation.semanticRefs![m.semanticRefOrdinal],
+          )
+        : [];
+}
+
+export function findEntityWithName(
+    semanticRefs: SemanticRef[],
+    entityName: string,
+): SemanticRef | undefined {
+    const searchTerm: PropertySearchTerm = {
+        propertyName: PropertyNames.EntityName,
+        propertyValue: createSearchTerm(entityName),
+    };
+    return semanticRefs.find((sr) =>
+        matchPropertySearchTermToEntity(searchTerm, sr),
+    );
+}
+
+function nullMethodError() {
+    return new Error("Null method; not implemented.");
 }

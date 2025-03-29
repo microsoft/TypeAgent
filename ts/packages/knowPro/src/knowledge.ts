@@ -1,6 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * Knowledge processing functions INTERNAL to the library.
+ * These should not be exposed via index.ts
+ */
+
 import { conversation as kpLib } from "knowledge-processor";
 import { collections, getTopK } from "typeagent";
 import { unionArrays } from "./collections.js";

@@ -20,12 +20,15 @@ import {
     readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     Term,
-    createTermEmbeddingCache,
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
 } from "knowpro";
-import { conversation as kpLib } from "knowledge-processor";
+import {
+    createEmbeddingCache,
+    conversation as kpLib,
+} from "knowledge-processor";
 import { collections } from "typeagent";
+import { openai, TextEmbeddingModel } from "aiclient";
 
 // metadata for podcast messages
 
@@ -121,13 +124,15 @@ export class Podcast implements IConversation<PodcastMessage> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createConversationSettings();
+        const [model, embeddingSize] = this.createEmbeddingModel();
+        this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
 
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
+            // TODO: do ths using slices/batch so we don't have to load all messages
             addMetadataToIndex(
                 this.messages,
                 this.semanticRefs,
@@ -183,7 +188,7 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     public async deserialize(podcastData: PodcastData): Promise<void> {
         this.nameTag = podcastData.nameTag;
-        this.messages = podcastData.messages.map((m) => {
+        const podcastMessages = podcastData.messages.map((m) => {
             const metadata = new PodcastMessageMeta(m.metadata.speaker);
             metadata.listeners = m.metadata.listeners;
             return new PodcastMessage(
@@ -193,6 +198,7 @@ export class Podcast implements IConversation<PodcastMessage> {
                 m.timestamp,
             );
         });
+        this.messages = podcastMessages;
         this.semanticRefs = podcastData.semanticRefs;
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {
@@ -255,7 +261,6 @@ export class Podcast implements IConversation<PodcastMessage> {
             await buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
-        this.buildCaches();
     }
 
     private buildParticipantAliases(): void {
@@ -297,12 +302,20 @@ export class Podcast implements IConversation<PodcastMessage> {
         return aliases;
     }
 
-    private buildCaches(): void {
-        createTermEmbeddingCache(
-            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
-            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
-            64,
-        );
+    /**
+     * Our index already has embeddings for every term in the podcast
+     * Create a caching embedding model that can just leverage those embeddings
+     * @returns embedding model, size of embedding
+     */
+    private createEmbeddingModel(): [TextEmbeddingModel, number] {
+        return [
+            createEmbeddingCache(
+                openai.createEmbeddingModel(),
+                64,
+                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+            ),
+            1536,
+        ];
     }
 }
 
@@ -314,15 +327,6 @@ export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
         this.threads = new ConversationThreads(settings.threadSettings);
     }
 }
-//const DataFileSuffix = "_data.json";
-//const EmbeddingFileSuffix = "_embeddings.bin";
 
 export interface PodcastData
-    extends IConversationDataWithIndexes<PodcastMessage> {} /**
- * Text (such as a transcript) can be collected over a time range.
- * This text can be partitioned into blocks. However, timestamps for individual blocks are not available.
- * Assigns individual timestamps to blocks proportional to their lengths.
- * @param turns Transcript turns to assign timestamps to
- * @param startDate starting
- * @param endDate
- */
+    extends IConversationDataWithIndexes<PodcastMessage> {}
