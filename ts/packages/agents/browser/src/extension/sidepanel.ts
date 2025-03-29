@@ -250,7 +250,7 @@ async function saveUserAction() {
     // Get schema based on the recorded action info
     const response = await chrome.runtime.sendMessage({
         type: "getIntentFromRecording",
-        html: [{ content: html, frameId: 0 }],
+        html: html.map((str: string) => ({ content: str, frameId: 0 })),
         screenshot,
         actionName,
         actionDescription,
@@ -600,24 +600,24 @@ function renderTimelineSteps(
         "#downloadHtml",
     )! as HTMLElement;
 
-    if (screenshotData !== undefined && screenshotData.length >0) {
-        screenshotData.forEach(screenshot => {
-        const img = document.createElement("img");
-        img.src = screenshot;
-        img.alt = "Annotated Screenshot";
-        img.style.width = "100%";
-        img.style.border = "1px solid #ccc";
-        img.style.borderRadius = "8px";
-        screenshotContainer.appendChild(img);
+    if (screenshotData !== undefined && screenshotData.length > 0) {
+        screenshotData.forEach((screenshot) => {
+            const img = document.createElement("img");
+            img.src = screenshot;
+            img.alt = "Annotated Screenshot";
+            img.style.width = "100%";
+            img.style.border = "1px solid #ccc";
+            img.style.borderRadius = "8px";
+            screenshotContainer.appendChild(img);
 
-        // Enable the download button
-        downloadButton.classList.remove("hidden");
-        downloadButton.style.display = "block";
-        downloadButton.addEventListener("click", () =>
-            // TODO: update downloads
-            downloadScreenshot(screenshot),
-        );
-    });
+            // Enable the download button
+            downloadButton.classList.remove("hidden");
+            downloadButton.style.display = "block";
+            downloadButton.addEventListener("click", () =>
+                // TODO: update downloads
+                downloadScreenshot(screenshot),
+            );
+        });
     }
 
     if (enableEdits && actionName !== undefined && actionName !== "") {

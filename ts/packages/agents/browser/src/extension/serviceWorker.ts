@@ -1342,7 +1342,7 @@ chrome.runtime.onMessage.addListener(
                             recordedActionSteps: message.steps,
                             existingActionNames: message.existingActionNames,
                             fragments: message.html,
-                            screenshot: message.screenshot,
+                            screenshots: message.screenshot,
                         },
                     });
 
@@ -1399,7 +1399,8 @@ chrome.runtime.onMessage.addListener(
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
-                        actionIndex:message.actionIndex,
+                        actionIndex: message.actionIndex,
+                        isCurrentlyRecording: message.isCurrentlyRecording,
                     });
                     sendResponse({});
                     break;
@@ -1409,7 +1410,8 @@ chrome.runtime.onMessage.addListener(
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
-                        actionIndex:message.actionIndex,
+                        actionIndex: message.actionIndex,
+                        isCurrentlyRecording: false,
                     });
 
                     sendResponse({});
@@ -1421,6 +1423,7 @@ chrome.runtime.onMessage.addListener(
                         "recordedActionPageHTML",
                         "annotatedScreenshot",
                         "actionIndex",
+                        "isCurrentlyRecording",
                     ]);
 
                     sendResponse(result);
@@ -1433,6 +1436,7 @@ chrome.runtime.onMessage.addListener(
                             "recordedActionPageHTML",
                             "annotatedScreenshot",
                             "actionIndex",
+                            "isCurrentlyRecording",
                         ]);
                     } catch (error) {
                         console.error("Error clearing storage data:", error);

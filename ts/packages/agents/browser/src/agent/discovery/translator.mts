@@ -74,21 +74,23 @@ function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
 }
 
 function getScreenshotPromptSection(
-    screenshot: string | undefined,
+    screenshots: string[] | undefined,
     fragments: HtmlFragments[] | undefined,
 ) {
     let screenshotSection = [];
-    if (screenshot) {
-        screenshotSection.push({
-            type: "text",
-            text: "Here is a screenshot of the currently visible webpage",
-        });
+    if (screenshots) {
+        screenshots.forEach((screenshot) => {
+            screenshotSection.push({
+                type: "text",
+                text: "Here is a screenshot of the currently visible webpage",
+            });
 
-        screenshotSection.push({
-            type: "image_url",
-            image_url: {
-                url: screenshot,
-            },
+            screenshotSection.push({
+                type: "image_url",
+                image_url: {
+                    url: screenshot,
+                },
+            });
         });
 
         if (fragments) {
@@ -175,10 +177,10 @@ export class SchemaDiscoveryAgent<T extends object> {
         translator: TypeChatJsonTranslator<U>,
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -237,7 +239,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         componentTypeName: string,
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const componentsSchema =
             await getSchemaFileContents("pageComponents.mts");
@@ -250,7 +252,7 @@ export class SchemaDiscoveryAgent<T extends object> {
             bootstrapTranslator,
             userRequest,
             fragments,
-            screenshot,
+            screenshots,
         ) as ContentSection[];
 
         const response = await bootstrapTranslator.translate("", [
@@ -265,7 +267,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     async getCandidateUserActions(
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
         pageSummary?: string,
     ) {
         // prompt - present html, optional screenshot and list of candidate actions
@@ -275,7 +277,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -338,7 +340,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     async getPageSummary(
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const resultsSchema = await getSchemaFileContents("pageSummary.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
@@ -347,7 +349,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -394,7 +396,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     async getPageLayout(
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const resultsSchema = await getSchemaFileContents("PageLayout.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
@@ -403,7 +405,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -453,7 +455,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     async getPageType(
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
         pageSummary?: string,
     ) {
         const resultsSchema = await getSchemaFileContents("pageTypes.mts");
@@ -463,7 +465,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -526,7 +528,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     async getSiteType(
         userRequest?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
         pageSummary?: string,
     ) {
         const resultsSchema = await getSchemaFileContents("siteTypes.mts");
@@ -536,7 +538,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -602,7 +604,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         recordedActionDescription: string,
         recordedActionSteps?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const resultsSchema = await getSchemaFileContents(
             "recordedActions.mts",
@@ -614,7 +616,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -696,7 +698,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         intentSchema?: any,
         recordedActionSteps?: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const resultsSchema = await getSchemaFileContents(
             "recordedActions.mts",
@@ -707,7 +709,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -778,7 +780,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         recordedActionName: string,
         recordedActionDescription: string,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const resultsSchema = await getSchemaFileContents(
             "expandDescription.mts",
@@ -789,7 +791,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -842,7 +844,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         recordedActionDescription: string,
         parameters: Map<string, any>,
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const resultsSchema = await getSchemaFileContents("evaluatePlan.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
@@ -851,7 +853,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
@@ -908,7 +910,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         recordedActionDescription: string,
         currentSteps?: string[],
         fragments?: HtmlFragments[],
-        screenshot?: string,
+        screenshots?: string[],
     ) {
         const resultsSchema = await getSchemaFileContents("evaluatePlan.mts");
         const bootstrapTranslator = this.getBootstrapTranslator(
@@ -917,7 +919,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         );
 
         const screenshotSection = getScreenshotPromptSection(
-            screenshot,
+            screenshots,
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
