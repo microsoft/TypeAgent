@@ -20,4 +20,4 @@ export * as querySchema from "./searchQuerySchema.js";
 export * from "./dateTimeSchema.js";
 export * from "./searchQueryTranslator.js";
 
-export * from "./storageProvider.js";
+export * from "./storage.js";

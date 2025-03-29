@@ -1,20 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MessageCollection } from "../src/storageProvider.js";
+import { MessageCollection } from "../src/storage.js";
 import { createMessage } from "./testCommon.js";
 
 describe("knowpro.MessageCollection", () => {
     test("addMessage", () => {
         const messageCollection = new MessageCollection();
-        messageCollection.push(createMessage("One"));
+        messageCollection.append(createMessage("One"));
         expect(messageCollection).toHaveLength(1);
         const m = messageCollection.get(0);
         expect(m).toBeDefined();
     });
     test("addMessages", () => {
         const messageCollection = new MessageCollection();
-        messageCollection.push(createMessage("One"), createMessage("Two"));
+        messageCollection.append(createMessage("One"), createMessage("Two"));
         expect(messageCollection).toHaveLength(2);
 
         let ordinals = [0, 1];

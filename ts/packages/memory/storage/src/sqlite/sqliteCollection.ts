@@ -39,7 +39,7 @@ export class SqliteCollection<T, TOrdinal extends number>
         return this.count;
     }
 
-    public push(...items: T[]): void {
+    public append(...items: T[]): void {
         for (const item of items) {
             this.pushObject(item);
         }

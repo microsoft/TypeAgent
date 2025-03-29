@@ -18,14 +18,17 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
-    createTermEmbeddingCache,
     buildTransientSecondaryIndexes,
 } from "knowpro";
-import { conversation as kpLib, image } from "knowledge-processor";
+import {
+    conversation as kpLib,
+    image,
+    createEmbeddingCache,
+} from "knowledge-processor";
 import fs from "node:fs";
 import path from "node:path";
 import { isImageFileType } from "common-utils";
-import { ChatModel } from "aiclient";
+import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
 
@@ -360,7 +363,8 @@ export class ImageCollection implements IConversation {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createConversationSettings();
+        const [model, embeddingSize] = this.createEmbeddingModel();
+        this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
     }
@@ -404,7 +408,6 @@ export class ImageCollection implements IConversation {
             this.settings,
             eventHandler,
         );
-        this.buildCaches();
 
         return indexingResult;
     }
@@ -447,15 +450,6 @@ export class ImageCollection implements IConversation {
             );
         }
         await buildTransientSecondaryIndexes(this, this.settings);
-        this.buildCaches();
-    }
-
-    private buildCaches(): void {
-        createTermEmbeddingCache(
-            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
-            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
-            64,
-        );
     }
 
     public async writeToFile(
@@ -481,6 +475,22 @@ export class ImageCollection implements IConversation {
             imageCollection.deserialize(data);
         }
         return imageCollection;
+    }
+
+    /**
+     * Our index already has embeddings for every term in the podcast
+     * Create an embedding model that can just leverage those embeddings
+     * @returns embedding model, size of embedding
+     */
+    private createEmbeddingModel(): [TextEmbeddingModel, number] {
+        return [
+            createEmbeddingCache(
+                openai.createEmbeddingModel(),
+                64,
+                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+            ),
+            1536,
+        ];
     }
 }
 
