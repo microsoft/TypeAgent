@@ -187,15 +187,15 @@ async function saveUserAction() {
     const stepsContainer = document.getElementById("stepsTimelineContainer")!;
     const steps = JSON.parse(stepsContainer.dataset?.steps || "[]");
 
-    const screenshot = JSON.parse(stepsContainer.dataset?.screenshot || '""');
+    const screenshot = JSON.parse(stepsContainer.dataset?.screenshot || "[]");
     let html = JSON.parse(stepsContainer.dataset?.html || '""');
 
-    if (html === undefined || html === "") {
+    if (html === undefined || html === "[]") {
         const htmlFragments = await chrome.runtime.sendMessage({
             type: "captureHtmlFragments",
         });
         if (htmlFragments !== undefined && htmlFragments.length > 0) {
-            html = htmlFragments[0].content;
+            html = [htmlFragments[0].content];
         }
     }
 
@@ -250,7 +250,7 @@ async function saveUserAction() {
     // Get schema based on the recorded action info
     const response = await chrome.runtime.sendMessage({
         type: "getIntentFromRecording",
-        html: [{ content: html, frameId: 0 }],
+        html: html.map((str: string) => ({ content: str, frameId: 0 })),
         screenshot,
         actionName,
         actionDescription,
@@ -540,8 +540,8 @@ function renderTimeline(action: any, index: number) {
 function renderTimelineSteps(
     steps: any[],
     userActionsListContainer: HTMLElement,
-    screenshotData: string,
-    htmlData: string,
+    screenshotData: string[],
+    htmlData: string[],
     enableEdits?: boolean,
     actionName?: string,
 ) {
@@ -576,12 +576,12 @@ function renderTimelineSteps(
             card.dataset.date = new Date(step.timestamp).toLocaleString();
 
             // only display a subset of fields in the UI
-            const { boundingBox, timestamp, id, ...filteredObjet } = step;
+            const { boundingBox, timestamp, id, ...filteredObject } = step;
 
             card.innerHTML = `        
             <h3>${index + 1}. ${step.type}</h3>
             <p>Details.</p>
-            <pre class="card-text"><code class="language-json">${JSON.stringify(filteredObjet, null, 2)}</code></pre>
+            <pre class="card-text"><code class="language-json">${JSON.stringify(filteredObject, null, 2)}</code></pre>
         `;
 
             stepsContainer.appendChild(card);
@@ -600,30 +600,24 @@ function renderTimelineSteps(
         "#downloadHtml",
     )! as HTMLElement;
 
-    if (screenshotData !== undefined && screenshotData !== "") {
-        const img = document.createElement("img");
-        img.src = screenshotData;
-        img.alt = "Annotated Screenshot";
-        img.style.width = "100%";
-        img.style.border = "1px solid #ccc";
-        img.style.borderRadius = "8px";
-        screenshotContainer.appendChild(img);
+    if (screenshotData !== undefined && screenshotData.length > 0) {
+        screenshotData.forEach((screenshot) => {
+            const img = document.createElement("img");
+            img.src = screenshot;
+            img.alt = "Annotated Screenshot";
+            img.style.width = "100%";
+            img.style.border = "1px solid #ccc";
+            img.style.borderRadius = "8px";
+            screenshotContainer.appendChild(img);
 
-        // Enable the download button
-        downloadButton.classList.remove("hidden");
-        downloadButton.style.display = "block";
-        downloadButton.addEventListener("click", () =>
-            downloadScreenshot(screenshotData),
-        );
-    }
-
-    if (htmlData !== undefined && htmlData !== "") {
-        // Enable download button
-        downloadHTMLButton.classList.remove("hidden");
-        downloadHTMLButton.style.display = "block";
-        downloadHTMLButton.addEventListener("click", () =>
-            downloadHTML(htmlData),
-        );
+            // Enable the download button
+            downloadButton.classList.remove("hidden");
+            downloadButton.style.display = "block";
+            downloadButton.addEventListener("click", () =>
+                // TODO: update downloads
+                downloadScreenshot(screenshot),
+            );
+        });
     }
 
     if (enableEdits && actionName !== undefined && actionName !== "") {
