@@ -11,7 +11,6 @@ import { Result } from "typechat";
 
 export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
     readonly cache: collections.Cache<string, number[]>;
-    embeddingLookup?: (text: string) => number[] | undefined;
 }
 
 /**
@@ -20,7 +19,7 @@ export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
  * - Allows for optional lookup from a persistent cache
  * @param innerModel Model to call when no cache hit
  * @param memCacheSize Size of the memory cache
- * @param lookupInPersistentCache (Optional) Lookup from persistent cache
+ * @param persistentCache (Optional) Lookup from persistent cache
  * @returns
  */
 export function createEmbeddingCache(
