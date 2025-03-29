@@ -119,7 +119,7 @@ export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
 export function createEmbeddingCache(
     innerModel: TextEmbeddingModel,
     memCacheSize: number,
-    persistentCache?: TextEmbeddingCache | undefined,
+    getPersistentCache?: () => TextEmbeddingCache | undefined,
 ): TextEmbeddingModelWithCache {
     const memCache: collections.Cache<string, number[]> =
         collections.createLRUCache(memCacheSize);
@@ -148,6 +148,9 @@ export function createEmbeddingCache(
     }
 
     function getFromCache(text: string): number[] | undefined {
+        const persistentCache = getPersistentCache
+            ? getPersistentCache()
+            : undefined;
         let embedding = persistentCache
             ? persistentCache.getEmbedding(text)
             : undefined;
@@ -157,6 +160,9 @@ export function createEmbeddingCache(
 
     function putInCache(text: string, embedding: number[]): void {
         memCache.put(text, embedding);
+        const persistentCache = getPersistentCache
+            ? getPersistentCache()
+            : undefined;
         if (persistentCache && persistentCache.putEmbedding) {
             persistentCache.putEmbedding(text, embedding);
         }

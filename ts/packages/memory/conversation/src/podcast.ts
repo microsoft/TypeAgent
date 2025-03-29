@@ -309,14 +309,11 @@ export class Podcast implements IConversation<PodcastMessage> {
      */
     private createEmbeddingModel(): [TextEmbeddingModel, number] {
         return [
-            createEmbeddingCache(openai.createEmbeddingModel(), 64, {
-                getEmbedding: (text: string) => {
-                    const fuzzyIndex =
-                        this.secondaryIndexes.termToRelatedTermsIndex
-                            .fuzzyIndex;
-                    return fuzzyIndex?.getEmbedding(text);
-                },
-            }),
+            createEmbeddingCache(
+                openai.createEmbeddingModel(),
+                64,
+                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+            ),
             1536,
         ];
     }

@@ -21,7 +21,10 @@ import {
     ITermToSemanticRefIndex,
     SemanticRef,
 } from "../src/interfaces.js";
-import { ConversationSettings } from "../src/conversation.js";
+import {
+    ConversationSettings,
+    createConversationSettings,
+} from "../src/conversation.js";
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 import {
@@ -32,6 +35,7 @@ import {
 import { matchPropertySearchTermToEntity } from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { Result } from "typechat";
+import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 
 export class TestMessage implements IMessage {
     constructor(
@@ -88,6 +92,27 @@ export class NullEmbeddingModel implements TextEmbeddingModel {
     public generateEmbedding(input: string): Promise<Result<number[]>> {
         throw nullMethodError();
     }
+}
+
+export function createOfflineConversationSettings(
+    getCache: () => TextEmbeddingCache | undefined,
+) {
+    const cachingModel = createEmbeddingCache(
+        new NullEmbeddingModel(),
+        32,
+        getCache,
+    );
+    return createConversationSettings(cachingModel);
+}
+
+export function loadTestConversation(
+    settings: ConversationSettings,
+): Promise<IConversation> {
+    return createConversationFromFile(
+        getRelativePath("./test/data"),
+        "Episode_53_AdrianTchaikovsky_index",
+        settings,
+    );
 }
 
 export function testIf(

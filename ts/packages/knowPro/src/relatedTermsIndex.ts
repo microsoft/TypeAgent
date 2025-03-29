@@ -26,6 +26,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { ConversationSettings } from "./conversation.js";
+import { TextEmbeddingCache } from "knowledge-processor";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -274,7 +275,9 @@ export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
     deserialize(data: ITextEmbeddingIndexData): void;
 }
 
-export class TermEmbeddingIndex implements ITermEmbeddingIndex {
+export class TermEmbeddingIndex
+    implements ITermEmbeddingIndex, TextEmbeddingCache
+{
     private textArray: string[];
     private embeddingIndex: TextEmbeddingIndex;
 

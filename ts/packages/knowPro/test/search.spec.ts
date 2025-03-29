@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { createAndTermGroup, createOrTermGroup } from "../src/common.js";
-import { createConversationSettings } from "../src/conversation.js";
 import {
     IConversation,
     KnowledgeType,
@@ -17,41 +16,37 @@ import {
     SemanticRefSearchResult,
 } from "../src/search.js";
 import {
-    createConversationFromFile,
-    getRelativePath,
-    hasTestKeys,
-    testIf,
+    createOfflineConversationSettings,
     emptyConversation,
-    getSemanticRefsForSearchResult,
     findEntityWithName,
+    getSemanticRefsForSearchResult,
+    loadTestConversation,
 } from "./testCommon.js";
+import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
 
 describe("knowpro.search.offline", () => {
     const testTimeout = 1000 * 60 * 5;
     let conversation: IConversation = emptyConversation();
-
+    let secondaryIndex: ConversationSecondaryIndexes | undefined;
     beforeAll(async () => {
-        if (hasTestKeys()) {
-            let settings = createConversationSettings();
-            conversation = await createConversationFromFile(
-                getRelativePath("./test/data"),
-                "Episode_53_AdrianTchaikovsky_index",
-                settings,
-            );
-        }
+        let settings = createOfflineConversationSettings(() => {
+            return secondaryIndex?.termToRelatedTermsIndex.fuzzyIndex;
+        });
+        conversation = await loadTestConversation(settings);
+        secondaryIndex =
+            conversation.secondaryIndexes as ConversationSecondaryIndexes;
     });
-    testIf(
+    test(
         "lookup",
-        () => hasTestKeys(),
         () => {
             const books = conversation.semanticRefIndex?.lookupTerm("book");
             expect(books).toBeDefined();
             expect(books!.length).toBeGreaterThan(0);
         },
+        testTimeout,
     );
-    testIf(
+    test(
         "searchKnowledge",
-        () => hasTestKeys(),
         async () => {
             const termGroup = createOrTermGroup();
             termGroup.terms.push(createSearchTerm("book"));
@@ -64,9 +59,8 @@ describe("knowpro.search.offline", () => {
         },
         testTimeout,
     );
-    testIf(
+    test(
         "searchMessages",
-        () => hasTestKeys(),
         async () => {
             const termGroup = createAndTermGroup();
             termGroup.terms.push(createSearchTerm("book"));
