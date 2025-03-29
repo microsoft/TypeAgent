@@ -162,7 +162,7 @@ function checkActionSchema(
     const paramSpecs = schemaConfig?.paramSpec?.[actionNameString];
     if (paramSpecs !== undefined) {
         if (paramSpecs !== false) {
-            checkParamSpecs(paramSpecs, parameterFieldType, actionNameString);
+            checkParamSpecs(paramSpecs, parameterFieldType!, actionNameString);
         }
         actionDefinition.paramSpecs = paramSpecs;
     }
