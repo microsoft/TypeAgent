@@ -3,6 +3,7 @@
 
 import {
     createTextEmbeddingModelWithCache,
+    TextEmbeddingCache,
     TextEmbeddingModel,
 } from "aiclient";
 import { collections } from "typeagent";
@@ -25,15 +26,14 @@ export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
 export function createEmbeddingCache(
     innerModel: TextEmbeddingModel,
     memCacheSize: number,
-    lookupInPersistentCache?: (text: string) => number[] | undefined,
+    persistentCache?: TextEmbeddingCache | undefined,
 ): TextEmbeddingModelWithCache {
     const memCache: collections.Cache<string, number[]> =
         collections.createLRUCache(memCacheSize);
-    innerModel = createTextEmbeddingModelWithCache(
-        innerModel,
-        getFromCache,
-        putInCache,
-    );
+    innerModel = createTextEmbeddingModelWithCache(innerModel, {
+        getEmbedding: getFromCache,
+        putEmbedding: putInCache,
+    });
     const modelWithCache: TextEmbeddingModelWithCache = {
         cache: memCache,
         generateEmbedding,
@@ -55,8 +55,8 @@ export function createEmbeddingCache(
     }
 
     function getFromCache(text: string): number[] | undefined {
-        let embedding = lookupInPersistentCache
-            ? lookupInPersistentCache(text)
+        let embedding = persistentCache
+            ? persistentCache.getEmbedding(text)
             : undefined;
         embedding ??= memCache.get(text);
         return embedding;
@@ -64,5 +64,8 @@ export function createEmbeddingCache(
 
     function putInCache(text: string, embedding: number[]): void {
         memCache.put(text, embedding);
+        if (persistentCache && persistentCache.putEmbedding) {
+            persistentCache.putEmbedding(text, embedding);
+        }
     }
 }

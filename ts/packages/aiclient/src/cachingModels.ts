@@ -5,6 +5,25 @@ import { error, Result, success } from "typechat";
 import { TextEmbeddingModel } from "./models";
 
 /**
+ * An embedding cache
+ */
+export interface TextEmbeddingCache {
+    /**
+     * Get an embedding from the cache
+     * @param text
+     * @returns
+     */
+    getEmbedding: (text: string) => number[] | undefined;
+    /**
+     * (Optional): Put an embedding in the cache
+     * @param text
+     * @param value
+     * @returns
+     */
+    putEmbedding?: (text: string, embedding: number[]) => void | undefined;
+}
+
+/**
  * Create an embedding model that can leverage a cache to improve performance
  * - You supply callbacks to manage the cache
  * Only calls the innerModel for those text items that did not hit the cache
@@ -15,8 +34,7 @@ import { TextEmbeddingModel } from "./models";
  */
 export function createTextEmbeddingModelWithCache(
     innerModel: TextEmbeddingModel,
-    getFromCache: (text: string) => number[] | undefined,
-    putInCache?: (text: string, value: number[]) => void,
+    cache: TextEmbeddingCache,
 ): TextEmbeddingModel {
     const modelWithCache: TextEmbeddingModel = {
         generateEmbedding,
@@ -28,7 +46,7 @@ export function createTextEmbeddingModelWithCache(
     return modelWithCache;
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
-        let embedding = getFromCache(input);
+        let embedding = cache.getEmbedding(input);
         if (embedding) {
             return success(embedding);
         }
@@ -47,7 +65,7 @@ export function createTextEmbeddingModelWithCache(
         // First, grab any embeddings we already have
         for (let i = 0; i < inputs.length; ++i) {
             let input = inputs[i];
-            let embedding = getFromCache(input);
+            let embedding = cache.getEmbedding(input);
             if (embedding === undefined) {
                 // This one needs embeddings
                 inputBatch ??= [];
@@ -78,8 +96,8 @@ export function createTextEmbeddingModelWithCache(
     }
 
     function updateCache(text: string, embedding: number[]): void {
-        if (putInCache) {
-            putInCache(text, embedding);
+        if (cache.putEmbedding !== undefined) {
+            cache.putEmbedding(text, embedding);
         }
     }
 }

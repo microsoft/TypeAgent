@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections, NormalizedEmbedding } from "typeagent";
+import { collections } from "typeagent";
 import { IConversation, ListIndexingResult, Term } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { Scored } from "./common.js";
@@ -27,6 +27,7 @@ import {
 } from "./fuzzyIndex.js";
 import { createEmbeddingCache } from "knowledge-processor";
 import { ConversationSettings } from "./conversation.js";
+import { TextEmbeddingCache } from "aiclient";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -275,7 +276,9 @@ export interface ITermEmbeddingIndex extends ITermToRelatedTermsFuzzy {
     deserialize(data: ITextEmbeddingIndexData): void;
 }
 
-export class TermEmbeddingIndex implements ITermEmbeddingIndex {
+export class TermEmbeddingIndex
+    implements ITermEmbeddingIndex, TextEmbeddingCache
+{
     private textArray: string[];
     private embeddingIndex: TextEmbeddingIndex;
 
@@ -365,10 +368,10 @@ export class TermEmbeddingIndex implements ITermEmbeddingIndex {
         this.embeddingIndex.deserialize(data.embeddings);
     }
 
-    public getEmbedding(text: string): NormalizedEmbedding | undefined {
+    public getEmbedding(text: string): number[] | undefined {
         const pos = this.textArray.indexOf(text);
         if (pos >= 0) {
-            return this.embeddingIndex.get(pos);
+            return serializeEmbedding(this.embeddingIndex.get(pos));
         }
         return undefined;
     }
@@ -388,13 +391,7 @@ export function createTermEmbeddingCache(
     settings.embeddingModel = createEmbeddingCache(
         settings.embeddingModel,
         cacheSize,
-        (term) => {
-            const embedding = termEmbeddingIndex.getEmbedding(term);
-            if (embedding) {
-                return serializeEmbedding(embedding);
-            }
-            return undefined;
-        },
+        termEmbeddingIndex,
     );
 }
 

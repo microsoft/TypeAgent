@@ -2213,6 +2213,9 @@ importers:
 
   packages/memory/conversation:
     dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)

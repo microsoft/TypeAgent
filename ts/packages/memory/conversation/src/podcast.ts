@@ -20,12 +20,15 @@ import {
     readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     Term,
-    createTermEmbeddingCache,
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
 } from "knowpro";
-import { conversation as kpLib } from "knowledge-processor";
+import {
+    createEmbeddingCache,
+    conversation as kpLib,
+} from "knowledge-processor";
 import { collections } from "typeagent";
+import { openai, TextEmbeddingModel } from "aiclient";
 
 // metadata for podcast messages
 
@@ -121,7 +124,10 @@ export class Podcast implements IConversation<PodcastMessage> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = this.createSettings();
+        this.settings = createConversationSettings(
+            this.createCachingModel(openai.createEmbeddingModel()),
+            1536,
+        );
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
@@ -257,7 +263,6 @@ export class Podcast implements IConversation<PodcastMessage> {
             await buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
-        this.buildCaches();
     }
 
     private buildParticipantAliases(): void {
@@ -299,16 +304,17 @@ export class Podcast implements IConversation<PodcastMessage> {
         return aliases;
     }
 
-    private buildCaches(): void {
-        createTermEmbeddingCache(
-            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
-            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
-            64,
-        );
+    private getTermEmbedding(text: string): number[] | undefined {
+        const fuzzyIndex =
+            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
+        return fuzzyIndex ? fuzzyIndex.getEmbedding(text) : undefined;
     }
 
-    private createSettings(): ConversationSettings {
-        return createConversationSettings();
+    private createCachingModel(model: TextEmbeddingModel): TextEmbeddingModel {
+        const cachingModel = createEmbeddingCache(model, 64, {
+            getEmbedding: (text: string) => this.getTermEmbedding(text),
+        });
+        return cachingModel;
     }
 }
 
