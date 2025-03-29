@@ -2,12 +2,15 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass, field
-from typing import Sequence, TypedDict
+from typing import Optional, Sequence, TypedDict
 
 from ..knowpro.importing import ConversationSettings
 from ..knowpro import convindex, interfaces, kplib, secindex
 from ..knowpro.interfaces import Datetime, Timedelta
-from ..knowpro.serialization import write_conversation_data_to_file
+from ..knowpro.serialization import (
+    write_conversation_data_to_file,
+    read_conversation_data_from_file,
+)
 
 
 @dataclass
@@ -209,23 +212,20 @@ class Podcast(
     #         )
     #     await self._build_transient_secondary_indexes(True)
 
-    # TODO: read_from_file
-    # @staticmethod
-    # async def read_from_file(
-    #     dir_path: str, base_file_name: str
-    # ) -> Optional["Podcast"]:  # Optional OK here
-    #     podcast = Podcast()
-    #     embedding_size = (
-    #         podcast.settings.related_term_index_settings.embedding_index_settings.embedding_size
-    #         if podcast.settings.related_term_index_settings.embedding_index_settings
-    #         else None
-    #     )
-    #     data = await read_conversation_data_from_file(
-    #         dir_path, base_file_name, embedding_size
-    #     )
-    #     if data:
-    #         await podcast.deserialize(data)
-    #     return podcast
+    @staticmethod
+    async def read_from_file(
+        filename: str,
+    ) -> Optional[
+        "Podcast"
+    ]:  # Optional OK here because Podcast must be stringified and "..." | None is a runtime error
+        podcast = Podcast()
+        embedding_size = (
+            podcast.settings.related_term_index_settings.embedding_index_settings.embedding_size
+        )
+        data = await read_conversation_data_from_file(filename, embedding_size)
+        if data:
+            await podcast.deserialize(data)
+        return podcast
 
     def _build_transient_secondary_indexes(self, build_all: bool) -> None:
         if build_all:

@@ -4,8 +4,7 @@
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from ..aitools.embeddings import NormalizedEmbeddings
-from ..aitools.vectorbase import ITextEmbeddingIndexData, VectorBase
+from ..aitools.vectorbase import VectorBase
 from .importing import TextEmbeddingIndexSettings
 from .interfaces import (
     ITextToTextLocationIndexData,
@@ -13,6 +12,7 @@ from .interfaces import (
     ListIndexingResult,
     TextLocation,
 )
+from .relatedtermsindex import ITextEmbeddingIndexData
 
 
 @dataclass
@@ -114,7 +114,8 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         return ITextToTextLocationIndexData(
             textLocations=[loc.serialize() for loc in self._text_locations],
             embeddings=ITextEmbeddingIndexData(
-                embeddings=self._vector_base.serialize()
+                textItems=[],  # TODO: Put values here!
+                embeddings=self._vector_base.serialize(),
             ),
         )
 

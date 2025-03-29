@@ -18,7 +18,9 @@ type NormalizedEmbeddings = NDArray[np.float32]  # An array of embeddings
 
 class AsyncEmbeddingModel:
     def __init__(self, embedding_size: int | None = None):
-        self.embedding_size = embedding_size if embedding_size else 1536
+        if embedding_size is None or embedding_size <= 0:
+            embedding_size = 1536
+        self.embedding_size = embedding_size
         self.azure_token_provider: AzureTokenProvider | None = None
         openai_key_name = "OPENAI_API_KEY"
         azure_key_name = "AZURE_OPENAI_API_KEY"
@@ -77,8 +79,9 @@ class AsyncEmbeddingModel:
 
     async def get_embeddings_nocache(self, input: list[str]) -> NormalizedEmbeddings:
         if not input:
-            # Save round trip and avoid error from reshape((0, N)) for N != 0.
-            return np.array([], dtype=np.float32).reshape((0, 0))
+            empty = np.array([], dtype=np.float32)
+            empty.shape = (0, self.embedding_size)
+            return empty
         if self.azure_token_provider and self.azure_token_provider.needs_refresh():
             await self.refresh_auth()
         data = (
@@ -126,7 +129,7 @@ class AsyncEmbeddingModel:
         if len(keys):
             return np.array(embeddings, dtype=np.float32).reshape((len(keys), -1))
         else:
-            return np.array([], dtype=np.float32).reshape((0, 0))
+            return np.array([], dtype=np.float32).reshape((0,))
 
 
 async def main():

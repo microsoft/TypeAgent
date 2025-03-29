@@ -2,7 +2,8 @@
 # Licensed under the MIT License.
 
 from typing import NotRequired, TypedDict
-from ..aitools.vectorbase import ITextEmbeddingIndexData, VectorBase
+
+from ..aitools.vectorbase import NormalizedEmbeddings, VectorBase
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
@@ -11,6 +12,7 @@ from .interfaces import (
     ITermToRelatedTermsIndex,
     ITermsToRelatedTermsDataItem,
     ITermsToRelatedTermsIndexData,
+    ITextEmbeddingIndexData,
     IndexingEventHandlers,
     ListIndexingResult,
     Term,
@@ -93,6 +95,7 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
         return ITermsToRelatedTermsIndexData(
             aliasData=self._alias_map.serialize(),
             textEmbeddingData=ITextEmbeddingIndexData(
-                embeddings=self._vector_base.serialize()
+                textItems=[],  # TODO: Put values here!
+                embeddings=self._vector_base.serialize(),
             ),
         )

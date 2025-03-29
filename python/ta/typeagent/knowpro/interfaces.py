@@ -3,7 +3,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime as Datetime, timedelta as Timedelta  # For export
+from datetime import datetime as Datetime, timedelta as Timedelta
 from typing import (
     Any,
     Callable,
@@ -14,11 +14,8 @@ from typing import (
     TypedDict,
 )
 
-from ..aitools.embeddings import NormalizedEmbedding
-from ..aitools.vectorbase import (
-    ITextEmbeddingIndexData,
-    VectorBase,
-)
+from ..aitools.embeddings import NormalizedEmbedding, NormalizedEmbeddings
+from ..aitools.vectorbase import VectorBase
 from . import kplib
 
 
@@ -170,7 +167,9 @@ class TextRange:
             )
 
 
-type KnowledgeData = dict[str, Any]  # Any valid JSON, really
+# TODO: Implement serializing KnowledgeData (or import from kplib).
+class KnowledgeData(TypedDict):
+    pass
 
 
 class SemanticRefData(TypedDict):
@@ -191,13 +190,11 @@ class SemanticRef:
         return f"{self.__class__.__name__}({self.semantic_ref_ordinal}, {self.range}, {self.knowledge_type!r}, {self.knowledge})"
 
     def serialize(self) -> SemanticRefData:
-        from . import serialization
-
         return SemanticRefData(
             semanticRefOrdinal=self.semantic_ref_ordinal,
             range=self.range.serialize(),
             knowledgeType=self.knowledge_type,
-            knowledge=serialization.serialize_object(self.knowledge),
+            knowledge=KnowledgeData(),  # TODO: self.knowledge.serialize()
         )
 
 
@@ -443,6 +440,11 @@ class ITermsToRelatedTermsDataItem(TypedDict):
 
 class ITermToRelatedTermsData(TypedDict):
     relatedTerms: NotRequired[list[ITermsToRelatedTermsDataItem] | None]
+
+
+class ITextEmbeddingIndexData(TypedDict):
+    textItems: list[str]
+    embeddings: NormalizedEmbeddings | None
 
 
 class ITermsToRelatedTermsIndexData(TypedDict):

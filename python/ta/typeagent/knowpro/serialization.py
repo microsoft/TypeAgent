@@ -3,17 +3,20 @@
 
 import functools
 import json
-from typing import Any, NotRequired, overload, TypedDict
+from typing import Any, NotRequired, cast, overload, TypedDict
 
 from ..aitools.embeddings import NormalizedEmbeddings
 from .interfaces import (
     IConversationDataWithIndexes,
-    Knowledge,
-    KnowledgeData,
-    KnowledgeType,
 )
 
 import numpy as np
+
+
+# -------------------
+# Shared definitions
+# -------------------
+
 
 DATA_FILE_SUFFIX = "_data.json"
 EMBEDDING_FILE_SUFFIX = "_embeddings.bin"
@@ -23,6 +26,7 @@ class FileHeader(TypedDict):
     version: str
 
 
+# Needed to create a TypedDict.
 def create_file_header() -> FileHeader:
     return FileHeader(version="0.1")
 
@@ -50,6 +54,11 @@ class ConversationFileData(TypedDict):
     jsonData: ConversationJsonData
     # This goes into a single binary file
     binaryData: ConversationBinaryData
+
+
+# --------------
+# Serialization
+# ---------------
 
 
 def write_conversation_data_to_file(
@@ -116,6 +125,8 @@ def to_conversation_file_data[IMessageData](
     return file_data
 
 
+# This converts any vanilla class instance to a dict, recursively,
+# with field named converted to camelCase.
 @overload
 def serialize_object(arg: None) -> None: ...
 @overload
@@ -157,3 +168,49 @@ def to_camel(name: str):
     # Don't pass edge cases.
     parts = name.split("_")
     return parts[0] + "".join(part.capitalize() for part in parts[1:])
+
+
+# ----------------
+# Deserialization
+# -----------------
+
+
+# No exceptions are caught; they just bubble out.
+async def read_conversation_data_from_file(
+    filename: str, embedding_size: int | None = None
+) -> IConversationDataWithIndexes | None:
+    with open(filename) as f:
+        json_data: ConversationJsonData = json.load(f)
+    if json_data is None:
+        # A serialized None -- file contained exactly "null".
+        return None
+    # TODO: validate json_data.
+    embeddings: NormalizedEmbeddings | None = None
+    if embedding_size:
+        with open(filename + EMBEDDING_FILE_SUFFIX, "rb") as f:
+            embeddings = np.fromfile(f, dtype=np.float32).reshape((-1, embedding_size))
+    else:
+        embeddings = None
+    file_data = ConversationFileData(
+        jsonData=json_data,
+        binaryData=ConversationBinaryData(
+            embeddings=None if embeddings is None else bytearray(embeddings.tobytes())
+        ),
+    )
+    if json_data.get("fileHeader") is None:
+        json_data["fileHeader"] = create_file_header()
+    return from_conversation_file_data(file_data)
+
+
+def from_conversation_file_data(
+    file_data: ConversationFileData,
+) -> IConversationDataWithIndexes | None:
+    json_data = file_data["jsonData"]
+    binary_data = file_data["binaryData"]
+    if binary_data:
+        embeddings = binary_data.get("embeddings")
+        if embeddings:
+            embeddings = np.frombuffer(embeddings, dtype=np.float32)
+    else:
+        embeddings = None
+    # TODO: proper return value, and remove '| None' from return type.
