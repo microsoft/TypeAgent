@@ -304,7 +304,7 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     /**
      * Our index already has embeddings for every term in the podcast
-     * Create an embedding model that can just leverage those embeddings
+     * Create a caching embedding model that can just leverage those embeddings
      * @returns embedding model, size of embedding
      */
     private createEmbeddingModel(): [TextEmbeddingModel, number] {

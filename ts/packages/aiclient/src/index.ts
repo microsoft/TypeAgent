@@ -10,4 +10,3 @@ export * from "./auth";
 export * from "./tokenCounter";
 export { getChatModelNames, getChatModelMaxConcurrency } from "./modelResource";
 export * as auth from "./auth";
-export * from "./cachingModels";
