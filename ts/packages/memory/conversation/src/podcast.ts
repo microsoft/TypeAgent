@@ -121,7 +121,7 @@ export class Podcast implements IConversation<PodcastMessage> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createConversationSettings();
+        this.settings = this.createSettings();
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
@@ -305,6 +305,10 @@ export class Podcast implements IConversation<PodcastMessage> {
             this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
             64,
         );
+    }
+
+    private createSettings(): ConversationSettings {
+        return createConversationSettings();
     }
 }
 

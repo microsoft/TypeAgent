@@ -14,25 +14,28 @@ export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
 }
 
 /**
- * Create an embedding model that leverages a cache to improve performance
- * @param innerModel
- * @param cacheSize
+ * Create an embedding model that leverages caches to improve performance
+ * - Maintains an in-memory LRU cache
+ * - Allows for optional lookup from a persistent cache
+ * @param innerModel Model to call when no cache hit
+ * @param memCacheSize Size of the memory cache
+ * @param lookupInPersistentCache (Optional) Lookup from persistent cache
  * @returns
  */
 export function createEmbeddingCache(
     innerModel: TextEmbeddingModel,
-    cacheSize: number,
-    embeddingLookup?: (text: string) => number[] | undefined,
+    memCacheSize: number,
+    lookupInPersistentCache?: (text: string) => number[] | undefined,
 ): TextEmbeddingModelWithCache {
-    const cache: collections.Cache<string, number[]> =
-        collections.createLRUCache(cacheSize);
+    const memCache: collections.Cache<string, number[]> =
+        collections.createLRUCache(memCacheSize);
     innerModel = createTextEmbeddingModelWithCache(
         innerModel,
         getFromCache,
         putInCache,
     );
     const modelWithCache: TextEmbeddingModelWithCache = {
-        cache,
+        cache: memCache,
         generateEmbedding,
         maxBatchSize: innerModel.maxBatchSize,
     };
@@ -52,12 +55,14 @@ export function createEmbeddingCache(
     }
 
     function getFromCache(text: string): number[] | undefined {
-        let embedding = embeddingLookup ? embeddingLookup(text) : undefined;
-        embedding ??= cache.get(text);
+        let embedding = lookupInPersistentCache
+            ? lookupInPersistentCache(text)
+            : undefined;
+        embedding ??= memCache.get(text);
         return embedding;
     }
 
     function putInCache(text: string, embedding: number[]): void {
-        cache.put(text, embedding);
+        memCache.put(text, embedding);
     }
 }

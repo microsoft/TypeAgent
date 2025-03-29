@@ -5,20 +5,24 @@ import { error, Result, success } from "typechat";
 import { TextEmbeddingModel } from "./models";
 
 /**
- * Create an embedding model that leverages a cache to improve performance
- * @param model Model to invoke when cache is not hit
+ * Create an embedding model that can leverage a cache to improve performance
+ * - You supply callbacks to manage the cache
+ * Only calls the innerModel for those text items that did not hit the cache
+ * @param innerModel Model to invoke when cache is not hit
+ * @param getFromCache Callback to lookup embeddings from a cache
+ * @param putInCache (Optional) update the cache with embeddings
  * @returns
  */
 export function createTextEmbeddingModelWithCache(
-    model: TextEmbeddingModel,
+    innerModel: TextEmbeddingModel,
     getFromCache: (text: string) => number[] | undefined,
     putInCache?: (text: string, value: number[]) => void,
 ): TextEmbeddingModel {
     const modelWithCache: TextEmbeddingModel = {
         generateEmbedding,
-        maxBatchSize: model.maxBatchSize,
+        maxBatchSize: innerModel.maxBatchSize,
     };
-    if (model.generateEmbeddingBatch) {
+    if (innerModel.generateEmbeddingBatch) {
         modelWithCache.generateEmbeddingBatch = generateEmbeddingBatch;
     }
     return modelWithCache;
@@ -28,7 +32,7 @@ export function createTextEmbeddingModelWithCache(
         if (embedding) {
             return success(embedding);
         }
-        const result = await model.generateEmbedding(input);
+        const result = await innerModel.generateEmbedding(input);
         if (result.success) {
             updateCache(input, result.data);
         }
@@ -53,7 +57,7 @@ export function createTextEmbeddingModelWithCache(
             }
         }
         if (inputBatch && inputBatch.length > 0) {
-            const result = await model.generateEmbeddingBatch!(inputBatch);
+            const result = await innerModel.generateEmbeddingBatch!(inputBatch);
             if (!result.success) {
                 return result;
             }

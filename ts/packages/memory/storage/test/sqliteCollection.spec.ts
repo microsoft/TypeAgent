@@ -43,7 +43,7 @@ describe("memory.sqlite.messageCollection", () => {
         const messages = createMessages(4);
 
         let prevLength = messageCollection.length;
-        messageCollection.push(...messages);
+        messageCollection.append(...messages);
         let newLength = messageCollection.length;
         expect(newLength).toEqual(prevLength + messages.length);
 
@@ -60,7 +60,7 @@ describe("memory.sqlite.messageCollection", () => {
         const collectionName = "messages_slice";
         const messageCollection = new SqlMessageCollection(db!, collectionName);
         const messages = createMessages(10);
-        messageCollection.push(...messages);
+        messageCollection.append(...messages);
 
         let sliceLength = 5;
         let startAt = 0;
@@ -91,7 +91,7 @@ describe("memory.sqlite.messageCollection", () => {
 
     function testPush(collection: SqlMessageCollection, message: IMessage) {
         const prevLength = collection.length;
-        collection.push(message);
+        collection.append(message);
         const newLength = collection.length;
         expect(newLength).toEqual(prevLength + 1);
         const messageAdded = collection.get(newLength - 1);
