@@ -25,7 +25,6 @@ import {
     TextEmbeddingIndex,
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
-import { createEmbeddingCache } from "knowledge-processor";
 import { ConversationSettings } from "./conversation.js";
 import { TextEmbeddingCache } from "aiclient";
 
@@ -381,18 +380,6 @@ export class TermEmbeddingIndex
             return { text: this.textArray[m.item], weight: m.score };
         });
     }
-}
-
-export function createTermEmbeddingCache(
-    settings: TextEmbeddingIndexSettings,
-    termEmbeddingIndex: TermEmbeddingIndex,
-    cacheSize: number,
-): void {
-    settings.embeddingModel = createEmbeddingCache(
-        settings.embeddingModel,
-        cacheSize,
-        termEmbeddingIndex,
-    );
 }
 
 export class TermEditDistanceIndex

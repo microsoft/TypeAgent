@@ -124,10 +124,8 @@ export class Podcast implements IConversation<PodcastMessage> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createConversationSettings(
-            this.createCachingModel(openai.createEmbeddingModel()),
-            1536,
-        );
+        const [model, embeddingSize] = this.createEmbeddingModel();
+        this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
@@ -304,17 +302,23 @@ export class Podcast implements IConversation<PodcastMessage> {
         return aliases;
     }
 
-    private getTermEmbedding(text: string): number[] | undefined {
-        const fuzzyIndex =
-            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
-        return fuzzyIndex ? fuzzyIndex.getEmbedding(text) : undefined;
-    }
-
-    private createCachingModel(model: TextEmbeddingModel): TextEmbeddingModel {
-        const cachingModel = createEmbeddingCache(model, 64, {
-            getEmbedding: (text: string) => this.getTermEmbedding(text),
-        });
-        return cachingModel;
+    /**
+     * Our index already has embeddings for every term in the podcast
+     * Create an embedding model that can just leverage those embeddings
+     * @returns embedding model, size of embedding
+     */
+    private createEmbeddingModel(): [TextEmbeddingModel, number] {
+        return [
+            createEmbeddingCache(openai.createEmbeddingModel(), 64, {
+                getEmbedding: (text: string) => {
+                    const fuzzyIndex =
+                        this.secondaryIndexes.termToRelatedTermsIndex
+                            .fuzzyIndex;
+                    return fuzzyIndex?.getEmbedding(text);
+                },
+            }),
+            1536,
+        ];
     }
 }
 
