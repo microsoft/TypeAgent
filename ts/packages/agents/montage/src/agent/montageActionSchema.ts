@@ -108,6 +108,10 @@ export type CreateMontageAction = {
     parameters: {
         // Montage title, defaults to "Untitled"
         title: string 
+        // any search terms to use to seed the montage based off of the title
+        search_filters?: string[];
+        // placeholder for images to be populated later
+        files?: string[];
     }
 }
 

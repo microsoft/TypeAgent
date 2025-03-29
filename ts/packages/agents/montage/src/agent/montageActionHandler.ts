@@ -103,12 +103,13 @@ async function updateMontageContext(
 
         // Load all montages from disk
         context.agentContext.montages = [];
+        context.agentContext.montageIdSeed = 0;
         if (await context.sessionStorage?.exists(montageFile)) {
             const data = await context.sessionStorage?.read(montageFile, "utf8");
             if (data) {
                 const d = JSON.parse(data);
-                context.agentContext.montageIdSeed = d.montageIdSeed;
-                context.agentContext.montages = JSON.parse(d.montages);
+                context.agentContext.montageIdSeed = d.montageIDSeed ? d.montageIdSeed : 0;
+                context.agentContext.montages = d.montages;
             }
         }
 
@@ -120,7 +121,7 @@ async function updateMontageContext(
         // Load the image index from disk
         // TODO: allow swapping between montages
         if (!context.agentContext.imageCollection) {
-            context.agentContext.imageCollection = await im.ImageCollection.readFromFile("f:\\pictures_index", "index");
+            context.agentContext.imageCollection = await im.ImageCollection.readFromFile("c:\\temp\\pictures_index", "index");
         }
 
         if (!context.agentContext.viewProcess) {
@@ -230,6 +231,7 @@ async function handleMontageAction(
             }
 
             // TODO: update project state with this action
+            // add found files to the montage
             actionContext.sessionContext.agentContext.montage!.files = [...new Set([...actionContext.sessionContext.agentContext.montage!.files, ...action.parameters.files!])];
 
             // send select to the visualizer/client
@@ -273,7 +275,20 @@ async function handleMontageAction(
             const newMontageAction: CreateMontageAction = action as CreateMontageAction;
             actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext, newMontageAction.parameters.title);
 
-            saveMontages(actionContext.sessionContext);
+            // make the title the search terms
+            if (newMontageAction.parameters.search_filters === undefined || newMontageAction.parameters.search_filters.length == 0) {
+                newMontageAction.parameters.search_filters = [ newMontageAction.parameters.title ];
+            }
+
+            // add some images based on the montage title
+            if (newMontageAction.parameters.search_filters && newMontageAction.parameters.search_filters.length > 0) {
+                await findRequestedImages(newMontageAction, actionContext.sessionContext.agentContext);
+            }
+
+            // add found files to the montage
+            actionContext.sessionContext.agentContext.montage!.files = [...new Set([...actionContext.sessionContext.agentContext.montage!.files, ...action.parameters.files!])];
+
+            saveMontages(actionContext.sessionContext);            
 
             // update montage state
             actionContext.sessionContext.agentContext.viewProcess?.send(actionContext.sessionContext.agentContext.montage!);
@@ -414,7 +429,7 @@ function entityFromMontage(montage: PhotoMontage) {
     }
 }
 
-async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction, 
+async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction | CreateMontageAction, 
     context: MontageActionContext) {
     if (context.imageCollection) {
         if (action.parameters.search_filters) {
