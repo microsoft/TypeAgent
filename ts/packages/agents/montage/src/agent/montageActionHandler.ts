@@ -245,7 +245,8 @@ async function handleMontageAction(
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
 
-            result = createActionResult(`Found ${action.parameters.files?.length} images.`);            
+            const count: number = actionContext.sessionContext.agentContext.montage!.files.length - action.parameters.files!.length;
+            result = createActionResult(`Found ${action.parameters.files!.length} images. Merged ${count} new images into the montage,.`);            
             break;
         }
 
