@@ -4,6 +4,11 @@
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { HTMLReducer } from "./htmlReducer";
 import { SkeletonLoadingDetector } from "./loadingDetector";
+import {
+    SchemaMetadata,
+    extractSchemaMetadata,
+    extractSchemaFromLinkedPages,
+} from "./schemaExtractor";
 import { convert } from "html-to-text";
 import DOMPurify from "dompurify";
 
@@ -1063,53 +1068,34 @@ async function handleScriptAction(
             });
             break;
         }
+
+        case "extractSchemaCurrentPage": {
+            const metadata = extractSchemaMetadata();
+            if (metadata.length > 0) {
+                const data: SchemaMetadata = {
+                    url: window.location.href,
+                    data: metadata,
+                };
+
+                chrome.runtime.sendMessage({
+                    type: "downloadData",
+                    data,
+                    filename: `schema-${new URL(window.location.href).hostname}-${Date.now()}.json`,
+                });
+            } else {
+                alert("No schema.org metadata found on this page.");
+            }
+
+            sendResponse({});
+            break;
+        }
+
+        case "extractSchemaLinkedPages": {
+            extractSchemaFromLinkedPages();
+            sendResponse({});
+            break;
+        }
     }
-}
-
-function extractMicrodata(): any[] {
-    const data: any[] = [];
-
-    // Find all elements with 'itemscope' attribute (Microdata)
-    document.querySelectorAll("[itemscope]").forEach((item) => {
-        const schemaType = item.getAttribute("itemtype");
-        const metadata: Record<string, any> = {
-            "@type": schemaType || "Unknown",
-        };
-
-        item.querySelectorAll("[itemprop]").forEach((prop) => {
-            const propName = prop.getAttribute("itemprop");
-            let value =
-                prop.getAttribute("content") || prop.textContent?.trim() || "";
-
-            if (prop.tagName === "IMG") {
-                value = (prop as HTMLImageElement).src;
-            }
-
-            if (propName) metadata[propName] = value;
-        });
-
-        data.push(metadata);
-    });
-
-    return data;
-}
-
-function extractJsonLd(): any[] {
-    const jsonLdData: any[] = [];
-
-    // Find all <script> tags with type="application/ld+json"
-    document
-        .querySelectorAll('script[type="application/ld+json"]')
-        .forEach((script) => {
-            try {
-                const json = JSON.parse(script.textContent || "{}");
-                jsonLdData.push(json);
-            } catch (error) {
-                console.error("Error parsing JSON-LD:", error);
-            }
-        });
-
-    return jsonLdData;
 }
 
 chrome.runtime?.onMessage.addListener(
@@ -1213,19 +1199,5 @@ window.addEventListener("spa-navigation", async () => {
         recordedActionHtml.push(lastPagehtml);
         recordedHtmlIndex = recordedActionHtml.length;
         saveRecordedActions();
-    }
-
-    // Extract both Microdata and JSON-LD
-    const microdata = extractMicrodata();
-    const jsonLdData = extractJsonLd();
-    const structuredData = [...microdata, ...jsonLdData];
-
-    if (structuredData.length > 0) {
-        chrome.runtime.sendMessage({
-            action: "microdataDetected",
-            data: structuredData,
-        });
-        // chrome.storage.local.set({ microdata: structuredData });
-        console.log(structuredData);
     }
 });
