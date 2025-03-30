@@ -73,6 +73,13 @@ class AsyncEmbeddingModel:
             api_key=azure_api_key,
         )
 
+    def add_embedding(self, key: str, embedding: NormalizedEmbedding) -> None:
+        existing = self._embedding_cache.get(key)
+        if existing is not None:
+            assert existing == embedding
+        else:
+            self._embedding_cache[key] = embedding
+
     async def get_embedding_nocache(self, input: str) -> NormalizedEmbedding:
         embeddings = await self.get_embeddings_nocache([input])
         return embeddings[0]

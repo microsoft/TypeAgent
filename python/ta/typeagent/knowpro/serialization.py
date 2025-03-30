@@ -179,7 +179,7 @@ def to_camel(name: str):
 async def read_conversation_data_from_file(
     filename: str, embedding_size: int | None = None
 ) -> IConversationDataWithIndexes | None:
-    with open(filename) as f:
+    with open(filename + DATA_FILE_SUFFIX) as f:
         json_data: ConversationJsonData = json.load(f)
     if json_data is None:
         # A serialized None -- file contained exactly "null".
@@ -214,3 +214,8 @@ def from_conversation_file_data(
     else:
         embeddings = None
     # TODO: proper return value, and remove '| None' from return type.
+
+
+# Looks like this only works for knowledge...
+def deserialize_knowledge(knowledge_type: str, obj: Any) -> Any:
+    return {}  # TODO: Implement this properly

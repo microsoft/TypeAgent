@@ -205,8 +205,7 @@ class ConversationIndex(ITermToSemanticRefIndex):
     def __init__(self, data: TermToSemanticRefIndexData | None = None):
         self._map = {}
         if data:
-            raise NotImplementedError("Deserialization not implemented yet.")
-            # self.deserialize(data)  # TODO
+            self.deserialize(data)
 
     def __len__(self) -> int:
         return len(self._map)
@@ -217,6 +216,9 @@ class ConversationIndex(ITermToSemanticRefIndex):
 
     def get_terms(self) -> list[str]:
         return list(self._map)
+
+    def clear(self) -> None:
+        self._map.clear()
 
     def add_term(
         self,
@@ -259,14 +261,16 @@ class ConversationIndex(ITermToSemanticRefIndex):
             )
         return TermToSemanticRefIndexData(items=items)
 
-    # TODO: deserialize
-    # def deserialize(self, data: TermToSemanticRefIndexData) -> None:
-    #     for term_data in data["items"]:
-    #         if term_data is not None and term_data["term"]:
-    #             self._map[self._prepare_term(term_data["term"])] = [
-    #                 ScoredSemanticRefOrdinal.deserialize(s)
-    #                 for s in term_data["scoredSemanticRefOrdinals"]
-    #             ]
+    def deserialize(self, data: TermToSemanticRefIndexData) -> None:
+        self.clear()
+        for index_item_data in data["items"]:
+            term = index_item_data.get("term")
+            term = self._prepare_term(term)
+            scored_refs_data = index_item_data["scoredSemanticRefOrdinals"]
+            scored_refs = [
+                ScoredSemanticRefOrdinal.deserialize(s) for s in scored_refs_data
+            ]
+            self._map[term] = scored_refs
 
     def _prepare_term(self, term: str) -> str:
         return term.lower()

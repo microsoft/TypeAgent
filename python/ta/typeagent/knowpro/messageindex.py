@@ -5,15 +5,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..aitools.embeddings import NormalizedEmbedding
-from .importing import ConversationSettings, MessageTextIndexSettings
+from .importing import MessageTextIndexSettings
 from .interfaces import (
     IConversation,
-    IConversationSecondaryIndexes,
     IMessage,
     IMessageTextIndex,
     IMessageTextIndexData,
     ITermToSemanticRefIndex,
-    ITextToTextLocationIndexData,
     IndexingEventHandlers,
     ListIndexingResult,
     MessageOrdinal,
@@ -159,3 +157,9 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         return IMessageTextIndexData(
             indexData=self.text_location_index.serialize(),
         )
+
+    def deserialize(self, data: IMessageTextIndexData) -> None:
+        index_data = data.get("indexData")
+        if index_data is None:
+            return
+        self.text_location_index.deserialize(index_data)

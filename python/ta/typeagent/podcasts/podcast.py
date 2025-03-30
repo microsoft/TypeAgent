@@ -7,7 +7,12 @@ from typing import Optional, Sequence, TypedDict
 from ..knowpro import convindex, interfaces, kplib, secindex
 from ..knowpro.convthreads import ConversationThreads
 from ..knowpro.importing import ConversationSettings
-from ..knowpro.interfaces import Datetime, IConversationDataWithIndexes, Timedelta
+from ..knowpro.interfaces import (
+    Datetime,
+    IConversationDataWithIndexes,
+    SemanticRef,
+    Timedelta,
+)
 from ..knowpro.messageindex import MessageTextIndex
 from ..knowpro.serialization import (
     write_conversation_data_to_file,
@@ -92,6 +97,8 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
             tags=self.tags,
             timestamp=self.timestamp,
         )
+
+    # TODO deserialize (static method?)
 
 
 class PodcastData(interfaces.IConversationDataWithIndexes[PodcastMessageData]):
@@ -180,7 +187,9 @@ class Podcast(
         data = self.serialize()
         write_conversation_data_to_file(data, filename)
 
-    async def deserialize(self, podcast_data: IConversationDataWithIndexes[PodcastMessageData]) -> None:
+    def deserialize(
+        self, podcast_data: IConversationDataWithIndexes[PodcastMessageData]
+    ) -> None:
         self.name_tag = podcast_data["nameTag"]
 
         self.messages = []
@@ -194,7 +203,11 @@ class Podcast(
             )
             self.messages.append(msg)
 
-        self.semantic_refs = podcast_data["semanticRefs"] # type: ignore  # TODO
+        semantic_refs_data = podcast_data.get("semanticRefs")
+        if semantic_refs_data is not None:
+            self.semantic_refs = [
+                SemanticRef.deserialize(r) for r in semantic_refs_data
+            ]  # ztype: ignore  # TODO
 
         self.tags = podcast_data["tags"]
 
@@ -206,11 +219,11 @@ class Podcast(
 
         related_terms_index_data = podcast_data.get("relatedTermsIndexData")
         if related_terms_index_data is not None:
-            term_to_related_terms_index = self.secondary_indexes.term_to_related_terms_index
+            term_to_related_terms_index = (
+                self.secondary_indexes.term_to_related_terms_index
+            )
             if term_to_related_terms_index is not None:
-                term_to_related_terms_index.deserialize(
-                    related_terms_index_data
-                )
+                term_to_related_terms_index.deserialize(related_terms_index_data)
 
         thread_data = podcast_data.get("threadData")
         if thread_data is not None:
@@ -224,9 +237,7 @@ class Podcast(
             self.secondary_indexes.message_index = MessageTextIndex(
                 self.settings.message_text_index_settings
             )
-            self.secondary_indexes.message_index.deserialize(
-                message_index_data
-            )
+            self.secondary_indexes.message_index.deserialize(message_index_data)
 
         self._build_transient_secondary_indexes(True)
 
@@ -242,7 +253,7 @@ class Podcast(
         )
         data = await read_conversation_data_from_file(filename, embedding_size)
         if data:
-            await podcast.deserialize(data)
+            podcast.deserialize(data)
         return podcast
 
     def _build_transient_secondary_indexes(self, build_all: bool) -> None:

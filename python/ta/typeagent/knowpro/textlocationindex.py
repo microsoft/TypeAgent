@@ -109,15 +109,21 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         **kwds,
     ) -> Any:
         raise NotImplementedError
-
+    
     def serialize(self) -> ITextToTextLocationIndexData:
         return ITextToTextLocationIndexData(
             textLocations=[loc.serialize() for loc in self._text_locations],
             embeddings=ITextEmbeddingIndexData(
-                textItems=[],  # TODO: Put values here!
+                textItems=[],  # TODO: Put values here?!
                 embeddings=self._vector_base.serialize(),
             ),
         )
 
-    def deserialize(self, data: Any) -> None:
-        raise NotImplementedError  # TODO: implement TextToTextLocationIndex deserialization
+    def deserialize(self, data: ITextToTextLocationIndexData) -> None:
+        text_locations = data["textLocations"]
+        embeddings = data["embeddings"]["embeddings"]
+        if embeddings is None:
+            raise ValueError("embeddings is None ?!")
+        assert len(text_locations) == len(embeddings), ((text_locations), (embeddings))
+        self._text_locations = [TextLocation.deserialize(loc) for loc in text_locations]
+        self._vector_base.deserialize(embeddings)

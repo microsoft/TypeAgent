@@ -75,6 +75,11 @@ class VectorBase:
     def __bool__(self) -> bool:
         return True
 
+    def add_embedding(self, key: str | None, embedding: NormalizedEmbedding) -> None:
+        self._vectors = np.append(self._vectors, embedding, axis=0)
+        if key is not None:
+            self._model.add_embedding(key, embedding)
+
     async def add_key(self, key: str, cache: bool = True) -> None:
         embedding = (await self.get_embedding(key)).reshape((self._embedding_size,))
         self._vectors = np.append(self._vectors, embedding, axis=0)
@@ -109,7 +114,14 @@ class VectorBase:
 
     def serialize(self) -> NormalizedEmbeddings:
         assert self._vectors.shape == (len(self._vectors), self._embedding_size)
-        return self._vectors
+        return self._vectors  # TODO: Should we make a copy?
+
+    def deserialize(self, data: NormalizedEmbeddings | None) -> None:
+        if data is None:
+            self.clear()
+            return
+        assert data.shape == (len(data), self._embedding_size)
+        self._vectors = data  # TODO: Should we make a copy?
 
 
 async def main():
