@@ -351,7 +351,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             hasParams = true;
 
             // TODO: implement in agent config/manifests
-            const priorityAgents = ["dispatcher", "system", "shell"];
+            const priorityAgents = ["dispatcher", "system", "shell", "chat"];
             const priorityExclusionAgents = existingNames.filter(name => !priorityAgents.includes(name));
 
             // disable all agents except system agents

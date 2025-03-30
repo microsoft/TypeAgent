@@ -31,8 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
             processAction(e);
         } else {
             
-            // clear existing container
-            mainContainer.innerHTML = "";
+            reset();
 
             // repopulate
             const montage = e as PhotoMontage            
@@ -50,8 +49,7 @@ document.addEventListener("DOMContentLoaded", function () {
         switch (action.actionName) {
 
             case "reset": {
-                mainContainer.innerHTML = "";
-                setTitle("");
+                reset();
                 break;
             }
 
@@ -152,9 +150,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     && msg.parameters.files === undefined 
                     && msg.parameters.search_filters === undefined
                     && msg.parameters.selected === undefined) {
-                    selected.clear();
-                    imgMap.clear();
-                    mainContainer.innerHTML = "";
+                    reset();
                 }
 
                 // Don't break because we want to clear the selection after doing a "remove"
@@ -176,6 +172,15 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // let the server know which files are being shown
         updateFileList(imgMap, selected);
+    }
+
+    /**
+     * Resets the canvas to it's default state
+     */
+    function reset() {
+        selected.clear();
+        imgMap.clear();
+        mainContainer.innerHTML = "";        
     }
 
     /**

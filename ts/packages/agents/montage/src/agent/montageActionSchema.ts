@@ -14,7 +14,8 @@ export type MontageAction =
     | CreateMontageAction
     | DeleteMontageAction
     | SwitchMontageAction
-    | ListMontageAction;
+    | ListMontageAction
+    | MergeMontageAction;
 
 
 // Find images to add to the montage.
@@ -93,6 +94,8 @@ export type SetSearchParametersAction = {
     parameters: {
         // search score value starts at 0
         minSearchScore?: number;
+        // only return exact maches?
+        exactMatch?: boolean;
     }
 }
 
@@ -132,9 +135,9 @@ export type DeleteMontageAction = {
 export type SwitchMontageAction = {
     actionName: "switchMontage"
     parameters: {
-        // The title of the montage to delete
+        // The title of the montage to switch to
         title?: string;
-        // The id (if known) of the montage to delete
+        // The id (if known) of the montage to switch to
         id?: number;
     }
 }
@@ -142,5 +145,18 @@ export type SwitchMontageAction = {
 // Lists all montages by name
 export type ListMontageAction = {
     actionName: "listMontages";
+}
+
+// Merges two or more montages together
+export type MergeMontageAction = {
+    actionName: "mergeMontages"
+    parameters: {
+        // The title of the merged montage
+        mergeMontageTitle: string;
+        // The titles of the montages to merge
+        titles?: string[];
+        // THe ids of the montages to merge
+        ids?: number[];
+    }
 }
 

@@ -12,7 +12,7 @@ import {
 import { ChildProcess, fork, spawn } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { CreateMontageAction, DeleteMontageAction, FindPhotosAction, ListPhotosAction, MontageAction, RemovePhotosAction, SelectPhotosAction, SetSearchParametersAction, SwitchMontageAction } from "./montageActionSchema.js";
+import { CreateMontageAction, DeleteMontageAction, FindPhotosAction, ListPhotosAction, MergeMontageAction, MontageAction, RemovePhotosAction, SelectPhotosAction, SetSearchParametersAction, SwitchMontageAction } from "./montageActionSchema.js";
 import { createActionResult, createActionResultFromError, createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
 import * as kp from "knowpro";
@@ -46,6 +46,7 @@ type MontageActionContext = {
     viewProcess: ChildProcess | undefined;
     searchSettings: {
         minScore: number,
+        exactMatch: boolean,
     }
 };
 
@@ -83,6 +84,7 @@ async function initializeMontageContext() {
         // default search settings
         searchSettings: {
             minScore: 0,
+            exactMatch: false,
         }
     };
 }
@@ -121,16 +123,22 @@ async function updateMontageContext(
         // Load the image index from disk
         // TODO: allow swapping between montages
         if (!context.agentContext.imageCollection) {
-            context.agentContext.imageCollection = await im.ImageCollection.readFromFile("c:\\temp\\pictures_index", "index");
+            if (existsSync("c:\\temp\\pictures_index")) {
+                context.agentContext.imageCollection = await im.ImageCollection.readFromFile("c:\\temp\\pictures_index", "index");
+            } else if (existsSync("f:\\pictures_index")) {
+                context.agentContext.imageCollection = await im.ImageCollection.readFromFile("f:\\pictures_index", "index");
+            }
         }
 
         if (!context.agentContext.viewProcess) {
             context.agentContext.viewProcess = await createViewServiceHost((montage: PhotoMontage) => {
                 // harvest the id
-                montage.id = context.agentContext.montage!.id;
+                if (context.agentContext.montage) {
+                    montage.id = context.agentContext.montage!.id;
 
-                // overwite the working montage with the updated monage
-                context.agentContext.montage = montage;
+                    // overwite the working montage with the updated monage
+                    context.agentContext.montage = montage;
+                }
             });
 
             // send initial state
@@ -250,9 +258,8 @@ async function handleMontageAction(
 
             const settingsAction: SetSearchParametersAction = action as SetSearchParametersAction;
 
-            if (settingsAction.parameters.minSearchScore) {
-                actionContext.sessionContext.agentContext.searchSettings.minScore = settingsAction.parameters.minSearchScore;
-            }
+            actionContext.sessionContext.agentContext.searchSettings.minScore = settingsAction.parameters.minSearchScore ? settingsAction.parameters.minSearchScore : actionContext.sessionContext.agentContext.searchSettings.minScore;
+            actionContext.sessionContext.agentContext.searchSettings.exactMatch = settingsAction.parameters.exactMatch ? settingsAction.parameters.exactMatch : actionContext.sessionContext.agentContext.searchSettings.exactMatch;
 
             result = createActionResult(`Updated search parameters to:\n${JSON.stringify(actionContext.sessionContext.agentContext.searchSettings)}`)
             break;
@@ -282,7 +289,7 @@ async function handleMontageAction(
 
             // add some images based on the montage title
             if (newMontageAction.parameters.search_filters && newMontageAction.parameters.search_filters.length > 0) {
-                await findRequestedImages(newMontageAction, actionContext.sessionContext.agentContext);
+                await findRequestedImages(newMontageAction, actionContext.sessionContext.agentContext, );
             }
 
             // add found files to the montage
@@ -299,7 +306,7 @@ async function handleMontageAction(
 
         case "deleteMontage": {
             const deleteMontageAction: DeleteMontageAction = action as DeleteMontageAction;
-            const montageIds: number[] = deleteMontageAction.parameters.id ? deleteMontageAction.parameters.id : [actionContext.sessionContext.agentContext.montage!.id];
+            const montageIds: number[] = deleteMontageAction.parameters.id ? deleteMontageAction.parameters.id : [actionContext.sessionContext.agentContext.montage ? actionContext.sessionContext.agentContext.montage.id : -1];
             const deleteAll: boolean = deleteMontageAction.parameters.deleteAll ? deleteMontageAction.parameters.deleteAll : false;
             let deletedCount: number = 0;
 
@@ -389,6 +396,36 @@ async function handleMontageAction(
 
             break;
         }
+
+        case "mergeMontages": {
+
+            const mergeMontageAction: MergeMontageAction = action as MergeMontageAction;
+
+            // create a new montage
+            const merged = createNewMontage(actionContext.sessionContext.agentContext, mergeMontageAction.parameters.mergeMontageTitle);
+
+            mergeMontageAction.parameters.ids?.forEach((id) => {
+                const montage: PhotoMontage | undefined = actionContext.sessionContext.agentContext.montages.find((value) => value.id === id);
+                merged.files = [...merged.files, ...montage!.files];
+            });
+
+            mergeMontageAction.parameters.titles?.forEach((title) => {
+                const montage: PhotoMontage | undefined = actionContext.sessionContext.agentContext.montages.find((value) => value.title === title);
+                merged.files = [...merged.files, ...montage!.files];
+            });
+
+            // save montage updates
+            saveMontages(actionContext.sessionContext);
+
+            // make this new montage the active montage
+            actionContext.sessionContext.agentContext.montage = merged;
+
+            // send select to the visualizer/client
+            actionContext.sessionContext.agentContext.viewProcess!.send(merged);
+
+            break;
+        }
+
     }
     return result;
 }
@@ -430,7 +467,8 @@ function entityFromMontage(montage: PhotoMontage) {
 }
 
 async function findRequestedImages(action: ListPhotosAction | FindPhotosAction | SelectPhotosAction | RemovePhotosAction | CreateMontageAction, 
-    context: MontageActionContext) {
+    context: MontageActionContext,
+    exactMatch: boolean = false) {
     if (context.imageCollection) {
         if (action.parameters.search_filters) {
             const matches = await kp.searchConversationKnowledge(
@@ -439,10 +477,18 @@ async function findRequestedImages(action: ListPhotosAction | FindPhotosAction |
                 {
                     booleanOp: "and", // or
                     terms: filterToSearchTerm(action.parameters.search_filters),
+                    
                 },
                 // when filter
                 {
-                    knowledgeType: "entity"
+                    //knowledgeType: "entity"
+                },
+                // options
+                {
+                    exactMatch: exactMatch,
+                    usePropertyIndex: true,
+                    useTimestampIndex: true,
+                    
                 }
             );
 
@@ -475,13 +521,14 @@ async function findRequestedImages(action: ListPhotosAction | FindPhotosAction |
                                     imageFiles.add(img.metadata.fileName.toLocaleLowerCase());
                                 }
                             } else if (semanticRef.knowledgeType === "action") {
-                                // const action: kpLib.Action = semanticRef.knowledge as kpLib.Action;
-                                // action.
-
+                                const imgRange: kp.TextLocation = semanticRef.range.start;
+                                const img: im.Image = context.imageCollection!.messages[imgRange.messageOrdinal];
+                                imageFiles.add(img.metadata.fileName.toLocaleLowerCase());
                             } else if (semanticRef.knowledgeType === "tag") {
-
+                                // TODO: implement
                             } else if (semanticRef.knowledgeType === "topic") {
-
+                                // TODO: implement
+                                console.log("topic");
                             }
                         }
                     }          
@@ -621,9 +668,9 @@ function createEncryptedPIDLFromPath(path: string) {
     const pidl = ILCreateFromPathW(path);
     const size: number = ILGetSize(pidl);
        
-    let stringBuffer = [""];
-    let requiredSize = [ 0 ];
-    if (!CryptBinaryToStringW(pidl, size, 1, stringBuffer, requiredSize)) {
+    let stringBuffer = [" ".repeat(2048)];
+    let bufferSize = [ 2048 ];
+    if (!CryptBinaryToStringW(pidl, size, 1, stringBuffer, bufferSize)) {
         debug(`ERROR encrypting PIDL for ${path}`);
     }
     
