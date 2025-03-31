@@ -472,15 +472,21 @@ export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         super.beginMatch(context);
-        const allMatches = new SemanticRefAccumulator();
+        let allMatches: SemanticRefAccumulator | undefined;
         for (const matchExpr of this.termExpressions) {
             const termMatches = matchExpr.eval(context);
             if (termMatches && termMatches.size > 0) {
-                allMatches.addUnion(termMatches);
+                if (allMatches) {
+                    allMatches.addUnion(termMatches);
+                } else {
+                    allMatches = termMatches;
+                }
             }
         }
-        allMatches.calculateTotalScore();
-        return allMatches;
+        if (allMatches) {
+            allMatches.calculateTotalScore();
+        }
+        return allMatches ?? new SemanticRefAccumulator();
     }
 }
 
@@ -1211,6 +1217,119 @@ export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
     public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
         const matches = this.srcExpr.eval(context);
         return matches.toScoredMessageOrdinals();
+    }
+}
+
+export class MatchMessagesBooleanExpr extends QueryOpExpr<MessageAccumulator> {
+    constructor() {
+        super();
+    }
+
+    protected beginMatch(context: QueryEvalContext) {
+        context.clearMatchedTerms();
+    }
+
+    protected accumulateMessages(
+        context: QueryEvalContext,
+        semanticRefMatches: SemanticRefAccumulator,
+    ): MessageAccumulator {
+        const messageMatches = new MessageAccumulator();
+        for (const semanticRefMatch of semanticRefMatches.getMatches()) {
+            messageMatches.addMessagesForSemanticRef(
+                context.getSemanticRef(semanticRefMatch.value),
+                semanticRefMatch.score,
+            );
+        }
+        return messageMatches;
+    }
+}
+
+/**
+ * Evaluates all child search term expressions
+ * Returns their accumulated scored matches
+ */
+export class MatchMessagesOrExpr extends MatchMessagesBooleanExpr {
+    constructor(
+        public termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | undefined
+        >[],
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        super.beginMatch(context);
+        let allMatches: MessageAccumulator | undefined;
+        for (const matchExpr of this.termExpressions) {
+            const semanticRefMatches = matchExpr.eval(context);
+            if (semanticRefMatches && semanticRefMatches.size > 0) {
+                const messageMatches = this.accumulateMessages(
+                    context,
+                    semanticRefMatches,
+                );
+                if (allMatches) {
+                    allMatches.addUnion(messageMatches);
+                } else {
+                    allMatches = messageMatches;
+                }
+            }
+        }
+        if (allMatches) {
+            allMatches.calculateTotalScore();
+        }
+        return allMatches ?? new MessageAccumulator();
+    }
+}
+
+export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
+    constructor(
+        public termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | undefined
+        >[],
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        super.beginMatch(context);
+
+        let allMatches: MessageAccumulator | undefined;
+        let iTerm = 0;
+        // Loop over each search term, intersecting the returned results...
+        for (; iTerm < this.termExpressions.length; ++iTerm) {
+            const semanticRefMatches =
+                this.termExpressions[iTerm].eval(context);
+            if (
+                semanticRefMatches === undefined ||
+                semanticRefMatches.size === 0
+            ) {
+                // We can't possibly have an 'and'
+                break;
+            }
+            const messageMatches = this.accumulateMessages(
+                context,
+                semanticRefMatches,
+            );
+            if (allMatches === undefined) {
+                allMatches = messageMatches;
+            } else {
+                allMatches = allMatches.intersect(messageMatches);
+                if (allMatches.size === 0) {
+                    // we can't possibly have an 'and'
+                    break;
+                }
+            }
+        }
+        if (allMatches && allMatches.size > 0) {
+            if (iTerm === this.termExpressions.length) {
+                allMatches.calculateTotalScore();
+                allMatches.selectWithHitCount(this.termExpressions.length);
+            } else {
+                // And is not possible
+                allMatches.clearMatches();
+            }
+        }
+        return allMatches ?? new MessageAccumulator();
     }
 }
 
