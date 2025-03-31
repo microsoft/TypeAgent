@@ -4,6 +4,7 @@
 //import { SearchInput } from "./searchInput";
 import { ChangeTitleAction, FindPhotosAction, RemovePhotosAction, SelectPhotosAction } from "../agent/montageActionSchema.js";
 import { PhotoMontage } from "../agent/montageActionHandler.js";
+import { Photo } from "./photo";
 
 //const eventSource = new EventSource("/events");
 
@@ -17,7 +18,7 @@ export type ListPhotosMessage = Message & {
 
 document.addEventListener("DOMContentLoaded", function () {
     const mainContainer = document.getElementById("mainContainer");
-    const imgMap: Map<string, HTMLImageElement> = new Map<string, HTMLImageElement>();
+    const imgMap: Map<string, Photo> = new Map<string, Photo>();
     const selected: Set<string> = new Set<string>();
 
     // setup event source from host source (shell, etc.)
@@ -73,8 +74,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 // select image by indicies first
                 if (msg.parameters.indicies) {
                     for(let i = 0; i < msg.parameters.indicies.length; i++) {
-                        mainContainer.children[msg.parameters.indicies[i]].classList.add("selected");
-                        selected.add(mainContainer.children[msg.parameters.indicies[i]].getAttribute("path"))
+                        mainContainer.children[msg.parameters.indicies[i] - 1].classList.add("selected");
+                        selected.add(mainContainer.children[msg.parameters.indicies[i] - 1].getAttribute("path"))
+                    }
+
+                    // unselect anything that's not selected
+                    for(let i = 0; i < mainContainer.children.length; i++) {
+                        if (!mainContainer.children[i].classList.contains("selected")) {
+                            mainContainer.children[i].classList.add("unselected");
+                        }
                     }
                 }
 
@@ -112,7 +120,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (msg.parameters.selected === "inverse") {
                         const keep: Set<string> = new Set<string>();
                         msg.parameters.indicies.forEach((v) => {
-                            keep.add(mainContainer.children[v].getAttribute("path"));
+                            keep.add(mainContainer.children[v - 1].getAttribute("path"));
                         });
 
                         keep.forEach((img) => {
@@ -123,7 +131,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     } else {
                         // have to start at the end otherwise indexes will be wrong
                         for(let i = msg.parameters.indicies.length - 1; i >= 0 ; i--) {
-                            const index = msg.parameters.indicies[i];
+                            const index = msg.parameters.indicies[i] - 1;
                             const file: string | undefined = mainContainer.children[index].getAttribute("path");
                             mainContainer.children[index].remove();
 
@@ -153,6 +161,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     reset();
                 }
 
+                // update indicies
+                for(let i = 0; i < mainContainer.children.length; i++) {
+                    mainContainer.children[i].lastElementChild.innerHTML = (i + 1).toString();
+                }
+
                 // Don't break because we want to clear the selection after doing a "remove"
                 if (!msg.parameters.selected) {
                     break;
@@ -180,7 +193,8 @@ document.addEventListener("DOMContentLoaded", function () {
     function reset() {
         selected.clear();
         imgMap.clear();
-        mainContainer.innerHTML = "";        
+        mainContainer.innerHTML = "";
+        setTitle("");
     }
 
     /**
@@ -191,22 +205,20 @@ document.addEventListener("DOMContentLoaded", function () {
     function addImages(files: string[] | undefined, setSelectionState: boolean = false) {
         if (files !== undefined) {
             files.forEach(async (f) => {
-                if (!imgMap.has(f)) {                            
-                    const img: HTMLImageElement = document.createElement("img");
-                    img.src = "/thumbnail?path=" + f;
-                    img.setAttribute("path", f);
+                if (!imgMap.has(f)) {        
+                
+                    // create the image control
+                    const img: Photo = new Photo(f, mainContainer.children.length + 1);
+                    
+                    // store the reference to the container
                     imgMap.set(f, img);
         
-                    // get the image caption
-                    const res = await fetch(`/knowlegeResponse?path=${f}`);
-                    const ii = await res.json();
-                    img.title = ii.fileName + " - " + ii.altText; 
-        
-                    mainContainer.append(img);
+                    // add the image div to the page
+                    mainContainer.append(img.container);
 
                     // does it need to be selected or unselected?
                     if (setSelectionState && selected.size > 0) {
-                        select(img);
+                        select(img.container);
                     }
                 }
             });
@@ -221,7 +233,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (files !== undefined) {
             for(let i = 0; i < files.length; i++) {
                 if (imgMap.has(files[i])) {
-                    imgMap.get(files[i]).classList.add("selected");
+                    imgMap.get(files[i]).container.classList.add("selected");
                     selected.add(files[i]);
                 }
             }
@@ -239,6 +251,10 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    /**
+     * Selects or unselects the supplied element
+     * @param img - The element to select or unselect
+     */
     function select(img: Element) {
         if (selected.has(img.getAttribute("path"))) {
             img.classList.add("selected");
@@ -256,7 +272,7 @@ document.addEventListener("DOMContentLoaded", function () {
 /** 
  * Notify the server of the files in the viewer
  */
-function updateFileList(files: Map<string, HTMLImageElement>, selected: Set<string>) {
+function updateFileList(files: Map<string, Photo>, selected: Set<string>) {
     // tell the server what images are being show
     fetch("/montageUpdated", {
         method: 'POST',

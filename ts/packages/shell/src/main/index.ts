@@ -302,6 +302,7 @@ async function createWindow() {
         targetUrl: URL,
     ): void => {
         const mainWindowSize = mainWindow?.getBounds();
+        let justopened: boolean = false;
 
         if (!inlineWebContentView && mainWindowSize) {
             inlineWebContentView = new WebContentsView({
@@ -312,6 +313,7 @@ async function createWindow() {
             });
 
             inlineWebContentView.webContents.setUserAgent(userAgent);
+            justopened = true;
 
             mainWindow?.contentView.addChildView(inlineWebContentView);
 
@@ -324,13 +326,16 @@ async function createWindow() {
             setContentSize();
         }
 
-        inlineWebContentView?.webContents.loadURL(targetUrl.toString());
+        // only open the requested canvas if it isn't already opened
+        if (ShellSettings.getinstance().canvas !== targetUrl.toString() || justopened) {
+            inlineWebContentView?.webContents.loadURL(targetUrl.toString());
 
-        // indicate in the settings which canvas is open
-        ShellSettings.getinstance().canvas = targetUrl.toString().toLocaleLowerCase();
+            // indicate in the settings which canvas is open
+            ShellSettings.getinstance().canvas = targetUrl.toString().toLocaleLowerCase();
 
-        // write the settings to disk
-        ShellSettings.getinstance().save();
+            // write the settings to disk
+            ShellSettings.getinstance().save();
+        }
     };
 
     ShellSettings.getinstance().onCloseInlineBrowser = (save: boolean = true): void => {

@@ -2015,7 +2015,7 @@ importers:
       markdown-agent:
         specifier: workspace:*
         version: link:../agents/markdown
-      montage:
+      montage-agent:
         specifier: workspace:*
         version: link:../agents/montage
       music:

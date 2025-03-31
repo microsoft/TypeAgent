@@ -52,7 +52,7 @@
     "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",
     "markdown-agent": "workspace:*",
-    "montage": "workspace:*",
+    "montage-agent": "workspace:*",
     "music": "workspace:*",
     "oracle-agent": "workspace:*",
     "photo-agent": "workspace:*",

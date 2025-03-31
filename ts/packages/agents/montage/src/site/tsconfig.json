@@ -12,6 +12,7 @@
       "exactOptionalPropertyTypes": false,
       "noImplicitAny": false,
       "strictNullChecks": false,
+      "sourceMap": true
     },
     "include": ["./*"],
     "ts-node": {

@@ -18,6 +18,26 @@ img {
     /*margin: 2px;*/
 }
 
+.imgDiv {
+    position: relative;
+}
+
+.indexDiv {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    font-size: 14px;
+    background-color: black;
+    opacity: 35%;
+    color: white;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    margin-right: 3px;
+    width: 16px;
+    height: 16px;
+    text-align: center;
+}
+
 .title {
     position: fixed;
     width: 100%;

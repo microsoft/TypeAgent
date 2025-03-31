@@ -569,6 +569,13 @@ async function indexImages(
     // index each image
     const retVal: Image[] = [];
     for (let i = 0; i < fileNames.length; i++) {
+
+        // ignore thumbnail images
+        if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
+            console.log(`ignoring '${fileNames[i]}'`)
+            continue;
+        }
+
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
         //console.log(`${fullFilePath} [${i+1} of ${fileNames.length}] (estimated time remaining: ${clock.elapsedSeconds / (i + 1) * (fileNames.length - i)})`);
         const img = await indexImage(fullFilePath, cachePath, chatModel);

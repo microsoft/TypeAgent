@@ -110,9 +110,11 @@ export type CreateMontageAction = {
     actionName: "createNewMontage";
     parameters: {
         // Montage title, defaults to "Untitled"
-        title: string 
+        title: string         
         // any search terms to use to seed the montage based off of the title
         search_filters?: string[];
+        // a flag indicating if the UI should imediately switch to this montage, defaults to true
+        focus: boolean
         // placeholder for images to be populated later
         files?: string[];
     }
