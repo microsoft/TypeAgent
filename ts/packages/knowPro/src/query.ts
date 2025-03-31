@@ -371,6 +371,8 @@ export class QueryEvalContext {
     public matchedPropertyTerms = new PropertyTermSet();
     public textRangesInScope: TextRangesInScope | undefined;
 
+    // TODO: Make property and timestamp indexes NON-OPTIONAL
+    // TODO: Move non-index based code to test
     constructor(
         public conversation: IConversation,
         /**
@@ -1220,45 +1222,22 @@ export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
     }
 }
 
-export class MatchMessagesBooleanExpr extends QueryOpExpr<MessageAccumulator> {
-    constructor() {
-        super();
-    }
-
-    protected beginMatch(context: QueryEvalContext) {
-        context.clearMatchedTerms();
-    }
-
-    protected accumulateMessages(
-        context: QueryEvalContext,
-        semanticRefMatches: SemanticRefAccumulator,
-    ): MessageAccumulator {
-        const messageMatches = new MessageAccumulator();
-        for (const semanticRefMatch of semanticRefMatches.getMatches()) {
-            messageMatches.addMessagesForSemanticRef(
-                context.getSemanticRef(semanticRefMatch.value),
-                semanticRefMatch.score,
-            );
-        }
-        return messageMatches;
-    }
-}
-
-/**
- * Evaluates all child search term expressions
- * Returns their accumulated scored matches
- */
-export class MatchMessagesOrExpr extends MatchMessagesBooleanExpr {
+export class MatchTermsToMessagesBooleanExpr extends QueryOpExpr<MessageAccumulator> {
     constructor(
         public termExpressions: IQueryOpExpr<
             SemanticRefAccumulator | undefined
         >[],
+        public op: "and" | "or",
     ) {
         super();
     }
 
     public override eval(context: QueryEvalContext): MessageAccumulator {
-        super.beginMatch(context);
+        return this.op === "and" ? this.evalAnd(context) : this.evalOr(context);
+    }
+
+    protected evalOr(context: QueryEvalContext): MessageAccumulator {
+        this.beginMatch(context);
         let allMatches: MessageAccumulator | undefined;
         for (const matchExpr of this.termExpressions) {
             const semanticRefMatches = matchExpr.eval(context);
@@ -1279,19 +1258,9 @@ export class MatchMessagesOrExpr extends MatchMessagesBooleanExpr {
         }
         return allMatches ?? new MessageAccumulator();
     }
-}
 
-export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
-    constructor(
-        public termExpressions: IQueryOpExpr<
-            SemanticRefAccumulator | undefined
-        >[],
-    ) {
-        super();
-    }
-
-    public override eval(context: QueryEvalContext): MessageAccumulator {
-        super.beginMatch(context);
+    private evalAnd(context: QueryEvalContext): MessageAccumulator {
+        this.beginMatch(context);
 
         let allMatches: MessageAccumulator | undefined;
         let iTerm = 0;
@@ -1330,6 +1299,24 @@ export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
             }
         }
         return allMatches ?? new MessageAccumulator();
+    }
+
+    private beginMatch(context: QueryEvalContext) {
+        context.clearMatchedTerms();
+    }
+
+    private accumulateMessages(
+        context: QueryEvalContext,
+        semanticRefMatches: SemanticRefAccumulator,
+    ): MessageAccumulator {
+        const messageMatches = new MessageAccumulator();
+        for (const semanticRefMatch of semanticRefMatches.getMatches()) {
+            messageMatches.addMessagesForSemanticRef(
+                context.getSemanticRef(semanticRefMatch.value),
+                semanticRefMatch.score,
+            );
+        }
+        return messageMatches;
     }
 }
 
