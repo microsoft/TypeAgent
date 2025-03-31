@@ -1284,7 +1284,7 @@ export class MatchMessagesOrExpr extends MatchMessagesBooleanExpr {
     }
 }
 
-export class MessagesMatchAndExpr extends MatchMessagesBooleanExpr {
+export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
     constructor(
         termExpressions: IQueryOpExpr<
             SemanticRefAccumulator | MessageAccumulator | undefined

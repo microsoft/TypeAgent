@@ -28,7 +28,7 @@ describe("query", () => {
         "messages.terms.or",
         () => {
             const targetEntityName = "Children of Memory";
-            const objectMatches = new q.MatchMessagesOrExpr([
+            const query = new q.MatchMessagesOrExpr([
                 new q.MatchPropertySearchTermExpr(
                     createPropertySearchTerm(
                         PropertyNames.Object,
@@ -42,8 +42,36 @@ describe("query", () => {
                     ),
                 ),
             ]);
-            const messageOrdinals = objectMatches.eval(createContext());
+            const messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
+        },
+        testTimeout,
+    );
+
+    test(
+        "messages.terms.and",
+        () => {
+            let query = new q.MatchMessagesAndExpr([
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(PropertyNames.Subject, "Adrian"),
+                ),
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(PropertyNames.Verb, "say"),
+                ),
+            ]);
+            let messageOrdinals = query.eval(createContext());
+            expect(messageOrdinals.size).toBeGreaterThan(0);
+
+            query = new q.MatchMessagesAndExpr([
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(PropertyNames.Subject, "Jane"),
+                ),
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(PropertyNames.Verb, "say"),
+                ),
+            ]);
+            messageOrdinals = query.eval(createContext());
+            expect(messageOrdinals.size).toEqual(0);
         },
         testTimeout,
     );
