@@ -51,12 +51,19 @@
       "name": "spelunker-agent"
     }
   },
+  "mcpServers": {
+    "mcpfilesystem": {
+      "emojiChar": "📁",
+      "description": "File system agent",
+      "defaultEnabled": true,
+      "serverScript": "./node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+      "serverScriptArgs": true
+    }
+  },
   "explainers": {
     "v5": {
       "constructions": {
-        "data": [
-          "./data/explainer/v5/data/player/basic.json"
-        ],
+        "data": ["./data/explainer/v5/data/player/basic.json"],
         "file": "./data/explainer/v5/constructions.json"
       }
     }

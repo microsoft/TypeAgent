@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import { glob } from "glob";
-import { AppAgentInfo } from "agent-dispatcher/helpers/npmAgentProvider";
+import { NpmAppAgentInfo } from "agent-dispatcher/helpers/npmAgentProvider";
 import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
+import { McpAppAgentConfig, McpAppAgentInfo } from "../mcpAgentProvider.js";
+import path from "node:path";
 
 export type ExplainerConfig = {
     constructions?: {
@@ -14,7 +16,16 @@ export type ExplainerConfig = {
 };
 
 export type AppAgentConfig = {
-    agents: { [key: string]: AppAgentInfo };
+    agents: { [key: string]: NpmAppAgentInfo };
+    mcpServers?: {
+        [key: string]: McpAppAgentInfo;
+    };
+};
+
+export type InstanceConfig = {
+    mcpServers?: {
+        [key: string]: McpAppAgentConfig;
+    };
 };
 
 export type Config = AppAgentConfig & {
@@ -23,7 +34,7 @@ export type Config = AppAgentConfig & {
 };
 
 let config: Config | undefined;
-export function getConfig(): Config {
+export function getProviderConfig(): Config {
     if (config === undefined) {
         config = JSON.parse(
             fs.readFileSync(getPackageFilePath("./data/config.json"), "utf8"),
@@ -32,8 +43,22 @@ export function getConfig(): Config {
     return config;
 }
 
+export function getInstanceConfig(
+    instanceDir: string | undefined,
+): InstanceConfig | undefined {
+    if (instanceDir === undefined) {
+        return undefined;
+    }
+    const instanceConfigPath = path.join(instanceDir, "config.json");
+    if (fs.existsSync(instanceConfigPath)) {
+        return JSON.parse(fs.readFileSync(instanceConfigPath, "utf8"));
+    }
+    return undefined;
+}
+
 export function getBuiltinConstructionConfig(explainerName: string) {
-    const config = getConfig()?.explainers?.[explainerName]?.constructions;
+    const config =
+        getProviderConfig()?.explainers?.[explainerName]?.constructions;
     return config
         ? {
               data: config.data.map((f) => getPackageFilePath(f)),
@@ -45,7 +70,7 @@ export function getBuiltinConstructionConfig(explainerName: string) {
 export async function getTestDataFiles(
     extended: boolean = true,
 ): Promise<string[]> {
-    const testDataFiles = getConfig()?.tests;
+    const testDataFiles = getProviderConfig()?.tests;
     if (testDataFiles === undefined) {
         return [];
     }

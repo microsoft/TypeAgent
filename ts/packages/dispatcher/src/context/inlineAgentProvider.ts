@@ -49,7 +49,7 @@ export function createBuiltinAppAgentProvider(
             }
             return { ...agent, initializeAgentContext: async () => context };
         },
-        unloadAppAgent(appAgentName: string) {
+        async unloadAppAgent(appAgentName: string) {
             // Inline agents are always loaded
             if (builtinAgentManifest[appAgentName] === undefined) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ipcMain, BrowserWindow, dialog } from "electron";
+import { ipcMain, BrowserWindow, dialog, WebContentsView } from "electron";
 import { readFileSync } from "fs";
 
 async function openDemoFile(window: BrowserWindow) {
@@ -46,7 +46,7 @@ function getActionCompleteEvent(awaitKeyboardInput: boolean) {
     }
 }
 
-function sendChatInputText(message: string, window: BrowserWindow) {
+function sendChatInputText(message: string, chatView: WebContentsView) {
     const timeoutPromise = new Promise((f) => setTimeout(f, 2000));
 
     const actionPromise = new Promise<string | undefined>((resolve) => {
@@ -57,12 +57,13 @@ function sendChatInputText(message: string, window: BrowserWindow) {
         ipcMain.on("send-input-text-complete", callback);
     });
 
-    window?.webContents.send("send-input-text", message);
+    chatView.webContents.send("send-input-text", message);
     return Promise.race([actionPromise, timeoutPromise]);
 }
 
 export async function runDemo(
     window: BrowserWindow,
+    chatView: WebContentsView,
     awaitKeyboardInput: boolean,
 ) {
     const data = await openDemoFile(window);
@@ -73,7 +74,7 @@ export async function runDemo(
             if (line.startsWith("@pauseForInput")) {
                 await getActionCompleteEvent(true);
             } else if (line && !line.startsWith("#")) {
-                await sendChatInputText(line, window);
+                await sendChatInputText(line, chatView);
                 var manualInput = awaitKeyboardInput && !line.startsWith("@");
                 await getActionCompleteEvent(manualInput);
             }

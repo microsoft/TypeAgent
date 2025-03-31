@@ -341,7 +341,7 @@ export class AppAgentManager implements ActionConfigProvider {
 
         await this.closeSessionContext(record);
         if (record.appAgent !== undefined) {
-            record.provider?.unloadAppAgent(record.name);
+            await record.provider?.unloadAppAgent(record.name);
         }
     }
 
@@ -525,7 +525,7 @@ export class AppAgentManager implements ActionConfigProvider {
                     record.commands = false;
                     await this.closeSessionContext(record);
                     if (record.appAgent !== undefined) {
-                        record.provider?.unloadAppAgent(record.name);
+                        await record.provider?.unloadAppAgent(record.name);
                     }
                     record.appAgent = undefined;
                 })(),
