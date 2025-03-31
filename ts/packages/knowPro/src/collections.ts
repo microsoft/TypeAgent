@@ -116,8 +116,10 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public addUnion(other: MatchAccumulator) {
-        for (const otherMatch of other.getMatches()) {
+    public addUnion(other: MatchAccumulator | IterableIterator<Match>) {
+        const otherMatches =
+            other instanceof MatchAccumulator ? other.getMatches() : other;
+        for (const otherMatch of otherMatches) {
             const existingMatch = this.getMatch(otherMatch.value);
             if (existingMatch) {
                 this.combineMatches(existingMatch, otherMatch);
@@ -527,6 +529,12 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         } else {
             this.add(messageOrdinalStart, score);
         }
+    }
+
+    public override intersect(other: MessageAccumulator): MessageAccumulator {
+        const intersection = new MessageAccumulator();
+        super.intersect(other, intersection);
+        return intersection;
     }
 
     public smoothScores() {

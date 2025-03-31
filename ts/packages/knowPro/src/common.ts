@@ -14,7 +14,7 @@ import {
     TextLocation,
     TextRange,
 } from "./interfaces.js";
-import { SearchTerm, SearchTermGroup } from "./search.js";
+import { PropertySearchTerm, SearchTerm, SearchTermGroup } from "./search.js";
 import {
     IConversationDataWithIndexes,
     ConversationSecondaryIndexes,
@@ -97,16 +97,21 @@ export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
 }
 
-export function createAndTermGroup(): SearchTermGroup {
-    return { booleanOp: "and", terms: [] };
+export type TermTypes = SearchTerm | PropertySearchTerm | SearchTermGroup;
+
+export function createAndTermGroup(...terms: TermTypes[]): SearchTermGroup {
+    terms ??= [];
+    return { booleanOp: "and", terms };
 }
 
-export function createOrTermGroup(): SearchTermGroup {
-    return { booleanOp: "or", terms: [] };
+export function createOrTermGroup(...terms: TermTypes[]): SearchTermGroup {
+    terms ??= [];
+    return { booleanOp: "or", terms };
 }
 
-export function createOrMaxTermGroup(): SearchTermGroup {
-    return { booleanOp: "or_max", terms: [] };
+export function createOrMaxTermGroup(...terms: TermTypes[]): SearchTermGroup {
+    terms ??= [];
+    return { booleanOp: "or_max", terms };
 }
 
 export async function createConversationFromData(
