@@ -7,6 +7,7 @@ import {
     AppAgent,
     SessionContext,
     ActionResult,
+    Entity,
     //Storage,
 } from "@typeagent/agent-sdk";
 import { ChildProcess, fork, spawn } from "child_process";
@@ -21,7 +22,7 @@ import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledg
 import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
 import Registry from "winreg";
 import koffi from 'koffi';
-import { displayResult } from "@typeagent/agent-sdk/helpers/display";
+import { displayError, displayResult } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:agent:montage");
@@ -125,7 +126,7 @@ async function updateMontageContext(
         if (!context.agentContext.imageCollection) {
             if (existsSync("c:\\temp\\pictures_index")) {
                 context.agentContext.imageCollection = await im.ImageCollection.readFromFile("c:\\temp\\pictures_index", "index");
-            } else if (existsSync("f:\\pictures_index")) {
+            } else if (existsSync("f:\\pictures_index2")) {
                 context.agentContext.imageCollection = await im.ImageCollection.readFromFile("f:\\pictures_index2", "index");
             }
         }
@@ -426,7 +427,10 @@ async function handleMontageAction(
 
             mergeMontageAction.parameters.titles?.forEach((title) => {
                 const montage: PhotoMontage | undefined = actionContext.sessionContext.agentContext.montages.find((value) => value.title === title);
-                merged.files = [...merged.files, ...montage!.files];
+                if (montage !== undefined) {
+                    merged.files = [...merged.files, ...montage.files];
+                    displayError(`Unable to find a montage called '${title}'`, actionContext);
+                }
             });
 
             // add the montage
@@ -475,13 +479,12 @@ function createNewMontage(context: MontageActionContext, title: string = ""): Ph
  * Creates an entity for conversation memory based on the supplied montage
  * @param montage - The montage to create an entity for
  */
-function entityFromMontage(montage: PhotoMontage) {
+function entityFromMontage(montage: PhotoMontage): Entity {
     return {
         name: montage.title,
         type: ["project", "montage"],
-        //additionalEntityText = montage.title;
-        uniqueId: montage.id.toString(),
-        imageCount: montage.files.length
+        additionalEntityText: "This montage is INCOMPLETE",
+        uniqueId: montage.id.toString(),        
     }
 }
 
