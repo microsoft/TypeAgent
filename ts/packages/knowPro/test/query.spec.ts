@@ -28,23 +28,20 @@ describe("query", () => {
         "messages.terms.or",
         () => {
             const targetEntityName = "Children of Memory";
-            const objectMatches = new q.MatchTermsToMessagesBooleanExpr(
-                [
-                    new q.MatchPropertySearchTermExpr(
-                        createPropertySearchTerm(
-                            PropertyNames.Object,
-                            targetEntityName,
-                        ),
+            const objectMatches = new q.MatchMessagesOrExpr([
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(
+                        PropertyNames.Object,
+                        targetEntityName,
                     ),
-                    new q.MatchPropertySearchTermExpr(
-                        createPropertySearchTerm(
-                            PropertyNames.EntityName,
-                            targetEntityName,
-                        ),
+                ),
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(
+                        PropertyNames.EntityName,
+                        targetEntityName,
                     ),
-                ],
-                "or",
-            );
+                ),
+            ]);
             const messageOrdinals = objectMatches.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
         },

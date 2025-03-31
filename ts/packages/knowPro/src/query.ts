@@ -1222,35 +1222,59 @@ export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
     }
 }
 
-export class MatchTermsToMessagesBooleanExpr extends QueryOpExpr<MessageAccumulator> {
+export class MatchMessagesBooleanExpr extends QueryOpExpr<MessageAccumulator> {
     constructor(
         public termExpressions: IQueryOpExpr<
-            SemanticRefAccumulator | undefined
+            SemanticRefAccumulator | MessageAccumulator | undefined
         >[],
-        public op: "and" | "or",
     ) {
         super();
     }
 
-    public override eval(context: QueryEvalContext): MessageAccumulator {
-        return this.op === "and" ? this.evalAnd(context) : this.evalOr(context);
+    protected beginMatch(context: QueryEvalContext) {
+        context.clearMatchedTerms();
     }
 
-    protected evalOr(context: QueryEvalContext): MessageAccumulator {
+    protected accumulateMessages(
+        context: QueryEvalContext,
+        semanticRefMatches: SemanticRefAccumulator,
+    ): MessageAccumulator {
+        const messageMatches = new MessageAccumulator();
+        for (const semanticRefMatch of semanticRefMatches.getMatches()) {
+            messageMatches.addMessagesForSemanticRef(
+                context.getSemanticRef(semanticRefMatch.value),
+                semanticRefMatch.score,
+            );
+        }
+        return messageMatches;
+    }
+}
+
+export class MatchMessagesOrExpr extends MatchMessagesBooleanExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super(termExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
         this.beginMatch(context);
         let allMatches: MessageAccumulator | undefined;
         for (const matchExpr of this.termExpressions) {
-            const semanticRefMatches = matchExpr.eval(context);
-            if (semanticRefMatches && semanticRefMatches.size > 0) {
-                const messageMatches = this.accumulateMessages(
-                    context,
-                    semanticRefMatches,
-                );
-                if (allMatches) {
-                    allMatches.addUnion(messageMatches);
-                } else {
-                    allMatches = messageMatches;
-                }
+            const matches = matchExpr.eval(context);
+            if (matches === undefined || matches.size === 0) {
+                continue;
+            }
+            let messageMatches =
+                matches instanceof SemanticRefAccumulator
+                    ? this.accumulateMessages(context, matches)
+                    : matches;
+            if (allMatches) {
+                allMatches.addUnion(messageMatches);
+            } else {
+                allMatches = messageMatches;
             }
         }
         if (allMatches) {
@@ -1258,27 +1282,33 @@ export class MatchTermsToMessagesBooleanExpr extends QueryOpExpr<MessageAccumula
         }
         return allMatches ?? new MessageAccumulator();
     }
+}
 
-    private evalAnd(context: QueryEvalContext): MessageAccumulator {
+export class MessagesMatchAndExpr extends MatchMessagesBooleanExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super(termExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
         this.beginMatch(context);
 
         let allMatches: MessageAccumulator | undefined;
         let iTerm = 0;
         // Loop over each search term, intersecting the returned results...
         for (; iTerm < this.termExpressions.length; ++iTerm) {
-            const semanticRefMatches =
-                this.termExpressions[iTerm].eval(context);
-            if (
-                semanticRefMatches === undefined ||
-                semanticRefMatches.size === 0
-            ) {
+            const matches = this.termExpressions[iTerm].eval(context);
+            if (matches === undefined || matches.size === 0) {
                 // We can't possibly have an 'and'
                 break;
             }
-            const messageMatches = this.accumulateMessages(
-                context,
-                semanticRefMatches,
-            );
+            let messageMatches =
+                matches instanceof SemanticRefAccumulator
+                    ? this.accumulateMessages(context, matches)
+                    : matches;
             if (allMatches === undefined) {
                 allMatches = messageMatches;
             } else {
@@ -1299,24 +1329,6 @@ export class MatchTermsToMessagesBooleanExpr extends QueryOpExpr<MessageAccumula
             }
         }
         return allMatches ?? new MessageAccumulator();
-    }
-
-    private beginMatch(context: QueryEvalContext) {
-        context.clearMatchedTerms();
-    }
-
-    private accumulateMessages(
-        context: QueryEvalContext,
-        semanticRefMatches: SemanticRefAccumulator,
-    ): MessageAccumulator {
-        const messageMatches = new MessageAccumulator();
-        for (const semanticRefMatch of semanticRefMatches.getMatches()) {
-            messageMatches.addMessagesForSemanticRef(
-                context.getSemanticRef(semanticRefMatch.value),
-                semanticRefMatch.score,
-            );
-        }
-        return messageMatches;
     }
 }
 
