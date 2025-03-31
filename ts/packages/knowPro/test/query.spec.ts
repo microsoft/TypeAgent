@@ -28,20 +28,7 @@ describe("query", () => {
         "messages.terms.or",
         () => {
             const targetEntityName = "Children of Memory";
-            const query = new q.MatchMessagesOrExpr([
-                new q.MatchPropertySearchTermExpr(
-                    createPropertySearchTerm(
-                        PropertyNames.Object,
-                        targetEntityName,
-                    ),
-                ),
-                new q.MatchPropertySearchTermExpr(
-                    createPropertySearchTerm(
-                        PropertyNames.EntityName,
-                        targetEntityName,
-                    ),
-                ),
-            ]);
+            const query = createObjectExpr(targetEntityName);
             const messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
         },
@@ -51,25 +38,11 @@ describe("query", () => {
     test(
         "messages.terms.and",
         () => {
-            let query = new q.MatchMessagesAndExpr([
-                new q.MatchPropertySearchTermExpr(
-                    createPropertySearchTerm(PropertyNames.Subject, "Adrian"),
-                ),
-                new q.MatchPropertySearchTermExpr(
-                    createPropertySearchTerm(PropertyNames.Verb, "say"),
-                ),
-            ]);
+            let query = createSubjectVerbExpr("Adrian", "say");
             let messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
 
-            query = new q.MatchMessagesAndExpr([
-                new q.MatchPropertySearchTermExpr(
-                    createPropertySearchTerm(PropertyNames.Subject, "Jane"),
-                ),
-                new q.MatchPropertySearchTermExpr(
-                    createPropertySearchTerm(PropertyNames.Verb, "say"),
-                ),
-            ]);
+            query = createSubjectVerbExpr("Jane", "say");
             messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toEqual(0);
         },
@@ -83,5 +56,35 @@ describe("query", () => {
             secondaryIndexes.propertyToSemanticRefIndex,
             secondaryIndexes.timestampIndex,
         );
+    }
+
+    function createObjectExpr(targetEntityName: string) {
+        const expr = new q.MatchMessagesOrExpr([
+            new q.MatchPropertySearchTermExpr(
+                createPropertySearchTerm(
+                    PropertyNames.Object,
+                    targetEntityName,
+                ),
+            ),
+            new q.MatchPropertySearchTermExpr(
+                createPropertySearchTerm(
+                    PropertyNames.EntityName,
+                    targetEntityName,
+                ),
+            ),
+        ]);
+        return expr;
+    }
+
+    function createSubjectVerbExpr(subject: string, verb: string) {
+        let expr = new q.MatchMessagesAndExpr([
+            new q.MatchPropertySearchTermExpr(
+                createPropertySearchTerm(PropertyNames.Subject, subject),
+            ),
+            new q.MatchPropertySearchTermExpr(
+                createPropertySearchTerm(PropertyNames.Verb, verb),
+            ),
+        ]);
+        return expr;
     }
 });
