@@ -783,7 +783,11 @@ async function initialize() {
             });
         });
 
-        server.listen(pipePath);
+        try { 
+            server.listen(pipePath);
+        } catch {
+            debugShellError(`Error creating pipe at ${pipePath}`);
+        }
     }
     return Promise.all(contentLoadP);
 }
