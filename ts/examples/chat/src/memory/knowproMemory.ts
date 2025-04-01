@@ -852,7 +852,7 @@ export async function createKnowproCommands(
         commandDef: CommandMetadata,
         andTerms: boolean = false,
     ): kp.SearchTermGroup {
-        const searchTerms = parseQueryTerms(termArgs);
+        const searchTerms = kp.createSearchTerms(termArgs);
         const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
         return {
             booleanOp: andTerms ? "and" : "or",
@@ -870,7 +870,6 @@ export async function createKnowproCommands(
     function createPropertyTerms(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
-        nameFilter?: (name: string) => boolean,
     ): kp.PropertySearchTerm[] {
         const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
         const propertyNames = nameFilter
@@ -952,27 +951,6 @@ export async function createKnowproCommands(
     function podcastNameToFilePath(podcastName: string): string {
         return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
-}
-
-export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
-    const queryTerms: kp.SearchTerm[] = [];
-    for (const arg of args) {
-        let allTermStrings = splitTermValues(arg);
-        if (allTermStrings.length > 0) {
-            allTermStrings = allTermStrings.map((t) => t.toLowerCase());
-            const queryTerm: kp.SearchTerm = {
-                term: { text: allTermStrings[0] },
-            };
-            if (allTermStrings.length > 1) {
-                queryTerm.relatedTerms = [];
-                for (let i = 1; i < allTermStrings.length; ++i) {
-                    queryTerm.relatedTerms.push({ text: allTermStrings[i] });
-                }
-            }
-            queryTerms.push(queryTerm);
-        }
-    }
-    return queryTerms;
 }
 
 function splitTermValues(term: string): string[] {

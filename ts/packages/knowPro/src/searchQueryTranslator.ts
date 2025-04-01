@@ -11,7 +11,7 @@ import * as querySchema from "./searchQuerySchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "typeagent";
 import { dateRangeFromDateTimeRange, WhenFilter } from "./search.js";
-import { createPropertySearchTerm, createSearchTerm } from "./searchCommon.js";
+import { createPropertySearchTerm, createSearchTerm } from "./searchLib.js";
 import { SearchTermGroup } from "./interfaces.js";
 import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
@@ -21,7 +21,7 @@ import {
     createAndTermGroup,
     createOrMaxTermGroup,
     createOrTermGroup,
-} from "./searchCommon.js";
+} from "./searchLib.js";
 
 /*-------------------------------
 

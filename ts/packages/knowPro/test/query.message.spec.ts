@@ -10,9 +10,11 @@ import {
     loadTestConversation,
 } from "./testCommon.js";
 import * as q from "../src/query.js";
-import { createPropertySearchTerm } from "../src/searchCommon.js";
-import { PropertyNames } from "../src/propertyIndex.js";
 import { verifyTextRanges } from "./verify.js";
+import {
+    createMatchObjectOrEntity,
+    createMatchSubjectAndVerb,
+} from "../src/compilerCommon.js";
 
 /**
  * Designed to run offline
@@ -65,35 +67,5 @@ describe("query.message.offline", () => {
 
     function createContext() {
         return createQueryContext(conversation);
-    }
-
-    function createMatchObjectOrEntity(targetEntityName: string) {
-        const expr = new q.MatchMessagesOrExpr([
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(
-                    PropertyNames.Object,
-                    targetEntityName,
-                ),
-            ),
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(
-                    PropertyNames.EntityName,
-                    targetEntityName,
-                ),
-            ),
-        ]);
-        return expr;
-    }
-
-    function createMatchSubjectAndVerb(subject: string, verb: string) {
-        let expr = new q.MatchMessagesAndExpr([
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(PropertyNames.Subject, subject),
-            ),
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(PropertyNames.Verb, verb),
-            ),
-        ]);
-        return expr;
     }
 });

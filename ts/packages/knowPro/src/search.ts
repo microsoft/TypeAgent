@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
-import { createAndTermGroup } from "./searchCommon.js";
+import { createAndTermGroup } from "./searchLib.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
@@ -24,6 +24,18 @@ import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
+
+/**
+ * Please inspect the following in interfaces.ts
+ * @see {@link ./interfaces.ts}
+ *
+ * Term: {@link Term}
+ * SearchTerm: {@link SearchTerm}
+ * PropertySearchTerm: {@link PropertySearchTerm}
+ * SearchTermGroup: {@link SearchTermGroup}
+ * ITermToSemanticRefIndex: {@link ITermToSemanticRefIndex}
+ * IPropertyToSemanticRefIndex: {@link IPropertyToSemanticRefIndex}
+ */
 
 /**
  * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match

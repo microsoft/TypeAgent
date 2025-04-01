@@ -17,7 +17,7 @@ import {
     createSearchTerm,
     createAndTermGroup,
     createOrTermGroup,
-} from "../src/searchCommon.js";
+} from "../src/searchLib.js";
 import {
     createOfflineConversationSettings,
     emptyConversation,
