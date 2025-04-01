@@ -12,6 +12,7 @@ import { FullAction } from "agent-cache";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { InstanceConfigProvider } from "../src/utils/config.js";
 
 type TranslateTestStep = {
     // Input
@@ -19,7 +20,7 @@ type TranslateTestStep = {
     attachments?: string[] | undefined;
 
     // Output
-    action: string | string[] | FullAction | FullAction[];
+    action?: string | string[] | FullAction | FullAction[];
     match?: "exact" | "partial"; // default to "exact"
 
     // Execution result:
@@ -30,9 +31,15 @@ type TranslateTestEntry = TranslateTestStep | TranslateTestStep[];
 type TranslateTestFile = TranslateTestEntry[];
 
 const repeat = 5;
-const defaultAppAgentProviders = getDefaultAppAgentProviders(undefined);
 const embeddingCacheDir = path.join(os.tmpdir(), ".typeagent", "cache");
-export async function defineTranslateTest(name: string, dataFiles: string[]) {
+export async function defineTranslateTest(
+    name: string,
+    dataFiles: string[],
+    instanceConfigProvider?: InstanceConfigProvider,
+) {
+    const defaultAppAgentProviders = getDefaultAppAgentProviders(
+        instanceConfigProvider,
+    );
     const inputs: TranslateTestEntry[] = (
         await Promise.all(
             dataFiles.map<Promise<TranslateTestFile>>(async (f) => {
@@ -104,31 +111,35 @@ export async function defineTranslateTest(name: string, dataFiles: string[]) {
                         );
                         expect(result?.hasError).toBeFalsy();
 
-                        const actions = result?.actions;
-                        expect(actions).toBeDefined();
+                        if (action !== undefined) {
+                            const actions = result?.actions;
+                            expect(actions).toBeDefined();
 
-                        const expectedValues = Array.isArray(action)
-                            ? action
-                            : [action];
-                        expect(actions).toHaveLength(expectedValues.length);
+                            const expectedValues = Array.isArray(action)
+                                ? action
+                                : [action];
+                            expect(actions).toHaveLength(expectedValues.length);
 
-                        for (let i = 0; i < expectedValues.length; i++) {
-                            const action = actions![i];
-                            const expected = expectedValues[i];
-                            if (typeof expected === "string") {
-                                const actualFullActionName = `${action.translatorName}.${action.actionName}`;
-                                if (match === "partial") {
-                                    expect(actualFullActionName).toContain(
-                                        expected,
-                                    );
+                            for (let i = 0; i < expectedValues.length; i++) {
+                                const action = actions![i];
+                                const expected = expectedValues[i];
+                                if (typeof expected === "string") {
+                                    const actualFullActionName = `${action.translatorName}.${action.actionName}`;
+                                    if (match === "partial") {
+                                        expect(actualFullActionName).toContain(
+                                            expected,
+                                        );
+                                    } else {
+                                        expect(actualFullActionName).toBe(
+                                            expected,
+                                        );
+                                    }
                                 } else {
-                                    expect(actualFullActionName).toBe(expected);
-                                }
-                            } else {
-                                if (match === "partial") {
-                                    expect(action).toMatchObject(expected);
-                                } else {
-                                    expect(action).toEqual(expected);
+                                    if (match === "partial") {
+                                        expect(action).toMatchObject(expected);
+                                    } else {
+                                        expect(action).toEqual(expected);
+                                    }
                                 }
                             }
                         }

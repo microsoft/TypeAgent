@@ -3,12 +3,12 @@
 
 import { AppAgentProvider } from "agent-dispatcher";
 import { getPackageFilePath } from "./utils/getPackageFilePath.js";
-import { readInstanceConfig, getProviderConfig } from "./utils/config.js";
+import { InstanceConfigProvider, getProviderConfig } from "./utils/config.js";
 import { createMcpAppAgentProvider } from "./mcpAgentProvider.js";
 
 let mcpAppAgentProvider: AppAgentProvider | undefined;
 export function getDefaultMcpAppAgentProvider(
-    instanceDir: string | undefined,
+    instanceConfigs?: InstanceConfigProvider,
 ): AppAgentProvider | undefined {
     if (mcpAppAgentProvider === undefined) {
         const servers = structuredClone(getProviderConfig().mcpServers);
@@ -25,8 +25,7 @@ export function getDefaultMcpAppAgentProvider(
             "typeagent",
             "0.0.1",
             servers,
-            readInstanceConfig(instanceDir)?.mcpServers,
-            instanceDir,
+            instanceConfigs,
         );
     }
     return mcpAppAgentProvider;
