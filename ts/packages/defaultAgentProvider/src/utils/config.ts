@@ -28,40 +28,19 @@ export type InstanceConfig = {
     };
 };
 
-export type Config = AppAgentConfig & {
+export type ProviderConfig = AppAgentConfig & {
     explainers: { [key: string]: ExplainerConfig };
     tests: string[];
 };
 
-let config: Config | undefined;
-export function getProviderConfig(): Config {
-    if (config === undefined) {
-        config = JSON.parse(
+let providerConfig: ProviderConfig | undefined;
+export function getProviderConfig(): ProviderConfig {
+    if (providerConfig === undefined) {
+        providerConfig = JSON.parse(
             fs.readFileSync(getPackageFilePath("./data/config.json"), "utf8"),
-        ) as Config;
+        ) as ProviderConfig;
     }
-    return config;
-}
-
-export function readInstanceConfig(
-    instanceDir: string | undefined,
-): InstanceConfig | undefined {
-    if (instanceDir === undefined) {
-        return undefined;
-    }
-    const instanceConfigPath = path.join(instanceDir, "config.json");
-    if (fs.existsSync(instanceConfigPath)) {
-        return JSON.parse(fs.readFileSync(instanceConfigPath, "utf8"));
-    }
-    return undefined;
-}
-
-export function writeInstanceConfig(
-    instanceDir: string,
-    config: InstanceConfig,
-): void {
-    const instanceConfigPath = path.join(instanceDir, "config.json");
-    fs.writeFileSync(instanceConfigPath, JSON.stringify(config, null, 4));
+    return providerConfig;
 }
 
 export function getBuiltinConstructionConfig(explainerName: string) {
@@ -91,4 +70,48 @@ export async function getTestDataFiles(
             windowsPathsNoEscape: true,
         },
     );
+}
+
+export interface InstanceConfigProvider {
+    getInstanceDir(): string | undefined;
+    getInstanceConfig(): Readonly<InstanceConfig>;
+    setInstanceConfig(instanceConfig: InstanceConfig): void;
+}
+
+export function getInstanceConfigProvider(
+    instanceDir: string | undefined, // undefined for in memory only
+): InstanceConfigProvider {
+    let instanceConfig: InstanceConfig;
+    function getInstanceConfig(): Readonly<InstanceConfig> {
+        if (instanceConfig === undefined) {
+            if (instanceDir !== undefined) {
+                const instanceConfigPath = path.join(
+                    instanceDir,
+                    "config.json",
+                );
+                if (fs.existsSync(instanceConfigPath)) {
+                    instanceConfig = JSON.parse(
+                        fs.readFileSync(instanceConfigPath, "utf8"),
+                    );
+                } else {
+                    instanceConfig = {};
+                }
+            } else {
+                instanceConfig = {};
+            }
+        }
+        return instanceConfig;
+    }
+    return {
+        getInstanceDir: () => instanceDir,
+        getInstanceConfig,
+        setInstanceConfig: (config: InstanceConfig) => {
+            if (instanceDir !== undefined) {
+                const filePath = path.join(instanceDir, "config.json");
+                fs.writeFileSync(filePath, JSON.stringify(config, null, 4));
+            }
+
+            instanceConfig = structuredClone(config);
+        },
+    };
 }

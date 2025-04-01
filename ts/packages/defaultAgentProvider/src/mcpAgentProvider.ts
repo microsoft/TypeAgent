@@ -16,7 +16,7 @@ import {
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { readInstanceConfig, writeInstanceConfig } from "./utils/config.js";
+import { InstanceConfig, InstanceConfigProvider } from "./utils/config.js";
 
 export type McpAppAgentInfo = {
     emojiChar: string;
@@ -94,7 +94,7 @@ function createMcpAppAgentTransport(
 function getMcpCommandHandlerTable(
     appAgentName: string,
     args: ArgDefinitions,
-    instanceDir: string,
+    configs: InstanceConfigProvider,
 ): CommandHandlerTable {
     return {
         description: "MCP Command Handler Server Arguments",
@@ -108,16 +108,16 @@ function getMcpCommandHandlerTable(
                     context: ActionContext<unknown>,
                     params: ParsedCommandParams<{}>,
                 ) => {
-                    const instanceConfig =
-                        readInstanceConfig(instanceDir) ?? {};
+                    const instanceConfig: InstanceConfig = structuredClone(
+                        configs.getInstanceConfig(),
+                    );
                     if (instanceConfig.mcpServers === undefined) {
                         instanceConfig.mcpServers = {};
                     }
                     instanceConfig.mcpServers[appAgentName] = {
                         serverScriptArgs: params.tokens,
                     };
-                    writeInstanceConfig(instanceDir, instanceConfig);
-
+                    configs.setInstanceConfig(instanceConfig);
                     context.actionIO.appendDisplay(
                         `Server arguments set to ${params.tokens.join(" ")}.  Please restart TypeAgent to reflect the change.`,
                     );
@@ -132,8 +132,8 @@ function createMcpAppAgentRecord(
     version: string,
     appAgentName: string,
     info: McpAppAgentInfo,
+    configs?: InstanceConfigProvider,
     instanceConfig?: McpAppAgentConfig,
-    instanceDir?: string,
 ): McpAppAgentRecord {
     const schemaFile = { format: "pas" as const, content: "" /* invalid */ };
     const manifest: AppAgentManifest = {
@@ -211,13 +211,13 @@ function createMcpAppAgentRecord(
             };
         }
         const handlers =
-            instanceDir !== undefined &&
+            configs !== undefined &&
             info.serverScriptArgs !== undefined &&
             !Array.isArray(info.serverScriptArgs)
                 ? getMcpCommandHandlerTable(
                       appAgentName,
                       info.serverScriptArgs,
-                      instanceDir,
+                      configs,
                   )
                 : undefined;
         if (handlers !== undefined) {
@@ -225,7 +225,7 @@ function createMcpAppAgentRecord(
         }
         return {
             manifest,
-            transport: undefined,
+            transport,
             agent,
         };
     };
@@ -239,9 +239,10 @@ export function createMcpAppAgentProvider(
     name: string,
     version: string,
     infos: Record<string, McpAppAgentInfo>,
-    instanceConfig?: Record<string, McpAppAgentConfig>,
-    instanceDir?: string,
+    configs?: InstanceConfigProvider,
 ): AppAgentProvider {
+    const instanceConfig = configs?.getInstanceConfig()?.mcpServers;
+
     const mcpAppAgents = new Map<string, McpAppAgentRecord>();
     function getMpcAppAgentRecord(appAgentName: string) {
         const existing = mcpAppAgents.get(appAgentName);
@@ -258,8 +259,8 @@ export function createMcpAppAgentProvider(
             version,
             appAgentName,
             info,
+            configs,
             instanceConfig?.[appAgentName],
-            instanceDir,
         );
         mcpAppAgents.set(appAgentName, record);
         return record;
@@ -284,7 +285,14 @@ export function createMcpAppAgentProvider(
             }
             if (--record.count === 0) {
                 mcpAppAgents.delete(appAgentName);
-                (await record.agentP).transport?.close();
+                const agent = await record.agentP;
+                const transport = agent.transport;
+                if (transport !== undefined) {
+                    return new Promise<void>((resolve) => {
+                        transport.onclose = resolve;
+                        transport.close();
+                    });
+                }
             }
         },
     };
