@@ -48,7 +48,7 @@ export class Collection<T, TOrdinal extends number>
         return this.items;
     }
 
-    public push(...items: T[]): void {
+    public append(...items: T[]): void {
         for (const item of items) {
             this.items.push(item);
         }

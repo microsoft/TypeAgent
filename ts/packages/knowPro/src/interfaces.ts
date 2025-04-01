@@ -318,7 +318,7 @@ export interface ICollection<T, TOrdinal>
     extends IReadonlyCollection<T, TOrdinal> {
     readonly isPersistent: boolean;
 
-    push(...items: T[]): void;
+    append(...items: T[]): void;
 }
 
 export interface IMessageCollection<TMessage extends IMessage = IMessage>

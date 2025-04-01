@@ -20,12 +20,15 @@ import {
     readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     Term,
-    createTermEmbeddingCache,
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
 } from "knowpro";
-import { conversation as kpLib } from "knowledge-processor";
+import {
+    createEmbeddingCache,
+    conversation as kpLib,
+} from "knowledge-processor";
 import { collections } from "typeagent";
+import { openai, TextEmbeddingModel } from "aiclient";
 
 // metadata for podcast messages
 
@@ -121,7 +124,8 @@ export class Podcast implements IConversation<PodcastMessage> {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createConversationSettings();
+        const [model, embeddingSize] = this.createEmbeddingModel();
+        this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
@@ -257,7 +261,6 @@ export class Podcast implements IConversation<PodcastMessage> {
             await buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
-        this.buildCaches();
     }
 
     private buildParticipantAliases(): void {
@@ -299,12 +302,20 @@ export class Podcast implements IConversation<PodcastMessage> {
         return aliases;
     }
 
-    private buildCaches(): void {
-        createTermEmbeddingCache(
-            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
-            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
-            64,
-        );
+    /**
+     * Our index already has embeddings for every term in the podcast
+     * Create a caching embedding model that can just leverage those embeddings
+     * @returns embedding model, size of embedding
+     */
+    private createEmbeddingModel(): [TextEmbeddingModel, number] {
+        return [
+            createEmbeddingCache(
+                openai.createEmbeddingModel(),
+                64,
+                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+            ),
+            1536,
+        ];
     }
 }
 

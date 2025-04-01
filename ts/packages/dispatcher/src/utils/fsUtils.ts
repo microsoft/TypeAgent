@@ -4,6 +4,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import lockfile from "proper-lockfile";
+import os from "node:os";
+
+export function expandHome(pathname: string): string {
+    if (!pathname.startsWith(`~${path.sep}`)) return pathname;
+    return path.join(os.homedir(), pathname.substring(2));
+}
 
 export function getYMDPrefix() {
     const date = new Date();

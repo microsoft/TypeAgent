@@ -57,7 +57,7 @@ export const testCommandAgentProvider: AppAgentProvider = {
         }
         return agent;
     },
-    unloadAppAgent: (appAgentName: string) => {
+    unloadAppAgent: async (appAgentName: string) => {
         if (appAgentName !== "test") {
             throw new Error(`Unknown app agent: ${appAgentName}`);
         }

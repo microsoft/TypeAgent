@@ -1342,7 +1342,7 @@ chrome.runtime.onMessage.addListener(
                             recordedActionSteps: message.steps,
                             existingActionNames: message.existingActionNames,
                             fragments: message.html,
-                            screenshot: message.screenshot,
+                            screenshots: message.screenshot,
                         },
                     });
 
@@ -1394,39 +1394,13 @@ chrome.runtime.onMessage.addListener(
                     sendResponse(htmlFragments);
                     break;
                 }
-                case "saveAnnotatedScreenshot": {
-                    await chrome.storage.session.set({
-                        annotatedScreenshot: message.screenshot,
-                    });
-                    sendResponse({});
-                    break;
-                }
-                case "getAnnotatedScreenshot": {
-                    const data = await chrome.storage.session.get(
-                        "annotatedScreenshot",
-                    );
-                    sendResponse(data.annotatedScreenshot);
-                    break;
-                }
-                case "saveRecordedActionPageHTML": {
-                    await chrome.storage.session.set({
-                        recordedActionPageHTML: message.html,
-                    });
-                    sendResponse({});
-                    break;
-                }
-                case "getRecordedActionPageHTML": {
-                    const data = await chrome.storage.session.get(
-                        "recordedActionPageHTML",
-                    );
-                    sendResponse(data.recordedActionPageHTML);
-                    break;
-                }
                 case "saveRecordedActions": {
                     await chrome.storage.session.set({
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
+                        actionIndex: message.actionIndex,
+                        isCurrentlyRecording: message.isCurrentlyRecording,
                     });
                     sendResponse({});
                     break;
@@ -1436,6 +1410,8 @@ chrome.runtime.onMessage.addListener(
                         recordedActions: message.recordedActions,
                         recordedActionPageHTML: message.recordedActionPageHTML,
                         annotatedScreenshot: message.recordedActionScreenshot,
+                        actionIndex: message.actionIndex,
+                        isCurrentlyRecording: false,
                     });
 
                     sendResponse({});
@@ -1446,6 +1422,8 @@ chrome.runtime.onMessage.addListener(
                         "recordedActions",
                         "recordedActionPageHTML",
                         "annotatedScreenshot",
+                        "actionIndex",
+                        "isCurrentlyRecording",
                     ]);
 
                     sendResponse(result);
@@ -1453,14 +1431,31 @@ chrome.runtime.onMessage.addListener(
                 }
                 case "clearRecordedActions": {
                     try {
-                        await chrome.storage.local.remove([
+                        await chrome.storage.session.remove([
                             "recordedActions",
                             "recordedActionPageHTML",
                             "annotatedScreenshot",
+                            "actionIndex",
+                            "isCurrentlyRecording",
                         ]);
                     } catch (error) {
                         console.error("Error clearing storage data:", error);
                     }
+
+                    sendResponse({});
+                    break;
+                }
+                case "downloadData": {
+                    const jsonString = JSON.stringify(message.data, null, 2);
+                    const dataUrl =
+                        "data:application/json;charset=utf-8," +
+                        encodeURIComponent(jsonString);
+
+                    chrome.downloads.download({
+                        url: dataUrl,
+                        filename: message.filename || "schema-metadata.json",
+                        saveAs: true,
+                    });
 
                     sendResponse({});
                     break;
@@ -1503,6 +1498,25 @@ chrome.runtime.onInstalled.addListener(() => {
         title: "Update Page Agent",
         contexts: ["all"],
         documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
+    });
+
+    chrome.contextMenus.create({
+        type: "separator",
+        id: "menuSeparator2",
+    });
+
+    chrome.contextMenus.create({
+        id: "extractSchemaCurrentPage",
+        title: "Get schema.org metadata from this page",
+        contexts: ["page"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        id: "extractSchemaLinkedPages",
+        title: "Get schema.org metadata from linked pages",
+        contexts: ["page"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 });
 
@@ -1576,6 +1590,26 @@ chrome.contextMenus?.onClicked.addListener(
                     actionName: "registerPageDynamicAgent",
                     parameters: {},
                 });
+                break;
+            }
+            case "extractSchemaCurrentPage": {
+                await chrome.tabs.sendMessage(
+                    tab.id!,
+                    {
+                        type: "extractSchemaCurrentPage",
+                    },
+                    { frameId: 0 },
+                );
+                break;
+            }
+            case "extractSchemaLinkedPages": {
+                await chrome.tabs.sendMessage(
+                    tab.id!,
+                    {
+                        type: "extractSchemaLinkedPages",
+                    },
+                    { frameId: 0 },
+                );
                 break;
             }
         }
