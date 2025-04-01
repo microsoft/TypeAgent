@@ -1,22 +1,27 @@
 # TODO for the Python knowpro port
 
-## Big functionality
+## Serialization and deserialization (basically done)
 
-    ### Serialization and deserialization
-    Do this before queries, since fully re-indexing takes too long.
+Do this before queries, since fully re-indexing takes too long.
 
-    - Serialization nearly done (gotta check TODO comments)
-    - Deserialization is nearly done (ditto)
+- Serialization appears done (gotta check TODO comments)
+- Deserialization ditto
 
-    ### Queries and searches
+### Still TODO:
 
-    So we can finally do some end-to-end testing.
+- Remove a bunch of `XxxData` TypedDicts that can be dealt with using
+  `deserialize_object` and `serialize_object`
+- Catch and report DeserializationError better
 
-    ### Retries for embeddings
+## Queries and searches
 
-    For robustness -- TypeChat already retries, but embeddings don't.
+STARTING THIS NOW.
 
----
+So we can finally do some end-to-end testing.
+
+## Retries for embeddings
+
+For robustness -- TypeChat already retries, but my embeddings don't.
 
 ## Small functionality
 
