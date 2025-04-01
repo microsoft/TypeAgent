@@ -21,7 +21,7 @@ import numpy as np
 
 from ..aitools.embeddings import NormalizedEmbeddings
 from .interfaces import (
-    IConversationDataWithIndexes,
+    ConversationDataWithIndexes,
     Tag,
     Topic,
 )
@@ -55,7 +55,7 @@ class EmbeddingData(TypedDict):
     embeddings: NormalizedEmbeddings | None
 
 
-class ConversationJsonData(IConversationDataWithIndexes):
+class ConversationJsonData(ConversationDataWithIndexes):
     fileHeader: NotRequired[FileHeader | None]
     embeddingFileHeader: NotRequired[EmbeddingFileHeader | None]
 
@@ -77,7 +77,7 @@ class ConversationFileData(TypedDict):
 
 
 def write_conversation_data_to_file(
-    conversation_data: IConversationDataWithIndexes,
+    conversation_data: ConversationDataWithIndexes,
     filename: str,
 ) -> None:
     file_data = to_conversation_file_data(conversation_data)
@@ -97,7 +97,7 @@ def serialize_embeddings(embeddings: NormalizedEmbeddings) -> NormalizedEmbeddin
 
 
 def to_conversation_file_data[IMessageData](
-    conversation_data: IConversationDataWithIndexes[IMessageData],
+    conversation_data: ConversationDataWithIndexes[IMessageData],
 ) -> ConversationFileData:
     file_header = create_file_header()
     embedding_file_header = EmbeddingFileHeader()
@@ -193,7 +193,7 @@ def to_camel(name: str) -> str:
 # No exceptions are caught; they just bubble out.
 async def read_conversation_data_from_file(
     filename: str, embedding_size: int | None = None
-) -> IConversationDataWithIndexes | None:
+) -> ConversationDataWithIndexes | None:
     with open(filename + DATA_FILE_SUFFIX) as f:
         json_data: ConversationJsonData = json.load(f)
     if json_data is None:
@@ -219,7 +219,7 @@ async def read_conversation_data_from_file(
 
 def from_conversation_file_data(
     file_data: ConversationFileData,
-) -> IConversationDataWithIndexes | None:
+) -> ConversationDataWithIndexes | None:
     json_data = file_data["jsonData"]
     binary_data = file_data["binaryData"]
     if binary_data:

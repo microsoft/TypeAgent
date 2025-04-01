@@ -9,7 +9,7 @@ from ..knowpro.convthreads import ConversationThreads
 from ..knowpro.importing import ConversationSettings
 from ..knowpro.interfaces import (
     Datetime,
-    IConversationDataWithIndexes,
+    ConversationDataWithIndexes,
     SemanticRef,
     Timedelta,
 )
@@ -101,7 +101,7 @@ class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
     # TODO deserialize (static method?)
 
 
-class PodcastData(interfaces.IConversationDataWithIndexes[PodcastMessageData]):
+class PodcastData(interfaces.ConversationDataWithIndexes[PodcastMessageData]):
     pass
 
 
@@ -188,7 +188,7 @@ class Podcast(
         write_conversation_data_to_file(data, filename)
 
     def deserialize(
-        self, podcast_data: IConversationDataWithIndexes[PodcastMessageData]
+        self, podcast_data: ConversationDataWithIndexes[PodcastMessageData]
     ) -> None:
         self.name_tag = podcast_data["nameTag"]
 
@@ -244,10 +244,11 @@ class Podcast(
     @staticmethod
     async def read_from_file(
         filename: str,
+        settings: ConversationSettings | None = None,
     ) -> Optional[
         "Podcast"
     ]:  # Must use Optional because Podcast must be stringified and "..." | None is a runtime error.
-        podcast = Podcast()
+        podcast = Podcast(settings=settings) if settings is not None else Podcast()
         embedding_size = (
             podcast.settings.related_term_index_settings.embedding_index_settings.embedding_size
         )

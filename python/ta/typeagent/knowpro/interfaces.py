@@ -345,10 +345,10 @@ class ITermToRelatedTermsIndex(Protocol):
     def fuzzy_index(self) -> VectorBase | None:
         raise NotImplementedError
 
-    def serialize(self) -> "ITermsToRelatedTermsIndexData":
+    def serialize(self) -> "TermsToRelatedTermsIndexData":
         raise NotImplementedError
 
-    def deserialize(self, data: "ITermsToRelatedTermsIndexData") -> None:
+    def deserialize(self, data: "TermsToRelatedTermsIndexData") -> None:
         raise NotImplementedError
 
 
@@ -399,10 +399,10 @@ class IConversationThreads(Protocol):
     ) -> Sequence[ScoredThreadOrdinal] | None:
         raise NotImplementedError
 
-    def serialize(self) -> "IConversationThreadData":
+    def serialize(self) -> "ConversationThreadData":
         raise NotImplementedError
 
-    def deserialize(self, data: "IConversationThreadData") -> None:
+    def deserialize(self, data: "ConversationThreadData") -> None:
         raise NotImplementedError
 
 
@@ -434,10 +434,10 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
 
     # TODO: Others?
 
-    def serialize(self) -> "IMessageTextIndexData":
+    def serialize(self) -> "MessageTextIndexData":
         raise NotImplementedError
 
-    def deserialize(self, data: "IMessageTextIndexData") -> None:
+    def deserialize(self, data: "MessageTextIndexData") -> None:
         raise NotImplementedError
 
 
@@ -466,12 +466,12 @@ class IConversation[
 # --------------------------------------------------
 
 
-class IThreadDataItem(TypedDict):
+class ThreadDataItem(TypedDict):
     thread: ThreadData
     embedding: NormalizedEmbedding | None
 
 
-class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):
+class ConversationThreadData[TThreadDataItem: ThreadDataItem](TypedDict):
     threads: list[TThreadDataItem] | None
 
 
@@ -480,23 +480,23 @@ class TermData(TypedDict):
     weight: NotRequired[float | None]
 
 
-class ITermsToRelatedTermsDataItem(TypedDict):
+class TermsToRelatedTermsDataItem(TypedDict):
     termText: str
     relatedTerms: list[TermData]
 
 
-class ITermToRelatedTermsData(TypedDict):
-    relatedTerms: NotRequired[list[ITermsToRelatedTermsDataItem] | None]
+class TermToRelatedTermsData(TypedDict):
+    relatedTerms: NotRequired[list[TermsToRelatedTermsDataItem] | None]
 
 
-class ITextEmbeddingIndexData(TypedDict):
+class TextEmbeddingIndexData(TypedDict):
     textItems: list[str]
     embeddings: NormalizedEmbeddings | None
 
 
-class ITermsToRelatedTermsIndexData(TypedDict):
-    aliasData: NotRequired[ITermToRelatedTermsData]
-    textEmbeddingData: NotRequired[ITextEmbeddingIndexData]
+class TermsToRelatedTermsIndexData(TypedDict):
+    aliasData: NotRequired[TermToRelatedTermsData]
+    textEmbeddingData: NotRequired[TextEmbeddingIndexData]
 
 
 class ScoredSemanticRefOrdinalData(TypedDict):
@@ -514,7 +514,7 @@ class TermToSemanticRefIndexData(TypedDict):
     items: list[TermToSemanticRefIndexItemData]
 
 
-class IConversationData[TMessageData](TypedDict):
+class ConversationData[TMessageData](TypedDict):
     nameTag: str
     messages: list[TMessageData]
     tags: list[str]
@@ -522,19 +522,19 @@ class IConversationData[TMessageData](TypedDict):
     semanticIndexData: NotRequired[TermToSemanticRefIndexData | None]
 
 
-class ITextToTextLocationIndexData(TypedDict):
+class TextToTextLocationIndexData(TypedDict):
     textLocations: list[TextLocationData]
-    embeddings: ITextEmbeddingIndexData
+    embeddings: TextEmbeddingIndexData
 
 
-class IMessageTextIndexData(TypedDict):
-    indexData: NotRequired[ITextToTextLocationIndexData | None]
+class MessageTextIndexData(TypedDict):
+    indexData: NotRequired[TextToTextLocationIndexData | None]
 
 
-class IConversationDataWithIndexes[TMessageData](IConversationData[TMessageData]):
-    relatedTermsIndexData: NotRequired[ITermsToRelatedTermsIndexData | None]
-    threadData: NotRequired[IConversationThreadData | None]
-    messageIndexData: NotRequired[IMessageTextIndexData | None]
+class ConversationDataWithIndexes[TMessageData](ConversationData[TMessageData]):
+    relatedTermsIndexData: NotRequired[TermsToRelatedTermsIndexData | None]
+    threadData: NotRequired[ConversationThreadData | None]
+    messageIndexData: NotRequired[MessageTextIndexData | None]
 
 
 # --------------------------------
