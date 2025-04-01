@@ -17,6 +17,17 @@ export enum ComparisonOp {
     Neq,
 }
 
+export function filterEntities(
+    entities: kpLib.ConcreteEntity[],
+    facetName: string,
+    value: kpLib.Value,
+    op: ComparisonOp,
+): kpLib.ConcreteEntity[] {
+    return entities.filter((e) =>
+        hasMatchingFacets(e.facets, facetName, value, op),
+    );
+}
+
 /**
  *
  * @param facets
