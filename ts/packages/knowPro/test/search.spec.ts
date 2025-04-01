@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createAndTermGroup, createOrTermGroup } from "../src/common.js";
 import {
     IConversation,
     KnowledgeType,
@@ -10,11 +9,15 @@ import {
     SearchTermGroup,
 } from "../src/interfaces.js";
 import {
-    createSearchTerm,
     searchConversation,
     searchConversationKnowledge,
     SemanticRefSearchResult,
 } from "../src/search.js";
+import {
+    createSearchTerm,
+    createAndTermGroup,
+    createOrTermGroup,
+} from "../src/searchCommon.js";
 import {
     createOfflineConversationSettings,
     emptyConversation,

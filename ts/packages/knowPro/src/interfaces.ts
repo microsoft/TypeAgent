@@ -283,6 +283,11 @@ export type PropertySearchTerm = {
     propertyValue: SearchTerm;
 };
 
+export type SearchTermGroupTypes =
+    | SearchTerm
+    | PropertySearchTerm
+    | SearchTermGroup;
+
 /**
  * A Group of search terms
  */
@@ -292,7 +297,7 @@ export type SearchTermGroup = {
         | "or" // Union matches for each term, adding up scores
         | "or_max"; // Union matches for each term, add up scores, select matches with max hit count
 
-    terms: (SearchTerm | PropertySearchTerm | SearchTermGroup)[];
+    terms: SearchTermGroupTypes[];
 };
 
 //------------------------

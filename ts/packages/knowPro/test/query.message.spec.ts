@@ -10,7 +10,7 @@ import {
     loadTestConversation,
 } from "./testCommon.js";
 import * as q from "../src/query.js";
-import { createPropertySearchTerm } from "../src/search.js";
+import { createPropertySearchTerm } from "../src/searchCommon.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { verifyTextRanges } from "./verify.js";
 

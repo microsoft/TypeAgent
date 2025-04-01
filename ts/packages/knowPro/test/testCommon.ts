@@ -28,7 +28,8 @@ import {
 } from "../src/conversation.js";
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
-import { createSearchTerm, SemanticRefSearchResult } from "../src/search.js";
+import { SemanticRefSearchResult } from "../src/search.js";
+import { createSearchTerm } from "../src/searchCommon.js";
 import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { Result } from "typechat";

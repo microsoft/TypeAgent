@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
-import { createAndTermGroup } from "./common.js";
+import { createAndTermGroup } from "./searchCommon.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
@@ -16,7 +16,6 @@ import {
     ScoredMessageOrdinal,
     SearchTerm,
     SearchTermGroup,
-    KnowledgePropertyName,
     PropertySearchTerm,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
@@ -25,64 +24,6 @@ import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
-
-/**
- * Please inspect the following in interfaces.ts
- * @see {@link ./interfaces.ts}
- *
- * Term: {@link Term}
- * SearchTerm: {@link SearchTerm}
- * PropertySearchTerm: {@link PropertySearchTerm}
- * SearchTermGroup: {@link SearchTermGroup}
- * ITermToSemanticRefIndex: {@link ITermToSemanticRefIndex}
- * IPropertyToSemanticRefIndex: {@link IPropertyToSemanticRefIndex}
- */
-
-export function createSearchTerm(text: string, score?: number): SearchTerm {
-    return {
-        term: {
-            text,
-            weight: score,
-        },
-    };
-}
-
-/**
- * Create a new property search term from the given name and value
- * @param name property name
- * @param value property value
- * @param exactMatchValue if true, configures propertyValue to only match exactly
- * @returns {PropertySearchTerm}
- */
-export function createPropertySearchTerm(
-    name: string,
-    value: string,
-    exactMatchValue: boolean = false,
-): PropertySearchTerm {
-    let propertyName: KnowledgePropertyName | SearchTerm;
-    let propertyValue: SearchTerm;
-    // Check if this is one of our well known predefined values
-    switch (name) {
-        default:
-            propertyName = createSearchTerm(name);
-            break;
-        case "name":
-        case "type":
-        case "verb":
-        case "subject":
-        case "object":
-        case "indirectObject":
-        case "tag":
-            propertyName = name;
-            break;
-    }
-    propertyValue = createSearchTerm(value);
-    if (exactMatchValue) {
-        // No related terms should be matched for this term
-        propertyValue.relatedTerms = [];
-    }
-    return { propertyName, propertyValue };
-}
 
 /**
  * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match
