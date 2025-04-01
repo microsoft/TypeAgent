@@ -5,17 +5,19 @@ import { IConversation } from "../src/interfaces.js";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
 import {
     createOfflineConversationSettings,
+    createQueryContext,
     emptyConversation,
     loadTestConversation,
 } from "./testCommon.js";
 import * as q from "../src/query.js";
 import { createPropertySearchTerm } from "../src/search.js";
 import { PropertyNames } from "../src/propertyIndex.js";
+import { verifyTextRanges } from "./verify.js";
 
 /**
  * Designed to run offline
  */
-describe("query.offline", () => {
+describe("query.message.offline", () => {
     const testTimeout = 1000 * 60 * 5;
     let conversation: IConversation = emptyConversation();
     let secondaryIndex: ConversationSecondaryIndexes | undefined;
@@ -31,7 +33,7 @@ describe("query.offline", () => {
         "messages.terms.or",
         () => {
             const targetEntityName = "Children of Memory";
-            const query = createObjectExpr(targetEntityName);
+            const query = createMatchObjectOrEntity(targetEntityName);
             const messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
         },
@@ -40,27 +42,32 @@ describe("query.offline", () => {
     test(
         "messages.terms.and",
         () => {
-            let query = createSubjectVerbExpr("Adrian", "say");
+            let query = createMatchSubjectAndVerb("Adrian", "say");
             let messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
 
-            query = createSubjectVerbExpr("Jane", "say");
+            query = createMatchSubjectAndVerb("Jane", "say");
             messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toEqual(0);
         },
         testTimeout,
     );
+    test("messages.terms.ranges", () => {
+        const targetEntityName = "Children of Time";
+        const query = createMatchObjectOrEntity(targetEntityName);
+        const scopeExpr = new q.TextRangesFromMessagesSelector(query);
+        const ranges = scopeExpr.eval(createContext());
+        expect(ranges).toBeDefined();
+        if (ranges) {
+            verifyTextRanges(ranges);
+        }
+    });
 
     function createContext() {
-        const secondaryIndexes = conversation.secondaryIndexes!;
-        return new q.QueryEvalContext(
-            conversation,
-            secondaryIndexes.propertyToSemanticRefIndex,
-            secondaryIndexes.timestampIndex,
-        );
+        return createQueryContext(conversation);
     }
 
-    function createObjectExpr(targetEntityName: string) {
+    function createMatchObjectOrEntity(targetEntityName: string) {
         const expr = new q.MatchMessagesOrExpr([
             new q.MatchPropertySearchTermExpr(
                 createPropertySearchTerm(
@@ -78,7 +85,7 @@ describe("query.offline", () => {
         return expr;
     }
 
-    function createSubjectVerbExpr(subject: string, verb: string) {
+    function createMatchSubjectAndVerb(subject: string, verb: string) {
         let expr = new q.MatchMessagesAndExpr([
             new q.MatchPropertySearchTermExpr(
                 createPropertySearchTerm(PropertyNames.Subject, subject),

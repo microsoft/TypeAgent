@@ -16,7 +16,6 @@ import {
     SemanticRefOrdinal,
     TextIndexingResult,
     TextLocation,
-    TextRange,
     Topic,
 } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
@@ -26,22 +25,7 @@ import { async } from "typeagent";
 import { facetValueToString } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
-
-/**
- * Returns the text range represented by a message (and an optional chunk ordinal)
- * @param messageOrdinal
- * @param chunkOrdinal
- * @returns {TextRange}
- */
-export function textRangeFromMessageChunk(
-    messageOrdinal: MessageOrdinal,
-    chunkOrdinal = 0,
-): TextRange {
-    return {
-        start: { messageOrdinal: messageOrdinal, chunkOrdinal: chunkOrdinal },
-        end: undefined,
-    };
-}
+import { textRangeFromMessageChunk } from "./message.js";
 
 export type KnowledgeValidator = (
     knowledgeType: KnowledgeType,

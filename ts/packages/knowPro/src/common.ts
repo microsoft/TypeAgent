@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 /**
+ * INTERNAL TO LIBRARY
  * Common types and methods INTERNAL to the library.
  * These should not be exposed via index.ts
  */

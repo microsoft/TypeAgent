@@ -9,7 +9,7 @@ import {
     ListIndexingResult,
     MessageOrdinal,
 } from "./interfaces.js";
-import { textRangeFromMessageChunk } from "./conversationIndex.js";
+import { textRangeFromMessageChunk } from "./message.js";
 import {
     ITimestampToTextRangeIndex,
     TimestampedTextRange,
