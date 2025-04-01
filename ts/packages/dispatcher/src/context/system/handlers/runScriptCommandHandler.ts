@@ -8,6 +8,7 @@ import { processCommands } from "../../../helpers/console.js";
 import { getPrompt, processCommandNoLock } from "../../../command/command.js";
 import fs from "node:fs";
 import path from "node:path";
+import { expandHome } from "../../../utils/fsUtils.js";
 
 export class RunCommandScriptHandler implements CommandHandler {
     public readonly description = "Run a command script file";
@@ -24,7 +25,10 @@ export class RunCommandScriptHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
         const prevScriptDir = systemContext.currentScriptDir;
-        const inputFile = path.resolve(prevScriptDir, params.args.input);
+        const inputFile = path.resolve(
+            prevScriptDir,
+            expandHome(params.args.input),
+        );
         const content = await fs.promises.readFile(inputFile, "utf8");
         const inputs = content.split(/\r?\n/);
         const prevBatchMode = systemContext.batchMode;
