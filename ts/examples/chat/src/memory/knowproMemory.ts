@@ -864,27 +864,8 @@ export async function createKnowproCommands(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(namedArgs, commandDef);
-    }
-
-    function createPropertyTerms(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-    ): kp.PropertySearchTerm[] {
         const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
-        const propertyNames = nameFilter
-            ? Object.keys(keyValues).filter(nameFilter)
-            : Object.keys(keyValues);
-        const propertySearchTerms: kp.PropertySearchTerm[] = [];
-        for (const propertyName of propertyNames) {
-            const allValues = splitTermValues(keyValues[propertyName]);
-            for (const value of allValues) {
-                propertySearchTerms.push(
-                    kp.createPropertySearchTerm(propertyName, value),
-                );
-            }
-        }
-        return propertySearchTerms;
+        return kp.createPropertySearchTerms(keyValues);
     }
 
     function whenFilterFromNamedArgs(
@@ -951,12 +932,4 @@ export async function createKnowproCommands(
     function podcastNameToFilePath(podcastName: string): string {
         return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
-}
-
-function splitTermValues(term: string): string[] {
-    let allTermStrings = knowLib.split(term, ";", {
-        trim: true,
-        removeEmpty: true,
-    });
-    return allTermStrings;
 }
