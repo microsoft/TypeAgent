@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * INTERNAL TO LIBRARY
+ * Query operators and processing is INTERNAL to the library.
+ * These should not be exposed via index.ts
+ */
+
 import {
     DateRange,
     IConversation,
@@ -44,6 +50,7 @@ import { Thread } from "./interfaces.js";
 import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
+import { textRangesFromMessageOrdinals } from "./message.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -415,6 +422,10 @@ export class QueryEvalContext {
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
         const messageIndex = semanticRef.range.start.messageOrdinal;
         return this.conversation.messages[messageIndex];
+    }
+
+    public getMessage(messageOrdinal: MessageOrdinal): IMessage {
+        return this.messages[messageOrdinal];
     }
 
     public clearMatchedTerms() {
@@ -1092,10 +1103,10 @@ export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
     }
 }
 
-export class TextRangesWithTermMatchesSelector
+export class TextRangesFromSemanticRefsSelector
     implements IQueryTextRangeSelector
 {
-    constructor(public sourceExpr: QueryOpExpr<SemanticRefAccumulator>) {}
+    constructor(public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>) {}
 
     public eval(context: QueryEvalContext): TextRangeCollection {
         const matches = this.sourceExpr.eval(context);
@@ -1107,6 +1118,20 @@ export class TextRangesWithTermMatchesSelector
             }
         }
         return rangesInScope;
+    }
+}
+
+export class TextRangesFromMessagesSelector implements IQueryTextRangeSelector {
+    constructor(public sourceExpr: IQueryOpExpr<MessageAccumulator>) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        const matches = this.sourceExpr.eval(context);
+        let rangesInScope: TextRange[] | undefined;
+        if (matches.size > 0) {
+            const allOrdinals = [...matches.getMatchedValues()];
+            rangesInScope = textRangesFromMessageOrdinals(allOrdinals);
+        }
+        return new TextRangeCollection(rangesInScope);
     }
 }
 

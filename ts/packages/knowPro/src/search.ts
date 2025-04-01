@@ -69,6 +69,7 @@ export type PropertySearchTerm = {
      *   E.g. to match hue(red)
      *      - propertyName as SearchTerm, set to 'hue'
      *      - propertyValue as SearchTerm, set to 'red'
+     *    We also want hue(red) to match any facets called color(red)
      * SearchTerms can included related terms
      *   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
      * The the query processor can also related terms using a related terms secondary index, if one is available
@@ -493,7 +494,7 @@ class QueryCompiler {
             const [searchTermsUsed, selectExpr] =
                 this.compileSearchGroup(termGroup);
             scopeSelectors.push(
-                new q.TextRangesWithTermMatchesSelector(selectExpr),
+                new q.TextRangesFromSemanticRefsSelector(selectExpr),
             );
             this.allScopeSearchTerms.push(...searchTermsUsed);
         }

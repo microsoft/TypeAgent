@@ -32,7 +32,7 @@ import {
     PropertySearchTerm,
     SemanticRefSearchResult,
 } from "../src/search.js";
-import { matchPropertySearchTermToEntity } from "../src/query.js";
+import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { Result } from "typechat";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
@@ -198,7 +198,16 @@ export function findEntityWithName(
         propertyValue: createSearchTerm(entityName),
     };
     return semanticRefs.find((sr) =>
-        matchPropertySearchTermToEntity(searchTerm, sr),
+        q.matchPropertySearchTermToEntity(searchTerm, sr),
+    );
+}
+
+export function createQueryContext(conversation: IConversation) {
+    const secondaryIndexes = conversation.secondaryIndexes!;
+    return new q.QueryEvalContext(
+        conversation,
+        secondaryIndexes.propertyToSemanticRefIndex,
+        secondaryIndexes.timestampIndex,
     );
 }
 
