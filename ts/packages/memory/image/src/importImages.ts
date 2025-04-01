@@ -498,6 +498,7 @@ export class ImageCollection implements IConversation {
  * Indexes the supplied image or images in the supplied folder.
  *
  * @param imagePath - The path to the image file or a folder containing images
+ * @param cachePath - The root cache path, if not specified image path is used
  * @param recursive - A flag indicating if the search should include subfolders
  * @returns - The imported images as an image collection.
  */
@@ -515,11 +516,7 @@ export async function importImages(
         );
     }
 
-    if (cachePath !== undefined) {
-        if (!fs.existsSync(cachePath)) {
-            fs.mkdirSync(cachePath);
-        }
-    } else {
+    if (cachePath === undefined) {
         cachePath = path.dirname(imagePath);
     }
 
@@ -566,19 +563,37 @@ async function indexImages(
         recursive: true,
     });
 
+    // create the cache path if it doesn't exist
+    if (!fs.existsSync(cachePath)) {
+        fs.mkdirSync(cachePath);
+    }
+
     // index each image
     const retVal: Image[] = [];
     for (let i = 0; i < fileNames.length; i++) {
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
-        //console.log(`${fullFilePath} [${i+1} of ${fileNames.length}] (estimated time remaining: ${clock.elapsedSeconds / (i + 1) * (fileNames.length - i)})`);
-        const img = await indexImage(fullFilePath, cachePath, chatModel);
 
-        if (callback) {
-            callback(fileNames[i], i, fileNames.length);
-        }
+        if (isDirectoryPath(fullFilePath)) {
+            retVal.push(
+                ...(await indexImages(
+                    fullFilePath,
+                    path.join(cachePath, fileNames[i]),
+                    true,
+                    chatModel,
+                    callback,
+                )),
+            );
+        } else {
+            // index the image
+            const img = await indexImage(fullFilePath, cachePath, chatModel);
 
-        if (img !== undefined) {
-            retVal.push(img);
+            if (callback) {
+                callback(fileNames[i], i, fileNames.length);
+            }
+
+            if (img !== undefined) {
+                retVal.push(img);
+            }
         }
     }
 

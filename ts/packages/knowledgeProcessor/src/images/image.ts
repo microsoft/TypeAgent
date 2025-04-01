@@ -519,7 +519,10 @@ export async function loadImage(
         cacheFolder = path.dirname(fileName);
     }
 
-    const cachedFileName: string = path.join(cacheFolder, fileName + ".eat");
+    const cachedFileName: string = path.join(
+        cacheFolder,
+        fileName + ".kr.json",
+    );
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }
