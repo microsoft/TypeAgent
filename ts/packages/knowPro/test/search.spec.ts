@@ -5,7 +5,6 @@ import {
     IConversation,
     KnowledgeType,
     ScoredMessageOrdinal,
-    SemanticRef,
     SearchTermGroup,
 } from "../src/interfaces.js";
 import {
@@ -21,11 +20,11 @@ import {
 import {
     createOfflineConversationSettings,
     emptyConversation,
-    findEntityWithName,
     getSemanticRefsForSearchResult,
     loadTestConversation,
 } from "./testCommon.js";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
+import { expectDoesNotHaveEntities, expectHasEntities } from "./verify.js";
 
 /**
  * These tests are designed to run offline.
@@ -71,6 +70,25 @@ describe("search.offline", () => {
                 createSearchTerm("spider"),
             );
             matches = await runSearchKnowledge(termGroup, "entity", false);
+        },
+        testTimeout,
+    );
+    test(
+        "searchKnowledge.andOr",
+        async () => {
+            let termGroup = createAndTermGroup(
+                createOrTermGroup(
+                    createSearchTerm("Children of Time"),
+                    createSearchTerm("Starship Troopers"),
+                ),
+                createSearchTerm("movie", undefined, true), // Exact match movies
+            );
+            let matches = await runSearchKnowledge(termGroup, "entity");
+            if (matches) {
+                const semanticRefs = resolveAndVerifySemanticRefs(matches);
+                expectHasEntities(semanticRefs, "Starship Troopers");
+                expectDoesNotHaveEntities(semanticRefs, "Children of Time");
+            }
         },
         testTimeout,
     );
@@ -161,25 +179,5 @@ describe("search.offline", () => {
         expect(semanticRefs).toHaveLength(matches.semanticRefMatches.length);
         expect(semanticRefs).not.toContain(undefined);
         return semanticRefs;
-    }
-
-    function expectHasEntities(
-        semanticRefs: SemanticRef[],
-        ...entityNames: string[]
-    ) {
-        for (const entityName of entityNames) {
-            const entity = findEntityWithName(semanticRefs, entityName);
-            expect(entity).toBeDefined();
-        }
-    }
-
-    function expectDoesNotHaveEntities(
-        semanticRefs: SemanticRef[],
-        ...entityNames: string[]
-    ) {
-        for (const entityName of entityNames) {
-            const entity = findEntityWithName(semanticRefs, entityName);
-            expect(entity).toBeUndefined();
-        }
     }
 });

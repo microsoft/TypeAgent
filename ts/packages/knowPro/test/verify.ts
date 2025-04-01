@@ -2,7 +2,28 @@
 // Licensed under the MIT License.
 
 import { TextRangeCollection } from "../src/collections.js";
-import { MessageOrdinal, TextRange } from "../src/interfaces.js";
+import { MessageOrdinal, SemanticRef, TextRange } from "../src/interfaces.js";
+import { findEntityWithName } from "./testCommon.js";
+
+export function expectHasEntities(
+    semanticRefs: SemanticRef[],
+    ...entityNames: string[]
+) {
+    for (const entityName of entityNames) {
+        const entity = findEntityWithName(semanticRefs, entityName);
+        expect(entity).toBeDefined();
+    }
+}
+
+export function expectDoesNotHaveEntities(
+    semanticRefs: SemanticRef[],
+    ...entityNames: string[]
+) {
+    for (const entityName of entityNames) {
+        const entity = findEntityWithName(semanticRefs, entityName);
+        expect(entity).toBeUndefined();
+    }
+}
 
 export function verifyTextRange(range: TextRange): void {
     expect(range.start.messageOrdinal).toBeGreaterThanOrEqual(0);

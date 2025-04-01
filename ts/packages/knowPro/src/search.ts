@@ -27,6 +27,10 @@ import { conversation as kpLib } from "knowledge-processor";
 import {
     createMatchMessagesBooleanExpr,
     createMatchTermsBooleanExpr,
+    isActionPropertyTerm,
+    isEntityPropertyTerm,
+    isPropertyTerm,
+    isSearchGroupTerm,
 } from "./compileLib.js";
 
 /**
@@ -301,13 +305,9 @@ class QueryCompiler {
         >[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
-                termExpressions.push(new q.MatchPropertySearchTermExpr(term));
+                termExpressions.push(this.compilePropertyTerm(term));
                 if (typeof term.propertyName !== "string") {
                     searchTermsUsed.push(term.propertyName);
-                }
-                if (isEntityPropertyTerm(term)) {
-                    term.propertyValue.term.weight ??=
-                        this.entityTermMatchWeight;
                 }
                 searchTermsUsed.push(term.propertyValue);
             } else if (isSearchGroupTerm(term)) {
@@ -315,13 +315,7 @@ class QueryCompiler {
                 searchTermsUsed.push(...termsUsed);
                 termExpressions.push(groupExpr);
             } else {
-                const boostWeight =
-                    this.entityTermMatchWeight / this.defaultTermMatchWeight;
-                termExpressions.push(
-                    new q.MatchSearchTermExpr(term, (term, sr, scored) =>
-                        this.boostEntities(term, sr, scored, boostWeight),
-                    ),
-                );
+                termExpressions.push(this.compileSearchTerm(term));
                 searchTermsUsed.push(term);
             }
         }
@@ -341,29 +335,33 @@ class QueryCompiler {
         >[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
-                termExpressions.push(new q.MatchPropertySearchTermExpr(term));
-                if (isEntityPropertyTerm(term)) {
-                    term.propertyValue.term.weight ??=
-                        this.entityTermMatchWeight;
-                }
+                termExpressions.push(this.compilePropertyTerm(term));
             } else if (isSearchGroupTerm(term)) {
                 const groupExpr = this.compileSearchGroupMessages(term);
                 termExpressions.push(groupExpr);
             } else {
-                const boostWeight =
-                    this.entityTermMatchWeight / this.defaultTermMatchWeight;
-                termExpressions.push(
-                    new q.MatchSearchTermExpr(term, (term, sr, scored) =>
-                        this.boostEntities(term, sr, scored, boostWeight),
-                    ),
-                );
+                termExpressions.push(this.compileSearchTerm(term));
             }
         }
-        let boolExpr = createMatchMessagesBooleanExpr(
+        return createMatchMessagesBooleanExpr(
             termExpressions,
             searchGroup.booleanOp,
         );
-        return boolExpr;
+    }
+
+    private compileSearchTerm(term: SearchTerm) {
+        const boostWeight =
+            this.entityTermMatchWeight / this.defaultTermMatchWeight;
+        return new q.MatchSearchTermExpr(term, (term, sr, scored) =>
+            this.boostEntities(term, sr, scored, boostWeight),
+        );
+    }
+
+    private compilePropertyTerm(term: PropertySearchTerm) {
+        if (isEntityPropertyTerm(term)) {
+            term.propertyValue.term.weight ??= this.entityTermMatchWeight;
+        }
+        return new q.MatchPropertySearchTermExpr(term);
     }
 
     private async compileScope(
@@ -568,41 +566,4 @@ class QueryCompiler {
         }
         return scoredRef;
     }
-}
-
-function isPropertyTerm(
-    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
-): term is PropertySearchTerm {
-    return term.hasOwnProperty("propertyName");
-}
-
-function isEntityPropertyTerm(term: PropertySearchTerm): boolean {
-    switch (term.propertyName) {
-        default:
-            break;
-        case "name":
-        case "type":
-            return true;
-    }
-    return false;
-}
-
-function isActionPropertyTerm(term: PropertySearchTerm): boolean {
-    switch (term.propertyName) {
-        default:
-            break;
-        case "subject":
-        case "verb":
-        case "object":
-        case "indirectObject":
-            return true;
-    }
-
-    return false;
-}
-
-function isSearchGroupTerm(
-    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
-): term is SearchTermGroup {
-    return term.hasOwnProperty("booleanOp");
 }

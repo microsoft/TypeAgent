@@ -8,6 +8,11 @@
  */
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
+import {
+    SearchTerm,
+    PropertySearchTerm,
+    SearchTermGroup,
+} from "./interfaces.js";
 import { PropertyNames } from "./propertyIndex.js";
 import * as q from "./query.js";
 import { createPropertySearchTerm } from "./searchLib.js";
@@ -80,4 +85,40 @@ export function compileMatchSubjectAndVerb(subject: string, verb: string) {
         ),
     ]);
     return expr;
+}
+export function isPropertyTerm(
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
+): term is PropertySearchTerm {
+    return term.hasOwnProperty("propertyName");
+}
+
+export function isEntityPropertyTerm(term: PropertySearchTerm): boolean {
+    switch (term.propertyName) {
+        default:
+            break;
+        case "name":
+        case "type":
+            return true;
+    }
+    return false;
+}
+
+export function isActionPropertyTerm(term: PropertySearchTerm): boolean {
+    switch (term.propertyName) {
+        default:
+            break;
+        case "subject":
+        case "verb":
+        case "object":
+        case "indirectObject":
+            return true;
+    }
+
+    return false;
+}
+
+export function isSearchGroupTerm(
+    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
+): term is SearchTermGroup {
+    return term.hasOwnProperty("booleanOp");
 }

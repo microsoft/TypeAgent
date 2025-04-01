@@ -20,12 +20,17 @@ import * as kpLib from "knowledge-processor";
  * @param weight optional weight for the term
  * @returns {SearchTerm}
  */
-export function createSearchTerm(text: string, weight?: number): SearchTerm {
+export function createSearchTerm(
+    text: string,
+    weight?: number,
+    exactMatchValue: boolean = false,
+): SearchTerm {
     return {
         term: {
             text,
             weight,
         },
+        relatedTerms: exactMatchValue ? [] : undefined,
     };
 }
 
