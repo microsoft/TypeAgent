@@ -99,7 +99,7 @@ function getMcpCommandHandlerTable(
     return {
         description: "MCP Command Handler Server Arguments",
         commands: {
-            serverArgs: {
+            server: {
                 description: "Set the server arguments",
                 parameters: {
                     args,
