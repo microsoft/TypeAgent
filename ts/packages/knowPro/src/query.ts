@@ -1354,6 +1354,25 @@ export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
     }
 }
 
+export class MatchMessagesOrMaxExpr extends MatchMessagesOrExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super(termExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const matches = super.eval(context);
+        const maxHitCount = matches.getMaxHitCount();
+        if (maxHitCount > 1) {
+            matches.selectWithHitCount(maxHitCount);
+        }
+        return matches;
+    }
+}
+
 export class NoOpExpr<T> extends QueryOpExpr<T> {
     constructor(public srcExpr: IQueryOpExpr<T>) {
         super();

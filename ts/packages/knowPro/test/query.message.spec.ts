@@ -12,9 +12,9 @@ import {
 import * as q from "../src/query.js";
 import { verifyTextRanges } from "./verify.js";
 import {
-    createMatchObjectOrEntity,
-    createMatchSubjectAndVerb,
-} from "../src/compilerCommon.js";
+    compileMatchObjectOrEntity,
+    compileMatchSubjectAndVerb,
+} from "../src/compileLib.js";
 
 /**
  * Designed to run offline
@@ -35,7 +35,7 @@ describe("query.message.offline", () => {
         "messages.terms.or",
         () => {
             const targetEntityName = "Children of Memory";
-            const query = createMatchObjectOrEntity(targetEntityName);
+            const query = compileMatchObjectOrEntity(targetEntityName);
             const messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
         },
@@ -44,11 +44,11 @@ describe("query.message.offline", () => {
     test(
         "messages.terms.and",
         () => {
-            let query = createMatchSubjectAndVerb("Adrian", "say");
+            let query = compileMatchSubjectAndVerb("Adrian", "say");
             let messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
 
-            query = createMatchSubjectAndVerb("Jane", "say");
+            query = compileMatchSubjectAndVerb("Jane", "say");
             messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toEqual(0);
         },
@@ -56,7 +56,7 @@ describe("query.message.offline", () => {
     );
     test("messages.terms.ranges", () => {
         const targetEntityName = "Children of Time";
-        const query = createMatchObjectOrEntity(targetEntityName);
+        const query = compileMatchObjectOrEntity(targetEntityName);
         const scopeExpr = new q.TextRangesFromMessagesSelector(query);
         const ranges = scopeExpr.eval(createContext());
         expect(ranges).toBeDefined();

@@ -24,6 +24,7 @@ import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
+import { createMatchTermsBooleanExpr } from "./compileLib.js";
 
 /**
  * Please inspect the following in interfaces.ts
@@ -311,43 +312,22 @@ class QueryCompiler {
                 searchTermsUsed.push(...termsUsed);
                 termExpressions.push(groupExpr);
             } else {
+                const boostWeight =
+                    this.entityTermMatchWeight / this.defaultTermMatchWeight;
                 termExpressions.push(
                     new q.MatchSearchTermExpr(term, (term, sr, scored) =>
-                        this.boostEntities(term, sr, scored, 10),
+                        this.boostEntities(term, sr, scored, boostWeight),
                     ),
                 );
                 searchTermsUsed.push(term);
             }
         }
-        let boolExpr = this.compileBooleanOp(
-            searchGroup,
+        let boolExpr = createMatchTermsBooleanExpr(
             termExpressions,
+            searchGroup.booleanOp,
             scopeExpr,
         );
         return [searchTermsUsed, boolExpr];
-    }
-
-    private compileBooleanOp(
-        searchGroup: SearchTermGroup,
-        termExpressions: q.IQueryOpExpr<SemanticRefAccumulator | undefined>[],
-        scopeExpr?: q.GetScopeExpr,
-    ) {
-        let boolExpr: q.MatchTermsBooleanExpr;
-        switch (searchGroup.booleanOp) {
-            case "and":
-                boolExpr = new q.MatchTermsAndExpr(termExpressions, scopeExpr);
-                break;
-            case "or":
-                boolExpr = new q.MatchTermsOrExpr(termExpressions, scopeExpr);
-                break;
-            case "or_max":
-                boolExpr = new q.MatchTermsOrMaxExpr(
-                    termExpressions,
-                    scopeExpr,
-                );
-                break;
-        }
-        return boolExpr;
     }
 
     private async compileScope(
@@ -473,31 +453,11 @@ class QueryCompiler {
                 this.secondaryIndexes.termToRelatedTermsIndex,
                 searchTerms,
                 dedupe,
-                //(term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
             );
             // Ensure that the resolved terms are valid etc.
             this.validateAndPrepareSearchTerms(searchTerms);
         }
     }
-
-    /*
-    private shouldFuzzyMatchRelatedTerms(
-        term: SearchTerm,
-        filter?: WhenFilter,
-    ): boolean {
-        const kType = filter?.knowledgeType;
-        if (kType && kType !== "entity") {
-            return true;
-        }
-        // If the term exactly matches the name of an entity, don't do fuzzy resolution
-        // The user was explicitly referring to an entity with a particular name
-        return !isKnownProperty(
-            this.secondaryIndexes?.propertyToSemanticRefIndex,
-            PropertyNames.EntityName,
-            term.term.text,
-        );
-    }
-    */
 
     private validateAndPrepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
@@ -509,12 +469,15 @@ class QueryCompiler {
         if (!this.validateAndPrepareTerm(searchTerm.term)) {
             return false;
         }
+        // Matching the term - exact match - counts for more than matching related terms
+        // Therefore, we boost any matches where the term matches directly...
         searchTerm.term.weight ??= this.defaultTermMatchWeight;
         if (searchTerm.relatedTerms !== undefined) {
             for (const relatedTerm of searchTerm.relatedTerms) {
                 if (!this.validateAndPrepareTerm(relatedTerm)) {
                     return false;
                 }
+                // If related term is *really* similar to the main term, score it the same
                 if (
                     relatedTerm.weight &&
                     relatedTerm.weight >= this.relatedIsExactThreshold
@@ -541,6 +504,14 @@ class QueryCompiler {
         return true;
     }
 
+    /**
+     * If the name or type of an entity matched, boost its score
+     * @param searchTerm
+     * @param sr
+     * @param scoredRef
+     * @param boostWeight
+     * @returns
+     */
     private boostEntities(
         searchTerm: SearchTerm,
         sr: SemanticRef,
