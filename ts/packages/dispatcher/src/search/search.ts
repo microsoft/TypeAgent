@@ -54,10 +54,12 @@ export async function lookupAndAnswer(
 
                         if (matches.response.answer.whyNoAnswer) {
                             console.log(
-                                "No Answer: " + matches.response.answer.whyNoAnswer
+                                "No Answer: " +
+                                    matches.response.answer.whyNoAnswer,
                             );
                             return createActionResult(
-                                "Not Answered - " + matches.response.answer.whyNoAnswer,
+                                "Not Answered - " +
+                                    matches.response.answer.whyNoAnswer,
                                 undefined,
                                 matchedEntities(matches.response),
                             );
