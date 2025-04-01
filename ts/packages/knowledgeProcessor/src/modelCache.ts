@@ -3,44 +3,57 @@
 
 import { TextEmbeddingModel } from "aiclient";
 import { collections } from "typeagent";
-import { Result, success, error } from "typechat";
+import { error, Result, success } from "typechat";
 
-export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
-    readonly cache: collections.Cache<string, number[]>;
-    embeddingLookup?: (text: string) => number[] | undefined;
+/**
+ * An embedding cache
+ */
+export interface TextEmbeddingCache {
+    /**
+     * Get an embedding from the cache
+     * @param text
+     * @returns
+     */
+    getEmbedding: (text: string) => number[] | undefined;
+    /**
+     * (Optional): Put an embedding in the cache
+     * @param text
+     * @param value
+     * @returns
+     */
+    putEmbedding?: (text: string, embedding: number[]) => void | undefined;
 }
 
 /**
- * Create an embedding model that leverages a cache to improve performance
- * @param model
- * @param cacheSize
+ * Create an embedding model that can leverage a cache to improve performance
+ * - You supply callbacks to manage the cache
+ * Only calls the innerModel for those text items that did not hit the cache
+ * @param innerModel Model to invoke when cache is not hit
+ * @param getFromCache Callback to lookup embeddings from a cache
+ * @param putInCache (Optional) update the cache with embeddings
  * @returns
  */
-export function createEmbeddingCache(
-    model: TextEmbeddingModel,
-    cacheSize: number,
-    embeddingLookup?: (text: string) => number[] | undefined,
-): TextEmbeddingModelWithCache {
-    const cache: collections.Cache<string, number[]> =
-        collections.createLRUCache(cacheSize);
-    const modelWithCache: TextEmbeddingModelWithCache = {
-        cache,
+export function createTextEmbeddingModelWithCache(
+    innerModel: TextEmbeddingModel,
+    cache: TextEmbeddingCache,
+): TextEmbeddingModel {
+    const modelWithCache: TextEmbeddingModel = {
         generateEmbedding,
-        maxBatchSize: model.maxBatchSize,
+        maxBatchSize: innerModel.maxBatchSize,
     };
-    if (model.generateEmbeddingBatch) {
+    if (innerModel.generateEmbeddingBatch) {
         modelWithCache.generateEmbeddingBatch = generateEmbeddingBatch;
     }
     return modelWithCache;
 
     async function generateEmbedding(input: string): Promise<Result<number[]>> {
-        let embedding = getFromCache(input);
+        let embedding = cache.getEmbedding(input);
         if (embedding) {
             return success(embedding);
         }
-        const result = await model.generateEmbedding(input);
+        const result = await innerModel.generateEmbedding(input);
         if (result.success) {
-            cache.put(input, result.data);
+            updateCache(input, result.data);
         }
         return result;
     }
@@ -53,7 +66,7 @@ export function createEmbeddingCache(
         // First, grab any embeddings we already have
         for (let i = 0; i < inputs.length; ++i) {
             let input = inputs[i];
-            let embedding = getFromCache(input);
+            let embedding = cache.getEmbedding(input);
             if (embedding === undefined) {
                 // This one needs embeddings
                 inputBatch ??= [];
@@ -63,7 +76,7 @@ export function createEmbeddingCache(
             }
         }
         if (inputBatch && inputBatch.length > 0) {
-            const result = await model.generateEmbeddingBatch!(inputBatch);
+            const result = await innerModel.generateEmbeddingBatch!(inputBatch);
             if (!result.success) {
                 return result;
             }
@@ -74,7 +87,7 @@ export function createEmbeddingCache(
             for (let i = 0; i < embeddingBatch.length; ++i) {
                 if (embeddingBatch[i] === undefined) {
                     embeddingBatch[i] = newEmbeddings[iGenerated++];
-                    cache.put(inputs[i], embeddingBatch[i]);
+                    updateCache(inputs[i], embeddingBatch[i]);
                 }
             }
         }
@@ -83,9 +96,75 @@ export function createEmbeddingCache(
             : error("Could not generated embeddings");
     }
 
+    function updateCache(text: string, embedding: number[]): void {
+        if (cache.putEmbedding !== undefined) {
+            cache.putEmbedding(text, embedding);
+        }
+    }
+}
+
+export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
+    readonly cache: collections.Cache<string, number[]>;
+}
+
+/**
+ * Create an embedding model that leverages caches to improve performance
+ * - Maintains an in-memory LRU cache
+ * - Allows for optional lookup from a persistent cache
+ * @param innerModel Model to call when no cache hit
+ * @param memCacheSize Size of the memory cache
+ * @param persistentCache (Optional) Lookup from persistent cache
+ * @returns
+ */
+export function createEmbeddingCache(
+    innerModel: TextEmbeddingModel,
+    memCacheSize: number,
+    getPersistentCache?: () => TextEmbeddingCache | undefined,
+): TextEmbeddingModelWithCache {
+    const memCache: collections.Cache<string, number[]> =
+        collections.createLRUCache(memCacheSize);
+    innerModel = createTextEmbeddingModelWithCache(innerModel, {
+        getEmbedding: getFromCache,
+        putEmbedding: putInCache,
+    });
+    const modelWithCache: TextEmbeddingModelWithCache = {
+        cache: memCache,
+        generateEmbedding,
+        maxBatchSize: innerModel.maxBatchSize,
+    };
+    if (innerModel.generateEmbeddingBatch) {
+        modelWithCache.generateEmbeddingBatch = generateEmbeddingBatch;
+    }
+    return modelWithCache;
+
+    async function generateEmbedding(input: string): Promise<Result<number[]>> {
+        return innerModel.generateEmbedding(input);
+    }
+
+    async function generateEmbeddingBatch(
+        inputs: string[],
+    ): Promise<Result<number[][]>> {
+        return innerModel.generateEmbeddingBatch!(inputs);
+    }
+
     function getFromCache(text: string): number[] | undefined {
-        let embedding = embeddingLookup ? embeddingLookup(text) : undefined;
-        embedding ??= cache.get(text);
+        const persistentCache = getPersistentCache
+            ? getPersistentCache()
+            : undefined;
+        let embedding = persistentCache
+            ? persistentCache.getEmbedding(text)
+            : undefined;
+        embedding ??= memCache.get(text);
         return embedding;
+    }
+
+    function putInCache(text: string, embedding: number[]): void {
+        memCache.put(text, embedding);
+        const persistentCache = getPersistentCache
+            ? getPersistentCache()
+            : undefined;
+        if (persistentCache && persistentCache.putEmbedding) {
+            persistentCache.putEmbedding(text, embedding);
+        }
     }
 }

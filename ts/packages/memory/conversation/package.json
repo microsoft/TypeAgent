@@ -27,6 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "aiclient": "workspace:*",
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",

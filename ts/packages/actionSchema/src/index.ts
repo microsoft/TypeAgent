@@ -19,6 +19,7 @@ export {
     generateActionSchema,
     generateSchemaTypeDefinition,
 } from "./generator.js";
+export { parseToolsJsonSchema } from "./jsonSchemaParser.js";
 export {
     generateActionJsonSchema,
     generateActionActionFunctionJsonSchemas,

@@ -283,7 +283,7 @@ export const shellAgentProvider: AppAgentProvider = {
         }
         return agent;
     },
-    unloadAppAgent: (appAgentName: string) => {
+    unloadAppAgent: async (appAgentName: string) => {
         if (appAgentName !== "shell") {
             throw new Error(`Unknown app agent: ${appAgentName}`);
         }
