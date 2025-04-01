@@ -13,10 +13,10 @@ import { loadSchema } from "typeagent";
 import {
     createPropertySearchTerm,
     createSearchTerm,
-    SearchTermGroup,
     dateRangeFromDateTimeRange,
     WhenFilter,
 } from "./search.js";
+import { SearchTermGroup } from "./interfaces.js";
 import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
 import { IConversation } from "./interfaces.js";

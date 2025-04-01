@@ -22,12 +22,9 @@ import {
     Term,
     TextRange,
 } from "./interfaces.js";
-import {
-    KnowledgePropertyName,
-    PropertySearchTerm,
-    SemanticRefSearchResult,
-    SearchTerm,
-} from "./search.js";
+import { SemanticRefSearchResult } from "./search.js";
+import { KnowledgePropertyName, PropertySearchTerm } from "./interfaces.js";
+import { SearchTerm } from "./interfaces.js";
 import {
     Match,
     MatchAccumulator,

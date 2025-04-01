@@ -14,6 +14,10 @@ import {
     Term,
     IConversationSecondaryIndexes,
     ScoredMessageOrdinal,
+    SearchTerm,
+    SearchTermGroup,
+    KnowledgePropertyName,
+    PropertySearchTerm,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
@@ -22,61 +26,17 @@ import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
 
-export type SearchTerm = {
-    /**
-     * Term being searched for
-     */
-    term: Term;
-    /**
-     * Additional terms related to term.
-     * These can be supplied from synonym tables and so on.
-     *  - Zero length array: no related matches for this term
-     *  - undefined array: the search processor may try to resolve related terms from any  {@link IConversationSecondaryIndexes}
-     * related term {@link ITermToRelatedTermsIndex} indexes available to it
-     */
-    relatedTerms?: Term[] | undefined;
-};
-
 /**
- * A Group of search terms
+ * Please inspect the following in interfaces.ts
+ * @see {@link ./interfaces.ts}
+ *
+ * Term: {@link Term}
+ * SearchTerm: {@link SearchTerm}
+ * PropertySearchTerm: {@link PropertySearchTerm}
+ * SearchTermGroup: {@link SearchTermGroup}
+ * ITermToSemanticRefIndex: {@link ITermToSemanticRefIndex}
+ * IPropertyToSemanticRefIndex: {@link IPropertyToSemanticRefIndex}
  */
-export type SearchTermGroup = {
-    booleanOp:
-        | "and" // Intersect matches for each term, adding up scores
-        | "or" // Union matches for each term, adding up scores
-        | "or_max"; // Union matches for each term, add up scores, select matches with max hit count
-
-    terms: (SearchTerm | PropertySearchTerm | SearchTermGroup)[];
-};
-
-/**
- * Well known knowledge properties
- */
-export type KnowledgePropertyName =
-    | "name" // the name of an entity
-    | "type" // the type of an entity
-    | "verb" // the verb of an action
-    | "subject" // the subject of an action
-    | "object" // the object of an action
-    | "indirectObject" // The indirectObject of an action
-    | "tag"; // Tag
-
-export type PropertySearchTerm = {
-    /**
-     * PropertySearch terms let you matched named property, values
-     * - You can  match a well known property name (name("Bach") type("book"))
-     * - Or you can provide a SearchTerm as a propertyName.
-     *   E.g. to match hue(red)
-     *      - propertyName as SearchTerm, set to 'hue'
-     *      - propertyValue as SearchTerm, set to 'red'
-     *    We also want hue(red) to match any facets called color(red)
-     * SearchTerms can included related terms
-     *   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
-     * The the query processor can also related terms using a related terms secondary index, if one is available
-     */
-    propertyName: KnowledgePropertyName | SearchTerm;
-    propertyValue: SearchTerm;
-};
 
 export function createSearchTerm(text: string, score?: number): SearchTerm {
     return {

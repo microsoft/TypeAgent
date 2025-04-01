@@ -15,7 +15,9 @@ import {
     TextLocation,
     TextRange,
 } from "./interfaces.js";
-import { PropertySearchTerm, SearchTerm, SearchTermGroup } from "./search.js";
+import { PropertySearchTerm } from "./interfaces.js";
+import { SearchTermGroup } from "./interfaces.js";
+import { SearchTerm } from "./interfaces.js";
 import {
     IConversationDataWithIndexes,
     ConversationSecondaryIndexes,

@@ -7,12 +7,12 @@ import {
     KnowledgeType,
     ScoredMessageOrdinal,
     SemanticRef,
+    SearchTermGroup,
 } from "../src/interfaces.js";
 import {
     createSearchTerm,
     searchConversation,
     searchConversationKnowledge,
-    SearchTermGroup,
     SemanticRefSearchResult,
 } from "../src/search.js";
 import {
