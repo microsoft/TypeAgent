@@ -4,7 +4,18 @@
 from dataclasses import is_dataclass, MISSING
 import functools
 import json
-from typing import Any, get_origin, get_args, Union, NotRequired, overload, TypedDict
+import types
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    get_origin,
+    get_args,
+    Union,
+    NotRequired,
+    overload,
+    TypedDict,
+)
 
 import numpy as np
 
@@ -244,6 +255,11 @@ def is_primitive(typ: type) -> bool:
 def deserialize_object(typ: Any, obj: Any) -> Any:
     origin = get_origin(typ)
 
+    # Handle Annotated by substituting its first argument for typ.
+    if origin is Annotated:
+        typ = get_args(typ)[0]
+        origin = get_origin(typ)  # Get the first type argument.
+
     # Non-generic: primitives and dataclasses.
     if origin is None:
         if is_primitive(typ):
@@ -263,14 +279,22 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
             breakpoint()  # What would this be?
             return obj
 
-    # Handle list[T] and List[T].
+    # Handle Lieral.
+    if origin is Literal:
+        if type(obj) is str and obj in get_args(typ):
+            return obj
+        raise ValueError(
+            f"Expected one of {get_args(typ)} for Literal, but got {obj!r} of type {type(obj)}"
+        )
+
+    # Handle list[T] / List[T].
     if origin is list:
         if not isinstance(obj, list):
             raise ValueError(f"Expected list for list, got {type(obj)}")
         (elem_type,) = get_args(typ)
         return [deserialize_object(elem_type, item) for item in obj]
 
-    # Handle tuple[T1, T2, etc.] and Tuple[T1, T2, etc.].
+    # Handle tuple[T1, T2, etc.] / Tuple[T1, T2, etc.].
     if origin is tuple:
         if not isinstance(obj, list):
             raise ValueError(f"Expected list for tuple, got {type(obj)}")
@@ -281,8 +305,8 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
             )
         return tuple(deserialize_object(t, item) for t, item in zip(args, obj))
 
-    # Handle Union types (including Optional).
-    if origin is Union:
+    # Handle Union[X, Y], Optional[X], and X | Y.
+    if origin in (Union, types.UnionType):
         candidates = get_args(typ)
         # Disambiguate among dataclasses if possible.
         dataclass_candidates = [
@@ -316,4 +340,5 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
                 last_exc = e
         raise ValueError(f"No union candidate succeeded. Last error: {last_exc}")
 
-    raise TypeError(f"Unsupported type {typ}")
+    breakpoint()
+    raise TypeError(f"Unsupported type {typ}, object {obj!r} of type {type(obj)}")
