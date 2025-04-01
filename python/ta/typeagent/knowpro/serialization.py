@@ -3,14 +3,18 @@
 
 import functools
 import json
+from types import GenericAlias, UnionType
 from typing import Any, NotRequired, cast, overload, TypedDict
+
+import numpy as np
 
 from ..aitools.embeddings import NormalizedEmbeddings
 from .interfaces import (
     IConversationDataWithIndexes,
+    Tag,
+    Topic,
 )
-
-import numpy as np
+from . import kplib
 
 
 # -------------------
@@ -216,6 +220,101 @@ def from_conversation_file_data(
     # TODO: proper return value, and remove '| None' from return type.
 
 
+TYPE_MAP = {
+    "entity": kplib.ConcreteEntity,
+    "action": kplib.Action,
+    "topic": Topic,
+    "tag": Tag,
+}
+
+
 # Looks like this only works for knowledge...
 def deserialize_knowledge(knowledge_type: str, obj: Any) -> Any:
-    return {}  # TODO: Implement this properly
+    typ = TYPE_MAP[knowledge_type]
+    return deserialize_object(typ, obj)
+
+
+type TypeForm = GenericAlias | UnionType | type | None
+
+PRIMITIVE_TYPES = (type(None), bool, int, float, str)  # Used with isinstance().
+
+
+# TODO: This should also fully validate.
+# TODO: Factor in smaller functions.
+def deserialize_object(typ: TypeForm, obj: object) -> Any:
+    if typ is None:
+        return deserialize_none(obj)
+    if isinstance(typ, UnionType):
+        return deserialize_union(typ.__args__, obj)
+    if isinstance(typ, GenericAlias) and  typ.__origin__ is list:
+           return deserialize_list(typ.__parameters__[0], obj)
+    if isinstance(typ, type):
+        return deserialize_class(typ, obj)
+    
+
+def deserialize_none(obj: object) -> None:
+    if obj is not None:
+        raise TypeError(f"Expected None, got {obj!r}")
+    return None
+
+
+def deserialize_union(typs: tuple[TypeForm, ...], obj: object) -> Any:
+    for typ in typs:
+        if typ_matches_obj(typ, obj):
+            return deserialize_object(typ, obj)
+    raise TypeError(f"Expected one of {typs}, but {obj!r} appears to be not one of those")
+
+
+def typ_matches_obj(typ: TypeForm, obj: object) -> bool:
+    if typ is None:
+        return obj is None
+    if typ in PRIMITIVE_TYPES:
+        return isinstance(obj, typ)
+    if isinstance(typ, GenericAlias) and typ.__origin__ is list:
+        return type(obj) is list
+    
+
+
+    if obj is None:
+        # Anything can be None. (TODO: Even if the schema disallows it?)
+        return None
+    if isinstance(typ, type):
+        if isinstance(obj, typ) and isinstance(obj, (bool, int, float, str)):
+            # Expected primitive JSON type.
+            return obj
+    annotations = getattr(typ, "__annotations__", None)
+    if annotations is None:
+        raise TypeError(f"No __annotations__ found on {typ}")
+    args = {}
+    for var_name, var_type in annotations.items():
+        key = to_camel(var_name)
+        value = obj.get(key)
+        if isinstance(value, (type(None), bool, int, float, str)):
+            args[var_name] = value
+            continue
+        if isinstance(value, list):
+            item_type = get_list_item_type(var_type)
+            if item_type is None:
+                raise TypeError(f"No list type found in type {var_type}")
+            value = [deserialize_object(item_type, item) for item in value]
+        else:
+            # TODO: dict
+            raise NotImplementedError(f"Cannot deserialize dict {value}")
+
+
+def get_list_item_type(typ: TypeForm) -> TypeForm | None:
+    # typ must be list, a generic alias whose origin is a list,
+    # or a union containing either of those.
+    if typ is list:
+        return object
+    if isinstance(typ, GenericAlias) and typ.__origin__ is list:
+        return typ.__parameters__[0]
+    if isinstance(typ, UnionType):
+        for item in typ.__args__:
+            t = get_list_item_type(item)
+            if t is not None:
+                return t
+    return None
+
+
+def match_union(typ: UnionType, value: obj) -> 

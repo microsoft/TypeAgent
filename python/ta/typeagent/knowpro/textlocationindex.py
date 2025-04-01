@@ -109,7 +109,7 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         **kwds,
     ) -> Any:
         raise NotImplementedError
-    
+
     def serialize(self) -> ITextToTextLocationIndexData:
         return ITextToTextLocationIndexData(
             textLocations=[loc.serialize() for loc in self._text_locations],

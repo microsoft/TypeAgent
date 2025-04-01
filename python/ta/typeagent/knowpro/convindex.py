@@ -9,7 +9,6 @@ import typechat
 from .interfaces import (
     # Interfaces.
     IConversation,
-    IConversationSecondaryIndexes,
     IMessage,
     ITermToSemanticRefIndex,
     # Other imports.
