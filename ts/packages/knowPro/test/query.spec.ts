@@ -12,7 +12,10 @@ import * as q from "../src/query.js";
 import { createPropertySearchTerm } from "../src/search.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 
-describe("query", () => {
+/**
+ * Designed to run offline
+ */
+describe("query.offline", () => {
     const testTimeout = 1000 * 60 * 5;
     let conversation: IConversation = emptyConversation();
     let secondaryIndex: ConversationSecondaryIndexes | undefined;
@@ -34,7 +37,6 @@ describe("query", () => {
         },
         testTimeout,
     );
-
     test(
         "messages.terms.and",
         () => {
