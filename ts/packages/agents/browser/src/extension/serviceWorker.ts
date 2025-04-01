@@ -1445,6 +1445,21 @@ chrome.runtime.onMessage.addListener(
                     sendResponse({});
                     break;
                 }
+                case "downloadData": {
+                    const jsonString = JSON.stringify(message.data, null, 2);
+                    const dataUrl =
+                        "data:application/json;charset=utf-8," +
+                        encodeURIComponent(jsonString);
+
+                    chrome.downloads.download({
+                        url: dataUrl,
+                        filename: message.filename || "schema-metadata.json",
+                        saveAs: true,
+                    });
+
+                    sendResponse({});
+                    break;
+                }
             }
         };
 
@@ -1483,6 +1498,25 @@ chrome.runtime.onInstalled.addListener(() => {
         title: "Update Page Agent",
         contexts: ["all"],
         documentUrlPatterns: ["chrome-extension://*/sidepanel.html"],
+    });
+
+    chrome.contextMenus.create({
+        type: "separator",
+        id: "menuSeparator2",
+    });
+
+    chrome.contextMenus.create({
+        id: "extractSchemaCurrentPage",
+        title: "Get schema.org metadata from this page",
+        contexts: ["page"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        id: "extractSchemaLinkedPages",
+        title: "Get schema.org metadata from linked pages",
+        contexts: ["page"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 });
 
@@ -1556,6 +1590,26 @@ chrome.contextMenus?.onClicked.addListener(
                     actionName: "registerPageDynamicAgent",
                     parameters: {},
                 });
+                break;
+            }
+            case "extractSchemaCurrentPage": {
+                await chrome.tabs.sendMessage(
+                    tab.id!,
+                    {
+                        type: "extractSchemaCurrentPage",
+                    },
+                    { frameId: 0 },
+                );
+                break;
+            }
+            case "extractSchemaLinkedPages": {
+                await chrome.tabs.sendMessage(
+                    tab.id!,
+                    {
+                        type: "extractSchemaLinkedPages",
+                    },
+                    { frameId: 0 },
+                );
                 break;
             }
         }

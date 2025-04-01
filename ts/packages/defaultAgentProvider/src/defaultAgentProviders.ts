@@ -6,13 +6,14 @@ import { createNpmAppAgentProvider } from "agent-dispatcher/helpers/npmAgentProv
 
 import path from "node:path";
 import fs from "node:fs";
-import { getConfig, AppAgentConfig } from "./utils/config.js";
+import { getProviderConfig, AppAgentConfig } from "./utils/config.js";
+import { getDefaultMcpAppAgentProvider } from "./mcpDefaultAgentProvider.js";
 
 let defaultAppAgentProvider: AppAgentProvider | undefined;
-export function getDefaultAppAgentProvider(): AppAgentProvider {
+function getDefaultNpmAppAgentProvider(): AppAgentProvider {
     if (defaultAppAgentProvider === undefined) {
         defaultAppAgentProvider = createNpmAppAgentProvider(
-            getConfig().agents,
+            getProviderConfig().agents,
             import.meta.url,
         );
     }
@@ -40,7 +41,11 @@ function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
 export function getDefaultAppAgentProviders(
     instanceDir: string | undefined,
 ): AppAgentProvider[] {
-    const providers = [getDefaultAppAgentProvider()];
+    const providers = [getDefaultNpmAppAgentProvider()];
+    const mcpProvider = getDefaultMcpAppAgentProvider(instanceDir);
+    if (mcpProvider !== undefined) {
+        providers.push(mcpProvider);
+    }
     if (instanceDir !== undefined) {
         providers.push(getExternalAppAgentProvider(instanceDir));
     }
