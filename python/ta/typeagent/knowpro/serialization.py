@@ -245,13 +245,17 @@ def deserialize_knowledge(knowledge_type: str, obj: Any) -> Any:
     return deserialize_object(typ, obj)
 
 
-# The rest of this file was written by o3-mini=high, with few errors.
+class DeserializationError(Exception):
+    pass
 
 
+@functools.cache
 def is_primitive(typ: type) -> bool:
     return typ in (int, float, bool, str, type(None))
 
 
+# TODO: Use type(obj) is X instead of isinstance(obj, X). It's faster.
+# TODO: Design a consistent reporting format.
 def deserialize_object(typ: Any, obj: Any) -> Any:
     origin = get_origin(typ)
 
@@ -263,44 +267,46 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
     # Non-generic: primitives and dataclasses.
     if origin is None:
         if is_primitive(typ):
-            if typ is not type(None) and not isinstance(obj, typ):
-                raise ValueError(f"Expected {typ} but got {type(obj)}")
+            if not isinstance(obj, typ):
+                raise DeserializationError(f"Expected {typ} but got {type(obj)}")
             return obj
         elif isinstance(typ, type) and is_dataclass(typ):
             if not isinstance(obj, dict):
-                raise ValueError(f"Expected dict for {typ}, got {type(obj)}")
+                raise DeserializationError(f"Expected dict for {typ}, got {type(obj)}")
             kwargs = {}
             for field, field_type in typ.__annotations__.items():
                 json_key = to_camel(field)
                 if json_key in obj:
                     kwargs[field] = deserialize_object(field_type, obj[json_key])
-            return typ(**kwargs)
+            return typ(
+                **kwargs
+            )  # TODO: This may raise if a mandatory field is missing. Unify with union handling?
         else:
-            breakpoint()  # What would this be?
-            return obj
+            # Could be a class that's not a dataclass -- we don't know the signature.
+            raise TypeError(f"Unsupported origin-less type {typ}")
 
-    # Handle Lieral.
+    # Handle Literal.
     if origin is Literal:
         if type(obj) is str and obj in get_args(typ):
             return obj
-        raise ValueError(
+        raise DeserializationError(
             f"Expected one of {get_args(typ)} for Literal, but got {obj!r} of type {type(obj)}"
         )
 
     # Handle list[T] / List[T].
     if origin is list:
         if not isinstance(obj, list):
-            raise ValueError(f"Expected list for list, got {type(obj)}")
+            raise DeserializationError(f"Expected list for list, got {type(obj)}")
         (elem_type,) = get_args(typ)
         return [deserialize_object(elem_type, item) for item in obj]
 
     # Handle tuple[T1, T2, etc.] / Tuple[T1, T2, etc.].
     if origin is tuple:
         if not isinstance(obj, list):
-            raise ValueError(f"Expected list for tuple, got {type(obj)}")
+            raise DeserializationError(f"Expected list for tuple, got {type(obj)}")
         args = get_args(typ)
         if len(args) != len(obj):
-            raise ValueError(
+            raise DeserializationError(
                 f"Tuple length mismatch: expected {len(args)}, got {len(obj)}"
             )
         return tuple(deserialize_object(t, item) for t, item in zip(args, obj))
@@ -325,8 +331,8 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
             if len(matching) == 1:
                 return deserialize_object(matching[0], obj)
             elif len(matching) > 1:
-                raise ValueError(
-                    "Ambiguous union: multiple dataclass candidates match: "
+                raise TypeError(
+                    f"Ambiguous union {typ}: multiple dataclass candidates match: "
                     + str([c.__name__ for c in matching])
                 )
         # Try each candidate until one succeeds.
@@ -334,11 +340,10 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
         for candidate in candidates:
             try:
                 return deserialize_object(candidate, obj)
-            except (
-                Exception
-            ) as e:  # TODO: Something better than catching all exceptions.
+            except DeserializationError as e:
                 last_exc = e
-        raise ValueError(f"No union candidate succeeded. Last error: {last_exc}")
+        raise DeserializationError(
+            f"No candidate from union {typ} succeeded"
+        ) from last_exc
 
-    breakpoint()
     raise TypeError(f"Unsupported type {typ}, object {obj!r} of type {type(obj)}")
