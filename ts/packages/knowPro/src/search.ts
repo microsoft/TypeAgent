@@ -24,7 +24,10 @@ import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { createMatchTermsBooleanExpr } from "./compileLib.js";
+import {
+    createMatchMessagesBooleanExpr,
+    createMatchTermsBooleanExpr,
+} from "./compileLib.js";
 
 /**
  * Please inspect the following in interfaces.ts
@@ -328,6 +331,39 @@ class QueryCompiler {
             scopeExpr,
         );
         return [searchTermsUsed, boolExpr];
+    }
+
+    public compileSearchGroupMessages(
+        searchGroup: SearchTermGroup,
+    ): q.IQueryOpExpr<MessageAccumulator> {
+        const termExpressions: q.IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[] = [];
+        for (const term of searchGroup.terms) {
+            if (isPropertyTerm(term)) {
+                termExpressions.push(new q.MatchPropertySearchTermExpr(term));
+                if (isEntityPropertyTerm(term)) {
+                    term.propertyValue.term.weight ??=
+                        this.entityTermMatchWeight;
+                }
+            } else if (isSearchGroupTerm(term)) {
+                const groupExpr = this.compileSearchGroupMessages(term);
+                termExpressions.push(groupExpr);
+            } else {
+                const boostWeight =
+                    this.entityTermMatchWeight / this.defaultTermMatchWeight;
+                termExpressions.push(
+                    new q.MatchSearchTermExpr(term, (term, sr, scored) =>
+                        this.boostEntities(term, sr, scored, boostWeight),
+                    ),
+                );
+            }
+        }
+        let boolExpr = createMatchMessagesBooleanExpr(
+            termExpressions,
+            searchGroup.booleanOp,
+        );
+        return boolExpr;
     }
 
     private async compileScope(

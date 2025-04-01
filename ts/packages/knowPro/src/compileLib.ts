@@ -7,7 +7,7 @@
  * These should not be exposed via index.ts
  */
 
-import { SemanticRefAccumulator } from "./collections.js";
+import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
 import { PropertyNames } from "./propertyIndex.js";
 import * as q from "./query.js";
 import { createPropertySearchTerm } from "./searchLib.js";
@@ -35,7 +35,9 @@ export function createMatchTermsBooleanExpr(
 }
 
 export function createMatchMessagesBooleanExpr(
-    termExpressions: q.IQueryOpExpr<SemanticRefAccumulator | undefined>[],
+    termExpressions: q.IQueryOpExpr<
+        SemanticRefAccumulator | MessageAccumulator | undefined
+    >[],
     booleanOp: BooleanOp,
 ) {
     let boolExpr: q.MatchMessagesBooleanExpr;
