@@ -1,10 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from dataclasses import is_dataclass, MISSING
 import functools
 import json
-from types import GenericAlias, UnionType
-from typing import Any, NotRequired, cast, overload, TypedDict
+from typing import Any, get_origin, get_args, Union, NotRequired, overload, TypedDict
 
 import numpy as np
 
@@ -165,10 +165,10 @@ def to_json(obj: Any) -> Any:
 
 
 @functools.cache
-def to_camel(name: str):
+def to_camel(name: str) -> str:
     assert isinstance(name, str), f"Cannot convert {name!r} to camel case"
-    # Name must be of the form lowercase_words_separated_by_underscores.
-    # Response will be lowercaseWordsSeparatedByUnderscores.
+    # Name must be of the form foo_bar_baz.
+    # Result will be fooBarBaz.
     # Don't pass edge cases.
     parts = name.split("_")
     return parts[0] + "".join(part.capitalize() for part in parts[1:])
@@ -234,87 +234,86 @@ def deserialize_knowledge(knowledge_type: str, obj: Any) -> Any:
     return deserialize_object(typ, obj)
 
 
-type TypeForm = GenericAlias | UnionType | type | None
-
-PRIMITIVE_TYPES = (type(None), bool, int, float, str)  # Used with isinstance().
+# The rest of this file was written by o3-mini=high, with few errors.
 
 
-# TODO: This should also fully validate.
-# TODO: Factor in smaller functions.
-def deserialize_object(typ: TypeForm, obj: object) -> Any:
-    if typ is None:
-        return deserialize_none(obj)
-    if isinstance(typ, UnionType):
-        return deserialize_union(typ.__args__, obj)
-    if isinstance(typ, GenericAlias) and  typ.__origin__ is list:
-           return deserialize_list(typ.__parameters__[0], obj)
-    if isinstance(typ, type):
-        return deserialize_class(typ, obj)
-    
-
-def deserialize_none(obj: object) -> None:
-    if obj is not None:
-        raise TypeError(f"Expected None, got {obj!r}")
-    return None
+def is_primitive(typ: type) -> bool:
+    return typ in (int, float, bool, str, type(None))
 
 
-def deserialize_union(typs: tuple[TypeForm, ...], obj: object) -> Any:
-    for typ in typs:
-        if typ_matches_obj(typ, obj):
-            return deserialize_object(typ, obj)
-    raise TypeError(f"Expected one of {typs}, but {obj!r} appears to be not one of those")
+def deserialize_object(typ: Any, obj: Any) -> Any:
+    origin = get_origin(typ)
 
-
-def typ_matches_obj(typ: TypeForm, obj: object) -> bool:
-    if typ is None:
-        return obj is None
-    if typ in PRIMITIVE_TYPES:
-        return isinstance(obj, typ)
-    if isinstance(typ, GenericAlias) and typ.__origin__ is list:
-        return type(obj) is list
-    
-
-
-    if obj is None:
-        # Anything can be None. (TODO: Even if the schema disallows it?)
-        return None
-    if isinstance(typ, type):
-        if isinstance(obj, typ) and isinstance(obj, (bool, int, float, str)):
-            # Expected primitive JSON type.
+    # Non-generic: primitives and dataclasses.
+    if origin is None:
+        if is_primitive(typ):
+            if typ is not type(None) and not isinstance(obj, typ):
+                raise ValueError(f"Expected {typ} but got {type(obj)}")
             return obj
-    annotations = getattr(typ, "__annotations__", None)
-    if annotations is None:
-        raise TypeError(f"No __annotations__ found on {typ}")
-    args = {}
-    for var_name, var_type in annotations.items():
-        key = to_camel(var_name)
-        value = obj.get(key)
-        if isinstance(value, (type(None), bool, int, float, str)):
-            args[var_name] = value
-            continue
-        if isinstance(value, list):
-            item_type = get_list_item_type(var_type)
-            if item_type is None:
-                raise TypeError(f"No list type found in type {var_type}")
-            value = [deserialize_object(item_type, item) for item in value]
+        elif isinstance(typ, type) and is_dataclass(typ):
+            if not isinstance(obj, dict):
+                raise ValueError(f"Expected dict for {typ}, got {type(obj)}")
+            kwargs = {}
+            for field, field_type in typ.__annotations__.items():
+                json_key = to_camel(field)
+                if json_key in obj:
+                    kwargs[field] = deserialize_object(field_type, obj[json_key])
+            return typ(**kwargs)
         else:
-            # TODO: dict
-            raise NotImplementedError(f"Cannot deserialize dict {value}")
+            breakpoint()  # What would this be?
+            return obj
 
+    # Handle list[T] and List[T].
+    if origin is list:
+        if not isinstance(obj, list):
+            raise ValueError(f"Expected list for list, got {type(obj)}")
+        (elem_type,) = get_args(typ)
+        return [deserialize_object(elem_type, item) for item in obj]
 
-def get_list_item_type(typ: TypeForm) -> TypeForm | None:
-    # typ must be list, a generic alias whose origin is a list,
-    # or a union containing either of those.
-    if typ is list:
-        return object
-    if isinstance(typ, GenericAlias) and typ.__origin__ is list:
-        return typ.__parameters__[0]
-    if isinstance(typ, UnionType):
-        for item in typ.__args__:
-            t = get_list_item_type(item)
-            if t is not None:
-                return t
-    return None
+    # Handle tuple[T1, T2, etc.] and Tuple[T1, T2, etc.].
+    if origin is tuple:
+        if not isinstance(obj, list):
+            raise ValueError(f"Expected list for tuple, got {type(obj)}")
+        args = get_args(typ)
+        if len(args) != len(obj):
+            raise ValueError(
+                f"Tuple length mismatch: expected {len(args)}, got {len(obj)}"
+            )
+        return tuple(deserialize_object(t, item) for t, item in zip(args, obj))
 
+    # Handle Union types (including Optional).
+    if origin is Union:
+        candidates = get_args(typ)
+        # Disambiguate among dataclasses if possible.
+        dataclass_candidates = [
+            c for c in candidates if isinstance(c, type) and is_dataclass(c)
+        ]
+        if dataclass_candidates and isinstance(obj, dict):
+            matching = []
+            for candidate in dataclass_candidates:
+                mandatory = {
+                    to_camel(name)
+                    for name, field in candidate.__dataclass_fields__.items()
+                    if field.default is MISSING and field.default_factory is MISSING
+                }
+                if mandatory.issubset(obj.keys()):
+                    matching.append(candidate)
+            if len(matching) == 1:
+                return deserialize_object(matching[0], obj)
+            elif len(matching) > 1:
+                raise ValueError(
+                    "Ambiguous union: multiple dataclass candidates match: "
+                    + str([c.__name__ for c in matching])
+                )
+        # Try each candidate until one succeeds.
+        last_exc = None
+        for candidate in candidates:
+            try:
+                return deserialize_object(candidate, obj)
+            except (
+                Exception
+            ) as e:  # TODO: Something better than catching all exceptions.
+                last_exc = e
+        raise ValueError(f"No union candidate succeeded. Last error: {last_exc}")
 
-def match_union(typ: UnionType, value: obj) -> 
+    raise TypeError(f"Unsupported type {typ}")
