@@ -38,11 +38,11 @@ type AppAgentRecord = {
     schemas: Set<string>;
     actions: Set<string>;
     commands: boolean;
-    hasSchemas: boolean;
     manifest: AppAgentManifest;
     appAgent?: AppAgent | undefined;
     sessionContext?: SessionContext | undefined;
     sessionContextP?: Promise<SessionContext> | undefined;
+    schemaErrors: Map<string, Error>;
 };
 
 export type AppAgentStateConfig = {
@@ -96,7 +96,6 @@ export const alwaysEnabledAgents = {
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
-    private readonly injectedSchemaForActionName = new Map<string, string>();
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
@@ -233,36 +232,30 @@ export class AppAgentManager implements ActionConfigProvider {
         const actionConfigs = convertToActionConfig(appAgentName, manifest);
 
         const entries = Object.entries(actionConfigs);
-
+        const schemaErrors = new Map<string, Error>();
         try {
             for (const [schemaName, config] of entries) {
                 debug(`Adding action config: ${schemaName}`);
                 this.actionConfigs.set(schemaName, config);
                 this.emojis[schemaName] = config.emojiChar;
-
-                const actionSchemaFile =
-                    this.actionSchemaFileCache.getActionSchemaFile(config);
-
-                if (this.actionSemanticMap) {
-                    semanticMapP.push(
-                        this.actionSemanticMap.addActionSchemaFile(
-                            config,
-                            actionSchemaFile,
-                            actionEmbeddingCache,
-                        ),
-                    );
-                }
-
                 if (config.transient) {
                     this.transientAgents[schemaName] = false;
                 }
-                if (config.injected) {
-                    for (const actionName of actionSchemaFile.parsedActionSchema.actionSchemas.keys()) {
-                        this.injectedSchemaForActionName.set(
-                            actionName,
-                            schemaName,
+                try {
+                    const actionSchemaFile =
+                        this.actionSchemaFileCache.getActionSchemaFile(config);
+
+                    if (this.actionSemanticMap) {
+                        semanticMapP.push(
+                            this.actionSemanticMap.addActionSchemaFile(
+                                config,
+                                actionSchemaFile,
+                                actionEmbeddingCache,
+                            ),
                         );
                     }
+                } catch (e: any) {
+                    schemaErrors.set(schemaName, e);
                 }
             }
 
@@ -278,8 +271,8 @@ export class AppAgentManager implements ActionConfigProvider {
             provider,
             actions: new Set(),
             schemas: new Set(),
+            schemaErrors,
             commands: false,
-            hasSchemas: entries.length > 0,
             manifest,
         };
 
@@ -322,14 +315,6 @@ export class AppAgentManager implements ActionConfigProvider {
             this.actionSemanticMap?.removeActionSchemaFile(schemaName);
             if (config.transient) {
                 delete this.transientAgents[schemaName];
-            }
-            if (config.injected) {
-                const injectedMap = this.injectedSchemaForActionName;
-                for (const [actionName, name] of injectedMap) {
-                    if (name === schemaName) {
-                        injectedMap.delete(actionName);
-                    }
-                }
             }
         }
     }
@@ -408,9 +393,17 @@ export class AppAgentManager implements ActionConfigProvider {
             );
             if (enableSchema !== record.schemas.has(name)) {
                 if (enableSchema) {
-                    record.schemas.add(name);
-                    changedSchemas.push([name, enableSchema]);
-                    debug(`Schema enabled ${name}`);
+                    const e = record.schemaErrors.get(name);
+                    if (e !== undefined) {
+                        failedSchemas.push([name, enableSchema, e]);
+                        debugError(
+                            `Schema '${name}' is not enabled because of error: ${e.message}`,
+                        );
+                    } else {
+                        record.schemas.add(name);
+                        changedSchemas.push([name, enableSchema]);
+                        debug(`Schema enabled ${name}`);
+                    }
                 } else {
                     record.schemas.delete(name);
                     changedSchemas.push([name, enableSchema]);

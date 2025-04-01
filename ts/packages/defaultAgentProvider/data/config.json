@@ -55,9 +55,15 @@
     "mcpfilesystem": {
       "emojiChar": "📁",
       "description": "File system agent",
-      "defaultEnabled": true,
+      "defaultEnabled": false,
       "serverScript": "./node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
-      "serverScriptArgs": true
+      "serverScriptArgs": {
+        "allowedDirectories": {
+          "description": "Allowed directories for the file system agent to access",
+          "type": "string",
+          "multiple": true
+        }
+      }
     }
   },
   "explainers": {

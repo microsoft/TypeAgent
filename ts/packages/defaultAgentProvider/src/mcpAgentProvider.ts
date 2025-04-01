@@ -7,6 +7,16 @@ import { AppAgent, AppAgentManifest } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { parseToolsJsonSchema, toJSONParsedActionSchema } from "action-schema";
 import { AppAgentProvider } from "agent-dispatcher";
+import {
+    ArgDefinitions,
+    ParsedCommandParams,
+    ActionContext,
+} from "@typeagent/agent-sdk";
+import {
+    CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
+import { readInstanceConfig, writeInstanceConfig } from "./utils/config.js";
 
 export type McpAppAgentInfo = {
     emojiChar: string;
@@ -15,7 +25,7 @@ export type McpAppAgentInfo = {
     schemaDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     serverScript?: string;
-    serverScriptArgs?: string[] | boolean;
+    serverScriptArgs?: string[] | ArgDefinitions;
 };
 
 export type McpAppAgent = {
@@ -49,14 +59,14 @@ function createMcpAppAgentTransport(
     }
 
     const instanceServerScriptArgs = instanceConfig?.serverScriptArgs;
-    const serverScriptArgs =
-        info.serverScriptArgs === true
-            ? instanceConfig?.serverScriptArgs
-            : Array.isArray(info.serverScriptArgs)
-              ? instanceServerScriptArgs
-                  ? info.serverScriptArgs.concat(instanceServerScriptArgs)
-                  : info.serverScriptArgs
-              : []; //  info.serverScriptArgs is false or undefined;
+    const serverScriptArgs = Array.isArray(info.serverScriptArgs)
+        ? instanceServerScriptArgs
+            ? info.serverScriptArgs.concat(instanceServerScriptArgs)
+            : info.serverScriptArgs
+        : info.serverScriptArgs === undefined
+          ? []
+          : instanceServerScriptArgs;
+
     if (serverScriptArgs === undefined) {
         throw new Error(
             `Invalid app agent config ${appAgentName}: Missing required server script args in instance config`,
@@ -81,16 +91,59 @@ function createMcpAppAgentTransport(
     });
 }
 
+function getMcpCommandHandlerTable(
+    appAgentName: string,
+    args: ArgDefinitions,
+    instanceDir: string,
+): CommandHandlerTable {
+    return {
+        description: "MCP Command Handler Server Arguments",
+        commands: {
+            serverArgs: {
+                description: "Set the server arguments",
+                parameters: {
+                    args,
+                },
+                run: async (
+                    context: ActionContext<unknown>,
+                    params: ParsedCommandParams<{}>,
+                ) => {
+                    const instanceConfig =
+                        readInstanceConfig(instanceDir) ?? {};
+                    if (instanceConfig.mcpServers === undefined) {
+                        instanceConfig.mcpServers = {};
+                    }
+                    instanceConfig.mcpServers[appAgentName] = {
+                        serverScriptArgs: params.tokens,
+                    };
+                    writeInstanceConfig(instanceDir, instanceConfig);
+
+                    context.actionIO.appendDisplay(
+                        `Server arguments set to ${params.tokens.join(" ")}.  Please restart TypeAgent to reflect the change.`,
+                    );
+                },
+            },
+        },
+    };
+}
+
 function createMcpAppAgentRecord(
     clientName: string,
     version: string,
     appAgentName: string,
     info: McpAppAgentInfo,
     instanceConfig?: McpAppAgentConfig,
+    instanceDir?: string,
 ): McpAppAgentRecord {
+    const schemaFile = { format: "pas" as const, content: "" /* invalid */ };
     const manifest: AppAgentManifest = {
         emojiChar: info.emojiChar,
         description: info.description,
+        schema: {
+            description: info.description,
+            schemaType: entryTypeName,
+            schemaFile,
+        },
     };
     if (info.defaultEnabled) {
         manifest.defaultEnabled = info.defaultEnabled;
@@ -103,8 +156,10 @@ function createMcpAppAgentRecord(
     }
 
     const createMcpAppAgent = async (): Promise<McpAppAgent> => {
+        let transport: StdioClientTransport | undefined;
+        let agent: AppAgent;
         try {
-            const transport = createMcpAppAgentTransport(
+            transport = createMcpAppAgentTransport(
                 appAgentName,
                 info,
                 instanceConfig,
@@ -118,13 +173,9 @@ function createMcpAppAgentRecord(
                 );
             }
 
-            manifest.schema = {
-                description: info.description,
-                schemaType: entryTypeName,
-                schemaFile: { format: "pas", content: convertSchema(tools) },
-            };
+            schemaFile.content = convertSchema(tools);
 
-            const agent: AppAgent = {
+            agent = {
                 executeAction: async (action, context) => {
                     const result = await client.callTool({
                         name: action.actionName,
@@ -147,27 +198,36 @@ function createMcpAppAgentRecord(
                     return createActionResult(text.join("\n"));
                 },
             };
-            return {
-                manifest,
-                transport,
-                agent,
-            };
         } catch (error: any) {
-            return {
-                manifest,
-                transport: undefined,
-                agent: {
-                    initializeAgentContext() {
-                        // Delay throwing error until the agent is used.
-                        throw error;
-                    },
-                    executeCommand() {
-                        // Since we don't have any schema, use a fake command handler to have it show up in the list of agents.
-                        throw error;
-                    },
+            if (transport !== undefined) {
+                transport.close();
+                transport = undefined;
+            }
+            agent = {
+                updateAgentContext() {
+                    // Delay throwing error until the agent is used.
+                    throw error;
                 },
             };
         }
+        const handlers =
+            instanceDir !== undefined &&
+            info.serverScriptArgs !== undefined &&
+            !Array.isArray(info.serverScriptArgs)
+                ? getMcpCommandHandlerTable(
+                      appAgentName,
+                      info.serverScriptArgs,
+                      instanceDir,
+                  )
+                : undefined;
+        if (handlers !== undefined) {
+            Object.assign(agent, getCommandInterface(handlers));
+        }
+        return {
+            manifest,
+            transport: undefined,
+            agent,
+        };
     };
     return {
         agentP: createMcpAppAgent(),
@@ -180,6 +240,7 @@ export function createMcpAppAgentProvider(
     version: string,
     infos: Record<string, McpAppAgentInfo>,
     instanceConfig?: Record<string, McpAppAgentConfig>,
+    instanceDir?: string,
 ): AppAgentProvider {
     const mcpAppAgents = new Map<string, McpAppAgentRecord>();
     function getMpcAppAgentRecord(appAgentName: string) {
@@ -198,6 +259,7 @@ export function createMcpAppAgentProvider(
             appAgentName,
             info,
             instanceConfig?.[appAgentName],
+            instanceDir,
         );
         mcpAppAgents.set(appAgentName, record);
         return record;

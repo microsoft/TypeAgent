@@ -43,7 +43,7 @@ export function getProviderConfig(): Config {
     return config;
 }
 
-export function getInstanceConfig(
+export function readInstanceConfig(
     instanceDir: string | undefined,
 ): InstanceConfig | undefined {
     if (instanceDir === undefined) {
@@ -54,6 +54,14 @@ export function getInstanceConfig(
         return JSON.parse(fs.readFileSync(instanceConfigPath, "utf8"));
     }
     return undefined;
+}
+
+export function writeInstanceConfig(
+    instanceDir: string,
+    config: InstanceConfig,
+): void {
+    const instanceConfigPath = path.join(instanceDir, "config.json");
+    fs.writeFileSync(instanceConfigPath, JSON.stringify(config, null, 4));
 }
 
 export function getBuiltinConstructionConfig(explainerName: string) {

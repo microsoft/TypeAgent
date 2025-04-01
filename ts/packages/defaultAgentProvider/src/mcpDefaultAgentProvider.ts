@@ -3,7 +3,7 @@
 
 import { AppAgentProvider } from "agent-dispatcher";
 import { getPackageFilePath } from "./utils/getPackageFilePath.js";
-import { getInstanceConfig, getProviderConfig } from "./utils/config.js";
+import { readInstanceConfig, getProviderConfig } from "./utils/config.js";
 import { createMcpAppAgentProvider } from "./mcpAgentProvider.js";
 
 let mcpAppAgentProvider: AppAgentProvider | undefined;
@@ -25,7 +25,8 @@ export function getDefaultMcpAppAgentProvider(
             "typeagent",
             "0.0.1",
             servers,
-            getInstanceConfig(instanceDir)?.mcpServers,
+            readInstanceConfig(instanceDir)?.mcpServers,
+            instanceDir,
         );
     }
     return mcpAppAgentProvider;

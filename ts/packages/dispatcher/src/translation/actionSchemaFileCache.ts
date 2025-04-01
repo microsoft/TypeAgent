@@ -53,6 +53,9 @@ function loadParsedActionSchema(
     source: string,
 ): ActionSchemaFile {
     try {
+        if (!source) {
+            throw new Error("No data");
+        }
         const parsedActionSchemaJSON = JSON.parse(
             source,
         ) as ParsedActionSchemaJSON;
