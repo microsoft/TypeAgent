@@ -80,14 +80,14 @@ export function compileSearchQueryForConversation(
     query: querySchema.SearchQuery,
     exactScoping: boolean = true,
 ): SearchQueryExpr[] {
-    const queryBuilder = new SearchQueryExprBuilder(conversation);
+    const queryBuilder = new SearchQueryCompiler(conversation);
     queryBuilder.exactScoping = exactScoping;
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
 }
 
-export class SearchQueryExprBuilder {
+class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
     public queryExpressions: SearchQueryExpr[];
     public exactScoping: boolean = false;
