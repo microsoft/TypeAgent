@@ -117,11 +117,11 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
         )
 
     def deserialize(self, data: TermsToRelatedTermsIndexData) -> None:
-        self._vector_base = VectorBase(self.settings.embedding_index_settings)
+        self._alias_map.clear()
+        self._vector_base.clear()
         self._alias_map.deserialize(data.get("aliasData"))
         text_embedding_data = data.get("textEmbeddingData")
-        self._vector_base.deserialize(
-            text_embedding_data.get("embeddings")
-            if text_embedding_data is not None
-            else None
-        )
+        if text_embedding_data is not None:
+            embeddings = text_embedding_data.get("embeddings")
+            if embeddings is not None:
+                self._vector_base.deserialize(embeddings)
