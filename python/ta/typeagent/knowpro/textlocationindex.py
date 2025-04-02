@@ -113,17 +113,15 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
     def serialize(self) -> TextToTextLocationIndexData:
         return TextToTextLocationIndexData(
             textLocations=[loc.serialize() for loc in self._text_locations],
-            embeddings=TextEmbeddingIndexData(
-                textItems=[],  # TODO: Put values here?!
-                embeddings=self._vector_base.serialize(),
-            ),
+            embeddings=self._vector_base.serialize(),
         )
 
     def deserialize(self, data: TextToTextLocationIndexData) -> None:
+        self._text_locations.clear()
+        self._vector_base.clear()
         text_locations = data["textLocations"]
-        embeddings = data["embeddings"]["embeddings"]
-        if embeddings is None:
-            raise ValueError("embeddings is None ?!")
+        embeddings = data["embeddings"]
+        assert embeddings is not None, "No embeddings found"
         assert len(text_locations) == len(embeddings), ((text_locations), (embeddings))
         self._text_locations = [TextLocation.deserialize(loc) for loc in text_locations]
         self._vector_base.deserialize(embeddings)

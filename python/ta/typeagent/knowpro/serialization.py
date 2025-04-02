@@ -119,13 +119,11 @@ def to_conversation_file_data(
     if message_index_data is not None:
         text_embedding_data = message_index_data.get("indexData")
         if text_embedding_data is not None:
-            index_embeddings = text_embedding_data.get("embeddings")
-            if index_embeddings is not None:
-                embeddings = index_embeddings.get("embeddings")
-                if embeddings is not None:
-                    embeddings_list.append(embeddings)
-                    index_embeddings["embeddings"] = None
-                    embedding_file_header["messageCount"] = len(embeddings)
+            embeddings = text_embedding_data.get("embeddings")
+            if embeddings is not None:
+                embeddings_list.append(embeddings)
+                text_embedding_data["embeddings"] = None
+                embedding_file_header["messageCount"] = len(embeddings)
 
     binary_data = ConversationBinaryData(embeddingsList=embeddings_list)
     json_data = ConversationJsonData(

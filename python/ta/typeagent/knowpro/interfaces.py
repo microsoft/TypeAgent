@@ -507,7 +507,7 @@ class ScoredSemanticRefOrdinalData(TypedDict):
 
 class TermToSemanticRefIndexItemData(TypedDict):
     term: str
-    scoredSemanticRefOrdinals: list[ScoredSemanticRefOrdinalData]
+    semanticRefOrdinals: list[ScoredSemanticRefOrdinalData]
 
 
 # Persistent form of a term index.
@@ -525,7 +525,7 @@ class ConversationData[TMessageData](TypedDict):
 
 class TextToTextLocationIndexData(TypedDict):
     textLocations: list[TextLocationData]
-    embeddings: TextEmbeddingIndexData
+    embeddings: NormalizedEmbeddings | None
 
 
 class MessageTextIndexData(TypedDict):
