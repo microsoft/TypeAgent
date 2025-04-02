@@ -1,3 +1,6 @@
+:: Copyright (c) Microsoft Corporation.
+:: Licensed under the MIT License.
+
 @echo off
 if "%~1"=="" goto help
 
