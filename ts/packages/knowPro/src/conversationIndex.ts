@@ -22,10 +22,15 @@ import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
 import { async } from "typeagent";
-import { createKnowledgeExtractor, facetValueToString } from "./knowledge.js";
+import {
+    createKnowledgeExtractor,
+    extractKnowledgeBatch,
+    facetValueToString,
+} from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { textRangeFromMessageChunk } from "./message.js";
+import { Result, success } from "typechat";
 
 export type KnowledgeValidator = (
     knowledgeType: KnowledgeType,
@@ -269,29 +274,55 @@ export async function buildSemanticRefIndex(
     return indexingResult;
 }
 
+export async function addMessageBatchToConversationIndex(
+    conversation: IConversation,
+    messageBatch: IMessage[],
+    extractor: kpLib.KnowledgeExtractor,
+): Promise<Result<number>> {
+    ensureIndex(conversation);
+    const maxRetries = 4;
+    const chunkOrdinal = 0;
+    const textChunks = messageBatch.map((m) => m.textChunks[chunkOrdinal]);
+    const extractResults = await extractKnowledgeBatch(
+        extractor,
+        textChunks,
+        maxRetries,
+    );
+    if (!extractResults.success) {
+        return extractResults;
+    }
+    const knowledgeBatch = extractResults.data;
+    addToConversationIndex(conversation, messageBatch, knowledgeBatch);
+    return success(messageBatch.length);
+}
+
 export function addToConversationIndex(
     conversation: IConversation,
     messages: IMessage[],
     knowledgeResponses: kpLib.KnowledgeResponse[],
 ): void {
-    if (conversation.semanticRefIndex === undefined) {
-        conversation.semanticRefIndex = new ConversationIndex();
-    }
-    if (conversation.semanticRefs === undefined) {
-        conversation.semanticRefs = [];
-    }
+    ensureIndex(conversation);
     for (let i = 0; i < messages.length; i++) {
         const messageOrdinal: MessageOrdinal = conversation.messages.length;
         conversation.messages.push(messages[i]);
         const knowledge = knowledgeResponses[i];
         if (knowledge) {
             addKnowledgeToIndex(
-                conversation.semanticRefs,
-                conversation.semanticRefIndex,
+                conversation.semanticRefs!,
+                conversation.semanticRefIndex!,
                 messageOrdinal,
                 knowledge,
             );
         }
+    }
+}
+
+function ensureIndex(conversation: IConversation) {
+    if (conversation.semanticRefIndex === undefined) {
+        conversation.semanticRefIndex = new ConversationIndex();
+    }
+    if (conversation.semanticRefs === undefined) {
+        conversation.semanticRefs = [];
     }
 }
 
