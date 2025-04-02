@@ -6,8 +6,7 @@ import asyncio
 import os
 import time
 
-import dotenv
-
+from typeagent.aitools import auth
 from typeagent.knowpro.importing import ConversationSettings
 from typeagent.podcasts import podcast
 
@@ -23,27 +22,33 @@ parser.add_argument(
 
 
 async def main():
-    dotenv.load_dotenv(
-        os.path.expanduser("~/TypeAgent/ts/.env")
-    )  # TODO: Only works in dev tree
-    # for k, v in os.environ.items():
-    #     if "KEY" in k:
-    #         print(f"{k}={v!r}")
+    auth.load_dotenv()
     args = parser.parse_args()
-    print("Create conversation settings...")
+    print("Create conversation settings ...")
     settings = ConversationSettings()
-    print(f"Loading {args.filename}...")
+    print(f"Loading {args.filename} ...")
     t0 = time.time()
-    pod = await podcast.Podcast.read_from_file(args.filename, settings)
+    pod = podcast.Podcast.read_from_file(args.filename, settings)
     t1 = time.time()
     print(f"Loading took {t1-t0:.3f} seconds")
     if pod is None:
         print("Failed to read podcast")
         return
 
-    book = pod.semantic_ref_index.lookup_term("book")
-    print(book)
+    term = "book"
+    print(f"\nSearching {pod.name_tag!r} for term {term!r} ...")
+    book_list = pod.semantic_ref_index.lookup_term(term)
+    if book_list is not None:
+        for scored_ord in book_list:
+            ord = scored_ord.semantic_ref_ordinal
+            assert 0 <= ord < len(pod.semantic_refs)
+            sref = pod.semantic_refs[ord]
+            assert sref.semantic_ref_ordinal == ord
+            print(
+                f"{ord}: Term {term!r} has nowledge of type {sref.knowledge_type!r}: {sref.knowledge}"
+            )
 
+    print(f"\nChecking that serialize -> deserialize -> serialize is 'idempotent' ...")
     ser1 = pod.serialize()
     pod2 = podcast.Podcast(settings=settings)
     pod2.deserialize(ser1)
@@ -54,4 +59,5 @@ async def main():
         print("Serialized data matches original")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
