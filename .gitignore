@@ -19,7 +19,6 @@ dist-pub/
 .env
 *.map
 *.out.txt
-*.bat
 *.tsbuildinfo
 
 # Local development and debugging
