@@ -140,7 +140,9 @@ export class SearchQueryExprBuilder {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
         }
         if (filter.actionSearchTerm) {
-            this.compileActionTerm(filter.actionSearchTerm, termGroup);
+            termGroup.terms.push(
+                this.compileActionTerm(filter.actionSearchTerm),
+            );
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
                 termGroup,
@@ -173,9 +175,8 @@ export class SearchQueryExprBuilder {
 
     private compileActionTerm(
         actionTerm: querySchema.ActionTerm,
-        termGroup?: SearchTermGroup,
     ): SearchTermGroup {
-        termGroup ??= createAndTermGroup();
+        const termGroup = createAndTermGroup();
         if (actionTerm.actionVerbs !== undefined) {
             this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
         }
@@ -186,24 +187,12 @@ export class SearchQueryExprBuilder {
                 termGroup,
             );
         }
-        if (actionTerm.targetEntities) {
-            if (this.shouldTreatTargetsAsObjects(actionTerm)) {
-                // If additional entities, then for now, assume the targetEntities represent an Object in an action
-                this.addEntityNamesToGroup(
-                    actionTerm.targetEntities,
-                    PropertyNames.Object,
-                    termGroup,
-                );
-            } else {
-                let objects = this.extractObjects(actionTerm.targetEntities);
-                if (objects.length > 0) {
-                    this.addEntityNamesToGroup(
-                        objects,
-                        PropertyNames.Object,
-                        termGroup,
-                    );
-                }
-            }
+        if (isEntityTermArray(actionTerm.targetEntities)) {
+            this.addEntityNamesToGroup(
+                actionTerm.targetEntities,
+                PropertyNames.Object,
+                termGroup,
+            );
         }
         return termGroup;
     }
@@ -212,14 +201,11 @@ export class SearchQueryExprBuilder {
         actionTerm: querySchema.ActionTerm,
         termGroup?: SearchTermGroup,
     ): SearchTermGroup {
-        termGroup ??= createAndTermGroup();
+        termGroup ??= createOrTermGroup();
         if (actionTerm.actionVerbs !== undefined) {
             this.compileSearchTerms(actionTerm.actionVerbs.words, termGroup);
         }
-        if (
-            actionTerm.targetEntities &&
-            !this.shouldTreatTargetsAsObjects(actionTerm)
-        ) {
+        if (isEntityTermArray(actionTerm.targetEntities)) {
             this.compileEntityTerms(actionTerm.targetEntities, termGroup);
         }
         if (isEntityTermArray(actionTerm.additionalEntities)) {
@@ -228,18 +214,15 @@ export class SearchQueryExprBuilder {
         return termGroup;
     }
 
-    private shouldTreatTargetsAsObjects(
-        actionTerm: querySchema.ActionTerm,
-    ): boolean {
-        // TODO: Improve this
-        // If additional entities, then for now, assume the targetEntities represent an Object in an action
-        if (
-            isEntityTermArray(actionTerm.additionalEntities) &&
-            actionTerm.additionalEntities.length > 0
-        ) {
-            return true;
+    private compileSearchTerms(
+        searchTerms: string[],
+        termGroup?: SearchTermGroup,
+    ): SearchTermGroup {
+        termGroup ??= createOrTermGroup();
+        for (const searchTerm of searchTerms) {
+            termGroup.terms.push(createSearchTerm(searchTerm));
         }
-        return false;
+        return termGroup;
     }
 
     private compileEntityTerms(
@@ -413,17 +396,6 @@ export class SearchQueryExprBuilder {
         }
     }
 
-    private compileSearchTerms(
-        searchTerms: string[],
-        termGroup?: SearchTermGroup,
-    ): SearchTermGroup {
-        termGroup ??= createOrTermGroup();
-        for (const searchTerm of searchTerms) {
-            termGroup.terms.push(createSearchTerm(searchTerm));
-        }
-        return termGroup;
-    }
-
     private isSearchableString(value: string): boolean {
         return !(isEmptyString(value) || isWildcard(value));
     }
@@ -441,7 +413,7 @@ export class SearchQueryExprBuilder {
                 return true;
         }
     }
-
+    /*
     private extractObjects(
         entities: querySchema.EntityTerm[],
     ): querySchema.EntityTerm[] {
@@ -458,6 +430,7 @@ export class SearchQueryExprBuilder {
         }
         return persons;
     }
+        */
 }
 
 const Wildcard = "*";
