@@ -12,7 +12,6 @@ import {
 } from "aiclient";
 
 import path from "path";
-import os from "node:os";
 import {
     DeletionInfo,
     IConversation,
@@ -79,6 +78,13 @@ export type TestModels = {
     embeddings: TextEmbeddingModel;
 };
 
+export function createTestModels(): TestModels {
+    return {
+        chat: openai.createChatModelDefault("knowproTest"),
+        embeddings: openai.createEmbeddingModel(),
+    };
+}
+
 export class NullEmbeddingModel implements TextEmbeddingModel {
     constructor(public maxBatchSize: number = 1) {}
 
@@ -107,7 +113,7 @@ export function loadTestConversation(
     settings: ConversationSettings,
 ): Promise<IConversation> {
     return createConversationFromFile(
-        getRelativePath("./test/data"),
+        getAbsolutePath("./test/data"),
         "Episode_53_AdrianTchaikovsky_index",
         settings,
     );
@@ -139,22 +145,7 @@ export function hasTestKeys() {
     return hasKeys;
 }
 
-export function skipTest(name: string) {
-    return test.skip(name, () => {});
-}
-
-export function createTestModels(): TestModels {
-    return {
-        chat: openai.createChatModelDefault("knowproTest"),
-        embeddings: openai.createEmbeddingModel(),
-    };
-}
-
-export function getRootDataPath() {
-    return path.join(os.tmpdir(), "/data/test");
-}
-
-export function getRelativePath(relativePath: string): string {
+export function getAbsolutePath(relativePath: string): string {
     return path.join(process.cwd(), relativePath);
 }
 

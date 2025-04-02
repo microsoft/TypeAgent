@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { split } from "knowledge-processor";
+import * as kpLib from "knowledge-processor";
 import { dateTime, getFileName, readAllText } from "typeagent";
 import {
     Podcast,
@@ -11,17 +11,15 @@ import {
 } from "./podcast.js";
 import { IMessage } from "knowpro";
 
+const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
+
 export function parsePodcastTranscript(
     transcriptText: string,
 ): [PodcastMessage[], Set<string>] {
-    const transcriptLines = split(transcriptText, /\r?\n/, {
-        removeEmpty: true,
-        trim: true,
-    });
+    const transcriptLines = getTranscriptLines(transcriptText);
     const participants = new Set<string>();
     const messages: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
-    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
     for (const line of transcriptLines) {
         const match = turnParserRegex.exec(line);
         if (match && match.groups) {
@@ -55,6 +53,21 @@ export function parsePodcastTranscript(
         messages.push(curMsg);
     }
     return [messages, participants];
+}
+
+export function parsePodcastSpeakers(transcriptText: string): string[] {
+    const regex = turnParserRegex;
+    const transcriptLines = getTranscriptLines(transcriptText);
+    const speakers: string[] = [];
+    transcriptLines.forEach((line) => {
+        const match = regex.exec(line);
+        if (match && match.groups) {
+            if (match.groups.speaker) {
+                speakers.push(match.groups.speaker);
+            }
+        }
+    });
+    return speakers;
 }
 
 export async function importPodcast(
@@ -116,4 +129,11 @@ export function timestampMessages(
             0,
         );
     }
+}
+
+function getTranscriptLines(transcriptText: string): string[] {
+    return kpLib.split(transcriptText, /\r?\n/, {
+        removeEmpty: true,
+        trim: true,
+    });
 }
