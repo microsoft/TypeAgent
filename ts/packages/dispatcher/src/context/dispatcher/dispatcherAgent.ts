@@ -16,7 +16,10 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../commandHandlerContext.js";
-import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResultFromTextDisplay,
+    createActionResultNoDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 import { DispatcherActions } from "./schema/dispatcherActionSchema.js";
 import {
     ClarifyRequestAction,
@@ -29,6 +32,8 @@ import {
     getHistoryContext,
     translateRequest,
 } from "../../translation/translateRequest.js";
+import { ActivityActions } from "./schema/activityActionSchema.js";
+import { DispatcherActivityName } from "./dispatcherUtils.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -41,7 +46,10 @@ const dispatcherHandlers: CommandHandlerTable = {
 
 async function executeDispatcherAction(
     action: TypeAgentAction<
-        DispatcherActions | ClarifyRequestAction | LookupAndAnswerAction
+        | DispatcherActions
+        | ClarifyRequestAction
+        | LookupAndAnswerAction
+        | ActivityActions
     >,
     context: ActionContext<CommandHandlerContext>,
 ) {
@@ -63,9 +71,25 @@ async function executeDispatcherAction(
                     return lookupAndAnswer(action, context);
             }
             break;
+        case "dispatcher.activity":
+            switch (action.actionName) {
+                case "exitActivity":
+                    const systemContext = context.sessionContext.agentContext;
+                    systemContext.activityContext = undefined;
+                    systemContext.agents.toggleTransient(
+                        DispatcherActivityName,
+                        false,
+                    );
+                    return createActionResultFromTextDisplay(
+                        "Ok.  What's next?",
+                    );
+            }
+            break;
     }
 
-    throw new Error(`Unknown dispatcher action: ${action.actionName}`);
+    throw new Error(
+        `Unknown dispatcher action: ${action.translatorName}.${action.actionName}`,
+    );
 }
 
 function clarifyRequestAction(
@@ -194,6 +218,17 @@ export const dispatcherManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/dispatcher/schema/lookupActionSchema.ts",
                 schemaType: "LookupAction",
+                injected: true,
+                cached: false,
+            },
+        },
+        activity: {
+            transient: true,
+            schema: {
+                description: "Action that manages activity context.",
+                schemaFile:
+                    "./src/context/dispatcher/schema/activityActionSchema.ts",
+                schemaType: "ActivityActions",
                 injected: true,
                 cached: false,
             },

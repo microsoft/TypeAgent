@@ -33,6 +33,7 @@ import {
 } from "./agentTranslators.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
+    DispatcherActivityName,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -472,6 +473,7 @@ function isActivitySchema(
         activityContext === undefined ||
         // Dispatcher schema (for unknown) is always active
         schemaName === DispatcherName ||
+        schemaName === DispatcherActivityName ||
         getAppAgentName(schemaName) === activityContext.appAgentName
     );
 }

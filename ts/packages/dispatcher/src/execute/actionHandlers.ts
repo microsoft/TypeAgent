@@ -46,6 +46,7 @@ import { conversation } from "knowledge-processor";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
+    DispatcherActivityName,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -766,6 +767,10 @@ export async function executeActions(
                     ),
                     ...result.activityContext,
                 };
+                systemContext.agents.toggleTransient(
+                    DispatcherActivityName,
+                    true,
+                );
             }
         }
         actionIndex++;
