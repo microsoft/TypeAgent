@@ -60,7 +60,7 @@ export function createMatchMessagesBooleanExpr(
     return boolExpr;
 }
 
-export function compileMatchObjectOrEntity(targetEntityName: string) {
+export function compileActionTarget(targetEntityName: string) {
     const expr = new q.MatchMessagesOrExpr([
         new q.MatchPropertySearchTermExpr(
             createPropertySearchTerm(PropertyNames.Object, targetEntityName),
@@ -75,17 +75,41 @@ export function compileMatchObjectOrEntity(targetEntityName: string) {
     return expr;
 }
 
-export function compileMatchSubjectAndVerb(subject: string, verb: string) {
+export function compileActionVerbs(
+    verbs: string | string[],
+): q.IQueryOpExpr<SemanticRefAccumulator | undefined> {
+    if (Array.isArray(verbs)) {
+        const verbTerms = verbs.map(
+            (v) =>
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(PropertyNames.Verb, v),
+                ),
+        );
+        return new q.MatchTermsAndExpr(verbTerms);
+    } else {
+        return new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(PropertyNames.Verb, verbs),
+        );
+    }
+}
+
+export function compileActionQuery(
+    actorEntityName: string,
+    verbs: string | string[],
+    targetEntityName?: string,
+) {
     let expr = new q.MatchMessagesAndExpr([
         new q.MatchPropertySearchTermExpr(
-            createPropertySearchTerm(PropertyNames.Subject, subject),
+            createPropertySearchTerm(PropertyNames.Subject, actorEntityName),
         ),
-        new q.MatchPropertySearchTermExpr(
-            createPropertySearchTerm(PropertyNames.Verb, verb),
-        ),
+        compileActionVerbs(verbs),
     ]);
+    if (targetEntityName) {
+        expr.termExpressions.push(compileActionTarget(targetEntityName));
+    }
     return expr;
 }
+
 export function isPropertyTerm(
     term: SearchTerm | PropertySearchTerm | SearchTermGroup,
 ): term is PropertySearchTerm {
