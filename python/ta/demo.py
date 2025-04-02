@@ -4,6 +4,7 @@
 import argparse
 import asyncio
 import os
+import textwrap
 import time
 
 from typeagent.aitools import auth
@@ -44,9 +45,20 @@ async def main():
             assert 0 <= ord < len(pod.semantic_refs)
             sref = pod.semantic_refs[ord]
             assert sref.semantic_ref_ordinal == ord
-            print(
-                f"{ord}: Term {term!r} has nowledge of type {sref.knowledge_type!r}: {sref.knowledge}"
-            )
+            print(f"\n{ord}: Term {term!r} has knowledge", end=" ")
+            print(f"of type {sref.knowledge_type!r} at {sref.range}:")
+            print("    ", sref.knowledge)
+            # Now dig up the messages
+            start_msg_ord = sref.range.start.message_ordinal
+            end_msg_ord = sref.range.end.message_ordinal if sref.range.end else None
+            messages = pod.messages[start_msg_ord:end_msg_ord]
+            for message, msg_ord in zip(
+                messages, range(start_msg_ord, (end_msg_ord or start_msg_ord) + 1)
+            ):
+                text = " ".join(message.text_chunks).strip()
+                wrapped = textwrap.wrap(text)
+                for line in wrapped:
+                    print(f"  {line}")
 
     print(f"\nChecking that serialize -> deserialize -> serialize is 'idempotent' ...")
     ser1 = pod.serialize()
