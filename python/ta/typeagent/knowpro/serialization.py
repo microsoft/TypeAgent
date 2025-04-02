@@ -61,7 +61,7 @@ class ConversationJsonData(ConversationDataWithIndexes):
 
 
 class ConversationBinaryData(TypedDict):
-    embeddings: NotRequired[bytearray | None]
+    embeddingsList: NotRequired[list[NormalizedEmbeddings] | None]
 
 
 class ConversationFileData(TypedDict):
@@ -83,10 +83,11 @@ def write_conversation_data_to_file(
     file_data = to_conversation_file_data(conversation_data)
     binary_data = file_data["binaryData"]
     if binary_data:
-        embeddings = binary_data.get("embeddings")
-        if embeddings:
+        embeddings_list = binary_data.get("embeddingsList")
+        if embeddings_list:
             with open(filename + EMBEDDING_FILE_SUFFIX, "wb") as f:
-                f.write(embeddings)
+                for embeddings in embeddings_list:
+                    embeddings.tofile(f)
     with open(filename + DATA_FILE_SUFFIX, "w") as f:
         # f.write(repr(file_data["jsonData"]))
         json.dump(file_data["jsonData"], f)
@@ -96,13 +97,13 @@ def serialize_embeddings(embeddings: NormalizedEmbeddings) -> NormalizedEmbeddin
     return np.concatenate(embeddings)
 
 
-def to_conversation_file_data[IMessageData](
-    conversation_data: ConversationDataWithIndexes[IMessageData],
+def to_conversation_file_data(
+    conversation_data: ConversationDataWithIndexes,
 ) -> ConversationFileData:
     file_header = create_file_header()
     embedding_file_header = EmbeddingFileHeader()
 
-    buffer = bytearray()
+    embeddings_list: list[NormalizedEmbeddings] = []
 
     related_terms_index_data = conversation_data.get("relatedTermsIndexData")
     if related_terms_index_data is not None:
@@ -110,7 +111,7 @@ def to_conversation_file_data[IMessageData](
         if text_embedding_data is not None:
             embeddings = text_embedding_data.get("embeddings")
             if embeddings is not None:
-                buffer.extend(embeddings)
+                embeddings_list.append(embeddings)
                 text_embedding_data["embeddings"] = None
                 embedding_file_header["relatedCount"] = len(embeddings)
 
@@ -122,11 +123,11 @@ def to_conversation_file_data[IMessageData](
             if index_embeddings is not None:
                 embeddings = index_embeddings.get("embeddings")
                 if embeddings is not None:
-                    buffer.extend(embeddings)
+                    embeddings_list.append(embeddings)
                     index_embeddings["embeddings"] = None
                     embedding_file_header["messageCount"] = len(embeddings)
 
-    binary_data = ConversationBinaryData(embeddings=buffer)
+    binary_data = ConversationBinaryData(embeddingsList=embeddings_list)
     json_data = ConversationJsonData(
         **conversation_data,
         fileHeader=file_header,
@@ -192,25 +193,25 @@ def to_camel(name: str) -> str:
 
 # No exceptions are caught; they just bubble out.
 async def read_conversation_data_from_file(
-    filename: str, embedding_size: int | None = None
+    filename: str, embedding_size: int
 ) -> ConversationDataWithIndexes | None:
     with open(filename + DATA_FILE_SUFFIX) as f:
         json_data: ConversationJsonData = json.load(f)
     if json_data is None:
         # A serialized None -- file contained exactly "null".
         return None
-    # TODO: validate json_data.
-    embeddings: NormalizedEmbeddings | None = None
+    # TODO: validate json_data. (Isn't this done by deserialize()?)
+    embeddings_list: list[NormalizedEmbeddings] | None = None
     if embedding_size:
         with open(filename + EMBEDDING_FILE_SUFFIX, "rb") as f:
             embeddings = np.fromfile(f, dtype=np.float32).reshape((-1, embedding_size))
+            embeddings_list = [embeddings]
     else:
-        embeddings = None
+        print("Warning: not reading embeddings file because size is {embedding_size}")
+        embeddings_list = None
     file_data = ConversationFileData(
         jsonData=json_data,
-        binaryData=ConversationBinaryData(
-            embeddings=None if embeddings is None else bytearray(embeddings.tobytes())
-        ),
+        binaryData=ConversationBinaryData(embeddingsList=embeddings_list),
     )
     if json_data.get("fileHeader") is None:
         json_data["fileHeader"] = create_file_header()
@@ -219,16 +220,68 @@ async def read_conversation_data_from_file(
 
 def from_conversation_file_data(
     file_data: ConversationFileData,
-) -> ConversationDataWithIndexes | None:
+) -> ConversationDataWithIndexes:
     json_data = file_data["jsonData"]
+    file_header = json_data.get("fileHeader")
+    if file_header is None:
+        raise DeserializationError("Missing file header")
+    if file_header["version"] != "0.1":
+        raise DeserializationError(f"Unsupported file version {file_header['version']}")
+    embedding_file_header = json_data.get("embeddingFileHeader")
+    if embedding_file_header is None:
+        raise DeserializationError("Missing embedding file header")
+
     binary_data = file_data["binaryData"]
     if binary_data:
-        embeddings = binary_data.get("embeddings")
-        if embeddings:
-            embeddings = np.frombuffer(embeddings, dtype=np.float32)
-    else:
-        embeddings = None
-    # TODO: proper return value, and remove '| None' from return type.
+        embeddings_list = binary_data.get("embeddingsList")
+        if embeddings_list is None:
+            raise DeserializationError("Missing embeddings list")
+        if len(embeddings_list) != 1:
+            raise ValueError(
+                f"Expected embeddings list of lengt 1, got {len(embeddings_list)}"
+            )
+        embeddings = embeddings_list[0]
+        pos = 0
+        pos += get_embeddings_from_binary_data(
+            embeddings,
+            json_data,
+            ("relatedTermsIndexData", "textEmbeddingData"),
+            pos,
+            embedding_file_header.get("relatedCount"),
+        )
+        pos += get_embeddings_from_binary_data(
+            embeddings,
+            json_data,
+            ("messageIndexData", "indexData"),
+            pos,
+            embedding_file_header.get("messageCount"),
+        )
+    return json_data
+
+
+def get_embeddings_from_binary_data(
+    embeddings: NormalizedEmbeddings,
+    json_data: ConversationJsonData,
+    keys: tuple[str, ...],
+    offset: int,
+    count: int | None,
+) -> int:
+    if count is None or count <= 0:
+        return 0
+    embeddings = embeddings[offset : offset + count]
+    if len(embeddings) != count:
+        raise DeserializationError(
+            f"Expected {count} embeddings, got {len(embeddings)}"
+        )
+    data = json_data
+    for key in keys:
+        new_data = data.get(key)
+        if new_data is None or type(new_data) is not dict:
+            return 0
+        data = new_data
+    if "embeddings" in data:
+        data["embeddings"] = embeddings
+    return count
 
 
 TYPE_MAP = {
@@ -267,6 +320,10 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
     # Non-generic: primitives and dataclasses.
     if origin is None:
         if is_primitive(typ):
+            if typ is int and type(obj) is float:
+                return int(obj)
+            if typ is float and type(obj) is int:
+                return float(obj)
             if not isinstance(obj, typ):
                 raise DeserializationError(f"Expected {typ} but got {type(obj)}")
             return obj
@@ -336,14 +393,14 @@ def deserialize_object(typ: Any, obj: Any) -> Any:
                     + str([c.__name__ for c in matching])
                 )
         # Try each candidate until one succeeds.
-        last_exc = None
+        all_excs = []
         for candidate in candidates:
             try:
                 return deserialize_object(candidate, obj)
             except DeserializationError as e:
-                last_exc = e
+                all_excs.append(e)
         raise DeserializationError(
-            f"No candidate from union {typ} succeeded"
-        ) from last_exc
+            f"No candidate from union {typ} succeeded -- errors: {all_excs}"
+        )
 
     raise TypeError(f"Unsupported type {typ}, object {obj!r} of type {type(obj)}")

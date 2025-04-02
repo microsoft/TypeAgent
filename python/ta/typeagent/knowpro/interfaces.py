@@ -125,18 +125,19 @@ class TextLocation:
         return f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal}, {self.char_ordinal})"
 
     def serialize(self) -> TextLocationData:
-        return TextLocationData(
-            messageOrdinal=self.message_ordinal,
-            chunkOrdinal=self.chunk_ordinal,
-            charOrdinal=self.char_ordinal,
-        )
+        kwds = dict(messageOrdinal=self.message_ordinal)
+        if self.chunk_ordinal != 0:
+            kwds["chunkOrdinal"] = self.chunk_ordinal
+        if self.char_ordinal != 0:
+            kwds["charOrdinal"] = self.char_ordinal
+        return TextLocationData(**kwds)
 
     @staticmethod
     def deserialize(data: TextLocationData) -> "TextLocation":
         return TextLocation(
             message_ordinal=data["messageOrdinal"],
-            chunk_ordinal=data["chunkOrdinal"],
-            char_ordinal=data["charOrdinal"],
+            chunk_ordinal=data.get("chunkOrdinal", 0),
+            char_ordinal=data.get("charOrdinal", 0),
         )
 
 

@@ -12,10 +12,20 @@ from typeagent.knowpro.importing import ConversationSettings
 from typeagent.podcasts import podcast
 
 parser = argparse.ArgumentParser()
-parser.add_argument("filename", nargs="?", type=str, default="podcast")
+parser.add_argument(
+    "filename",
+    nargs="?",
+    type=str,
+    default=os.path.expanduser(
+        "~/TypeAgent/python/ta/testdata/Episode_53_AdrianTchaikovsky_index"
+    ),
+)
+
 
 async def main():
-    dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))  # TODO: Only works in dev tree
+    dotenv.load_dotenv(
+        os.path.expanduser("~/TypeAgent/ts/.env")
+    )  # TODO: Only works in dev tree
     # for k, v in os.environ.items():
     #     if "KEY" in k:
     #         print(f"{k}={v!r}")
