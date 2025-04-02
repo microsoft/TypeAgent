@@ -302,9 +302,14 @@ class QueryCompiler {
     ): [SearchTerm[], q.IQueryOpExpr<SemanticRefAccumulator>] {
         return this.compileSearchGroup(
             searchGroup,
-            (termExpressions, booleanOp) => {
-                return createMatchTermsBooleanExpr(termExpressions, booleanOp);
+            (termExpressions, booleanOp, scope) => {
+                return createMatchTermsBooleanExpr(
+                    termExpressions,
+                    booleanOp,
+                    scope,
+                );
             },
+            scopeExpr,
         );
     }
 
@@ -391,20 +396,21 @@ class QueryCompiler {
                 new q.TextRangesInDateRangeSelector(filter.dateRange),
             );
         }
-        // Actions are inherently scope selecting. If any present in the query, use them
-        // to restrict scope
-        let actionTermsGroup = this.getActionTermsFromSearchGroup(searchGroup);
-        if (actionTermsGroup !== undefined) {
-            scopeSelectors ??= [];
-            this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
-        }
-        // If additional scoping terms were provided
+        // If specific scoping terms were provided
         if (filter && filter.scopeDefiningTerms !== undefined) {
             scopeSelectors ??= [];
             this.addTermsScopeSelector(
                 filter.scopeDefiningTerms,
                 scopeSelectors,
             );
+        } else {
+            // Treat any actions as inherently scope selecting.
+            let actionTermsGroup =
+                this.getActionTermsFromSearchGroup(searchGroup);
+            if (actionTermsGroup !== undefined) {
+                scopeSelectors ??= [];
+                this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
+            }
         }
         // If a thread index is available...
         const threads = this.secondaryIndexes?.threads;
@@ -433,14 +439,6 @@ class QueryCompiler {
         scopeSelectors: q.IQueryTextRangeSelector[],
     ) {
         if (termGroup.terms.length > 0) {
-            /*
-            const [searchTermsUsed, selectExpr] =
-                this.compileSearchGroup(termGroup);
-            scopeSelectors.push(
-                new q.TextRangesFromSemanticRefsSelector(selectExpr),
-            );
-            this.allScopeSearchTerms.push(...searchTermsUsed);
-            */
             const [searchTermsUsed, selectExpr] =
                 this.compileSearchGroupMessages(termGroup);
             scopeSelectors.push(
@@ -449,7 +447,21 @@ class QueryCompiler {
             this.allScopeSearchTerms.push(...searchTermsUsed);
         }
     }
-
+    /*
+    private addTermsScopeSelectorV1(
+        termGroup: SearchTermGroup,
+        scopeSelectors: q.IQueryTextRangeSelector[],
+    ) {
+        if (termGroup.terms.length > 0) {
+            const [searchTermsUsed, selectExpr] =
+                this.compileSearchGroupTerms(termGroup);
+            scopeSelectors.push(
+                new q.TextRangesFromSemanticRefsSelector(selectExpr),
+            );
+            this.allScopeSearchTerms.push(...searchTermsUsed);
+        }
+    }
+    */
     private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
         let predicates: q.IQuerySemanticRefPredicate[] = [];
         if (filter.knowledgeType) {

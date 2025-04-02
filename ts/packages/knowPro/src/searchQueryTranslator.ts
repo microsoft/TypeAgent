@@ -156,35 +156,13 @@ export class SearchQueryExprBuilder {
         this.entityTermsAdded.clear();
 
         let when: WhenFilter | undefined;
-        let scopeDefiningTerms = createAndTermGroup();
-
         const actionTerm = filter.actionSearchTerm;
         if (actionTerm) {
-            if (
-                actionTerm.targetEntities &&
-                !this.shouldTreatTargetsAsObjects(actionTerm)
-            ) {
-                // The entity term is not already an Object match
-                this.addScopingTermsToGroup(
-                    actionTerm.targetEntities,
-                    scopeDefiningTerms,
-                );
+            const scopeDefiningTerms = this.compileScope(actionTerm);
+            if (scopeDefiningTerms.terms.length > 0) {
+                when ??= {};
+                when.scopeDefiningTerms = scopeDefiningTerms;
             }
-            let additionalEntities =
-                filter.actionSearchTerm?.additionalEntities;
-            if (
-                isEntityTermArray(additionalEntities) &&
-                additionalEntities.length > 0
-            ) {
-                this.addScopingTermsToGroup(
-                    additionalEntities,
-                    scopeDefiningTerms,
-                );
-            }
-        }
-        if (scopeDefiningTerms.terms.length > 0) {
-            when ??= {};
-            when.scopeDefiningTerms = scopeDefiningTerms;
         }
         if (filter.timeRange) {
             when ??= {};
@@ -199,13 +177,7 @@ export class SearchQueryExprBuilder {
     ): SearchTermGroup {
         termGroup ??= createAndTermGroup();
         if (actionTerm.actionVerbs !== undefined) {
-            for (const verb of actionTerm.actionVerbs.words) {
-                this.addPropertyTermToGroup(
-                    PropertyNames.Verb,
-                    verb,
-                    termGroup,
-                );
-            }
+            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(
@@ -288,20 +260,64 @@ export class SearchQueryExprBuilder {
         }
     }
 
-    private addScopingTermsToGroup(
-        entityTerms: querySchema.EntityTerm[],
-        termGroup: SearchTermGroup,
-    ): void {
-        /*
-        for (const entityTerm of entityTerms) {
-            this.addPropertyTermToGroup(
+    private compileScope(actionTerm: querySchema.ActionTerm): SearchTermGroup {
+        const termGroup = createAndTermGroup();
+        if (isEntityTermArray(actionTerm.actorEntities)) {
+            this.addEntityNamesToGroup(
+                actionTerm.actorEntities,
+                PropertyNames.Subject,
+                termGroup,
+            );
+        }
+
+        if (actionTerm.actionVerbs !== undefined) {
+            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
+        }
+
+        if (isEntityTermArray(actionTerm.targetEntities)) {
+            // A target can be the name of an object of an action OR the name of an entity
+            termGroup.terms.push(
+                this.compileObjectOrEntityName(actionTerm.targetEntities),
+            );
+        }
+
+        if (isEntityTermArray(actionTerm.additionalEntities)) {
+            this.addEntityNamesToGroup(
+                actionTerm.additionalEntities,
                 PropertyNames.EntityName,
-                entityTerm.name,
                 termGroup,
                 this.exactScoping,
             );
         }
-        */
+        return termGroup;
+    }
+
+    private compileObjectOrEntityName(
+        targetEntities: querySchema.EntityTerm[],
+    ): SearchTermGroup {
+        // A target can be the name of an object of an action OR the name of an entity
+        const objectTermGroup = createOrTermGroup();
+        this.addEntityNamesToGroup(
+            targetEntities,
+            PropertyNames.Object,
+            objectTermGroup,
+        );
+        this.addEntityNamesToGroup(
+            targetEntities,
+            PropertyNames.EntityName,
+            objectTermGroup,
+            this.exactScoping,
+        );
+        return objectTermGroup;
+    }
+
+    private addVerbsToGroup(
+        verbs: querySchema.VerbsTerm,
+        termGroup: SearchTermGroup,
+    ) {
+        for (const verb of verbs.words) {
+            this.addPropertyTermToGroup(PropertyNames.Verb, verb, termGroup);
+        }
     }
 
     private addEntityTermToGroup(

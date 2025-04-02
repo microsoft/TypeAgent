@@ -11,7 +11,9 @@ import {
 } from "./testCommon.js";
 import * as q from "../src/query.js";
 import { verifyTextRanges } from "./verify.js";
-import { compileActionTarget, compileActionQuery } from "../src/compileLib.js";
+import { PropertyNames } from "../src/propertyIndex.js";
+import { createPropertySearchTerm } from "../src/searchLib.js";
+import { SemanticRefAccumulator } from "../src/collections.js";
 
 /**
  * Designed to run offline
@@ -66,3 +68,53 @@ describe("query.message.offline", () => {
         return createQueryContext(conversation);
     }
 });
+
+function compileActionQuery(
+    actorEntityName: string,
+    verbs: string | string[],
+    targetEntityName?: string,
+) {
+    let expr = new q.MatchMessagesAndExpr([
+        new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(PropertyNames.Subject, actorEntityName),
+        ),
+        compileActionVerbs(verbs),
+    ]);
+    if (targetEntityName) {
+        expr.termExpressions.push(compileActionTarget(targetEntityName));
+    }
+    return expr;
+}
+
+function compileActionVerbs(
+    verbs: string | string[],
+): q.IQueryOpExpr<SemanticRefAccumulator | undefined> {
+    if (Array.isArray(verbs)) {
+        const verbTerms = verbs.map(
+            (v) =>
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(PropertyNames.Verb, v),
+                ),
+        );
+        return new q.MatchTermsAndExpr(verbTerms);
+    } else {
+        return new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(PropertyNames.Verb, verbs),
+        );
+    }
+}
+
+function compileActionTarget(targetEntityName: string) {
+    const expr = new q.MatchMessagesOrExpr([
+        new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(PropertyNames.Object, targetEntityName),
+        ),
+        new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(
+                PropertyNames.EntityName,
+                targetEntityName,
+            ),
+        ),
+    ]);
+    return expr;
+}
