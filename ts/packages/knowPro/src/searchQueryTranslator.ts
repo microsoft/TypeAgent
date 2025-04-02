@@ -23,16 +23,18 @@ import {
     createOrTermGroup,
 } from "./searchLib.js";
 
-/*-------------------------------
-
-    EXPERIMENTAL CODE
-    Frequent changes
-
----------------------------------*/
-
+/**
+ * A TypeChat Translator that turns natural language into structured queries
+ * of type: {@link SearchQuery}
+ */
 export type SearchQueryTranslator =
     TypeChatJsonTranslator<querySchema.SearchQuery>;
 
+/**
+ * Create a query translator using
+ * @param {TypeChatLanguageModel} model
+ * @returns {SearchQueryTranslator}
+ */
 export function createSearchQueryTranslator(
     model: TypeChatLanguageModel,
 ): SearchQueryTranslator {
@@ -413,24 +415,6 @@ export class SearchQueryExprBuilder {
                 return true;
         }
     }
-    /*
-    private extractObjects(
-        entities: querySchema.EntityTerm[],
-    ): querySchema.EntityTerm[] {
-        let persons: querySchema.EntityTerm[] = [];
-        let i = 0;
-        while (i < entities.length) {
-            const term = entities[i];
-            if (term.isPerson) {
-                entities.splice(i, 1);
-                persons.push(term);
-            } else {
-                ++i;
-            }
-        }
-        return persons;
-    }
-        */
 }
 
 const Wildcard = "*";
