@@ -26,7 +26,7 @@ import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
 import { lookupAndAnswer } from "../../search/search.js";
 import { LookupAndAnswerAction } from "./schema/lookupActionSchema.js";
 import {
-    getChatHistoryForTranslation,
+    getHistoryContext,
     translateRequest,
 } from "../../translation/translateRequest.js";
 
@@ -136,7 +136,7 @@ async function clarifyWithLookup(
     }
 
     // TODO: This translation can probably more scoped based on the `actionName` field.
-    const history = getChatHistoryForTranslation(systemContext);
+    const history = getHistoryContext(systemContext);
 
     history.promptSections.push({
         role: "assistant",

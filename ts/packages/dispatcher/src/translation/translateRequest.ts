@@ -8,6 +8,7 @@ import {
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext } from "@typeagent/agent-sdk";
 import {
+    ActivityContext,
     createExecutableAction,
     ExecutableAction,
     HistoryContext,
@@ -24,6 +25,7 @@ import {
 } from "./multipleActionSchema.js";
 import {
     createTypeAgentTranslatorForSelectedActions,
+    getAppAgentName,
     isAdditionalActionLookupAction,
     loadAgentJsonTranslator,
     TranslatedAction,
@@ -72,6 +74,7 @@ function getTranslationActionConfigs(
     switchEnabled: boolean,
     switchAgentAction: boolean,
     firstSchemaName?: string,
+    activityContext?: ActivityContext,
 ) {
     const actionConfigs: ActionConfig[] = [];
     const switchActionConfigs: ActionConfig[] = [];
@@ -80,7 +83,10 @@ function getTranslationActionConfigs(
     }
     for (const actionConfig of agents.getActionConfigs()) {
         const name = actionConfig.schemaName;
-        if (firstSchemaName === name || !agents.isSchemaActive(name)) {
+        if (
+            firstSchemaName === name ||
+            !isSchemaActiveWithActivity(name, agents, activityContext)
+        ) {
             continue;
         }
         // Include the schemas for injection if switch is disabled or it is injected.
@@ -110,7 +116,11 @@ export function getTranslatorForSchema(
 ) {
     const switchEnabled = isSwitchEnabled(context.session.getConfig());
     const translatorName = switchEnabled ? schemaName : ""; // Use empty string to represent the one and only translator that combines all schemas.
-    const translator = context.translatorCache.get(schemaName);
+    const activityContext = context.activityContext;
+    // Can't use cached translator if we have activity
+    const translator = activityContext
+        ? undefined
+        : context.translatorCache.get(schemaName);
     if (translator !== undefined) {
         return translator;
     }
@@ -120,6 +130,7 @@ export function getTranslatorForSchema(
         switchEnabled,
         config.switch.inline,
         schemaName,
+        context.activityContext,
     );
 
     const newTranslator = loadAgentJsonTranslator(
@@ -137,7 +148,9 @@ export function getTranslatorForSchema(
             jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
         },
     );
-    context.translatorCache.set(translatorName, newTranslator);
+    if (!activityContext) {
+        context.translatorCache.set(translatorName, newTranslator);
+    }
     return newTranslator;
 }
 
@@ -197,15 +210,27 @@ async function pickInitialSchema(
     }
 
     // Start with the last translator used
-    let schemaName = systemContext.lastActionSchemaName;
+    const activityContext = systemContext.activityContext;
+    const agents = systemContext.agents;
 
+    let schemaName: string | undefined = systemContext.lastActionSchemaName;
     const embedding = switchConfig.embedding;
     if (embedding && request.length > 0) {
+        const filter = activityContext
+            ? (schemaName: string) =>
+                  isSchemaActiveWithActivity(
+                      schemaName,
+                      agents,
+                      activityContext,
+                  )
+            : undefined;
+
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
-        const result = await systemContext.agents.semanticSearchActionSchema(
+        const result = await agents.semanticSearchActionSchema(
             request,
             debugSemanticSearch.enabled ? 5 : 1,
+            filter,
         );
         if (result) {
             debugSemanticSearch(
@@ -226,12 +251,21 @@ async function pickInitialSchema(
         }
     }
 
-    if (!systemContext.agents.isSchemaActive(schemaName)) {
+    if (!isSchemaActiveWithActivity(schemaName, agents, activityContext)) {
+        if (activityContext !== undefined) {
+            schemaName = activityContext.appAgentName;
+            if (!agents.isSchemaActive(activityContext.appAgentName)) {
+                throw new Error(
+                    `Activity context schema ${activityContext.appAgentName} not active`,
+                );
+            }
+        }
+
         debugTranslate(
             `Translating request using default translator: ${schemaName} not active`,
         );
         // REVIEW: Just pick the first one.
-        schemaName = systemContext.agents.getActiveSchemas()[0];
+        schemaName = agents.getActiveSchemas()[0];
         if (schemaName === undefined) {
             throw new Error("No active translator available");
         }
@@ -419,9 +453,32 @@ type NextTranslation = {
     searched: boolean;
 };
 
+function isSchemaActiveWithActivity(
+    schemaName: string,
+    agents: AppAgentManager,
+    activityContext?: ActivityContext,
+) {
+    return (
+        agents.isSchemaActive(schemaName) &&
+        isActivitySchema(schemaName, activityContext)
+    );
+}
+
+function isActivitySchema(
+    schemaName: string,
+    activityContext?: ActivityContext,
+) {
+    return (
+        activityContext === undefined ||
+        // Dispatcher schema (for unknown) is always active
+        schemaName === DispatcherName ||
+        getAppAgentName(schemaName) === activityContext.appAgentName
+    );
+}
+
 async function findAssistantForRequest(
     request: string,
-    translatorName: string,
+    schemaName: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<NextTranslation | undefined> {
     displayStatus(
@@ -432,7 +489,12 @@ async function findAssistantForRequest(
     const schemaNames = systemContext.agents
         .getActiveSchemas()
         .filter(
-            (enabledTranslatorName) => translatorName !== enabledTranslatorName,
+            (enabledSchemaName) =>
+                schemaName !== enabledSchemaName &&
+                isActivitySchema(
+                    enabledSchemaName,
+                    systemContext.activityContext,
+                ),
         );
 
     if (schemaNames.length === 0) {
@@ -630,7 +692,7 @@ async function finalizeMultipleActions(
     return actions;
 }
 
-export function getChatHistoryForTranslation(
+export function getHistoryContext(
     context: CommandHandlerContext,
 ): HistoryContext {
     const promptSections = context.chatHistory.getPromptSections();
@@ -649,7 +711,12 @@ export function getChatHistoryForTranslation(
         .additionalInstructions
         ? context.chatHistory.getCurrentInstructions()
         : undefined;
-    return { promptSections, entities, additionalInstructions };
+    return {
+        promptSections,
+        entities,
+        additionalInstructions,
+        activityContext: context.activityContext,
+    };
 }
 
 export type TranslationResult = {
@@ -779,7 +846,7 @@ export function translatePendingRequestAction(
     actionIndex?: number,
 ) {
     const systemContext = context.sessionContext.agentContext;
-    const history = getChatHistoryForTranslation(systemContext);
+    const history = getHistoryContext(systemContext);
     return translateRequest(
         action.parameters.pendingRequest,
         context,

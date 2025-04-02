@@ -752,6 +752,21 @@ export async function executeActions(
                     );
                 }
             }
+
+            if (result.activityContext !== undefined) {
+                if (actionQueue.length > 0) {
+                    throw new Error(
+                        `Cannot start an activity when there are pending actions.`,
+                    );
+                }
+                // TODO: validation
+                systemContext.activityContext = {
+                    appAgentName: getAppAgentName(
+                        executableAction.action.translatorName,
+                    ),
+                    ...result.activityContext,
+                };
+            }
         }
         actionIndex++;
     }
