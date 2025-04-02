@@ -329,24 +329,33 @@ class QueryCompiler {
 
     public compileSearchGroupMessages(
         searchGroup: SearchTermGroup,
-    ): q.IQueryOpExpr<MessageAccumulator> {
+    ): [SearchTerm[], q.IQueryOpExpr<MessageAccumulator>] {
+        const searchTermsUsed: SearchTerm[] = [];
         const termExpressions: q.IQueryOpExpr<
             SemanticRefAccumulator | MessageAccumulator | undefined
         >[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
                 termExpressions.push(this.compilePropertyTerm(term));
+                if (typeof term.propertyName !== "string") {
+                    searchTermsUsed.push(term.propertyName);
+                }
+                searchTermsUsed.push(term.propertyValue);
             } else if (isSearchGroupTerm(term)) {
-                const groupExpr = this.compileSearchGroupMessages(term);
+                const [termsUsed, groupExpr] =
+                    this.compileSearchGroupMessages(term);
+                searchTermsUsed.push(...termsUsed);
                 termExpressions.push(groupExpr);
             } else {
                 termExpressions.push(this.compileSearchTerm(term));
+                searchTermsUsed.push(term);
             }
         }
-        return createMatchMessagesBooleanExpr(
+        const boolExpr = createMatchMessagesBooleanExpr(
             termExpressions,
             searchGroup.booleanOp,
         );
+        return [searchTermsUsed, boolExpr];
     }
 
     private compileSearchTerm(term: SearchTerm) {
@@ -418,10 +427,18 @@ class QueryCompiler {
         scopeSelectors: q.IQueryTextRangeSelector[],
     ) {
         if (termGroup.terms.length > 0) {
+            /*
             const [searchTermsUsed, selectExpr] =
                 this.compileSearchGroup(termGroup);
             scopeSelectors.push(
                 new q.TextRangesFromSemanticRefsSelector(selectExpr),
+            );
+            this.allScopeSearchTerms.push(...searchTermsUsed);
+            */
+            const [searchTermsUsed, selectExpr] =
+                this.compileSearchGroupMessages(termGroup);
+            scopeSelectors.push(
+                new q.TextRangesFromMessagesSelector(selectExpr),
             );
             this.allScopeSearchTerms.push(...searchTermsUsed);
         }
