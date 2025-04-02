@@ -9,7 +9,6 @@ Do this before queries, since fully re-indexing takes too long.
 
 ### Still TODO:
 
-- SemanticRefIndex is empty after deserialization?!?!?!
 - Remove a bunch of `XxxData` TypedDicts that can be dealt with using
   `deserialize_object` and `serialize_object`
 - Catch and report DeserializationError better
@@ -20,13 +19,13 @@ So we can finally do some end-to-end testing.
 
 STARTING THIS NOW.
 
-UMESH:
-query.ts
-MatchSearchTermExpr
-MatchPropertySearchTermExpr
-SemanticRefAccumulator is in collection.ts
-
-Ignore code path "without indexes"
+> UMESH:
+> - query.ts
+>   - MatchSearchTermExpr
+>   - MatchPropertySearchTermExpr
+> - SemanticRefAccumulator is in collection.ts
+> 
+> Ignore code path "without indexes"
 
 ## Retries for embeddings
 
