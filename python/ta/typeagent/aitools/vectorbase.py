@@ -12,28 +12,23 @@ from .embeddings import AsyncEmbeddingModel, NormalizedEmbedding, NormalizedEmbe
 
 @dataclass
 class TextEmbeddingIndexSettings:
-    embedding_model: AsyncEmbeddingModel | None = None
-    embedding_size: int | None = None
-    min_score: float = 0.0
-    max_matches: int | None = None
+    embedding_model: AsyncEmbeddingModel
+    embedding_size: int  # Always embedding_model.embedding_size
+    min_score: float
+    max_matches: int | None
     retry_max_attempts: int = 2
     retry_delay: float = 2.0  # Seconds
     batch_size: int = 8
 
     def __init__(
         self,
-        embedding_model: AsyncEmbeddingModel | None = None,
-        embedding_size: int | None = None,
+        model: AsyncEmbeddingModel | None = None,
         min_score: float | None = None,
         max_matches: int | None = None,
     ):
-        if embedding_model is None:
-            embedding_model = AsyncEmbeddingModel(embedding_size)
-        self.embedding_model = embedding_model
-        self.embedding_size = embedding_size
-        if min_score is None:
-            min_score = 0.85
-        self.min_score = min_score
+        self.embedding_model = model or AsyncEmbeddingModel()
+        self.embedding_size = self.embedding_model.embedding_size
+        self.min_score = min_score if min_score is not None else 0.85
         self.max_matches = max_matches
 
 
@@ -81,7 +76,7 @@ class VectorBase:
             self._model.add_embedding(key, embedding)
 
     async def add_key(self, key: str, cache: bool = True) -> None:
-        embedding = (await self.get_embedding(key)).reshape((self._embedding_size,))
+        embedding = (await self.get_embedding(key)).reshape(1, -1)  # Make it 2D
         self._vectors = np.append(self._vectors, embedding, axis=0)
 
     async def add_keys(self, keys: list[str], cache: bool = True) -> None:
@@ -98,7 +93,7 @@ class VectorBase:
         embedding = await self.get_embedding(key)
         scores = np.dot(self._vectors, embedding)  # This does most of the work
         scored_ordinals = [
-            ScoredOrdinal(i, score)
+            ScoredOrdinal(i, float(score))
             for i, score in enumerate(scores)
             if score >= min_score
         ]
@@ -125,7 +120,8 @@ class VectorBase:
 
 
 async def main():
-    import dotenv, os, time
+    import time
+    from . import auth
 
     epoch = time.time()
 
@@ -140,7 +136,7 @@ async def main():
     def debugv(heading):
         log(f"{heading}: bool={bool(v)}, len={len(v)}")
 
-    dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))
+    auth.load_dotenv()
     v = VectorBase()
     debugv("\nEmpty vector base")
 

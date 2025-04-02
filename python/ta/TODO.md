@@ -1,36 +1,40 @@
 # TODO for the Python knowpro port
 
-## Big functionality
+## Serialization and deserialization (basically done)
 
-    ### Serialization and deserialization
-    Do this before queries, since fully re-indexing takes too long.
+Do this before queries, since fully re-indexing takes too long.
 
-    - Serialization nearly done (gotta check TODO comments)
-    - Deserialization is nearly done (ditto)
+- Serialization appears done (gotta check TODO comments)
+- Deserialization ditto
 
-    ### Queries and searches
+### Still TODO:
 
-    So we can finally do some end-to-end testing.
+- Remove a bunch of `XxxData` TypedDicts that can be dealt with using
+  `deserialize_object` and `serialize_object`
+- Catch and report DeserializationError better
 
-    ### Retries for embeddings
+## Queries and searches
 
-    For robustness -- TypeChat already retries, but embeddings don't.
+So we can finally do some end-to-end testing.
 
----
+STARTING THIS NOW.
 
-## Small functionality
+> UMESH:
+> - query.ts
+>   - MatchSearchTermExpr
+>   - MatchPropertySearchTermExpr
+> - SemanticRefAccumulator is in collection.ts
+> 
+> Ignore code path "without indexes"
 
-- Implement Podcast._build_caches(), by implementing TermEmbeddingCache?
-  - Umesh wants to redo this anyway, so low priority
+## Retries for embeddings
+
+For robustness -- TypeChat already retries, but my embeddings don't.
 
 ## Refactoring implementations
 
 - Change some inconsistent module names
 - Rewrite podcast parsing without regexes
-
-## Main/demo/test program support
-
-- Unify various dotenv calls and make them search harder (relative to repo)
 
 ## Type checking stuff
 
@@ -48,6 +52,6 @@
 ## Questions
 
 - Do the serialization data formats (which are TypedDicts, not Protocols):
-  - Really belong in interfaces.py?
-  - Need to have names starting with 'I'?
+  - Really belong in interfaces.py? [UMES: No] [me: TODO]
+  - Need to have names starting with 'I'? [UMESH: No] [me: DONE]
   My answers for both are no, unless Steve explains why.
