@@ -10,9 +10,10 @@ import {
     loadTestConversation,
 } from "./testCommon.js";
 import * as q from "../src/query.js";
-import { createPropertySearchTerm } from "../src/search.js";
-import { PropertyNames } from "../src/propertyIndex.js";
 import { verifyTextRanges } from "./verify.js";
+import { PropertyNames } from "../src/propertyIndex.js";
+import { createPropertySearchTerm } from "../src/searchLib.js";
+import { SemanticRefAccumulator } from "../src/collections.js";
 
 /**
  * Designed to run offline
@@ -33,7 +34,7 @@ describe("query.message.offline", () => {
         "messages.terms.or",
         () => {
             const targetEntityName = "Children of Memory";
-            const query = createMatchObjectOrEntity(targetEntityName);
+            const query = compileActionTarget(targetEntityName);
             const messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
         },
@@ -42,11 +43,11 @@ describe("query.message.offline", () => {
     test(
         "messages.terms.and",
         () => {
-            let query = createMatchSubjectAndVerb("Adrian", "say");
+            let query = compileActionQuery("Adrian", "say");
             let messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toBeGreaterThan(0);
 
-            query = createMatchSubjectAndVerb("Jane", "say");
+            query = compileActionQuery("Jane", "say");
             messageOrdinals = query.eval(createContext());
             expect(messageOrdinals.size).toEqual(0);
         },
@@ -54,7 +55,7 @@ describe("query.message.offline", () => {
     );
     test("messages.terms.ranges", () => {
         const targetEntityName = "Children of Time";
-        const query = createMatchObjectOrEntity(targetEntityName);
+        const query = compileActionTarget(targetEntityName);
         const scopeExpr = new q.TextRangesFromMessagesSelector(query);
         const ranges = scopeExpr.eval(createContext());
         expect(ranges).toBeDefined();
@@ -66,34 +67,54 @@ describe("query.message.offline", () => {
     function createContext() {
         return createQueryContext(conversation);
     }
-
-    function createMatchObjectOrEntity(targetEntityName: string) {
-        const expr = new q.MatchMessagesOrExpr([
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(
-                    PropertyNames.Object,
-                    targetEntityName,
-                ),
-            ),
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(
-                    PropertyNames.EntityName,
-                    targetEntityName,
-                ),
-            ),
-        ]);
-        return expr;
-    }
-
-    function createMatchSubjectAndVerb(subject: string, verb: string) {
-        let expr = new q.MatchMessagesAndExpr([
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(PropertyNames.Subject, subject),
-            ),
-            new q.MatchPropertySearchTermExpr(
-                createPropertySearchTerm(PropertyNames.Verb, verb),
-            ),
-        ]);
-        return expr;
-    }
 });
+
+function compileActionQuery(
+    actorEntityName: string,
+    verbs: string | string[],
+    targetEntityName?: string,
+) {
+    let expr = new q.MatchMessagesAndExpr([
+        new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(PropertyNames.Subject, actorEntityName),
+        ),
+        compileActionVerbs(verbs),
+    ]);
+    if (targetEntityName) {
+        expr.termExpressions.push(compileActionTarget(targetEntityName));
+    }
+    return expr;
+}
+
+function compileActionVerbs(
+    verbs: string | string[],
+): q.IQueryOpExpr<SemanticRefAccumulator | undefined> {
+    if (Array.isArray(verbs)) {
+        const verbTerms = verbs.map(
+            (v) =>
+                new q.MatchPropertySearchTermExpr(
+                    createPropertySearchTerm(PropertyNames.Verb, v),
+                ),
+        );
+        return new q.MatchTermsAndExpr(verbTerms);
+    } else {
+        return new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(PropertyNames.Verb, verbs),
+        );
+    }
+}
+
+function compileActionTarget(targetEntityName: string) {
+    const expr = new q.MatchMessagesOrExpr([
+        new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(PropertyNames.Object, targetEntityName),
+        ),
+        new q.MatchPropertySearchTermExpr(
+            createPropertySearchTerm(
+                PropertyNames.EntityName,
+                targetEntityName,
+            ),
+        ),
+    ]);
+    return expr;
+}

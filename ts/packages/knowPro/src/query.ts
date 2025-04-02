@@ -22,12 +22,9 @@ import {
     Term,
     TextRange,
 } from "./interfaces.js";
-import {
-    KnowledgePropertyName,
-    PropertySearchTerm,
-    SemanticRefSearchResult,
-    SearchTerm,
-} from "./search.js";
+import { SemanticRefSearchResult } from "./search.js";
+import { KnowledgePropertyName, PropertySearchTerm } from "./interfaces.js";
+import { SearchTerm } from "./interfaces.js";
 import {
     Match,
     MatchAccumulator,
@@ -1354,6 +1351,25 @@ export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
             }
         }
         return allMatches ?? new MessageAccumulator();
+    }
+}
+
+export class MatchMessagesOrMaxExpr extends MatchMessagesOrExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super(termExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const matches = super.eval(context);
+        const maxHitCount = matches.getMaxHitCount();
+        if (maxHitCount > 1) {
+            matches.selectWithHitCount(maxHitCount);
+        }
+        return matches;
     }
 }
 
