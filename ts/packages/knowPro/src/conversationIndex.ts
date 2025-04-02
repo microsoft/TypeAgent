@@ -20,9 +20,9 @@ import {
 } from "./interfaces.js";
 import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
-import { ChatModel, openai } from "aiclient";
+import { openai } from "aiclient";
 import { async } from "typeagent";
-import { facetValueToString } from "./knowledge.js";
+import { createKnowledgeExtractor, facetValueToString } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { textRangeFromMessageChunk } from "./message.js";
@@ -228,7 +228,7 @@ export async function buildSemanticRefIndex(
         conversation.semanticRefs = [];
     }
     const semanticRefs = conversation.semanticRefs;
-    extractor ??= createKnowledgeProcessor();
+    extractor ??= createKnowledgeExtractor();
     const maxRetries = 4;
     let indexingResult: TextIndexingResult = {};
     // TODO: Support batching
@@ -392,22 +392,6 @@ export function createKnowledgeModel() {
         "chatExtractor",
     ]);
     return chatModel;
-}
-
-export function createKnowledgeProcessor(
-    chatModel?: ChatModel,
-): kpLib.KnowledgeExtractor {
-    chatModel ??= createKnowledgeModel();
-    const extractor = kpLib.createKnowledgeExtractor(chatModel, {
-        maxContextLength: 4096,
-        /**
-         * This should *ALWAYS* be false.
-         * Merging is handled during indexing:
-         * TODO: remove flag from knowledgeExtractor
-         */
-        mergeActionKnowledge: false,
-    });
-    return extractor;
 }
 
 export async function buildConversationIndex(
