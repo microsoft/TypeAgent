@@ -14,8 +14,7 @@ import { IMessage } from "knowpro";
 export function parsePodcastTranscript(
     transcriptText: string,
 ): [PodcastMessage[], Set<string>] {
-    const turnParserRegex =
-        /^(?<speaker>[A-Z0-9 ]+[.:])(?=\s|\n)?(?<speech>.*)$/;
+    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
     const transcriptLines = getTranscriptLines(transcriptText);
     const participants = new Set<string>();
     const messages: PodcastMessage[] = [];
@@ -56,8 +55,7 @@ export function parsePodcastTranscript(
 }
 
 export function parsePodcastSpeakers(transcriptText: string): string[] {
-    const turnParserRegex =
-        /^(?<speaker>[A-Z0-9 ]+[.:])(?=\s|\n)?(?<speech>.*)$/;
+    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
     const transcriptLines = getTranscriptLines(transcriptText);
     const speakers: string[] = [];
     transcriptLines.forEach((line) => {

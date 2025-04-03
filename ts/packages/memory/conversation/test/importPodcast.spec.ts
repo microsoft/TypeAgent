@@ -19,6 +19,10 @@ describe("conversation.importPodcast", () => {
             speechCount: 9,
             participantCount: 3,
         },
+        {
+            filePath:
+                "../../knowpro/test/data/Episode_53_AdrianTchaikovsky.txt",
+        },
     ];
 
     test("parseSpeakers", () => {
