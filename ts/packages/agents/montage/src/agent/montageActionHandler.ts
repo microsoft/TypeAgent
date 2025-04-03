@@ -455,9 +455,14 @@ async function handleMontageAction(
         }
 
         case "deleteMontage": {
-            const deleteMontageAction: DeleteMontageAction = action as DeleteMontageAction;
-            const montageIds: number[] = deleteMontageAction.parameters.id ? deleteMontageAction.parameters.id : [-1];
-            const deleteAll: boolean = deleteMontageAction.parameters.deleteAll ? deleteMontageAction.parameters.deleteAll : false;
+            const deleteMontageAction: DeleteMontageAction =
+                action as DeleteMontageAction;
+            const montageIds: number[] = deleteMontageAction.parameters.id
+                ? deleteMontageAction.parameters.id
+                : [-1];
+            const deleteAll: boolean = deleteMontageAction.parameters.deleteAll
+                ? deleteMontageAction.parameters.deleteAll
+                : false;
             let deletedCount: number = 0;
 
             if (deleteAll) {
@@ -474,13 +479,17 @@ async function handleMontageAction(
                             //     actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);
                             // }
 
-                    if (value.title.toLocaleLowerCase() === deleteMontageAction.parameters.title?.toLocaleLowerCase()) {
-                        deletedCount++;
-                        return false; // filter out
-                    }
+                            if (
+                                value.title.toLocaleLowerCase() ===
+                                deleteMontageAction.parameters.title?.toLocaleLowerCase()
+                            ) {
+                                deletedCount++;
+                                return false; // filter out
+                            }
 
-                    return true;
-                });
+                            return true;
+                        },
+                    );
             } else {
                 // no id/title specified, delete the active montage or the ones with the supplied ids
                 if (actionContext.sessionContext.agentContext.montage) {
@@ -580,7 +589,10 @@ async function handleMontageAction(
                 action as MergeMontageAction;
 
             // create a new montage
-            const merged = createNewMontage(actionContext.sessionContext.agentContext, mergeMontageAction.parameters.mergeMontageTitle);
+            const merged = createNewMontage(
+                actionContext.sessionContext.agentContext,
+                mergeMontageAction.parameters.mergeMontageTitle,
+            );
             let mergedCount: number = 0;
             mergeMontageAction.parameters.ids?.forEach((id) => {
                 const montage: PhotoMontage | undefined =
@@ -598,9 +610,12 @@ async function handleMontageAction(
                     );
                 if (montage !== undefined) {
                     merged.files = [...merged.files, ...montage.files];
-                    mergedCount++                    
+                    mergedCount++;
                 } else {
-                    displayError(`Unable to find a montage called '${title}', unable to merge it.`, actionContext);
+                    displayError(
+                        `Unable to find a montage called '${title}', unable to merge it.`,
+                        actionContext,
+                    );
                 }
             });
 
@@ -616,7 +631,9 @@ async function handleMontageAction(
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(merged);
 
-            result = createActionResultNoDisplay(`Merged ${mergedCount} montages.`);
+            result = createActionResultNoDisplay(
+                `Merged ${mergedCount} montages.`,
+            );
 
             break;
         }
@@ -658,15 +675,16 @@ function entityFromMontage(montage: PhotoMontage) {
     return {
         name: montage.title,
         type: ["project", "montage"],
-        additionalEntityText: "Status: This montage has been created but not editited. Awaiting review.",
+        additionalEntityText:
+            "Status: This montage has been created but not editited. Awaiting review.",
         uniqueId: montage.id.toString(),
-        facets: [ 
+        facets: [
             {
                 name: "status",
-                value: "This montage has been created but not editited. Awaiting review."
+                value: "This montage has been created but not editited. Awaiting review.",
             },
-        ]
-    }
+        ],
+    };
 }
 
 async function findRequestedImages(
@@ -842,13 +860,13 @@ export async function createViewServiceHost(
 }
 
 async function saveMontages(context: SessionContext<MontageActionContext>) {
-    
     // merge the "working montage" into the saved montages
     if (context.agentContext.montage !== undefined) {
         let found: boolean = false;
         context.agentContext.montages.findIndex((value, index) => {
             if (value.id === context.agentContext.montage?.id) {
-                context.agentContext.montages[index] = context.agentContext.montage!;
+                context.agentContext.montages[index] =
+                    context.agentContext.montage!;
                 found = true;
             }
         });
@@ -860,7 +878,13 @@ async function saveMontages(context: SessionContext<MontageActionContext>) {
     }
 
     // save the montages for later
-    await context.sessionStorage?.write(montageFile, JSON.stringify({ montageIdSeed: context.agentContext.montageIdSeed, montages: context.agentContext.montages }));
+    await context.sessionStorage?.write(
+        montageFile,
+        JSON.stringify({
+            montageIdSeed: context.agentContext.montageIdSeed,
+            montages: context.agentContext.montages,
+        }),
+    );
 }
 
 /**
