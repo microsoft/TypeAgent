@@ -56,6 +56,8 @@ type LookupConversation = {
 type LookupInternet = {
     source: "internet";
     internetLookups: string[];
+    // specific sites to look up in.
+    site?: string[];
 };
 
 // The user request is a question about previous conversations or general knowledge that can be found from the internet.
