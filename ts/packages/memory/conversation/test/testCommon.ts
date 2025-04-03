@@ -37,7 +37,7 @@ export function getTestTranscriptDialog(): TestTranscriptInfo {
 
 export function getTestTranscriptPodcast(): TestTranscriptInfo {
     return {
-        filePath: "../../knowpro/test/data/Episode_53_AdrianTchaikovsky.txt",
+        filePath: "./test/data/Episode_53_AdrianTchaikovsky.txt",
         name: "Episode_53",
         date: new Date("May 2023"),
         length: 60,
