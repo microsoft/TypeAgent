@@ -18,14 +18,17 @@ import {
     IConversationDataWithIndexes,
     writeConversationDataToFile,
     readConversationDataFromFile,
-    createTermEmbeddingCache,
     buildTransientSecondaryIndexes,
 } from "knowpro";
-import { conversation as kpLib, image } from "knowledge-processor";
+import {
+    conversation as kpLib,
+    image,
+    createEmbeddingCache,
+} from "knowledge-processor";
 import fs from "node:fs";
 import path from "node:path";
 import { isImageFileType } from "common-utils";
-import { ChatModel } from "aiclient";
+import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
 
@@ -360,7 +363,8 @@ export class ImageCollection implements IConversation {
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
-        this.settings = createConversationSettings();
+        const [model, embeddingSize] = this.createEmbeddingModel();
+        this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
     }
@@ -404,7 +408,6 @@ export class ImageCollection implements IConversation {
             this.settings,
             eventHandler,
         );
-        this.buildCaches();
 
         return indexingResult;
     }
@@ -424,8 +427,7 @@ export class ImageCollection implements IConversation {
 
     public async deserialize(data: ImageCollectionData): Promise<void> {
         this.nameTag = data.nameTag;
-        this.messages = data.messages;
-        this.messages = data.messages.map((m) => {
+        const messages = data.messages.map((m) => {
             const image = new Image(
                 m.textChunks,
                 new ImageMeta(m.metadata.fileName, m.metadata.img),
@@ -434,6 +436,7 @@ export class ImageCollection implements IConversation {
             image.timestamp = m.timestamp;
             return image;
         });
+        this.messages = messages;
         this.semanticRefs = data.semanticRefs;
         this.tags = data.tags;
         if (data.semanticIndexData) {
@@ -447,15 +450,6 @@ export class ImageCollection implements IConversation {
             );
         }
         await buildTransientSecondaryIndexes(this, this.settings);
-        this.buildCaches();
-    }
-
-    private buildCaches(): void {
-        createTermEmbeddingCache(
-            this.settings.relatedTermIndexSettings.embeddingIndexSettings!,
-            this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex!,
-            64,
-        );
     }
 
     public async writeToFile(
@@ -482,12 +476,29 @@ export class ImageCollection implements IConversation {
         }
         return imageCollection;
     }
+
+    /**
+     * Our index already has embeddings for every term in the podcast
+     * Create an embedding model that can just leverage those embeddings
+     * @returns embedding model, size of embedding
+     */
+    private createEmbeddingModel(): [TextEmbeddingModel, number] {
+        return [
+            createEmbeddingCache(
+                openai.createEmbeddingModel(),
+                64,
+                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+            ),
+            1536,
+        ];
+    }
 }
 
 /**
  * Indexes the supplied image or images in the supplied folder.
  *
  * @param imagePath - The path to the image file or a folder containing images
+ * @param cachePath - The root cache path, if not specified image path is used
  * @param cachePath - The root cache path, if not specified image path is used
  * @param recursive - A flag indicating if the search should include subfolders
  * @returns - The imported images as an image collection.
@@ -506,8 +517,12 @@ export async function importImages(
         );
     }
 
-    if (cachePath === undefined) {
-        cachePath = path.dirname(imagePath);
+    if (cachePath !== undefined) {
+        if (!fs.existsSync(cachePath)) {
+            fs.mkdirSync(cachePath);
+        }
+    } else {
+        cachePath = imagePath;
     }
 
     // create a model used to extract data from the images
@@ -556,16 +571,29 @@ async function indexImages(
     // create the cache path if it doesn't exist
     if (!fs.existsSync(cachePath)) {
         fs.mkdirSync(cachePath);
-    }    
+    }
 
     // index each image
     const retVal: Image[] = [];
     for (let i = 0; i < fileNames.length; i++) {
+        // ignore thumbnail images
+        if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
+            console.log(`ignoring '${fileNames[i]}'`);
+            continue;
+        }
 
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
 
         if (isDirectoryPath(fullFilePath)) {
-            retVal.push(... await indexImages(fullFilePath, path.join(cachePath, fileNames[i]), true, chatModel, callback));
+            retVal.push(
+                ...(await indexImages(
+                    fullFilePath,
+                    path.join(cachePath, fileNames[i]),
+                    true,
+                    chatModel,
+                    callback,
+                )),
+            );
         } else {
             // index the image
             const img = await indexImage(fullFilePath, cachePath, chatModel);

@@ -8,10 +8,17 @@ export type PromptEntity = Entity & {
     sourceAppAgentName: string;
 };
 
+export type ActivityContext = {
+    appAgentName: string;
+    description: string;
+    state: Record<string, unknown>;
+};
+
 export type HistoryContext = {
     promptSections: PromptSection[];
     entities: PromptEntity[];
     additionalInstructions?: string[] | undefined;
+    activityContext?: ActivityContext | undefined;
 };
 
 export function normalizeParamString(str: string) {

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 /**
+ * INTERNAL TO LIBRARY
  * Common types and methods INTERNAL to the library.
  * These should not be exposed via index.ts
  */
@@ -14,7 +15,7 @@ import {
     TextLocation,
     TextRange,
 } from "./interfaces.js";
-import { SearchTerm, SearchTermGroup } from "./search.js";
+import { SearchTerm } from "./interfaces.js";
 import {
     IConversationDataWithIndexes,
     ConversationSecondaryIndexes,
@@ -95,18 +96,6 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
 
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
-}
-
-export function createAndTermGroup(): SearchTermGroup {
-    return { booleanOp: "and", terms: [] };
-}
-
-export function createOrTermGroup(): SearchTermGroup {
-    return { booleanOp: "or", terms: [] };
-}
-
-export function createOrMaxTermGroup(): SearchTermGroup {
-    return { booleanOp: "or_max", terms: [] };
 }
 
 export async function createConversationFromData(

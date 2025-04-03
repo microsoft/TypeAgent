@@ -52,6 +52,11 @@ export class ExpandableTextarea {
                 this.textEntry.textContent = "";
                 event.preventDefault();
             }
+
+            if (sendButton !== undefined) {
+                sendButton.disabled = this.textEntry.innerHTML.length == 0;
+            }
+
             return true;
         });
         this.textEntry.addEventListener("input", () => {

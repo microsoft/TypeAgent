@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * INTERNAL TO LIBRARY
+ * Query operators and processing is INTERNAL to the library.
+ * These should not be exposed via index.ts
+ */
+
 import {
     DateRange,
     IConversation,
@@ -16,12 +22,9 @@ import {
     Term,
     TextRange,
 } from "./interfaces.js";
-import {
-    KnowledgePropertyName,
-    PropertySearchTerm,
-    SemanticRefSearchResult,
-    SearchTerm,
-} from "./search.js";
+import { SemanticRefSearchResult } from "./search.js";
+import { KnowledgePropertyName, PropertySearchTerm } from "./interfaces.js";
+import { SearchTerm } from "./interfaces.js";
 import {
     Match,
     MatchAccumulator,
@@ -44,6 +47,7 @@ import { Thread } from "./interfaces.js";
 import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
+import { textRangesFromMessageOrdinals } from "./message.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -371,6 +375,8 @@ export class QueryEvalContext {
     public matchedPropertyTerms = new PropertyTermSet();
     public textRangesInScope: TextRangesInScope | undefined;
 
+    // TODO: Make property and timestamp indexes NON-OPTIONAL
+    // TODO: Move non-index based code to test
     constructor(
         public conversation: IConversation,
         /**
@@ -413,6 +419,10 @@ export class QueryEvalContext {
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
         const messageIndex = semanticRef.range.start.messageOrdinal;
         return this.conversation.messages[messageIndex];
+    }
+
+    public getMessage(messageOrdinal: MessageOrdinal): IMessage {
+        return this.messages[messageOrdinal];
     }
 
     public clearMatchedTerms() {
@@ -472,15 +482,21 @@ export class MatchTermsOrExpr extends MatchTermsBooleanExpr {
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         super.beginMatch(context);
-        const allMatches = new SemanticRefAccumulator();
+        let allMatches: SemanticRefAccumulator | undefined;
         for (const matchExpr of this.termExpressions) {
             const termMatches = matchExpr.eval(context);
             if (termMatches && termMatches.size > 0) {
-                allMatches.addUnion(termMatches);
+                if (allMatches) {
+                    allMatches.addUnion(termMatches);
+                } else {
+                    allMatches = termMatches;
+                }
             }
         }
-        allMatches.calculateTotalScore();
-        return allMatches;
+        if (allMatches) {
+            allMatches.calculateTotalScore();
+        }
+        return allMatches ?? new SemanticRefAccumulator();
     }
 }
 
@@ -1084,10 +1100,10 @@ export class TextRangesWithTagSelector implements IQueryTextRangeSelector {
     }
 }
 
-export class TextRangesWithTermMatchesSelector
+export class TextRangesFromSemanticRefsSelector
     implements IQueryTextRangeSelector
 {
-    constructor(public sourceExpr: QueryOpExpr<SemanticRefAccumulator>) {}
+    constructor(public sourceExpr: IQueryOpExpr<SemanticRefAccumulator>) {}
 
     public eval(context: QueryEvalContext): TextRangeCollection {
         const matches = this.sourceExpr.eval(context);
@@ -1099,6 +1115,20 @@ export class TextRangesWithTermMatchesSelector
             }
         }
         return rangesInScope;
+    }
+}
+
+export class TextRangesFromMessagesSelector implements IQueryTextRangeSelector {
+    constructor(public sourceExpr: IQueryOpExpr<MessageAccumulator>) {}
+
+    public eval(context: QueryEvalContext): TextRangeCollection | undefined {
+        const matches = this.sourceExpr.eval(context);
+        let rangesInScope: TextRange[] | undefined;
+        if (matches.size > 0) {
+            const allOrdinals = [...matches.getMatchedValues()];
+            rangesInScope = textRangesFromMessageOrdinals(allOrdinals);
+        }
+        return new TextRangeCollection(rangesInScope);
     }
 }
 
@@ -1211,6 +1241,135 @@ export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
     public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
         const matches = this.srcExpr.eval(context);
         return matches.toScoredMessageOrdinals();
+    }
+}
+
+export class MatchMessagesBooleanExpr extends QueryOpExpr<MessageAccumulator> {
+    constructor(
+        public termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super();
+    }
+
+    protected beginMatch(context: QueryEvalContext) {
+        context.clearMatchedTerms();
+    }
+
+    protected accumulateMessages(
+        context: QueryEvalContext,
+        semanticRefMatches: SemanticRefAccumulator,
+    ): MessageAccumulator {
+        const messageMatches = new MessageAccumulator();
+        for (const semanticRefMatch of semanticRefMatches.getMatches()) {
+            messageMatches.addMessagesForSemanticRef(
+                context.getSemanticRef(semanticRefMatch.value),
+                semanticRefMatch.score,
+            );
+        }
+        return messageMatches;
+    }
+}
+
+export class MatchMessagesOrExpr extends MatchMessagesBooleanExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super(termExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        this.beginMatch(context);
+        let allMatches: MessageAccumulator | undefined;
+        for (const matchExpr of this.termExpressions) {
+            const matches = matchExpr.eval(context);
+            if (matches === undefined || matches.size === 0) {
+                continue;
+            }
+            let messageMatches =
+                matches instanceof SemanticRefAccumulator
+                    ? this.accumulateMessages(context, matches)
+                    : matches;
+            if (allMatches) {
+                allMatches.addUnion(messageMatches);
+            } else {
+                allMatches = messageMatches;
+            }
+        }
+        if (allMatches) {
+            allMatches.calculateTotalScore();
+        }
+        return allMatches ?? new MessageAccumulator();
+    }
+}
+
+export class MatchMessagesAndExpr extends MatchMessagesBooleanExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super(termExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        this.beginMatch(context);
+
+        let allMatches: MessageAccumulator | undefined;
+        let iTerm = 0;
+        // Loop over each search term, intersecting the returned results...
+        for (; iTerm < this.termExpressions.length; ++iTerm) {
+            const matches = this.termExpressions[iTerm].eval(context);
+            if (matches === undefined || matches.size === 0) {
+                // We can't possibly have an 'and'
+                break;
+            }
+            let messageMatches =
+                matches instanceof SemanticRefAccumulator
+                    ? this.accumulateMessages(context, matches)
+                    : matches;
+            if (allMatches === undefined) {
+                allMatches = messageMatches;
+            } else {
+                allMatches = allMatches.intersect(messageMatches);
+                if (allMatches.size === 0) {
+                    // we can't possibly have an 'and'
+                    break;
+                }
+            }
+        }
+        if (allMatches && allMatches.size > 0) {
+            if (iTerm === this.termExpressions.length) {
+                allMatches.calculateTotalScore();
+                allMatches.selectWithHitCount(this.termExpressions.length);
+            } else {
+                // And is not possible
+                allMatches.clearMatches();
+            }
+        }
+        return allMatches ?? new MessageAccumulator();
+    }
+}
+
+export class MatchMessagesOrMaxExpr extends MatchMessagesOrExpr {
+    constructor(
+        termExpressions: IQueryOpExpr<
+            SemanticRefAccumulator | MessageAccumulator | undefined
+        >[],
+    ) {
+        super(termExpressions);
+    }
+
+    public override eval(context: QueryEvalContext): MessageAccumulator {
+        const matches = super.eval(context);
+        const maxHitCount = matches.getMaxHitCount();
+        if (maxHitCount > 1) {
+            matches.selectWithHitCount(maxHitCount);
+        }
+        return matches;
     }
 }
 

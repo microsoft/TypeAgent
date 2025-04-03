@@ -6,7 +6,8 @@ export type ListAction =
     | RemoveItemsAction
     | CreateListAction
     | GetListAction
-    | ClearListAction;
+    | ClearListAction
+    | StartEditList;
 
 // add one or more items to a list; if the list does not exist, create it
 export type AddItemsAction = {
@@ -44,6 +45,13 @@ export type GetListAction = {
 
 export type ClearListAction = {
     actionName: "clearList";
+    parameters: {
+        listName: string;
+    };
+};
+
+export type StartEditList = {
+    actionName: "startEditList";
     parameters: {
         listName: string;
     };

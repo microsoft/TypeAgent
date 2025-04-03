@@ -44,6 +44,9 @@
     "markdown": {
       "name": "markdown-agent"
     },
+    "montage": {
+      "name": "montage-agent"
+    },
     "oracle": {
       "name": "oracle-agent"
     },
@@ -51,12 +54,25 @@
       "name": "spelunker-agent"
     }
   },
+  "mcpServers": {
+    "mcpfilesystem": {
+      "emojiChar": "📁",
+      "description": "File system agent",
+      "defaultEnabled": false,
+      "serverScript": "./node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+      "serverScriptArgs": {
+        "allowedDirectories": {
+          "description": "Allowed directories for the file system agent to access",
+          "type": "string",
+          "multiple": true
+        }
+      }
+    }
+  },
   "explainers": {
     "v5": {
       "constructions": {
-        "data": [
-          "./data/explainer/v5/data/player/basic.json"
-        ],
+        "data": ["./data/explainer/v5/data/player/basic.json"],
         "file": "./data/explainer/v5/constructions.json"
       }
     }

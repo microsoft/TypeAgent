@@ -138,7 +138,7 @@ export function createSchemaAuthoringAgent(
                 action.parameters.webPlanDescription!,
                 action.parameters.webPlanSteps,
                 htmlFragments,
-                screenshot,
+                [screenshot],
             );
 
             if (suggestedStepsResponse.success) {
@@ -239,7 +239,7 @@ export function createSchemaAuthoringAgent(
                     action.parameters.webPlanDescription!,
                     paramsMap,
                     htmlFragments,
-                    screenshot,
+                    [screenshot],
                 );
 
                 if (evaluationResult.success) {

@@ -83,7 +83,10 @@ export function createChangeAssistantActionSchema(
                 ),
                 schemaNameParameterComments,
             ),
-            request: sc.string(),
+            request: sc.field(
+                sc.string(),
+                "complete request that can be translated, do not use entities' id for this field",
+            ),
         }),
     } as const);
     return sc.intf(
@@ -305,7 +308,7 @@ function createTypeAgentTranslator<
     // debug/token count tag
     const altTranslator = createJsonTranslatorWithValidator(
         "check",
-        translator.validator,
+        validator,
         options,
     );
     altTranslator.createRequestPrompt = (request: string) => {
@@ -321,7 +324,7 @@ function createTypeAgentTranslator<
         ) => {
             // Expand the request prompt up front with the history and attachments
             const requestPrompt = createTypeAgentRequestPrompt(
-                streamingTranslator,
+                validator,
                 request,
                 history,
                 attachments,
@@ -338,7 +341,7 @@ function createTypeAgentTranslator<
         // No streaming, no history, no attachments.
         checkTranslate: async (request: string) => {
             const requestPrompt = createTypeAgentRequestPrompt(
-                altTranslator,
+                validator,
                 request,
                 undefined,
                 undefined,

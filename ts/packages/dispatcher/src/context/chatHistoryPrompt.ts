@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import { HistoryContext } from "agent-cache";
-import { CachedImageWithDetails } from "common-utils";
-import { PromptSection, TypeChatJsonTranslator } from "typechat";
+import { CachedImageWithDetails, TypeAgentJsonValidator } from "common-utils";
+import { PromptSection } from "typechat";
 
 export function createTypeAgentRequestPrompt(
-    translator: TypeChatJsonTranslator<object>,
+    validator: TypeAgentJsonValidator<object>,
     request: string,
     history: HistoryContext | undefined,
     attachments: CachedImageWithDetails[] | undefined,
@@ -19,24 +19,36 @@ export function createTypeAgentRequestPrompt(
     }
 
     const prompts: string[] = [];
-    if (translator.validator.getSchemaText() === "") {
+    if (validator.getSchemaText() === "") {
         // If the schema is empty, we are skipping the type script schema because of json schema.
         prompts.push(
             `You are a service that translates user requests into JSON objects`,
         );
     } else {
         prompts.push(
-            `You are a service that translates user requests into JSON objects of type "${translator.validator.getTypeName()}" according to the following TypeScript definitions:`,
+            `You are a service that translates user requests into JSON objects of type "${validator.getTypeName()}" according to the following TypeScript definitions:`,
             `\`\`\``,
-            translator.validator.getSchemaText(),
+            validator.getSchemaText(),
             `\`\`\``,
         );
     }
 
     if (context) {
         if (history !== undefined) {
+            if (history.activityContext !== undefined) {
+                // REVIEW: this assume that the schema we are translating matches the activity context.
+                prompts.push("###");
+                prompts.push(
+                    `The user is currently working on the activity "${history.activityContext.description}" with the state:`,
+                    JSON.stringify(history.activityContext.state, undefined, 2),
+                );
+                prompts.push(
+                    `Translation can assume about the values in the activity state unless the request explicitly overrides them.`,
+                );
+            }
             const promptSections: PromptSection[] = history.promptSections;
             if (promptSections.length > 1) {
+                prompts.push("###");
                 prompts.push(
                     "The following is a summary of the recent chat history:",
                 );
@@ -97,7 +109,7 @@ export function createTypeAgentRequestPrompt(
         prompts.push(
             "Resolve pronouns and references in the current user request with the recent entities in the chat history.",
             "Determine the entities implicitly referred in the current user request based on the recent chat history.",
-            "If parameter values refers to an entity, use entities' id as parameter values when referring to entities instead of the entities' name",
+            "If parameter value refers to an entity, use entities' id as parameter values when referring to entities instead of the entities' name",
             "If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest.",
             "Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
             `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,

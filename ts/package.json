@@ -29,6 +29,7 @@
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
     "lint:fix": "pnpm run prettier:fix",
+    "montage": "pnpm -C packages/montage exec npm run start",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write .",
     "rebuild": "fluid-build . -t build --rebuild",
@@ -47,7 +48,7 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.7.0+sha512.6b865ad4b62a1d9842b61d674a393903b871d9244954f652b8842c2b553c72176b278f64c463e52d40fff8aba385c235c8c9ecf5cc7de4fd78b8bb6d49633ab6",
+  "packageManager": "pnpm@10.7.1",
   "engines": {
     "node": ">=18",
     "pnpm": ">=9"

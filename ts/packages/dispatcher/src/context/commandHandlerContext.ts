@@ -11,7 +11,7 @@ import {
     createDebugLoggerSink,
     createMongoDBLoggerSink,
 } from "telemetry";
-import { AgentCache } from "agent-cache";
+import { ActivityContext, AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
     DispatcherConfig,
@@ -106,6 +106,7 @@ export type CommandHandlerContext = {
     readonly cacheDir: string | undefined;
     readonly embeddingCacheDir: string | undefined;
 
+    activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     // Per activation configs
     developerMode?: boolean;

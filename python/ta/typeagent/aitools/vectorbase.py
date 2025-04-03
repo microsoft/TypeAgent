@@ -1,13 +1,35 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from dataclasses import dataclass
 from typing import Any, NamedTuple, TypedDict, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 from .embeddings import AsyncEmbeddingModel, NormalizedEmbedding, NormalizedEmbeddings
-from ..knowpro.importing import TextEmbeddingIndexSettings
+
+
+@dataclass
+class TextEmbeddingIndexSettings:
+    embedding_model: AsyncEmbeddingModel
+    embedding_size: int  # Always embedding_model.embedding_size
+    min_score: float
+    max_matches: int | None
+    retry_max_attempts: int = 2
+    retry_delay: float = 2.0  # Seconds
+    batch_size: int = 8
+
+    def __init__(
+        self,
+        model: AsyncEmbeddingModel | None = None,
+        min_score: float | None = None,
+        max_matches: int | None = None,
+    ):
+        self.embedding_model = model or AsyncEmbeddingModel()
+        self.embedding_size = self.embedding_model.embedding_size
+        self.min_score = min_score if min_score is not None else 0.85
+        self.max_matches = max_matches
 
 
 class ScoredOrdinal(NamedTuple):
@@ -15,18 +37,17 @@ class ScoredOrdinal(NamedTuple):
     score: float
 
 
-class ITextEmbeddingIndexData(TypedDict):
-    embeddings: NormalizedEmbeddings | None
-
-
 class VectorBase:
+    _vectors: NormalizedEmbeddings
+
     def __init__(self, settings: TextEmbeddingIndexSettings | None = None):
-        model = settings.embedding_model if settings is not None else None
+        model = settings.embedding_model if settings else None
+        embedding_size = settings.embedding_size if settings else None
         if model is None:
-            model = AsyncEmbeddingModel()
+            model = AsyncEmbeddingModel(embedding_size)
         self._model = model
-        # TODO: Using Any b/c pyright doesn't appear to understand NDArray.
-        self._vectors: NormalizedEmbeddings | None = None
+        self._embedding_size = model.embedding_size
+        self.clear()
 
     async def get_embedding(self, key: str, cache: bool = True) -> NormalizedEmbedding:
         if cache:
@@ -43,31 +64,28 @@ class VectorBase:
             return await self._model.get_embeddings_nocache(keys)
 
     def __len__(self) -> int:
-        return len(self._vectors) if self._vectors is not None else 0
+        return len(self._vectors)
 
     # Needed because otherwise an empty index would be falsy.
     def __bool__(self) -> bool:
         return True
 
+    def add_embedding(self, key: str | None, embedding: NormalizedEmbedding) -> None:
+        self._vectors = np.append(self._vectors, embedding, axis=0)
+        if key is not None:
+            self._model.add_embedding(key, embedding)
+
     async def add_key(self, key: str, cache: bool = True) -> None:
-        embedding = (await self.get_embedding(key)).reshape((1, -1))
-        if self._vectors is None:
-            self._vectors = embedding
-        else:
-            self._vectors = np.append(self._vectors, embedding, axis=0)
+        embedding = (await self.get_embedding(key)).reshape(1, -1)  # Make it 2D
+        self._vectors = np.append(self._vectors, embedding, axis=0)
 
     async def add_keys(self, keys: list[str], cache: bool = True) -> None:
         embeddings = await self.get_embeddings(keys, cache=cache)
-        if self._vectors is None:
-            self._vectors = embeddings
-        else:
-            self._vectors = np.append(self._vectors, embeddings, axis=0)
+        self._vectors = np.concatenate((self._vectors, embeddings), axis=0)
 
     async def fuzzy_lookup(
         self, key: str, max_hits: int | None = None, min_score: float | None = None
     ) -> list[ScoredOrdinal]:
-        if self._vectors is None:
-            return []
         if max_hits is None:
             max_hits = 10
         if min_score is None:
@@ -75,7 +93,7 @@ class VectorBase:
         embedding = await self.get_embedding(key)
         scores = np.dot(self._vectors, embedding)  # This does most of the work
         scored_ordinals = [
-            ScoredOrdinal(i, score)
+            ScoredOrdinal(i, float(score))
             for i, score in enumerate(scores)
             if score >= min_score
         ]
@@ -83,17 +101,27 @@ class VectorBase:
         return scored_ordinals[:max_hits]
 
     def clear(self) -> None:
-        self._vectors = np.array([], dtype=np.float32).reshape((0, 0))
+        self._vectors = np.array([], dtype=np.float32)
+        self._vectors.shape = (0, self._embedding_size)
 
     def serialize_embedding_at(self, ordinal: int) -> NormalizedEmbedding | None:
-        return self._vectors[ordinal] if self._vectors is not None else None
+        return self._vectors[ordinal] if 0 <= ordinal < len(self._vectors) else None
 
-    def serialize(self) -> NormalizedEmbeddings | None:
-        return self._vectors if self._vectors is not None else None
+    def serialize(self) -> NormalizedEmbeddings:
+        assert self._vectors.shape == (len(self._vectors), self._embedding_size)
+        return self._vectors  # TODO: Should we make a copy?
+
+    def deserialize(self, data: NormalizedEmbeddings | None) -> None:
+        if data is None:
+            self.clear()
+            return
+        assert data.shape == (len(data), self._embedding_size)
+        self._vectors = data  # TODO: Should we make a copy?
 
 
 async def main():
-    import dotenv, os, time
+    import time
+    from . import auth
 
     epoch = time.time()
 
@@ -108,7 +136,7 @@ async def main():
     def debugv(heading):
         log(f"{heading}: bool={bool(v)}, len={len(v)}")
 
-    dotenv.load_dotenv(os.path.expanduser("~/TypeAgent/ts/.env"))
+    auth.load_dotenv()
     v = VectorBase()
     debugv("\nEmpty vector base")
 

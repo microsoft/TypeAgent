@@ -14,10 +14,11 @@ export async function lookupAndAnswer(
 ): Promise<ActionResult> {
     switch (lookupAction.parameters.lookup.source) {
         case "internet":
-            console.log("Running internet lookups");
+            const { question, lookup } = lookupAction.parameters;
             return handleLookup(
-                lookupAction.parameters.question,
-                lookupAction.parameters.lookup.internetLookups,
+                question,
+                lookup.internetLookups,
+                lookup.site,
                 context,
                 await getLookupSettings(true),
             );
@@ -51,18 +52,32 @@ export async function lookupAndAnswer(
                     ) {
                         console.log("CONVERSATION MEMORY MATCHES:");
                         conversation.log.logSearchResponse(matches.response);
-                        console.log(
-                            "Answer: " +
-                                matches.response.answer.answer
-                                    ?.replace("\n", "")
-                                    .substring(0, 100) +
-                                "...",
-                        );
-                        return createActionResult(
-                            matches.response.answer.answer!,
-                            undefined,
-                            matchedEntities(matches.response),
-                        );
+
+                        if (matches.response.answer.whyNoAnswer) {
+                            console.log(
+                                "No Answer: " +
+                                    matches.response.answer.whyNoAnswer,
+                            );
+                            return createActionResult(
+                                "Not Answered - " +
+                                    matches.response.answer.whyNoAnswer,
+                                undefined,
+                                matchedEntities(matches.response),
+                            );
+                        } else {
+                            console.log(
+                                "Answer: " +
+                                    matches.response.answer.answer
+                                        ?.replace("\n", "")
+                                        .substring(0, 100) +
+                                    "...",
+                            );
+                            return createActionResult(
+                                matches.response.answer.answer!,
+                                undefined,
+                                matchedEntities(matches.response),
+                            );
+                        }
                     } else {
                         console.log("bug bug");
                         return createActionResult(

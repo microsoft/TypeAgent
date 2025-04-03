@@ -16,4 +16,6 @@ onlyBuiltDependencies:
   - esbuild
   - exifreader
   - keytar
+  - koffi
   - puppeteer
+  - sharp

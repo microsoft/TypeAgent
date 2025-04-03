@@ -54,10 +54,18 @@ export function skipTest(name: string) {
 
 export function createTestModels(): TestModels {
     return {
-        chat: openai.createChatModelDefault("knowledgeProcessorTest"),
-        answerModel: openai.createChatModel("knowledgeProcessorTest"),
-        embeddings: openai.createEmbeddingModel(),
+        chat: createTestChatModel(),
+        answerModel: createTestChatModel(),
+        embeddings: createTestEmbeddingModel(),
     };
+}
+
+export function createTestChatModel() {
+    return openai.createChatModelDefault("knowpro-test");
+}
+
+export function createTestEmbeddingModel() {
+    return openai.createEmbeddingModel();
 }
 
 export function getRootDataPath() {

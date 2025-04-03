@@ -65,6 +65,7 @@
     "webNavigation",
     "debugger",
     "contextMenus",
+    "downloads",
     "sidePanel"
   ],
   "host_permissions": ["<all_urls>"],

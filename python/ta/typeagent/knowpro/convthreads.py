@@ -1,18 +1,15 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Protocol, TypedDict
-
-from .importing import TextEmbeddingIndexSettings
 from .interfaces import (
-    IConversationThreadData,
+    ConversationThreadData,
     IConversationThreads,
-    IThreadDataItem,
+    ThreadDataItem,
     ScoredThreadOrdinal,
     Thread,
     ThreadData,
 )
-from ..aitools.vectorbase import VectorBase
+from ..aitools.vectorbase import TextEmbeddingIndexSettings, VectorBase
 
 
 class ConversationThreads(IConversationThreads):
@@ -57,16 +54,29 @@ class ConversationThreads(IConversationThreads):
             [t.description for t in self.threads], cache=False
         )
 
-    def serialize(self) -> IConversationThreadData[IThreadDataItem]:
-        thread_data: list[IThreadDataItem] = []
+    def serialize(self) -> ConversationThreadData[ThreadDataItem]:
         embedding_index = self.vector_base
 
+        thread_data: list[ThreadDataItem] = []
         for i, thread in enumerate(self.threads):
             thread_data.append(
-                IThreadDataItem(
+                ThreadDataItem(
                     thread=thread.serialize(),
                     embedding=embedding_index.serialize_embedding_at(i),
                 )
             )
 
-        return IConversationThreadData(threads=thread_data)
+        return ConversationThreadData(threads=thread_data)
+
+    def deserialize(self, data: ConversationThreadData[ThreadDataItem]) -> None:
+        self.clear()
+        thread_data = data.get("threads")
+        if thread_data is None:
+            return
+        for item in thread_data:
+            thread_data = item["thread"]
+            embedding = item["embedding"]
+            thread = Thread.deserialize(thread_data)
+            self.threads.append(thread)
+            if embedding:
+                self.vector_base.add_embedding(thread_data["description"], embedding)

@@ -19,7 +19,10 @@ import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
-import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
+import {
+    DispatcherActivityName,
+    DispatcherName,
+} from "./dispatcher/dispatcherUtils.js";
 import {
     ActionSchemaSemanticMap,
     EmbeddingCache,
@@ -38,11 +41,11 @@ type AppAgentRecord = {
     schemas: Set<string>;
     actions: Set<string>;
     commands: boolean;
-    hasSchemas: boolean;
     manifest: AppAgentManifest;
     appAgent?: AppAgent | undefined;
     sessionContext?: SessionContext | undefined;
     sessionContextP?: Promise<SessionContext> | undefined;
+    schemaErrors: Map<string, Error>;
 };
 
 export type AppAgentStateConfig = {
@@ -88,15 +91,14 @@ export type SetStateResult = {
 };
 
 export const alwaysEnabledAgents = {
-    schemas: [DispatcherName],
-    actions: [DispatcherName],
+    schemas: [DispatcherName, DispatcherActivityName],
+    actions: [DispatcherName, DispatcherActivityName],
     commands: ["system"],
 };
 
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
-    private readonly injectedSchemaForActionName = new Map<string, string>();
     private readonly emojis: Record<string, string> = {};
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
@@ -233,13 +235,16 @@ export class AppAgentManager implements ActionConfigProvider {
         const actionConfigs = convertToActionConfig(appAgentName, manifest);
 
         const entries = Object.entries(actionConfigs);
+        const schemaErrors = new Map<string, Error>();
 
-        try {
-            for (const [schemaName, config] of entries) {
-                debug(`Adding action config: ${schemaName}`);
-                this.actionConfigs.set(schemaName, config);
-                this.emojis[schemaName] = config.emojiChar;
-
+        for (const [schemaName, config] of entries) {
+            debug(`Adding action config: ${schemaName}`);
+            this.actionConfigs.set(schemaName, config);
+            this.emojis[schemaName] = config.emojiChar;
+            if (config.transient) {
+                this.transientAgents[schemaName] = false;
+            }
+            try {
                 const actionSchemaFile =
                     this.actionSchemaFileCache.getActionSchemaFile(config);
 
@@ -252,34 +257,20 @@ export class AppAgentManager implements ActionConfigProvider {
                         ),
                     );
                 }
-
-                if (config.transient) {
-                    this.transientAgents[schemaName] = false;
-                }
-                if (config.injected) {
-                    for (const actionName of actionSchemaFile.parsedActionSchema.actionSchemas.keys()) {
-                        this.injectedSchemaForActionName.set(
-                            actionName,
-                            schemaName,
-                        );
-                    }
-                }
+            } catch (e: any) {
+                schemaErrors.set(schemaName, e);
             }
-
-            this.emojis[appAgentName] = manifest.emojiChar;
-        } catch (e: any) {
-            // Clean up what we did.
-            this.cleanupAgent(appAgentName);
-            throw e;
         }
+
+        this.emojis[appAgentName] = manifest.emojiChar;
 
         const record: AppAgentRecord = {
             name: appAgentName,
             provider,
             actions: new Set(),
             schemas: new Set(),
+            schemaErrors,
             commands: false,
-            hasSchemas: entries.length > 0,
             manifest,
         };
 
@@ -323,14 +314,6 @@ export class AppAgentManager implements ActionConfigProvider {
             if (config.transient) {
                 delete this.transientAgents[schemaName];
             }
-            if (config.injected) {
-                const injectedMap = this.injectedSchemaForActionName;
-                for (const [actionName, name] of injectedMap) {
-                    if (name === schemaName) {
-                        injectedMap.delete(actionName);
-                    }
-                }
-            }
         }
     }
 
@@ -341,7 +324,7 @@ export class AppAgentManager implements ActionConfigProvider {
 
         await this.closeSessionContext(record);
         if (record.appAgent !== undefined) {
-            record.provider?.unloadAppAgent(record.name);
+            await record.provider?.unloadAppAgent(record.name);
         }
     }
 
@@ -408,9 +391,17 @@ export class AppAgentManager implements ActionConfigProvider {
             );
             if (enableSchema !== record.schemas.has(name)) {
                 if (enableSchema) {
-                    record.schemas.add(name);
-                    changedSchemas.push([name, enableSchema]);
-                    debug(`Schema enabled ${name}`);
+                    const e = record.schemaErrors.get(name);
+                    if (e !== undefined) {
+                        failedSchemas.push([name, enableSchema, e]);
+                        debugError(
+                            `Schema '${name}' is not enabled because of error: ${e.message}`,
+                        );
+                    } else {
+                        record.schemas.add(name);
+                        changedSchemas.push([name, enableSchema]);
+                        debug(`Schema enabled ${name}`);
+                    }
                 } else {
                     record.schemas.delete(name);
                     changedSchemas.push([name, enableSchema]);
@@ -525,7 +516,7 @@ export class AppAgentManager implements ActionConfigProvider {
                     record.commands = false;
                     await this.closeSessionContext(record);
                     if (record.appAgent !== undefined) {
-                        record.provider?.unloadAppAgent(record.name);
+                        await record.provider?.unloadAppAgent(record.name);
                     }
                     record.appAgent = undefined;
                 })(),

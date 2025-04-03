@@ -1,22 +1,28 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
-dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
-
-import {
-    ChatModel,
-    hasEnvSettings,
-    openai,
-    TextEmbeddingModel,
-} from "aiclient";
-
 import path from "path";
-import os from "node:os";
-import { DeletionInfo, IMessage } from "../src/interfaces.js";
-import { ConversationSettings } from "../src/conversation.js";
+import { getAbsolutePath, NullEmbeddingModel, readTestFile } from "test-lib";
+import {
+    DeletionInfo,
+    IConversation,
+    IConversationSecondaryIndexes,
+    IMessage,
+    ITermToSemanticRefIndex,
+    SemanticRef,
+    PropertySearchTerm,
+} from "../src/interfaces.js";
+import {
+    ConversationSettings,
+    createConversationSettings,
+} from "../src/conversation.js";
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
+import { SemanticRefSearchResult } from "../src/search.js";
+import { createSearchTerm } from "../src/searchLib.js";
+import * as q from "../src/query.js";
+import { PropertyNames } from "../src/propertyIndex.js";
+import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 
 export class TestMessage implements IMessage {
     constructor(
@@ -31,6 +37,22 @@ export class TestMessage implements IMessage {
     }
 }
 
+export class TestConversation implements IConversation<TestMessage> {
+    public semanticRefs: SemanticRef[] | undefined;
+    public semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    public secondaryIndexes?: IConversationSecondaryIndexes | undefined;
+
+    constructor(
+        public nameTag: string,
+        public tags: string[] = [],
+        public messages: TestMessage[] = [],
+    ) {}
+}
+
+export function emptyConversation() {
+    return new TestConversation("Empty Conversation");
+}
+
 export function createMessage(messageText: string): TestMessage {
     const message = new TestMessage([messageText]);
     message.timestamp = createTimestamp();
@@ -41,54 +63,36 @@ export function createTimestamp(): string {
     return new Date().toISOString();
 }
 
-export type TestModels = {
-    chat: ChatModel;
-    embeddings: TextEmbeddingModel;
-};
-
-export function testIf(
-    name: string,
-    runIf: () => boolean,
-    fn: jest.ProvidesCallback,
-    testTimeout?: number | undefined,
+export function createOfflineConversationSettings(
+    getCache: () => TextEmbeddingCache | undefined,
 ) {
-    if (!runIf()) {
-        return test.skip(name, () => {});
-    }
-    return test(name, fn, testTimeout);
+    const cachingModel = createEmbeddingCache(
+        new NullEmbeddingModel(),
+        32,
+        getCache,
+    );
+    return createConversationSettings(cachingModel);
 }
 
-export function shouldSkip() {
-    return !hasTestKeys();
+export const defaultConversationName = "Episode_53_AdrianTchaikovsky_index";
+
+export function loadTestConversation(
+    settings: ConversationSettings,
+    name?: string,
+): Promise<IConversation> {
+    name ??= defaultConversationName;
+    return createConversationFromFile(
+        getAbsolutePath("./test/data"),
+        name,
+        settings,
+    );
 }
 
-export function hasTestKeys() {
-    const hasKeys: boolean =
-        hasEnvSettings(process.env, openai.EnvVars.AZURE_OPENAI_API_KEY) &&
-        hasEnvSettings(
-            process.env,
-            openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
-        );
-    return hasKeys;
-}
-
-export function skipTest(name: string) {
-    return test.skip(name, () => {});
-}
-
-export function createTestModels(): TestModels {
-    return {
-        chat: openai.createChatModelDefault("knowproTest"),
-        embeddings: openai.createEmbeddingModel(),
-    };
-}
-
-export function getRootDataPath() {
-    return path.join(os.tmpdir(), "/data/test");
-}
-
-export function getRelativePath(relativePath: string): string {
-    return path.join(process.cwd(), relativePath);
+export function loadTestQueries(
+    relativePath: string,
+): Record<string, string>[] {
+    const json = readTestFile(relativePath);
+    return JSON.parse(json);
 }
 
 export async function createConversationFromFile(
@@ -107,4 +111,37 @@ export async function createConversationFromFile(
         );
     }
     return createConversationFromData(data, settings);
+}
+
+export function getSemanticRefsForSearchResult(
+    conversation: IConversation,
+    result: SemanticRefSearchResult,
+): SemanticRef[] {
+    return conversation.semanticRefs
+        ? result.semanticRefMatches.map(
+              (m) => conversation.semanticRefs![m.semanticRefOrdinal],
+          )
+        : [];
+}
+
+export function findEntityWithName(
+    semanticRefs: SemanticRef[],
+    entityName: string,
+): SemanticRef | undefined {
+    const searchTerm: PropertySearchTerm = {
+        propertyName: PropertyNames.EntityName,
+        propertyValue: createSearchTerm(entityName),
+    };
+    return semanticRefs.find((sr) =>
+        q.matchPropertySearchTermToEntity(searchTerm, sr),
+    );
+}
+
+export function createQueryContext(conversation: IConversation) {
+    const secondaryIndexes = conversation.secondaryIndexes!;
+    return new q.QueryEvalContext(
+        conversation,
+        secondaryIndexes.propertyToSemanticRefIndex,
+        secondaryIndexes.timestampIndex,
+    );
 }

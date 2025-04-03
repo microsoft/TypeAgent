@@ -3,6 +3,7 @@
 
 import {
     ActionContext,
+    AppAction,
     AppAgent,
     AppAgentManifest,
     ParsedCommandParams,
@@ -20,6 +21,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
+import { ShellAction } from "./shellActionSchema.js";
 
 const port = process.env.PORT || 9001;
 
@@ -30,6 +32,11 @@ type ShellContext = {
 const config: AppAgentManifest = {
     emojiChar: "🐚",
     description: "Shell",
+    schema: {
+        description: "Graphical user interface (shell) for the user.",
+        schemaFile: "../shell/src/main/shellActionSchema.ts",
+        schemaType: "ShellAction",
+    },
 };
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
@@ -213,8 +220,15 @@ class ShellOpenWebContentView implements CommandHandler {
                 targetUrl = new URL(`http://localhost:${port}/`);
 
                 break;
+            case "montage":
+                // TODO: agents should publish their port #s in manifests
+                targetUrl = new URL(`http://localhost:9012/`);
+
+                break;
             default:
                 targetUrl = new URL(params.args.site);
+
+                break;
         }
         context.sessionContext.agentContext.settings.openInlineBrowser(
             targetUrl,
@@ -264,6 +278,29 @@ const agent: AppAgent = {
             settings: ShellSettings.getinstance(),
         };
     },
+    async executeAction(
+        action: AppAction,
+        context: ActionContext<ShellContext>,
+    ) {
+        const shellAction = action as ShellAction;
+        switch (shellAction.actionName) {
+            case "openCanvas":
+                const openCmd = new ShellOpenWebContentView();
+                const parameters = {
+                    args: {
+                        site: shellAction.parameters.site,
+                    },
+                };
+                openCmd.run(context, parameters as any);
+                break;
+            case "closeCanvas":
+                const closeCmd = new ShellCloseWebContentView();
+                closeCmd.run(context);
+                break;
+        }
+
+        return undefined;
+    },
     ...getCommandInterface(handlers),
 };
 
@@ -283,7 +320,7 @@ export const shellAgentProvider: AppAgentProvider = {
         }
         return agent;
     },
-    unloadAppAgent: (appAgentName: string) => {
+    unloadAppAgent: async (appAgentName: string) => {
         if (appAgentName !== "shell") {
             throw new Error(`Unknown app agent: ${appAgentName}`);
         }

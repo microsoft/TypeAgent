@@ -29,6 +29,7 @@ export {
     ParameterDefinitions,
     ParsedCommandParams,
     PartialParsedCommandParams,
+    ArgDefinitions,
     FlagDefinitions,
 } from "./parameters.js";
 export {

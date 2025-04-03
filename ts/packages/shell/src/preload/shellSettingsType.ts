@@ -24,7 +24,8 @@ export type ShellSettingsType = {
     partialCompletion: boolean;
     disallowedDisplayType: DisplayType[];
     darkMode: boolean;
-    chatHistory: boolean;
+    chatHistory: boolean; // should the shell load the chat history?
+    canvas?: string; // should the canvas be reopenend upon start?
 };
 
 export const defaultSettings: ShellSettingsType = {

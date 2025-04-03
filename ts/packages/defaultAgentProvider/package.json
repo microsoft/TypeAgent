@@ -28,6 +28,8 @@
   },
   "dependencies": {
     "@azure/msal-node-extensions": "^1.5.0",
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@modelcontextprotocol/server-filesystem": "2025.1.14",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",
@@ -52,6 +54,7 @@
     "knowledge-processor": "workspace:*",
     "list-agent": "workspace:*",
     "markdown-agent": "workspace:*",
+    "montage-agent": "workspace:*",
     "music": "workspace:*",
     "oracle-agent": "workspace:*",
     "photo-agent": "workspace:*",
@@ -61,7 +64,8 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "ws": "^8.17.1"
+    "ws": "^8.17.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

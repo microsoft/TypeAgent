@@ -9,7 +9,7 @@ import {
     ListIndexingResult,
     MessageOrdinal,
 } from "./interfaces.js";
-import { textRangeFromMessageChunk } from "./conversationIndex.js";
+import { textRangeFromMessageChunk } from "./message.js";
 import {
     ITimestampToTextRangeIndex,
     TimestampedTextRange,
@@ -112,6 +112,7 @@ export function buildTimestampIndex(
     if (conversation.messages && conversation.secondaryIndexes) {
         conversation.secondaryIndexes.timestampIndex ??=
             new TimestampToTextRangeIndex();
+        // TODO: do ths using slices/batch so we don't have to load all messages
         return addToTimestampIndex(
             conversation.secondaryIndexes.timestampIndex,
             conversation.messages,
