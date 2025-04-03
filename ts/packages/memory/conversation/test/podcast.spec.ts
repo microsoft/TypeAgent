@@ -8,7 +8,8 @@ import {
 } from "test-lib";
 import {
     createOnlineConversationSettings,
-    getTestTranscriptSmall,
+    getTestTranscriptDialog,
+    // getTestTranscriptSmall,
 } from "./testCommon.js";
 import { importPodcast } from "../src/importPodcast.js";
 import { IndexingResults, TextIndexingResult, TextLocation } from "knowpro";
@@ -19,10 +20,9 @@ describe("podcast", () => {
         "buildIndex",
         () => hasTestKeys(),
         async () => {
-            const test = getTestTranscriptSmall();
+            //const test = getTestTranscriptSmall();
             const maxMessages = 4;
-            // TODO: issue with this file..
-            //const test = getTestTranscriptDialog();
+            const test = getTestTranscriptDialog();
             const podcast = await importPodcast(
                 getAbsolutePath(test.filePath),
                 test.name,
@@ -30,7 +30,9 @@ describe("podcast", () => {
                 test.length,
                 createOnlineConversationSettings(),
             );
-            podcast.messages = podcast.messages.slice(0, maxMessages);
+            if (maxMessages < podcast.messages.length) {
+                podcast.messages = podcast.messages.slice(0, maxMessages);
+            }
             const results = await podcast.buildIndex();
             verifyNoErrors(results);
 
