@@ -51,7 +51,7 @@ app.get("/image", (req: Request, res: Response) => {
     } else {
         const normalized = path.resolve(file);
         allowedFolders.forEach((folder) => {
-            if (normalized.startsWith(folder)) {
+            if (normalized.startsWith(path.resolve(folder))) {
                 // send the file
                 res.sendFile(normalized);
                 served = true
@@ -135,7 +135,7 @@ app.get("/knowlegeResponse", (req: Request, res: Response) => {
 
     // does the file exist and is it in an allowed folder
     allowedFolders.forEach((folder) => {
-        if (file.startsWith(folder)) {
+        if (normalizedPath.startsWith(path.resolve(folder))) {
             if (fs.existsSync(normalizedPath)) {
                 res.sendFile(normalizedPath);
             } else {
