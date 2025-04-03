@@ -36,7 +36,7 @@ import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
 import {
-    getChatHistoryForTranslation,
+    getHistoryContext,
     getTranslatorForSchema,
     translateRequest,
 } from "../../../translation/translateRequest.js";
@@ -150,11 +150,13 @@ async function canTranslateWithoutContext(
     }
 }
 
-function hasAdditionalInstructions(history?: HistoryContext) {
+function canBeCachedWithHistory(history?: HistoryContext) {
+    // TODO: Translation with additional instructions or activities context are not cacheable for now
     return (
-        history &&
-        history.additionalInstructions !== undefined &&
-        history.additionalInstructions.length > 0
+        history === undefined ||
+        ((history.additionalInstructions === undefined ||
+            history.additionalInstructions.length === 0) &&
+            history.activityContext !== undefined)
     );
 }
 
@@ -167,8 +169,7 @@ function getExplainerOptions(
         return undefined;
     }
 
-    if (hasAdditionalInstructions(requestAction.history)) {
-        // Translation with additional instructions are not cacheable.
+    if (!canBeCachedWithHistory(requestAction.history)) {
         return undefined;
     }
 
@@ -338,7 +339,7 @@ export class RequestCommandHandler implements CommandHandler {
 
             const history = systemContext.session.getConfig().translation
                 .history.enabled
-                ? getChatHistoryForTranslation(systemContext)
+                ? getHistoryContext(systemContext)
                 : undefined;
 
             // prefetch entities here
@@ -354,7 +355,7 @@ export class RequestCommandHandler implements CommandHandler {
 
             const canUseCacheMatch =
                 (attachments === undefined || attachments.length === 0) &&
-                !hasAdditionalInstructions(history);
+                canBeCachedWithHistory(history);
             const match = canUseCacheMatch
                 ? await matchRequest(request, context, history)
                 : undefined;
