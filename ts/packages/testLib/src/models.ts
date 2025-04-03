@@ -1,15 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import dotenv from "dotenv";
+const envUrl = new URL("../../../.env", import.meta.url);
+dotenv.config({ path: envUrl });
+
 import {
     ChatModel,
     hasEnvSettings,
     openai,
     TextEmbeddingModel,
 } from "aiclient";
-import dotenv from "dotenv";
 import { Result } from "typechat";
-dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
 
 export function hasTestKeys() {
     const hasKeys: boolean =
@@ -25,6 +27,10 @@ export type TestModels = {
     chat: ChatModel;
     embeddings: TextEmbeddingModel;
 };
+
+export function createTestEmbeddingModel(): [TextEmbeddingModel, number] {
+    return [openai.createEmbeddingModel(), 1536];
+}
 
 export function createTestModels(testName: string): TestModels {
     return {

@@ -14,7 +14,7 @@ import { ConversationSettings, IMessage } from "knowpro";
 export function parsePodcastTranscript(
     transcriptText: string,
 ): [PodcastMessage[], Set<string>] {
-    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
+    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
     const transcriptLines = getTranscriptLines(transcriptText);
     const participants = new Set<string>();
     const messages: PodcastMessage[] = [];
@@ -29,7 +29,7 @@ export function parsePodcastTranscript(
                 if (speaker) {
                     messages.push(curMsg);
                     curMsg = undefined;
-                } else {
+                } else if (speech) {
                     curMsg.addContent("\n" + speech);
                 }
             }
@@ -39,7 +39,7 @@ export function parsePodcastTranscript(
                     participants.add(speaker);
                 }
                 curMsg = new PodcastMessage(
-                    [speech],
+                    [speech.trim()],
                     new PodcastMessageMeta(speaker),
                 );
             }
@@ -49,21 +49,6 @@ export function parsePodcastTranscript(
         messages.push(curMsg);
     }
     return [messages, participants];
-}
-
-export function parsePodcastSpeakers(transcriptText: string): string[] {
-    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
-    const transcriptLines = getTranscriptLines(transcriptText);
-    const speakers: string[] = [];
-    transcriptLines.forEach((line) => {
-        const match = turnParserRegex.exec(line);
-        if (match && match.groups) {
-            if (match.groups.speaker) {
-                speakers.push(match.groups.speaker);
-            }
-        }
-    });
-    return speakers;
 }
 
 export async function importPodcast(

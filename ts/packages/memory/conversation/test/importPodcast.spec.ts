@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import { getAbsolutePath, readTestFile } from "test-lib";
-import {
-    importPodcast,
-    parsePodcastSpeakers,
-    parsePodcastTranscript,
-} from "../src/importPodcast.js";
+import { importPodcast, parsePodcastTranscript } from "../src/importPodcast.js";
 import {
     createOfflineConversationSettings,
     getTestTranscripts,
@@ -15,16 +11,6 @@ import {
 describe("conversation.importPodcast", () => {
     const testTimeout = 5 * 60 * 1000;
     const testTranscripts = getTestTranscripts();
-
-    test("parseSpeakers", () => {
-        for (const test of testTranscripts) {
-            const transcriptText = readTestFile(test.filePath);
-            const speakers = parsePodcastSpeakers(transcriptText);
-            if (test.messageCount) {
-                expect(speakers).toHaveLength(test.messageCount);
-            }
-        }
-    });
 
     test("parseTranscript", () => {
         for (const test of testTranscripts) {
