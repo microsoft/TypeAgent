@@ -516,8 +516,12 @@ export async function importImages(
         );
     }
 
-    if (cachePath === undefined) {
-        cachePath = path.dirname(imagePath);
+    if (cachePath !== undefined) {
+        if (!fs.existsSync(cachePath)) {
+            fs.mkdirSync(cachePath);
+        }
+    } else {
+        cachePath = imagePath;
     }
 
     // create a model used to extract data from the images
@@ -571,6 +575,12 @@ async function indexImages(
     // index each image
     const retVal: Image[] = [];
     for (let i = 0; i < fileNames.length; i++) {
+        // ignore thumbnail images
+        if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
+            console.log(`ignoring '${fileNames[i]}'`);
+            continue;
+        }
+
         const fullFilePath: string = path.join(sourcePath, fileNames[i]);
 
         if (isDirectoryPath(fullFilePath)) {

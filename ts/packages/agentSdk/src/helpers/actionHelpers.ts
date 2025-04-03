@@ -11,10 +11,11 @@ import { Entity } from "../memory.js";
 
 export function createActionResultNoDisplay(
     literalText: string,
+    entities?: Entity[] | undefined,
 ): ActionResultSuccessNoDisplay {
     return {
         literalText,
-        entities: [],
+        entities: entities ? entities : [],
     };
 }
 

@@ -673,7 +673,7 @@ function createAzureOpenAIChatModel(
 
     function verifyContentSafety(data: ChatCompletionChunk): boolean {
         data.choices.map((c: ChatCompletionDelta) => {
-            if (c.finish_reason == "content_filter_error") {
+            if (c.finish_reason === "content_filter_error") {
                 const err = c.content_filter_results as FilterError;
                 throw new Error(
                     `There was a content filter error (${err.code}): ${err.message}`,
@@ -701,6 +701,12 @@ function verifyFilterResults(filterResult: FilterResult) {
         }
         if (filterResult.violence?.filtered) {
             filters.push("violence");
+        }
+        if (filterResult.protected_material_code?.filtered) {
+            filters.push("protected_material_code");
+        }
+        if (filterResult.protected_material_text?.filtered) {
+            filters.push("protected_material_text");
         }
 
         if (filters.length > 0) {

@@ -42,9 +42,10 @@ export class ShellSettings
     public onRunDemo: ((interactive: boolean) => void) | null;
     public onToggleTopMost: EmptyFunction | null;
     public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
-    public onCloseInlineBrowser: EmptyFunction | null;
+    public onCloseInlineBrowser: ((save: boolean) => void) | null;
     public darkMode: boolean;
     public chatHistory: boolean;
+    public canvas?: string;
 
     public get width(): number {
         return this.size[0] ?? defaultSettings.size[0];
@@ -93,6 +94,7 @@ export class ShellSettings
         this.onCloseInlineBrowser = null;
         this.darkMode = settings.darkMode;
         this.chatHistory = settings.chatHistory;
+        this.canvas = settings.canvas;
     }
 
     public static get filePath(): string {
@@ -202,9 +204,9 @@ export class ShellSettings
         }
     }
 
-    public closeInlineBrowser() {
+    public closeInlineBrowser(save: boolean = true) {
         if (ShellSettings.getinstance().onCloseInlineBrowser != null) {
-            ShellSettings.getinstance().onCloseInlineBrowser!();
+            ShellSettings.getinstance().onCloseInlineBrowser!(save);
         }
     }
 }

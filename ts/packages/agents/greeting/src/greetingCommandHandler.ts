@@ -117,7 +117,7 @@ export interface GenericGreeting {
 export class GreetingCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Have the agent generate a personalized greeting.";
-    private instructions = `You are a breezy greeting generator.`;
+    private instructions = `You are a breezy greeting generator. You also help the user remember unfished work like projects.`;
 
     /**
      * Handle the @greeting command
@@ -256,7 +256,7 @@ async function handlePersonalizedGreetingAction(
     greetingAction: PersonalizedGreetingAction,
     context: ActionContext<GreetingAgentContext>,
 ): Promise<ActionResult> {
-    let result = createActionResult("Hi!");
+    let result = createActionResult("Hi!", true, undefined);
     if (greetingAction.parameters !== undefined) {
         const count = greetingAction.parameters.possibleGreetings.length;
         console.log(`Received ${count} generated greetings`);
@@ -340,8 +340,10 @@ async function getRecentChatHistory(
 
     if (conversationManager !== undefined) {
         let searchResponse = await conversationManager.getSearchResponse(
-            "What were we talking about last?",
-            [{ terms: ["last conversation"] }],
+            "What were we talking about most recently?",
+            [{ terms: ["last conversation", "project"] }],
+            { maxMatches: 5 },
+            5,
         );
         if (searchResponse && searchResponse.response?.hasHits()) {
             chatHistory.push(
@@ -349,7 +351,7 @@ async function getRecentChatHistory(
             );
             chatHistory.push("###");
             chatHistory.push(
-                "Recent entities found in chat history, in order, most recent first:",
+                "Recent entities found in chat history, in order, oldest first, most recent last:",
             );
             searchResponse.response?.entities.map((ee) => {
                 ee.entities?.map((e) => {
