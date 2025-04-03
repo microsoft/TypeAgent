@@ -119,12 +119,12 @@ function checkActionSchema(
     schemaConfig: SchemaConfig | undefined,
 ): [string, ActionSchemaTypeDefinition] {
     const name = definition.name;
-    
+
     if (definition.type.type !== "object") {
         throw new Error(
             `Schema Error: object type expect in action schema type ${name}, got ${definition.type.type}`,
         );
-    } 
+    }
 
     const { actionName, parameters } = definition.type.fields;
     if (actionName === undefined) {
@@ -430,7 +430,7 @@ class ActionParser {
             case ts.SyntaxKind.LiteralType:
                 return this.parseLiteralType(node as ts.LiteralTypeNode);
             // TODO: Faithfully resolve intersection types
-            // case ts.SyntaxKind.IntersectionType:                
+            // case ts.SyntaxKind.IntersectionType:
             //     return this.parseIntersectionType(node as ts.IntersectionTypeNode);
             default:
                 throw new Error(
@@ -516,7 +516,7 @@ class ActionParser {
             : this.parseTypeUnionType(node);
     }
 
-    // TOOD: Faithfully resolve intersection types 
+    // TOOD: Faithfully resolve intersection types
     // private parseIntersectionType(node: ts.IntersectionTypeNode): SchemaTypeObject {
     //     const fields: SchemaObjectFields = {};
     //     for (const type of node.types) {
@@ -527,7 +527,7 @@ class ActionParser {
 
     //             const typeRef = this.typeMap.get(parsedType.name);
 
-    //             if (typeRef?.type.type !== 'object') {  
+    //             if (typeRef?.type.type !== 'object') {
     //                 throw new Error(
     //                     `Unsupported type reference in intersection type: ${parsedType.name}`,
     //                 );
@@ -540,7 +540,7 @@ class ActionParser {
     //                     trailingComments: field.trailingComments,
     //                 };
     //             });
-                
+
     //         } else {
     //             throw new Error(
     //                 `Only object types are supported in intersection types. Received ${parsedType.type}`

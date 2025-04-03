@@ -7,9 +7,9 @@ packages:
   - examples/agentExamples/*
   - tools
 onlyBuiltDependencies:
-  - '@azure/msal-node-extensions'
-  - '@azure/msal-node-runtime'
-  - '@vscode/vsce-sign'
+  - "@azure/msal-node-extensions"
+  - "@azure/msal-node-runtime"
+  - "@vscode/vsce-sign"
   - better-sqlite3
   - canvas
   - electron

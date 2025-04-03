@@ -35,8 +35,8 @@ const config: AppAgentManifest = {
     schema: {
         description: "Graphical user interface (shell) for the user.",
         schemaFile: "../shell/src/main/shellActionSchema.ts",
-        schemaType: "ShellAction"
-    }
+        schemaType: "ShellAction",
+    },
 };
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
@@ -227,7 +227,7 @@ class ShellOpenWebContentView implements CommandHandler {
                 break;
             default:
                 targetUrl = new URL(params.args.site);
-                
+
                 break;
         }
         context.sessionContext.agentContext.settings.openInlineBrowser(
@@ -278,17 +278,20 @@ const agent: AppAgent = {
             settings: ShellSettings.getinstance(),
         };
     },
-    async executeAction(action: AppAction, context: ActionContext<ShellContext>) {
+    async executeAction(
+        action: AppAction,
+        context: ActionContext<ShellContext>,
+    ) {
         const shellAction = action as ShellAction;
         switch (shellAction.actionName) {
             case "openCanvas":
                 const openCmd = new ShellOpenWebContentView();
                 const parameters = {
                     args: {
-                        site: shellAction.parameters.site
-                    }
-                }
-                openCmd.run(context, parameters as any)
+                        site: shellAction.parameters.site,
+                    },
+                };
+                openCmd.run(context, parameters as any);
                 break;
             case "closeCanvas":
                 const closeCmd = new ShellCloseWebContentView();
@@ -297,7 +300,7 @@ const agent: AppAgent = {
         }
 
         return undefined;
-    },    
+    },
     ...getCommandInterface(handlers),
 };
 

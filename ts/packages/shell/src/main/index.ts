@@ -327,18 +327,25 @@ async function createWindow() {
         }
 
         // only open the requested canvas if it isn't already opened
-        if (ShellSettings.getinstance().canvas !== targetUrl.toString() || justopened) {
+        if (
+            ShellSettings.getinstance().canvas !== targetUrl.toString() ||
+            justopened
+        ) {
             inlineWebContentView?.webContents.loadURL(targetUrl.toString());
 
             // indicate in the settings which canvas is open
-            ShellSettings.getinstance().canvas = targetUrl.toString().toLocaleLowerCase();
+            ShellSettings.getinstance().canvas = targetUrl
+                .toString()
+                .toLocaleLowerCase();
 
             // write the settings to disk
             ShellSettings.getinstance().save();
         }
     };
 
-    ShellSettings.getinstance().onCloseInlineBrowser = (save: boolean = true): void => {
+    ShellSettings.getinstance().onCloseInlineBrowser = (
+        save: boolean = true,
+    ): void => {
         const mainWindowSize = mainWindow?.getBounds();
 
         if (inlineWebContentView && mainWindowSize) {
@@ -675,9 +682,14 @@ async function initialize() {
         updateSummary(dispatcher);
 
         // open the canvas if it was previously open
-        if (ShellSettings.getinstance().canvas !== undefined && ShellSettings.getinstance().onOpenInlineBrowser !== null) {
-            ShellSettings.getinstance().onOpenInlineBrowser!(new URL(ShellSettings.getinstance().canvas!));
-        }        
+        if (
+            ShellSettings.getinstance().canvas !== undefined &&
+            ShellSettings.getinstance().onOpenInlineBrowser !== null
+        ) {
+            ShellSettings.getinstance().onOpenInlineBrowser!(
+                new URL(ShellSettings.getinstance().canvas!),
+            );
+        }
 
         // send the agent greeting if it's turned on
         if (ShellSettings.getinstance().agentGreeting) {
@@ -783,7 +795,7 @@ async function initialize() {
             });
         });
 
-        try { 
+        try {
             server.listen(pipePath);
         } catch {
             debugShellError(`Error creating pipe at ${pipePath}`);

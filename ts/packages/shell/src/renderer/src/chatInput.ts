@@ -55,8 +55,8 @@ export class ExpandableTextarea {
 
             if (sendButton !== undefined) {
                 sendButton.disabled = this.textEntry.innerHTML.length == 0;
-            }            
-            
+            }
+
             return true;
         });
         this.textEntry.addEventListener("input", () => {

@@ -26,7 +26,7 @@ const staticPath = fileURLToPath(new URL("../", import.meta.url));
 app.use(express.static(staticPath));
 
 // Accept JSON POST body data
-app.use(bodyParser.json())
+app.use(bodyParser.json());
 
 /**
  * Gets the root document
@@ -40,23 +40,22 @@ app.get("/", (req: Request, res: Response) => {
  * TODO: secure path access to image folder only
  */
 app.get("/image", (req: Request, res: Response) => {
-
     // load the requested file
     // BUGBUG: not secure...need to assert perms, etc. here
     res.sendFile(req.query.path as string);
-
 });
 
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
 app.get("/thumbnail", async (req: Request, res: Response) => {
-
     console.log(req.url);
     const file: string = req.query.path as string;
 
     const thumbnail = `${file}.thumbnail.jpg`;
     if (!fs.existsSync(thumbnail)) {
-        const img = sharp(file, { failOn: "error"}).resize(800, 800, { fit: "inside" }).withMetadata();
+        const img = sharp(file, { failOn: "error" })
+            .resize(800, 800, { fit: "inside" })
+            .withMetadata();
         try {
             await img.toFile(`${file}.thumbnail.jpg`);
         } catch (e) {
@@ -74,13 +73,13 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
     // TOOD: figure out why this fails for most images
     // const img = sharp(file, { failOn: "error"}).resize(800, 800, { fit: "inside" }).withMetadata();
     //  const buffer = await img.toBuffer();
-    
+
     // res.setHeader("Content-Type", getMimeType(path.extname(file)));
     // res.setHeader("Cache-Control", "no-cache");
     // res.setHeader("Connection", "keep-alive");
     // res.setHeader("Content-Length", buffer.byteLength);
-    // res.flushHeaders(); 
-        
+    // res.flushHeaders();
+
     // res.write(buffer);
 });
 
@@ -89,14 +88,12 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
  * Used for debugging purposes only.
  */
 app.get("/knowlegeResponse", (req: Request, res: Response) => {
-
     const file = `${req.query.path}.kr.json`;
     if (fs.existsSync(file)) {
         res.sendFile(file);
     } else {
-        res.status(404).send("Knowledge Response file does not exist.")
+        res.status(404).send("Knowledge Response file does not exist.");
     }
-
 });
 
 /**
@@ -141,7 +138,6 @@ app.get("/cmd", async (req, res) => {
  * @param message The message to forward to the clients
  */
 function sendDataToClients(message: any) {
-
     // when no client is here just queue messages to drain later
     if (clients.length == 0) {
         messageQueue.push(message);
@@ -153,7 +149,7 @@ function sendDataToClients(message: any) {
 }
 
 /**
- * Indicate to the host/parent process that we've started successfully 
+ * Indicate to the host/parent process that we've started successfully
  */
 process.send?.("Success");
 

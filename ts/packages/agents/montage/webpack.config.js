@@ -23,9 +23,9 @@ export default {
                 test: /\.tsx?$/,
                 loader: "ts-loader",
                 exclude: /node_modules/,
-                options: {  
-                    projectReferences: true // Enable project references  
-                },                 
+                options: {
+                    projectReferences: true, // Enable project references
+                },
             },
         ],
     },

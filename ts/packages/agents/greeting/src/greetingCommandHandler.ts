@@ -343,7 +343,7 @@ async function getRecentChatHistory(
             "What were we talking about most recently?",
             [{ terms: ["last conversation", "project"] }],
             { maxMatches: 5 },
-            5
+            5,
         );
         if (searchResponse && searchResponse.response?.hasHits()) {
             chatHistory.push(
@@ -351,7 +351,7 @@ async function getRecentChatHistory(
             );
             chatHistory.push("###");
             chatHistory.push(
-                "Recent entities found in chat history, in order, olst first, most recent last:",
+                "Recent entities found in chat history, in order, oldest first, most recent last:",
             );
             searchResponse.response?.entities.map((ee) => {
                 ee.entities?.map((e) => {

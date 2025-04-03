@@ -17,7 +17,6 @@ export type MontageAction =
     | ListMontageAction
     | MergeMontageAction;
 
-
 // Find images to add to the montage.
 export type FindPhotosAction = {
     actionName: "findPhotos";
@@ -26,8 +25,8 @@ export type FindPhotosAction = {
         search_filters: string[];
         // placeholder for images to be populated later
         files?: string[];
-    }
-}
+    };
+};
 
 // Selects images in the UI that have already been found
 export type SelectPhotosAction = {
@@ -39,8 +38,8 @@ export type SelectPhotosAction = {
         indicies?: number[];
         // placeholder for images to be populated later
         files?: string[];
-    }
-}
+    };
+};
 
 // Lists/adds all available photos
 export type ListPhotosAction = {
@@ -50,16 +49,16 @@ export type ListPhotosAction = {
         files?: string[];
         // always empty
         search_filters?: string[];
-    }
-}
+    };
+};
 
 // Changes the montage title
 export type ChangeTitleAction = {
     actionName: "changeTitle";
     parameters: {
         title: string;
-    }
-}
+    };
+};
 
 // Removes the images the images that match the supplied criteria
 export type RemovePhotosAction = {
@@ -73,20 +72,20 @@ export type RemovePhotosAction = {
         selected?: "selected" | "inverse" | "all";
         // placeholder for images to be populated later
         files?: string[];
-    }
-}
+    };
+};
 
 // Clears the currently selected images
 export type ClearSelectionAction = {
     actionName: "clearSelectedPhotos";
-    parameters: {}
-}
+    parameters: {};
+};
 
 // Shows search parameters
 export type ShowSearchParametersAction = {
     actionName: "showSearchParameters";
-    parameters: {}
-}
+    parameters: {};
+};
 
 // Update search parameters
 export type SetSearchParametersAction = {
@@ -96,29 +95,29 @@ export type SetSearchParametersAction = {
         minSearchScore?: number;
         // only return exact maches?
         exactMatch?: boolean;
-    }
-}
+    };
+};
 
 // Starts a slide show with the images in the active montage
 export type StartSlideShowAction = {
     actionName: "startSlideShow";
-    parameters: {}
-}
+    parameters: {};
+};
 
 // Creates a new montage
 export type CreateMontageAction = {
     actionName: "createNewMontage";
     parameters: {
         // Montage title, defaults to "Untitled"
-        title: string         
+        title: string;
         // any search terms to use to seed the montage based off of the title
         search_filters?: string[];
         // a flag indicating if the UI should imediately switch to this montage, defaults to true
-        focus: boolean
+        focus: boolean;
         // placeholder for images to be populated later
         files?: string[];
-    }
-}
+    };
+};
 
 // Deletes the identified montage
 export type DeleteMontageAction = {
@@ -130,28 +129,28 @@ export type DeleteMontageAction = {
         id?: number[];
         // A flag indicating to remove all montages
         deleteAll?: boolean;
-    }
-}
+    };
+};
 
 // Switches the active montage
 export type SwitchMontageAction = {
-    actionName: "switchMontage"
+    actionName: "switchMontage";
     parameters: {
         // The title of the montage to switch to
         title?: string;
         // The id (if known) of the montage to switch to
         id?: number;
-    }
-}
+    };
+};
 
 // Lists all montages by name
 export type ListMontageAction = {
     actionName: "listMontages";
-}
+};
 
 // Merges two or more montages together
 export type MergeMontageAction = {
-    actionName: "mergeMontages"
+    actionName: "mergeMontages";
     parameters: {
         // The title of the merged montage
         mergeMontageTitle: string;
@@ -159,6 +158,5 @@ export type MergeMontageAction = {
         titles?: string[];
         // THe ids of the montages to merge
         ids?: number[];
-    }
-}
-
+    };
+};

@@ -569,10 +569,9 @@ async function indexImages(
     // index each image
     const retVal: Image[] = [];
     for (let i = 0; i < fileNames.length; i++) {
-
         // ignore thumbnail images
         if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
-            console.log(`ignoring '${fileNames[i]}'`)
+            console.log(`ignoring '${fileNames[i]}'`);
             continue;
         }
 
