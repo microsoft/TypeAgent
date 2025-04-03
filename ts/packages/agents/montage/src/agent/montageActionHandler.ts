@@ -7,10 +7,6 @@ import {
     AppAgent,
     SessionContext,
     ActionResult,
-<<<<<<< HEAD
-=======
-    Entity,
->>>>>>> origin
     //Storage,
 } from "@typeagent/agent-sdk";
 import { ChildProcess, fork, spawn } from "child_process";
