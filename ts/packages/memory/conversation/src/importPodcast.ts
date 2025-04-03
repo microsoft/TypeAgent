@@ -9,7 +9,7 @@ import {
     PodcastMessageMeta,
     assignMessageListeners,
 } from "./podcast.js";
-import { IMessage } from "knowpro";
+import { ConversationSettings, IMessage } from "knowpro";
 
 export function parsePodcastTranscript(
     transcriptText: string,
@@ -19,6 +19,7 @@ export function parsePodcastTranscript(
     const participants = new Set<string>();
     const messages: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
+
     for (const line of transcriptLines) {
         const match = turnParserRegex.exec(line);
         if (match && match.groups) {
@@ -34,11 +35,7 @@ export function parsePodcastTranscript(
             }
             if (!curMsg) {
                 if (speaker) {
-                    speaker = speaker.trim();
-                    if (speaker.endsWith(":")) {
-                        speaker = speaker.slice(0, speaker.length - 1);
-                    }
-                    speaker = speaker.toLocaleLowerCase();
+                    speaker = prepareSpeakerName(speaker);
                     participants.add(speaker);
                 }
                 curMsg = new PodcastMessage(
@@ -74,6 +71,7 @@ export async function importPodcast(
     podcastName?: string,
     startDate?: Date,
     lengthMinutes: number = 60,
+    settings?: ConversationSettings,
 ): Promise<Podcast> {
     const transcriptText = await readAllText(transcriptFilePath);
     podcastName ??= getFileName(transcriptFilePath);
@@ -86,7 +84,7 @@ export async function importPodcast(
             dateTime.addMinutesToDate(startDate, lengthMinutes),
         );
     }
-    const pod = new Podcast(podcastName, messages, [podcastName]);
+    const pod = new Podcast(podcastName, messages, [podcastName], settings);
     // TODO: add more tags
     return pod;
 }
@@ -135,4 +133,13 @@ function getTranscriptLines(transcriptText: string): string[] {
         removeEmpty: true,
         trim: true,
     });
+}
+
+function prepareSpeakerName(speaker: string): string {
+    speaker = speaker.trim();
+    if (speaker.endsWith(":")) {
+        speaker = speaker.slice(0, speaker.length - 1);
+    }
+    speaker = speaker.toLocaleLowerCase();
+    return speaker;
 }

@@ -1,38 +1,27 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { getAbsolutePath, readTestFile } from "test-lib";
 import {
+    importPodcast,
     parsePodcastSpeakers,
     parsePodcastTranscript,
 } from "../src/importPodcast.js";
-import { readTestFile } from "test-lib";
+import {
+    createOfflineConversationSettings,
+    getTestTranscripts,
+} from "./testCommon.js";
 
 describe("conversation.importPodcast", () => {
-    const testTranscripts: TranscriptInfo[] = [
-        {
-            filePath: "./test/data/transcript_random.txt",
-            speechCount: 7,
-            participantCount: 5,
-        },
-        {
-            filePath: "../../knowpro/test/data/dialog.txt",
-            speechCount: 9,
-            participantCount: 3,
-        },
-        {
-            filePath:
-                "../../knowpro/test/data/Episode_53_AdrianTchaikovsky.txt",
-            speechCount: 105,
-            participantCount: 3,
-        },
-    ];
+    const testTimeout = 5 * 60 * 1000;
+    const testTranscripts = getTestTranscripts();
 
     test("parseSpeakers", () => {
         for (const test of testTranscripts) {
             const transcriptText = readTestFile(test.filePath);
             const speakers = parsePodcastSpeakers(transcriptText);
-            if (test.speechCount) {
-                expect(speakers).toHaveLength(test.speechCount);
+            if (test.messageCount) {
+                expect(speakers).toHaveLength(test.messageCount);
             }
         }
     });
@@ -42,18 +31,38 @@ describe("conversation.importPodcast", () => {
             const transcriptText = readTestFile(test.filePath);
             const [messages, participants] =
                 parsePodcastTranscript(transcriptText);
-            if (test.speechCount) {
-                expect(messages).toHaveLength(test.speechCount);
+            if (test.messageCount) {
+                expect(messages).toHaveLength(test.messageCount);
             }
             if (test.participantCount) {
                 expect(participants.size).toEqual(test.participantCount);
             }
         }
     });
-});
 
-type TranscriptInfo = {
-    filePath: string;
-    participantCount?: number | undefined;
-    speechCount?: number | undefined;
-};
+    test(
+        "importPodcast",
+        async () => {
+            const settings = createOfflineConversationSettings();
+            for (const test of testTranscripts) {
+                const podcast = await importPodcast(
+                    getAbsolutePath(test.filePath),
+                    test.name,
+                    test.date,
+                    test.length,
+                    settings,
+                );
+                expect(podcast.messages.length).toBeGreaterThan(0);
+                if (test.messageCount) {
+                    expect(podcast.messages).toHaveLength(test.messageCount);
+                }
+                expect(podcast.nameTag).toEqual(test.name);
+                if (test.participantCount) {
+                    const participants = podcast.getParticipants();
+                    expect(participants.size).toEqual(test.participantCount);
+                }
+            }
+        },
+        testTimeout,
+    );
+});

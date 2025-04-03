@@ -2146,6 +2146,9 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
+      test-lib:
+        specifier: workspace:*
+        version: link:../testLib
       typescript:
         specifier: ^5.4.2
         version: 5.4.5

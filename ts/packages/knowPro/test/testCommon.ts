@@ -1,17 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
-dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
-
-import {
-    ChatModel,
-    hasEnvSettings,
-    openai,
-    TextEmbeddingModel,
-} from "aiclient";
 import path from "path";
-import fs from "fs";
+import { getAbsolutePath, NullEmbeddingModel, readTestFile } from "test-lib";
 import {
     DeletionInfo,
     IConversation,
@@ -31,7 +22,6 @@ import { SemanticRefSearchResult } from "../src/search.js";
 import { createSearchTerm } from "../src/searchLib.js";
 import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
-import { Result } from "typechat";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 
 export class TestMessage implements IMessage {
@@ -73,31 +63,6 @@ export function createTimestamp(): string {
     return new Date().toISOString();
 }
 
-export type TestModels = {
-    chat: ChatModel;
-    embeddings: TextEmbeddingModel;
-};
-
-export function createTestModels(): TestModels {
-    return {
-        chat: openai.createChatModelDefault("knowproTest"),
-        embeddings: openai.createEmbeddingModel(),
-    };
-}
-
-export class NullEmbeddingModel implements TextEmbeddingModel {
-    constructor(public maxBatchSize: number = 1) {}
-
-    public generateEmbeddingBatch?(
-        inputs: string[],
-    ): Promise<Result<number[][]>> {
-        throw nullMethodError();
-    }
-    public generateEmbedding(input: string): Promise<Result<number[]>> {
-        throw nullMethodError();
-    }
-}
-
 export function createOfflineConversationSettings(
     getCache: () => TextEmbeddingCache | undefined,
 ) {
@@ -109,12 +74,16 @@ export function createOfflineConversationSettings(
     return createConversationSettings(cachingModel);
 }
 
+export const defaultConversationName = "Episode_53_AdrianTchaikovsky_index";
+
 export function loadTestConversation(
     settings: ConversationSettings,
+    name?: string,
 ): Promise<IConversation> {
+    name ??= defaultConversationName;
     return createConversationFromFile(
         getAbsolutePath("./test/data"),
-        "Episode_53_AdrianTchaikovsky_index",
+        name,
         settings,
     );
 }
@@ -124,41 +93,6 @@ export function loadTestQueries(
 ): Record<string, string>[] {
     const json = readTestFile(relativePath);
     return JSON.parse(json);
-}
-
-export function testIf(
-    name: string,
-    runIf: () => boolean,
-    fn: jest.ProvidesCallback,
-    testTimeout?: number | undefined,
-) {
-    if (!runIf()) {
-        return test.skip(name, () => {});
-    }
-    return test(name, fn, testTimeout);
-}
-
-export function shouldSkip() {
-    return !hasTestKeys();
-}
-
-export function hasTestKeys() {
-    const hasKeys: boolean =
-        hasEnvSettings(process.env, openai.EnvVars.AZURE_OPENAI_API_KEY) &&
-        hasEnvSettings(
-            process.env,
-            openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
-        );
-    return hasKeys;
-}
-
-export function getAbsolutePath(relativePath: string): string {
-    return path.join(process.cwd(), relativePath);
-}
-
-export function readTestFile(relativePath: string): string {
-    const absolutePath = getAbsolutePath(relativePath);
-    return fs.readFileSync(absolutePath, "utf-8");
 }
 
 export async function createConversationFromFile(
@@ -210,8 +144,4 @@ export function createQueryContext(conversation: IConversation) {
         secondaryIndexes.propertyToSemanticRefIndex,
         secondaryIndexes.timestampIndex,
     );
-}
-
-function nullMethodError() {
-    return new Error("Null method; not implemented.");
 }

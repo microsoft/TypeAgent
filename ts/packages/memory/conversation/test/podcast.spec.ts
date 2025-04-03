@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { hasTestKeys, testIf } from "./testCommon.js";
+import { hasTestKeys, testIf } from "test-lib";
 
 /**
  * These are ONLINE
