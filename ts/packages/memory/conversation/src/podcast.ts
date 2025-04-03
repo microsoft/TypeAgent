@@ -106,14 +106,11 @@ export class PodcastMessage implements IMessage {
         public timestamp: string | undefined = undefined,
     ) {}
 
-    getKnowledge(): kpLib.KnowledgeResponse {
+    public getKnowledge(): kpLib.KnowledgeResponse {
         return this.metadata.getKnowledge();
     }
 
-    addTimestamp(timestamp: string) {
-        this.timestamp = timestamp;
-    }
-    addContent(content: string) {
+    public addContent(content: string) {
         this.textChunks[0] += content;
     }
 }
