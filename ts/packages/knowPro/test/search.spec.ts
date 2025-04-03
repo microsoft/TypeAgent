@@ -21,6 +21,7 @@ import {
     emptyConversation,
     loadTestConversationForOffline,
     loadTestConversationForOnline,
+    loadTestQueries,
     parseTestQuery,
 } from "./testCommon.js";
 import {
@@ -29,7 +30,7 @@ import {
     resolveAndVerifySemanticRefs,
     verifyMessageOrdinals,
 } from "./verify.js";
-import { hasTestKeys, readTestFileLines, describeIf } from "test-lib";
+import { hasTestKeys, describeIf } from "test-lib";
 
 /**
  * These tests are designed to run offline.
@@ -181,12 +182,12 @@ describeIf(
         test(
             "search.queries",
             async () => {
-                const maxQueries = 10;
+                const maxQueries = 100;
                 const testFile = "./test/data/Episode_53_query.txt";
-                let queries = readTestFileLines(testFile);
+                let queries = loadTestQueries(testFile);
                 queries = queries.slice(0, maxQueries);
                 for (const query of queries) {
-                    const searchExpr = parseTestQuery(query);
+                    const searchExpr = parseTestQuery(conversation, query);
                     await runSearchConversation(
                         conversation,
                         searchExpr.searchTermGroup,

@@ -6,7 +6,7 @@ import {
     getAbsolutePath,
     NullEmbeddingModel,
     parseCommandArgs,
-    readTestFile,
+    readTestFileLines,
 } from "test-lib";
 import {
     DeletionInfo,
@@ -21,10 +21,15 @@ import {
 import {
     ConversationSettings,
     createConversationSettings,
+    getTimeRangeForConversation,
 } from "../src/conversation.js";
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
-import { SearchSelectExpr, SemanticRefSearchResult } from "../src/search.js";
+import {
+    SearchSelectExpr,
+    SemanticRefSearchResult,
+    WhenFilter,
+} from "../src/search.js";
 import {
     createOrTermGroup,
     createPropertySearchTerms,
@@ -36,6 +41,7 @@ import { PropertyNames } from "../src/propertyIndex.js";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
 import { openai } from "aiclient";
+import { dateTime } from "typeagent";
 
 export class TestMessage implements IMessage {
     constructor(
@@ -137,16 +143,25 @@ export async function loadTestConversationForOnline(name?: string) {
 }
 
 export function loadTestQueries(
-    relativePath: string,
-): Record<string, string>[] {
-    const json = readTestFile(relativePath);
-    return JSON.parse(json);
+    filePath: string,
+    commentPrefix: string = "#",
+): string[] {
+    let queries = readTestFileLines(filePath);
+    queries = queries.filter((l) => !l.startsWith(commentPrefix));
+    return queries;
 }
 
-export function parseTestQuery(query: string): SearchSelectExpr {
+export function parseTestQuery(
+    conversation: IConversation,
+    query: string,
+): SearchSelectExpr {
     const cmdArgs = parseCommandArgs(query);
+    const when = cmdArgs.namedArgs
+        ? parseWhenFilter(conversation, cmdArgs.namedArgs)
+        : undefined;
     return {
         searchTermGroup: parseSearchTermGroup(cmdArgs.args, cmdArgs.namedArgs),
+        when,
     };
 }
 
@@ -162,6 +177,58 @@ export function parseSearchTermGroup(
         termGroup.terms.push(...createPropertySearchTerms(propertyTerms));
     }
     return termGroup;
+}
+
+export function parseWhenFilter(
+    conversation: IConversation,
+    namedArgs: Record<string, any>,
+): WhenFilter {
+    let filter: WhenFilter = {
+        knowledgeType: namedArgs.ktype,
+    };
+    const dateRange = getTimeRangeForConversation(conversation);
+    if (dateRange) {
+        let startDate: Date | undefined;
+        let endDate: Date | undefined;
+        // Did they provide an explicit date range?
+        if (namedArgs.startDate || namedArgs.endDate) {
+            startDate = stringToDate(namedArgs.startDate) ?? dateRange.start;
+            endDate = stringToDate(namedArgs.endDate) ?? dateRange.end;
+        } else {
+            // They may have provided a relative date range
+            if (namedArgs.startMinute >= 0) {
+                startDate = dateTime.addMinutesToDate(
+                    dateRange.start,
+                    namedArgs.startMinute,
+                );
+            }
+            if (namedArgs.endMinute > 0) {
+                endDate = dateTime.addMinutesToDate(
+                    dateRange.start,
+                    namedArgs.endMinute,
+                );
+            }
+        }
+        if (startDate) {
+            filter.dateRange = {
+                start: startDate,
+                end: endDate,
+            };
+        }
+    }
+    const keysToDelete = [
+        "ktype",
+        "startDate",
+        "endDate",
+        "startMinute",
+        "endMinute",
+    ];
+    keysToDelete.forEach((key) => delete namedArgs[key]);
+    return filter;
+}
+
+export function stringToDate(value: string | undefined): Date | undefined {
+    return value ? dateTime.stringToDate(value) : undefined;
 }
 
 export async function createConversationFromFile(
