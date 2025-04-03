@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 import { createConversationSettings } from "knowpro";
 import { NullEmbeddingModel } from "test-lib";
 
@@ -44,13 +43,6 @@ export function getTestTranscripts(): TranscriptInfo[] {
     ];
 }
 
-export function createOfflineConversationSettings(
-    getCache?: () => TextEmbeddingCache | undefined,
-) {
-    const cachingModel = createEmbeddingCache(
-        new NullEmbeddingModel(),
-        32,
-        getCache,
-    );
-    return createConversationSettings(cachingModel);
+export function createOfflineConversationSettings() {
+    return createConversationSettings(new NullEmbeddingModel(), 0);
 }
