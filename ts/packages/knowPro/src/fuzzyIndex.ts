@@ -157,7 +157,7 @@ export async function generateTextEmbeddingsForIndex(
         );
         return success(embeddings);
     } catch (ex) {
-        return error(`generateTExtEmbeddingsForIndex failed: ${ex}`);
+        return error(`generateTextEmbeddingsForIndex failed: ${ex}`);
     }
 }
 

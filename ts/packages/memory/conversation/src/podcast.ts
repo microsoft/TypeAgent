@@ -76,6 +76,7 @@ export class PodcastMessageMeta implements IKnowledgeSource {
         }
     }
 }
+
 export function assignMessageListeners(
     msgs: PodcastMessage[],
     participants: Set<string>,
@@ -117,15 +118,20 @@ export class Podcast implements IConversation<PodcastMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
+    public semanticRefs: SemanticRef[];
 
     constructor(
         public nameTag: string = "",
         public messages: PodcastMessage[] = [],
         public tags: string[] = [],
-        public semanticRefs: SemanticRef[] = [],
+        settings?: ConversationSettings,
     ) {
-        const [model, embeddingSize] = this.createEmbeddingModel();
-        this.settings = createConversationSettings(model, embeddingSize);
+        this.semanticRefs = [];
+        if (!settings) {
+            const [model, embeddingSize] = this.createEmbeddingModel();
+            settings = createConversationSettings(model, embeddingSize);
+        }
+        this.settings = settings;
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
@@ -139,6 +145,19 @@ export class Podcast implements IConversation<PodcastMessage> {
                 this.semanticRefIndex,
             );
         }
+    }
+
+    public getParticipants(): Set<string> {
+        const participants = new Set<string>();
+        for (const message of this.messages) {
+            if (message.metadata.speaker) {
+                participants.add(message.metadata.speaker);
+            }
+            for (const listener of message.metadata.listeners) {
+                participants.add(listener);
+            }
+        }
+        return participants;
     }
 
     public async buildIndex(

@@ -473,12 +473,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
             };
         }, 0);
     }
-    /*
-    public override clearMatches() {
-        super.clearMatches();
-        this.searchTermMatches.clear();
-    }
-    */
 }
 
 export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
@@ -831,5 +825,23 @@ function* union<T>(
 function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
     for (const value of values) {
         set.add(value);
+    }
+}
+
+export type Batch<T = any> = {
+    startAt: number;
+    value: T[];
+};
+
+export function* getBatches<T = any>(
+    array: T[],
+    size: number,
+): IterableIterator<Batch<T>> {
+    for (let i = 0; i < array.length; i += size) {
+        const slice = array.slice(i, i + size);
+        if (slice.length === 0) {
+            break;
+        }
+        yield { startAt: i, value: slice };
     }
 }
