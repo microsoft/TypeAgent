@@ -30,3 +30,8 @@ export function readTestFileLines(filePath: string): string[] {
     }
     return [];
 }
+
+export function readTestJsonFile(filePath: string): any {
+    const json = readTestFile(filePath);
+    return JSON.parse(json);
+}

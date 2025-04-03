@@ -142,13 +142,8 @@ export async function loadTestConversationForOnline(name?: string) {
     return conversation;
 }
 
-export function loadTestQueries(
-    filePath: string,
-    commentPrefix: string = "#",
-): string[] {
-    let queries = readTestFileLines(filePath);
-    queries = queries.filter((l) => !l.startsWith(commentPrefix));
-    return queries;
+export function loadTestQueries(filePath: string): string[] {
+    return readTestFileLines(filePath);
 }
 
 export function parseTestQuery(
@@ -159,6 +154,7 @@ export function parseTestQuery(
     const when = cmdArgs.namedArgs
         ? parseWhenFilter(conversation, cmdArgs.namedArgs)
         : undefined;
+
     return {
         searchTermGroup: parseSearchTermGroup(cmdArgs.args, cmdArgs.namedArgs),
         when,

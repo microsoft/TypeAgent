@@ -27,8 +27,10 @@ import {
 import {
     expectDoesNotHaveEntities,
     expectHasEntities,
+    resolveAndVerifyKnowledgeMatches,
     resolveAndVerifySemanticRefs,
     verifyMessageOrdinals,
+    verifySemanticRefResult,
 } from "./verify.js";
 import { hasTestKeys, describeIf } from "test-lib";
 
@@ -132,7 +134,13 @@ describe("search.offline", () => {
                 createSearchTerm("book"),
                 createSearchTerm("movie"),
             );
-            await runSearchConversation(conversation, termGroup);
+            const results = await runSearchConversation(
+                conversation,
+                termGroup,
+            );
+            if (results) {
+                resolveAndVerifyKnowledgeMatches(conversation, results);
+            }
         },
         testTimeout,
     );
@@ -152,9 +160,8 @@ describe("search.offline", () => {
             if (matches) {
                 expect(matches.size).toEqual(1);
                 const entities = matches.get(knowledgeType);
-                expect(entities).toBeDefined();
-                expect(entities?.semanticRefMatches.length).toBeGreaterThan(0);
-                return matches.get(knowledgeType);
+                verifySemanticRefResult(entities);
+                return entities;
             }
         } else {
             if (matches) {
@@ -188,11 +195,14 @@ describeIf(
                 queries = queries.slice(0, maxQueries);
                 for (const query of queries) {
                     const searchExpr = parseTestQuery(conversation, query);
-                    await runSearchConversation(
+                    const results = await runSearchConversation(
                         conversation,
                         searchExpr.searchTermGroup,
                         searchExpr.when,
                     );
+                    if (results) {
+                        resolveAndVerifyKnowledgeMatches(conversation, results);
+                    }
                 }
             },
             testTimeout,

@@ -9,7 +9,10 @@ import {
     SemanticRef,
     TextRange,
 } from "../src/interfaces.js";
-import { SemanticRefSearchResult } from "../src/search.js";
+import {
+    ConversationSearchResult,
+    SemanticRefSearchResult,
+} from "../src/search.js";
 import {
     findEntityWithName,
     getSemanticRefsForSearchResult,
@@ -67,6 +70,26 @@ export function verifyMessageOrdinals(
     for (const ordinal of scoredOrdinals) {
         const message = conversation.messages[ordinal.messageOrdinal];
         expect(message).toBeDefined();
+    }
+}
+
+export function verifySemanticRefResult(
+    matches: SemanticRefSearchResult | undefined,
+) {
+    expect(matches).toBeDefined();
+    if (matches) {
+        expect(matches.semanticRefMatches.length).toBeGreaterThan(0);
+    }
+}
+
+export function resolveAndVerifyKnowledgeMatches(
+    conversation: IConversation,
+    results: ConversationSearchResult,
+) {
+    if (results.knowledgeMatches) {
+        for (const value of results.knowledgeMatches.values()) {
+            resolveAndVerifySemanticRefs(conversation, value);
+        }
     }
 }
 
