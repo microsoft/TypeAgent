@@ -22,6 +22,8 @@ describe("conversation.importPodcast", () => {
         {
             filePath:
                 "../../knowpro/test/data/Episode_53_AdrianTchaikovsky.txt",
+            speechCount: 105,
+            participantCount: 3,
         },
     ];
 
