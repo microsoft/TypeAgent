@@ -1,30 +1,37 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createAndTermGroup, createOrTermGroup } from "../src/common.js";
 import {
     IConversation,
     KnowledgeType,
     ScoredMessageOrdinal,
-    SemanticRef,
+    SearchTermGroup,
 } from "../src/interfaces.js";
 import {
-    createSearchTerm,
     searchConversation,
     searchConversationKnowledge,
-    SearchTermGroup,
     SemanticRefSearchResult,
 } from "../src/search.js";
 import {
+    createSearchTerm,
+    createAndTermGroup,
+    createOrTermGroup,
+} from "../src/searchLib.js";
+import {
     createOfflineConversationSettings,
     emptyConversation,
-    findEntityWithName,
     getSemanticRefsForSearchResult,
     loadTestConversation,
 } from "./testCommon.js";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
+import { expectDoesNotHaveEntities, expectHasEntities } from "./verify.js";
 
-describe("knowpro.search.offline", () => {
+/**
+ * These tests are designed to run offline.
+ * They ONLY use terms for which we already have embeddings in the test data conversation index
+ * This allows us to run fuzzy matching entirely offline
+ */
+describe("search.offline", () => {
     const testTimeout = 1000 * 60 * 5;
     let conversation: IConversation = emptyConversation();
     let secondaryIndex: ConversationSecondaryIndexes | undefined;
@@ -46,26 +53,76 @@ describe("knowpro.search.offline", () => {
         testTimeout,
     );
     test(
-        "searchKnowledge",
+        "searchKnowledge.and",
         async () => {
-            const termGroup = createOrTermGroup();
-            termGroup.terms.push(createSearchTerm("book"));
-            termGroup.terms.push(createSearchTerm("movie"));
-            const matches = await runSearchKnowledge(termGroup, "entity");
+            let termGroup = createAndTermGroup(
+                createSearchTerm("book"),
+                createSearchTerm("movie"),
+            );
+            let matches = await runSearchKnowledge(termGroup, "entity");
             if (matches) {
                 const semanticRefs = resolveAndVerifySemanticRefs(matches);
-                verifyHasEntity(semanticRefs, "Starship Troopers");
+                expectHasEntities(semanticRefs, "Starship Troopers");
+                expectDoesNotHaveEntities(semanticRefs, "Children of Time");
+            }
+            termGroup = createAndTermGroup(
+                createSearchTerm("book"),
+                createSearchTerm("spider"),
+            );
+            matches = await runSearchKnowledge(termGroup, "entity", false);
+        },
+        testTimeout,
+    );
+    test(
+        "searchKnowledge.andOr",
+        async () => {
+            let termGroup = createAndTermGroup(
+                createOrTermGroup(
+                    createSearchTerm("Children of Time"),
+                    createSearchTerm("Starship Troopers"),
+                ),
+                createSearchTerm("movie", undefined, true), // Exact match movies
+            );
+            let matches = await runSearchKnowledge(termGroup, "entity");
+            if (matches) {
+                const semanticRefs = resolveAndVerifySemanticRefs(matches);
+                expectHasEntities(semanticRefs, "Starship Troopers");
+                expectDoesNotHaveEntities(semanticRefs, "Children of Time");
             }
         },
         testTimeout,
     );
     test(
-        "searchMessages",
+        "searchKnowledge.or",
         async () => {
-            const termGroup = createAndTermGroup();
-            termGroup.terms.push(createSearchTerm("book"));
-            termGroup.terms.push(createSearchTerm("movie"));
-            await runSearchMessages(termGroup);
+            const termGroup = createOrTermGroup(
+                createSearchTerm("book"),
+                createSearchTerm("movie"),
+                createSearchTerm("spider"),
+            );
+            let matches = await runSearchKnowledge(termGroup, "entity");
+            if (matches) {
+                const semanticRefs = resolveAndVerifySemanticRefs(matches);
+                expectHasEntities(
+                    semanticRefs,
+                    "Starship Troopers",
+                    "Children of Time",
+                    "spider",
+                    "spiders",
+                    "Portids",
+                );
+            }
+        },
+        testTimeout,
+    );
+    test(
+        "searchConversation.and",
+        async () => {
+            const termGroup = createAndTermGroup(
+                createSearchTerm("book"),
+                createSearchTerm("movie"),
+            );
+            await runSearchConversation(termGroup);
         },
         testTimeout,
     );
@@ -73,24 +130,31 @@ describe("knowpro.search.offline", () => {
     async function runSearchKnowledge(
         termGroup: SearchTermGroup,
         knowledgeType: KnowledgeType,
+        expectMatches: boolean = true,
     ): Promise<SemanticRefSearchResult | undefined> {
         const matches = await searchConversationKnowledge(
             conversation,
             termGroup,
             { knowledgeType },
         );
-        expect(matches).toBeDefined();
-        if (matches) {
-            expect(matches.size).toEqual(1);
-            const entities = matches.get(knowledgeType);
-            expect(entities).toBeDefined();
-            expect(entities?.semanticRefMatches.length).toBeGreaterThan(0);
-            return matches.get(knowledgeType);
+        if (expectMatches) {
+            expect(matches).toBeDefined();
+            if (matches) {
+                expect(matches.size).toEqual(1);
+                const entities = matches.get(knowledgeType);
+                expect(entities).toBeDefined();
+                expect(entities?.semanticRefMatches.length).toBeGreaterThan(0);
+                return matches.get(knowledgeType);
+            }
+        } else {
+            if (matches) {
+                expect(matches.size).toEqual(0);
+            }
         }
         return undefined;
     }
 
-    async function runSearchMessages(termGroup: SearchTermGroup) {
+    async function runSearchConversation(termGroup: SearchTermGroup) {
         const matches = await searchConversation(conversation, termGroup);
         expect(matches).toBeDefined();
         if (matches) {
@@ -115,10 +179,5 @@ describe("knowpro.search.offline", () => {
         expect(semanticRefs).toHaveLength(matches.semanticRefMatches.length);
         expect(semanticRefs).not.toContain(undefined);
         return semanticRefs;
-    }
-
-    function verifyHasEntity(semanticRefs: SemanticRef[], entityName: string) {
-        const entity = findEntityWithName(semanticRefs, entityName);
-        expect(entity).toBeDefined();
     }
 });

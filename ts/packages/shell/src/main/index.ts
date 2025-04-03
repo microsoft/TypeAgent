@@ -31,7 +31,6 @@ import { shellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import { WebSocketMessageV2 } from "common-utils";
 import { AzureSpeech } from "./azureSpeech.js";
-import { auth } from "aiclient";
 import {
     closeLocalWhisper,
     isLocalWhisperEnabled,
@@ -41,8 +40,6 @@ import { createGenericChannel } from "agent-rpc/channel";
 import net from "node:net";
 import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
-
-console.log(auth.AzureTokenScopes.CogServices);
 
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
@@ -291,7 +288,7 @@ async function createWindow() {
     };
 
     ShellSettings.getinstance().onRunDemo = (interactive: boolean): void => {
-        runDemo(mainWindow!, interactive);
+        runDemo(mainWindow!, chatView!, interactive);
     };
 
     ShellSettings.getinstance().onToggleTopMost = () => {
@@ -540,78 +537,90 @@ async function initializeDispatcher(
     chatView: WebContentsView,
     updateSummary: (dispatcher: Dispatcher) => void,
 ) {
-    const clientIOChannel = createGenericChannel((message: any) => {
-        chatView.webContents.send("clientio-rpc-call", message);
-    });
-    ipcMain.on("clientio-rpc-reply", (_event, message) => {
-        clientIOChannel.message(message);
-    });
+    try {
+        const clientIOChannel = createGenericChannel((message: any) => {
+            chatView.webContents.send("clientio-rpc-call", message);
+        });
+        ipcMain.on("clientio-rpc-reply", (_event, message) => {
+            clientIOChannel.message(message);
+        });
 
-    const newClientIO = createClientIORpcClient(clientIOChannel.channel);
-    const clientIO = {
-        ...newClientIO,
-        exit: () => {
-            app.quit();
-        },
-    };
+        const newClientIO = createClientIORpcClient(clientIOChannel.channel);
+        const clientIO = {
+            ...newClientIO,
+            exit: () => {
+                app.quit();
+            },
+        };
 
-    const instanceDir = getInstanceDir();
+        const instanceDir = getInstanceDir();
 
-    // Set up dispatcher
-    const newDispatcher = await createDispatcher("shell", {
-        appAgentProviders: [
-            shellAgentProvider,
-            ...getDefaultAppAgentProviders(instanceDir),
-        ],
-        agentInstaller: getDefaultAppAgentInstaller(instanceDir),
-        explanationAsynchronousMode: true,
-        persistSession: true,
-        persistDir: instanceDir,
-        enableServiceHost: true,
-        metrics: true,
-        dblogging: true,
-        clientId: getClientId(),
-        clientIO,
-        constructionProvider: getDefaultConstructionProvider(),
-    });
+        // Set up dispatcher
+        const newDispatcher = await createDispatcher("shell", {
+            appAgentProviders: [
+                shellAgentProvider,
+                ...getDefaultAppAgentProviders(instanceDir),
+            ],
+            agentInstaller: getDefaultAppAgentInstaller(instanceDir),
+            explanationAsynchronousMode: true,
+            persistSession: true,
+            persistDir: instanceDir,
+            enableServiceHost: true,
+            metrics: true,
+            dblogging: true,
+            clientId: getClientId(),
+            clientIO,
+            constructionProvider: getDefaultConstructionProvider(),
+        });
 
-    async function processShellRequest(
-        text: string,
-        id: string,
-        images: string[],
-    ) {
-        if (typeof text !== "string" || typeof id !== "string") {
-            throw new Error("Invalid request");
+        async function processShellRequest(
+            text: string,
+            id: string,
+            images: string[],
+        ) {
+            if (typeof text !== "string" || typeof id !== "string") {
+                throw new Error("Invalid request");
+            }
+            debugShell(newDispatcher.getPrompt(), text);
+
+            const metrics = await newDispatcher.processCommand(
+                text,
+                id,
+                images,
+            );
+            chatView.webContents.send("send-demo-event", "CommandProcessed");
+            updateSummary(dispatcher);
+            return metrics;
         }
-        debugShell(newDispatcher.getPrompt(), text);
 
-        const metrics = await newDispatcher.processCommand(text, id, images);
-        chatView.webContents.send("send-demo-event", "CommandProcessed");
-        updateSummary(dispatcher);
-        return metrics;
+        const dispatcher = {
+            ...newDispatcher,
+            processCommand: processShellRequest,
+        };
+
+        // Set up the RPC
+        const dispatcherChannel = createGenericChannel((message: any) => {
+            chatView.webContents.send("dispatcher-rpc-reply", message);
+        });
+        ipcMain.on("dispatcher-rpc-call", (_event, message) => {
+            dispatcherChannel.message(message);
+        });
+        createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
+
+        setupQuit(dispatcher);
+
+        // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
+        // using it to process command, so that the client can receive messages.
+        debugShell("Dispatcher initialized", performance.now() - time);
+
+        return dispatcher;
+    } catch (e: any) {
+        dialog.showErrorBox(
+            "Exception initializing dispatcher",
+            `${e.message}\n${e.stack}`,
+        );
+        return undefined;
     }
-
-    const dispatcher = {
-        ...newDispatcher,
-        processCommand: processShellRequest,
-    };
-
-    // Set up the RPC
-    const dispatcherChannel = createGenericChannel((message: any) => {
-        chatView.webContents.send("dispatcher-rpc-reply", message);
-    });
-    ipcMain.on("dispatcher-rpc-call", (_event, message) => {
-        dispatcherChannel.message(message);
-    });
-    createDispatcherRpcServer(dispatcher, dispatcherChannel.channel);
-
-    setupQuit(dispatcher);
-
-    // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
-    // using it to process command, so that the client can receive messages.
-    debugShell("Dispatcher initialized", performance.now() - time);
-
-    return dispatcher;
 }
 
 // This method will be called when Electron has finished
@@ -645,7 +654,6 @@ async function initialize() {
 
     // Note: Make sure dom ready before using dispatcher.
     const dispatcherP = initializeDispatcher(chatView, updateSummary);
-
     ipcMain.on("dom ready", async () => {
         debugShell("Showing window", performance.now() - time);
         mainWindow.show();
@@ -679,6 +687,10 @@ async function initialize() {
 
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
         const dispatcher = await dispatcherP;
+        if (dispatcher === undefined) {
+            app.quit();
+            return;
+        }
         updateSummary(dispatcher);
 
         // open the canvas if it was previously open

@@ -3,7 +3,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime as Datetime, timedelta as Timedelta  # For export
+from datetime import datetime as Datetime, timedelta as Timedelta
 from typing import (
     Any,
     Callable,
@@ -14,11 +14,8 @@ from typing import (
     TypedDict,
 )
 
-from ..aitools.embeddings import NormalizedEmbedding
-from ..aitools.vectorbase import (
-    ITextEmbeddingIndexData,
-    VectorBase,
-)
+from ..aitools.embeddings import NormalizedEmbedding, NormalizedEmbeddings
+from ..aitools.vectorbase import VectorBase
 from . import kplib
 
 
@@ -61,13 +58,12 @@ class ScoredSemanticRefOrdinal:
             semanticRefOrdinal=self.semantic_ref_ordinal, score=self.score
         )
 
-    # TODO: deserialize
-    # @staticmethod
-    # def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
-    #     return ScoredSemanticRefOrdinal(
-    #         semantic_ref_ordinal=data["semanticRefOrdinal"],
-    #         score=data["score"],
-    #     )
+    @staticmethod
+    def deserialize(data: "ScoredSemanticRefOrdinalData") -> "ScoredSemanticRefOrdinal":
+        return ScoredSemanticRefOrdinal(
+            semantic_ref_ordinal=data["semanticRefOrdinal"],
+            score=data["score"],
+        )
 
 
 @dataclass
@@ -129,10 +125,19 @@ class TextLocation:
         return f"{self.__class__.__name__}({self.message_ordinal}, {self.chunk_ordinal}, {self.char_ordinal})"
 
     def serialize(self) -> TextLocationData:
-        return TextLocationData(
-            messageOrdinal=self.message_ordinal,
-            chunkOrdinal=self.chunk_ordinal,
-            charOrdinal=self.char_ordinal,
+        kwds = dict(messageOrdinal=self.message_ordinal)
+        if self.chunk_ordinal != 0:
+            kwds["chunkOrdinal"] = self.chunk_ordinal
+        if self.char_ordinal != 0:
+            kwds["charOrdinal"] = self.char_ordinal
+        return TextLocationData(**kwds)
+
+    @staticmethod
+    def deserialize(data: TextLocationData) -> "TextLocation":
+        return TextLocation(
+            message_ordinal=data["messageOrdinal"],
+            chunk_ordinal=data.get("chunkOrdinal", 0),
+            char_ordinal=data.get("charOrdinal", 0),
         )
 
 
@@ -169,8 +174,20 @@ class TextRange:
                 end=self.end.serialize(),
             )
 
+    @staticmethod
+    def deserialize(data: TextRangeData) -> "TextRange":
+        start = TextLocation.deserialize(data["start"])
+        end_data = data.get("end")
+        if end_data is None:
+            return TextRange(start)
+        else:
+            end = TextLocation.deserialize(end_data)
+            return TextRange(start, end)
 
-type KnowledgeData = dict[str, Any]  # Any valid JSON, really
+
+# TODO: Implement serializing KnowledgeData (or import from kplib).
+class KnowledgeData(TypedDict):
+    pass
 
 
 class SemanticRefData(TypedDict):
@@ -198,6 +215,19 @@ class SemanticRef:
             range=self.range.serialize(),
             knowledgeType=self.knowledge_type,
             knowledge=serialization.serialize_object(self.knowledge),
+        )
+
+    @staticmethod
+    def deserialize(data: SemanticRefData) -> "SemanticRef":
+        from . import serialization
+
+        return SemanticRef(
+            semantic_ref_ordinal=data["semanticRefOrdinal"],
+            range=TextRange.deserialize(data["range"]),
+            knowledge_type=data["knowledgeType"],
+            knowledge=serialization.deserialize_knowledge(
+                data["knowledgeType"], data["knowledge"]
+            ),
         )
 
 
@@ -316,7 +346,10 @@ class ITermToRelatedTermsIndex(Protocol):
     def fuzzy_index(self) -> VectorBase | None:
         raise NotImplementedError
 
-    def serialize(self) -> "ITermsToRelatedTermsIndexData":
+    def serialize(self) -> "TermsToRelatedTermsIndexData":
+        raise NotImplementedError
+
+    def deserialize(self, data: "TermsToRelatedTermsIndexData") -> None:
         raise NotImplementedError
 
 
@@ -336,6 +369,12 @@ class Thread:
             description=self.description,
             ranges=[range.serialize() for range in self.ranges],
         )
+
+    @staticmethod
+    def deserialize(data: ThreadData) -> "Thread":
+        description = data["description"]
+        ranges = [TextRange.deserialize(range_data) for range_data in data["ranges"]]
+        return Thread(description, ranges)
 
 
 type ThreadOrdinal = int
@@ -361,7 +400,10 @@ class IConversationThreads(Protocol):
     ) -> Sequence[ScoredThreadOrdinal] | None:
         raise NotImplementedError
 
-    def serialize(self) -> "IConversationThreadData":
+    def serialize(self) -> "ConversationThreadData":
+        raise NotImplementedError
+
+    def deserialize(self, data: "ConversationThreadData") -> None:
         raise NotImplementedError
 
 
@@ -393,7 +435,10 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
 
     # TODO: Others?
 
-    def serialize(self) -> "IMessageTextIndexData":
+    def serialize(self) -> "MessageTextIndexData":
+        raise NotImplementedError
+
+    def deserialize(self, data: "MessageTextIndexData") -> None:
         raise NotImplementedError
 
 
@@ -422,12 +467,12 @@ class IConversation[
 # --------------------------------------------------
 
 
-class IThreadDataItem(TypedDict):
+class ThreadDataItem(TypedDict):
     thread: ThreadData
     embedding: NormalizedEmbedding | None
 
 
-class IConversationThreadData[TThreadDataItem: IThreadDataItem](TypedDict):
+class ConversationThreadData[TThreadDataItem: ThreadDataItem](TypedDict):
     threads: list[TThreadDataItem] | None
 
 
@@ -436,18 +481,23 @@ class TermData(TypedDict):
     weight: NotRequired[float | None]
 
 
-class ITermsToRelatedTermsDataItem(TypedDict):
+class TermsToRelatedTermsDataItem(TypedDict):
     termText: str
     relatedTerms: list[TermData]
 
 
-class ITermToRelatedTermsData(TypedDict):
-    relatedTerms: NotRequired[list[ITermsToRelatedTermsDataItem] | None]
+class TermToRelatedTermsData(TypedDict):
+    relatedTerms: NotRequired[list[TermsToRelatedTermsDataItem] | None]
 
 
-class ITermsToRelatedTermsIndexData(TypedDict):
-    aliasData: NotRequired[ITermToRelatedTermsData]
-    textEmbeddingData: NotRequired[ITextEmbeddingIndexData]
+class TextEmbeddingIndexData(TypedDict):
+    textItems: list[str]
+    embeddings: NormalizedEmbeddings | None
+
+
+class TermsToRelatedTermsIndexData(TypedDict):
+    aliasData: NotRequired[TermToRelatedTermsData]
+    textEmbeddingData: NotRequired[TextEmbeddingIndexData]
 
 
 class ScoredSemanticRefOrdinalData(TypedDict):
@@ -457,7 +507,7 @@ class ScoredSemanticRefOrdinalData(TypedDict):
 
 class TermToSemanticRefIndexItemData(TypedDict):
     term: str
-    scoredSemanticRefOrdinals: list[ScoredSemanticRefOrdinalData]
+    semanticRefOrdinals: list[ScoredSemanticRefOrdinalData]
 
 
 # Persistent form of a term index.
@@ -465,7 +515,7 @@ class TermToSemanticRefIndexData(TypedDict):
     items: list[TermToSemanticRefIndexItemData]
 
 
-class IConversationData[TMessageData](TypedDict):
+class ConversationData[TMessageData](TypedDict):
     nameTag: str
     messages: list[TMessageData]
     tags: list[str]
@@ -473,19 +523,19 @@ class IConversationData[TMessageData](TypedDict):
     semanticIndexData: NotRequired[TermToSemanticRefIndexData | None]
 
 
-class ITextToTextLocationIndexData(TypedDict):
+class TextToTextLocationIndexData(TypedDict):
     textLocations: list[TextLocationData]
-    embeddings: ITextEmbeddingIndexData
+    embeddings: NormalizedEmbeddings | None
 
 
-class IMessageTextIndexData(TypedDict):
-    indexData: NotRequired[ITextToTextLocationIndexData | None]
+class MessageTextIndexData(TypedDict):
+    indexData: NotRequired[TextToTextLocationIndexData | None]
 
 
-class IConversationDataWithIndexes[TMessageData](IConversationData[TMessageData]):
-    relatedTermsIndexData: NotRequired[ITermsToRelatedTermsIndexData | None]
-    threadData: NotRequired[IConversationThreadData | None]
-    messageIndexData: NotRequired[IMessageTextIndexData | None]
+class ConversationDataWithIndexes[TMessageData](ConversationData[TMessageData]):
+    relatedTermsIndexData: NotRequired[TermsToRelatedTermsIndexData | None]
+    threadData: NotRequired[ConversationThreadData | None]
+    messageIndexData: NotRequired[MessageTextIndexData | None]
 
 
 # --------------------------------

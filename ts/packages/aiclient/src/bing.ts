@@ -24,6 +24,11 @@ export function apiSettingsFromEnv(
     };
 }
 
+/**
+ * Search options to pass on the qs
+ * Do not rename these: these are treated as name value pairs and
+ * serialized to query strings as is
+ */
 export interface SearchOptions {
     count?: number;
     offset?: number;
@@ -140,6 +145,7 @@ export async function createBingSearch(
     ): Promise<Result<WebPage[]>> {
         const queryText =
             typeof query === "string" ? query : buildQuery(query, "OR");
+
         const response = await search(queryText, options, "WebPages");
         if (response.success) {
             const webPages = response.data.webPages?.value ?? [];
@@ -209,13 +215,18 @@ export async function createBingSearch(
  * REQUIRED: Environment variable: BING_API_KEY
  * @param query query to run
  * @param count number of matches
+ * @param site (optional) Site specific search
  * @returns
  */
 export async function searchWeb(
     query: string,
     count?: number,
+    site?: string,
 ): Promise<WebPage[]> {
-    const options = count ? { count } : undefined;
+    let options = count ? { count } : undefined;
+    if (site) {
+        query += ` site:${encodeURIComponent(site)}`;
+    }
     // Automatically uses Environment variable: BING_API_KEY
     const clientResult = await createBingSearch();
     if (!clientResult.success) {

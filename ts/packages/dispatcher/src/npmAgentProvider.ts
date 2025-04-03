@@ -2,6 +2,6 @@
 // Licensed under the MIT License.
 
 export {
-    AppAgentInfo,
+    NpmAppAgentInfo,
     createNpmAppAgentProvider,
 } from "./agentProvider/npmAgentProvider.js";

@@ -16,7 +16,7 @@ import {
     ITermToRelatedTermsFuzzy,
     ITermToRelatedTerms,
 } from "./interfaces.js";
-import { SearchTerm } from "./search.js";
+import { SearchTerm } from "./interfaces.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {

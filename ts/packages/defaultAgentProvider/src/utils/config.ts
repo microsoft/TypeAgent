@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import { glob } from "glob";
-import { AppAgentInfo } from "agent-dispatcher/helpers/npmAgentProvider";
+import { NpmAppAgentInfo } from "agent-dispatcher/helpers/npmAgentProvider";
 import { getPackageFilePath } from "./getPackageFilePath.js";
 import fs from "node:fs";
+import { McpAppAgentConfig, McpAppAgentInfo } from "../mcpAgentProvider.js";
+import path from "node:path";
 
 export type ExplainerConfig = {
     constructions?: {
@@ -14,26 +16,36 @@ export type ExplainerConfig = {
 };
 
 export type AppAgentConfig = {
-    agents: { [key: string]: AppAgentInfo };
+    agents: { [key: string]: NpmAppAgentInfo };
+    mcpServers?: {
+        [key: string]: McpAppAgentInfo;
+    };
 };
 
-export type Config = AppAgentConfig & {
+export type InstanceConfig = {
+    mcpServers?: {
+        [key: string]: McpAppAgentConfig;
+    };
+};
+
+export type ProviderConfig = AppAgentConfig & {
     explainers: { [key: string]: ExplainerConfig };
     tests: string[];
 };
 
-let config: Config | undefined;
-export function getConfig(): Config {
-    if (config === undefined) {
-        config = JSON.parse(
+let providerConfig: ProviderConfig | undefined;
+export function getProviderConfig(): ProviderConfig {
+    if (providerConfig === undefined) {
+        providerConfig = JSON.parse(
             fs.readFileSync(getPackageFilePath("./data/config.json"), "utf8"),
-        ) as Config;
+        ) as ProviderConfig;
     }
-    return config;
+    return providerConfig;
 }
 
 export function getBuiltinConstructionConfig(explainerName: string) {
-    const config = getConfig()?.explainers?.[explainerName]?.constructions;
+    const config =
+        getProviderConfig()?.explainers?.[explainerName]?.constructions;
     return config
         ? {
               data: config.data.map((f) => getPackageFilePath(f)),
@@ -45,7 +57,7 @@ export function getBuiltinConstructionConfig(explainerName: string) {
 export async function getTestDataFiles(
     extended: boolean = true,
 ): Promise<string[]> {
-    const testDataFiles = getConfig()?.tests;
+    const testDataFiles = getProviderConfig()?.tests;
     if (testDataFiles === undefined) {
         return [];
     }
@@ -58,4 +70,48 @@ export async function getTestDataFiles(
             windowsPathsNoEscape: true,
         },
     );
+}
+
+export interface InstanceConfigProvider {
+    getInstanceDir(): string | undefined;
+    getInstanceConfig(): Readonly<InstanceConfig>;
+    setInstanceConfig(instanceConfig: InstanceConfig): void;
+}
+
+export function getInstanceConfigProvider(
+    instanceDir: string | undefined, // undefined for in memory only
+): InstanceConfigProvider {
+    let instanceConfig: InstanceConfig;
+    function getInstanceConfig(): Readonly<InstanceConfig> {
+        if (instanceConfig === undefined) {
+            if (instanceDir !== undefined) {
+                const instanceConfigPath = path.join(
+                    instanceDir,
+                    "config.json",
+                );
+                if (fs.existsSync(instanceConfigPath)) {
+                    instanceConfig = JSON.parse(
+                        fs.readFileSync(instanceConfigPath, "utf8"),
+                    );
+                } else {
+                    instanceConfig = {};
+                }
+            } else {
+                instanceConfig = {};
+            }
+        }
+        return instanceConfig;
+    }
+    return {
+        getInstanceDir: () => instanceDir,
+        getInstanceConfig,
+        setInstanceConfig: (config: InstanceConfig) => {
+            if (instanceDir !== undefined) {
+                const filePath = path.join(instanceDir, "config.json");
+                fs.writeFileSync(filePath, JSON.stringify(config, null, 4));
+            }
+
+            instanceConfig = structuredClone(config);
+        },
+    };
 }
