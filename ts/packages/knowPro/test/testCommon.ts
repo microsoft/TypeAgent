@@ -10,8 +10,8 @@ import {
     openai,
     TextEmbeddingModel,
 } from "aiclient";
-
 import path from "path";
+import fs from "fs";
 import {
     DeletionInfo,
     IConversation,
@@ -119,6 +119,13 @@ export function loadTestConversation(
     );
 }
 
+export function loadTestQueries(
+    relativePath: string,
+): Record<string, string>[] {
+    const json = readTestFile(relativePath);
+    return JSON.parse(json);
+}
+
 export function testIf(
     name: string,
     runIf: () => boolean,
@@ -147,6 +154,11 @@ export function hasTestKeys() {
 
 export function getAbsolutePath(relativePath: string): string {
     return path.join(process.cwd(), relativePath);
+}
+
+export function readTestFile(relativePath: string): string {
+    const absolutePath = getAbsolutePath(relativePath);
+    return fs.readFileSync(absolutePath, "utf-8");
 }
 
 export async function createConversationFromFile(

@@ -2293,6 +2293,9 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
+      test-lib:
+        specifier: workspace:*
+        version: link:../../testLib
       typescript:
         specifier: ^5.4.2
         version: 5.4.5
@@ -2544,6 +2547,37 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.7
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@20.17.28)(ts-node@10.9.2(@types/node@20.17.28)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ^5.4.2
+        version: 5.4.5
+
+  packages/testLib:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../aiclient
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.7
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.3.1
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.17.28)(ts-node@10.9.2(@types/node@20.17.28)(typescript@5.4.5))

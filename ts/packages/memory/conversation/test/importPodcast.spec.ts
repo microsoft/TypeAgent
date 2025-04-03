@@ -5,7 +5,7 @@ import {
     parsePodcastSpeakers,
     parsePodcastTranscript,
 } from "../src/importPodcast.js";
-import { loadTestFile } from "./testCommon.js";
+import { readTestFile } from "test-lib";
 
 describe("conversation.importPodcast", () => {
     const testTranscripts: TranscriptInfo[] = [
@@ -29,7 +29,7 @@ describe("conversation.importPodcast", () => {
 
     test("parseSpeakers", () => {
         for (const test of testTranscripts) {
-            const transcriptText = loadTestFile(test.filePath);
+            const transcriptText = readTestFile(test.filePath);
             const speakers = parsePodcastSpeakers(transcriptText);
             if (test.speechCount) {
                 expect(speakers).toHaveLength(test.speechCount);
@@ -39,7 +39,7 @@ describe("conversation.importPodcast", () => {
 
     test("parseTranscript", () => {
         for (const test of testTranscripts) {
-            const transcriptText = loadTestFile(test.filePath);
+            const transcriptText = readTestFile(test.filePath);
             const [messages, participants] =
                 parsePodcastTranscript(transcriptText);
             if (test.speechCount) {
