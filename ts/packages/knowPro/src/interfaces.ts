@@ -353,7 +353,7 @@ export type SecondaryIndexingResults = {
     properties?: ListIndexingResult | undefined;
     timestamps?: ListIndexingResult | undefined;
     relatedTerms?: ListIndexingResult | undefined;
-    message?: TextIndexingResult | undefined;
+    message?: ListIndexingResult | undefined;
 };
 
 export type TextIndexingResult = {

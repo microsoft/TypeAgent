@@ -242,7 +242,7 @@ export async function buildSemanticRefIndex(
         const chunkOrdinal = 0;
         const message = conversation.messages[messageOrdinal];
         // only one chunk per message for now
-        const text = message.textChunks[chunkOrdinal];
+        const text = message.textChunks[chunkOrdinal].trim();
         const knowledgeResult = await async.callWithRetry(() =>
             extractor.extractWithRetry(text, maxRetries),
         );

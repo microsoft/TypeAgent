@@ -39,7 +39,7 @@ export function parsePodcastTranscript(
                     participants.add(speaker);
                 }
                 curMsg = new PodcastMessage(
-                    [speech.trim()],
+                    [speech],
                     new PodcastMessageMeta(speaker),
                 );
             }
