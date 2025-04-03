@@ -413,7 +413,6 @@ export async function handleCalendarAction(
                                         {
                                             name: `${actionEvent.description}`,
                                             type: ["event"],
-                                            additionalEntityText: localId,
                                             uniqueId: localId,
                                         },
                                     ];
@@ -655,7 +654,6 @@ export async function handleCalendarAction(
                             {
                                 name: `${actionEvent.description}`,
                                 type: ["event"],
-                                additionalEntityText: localId,
                                 uniqueId: localId,
                             },
                         ];
@@ -744,8 +742,6 @@ export async function handleCalendarAction(
                                         {
                                             name: `${meeting.subject}`,
                                             type: ["event"],
-                                            additionalEntityText:
-                                                lastLocalEventId,
                                             uniqueId: lastLocalEventId,
                                         },
                                     ];

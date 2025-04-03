@@ -7,6 +7,6 @@ export interface Entity {
     // the types of the entity such as "artist" or "animal"; an entity can have multiple types; entity types should be single words
     type: string[];
 
-    additionalEntityText?: string;
+    // Stable unique id for this entity, will be round tripped back to the source agent if user refer to the entity in the future.
     uniqueId?: string;
 }

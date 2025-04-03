@@ -673,7 +673,6 @@ function entityFromMontage(montage: PhotoMontage): Entity {
     return {
         name: montage.title,
         type: ["project", "montage"],
-        additionalEntityText: "This montage is INCOMPLETE",
         uniqueId: montage.id.toString(),
     };
 }

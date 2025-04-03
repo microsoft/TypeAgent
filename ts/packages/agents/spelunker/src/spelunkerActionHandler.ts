@@ -210,7 +210,6 @@ function focusReport(
             (folder): Entity => ({
                 name: path.basename(folder),
                 type: ["folder"],
-                additionalEntityText: path.dirname(folder),
                 uniqueId: folder,
             }),
         ),
