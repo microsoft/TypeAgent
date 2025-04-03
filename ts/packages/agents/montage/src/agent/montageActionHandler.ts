@@ -162,6 +162,12 @@ async function updateMontageContext(
                         "c:\\temp\\pictures_index",
                         "index",
                     );
+            } else if (existsSync("f:\\pictures_index")) {
+            context.agentContext.imageCollection =
+                await im.ImageCollection.readFromFile(
+                    "f:\\pictures_index",
+                    "index",
+                );
             } else {
                 debug(
                     "Unable to load image index, please create one using the image indexer.",

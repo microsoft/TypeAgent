@@ -8,11 +8,13 @@ import bodyParser from "body-parser";
 import { fileURLToPath } from "url";
 import path from "path";
 import sharp from "sharp";
-//import { getMimeType } from "common-utils";
 import fs from "node:fs";
 
 const app: Express = express();
 const port = process.env.PORT || 9012;
+
+// TODO: make this configurable based on user setup/input
+const allowedFolders: string[] = [ "f:\\pictures", "c:\\temp\\pictures" ];
 
 // limit request rage
 const limiter = rateLimit({
@@ -37,37 +39,74 @@ app.get("/", (req: Request, res: Response) => {
 
 /**
  * Serves up requested images
- * TODO: secure path access to image folder only
  */
-app.get("/image", (req: Request, res: Response) => {
-    // load the requested file
-    // BUGBUG: not secure...need to assert perms, etc. here
-    res.sendFile(req.query.path as string);
+app.get("/image", (req: Request, res: Response) => {    
+
+    const file = req.query.path as string | undefined;
+    let served: boolean = false;
+
+    if (file === undefined) {
+        res.status(400).send("Bad Request");
+        return;
+    } else {
+        allowedFolders.forEach((folder) => {
+            if (file.startsWith(folder)) {
+                // send the file
+                res.sendFile(file);
+                served = true
+            }
+        });
+    }
+
+    // File isn't in an allowed folder
+    if (!served) {
+        res.status(403).send("Forbidden");
+    }
 });
 
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
 app.get("/thumbnail", async (req: Request, res: Response) => {
-    console.log(req.url);
-    const file: string = req.query.path as string;
 
+    const file = req.query.path as string | undefined;
     const thumbnail = `${file}.thumbnail.jpg`;
-    if (!fs.existsSync(thumbnail)) {
-        const img = sharp(file, { failOn: "error" })
-            .resize(800, 800, { fit: "inside" })
-            .withMetadata();
-        try {
-            await img.toFile(`${file}.thumbnail.jpg`);
-        } catch (e) {
-            console.log(e);
-        }
+    let served: boolean = false;
+
+    if (file === undefined) {
+        res.status(400).send("Bad Request");
+        return;
+    } else {
+        allowedFolders.forEach(async (folder) => {
+            if (file.startsWith(folder)) {
+
+                // get the thumbnail of the supplied image or make it if it doesn't exist
+                if (!fs.existsSync(thumbnail)) {
+                    const img = sharp(file, { failOn: "error" })
+                        .resize(800, 800, { fit: "inside" })
+                        .withMetadata();
+                    try {
+                        await img.toFile(`${file}.thumbnail.jpg`);
+                    } catch (e) {
+                        console.log(e);
+                    }
+                }                
+
+                // send the thumbnail if it's a valid size
+                // otherwise send the original
+                if (fs.statSync(thumbnail).size > 0) {
+                    res.sendFile(thumbnail);
+                } else {
+                    res.sendFile(file);
+                }
+
+                served = true
+            }
+        });
     }
 
-    // send the thumbnail if it's a valid size
-    if (fs.statSync(thumbnail).size > 0) {
-        res.sendFile(thumbnail);
-    } else {
-        res.sendFile(file);
+    // File isn't in an allowed folder
+    if (!served) {
+        res.status(403).send("Forbidden");
     }
 
     // TOOD: figure out why this fails for most images
@@ -89,11 +128,25 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
  */
 app.get("/knowlegeResponse", (req: Request, res: Response) => {
     const file = `${req.query.path}.kr.json`;
-    if (fs.existsSync(file)) {
-        res.sendFile(file);
-    } else {
-        res.status(404).send("Knowledge Response file does not exist.");
-    }
+    let served: boolean = false;
+
+    // does the file exist and is it in an allowed folder
+    allowedFolders.forEach((folder) => {
+        if (file.startsWith(folder)) {
+            if (fs.existsSync(file)) {
+                res.sendFile(file);
+            } else {
+                res.status(404).send("Knowledge Response file does not exist.");
+            }
+
+            served = true;
+        }
+    });
+
+    // File isn't in an allowed folder
+    if (!served) {
+        res.status(403).send("Forbidden");
+    }  
 });
 
 /**
