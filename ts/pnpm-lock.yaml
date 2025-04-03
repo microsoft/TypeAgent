@@ -2270,6 +2270,9 @@ importers:
       exifreader:
         specifier: 4.23.5
         version: 4.23.5
+      sharp:
+        specifier: ^0.33.5
+        version: 0.33.5
       typeagent:
         specifier: workspace:*
         version: link:../typeagent

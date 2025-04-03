@@ -35,6 +35,7 @@ import {
 import { KnowledgeExtractor } from "../conversation/knowledge.js";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+import sharp from "sharp";
 
 /**
  * Creates an image memory
@@ -519,14 +520,10 @@ export async function loadImage(
         cacheFolder = path.dirname(fileName);
     }
 
-<<<<<<< HEAD
-    const cachedFileName: string = path.join(cacheFolder, fileName + ".kr.json");
-=======
     const cachedFileName: string = path.join(
         cacheFolder,
         fileName + ".kr.json",
     );
->>>>>>> origin
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }
@@ -615,6 +612,7 @@ export async function loadImage(
  * @param cachePath The path where the image knowledge response is to be cached
  * @param model The language model being used to describe the image.
  * @param loadCachedDetails A flag indicating if cached image descriptions should be loaded if available.
+ * @param maxSize An image size limit.  Images larger than this threshold will be loaded at a smaller size.
  * @returns The described image.
  */
 export async function loadImageWithKnowledge(
@@ -622,6 +620,7 @@ export async function loadImageWithKnowledge(
     cachePath: string,
     model: ChatModel,
     loadCachedDetails: boolean = true,
+    maxSize: number = 20 * 1024 * 1024,
 ): Promise<Image | undefined> {
 
     const cachedFileName: string = path.join(
@@ -632,7 +631,27 @@ export async function loadImageWithKnowledge(
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }
 
-    const buffer: Buffer = fs.readFileSync(fileName);
+    
+    // if the image exceeds the supplied limit we'll resize the image to fit under that threshold
+    const fileSize: number = fs.statSync(fileName, { }).size;
+    let buffer: Buffer = fs.readFileSync(fileName);
+    let smaller_buffer: Buffer | undefined = undefined;
+    if (maxSize != -1 && fileSize > maxSize) {
+        try {
+            const img_sharp = sharp(fileName, { failOn: "error" });
+
+            // how much over the limit are we?
+            const over: number = fileSize / maxSize - 1;
+            const md: sharp.Metadata = await img_sharp.metadata();
+            const newWidth = Math.round((1 - over) * md.width!);
+            const newHeight = Math.round((1 - over) * md.height!);
+
+            const resized = img_sharp.resize(newWidth, newHeight, { fit: "inside" }).withMetadata();
+            smaller_buffer = await resized.toBuffer();
+        } catch (error) {
+            console.log(`Unable to resize '${fileName}'. ${error}`);
+        }
+    }
 
     // load EXIF properties
     const tags: ExifReader.Tags = ExifReader.load(buffer);
@@ -646,7 +665,7 @@ export async function loadImageWithKnowledge(
     const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(
         tags,
         fileName,
-        `data:image/${mimeType};base64,${buffer.toString("base64")}`,
+        `data:image/${mimeType};base64,${ smaller_buffer ? smaller_buffer.toString("base64") : buffer.toString("base64")}`,
     );
 
     const validator =
