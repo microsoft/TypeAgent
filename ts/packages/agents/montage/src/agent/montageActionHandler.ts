@@ -86,19 +86,19 @@ async function executeMontageAction(
 }
 
 // Define the nativew functions we'll be using function
-const shell32: koffi.IKoffiLib = koffi.load("shell32.dll");
-const crypt32: koffi.IKoffiLib = koffi.load("crypt32.dll");
+const shell32: koffi.IKoffiLib | undefined = process.platform === "win32" ? koffi.load("shell32.dll") : undefined;
+const crypt32: koffi.IKoffiLib | undefined = process.platform === "win32" ? koffi.load("crypt32.dll") : undefined;
 
 // define types
 koffi.opaque("ITEMIDLIST");
 
 // define functions
-const ILCreateFromPathW = shell32.func(
+const ILCreateFromPathW = shell32?.func(
     "ITEMIDLIST* ILCreateFromPathW(str16 pszPath)",
 );
-const ILGetSize = shell32.func("uint ILGetSize(ITEMIDLIST* pidl)");
-const ILFree = shell32.func("void ILFree(ITEMIDLIST* pidl)");
-const CryptBinaryToStringW = crypt32.func(
+const ILGetSize = shell32?.func("uint ILGetSize(ITEMIDLIST* pidl)");
+const ILFree = shell32?.func("void ILFree(ITEMIDLIST* pidl)");
+const CryptBinaryToStringW = crypt32?.func(
     "bool CryptBinaryToStringW(ITEMIDLIST* pbBinary, uint cbBinary, uint dwFlags, _Inout_ str16 pszString, _Inout_ uint* pcchString)",
 );
 
@@ -927,16 +927,20 @@ function startSlideShow(context: MontageActionContext) {
  * @returns - The encrypted PIDL
  */
 function createEncryptedPIDLFromPath(path: string) {
-    const pidl = ILCreateFromPathW(path);
-    const size: number = ILGetSize(pidl);
+    if (ILCreateFromPathW !== undefined && CryptBinaryToStringW !== undefined && ILGetSize !== undefined && ILFree !== undefined) {
+        const pidl = ILCreateFromPathW(path);
+        const size: number = ILGetSize(pidl);
 
-    let stringBuffer = [" ".repeat(2048)];
-    let bufferSize = [2048];
-    if (!CryptBinaryToStringW(pidl, size, 1, stringBuffer, bufferSize)) {
-        debug(`ERROR encrypting PIDL for ${path}`);
+        let stringBuffer = [" ".repeat(2048)];
+        let bufferSize = [2048];
+        if (!CryptBinaryToStringW(pidl, size, 1, stringBuffer, bufferSize)) {
+            debug(`ERROR encrypting PIDL for ${path}`);
+        }
+
+        ILFree(pidl);
+
+        return stringBuffer[0];
     }
 
-    ILFree(pidl);
-
-    return stringBuffer[0];
+    return undefined;
 }
