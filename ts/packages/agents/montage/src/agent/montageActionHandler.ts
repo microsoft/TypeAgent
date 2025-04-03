@@ -7,6 +7,10 @@ import {
     AppAgent,
     SessionContext,
     ActionResult,
+<<<<<<< HEAD
+=======
+    Entity,
+>>>>>>> origin
     //Storage,
 } from "@typeagent/agent-sdk";
 import { ChildProcess, fork, spawn } from "child_process";
@@ -593,6 +597,7 @@ async function handleMontageAction(
                 actionContext.sessionContext.agentContext,
                 mergeMontageAction.parameters.mergeMontageTitle,
             );
+
             let mergedCount: number = 0;
             mergeMontageAction.parameters.ids?.forEach((id) => {
                 const montage: PhotoMontage | undefined =
@@ -675,8 +680,6 @@ function entityFromMontage(montage: PhotoMontage) {
     return {
         name: montage.title,
         type: ["project", "montage"],
-        additionalEntityText:
-            "Status: This montage has been created but not editited. Awaiting review.",
         uniqueId: montage.id.toString(),
         facets: [
             {

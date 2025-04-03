@@ -8,6 +8,7 @@ export type {
     ParamValueType,
     ParamObjectType,
     HistoryContext,
+    ActivityContext,
     PromptEntity,
 } from "./explanation/requestAction.js";
 

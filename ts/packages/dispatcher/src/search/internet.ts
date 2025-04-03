@@ -120,6 +120,7 @@ async function getLookupConfig() {
 type LookupContext = {
     request: string; // request to be answered
     lookups: string[]; // Lookups we are running
+    sites: string[] | undefined; // Sites we are looking at
     answers: Map<string, ChunkChatResponse>; // lookup -> final answer for lookup
     inProgress: Map<string, LookupProgress>; // lookup -> progress for lookup
 };
@@ -142,6 +143,7 @@ type LookupSettings = {
 export async function handleLookup(
     request: string,
     lookups: string[] | undefined,
+    sites: string[] | undefined,
     context: ActionContext<CommandHandlerContext>,
     settings: LookupSettings,
 ): Promise<ActionResult> {
@@ -169,13 +171,22 @@ export async function handleLookup(
     const lookupContext: LookupContext = {
         request,
         lookups,
+        sites,
         answers: new Map<string, ChunkChatResponse>(),
         inProgress: new Map<string, LookupProgress>(),
     };
+
+    const siteQuery = sites ? ` site:${sites.join("|")}` : "";
     // Run all lookups concurrently
     const results = await Promise.all(
         lookups.map((l) =>
-            runLookup(l, lookupContext, context, settings, documentConcurrency),
+            runLookup(
+                `${l}${siteQuery}`,
+                lookupContext,
+                context,
+                settings,
+                documentConcurrency,
+            ),
         ),
     );
     if (results.length > 0) {

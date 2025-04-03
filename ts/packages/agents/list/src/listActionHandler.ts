@@ -11,8 +11,8 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
-    createActionResultFromHtmlDisplay,
-    createActionResultFromError,
+    createActionResultFromMarkdownDisplay,
+    createActionResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ListAction } from "./listSchema.js";
 
@@ -235,6 +235,60 @@ async function updateListContext(
     }
 }
 
+function getEntities(list: string, items?: string[]) {
+    const entities = [
+        {
+            name: list,
+            type: ["list"],
+        },
+    ];
+    if (items) {
+        for (const item of items) {
+            entities.push({
+                name: item,
+                type: ["item"],
+            });
+        }
+    }
+    return entities;
+}
+
+function getStore(listContext: ListActionContext) {
+    if (listContext.store === undefined) {
+        throw new Error("List store not initialized");
+    }
+    return listContext.store;
+}
+
+function getList(listContext: ListActionContext, listName: string) {
+    const list = getStore(listContext).getList(listName);
+    if (list === undefined) {
+        throw new Error(`List '${listName}' not found`);
+    }
+    return list;
+}
+
+function getListDisplay(
+    listContext: ListActionContext,
+    listName: string,
+    suffix?: string,
+) {
+    const list = getList(listContext, listName);
+    if (list.itemsSet.size === 0) {
+        return createActionResult(
+            `List '${listName}' is empty.${suffix ? `\n${suffix}` : ""}`,
+            undefined,
+            getEntities(listName),
+        );
+    }
+    const plainList = Array.from(list.itemsSet);
+
+    // set displayText to markdown list of the items
+    return createActionResultFromMarkdownDisplay(
+        `List '${listName}' has items:\n\n${plainList.map((item) => `- ${item}`).join("\n")}${suffix ? `\n\n${suffix}` : ""}`,
+        getEntities(listName, plainList),
+    );
+}
 async function handleListAction(
     action: ListAction,
     listContext: ListActionContext,
@@ -243,94 +297,48 @@ async function handleListAction(
     let displayText: string | undefined = undefined;
     switch (action.actionName) {
         case "addItems": {
-            const store = listContext.store;
-            if (store === undefined) {
-                return createActionResultFromError(
-                    "List store not initialized",
-                );
-            }
-            const addAction = action;
-            if (addAction.parameters.items.length === 0) {
+            const store = getStore(listContext);
+            const { items, listName } = action.parameters;
+            if (items.length === 0) {
                 throw new Error("No items to add");
             }
-            if (addAction.parameters.listName === "") {
+            if (listName === "") {
                 throw new Error("List name is empty");
             }
 
-            store.addItems(
-                addAction.parameters.listName,
-                addAction.parameters.items,
-            );
+            store.addItems(listName, items);
             await store.save();
-            displayText = `Added items: ${addAction.parameters.items} to list ${addAction.parameters.listName}`;
+            displayText = `Added items: ${items} to list ${listName}`;
             result = createActionResultFromTextDisplay(
                 displayText,
                 displayText,
             );
-            result.entities = [
-                {
-                    name: addAction.parameters.listName,
-                    type: ["list"],
-                },
-            ];
-            for (const item of addAction.parameters.items) {
-                result.entities.push({
-                    name: item,
-                    type: ["item"],
-                });
-            }
-
+            result.entities = getEntities(listName, items);
             break;
         }
         case "removeItems": {
-            const store = listContext.store;
-            if (store === undefined) {
-                return createActionResultFromError(
-                    "List store not initialized",
-                );
-            }
-            const removeAction = action;
-            if (removeAction.parameters.items.length === 0) {
+            const store = getStore(listContext);
+            const { items, listName } = action.parameters;
+            if (items.length === 0) {
                 throw new Error("No items to remove");
             }
-            if (removeAction.parameters.listName === "") {
+            if (listName === "") {
                 throw new Error("List name is empty");
             }
 
-            store.removeItems(
-                removeAction.parameters.listName,
-                removeAction.parameters.items,
-            );
+            store.removeItems(listName, items);
             await store.save();
-            displayText = `Removed items: ${removeAction.parameters.items} from list ${removeAction.parameters.listName}`;
+            displayText = `Removed items: ${items} from list ${listName}`;
             result = createActionResultFromTextDisplay(
                 displayText,
                 displayText,
             );
-            result.entities = [
-                {
-                    name: removeAction.parameters.listName,
-                    type: ["list"],
-                },
-            ];
-            for (const item of removeAction.parameters.items) {
-                result.entities.push({
-                    name: item,
-                    type: ["item"],
-                });
-            }
-
+            result.entities = getEntities(listName, items);
             break;
         }
         case "createList": {
-            const store = listContext.store;
-            if (store === undefined) {
-                return createActionResultFromError(
-                    "List store not initialized",
-                );
-            }
-            const createListAction = action;
-            const listName = createListAction.parameters.listName;
+            const store = getStore(listContext);
+            const listName = action.parameters.listName;
 
             if (store.createList(listName)) {
                 displayText = `Created list: ${listName}`;
@@ -342,81 +350,18 @@ async function handleListAction(
                 displayText,
                 displayText,
             );
-            result.entities = [
-                {
-                    name: createListAction.parameters.listName,
-                    type: ["list"],
-                },
-            ];
-
+            result.entities = getEntities(listName);
             break;
         }
         case "getList": {
-            const store = listContext.store;
-            if (store === undefined) {
-                return createActionResultFromError(
-                    "List store not initialized",
-                );
-            }
-            const getListAction = action;
-            const listName = getListAction.parameters.listName;
-            const list = store.getList(listName);
-            if (list === undefined) {
-                return createActionResultFromError(
-                    `List '${listName}' not found`,
-                );
-            }
-            if (list.itemsSet.size === 0) {
-                displayText = `List '${listName}' is empty`;
-                result = createActionResultFromTextDisplay(
-                    displayText,
-                    displayText,
-                );
-                result.entities = [
-                    {
-                        name: listName,
-                        type: ["list"],
-                    },
-                ];
-                break;
-            }
-            const plainList = Array.from(list.itemsSet);
-            // set displayText to html list of the items
-            displayText = `<ul>${plainList
-                .map((item) => `<li>${item}</li>`)
-                .join("")}</ul>`;
-            result = createActionResultFromHtmlDisplay(
-                displayText,
-                `List '${listName}' has items: ${plainList.join(",")}`,
-            );
-            result.entities = [
-                {
-                    name: listName,
-                    type: ["list"],
-                },
-                ...plainList.map((item) => ({
-                    name: item,
-                    type: ["item"],
-                })),
-            ];
+            result = getListDisplay(listContext, action.parameters.listName);
             break;
         }
         case "clearList": {
-            const store = listContext.store;
-            if (store === undefined) {
-                return createActionResultFromError(
-                    "List store not initialized",
-                );
-            }
+            const store = getStore(listContext);
             const clearListAction = action;
             const listName = clearListAction.parameters.listName;
-            const list = store.getList(listName);
-            if (list === undefined) {
-                return createActionResultFromError(
-                    `List '${listName}' not found`,
-                );
-            }
-
+            const list = getList(listContext, listName);
             list.itemsSet.clear();
             await store.save();
             displayText = `Cleared list: ${listName}`;
@@ -424,13 +369,22 @@ async function handleListAction(
                 displayText,
                 displayText,
             );
-            result.entities = [
-                {
-                    name: clearListAction.parameters.listName,
-                    type: ["list"],
+            result.entities = getEntities(listName);
+            break;
+        }
+        case "startEditList": {
+            result = getListDisplay(
+                listContext,
+                action.parameters.listName,
+                "What do you want to add or remove from this list?",
+            );
+            result.activityContext = {
+                activity: "edit",
+                description: "editing list",
+                state: {
+                    listName: action.parameters.listName,
                 },
-            ];
-
+            };
             break;
         }
         default:
