@@ -34,6 +34,11 @@ import {
     isSearchGroupTerm,
 } from "./compileLib.js";
 
+export type SearchSelectExpr = {
+    searchTermGroup: SearchTermGroup;
+    when?: WhenFilter | undefined;
+};
+
 /**
  * Please inspect the following in interfaces.ts
  * @see {@link ./interfaces.ts}

@@ -10,7 +10,11 @@ import {
 import * as querySchema from "./searchQuerySchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "typeagent";
-import { dateRangeFromDateTimeRange, WhenFilter } from "./search.js";
+import {
+    dateRangeFromDateTimeRange,
+    SearchSelectExpr,
+    WhenFilter,
+} from "./search.js";
 import { createPropertySearchTerm, createSearchTerm } from "./searchLib.js";
 import { SearchTermGroup } from "./interfaces.js";
 import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
@@ -52,11 +56,6 @@ export function createSearchQueryTranslator(
         ),
     );
 }
-
-export type SearchSelectExpr = {
-    searchTermGroup: SearchTermGroup;
-    when?: WhenFilter | undefined;
-};
 
 export type SearchQueryExpr = {
     selectExpressions: SearchSelectExpr[];

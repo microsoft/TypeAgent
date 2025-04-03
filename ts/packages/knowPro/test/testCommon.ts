@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { getAbsolutePath, NullEmbeddingModel, readTestFile } from "test-lib";
+import {
+    getAbsolutePath,
+    NullEmbeddingModel,
+    parseCommandArgs,
+    readTestFile,
+} from "test-lib";
 import {
     DeletionInfo,
     IConversation,
@@ -11,6 +16,7 @@ import {
     ITermToSemanticRefIndex,
     SemanticRef,
     PropertySearchTerm,
+    SearchTermGroup,
 } from "../src/interfaces.js";
 import {
     ConversationSettings,
@@ -18,11 +24,18 @@ import {
 } from "../src/conversation.js";
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
-import { SemanticRefSearchResult } from "../src/search.js";
-import { createSearchTerm } from "../src/searchLib.js";
+import { SearchSelectExpr, SemanticRefSearchResult } from "../src/search.js";
+import {
+    createOrTermGroup,
+    createPropertySearchTerms,
+    createSearchTerm,
+    createSearchTerms,
+} from "../src/searchLib.js";
 import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
+import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
+import { openai } from "aiclient";
 
 export class TestMessage implements IMessage {
     constructor(
@@ -74,6 +87,17 @@ export function createOfflineConversationSettings(
     return createConversationSettings(cachingModel);
 }
 
+export function createOnlineConversationSettings(
+    getCache: () => TextEmbeddingCache | undefined,
+) {
+    const cachingModel = createEmbeddingCache(
+        openai.createEmbeddingModel(),
+        32,
+        getCache,
+    );
+    return createConversationSettings(cachingModel);
+}
+
 export const defaultConversationName = "Episode_53_AdrianTchaikovsky_index";
 
 export function loadTestConversation(
@@ -88,11 +112,56 @@ export function loadTestConversation(
     );
 }
 
+export async function loadTestConversationForOffline(name?: string) {
+    //  This is held in a closure and used to service cache queries
+    let secondaryIndex: ConversationSecondaryIndexes | undefined;
+    let settings = createOfflineConversationSettings(() => {
+        return secondaryIndex?.termToRelatedTermsIndex.fuzzyIndex;
+    });
+    const conversation = await loadTestConversation(settings);
+    secondaryIndex =
+        conversation.secondaryIndexes as ConversationSecondaryIndexes;
+    return conversation;
+}
+
+export async function loadTestConversationForOnline(name?: string) {
+    //  This is held in a closure and used to service cache queries
+    let secondaryIndex: ConversationSecondaryIndexes | undefined;
+    let settings = createOnlineConversationSettings(() => {
+        return secondaryIndex?.termToRelatedTermsIndex.fuzzyIndex;
+    });
+    const conversation = await loadTestConversation(settings);
+    secondaryIndex =
+        conversation.secondaryIndexes as ConversationSecondaryIndexes;
+    return conversation;
+}
+
 export function loadTestQueries(
     relativePath: string,
 ): Record<string, string>[] {
     const json = readTestFile(relativePath);
     return JSON.parse(json);
+}
+
+export function parseTestQuery(query: string): SearchSelectExpr {
+    const cmdArgs = parseCommandArgs(query);
+    return {
+        searchTermGroup: parseSearchTermGroup(cmdArgs.args, cmdArgs.namedArgs),
+    };
+}
+
+export function parseSearchTermGroup(
+    terms?: string[],
+    propertyTerms?: Record<string, string>,
+): SearchTermGroup {
+    const termGroup = createOrTermGroup();
+    if (terms) {
+        termGroup.terms.push(...createSearchTerms(terms));
+    }
+    if (propertyTerms) {
+        termGroup.terms.push(...createPropertySearchTerms(propertyTerms));
+    }
+    return termGroup;
 }
 
 export async function createConversationFromFile(

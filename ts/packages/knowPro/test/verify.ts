@@ -2,8 +2,18 @@
 // Licensed under the MIT License.
 
 import { TextRangeCollection } from "../src/collections.js";
-import { MessageOrdinal, SemanticRef, TextRange } from "../src/interfaces.js";
-import { findEntityWithName } from "./testCommon.js";
+import {
+    IConversation,
+    MessageOrdinal,
+    ScoredMessageOrdinal,
+    SemanticRef,
+    TextRange,
+} from "../src/interfaces.js";
+import { SemanticRefSearchResult } from "../src/search.js";
+import {
+    findEntityWithName,
+    getSemanticRefsForSearchResult,
+} from "./testCommon.js";
 
 export function expectHasEntities(
     semanticRefs: SemanticRef[],
@@ -48,4 +58,24 @@ export function verifyTextRanges(ranges: TextRangeCollection): void {
         }
         endOrdinalInPrevRange = endOrdinal;
     }
+}
+
+export function verifyMessageOrdinals(
+    conversation: IConversation,
+    scoredOrdinals: ScoredMessageOrdinal[],
+) {
+    for (const ordinal of scoredOrdinals) {
+        const message = conversation.messages[ordinal.messageOrdinal];
+        expect(message).toBeDefined();
+    }
+}
+
+export function resolveAndVerifySemanticRefs(
+    conversation: IConversation,
+    matches: SemanticRefSearchResult,
+) {
+    const semanticRefs = getSemanticRefsForSearchResult(conversation, matches);
+    expect(semanticRefs).toHaveLength(matches.semanticRefMatches.length);
+    expect(semanticRefs).not.toContain(undefined);
+    return semanticRefs;
 }

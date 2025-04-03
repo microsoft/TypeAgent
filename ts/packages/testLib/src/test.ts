@@ -9,10 +9,23 @@ export function testIf(
     fn: jest.ProvidesCallback,
     testTimeout?: number | undefined,
 ) {
-    if (!runIf()) {
-        return test.skip(name, () => {});
+    if (runIf()) {
+        test(name, fn, testTimeout);
+    } else {
+        test.skip(name, () => {});
     }
-    return test(name, fn, testTimeout);
+}
+
+export function describeIf(
+    name: string,
+    runIf: () => boolean,
+    describeFn: () => void,
+) {
+    if (runIf()) {
+        describe(name, describeFn);
+    } else {
+        describe.skip(name, describeFn);
+    }
 }
 
 export function shouldSkip() {
