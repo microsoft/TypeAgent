@@ -42,17 +42,18 @@ app.get("/", (req: Request, res: Response) => {
  */
 app.get("/image", (req: Request, res: Response) => {    
 
-    const file = req.query.path as string | undefined;
+    const file = req.query.path as string | undefined;    
     let served: boolean = false;
 
     if (file === undefined) {
         res.status(400).send("Bad Request");
         return;
     } else {
+        const normalized = path.resolve(file);
         allowedFolders.forEach((folder) => {
-            if (file.startsWith(folder)) {
+            if (normalized.startsWith(folder)) {
                 // send the file
-                res.sendFile(file);
+                res.sendFile(normalized);
                 served = true
             }
         });
@@ -68,24 +69,25 @@ sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
 app.get("/thumbnail", async (req: Request, res: Response) => {
 
-    const file = req.query.path as string | undefined;
-    const thumbnail = `${file}.thumbnail.jpg`;
+    const file = req.query.path as string | undefined;    
     let served: boolean = false;
 
     if (file === undefined) {
         res.status(400).send("Bad Request");
         return;
     } else {
+        const normalizedPath = path.resolve(file)
         allowedFolders.forEach(async (folder) => {
-            if (file.startsWith(folder)) {
+            if (normalizedPath.startsWith(path.resolve(folder))) {
 
                 // get the thumbnail of the supplied image or make it if it doesn't exist
+                const thumbnail = `${normalizedPath}.thumbnail.jpg`;
                 if (!fs.existsSync(thumbnail)) {
-                    const img = sharp(file, { failOn: "error" })
+                    const img = sharp(normalizedPath, { failOn: "error" })
                         .resize(800, 800, { fit: "inside" })
                         .withMetadata();
                     try {
-                        await img.toFile(`${file}.thumbnail.jpg`);
+                        await img.toFile(thumbnail);
                     } catch (e) {
                         console.log(e);
                     }
@@ -96,7 +98,7 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
                 if (fs.statSync(thumbnail).size > 0) {
                     res.sendFile(thumbnail);
                 } else {
-                    res.sendFile(file);
+                    res.sendFile(normalizedPath);
                 }
 
                 served = true
@@ -128,13 +130,14 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
  */
 app.get("/knowlegeResponse", (req: Request, res: Response) => {
     const file = `${req.query.path}.kr.json`;
+    const normalizedPath = path.resolve(file);
     let served: boolean = false;
 
     // does the file exist and is it in an allowed folder
     allowedFolders.forEach((folder) => {
         if (file.startsWith(folder)) {
-            if (fs.existsSync(file)) {
-                res.sendFile(file);
+            if (fs.existsSync(normalizedPath)) {
+                res.sendFile(normalizedPath);
             } else {
                 res.status(404).send("Knowledge Response file does not exist.");
             }
