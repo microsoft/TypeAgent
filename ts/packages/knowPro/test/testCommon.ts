@@ -1,18 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
-dotenv.config({ path: new URL("../../../../.env", import.meta.url) });
-
-import {
-    ChatModel,
-    hasEnvSettings,
-    openai,
-    TextEmbeddingModel,
-} from "aiclient";
-
 import path from "path";
-import os from "node:os";
+import { getAbsolutePath, NullEmbeddingModel, readTestFile } from "test-lib";
 import {
     DeletionInfo,
     IConversation,
@@ -20,6 +10,7 @@ import {
     IMessage,
     ITermToSemanticRefIndex,
     SemanticRef,
+    PropertySearchTerm,
 } from "../src/interfaces.js";
 import {
     ConversationSettings,
@@ -27,14 +18,10 @@ import {
 } from "../src/conversation.js";
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
-import {
-    createSearchTerm,
-    PropertySearchTerm,
-    SemanticRefSearchResult,
-} from "../src/search.js";
-import { matchPropertySearchTermToEntity } from "../src/query.js";
+import { SemanticRefSearchResult } from "../src/search.js";
+import { createSearchTerm } from "../src/searchLib.js";
+import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
-import { Result } from "typechat";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 
 export class TestMessage implements IMessage {
@@ -76,24 +63,6 @@ export function createTimestamp(): string {
     return new Date().toISOString();
 }
 
-export type TestModels = {
-    chat: ChatModel;
-    embeddings: TextEmbeddingModel;
-};
-
-export class NullEmbeddingModel implements TextEmbeddingModel {
-    constructor(public maxBatchSize: number = 1) {}
-
-    public generateEmbeddingBatch?(
-        inputs: string[],
-    ): Promise<Result<number[][]>> {
-        throw nullMethodError();
-    }
-    public generateEmbedding(input: string): Promise<Result<number[]>> {
-        throw nullMethodError();
-    }
-}
-
 export function createOfflineConversationSettings(
     getCache: () => TextEmbeddingCache | undefined,
 ) {
@@ -105,59 +74,25 @@ export function createOfflineConversationSettings(
     return createConversationSettings(cachingModel);
 }
 
+export const defaultConversationName = "Episode_53_AdrianTchaikovsky_index";
+
 export function loadTestConversation(
     settings: ConversationSettings,
+    name?: string,
 ): Promise<IConversation> {
+    name ??= defaultConversationName;
     return createConversationFromFile(
-        getRelativePath("./test/data"),
-        "Episode_53_AdrianTchaikovsky_index",
+        getAbsolutePath("./test/data"),
+        name,
         settings,
     );
 }
 
-export function testIf(
-    name: string,
-    runIf: () => boolean,
-    fn: jest.ProvidesCallback,
-    testTimeout?: number | undefined,
-) {
-    if (!runIf()) {
-        return test.skip(name, () => {});
-    }
-    return test(name, fn, testTimeout);
-}
-
-export function shouldSkip() {
-    return !hasTestKeys();
-}
-
-export function hasTestKeys() {
-    const hasKeys: boolean =
-        hasEnvSettings(process.env, openai.EnvVars.AZURE_OPENAI_API_KEY) &&
-        hasEnvSettings(
-            process.env,
-            openai.EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
-        );
-    return hasKeys;
-}
-
-export function skipTest(name: string) {
-    return test.skip(name, () => {});
-}
-
-export function createTestModels(): TestModels {
-    return {
-        chat: openai.createChatModelDefault("knowproTest"),
-        embeddings: openai.createEmbeddingModel(),
-    };
-}
-
-export function getRootDataPath() {
-    return path.join(os.tmpdir(), "/data/test");
-}
-
-export function getRelativePath(relativePath: string): string {
-    return path.join(process.cwd(), relativePath);
+export function loadTestQueries(
+    relativePath: string,
+): Record<string, string>[] {
+    const json = readTestFile(relativePath);
+    return JSON.parse(json);
 }
 
 export async function createConversationFromFile(
@@ -198,10 +133,15 @@ export function findEntityWithName(
         propertyValue: createSearchTerm(entityName),
     };
     return semanticRefs.find((sr) =>
-        matchPropertySearchTermToEntity(searchTerm, sr),
+        q.matchPropertySearchTermToEntity(searchTerm, sr),
     );
 }
 
-function nullMethodError() {
-    return new Error("Null method; not implemented.");
+export function createQueryContext(conversation: IConversation) {
+    const secondaryIndexes = conversation.secondaryIndexes!;
+    return new q.QueryEvalContext(
+        conversation,
+        secondaryIndexes.propertyToSemanticRefIndex,
+        secondaryIndexes.timestampIndex,
+    );
 }

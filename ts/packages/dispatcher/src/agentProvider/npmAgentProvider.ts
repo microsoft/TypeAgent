@@ -15,7 +15,7 @@ const enum ExecutionMode {
     DispatcherProcess = "dispatcher",
 }
 
-export type AppAgentInfo = {
+export type NpmAppAgentInfo = {
     name: string;
     path?: string;
     execMode?: ExecutionMode;
@@ -35,14 +35,14 @@ function patchPaths(manifest: ActionManifest, dir: string) {
     }
 }
 
-function getRequire(info: AppAgentInfo, requirePath: string) {
+function getRequire(info: NpmAppAgentInfo, requirePath: string) {
     // path.sep at the at is necessary for it to work.
     // REVIEW: adding package.json is necessary for jest-resolve to work in tests for some reason.
     const loadPath = `${info.path ? `${path.resolve(info.path)}${path.sep}package.json` : requirePath}`;
     return createRequire(loadPath);
 }
 
-async function loadManifest(info: AppAgentInfo, requirePath: string) {
+async function loadManifest(info: NpmAppAgentInfo, requirePath: string) {
     const require = getRequire(info, requirePath);
     const manifestPath = require.resolve(`${info.name}/agent/manifest`);
     const config = require(manifestPath) as AppAgentManifest;
@@ -55,7 +55,7 @@ function enableExecutionMode() {
 }
 
 async function loadModuleAgent(
-    info: AppAgentInfo,
+    info: NpmAppAgentInfo,
     appAgentName: string,
     requirePath: string,
 ): Promise<AgentProcess> {
@@ -81,7 +81,7 @@ async function loadModuleAgent(
 }
 
 export function createNpmAppAgentProvider(
-    configs: Record<string, AppAgentInfo>,
+    configs: Record<string, NpmAppAgentInfo>,
     requirePath: string,
 ): AppAgentProvider {
     const moduleAgents = new Map<string, AgentProcess>();
@@ -122,7 +122,7 @@ export function createNpmAppAgentProvider(
             moduleAgents.set(appAgentName, agent);
             return agent.appAgent;
         },
-        unloadAppAgent(appAgentName: string) {
+        async unloadAppAgent(appAgentName: string) {
             const agent = moduleAgents.get(appAgentName);
             if (!agent) {
                 throw new Error(`Invalid app agent: ${appAgentName}`);

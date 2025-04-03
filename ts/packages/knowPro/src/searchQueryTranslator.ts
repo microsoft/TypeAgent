@@ -10,13 +10,9 @@ import {
 import * as querySchema from "./searchQuerySchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "typeagent";
-import {
-    createPropertySearchTerm,
-    createSearchTerm,
-    SearchTermGroup,
-    dateRangeFromDateTimeRange,
-    WhenFilter,
-} from "./search.js";
+import { dateRangeFromDateTimeRange, WhenFilter } from "./search.js";
+import { createPropertySearchTerm, createSearchTerm } from "./searchLib.js";
+import { SearchTermGroup } from "./interfaces.js";
 import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
 import { IConversation } from "./interfaces.js";
@@ -25,18 +21,20 @@ import {
     createAndTermGroup,
     createOrMaxTermGroup,
     createOrTermGroup,
-} from "./common.js";
+} from "./searchLib.js";
 
-/*-------------------------------
-
-    EXPERIMENTAL CODE
-    Frequent changes
-
----------------------------------*/
-
+/**
+ * A TypeChat Translator that turns natural language into structured queries
+ * of type: {@link SearchQuery}
+ */
 export type SearchQueryTranslator =
     TypeChatJsonTranslator<querySchema.SearchQuery>;
 
+/**
+ * Create a query translator using
+ * @param {TypeChatLanguageModel} model
+ * @returns {SearchQueryTranslator}
+ */
 export function createSearchQueryTranslator(
     model: TypeChatLanguageModel,
 ): SearchQueryTranslator {
@@ -82,14 +80,14 @@ export function compileSearchQueryForConversation(
     query: querySchema.SearchQuery,
     exactScoping: boolean = true,
 ): SearchQueryExpr[] {
-    const queryBuilder = new SearchQueryExprBuilder(conversation);
+    const queryBuilder = new SearchQueryCompiler(conversation);
     queryBuilder.exactScoping = exactScoping;
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
 }
 
-export class SearchQueryExprBuilder {
+class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
     public queryExpressions: SearchQueryExpr[];
     public exactScoping: boolean = false;
@@ -144,7 +142,9 @@ export class SearchQueryExprBuilder {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
         }
         if (filter.actionSearchTerm) {
-            this.compileActionTerm(filter.actionSearchTerm, termGroup);
+            termGroup.terms.push(
+                this.compileActionTerm(filter.actionSearchTerm),
+            );
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
                 termGroup,
@@ -160,35 +160,13 @@ export class SearchQueryExprBuilder {
         this.entityTermsAdded.clear();
 
         let when: WhenFilter | undefined;
-        let scopeDefiningTerms = createAndTermGroup();
-
         const actionTerm = filter.actionSearchTerm;
         if (actionTerm) {
-            if (
-                actionTerm.targetEntities &&
-                !this.shouldTreatTargetsAsObjects(actionTerm)
-            ) {
-                // The entity term is not already an Object match
-                this.addScopingTermsToGroup(
-                    actionTerm.targetEntities,
-                    scopeDefiningTerms,
-                );
+            const scopeDefiningTerms = this.compileScope(actionTerm);
+            if (scopeDefiningTerms.terms.length > 0) {
+                when ??= {};
+                when.scopeDefiningTerms = scopeDefiningTerms;
             }
-            let additionalEntities =
-                filter.actionSearchTerm?.additionalEntities;
-            if (
-                isEntityTermArray(additionalEntities) &&
-                additionalEntities.length > 0
-            ) {
-                this.addScopingTermsToGroup(
-                    additionalEntities,
-                    scopeDefiningTerms,
-                );
-            }
-        }
-        if (scopeDefiningTerms.terms.length > 0) {
-            when ??= {};
-            when.scopeDefiningTerms = scopeDefiningTerms;
         }
         if (filter.timeRange) {
             when ??= {};
@@ -199,17 +177,10 @@ export class SearchQueryExprBuilder {
 
     private compileActionTerm(
         actionTerm: querySchema.ActionTerm,
-        termGroup?: SearchTermGroup,
     ): SearchTermGroup {
-        termGroup ??= createAndTermGroup();
+        const termGroup = createAndTermGroup();
         if (actionTerm.actionVerbs !== undefined) {
-            for (const verb of actionTerm.actionVerbs.words) {
-                this.addPropertyTermToGroup(
-                    PropertyNames.Verb,
-                    verb,
-                    termGroup,
-                );
-            }
+            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(
@@ -218,24 +189,12 @@ export class SearchQueryExprBuilder {
                 termGroup,
             );
         }
-        if (actionTerm.targetEntities) {
-            if (this.shouldTreatTargetsAsObjects(actionTerm)) {
-                // If additional entities, then for now, assume the targetEntities represent an Object in an action
-                this.addEntityNamesToGroup(
-                    actionTerm.targetEntities,
-                    PropertyNames.Object,
-                    termGroup,
-                );
-            } else {
-                let objects = this.extractObjects(actionTerm.targetEntities);
-                if (objects.length > 0) {
-                    this.addEntityNamesToGroup(
-                        objects,
-                        PropertyNames.Object,
-                        termGroup,
-                    );
-                }
-            }
+        if (isEntityTermArray(actionTerm.targetEntities)) {
+            this.addEntityNamesToGroup(
+                actionTerm.targetEntities,
+                PropertyNames.Object,
+                termGroup,
+            );
         }
         return termGroup;
     }
@@ -244,14 +203,11 @@ export class SearchQueryExprBuilder {
         actionTerm: querySchema.ActionTerm,
         termGroup?: SearchTermGroup,
     ): SearchTermGroup {
-        termGroup ??= createAndTermGroup();
+        termGroup ??= createOrTermGroup();
         if (actionTerm.actionVerbs !== undefined) {
             this.compileSearchTerms(actionTerm.actionVerbs.words, termGroup);
         }
-        if (
-            actionTerm.targetEntities &&
-            !this.shouldTreatTargetsAsObjects(actionTerm)
-        ) {
+        if (isEntityTermArray(actionTerm.targetEntities)) {
             this.compileEntityTerms(actionTerm.targetEntities, termGroup);
         }
         if (isEntityTermArray(actionTerm.additionalEntities)) {
@@ -260,18 +216,15 @@ export class SearchQueryExprBuilder {
         return termGroup;
     }
 
-    private shouldTreatTargetsAsObjects(
-        actionTerm: querySchema.ActionTerm,
-    ): boolean {
-        // TODO: Improve this
-        // If additional entities, then for now, assume the targetEntities represent an Object in an action
-        if (
-            isEntityTermArray(actionTerm.additionalEntities) &&
-            actionTerm.additionalEntities.length > 0
-        ) {
-            return true;
+    private compileSearchTerms(
+        searchTerms: string[],
+        termGroup?: SearchTermGroup,
+    ): SearchTermGroup {
+        termGroup ??= createOrTermGroup();
+        for (const searchTerm of searchTerms) {
+            termGroup.terms.push(createSearchTerm(searchTerm));
         }
-        return false;
+        return termGroup;
     }
 
     private compileEntityTerms(
@@ -292,20 +245,64 @@ export class SearchQueryExprBuilder {
         }
     }
 
-    private addScopingTermsToGroup(
-        entityTerms: querySchema.EntityTerm[],
-        termGroup: SearchTermGroup,
-    ): void {
-        /*
-        for (const entityTerm of entityTerms) {
-            this.addPropertyTermToGroup(
+    private compileScope(actionTerm: querySchema.ActionTerm): SearchTermGroup {
+        const termGroup = createAndTermGroup();
+        if (isEntityTermArray(actionTerm.actorEntities)) {
+            this.addEntityNamesToGroup(
+                actionTerm.actorEntities,
+                PropertyNames.Subject,
+                termGroup,
+            );
+        }
+
+        if (actionTerm.actionVerbs !== undefined) {
+            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
+        }
+
+        if (isEntityTermArray(actionTerm.targetEntities)) {
+            // A target can be the name of an object of an action OR the name of an entity
+            termGroup.terms.push(
+                this.compileObjectOrEntityName(actionTerm.targetEntities),
+            );
+        }
+
+        if (isEntityTermArray(actionTerm.additionalEntities)) {
+            this.addEntityNamesToGroup(
+                actionTerm.additionalEntities,
                 PropertyNames.EntityName,
-                entityTerm.name,
                 termGroup,
                 this.exactScoping,
             );
         }
-        */
+        return termGroup;
+    }
+
+    private compileObjectOrEntityName(
+        targetEntities: querySchema.EntityTerm[],
+    ): SearchTermGroup {
+        // A target can be the name of an object of an action OR the name of an entity
+        const objectTermGroup = createOrTermGroup();
+        this.addEntityNamesToGroup(
+            targetEntities,
+            PropertyNames.Object,
+            objectTermGroup,
+        );
+        this.addEntityNamesToGroup(
+            targetEntities,
+            PropertyNames.EntityName,
+            objectTermGroup,
+            this.exactScoping,
+        );
+        return objectTermGroup;
+    }
+
+    private addVerbsToGroup(
+        verbs: querySchema.VerbsTerm,
+        termGroup: SearchTermGroup,
+    ) {
+        for (const verb of verbs.words) {
+            this.addPropertyTermToGroup(PropertyNames.Verb, verb, termGroup);
+        }
     }
 
     private addEntityTermToGroup(
@@ -401,17 +398,6 @@ export class SearchQueryExprBuilder {
         }
     }
 
-    private compileSearchTerms(
-        searchTerms: string[],
-        termGroup?: SearchTermGroup,
-    ): SearchTermGroup {
-        termGroup ??= createOrTermGroup();
-        for (const searchTerm of searchTerms) {
-            termGroup.terms.push(createSearchTerm(searchTerm));
-        }
-        return termGroup;
-    }
-
     private isSearchableString(value: string): boolean {
         return !(isEmptyString(value) || isWildcard(value));
     }
@@ -428,23 +414,6 @@ export class SearchQueryExprBuilder {
             case "entity":
                 return true;
         }
-    }
-
-    private extractObjects(
-        entities: querySchema.EntityTerm[],
-    ): querySchema.EntityTerm[] {
-        let persons: querySchema.EntityTerm[] = [];
-        let i = 0;
-        while (i < entities.length) {
-            const term = entities[i];
-            if (term.isPerson) {
-                entities.splice(i, 1);
-                persons.push(term);
-            } else {
-                ++i;
-            }
-        }
-        return persons;
     }
 }
 

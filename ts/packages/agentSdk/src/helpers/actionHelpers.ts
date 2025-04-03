@@ -11,7 +11,7 @@ import { Entity } from "../memory.js";
 
 export function createActionResultNoDisplay(
     literalText: string,
-    entities?: Entity[] | undefined
+    entities?: Entity[] | undefined,
 ): ActionResultSuccessNoDisplay {
     return {
         literalText,

@@ -1,7 +1,40 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IMessage, MessageOrdinal } from "./interfaces.js";
+import { IMessage, MessageOrdinal, TextRange } from "./interfaces.js";
+
+/**
+ * Returns the text range represented by a message (and an optional chunk ordinal)
+ * @param messageOrdinal
+ * @param chunkOrdinal
+ * @returns {TextRange}
+ */
+export function textRangeFromMessageChunk(
+    messageOrdinal: MessageOrdinal,
+    chunkOrdinal = 0,
+): TextRange {
+    return {
+        start: { messageOrdinal: messageOrdinal, chunkOrdinal: chunkOrdinal },
+        end: undefined,
+    };
+}
+
+export function textRangeFromMessageRange(
+    start: MessageOrdinal,
+    end: MessageOrdinal,
+): TextRange {
+    if (start === end) {
+        // Point location
+        return { start: { messageOrdinal: start } };
+    } else if (start < end) {
+        return {
+            start: { messageOrdinal: start },
+            end: { messageOrdinal: end },
+        };
+    } else {
+        throw new Error(`Expect message ordinal range: ${start} <= ${end}`);
+    }
+}
 
 /**
  * Get the total number of a characters in a message.
@@ -43,4 +76,33 @@ export function getCountOfMessagesInCharBudget(
         totalCharCount += messageCharCount;
     }
     return i;
+}
+
+/**
+ * Turn message ordinals into text ranges.. building longest contiguous ranges
+ * @param messageOrdinals
+ * @returns
+ */
+export function textRangesFromMessageOrdinals(
+    messageOrdinals: MessageOrdinal[],
+): TextRange[] {
+    if (messageOrdinals.length === 0) {
+        return [];
+    }
+    // Sort ordinals in ascending order
+    messageOrdinals.sort((x, y) => x - y);
+    let ranges: TextRange[] = [];
+    let startOrdinal: MessageOrdinal | undefined = messageOrdinals[0];
+    let endOrdinal = startOrdinal;
+    for (let i = 1; i < messageOrdinals.length; ++i) {
+        const messageOrdinal = messageOrdinals[i];
+        if (messageOrdinal - endOrdinal > 1) {
+            // Non-contiguous range
+            ranges.push(textRangeFromMessageRange(startOrdinal, endOrdinal));
+            startOrdinal = messageOrdinal;
+        }
+        endOrdinal = messageOrdinal;
+    }
+    ranges.push(textRangeFromMessageRange(startOrdinal, endOrdinal));
+    return ranges;
 }

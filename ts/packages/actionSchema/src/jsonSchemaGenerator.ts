@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as sc from "./creator.js";
+import { JsonSchema } from "./jsonSchemaTypes.js";
 import {
     ActionSchemaEntryTypeDefinition,
     ActionSchemaGroup,
@@ -17,50 +18,6 @@ export function wrapTypeWithJsonSchema(
     return sc.type(type.name, sc.obj({ response: type.type }), undefined, true);
 }
 
-type JsonSchemaObject = {
-    type: "object";
-    description?: string;
-    properties: Record<string, JsonSchema>;
-    required: string[];
-    additionalProperties: false;
-};
-type JsonSchemaArray = {
-    type: "array";
-    description?: string;
-    items: JsonSchema;
-};
-
-type JsonSchemaString = {
-    type: "string";
-    description?: string;
-    enum?: string[];
-};
-
-type JsonSchemaNumber = {
-    type: "number";
-    description?: string;
-};
-
-type JsonSchemaBoolean = {
-    type: "boolean";
-    description?: string;
-};
-
-type JsonSchemaNull = {
-    type: "null";
-    description?: string;
-};
-
-type JsonSchemaUnion = {
-    anyOf: JsonSchema[];
-    description?: string;
-};
-
-type JsonSchemaReference = {
-    $ref: string;
-    description?: string;
-};
-
 export type ActionObjectJsonSchema = {
     name: string;
     description?: string;
@@ -69,16 +26,6 @@ export type ActionObjectJsonSchema = {
 };
 
 type JsonSchemaRoot = JsonSchema & { $defs?: Record<string, JsonSchema> }; // REVIEW should be JsonSchemaObject;
-
-type JsonSchema =
-    | JsonSchemaObject
-    | JsonSchemaArray
-    | JsonSchemaString
-    | JsonSchemaNumber
-    | JsonSchemaBoolean
-    | JsonSchemaNull
-    | JsonSchemaUnion
-    | JsonSchemaReference;
 
 function fieldComments(field: SchemaObjectField): string | undefined {
     const combined = [
@@ -115,7 +62,7 @@ function generateJsonSchemaType(
                         return [key, fieldType];
                     }),
                 ),
-                required: Object.keys(type.fields),
+                required: Object.keys(type.fields), // OpenAI JSON schema requires all fields to be required
                 additionalProperties: false,
             };
         case "array":

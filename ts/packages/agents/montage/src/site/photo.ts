@@ -1,10 +1,12 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 export class Photo {
-    
     private _container: HTMLDivElement;
     private imagePath: string;
     private indexDiv: HTMLDivElement;
     private img: HTMLImageElement;
-    
+
     constructor(imgPath: string, index: number) {
         this.imagePath = this.imagePath;
 
@@ -17,10 +19,9 @@ export class Photo {
         this.img.src = "/thumbnail?path=" + imgPath;
 
         // get the image caption
-        fetch(`/knowlegeResponse?path=${imgPath}`).then(async (response) =>
-        {
+        fetch(`/knowlegeResponse?path=${imgPath}`).then(async (response) => {
             const ii = await response.json();
-            this.img.title = ii.fileName + " - " + ii.altText;                         
+            this.img.title = ii.fileName + " - " + ii.altText;
         });
 
         // add the image index
@@ -34,7 +35,7 @@ export class Photo {
     }
 
     public get container() {
-        return this._container
+        return this._container;
     }
 
     public updateImageIndex(index: number) {

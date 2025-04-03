@@ -2,15 +2,17 @@
 # Licensed under the MIT License.
 
 from typing import NotRequired, TypedDict
-from ..aitools.vectorbase import ITextEmbeddingIndexData, VectorBase
+
+from ..aitools.vectorbase import NormalizedEmbeddings, VectorBase
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
     ITermToRelatedTerms,
-    ITermToRelatedTermsData,
+    TermToRelatedTermsData,
     ITermToRelatedTermsIndex,
-    ITermsToRelatedTermsDataItem,
-    ITermsToRelatedTermsIndexData,
+    TermsToRelatedTermsDataItem,
+    TermsToRelatedTermsIndexData,
+    TextEmbeddingIndexData,
     IndexingEventHandlers,
     ListIndexingResult,
     Term,
@@ -42,16 +44,32 @@ class TermToRelatedTermsMap(ITermToRelatedTerms):
     def clear(self) -> None:
         self.map.clear()
 
-    def serialize(self) -> ITermToRelatedTermsData:
-        related_terms: list[ITermsToRelatedTermsDataItem] = []
+    def serialize(self) -> TermToRelatedTermsData:
+        related_terms: list[TermsToRelatedTermsDataItem] = []
         for key, value in self.map.items():
             related_terms.append(
-                ITermsToRelatedTermsDataItem(
+                TermsToRelatedTermsDataItem(
                     termText=key,
                     relatedTerms=[term.serialize() for term in value],
                 )
             )
-        return ITermToRelatedTermsData(relatedTerms=related_terms)
+        return TermToRelatedTermsData(relatedTerms=related_terms)
+
+    def deserialize(self, data: TermToRelatedTermsData | None) -> None:
+        self.clear()
+        if data is None:
+            return
+        related_terms_data = data.get("relatedTerms")
+        if related_terms_data is None:
+            return
+        for item in related_terms_data:
+            term_text = item["termText"]
+            related_terms_data = item["relatedTerms"]
+            related_terms: list[Term] = [
+                Term(term_data["text"], weight=term_data.get("weight"))
+                for term_data in related_terms_data
+            ]
+            self.add_related_term(term_text, related_terms)
 
 
 async def build_related_terms_index(
@@ -89,10 +107,21 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
     def fuzzy_index(self) -> VectorBase:
         return self._vector_base
 
-    def serialize(self) -> ITermsToRelatedTermsIndexData:
-        return ITermsToRelatedTermsIndexData(
+    def serialize(self) -> TermsToRelatedTermsIndexData:
+        return TermsToRelatedTermsIndexData(
             aliasData=self._alias_map.serialize(),
-            textEmbeddingData=ITextEmbeddingIndexData(
-                embeddings=self._vector_base.serialize()
+            textEmbeddingData=TextEmbeddingIndexData(
+                textItems=[],  # TODO: Put values here!
+                embeddings=self._vector_base.serialize(),
             ),
         )
+
+    def deserialize(self, data: TermsToRelatedTermsIndexData) -> None:
+        self._alias_map.clear()
+        self._vector_base.clear()
+        self._alias_map.deserialize(data.get("aliasData"))
+        text_embedding_data = data.get("textEmbeddingData")
+        if text_embedding_data is not None:
+            embeddings = text_embedding_data.get("embeddings")
+            if embeddings is not None:
+                self._vector_base.deserialize(embeddings)

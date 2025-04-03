@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
-import { createAndTermGroup } from "./common.js";
+import { createAndTermGroup } from "./searchLib.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
@@ -14,6 +14,9 @@ import {
     Term,
     IConversationSecondaryIndexes,
     ScoredMessageOrdinal,
+    SearchTerm,
+    SearchTermGroup,
+    PropertySearchTerm,
 } from "./interfaces.js";
 import { mergedEntities, mergeTopics } from "./knowledge.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
@@ -21,107 +24,27 @@ import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
 import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
-
-export type SearchTerm = {
-    /**
-     * Term being searched for
-     */
-    term: Term;
-    /**
-     * Additional terms related to term.
-     * These can be supplied from synonym tables and so on.
-     *  - Zero length array: no related matches for this term
-     *  - undefined array: the search processor may try to resolve related terms from any  {@link IConversationSecondaryIndexes}
-     * related term {@link ITermToRelatedTermsIndex} indexes available to it
-     */
-    relatedTerms?: Term[] | undefined;
-};
+import {
+    BooleanOp,
+    createMatchMessagesBooleanExpr,
+    createMatchTermsBooleanExpr,
+    isActionPropertyTerm,
+    isEntityPropertyTerm,
+    isPropertyTerm,
+    isSearchGroupTerm,
+} from "./compileLib.js";
 
 /**
- * A Group of search terms
+ * Please inspect the following in interfaces.ts
+ * @see {@link ./interfaces.ts}
+ *
+ * Term: {@link Term}
+ * SearchTerm: {@link SearchTerm}
+ * PropertySearchTerm: {@link PropertySearchTerm}
+ * SearchTermGroup: {@link SearchTermGroup}
+ * ITermToSemanticRefIndex: {@link ITermToSemanticRefIndex}
+ * IPropertyToSemanticRefIndex: {@link IPropertyToSemanticRefIndex}
  */
-export type SearchTermGroup = {
-    booleanOp:
-        | "and" // Intersect matches for each term, adding up scores
-        | "or" // Union matches for each term, adding up scores
-        | "or_max"; // Union matches for each term, add up scores, select matches with max hit count
-
-    terms: (SearchTerm | PropertySearchTerm | SearchTermGroup)[];
-};
-
-/**
- * Well known knowledge properties
- */
-export type KnowledgePropertyName =
-    | "name" // the name of an entity
-    | "type" // the type of an entity
-    | "verb" // the verb of an action
-    | "subject" // the subject of an action
-    | "object" // the object of an action
-    | "indirectObject" // The indirectObject of an action
-    | "tag"; // Tag
-
-export type PropertySearchTerm = {
-    /**
-     * PropertySearch terms let you matched named property, values
-     * - You can  match a well known property name (name("Bach") type("book"))
-     * - Or you can provide a SearchTerm as a propertyName.
-     *   E.g. to match hue(red)
-     *      - propertyName as SearchTerm, set to 'hue'
-     *      - propertyValue as SearchTerm, set to 'red'
-     * SearchTerms can included related terms
-     *   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
-     * The the query processor can also related terms using a related terms secondary index, if one is available
-     */
-    propertyName: KnowledgePropertyName | SearchTerm;
-    propertyValue: SearchTerm;
-};
-
-export function createSearchTerm(text: string, score?: number): SearchTerm {
-    return {
-        term: {
-            text,
-            weight: score,
-        },
-    };
-}
-
-/**
- * Create a new property search term from the given name and value
- * @param name property name
- * @param value property value
- * @param exactMatchValue if true, configures propertyValue to only match exactly
- * @returns {PropertySearchTerm}
- */
-export function createPropertySearchTerm(
-    name: string,
-    value: string,
-    exactMatchValue: boolean = false,
-): PropertySearchTerm {
-    let propertyName: KnowledgePropertyName | SearchTerm;
-    let propertyValue: SearchTerm;
-    // Check if this is one of our well known predefined values
-    switch (name) {
-        default:
-            propertyName = createSearchTerm(name);
-            break;
-        case "name":
-        case "type":
-        case "verb":
-        case "subject":
-        case "object":
-        case "indirectObject":
-        case "tag":
-            propertyName = name;
-            break;
-    }
-    propertyValue = createSearchTerm(value);
-    if (exactMatchValue) {
-        // No related terms should be matched for this term
-        propertyValue.relatedTerms = [];
-    }
-    return { propertyName, propertyValue };
-}
 
 /**
  * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match
@@ -365,7 +288,7 @@ class QueryCompiler {
         options?: SearchOptions,
     ) {
         // Select is a combination of ordinary search terms and property search terms
-        let [searchTermUsed, selectExpr] = this.compileSearchGroup(
+        let [searchTermUsed, selectExpr] = this.compileSearchGroupTerms(
             termGroup,
             scopeExpr,
         );
@@ -373,67 +296,92 @@ class QueryCompiler {
         return selectExpr;
     }
 
-    private compileSearchGroup(
+    private compileSearchGroupTerms(
         searchGroup: SearchTermGroup,
         scopeExpr?: q.GetScopeExpr,
     ): [SearchTerm[], q.IQueryOpExpr<SemanticRefAccumulator>] {
+        return this.compileSearchGroup(
+            searchGroup,
+            (termExpressions, booleanOp, scope) => {
+                return createMatchTermsBooleanExpr(
+                    termExpressions,
+                    booleanOp,
+                    scope,
+                );
+            },
+            scopeExpr,
+        );
+    }
+
+    public compileSearchGroupMessages(
+        searchGroup: SearchTermGroup,
+    ): [SearchTerm[], q.IQueryOpExpr<MessageAccumulator>] {
+        return this.compileSearchGroup(
+            searchGroup,
+            (termExpressions, booleanOp) => {
+                return createMatchMessagesBooleanExpr(
+                    termExpressions,
+                    booleanOp,
+                );
+            },
+        );
+    }
+
+    public compileSearchGroup(
+        searchGroup: SearchTermGroup,
+        createOp: (
+            termExpressions: q.IQueryOpExpr[],
+            booleanOp: BooleanOp,
+            scopeExpr?: q.GetScopeExpr,
+        ) => IQueryOpExpr,
+        scopeExpr?: q.GetScopeExpr,
+    ): [SearchTerm[], q.IQueryOpExpr] {
         const searchTermsUsed: SearchTerm[] = [];
-        const termExpressions: q.IQueryOpExpr<
-            SemanticRefAccumulator | undefined
-        >[] = [];
+        const termExpressions: q.IQueryOpExpr[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
-                termExpressions.push(new q.MatchPropertySearchTermExpr(term));
+                termExpressions.push(this.compilePropertyTerm(term));
                 if (typeof term.propertyName !== "string") {
                     searchTermsUsed.push(term.propertyName);
                 }
-                if (isEntityPropertyTerm(term)) {
-                    term.propertyValue.term.weight ??=
-                        this.entityTermMatchWeight;
-                }
                 searchTermsUsed.push(term.propertyValue);
             } else if (isSearchGroupTerm(term)) {
-                const [termsUsed, groupExpr] = this.compileSearchGroup(term);
+                const [termsUsed, groupExpr] = this.compileSearchGroup(
+                    term,
+                    createOp,
+                );
                 searchTermsUsed.push(...termsUsed);
                 termExpressions.push(groupExpr);
             } else {
-                termExpressions.push(
-                    new q.MatchSearchTermExpr(term, (term, sr, scored) =>
-                        this.boostEntities(term, sr, scored, 10),
-                    ),
-                );
+                termExpressions.push(this.compileSearchTerm(term));
                 searchTermsUsed.push(term);
             }
         }
-        let boolExpr = this.compileBooleanOp(
-            searchGroup,
+        let boolExpr = createOp(
             termExpressions,
+            searchGroup.booleanOp,
             scopeExpr,
         );
         return [searchTermsUsed, boolExpr];
     }
 
-    private compileBooleanOp(
-        searchGroup: SearchTermGroup,
-        termExpressions: q.IQueryOpExpr<SemanticRefAccumulator | undefined>[],
-        scopeExpr?: q.GetScopeExpr,
-    ) {
-        let boolExpr: q.MatchTermsBooleanExpr;
-        switch (searchGroup.booleanOp) {
-            case "and":
-                boolExpr = new q.MatchTermsAndExpr(termExpressions, scopeExpr);
-                break;
-            case "or":
-                boolExpr = new q.MatchTermsOrExpr(termExpressions, scopeExpr);
-                break;
-            case "or_max":
-                boolExpr = new q.MatchTermsOrMaxExpr(
-                    termExpressions,
-                    scopeExpr,
-                );
-                break;
+    private compileSearchTerm(
+        term: SearchTerm,
+    ): IQueryOpExpr<SemanticRefAccumulator | undefined> {
+        const boostWeight =
+            this.entityTermMatchWeight / this.defaultTermMatchWeight;
+        return new q.MatchSearchTermExpr(term, (term, sr, scored) =>
+            this.boostEntities(term, sr, scored, boostWeight),
+        );
+    }
+
+    private compilePropertyTerm(
+        term: PropertySearchTerm,
+    ): IQueryOpExpr<SemanticRefAccumulator | undefined> {
+        if (isEntityPropertyTerm(term)) {
+            term.propertyValue.term.weight ??= this.entityTermMatchWeight;
         }
-        return boolExpr;
+        return new q.MatchPropertySearchTermExpr(term);
     }
 
     private async compileScope(
@@ -448,20 +396,21 @@ class QueryCompiler {
                 new q.TextRangesInDateRangeSelector(filter.dateRange),
             );
         }
-        // Actions are inherently scope selecting. If any present in the query, use them
-        // to restrict scope
-        let actionTermsGroup = this.getActionTermsFromSearchGroup(searchGroup);
-        if (actionTermsGroup !== undefined) {
-            scopeSelectors ??= [];
-            this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
-        }
-        // If additional scoping terms were provided
+        // If specific scoping terms were provided
         if (filter && filter.scopeDefiningTerms !== undefined) {
             scopeSelectors ??= [];
             this.addTermsScopeSelector(
                 filter.scopeDefiningTerms,
                 scopeSelectors,
             );
+        } else {
+            // Treat any actions as inherently scope selecting.
+            let actionTermsGroup =
+                this.getActionTermsFromSearchGroup(searchGroup);
+            if (actionTermsGroup !== undefined) {
+                scopeSelectors ??= [];
+                this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
+            }
         }
         // If a thread index is available...
         const threads = this.secondaryIndexes?.threads;
@@ -491,14 +440,28 @@ class QueryCompiler {
     ) {
         if (termGroup.terms.length > 0) {
             const [searchTermsUsed, selectExpr] =
-                this.compileSearchGroup(termGroup);
+                this.compileSearchGroupMessages(termGroup);
             scopeSelectors.push(
-                new q.TextRangesWithTermMatchesSelector(selectExpr),
+                new q.TextRangesFromMessagesSelector(selectExpr),
             );
             this.allScopeSearchTerms.push(...searchTermsUsed);
         }
     }
-
+    /*
+    private addTermsScopeSelectorV1(
+        termGroup: SearchTermGroup,
+        scopeSelectors: q.IQueryTextRangeSelector[],
+    ) {
+        if (termGroup.terms.length > 0) {
+            const [searchTermsUsed, selectExpr] =
+                this.compileSearchGroupTerms(termGroup);
+            scopeSelectors.push(
+                new q.TextRangesFromSemanticRefsSelector(selectExpr),
+            );
+            this.allScopeSearchTerms.push(...searchTermsUsed);
+        }
+    }
+    */
     private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
         let predicates: q.IQuerySemanticRefPredicate[] = [];
         if (filter.knowledgeType) {
@@ -559,31 +522,11 @@ class QueryCompiler {
                 this.secondaryIndexes.termToRelatedTermsIndex,
                 searchTerms,
                 dedupe,
-                //(term) => this.shouldFuzzyMatchRelatedTerms(term, filter),
             );
             // Ensure that the resolved terms are valid etc.
             this.validateAndPrepareSearchTerms(searchTerms);
         }
     }
-
-    /*
-    private shouldFuzzyMatchRelatedTerms(
-        term: SearchTerm,
-        filter?: WhenFilter,
-    ): boolean {
-        const kType = filter?.knowledgeType;
-        if (kType && kType !== "entity") {
-            return true;
-        }
-        // If the term exactly matches the name of an entity, don't do fuzzy resolution
-        // The user was explicitly referring to an entity with a particular name
-        return !isKnownProperty(
-            this.secondaryIndexes?.propertyToSemanticRefIndex,
-            PropertyNames.EntityName,
-            term.term.text,
-        );
-    }
-    */
 
     private validateAndPrepareSearchTerms(searchTerms: SearchTerm[]): void {
         for (const searchTerm of searchTerms) {
@@ -595,12 +538,15 @@ class QueryCompiler {
         if (!this.validateAndPrepareTerm(searchTerm.term)) {
             return false;
         }
+        // Matching the term - exact match - counts for more than matching related terms
+        // Therefore, we boost any matches where the term matches directly...
         searchTerm.term.weight ??= this.defaultTermMatchWeight;
         if (searchTerm.relatedTerms !== undefined) {
             for (const relatedTerm of searchTerm.relatedTerms) {
                 if (!this.validateAndPrepareTerm(relatedTerm)) {
                     return false;
                 }
+                // If related term is *really* similar to the main term, score it the same
                 if (
                     relatedTerm.weight &&
                     relatedTerm.weight >= this.relatedIsExactThreshold
@@ -627,6 +573,14 @@ class QueryCompiler {
         return true;
     }
 
+    /**
+     * If the name or type of an entity matched, boost its score
+     * @param searchTerm
+     * @param sr
+     * @param scoredRef
+     * @param boostWeight
+     * @returns
+     */
     private boostEntities(
         searchTerm: SearchTerm,
         sr: SemanticRef,
@@ -647,41 +601,4 @@ class QueryCompiler {
         }
         return scoredRef;
     }
-}
-
-function isPropertyTerm(
-    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
-): term is PropertySearchTerm {
-    return term.hasOwnProperty("propertyName");
-}
-
-function isEntityPropertyTerm(term: PropertySearchTerm): boolean {
-    switch (term.propertyName) {
-        default:
-            break;
-        case "name":
-        case "type":
-            return true;
-    }
-    return false;
-}
-
-function isActionPropertyTerm(term: PropertySearchTerm): boolean {
-    switch (term.propertyName) {
-        default:
-            break;
-        case "subject":
-        case "verb":
-        case "object":
-        case "indirectObject":
-            return true;
-    }
-
-    return false;
-}
-
-function isSearchGroupTerm(
-    term: SearchTerm | PropertySearchTerm | SearchTermGroup,
-): term is SearchTermGroup {
-    return term.hasOwnProperty("booleanOp");
 }

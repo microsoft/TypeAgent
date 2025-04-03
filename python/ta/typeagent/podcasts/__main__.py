@@ -5,40 +5,39 @@
 # Check Python version before importing anything else.
 import sys
 
-from ..knowpro import serialization
-
 minver = (3, 12)
 if sys.version_info < minver:
-    sys.exit(f"Error: Python {minver[0]}.{minver[1]}+ required")
-del minver
+    sys.exit(
+        f"Error: Python {minver[0]}.{minver[1]}+ required, "
+        + f"got {sys.version_info[0]}.{sys.version_info[1]}"
+    )
 
 import argparse
-import json
 import os
 
-import dotenv
-
-from ..knowpro.convindex import ConversationIndex
-from ..knowpro.interfaces import (
+# Use absolute imports so you can run this as a script file.
+from typeagent.aitools import auth
+from typeagent.knowpro import importing, serialization
+from typeagent.knowpro.interfaces import (
     Datetime,
     IndexingEventHandlers,
     MessageOrdinal,
     TextLocation,
 )
-from .podcast_import import import_podcast
+from typeagent.podcasts.podcast import Podcast
+from typeagent.podcasts.podcast_import import import_podcast
 
 
 async def main():
-    dotenv.load_dotenv(
-        os.path.expanduser("~/TypeAgent/ts/.env")
-    )  # TODO: Only works in dev tree
+    auth.load_dotenv()
     parser = argparse.ArgumentParser(description="Import a podcast")
     parser.add_argument("filename", nargs="?", help="The filename to import")
     # TODO: Add more arguments for the import_podcast function.
     args = parser.parse_args()
     if not args.filename:
         args.filename = os.path.expanduser("~/TypeAgent/python/ta/testdata/npr.txt")
-    pod = import_podcast(args.filename, None, Datetime.now(), 3.0)
+    settings = importing.ConversationSettings()
+    pod = import_podcast(args.filename, None, Datetime.now(), 3.0, settings=settings)
     print()
     print("Name-Tag:", pod.name_tag)
     print("Tags:", ", ".join(pod.tags))
@@ -88,13 +87,15 @@ async def main():
     )
     pod.write_to_file(filename)
     print(f"Dump complete.")
-    # if pod.semantic_ref_index is not None:
-    #     data = pod.semantic_ref_index.serialize()
-    #     # new = ConversationIndex(data)
-    #     # assert new.serialize() == data
-    #     # print(json.dumps(data, indent=2))
 
-    # print(pod.serialize())
+    ser1 = pod.serialize()
+    pod2 = Podcast(settings=pod.settings)
+    pod2.deserialize(ser1)
+    ser2 = pod2.serialize()
+    if ser1 == ser2:
+        print("Serialized data matches original")
+    else:
+        print("Serialized data does not match original")
 
 
 if __name__ == "__main__":

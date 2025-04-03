@@ -5,15 +5,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..aitools.embeddings import NormalizedEmbedding
-from .importing import ConversationSettings, MessageTextIndexSettings
+from .importing import MessageTextIndexSettings
 from .interfaces import (
     IConversation,
-    IConversationSecondaryIndexes,
     IMessage,
     IMessageTextIndex,
-    IMessageTextIndexData,
+    MessageTextIndexData,
     ITermToSemanticRefIndex,
-    ITextToTextLocationIndexData,
     IndexingEventHandlers,
     ListIndexingResult,
     MessageOrdinal,
@@ -113,7 +111,9 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
 
     async def generate_embedding(self, text: str) -> NormalizedEmbedding:
         # Note: if you rename generate_embedding, be sure to also fix is_message_text_embedding_index.
+        # TODO: This is unused -- remove it?
         # TODO: Retries?
+        # TODO: Find a prettier API to get an embedding rather than using _vector_base?
         return await self.text_location_index._vector_base.get_embedding(text)
 
     # TODO: Waiting for text_location_index.lookup_in_subset_by_embeddings.
@@ -153,7 +153,13 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
             )
         ]
 
-    def serialize(self) -> IMessageTextIndexData:
-        return IMessageTextIndexData(
+    def serialize(self) -> MessageTextIndexData:
+        return MessageTextIndexData(
             indexData=self.text_location_index.serialize(),
         )
+
+    def deserialize(self, data: MessageTextIndexData) -> None:
+        index_data = data.get("indexData")
+        if index_data is None:
+            return
+        self.text_location_index.deserialize(index_data)

@@ -8,11 +8,13 @@ import bodyParser from "body-parser";
 import { fileURLToPath } from "url";
 import path from "path";
 import sharp from "sharp";
-//import { getMimeType } from "common-utils";
 import fs from "node:fs";
 
 const app: Express = express();
 const port = process.env.PORT || 9012;
+
+// TODO: make this configurable based on user setup/input
+const allowedFolders: string[] = ["f:\\pictures", "c:\\temp\\pictures"];
 
 // limit request rage
 const limiter = rateLimit({
@@ -26,7 +28,7 @@ const staticPath = fileURLToPath(new URL("../", import.meta.url));
 app.use(express.static(staticPath));
 
 // Accept JSON POST body data
-app.use(bodyParser.json())
+app.use(bodyParser.json());
 
 /**
  * Gets the root document
@@ -37,50 +39,85 @@ app.get("/", (req: Request, res: Response) => {
 
 /**
  * Serves up requested images
- * TODO: secure path access to image folder only
  */
 app.get("/image", (req: Request, res: Response) => {
+    const file = req.query.path as string | undefined;
+    let served: boolean = false;
 
-    // load the requested file
-    // BUGBUG: not secure...need to assert perms, etc. here
-    res.sendFile(req.query.path as string);
+    if (file === undefined) {
+        res.status(400).send("Bad Request");
+        return;
+    } else {
+        const normalized = path.resolve(file);
+        allowedFolders.forEach((folder) => {
+            if (normalized.startsWith(path.resolve(folder))) {
+                // send the file
+                res.sendFile(normalized);
+                served = true;
+            }
+        });
+    }
 
+    // File isn't in an allowed folder
+    if (!served) {
+        res.status(403).send("Forbidden");
+    }
 });
 
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
 app.get("/thumbnail", async (req: Request, res: Response) => {
+    const file = req.query.path as string | undefined;
+    let served: boolean = false;
 
-    console.log(req.url);
-    const file: string = req.query.path as string;
+    if (file === undefined) {
+        res.status(400).send("Bad Request");
+        return;
+    } else {
+        const normalizedPath = path.resolve(file);
+        allowedFolders.forEach(async (folder) => {
+            if (normalizedPath.startsWith(path.resolve(folder))) {
+                // get the thumbnail of the supplied image or make it if it doesn't exist
+                const thumbnail = `${normalizedPath}.thumbnail.jpg`;
+                if (!fs.existsSync(thumbnail)) {
+                    const img = sharp(normalizedPath, { failOn: "error" })
+                        .resize(800, 800, { fit: "inside" })
+                        .withMetadata();
+                    try {
+                        await img.toFile(thumbnail);
+                    } catch (e) {
+                        console.log(e);
+                    }
+                }
 
-    const thumbnail = `${file}.thumbnail.jpg`;
-    if (!fs.existsSync(thumbnail)) {
-        const img = sharp(file, { failOn: "error"}).resize(800, 800, { fit: "inside" }).withMetadata();
-        try {
-            await img.toFile(`${file}.thumbnail.jpg`);
-        } catch (e) {
-            console.log(e);
-        }
+                // send the thumbnail if it's a valid size
+                // otherwise send the original
+                if (fs.statSync(thumbnail).size > 0) {
+                    res.sendFile(thumbnail);
+                } else {
+                    res.sendFile(normalizedPath);
+                }
+
+                served = true;
+            }
+        });
     }
 
-    // send the thumbnail if it's a valid size
-    if (fs.statSync(thumbnail).size > 0) {
-        res.sendFile(thumbnail);
-    } else {
-        res.sendFile(file);
+    // File isn't in an allowed folder
+    if (!served) {
+        res.status(403).send("Forbidden");
     }
 
     // TOOD: figure out why this fails for most images
     // const img = sharp(file, { failOn: "error"}).resize(800, 800, { fit: "inside" }).withMetadata();
     //  const buffer = await img.toBuffer();
-    
+
     // res.setHeader("Content-Type", getMimeType(path.extname(file)));
     // res.setHeader("Cache-Control", "no-cache");
     // res.setHeader("Connection", "keep-alive");
     // res.setHeader("Content-Length", buffer.byteLength);
-    // res.flushHeaders(); 
-        
+    // res.flushHeaders();
+
     // res.write(buffer);
 });
 
@@ -89,14 +126,27 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
  * Used for debugging purposes only.
  */
 app.get("/knowlegeResponse", (req: Request, res: Response) => {
-
     const file = `${req.query.path}.kr.json`;
-    if (fs.existsSync(file)) {
-        res.sendFile(file);
-    } else {
-        res.status(404).send("Knowledge Response file does not exist.")
-    }
+    const normalizedPath = path.resolve(file);
+    let served: boolean = false;
 
+    // does the file exist and is it in an allowed folder
+    allowedFolders.forEach((folder) => {
+        if (normalizedPath.startsWith(path.resolve(folder))) {
+            if (fs.existsSync(normalizedPath)) {
+                res.sendFile(normalizedPath);
+            } else {
+                res.status(404).send("Knowledge Response file does not exist.");
+            }
+
+            served = true;
+        }
+    });
+
+    // File isn't in an allowed folder
+    if (!served) {
+        res.status(403).send("Forbidden");
+    }
 });
 
 /**
@@ -141,7 +191,6 @@ app.get("/cmd", async (req, res) => {
  * @param message The message to forward to the clients
  */
 function sendDataToClients(message: any) {
-
     // when no client is here just queue messages to drain later
     if (clients.length == 0) {
         messageQueue.push(message);
@@ -153,7 +202,7 @@ function sendDataToClients(message: any) {
 }
 
 /**
- * Indicate to the host/parent process that we've started successfully 
+ * Indicate to the host/parent process that we've started successfully
  */
 process.send?.("Success");
 

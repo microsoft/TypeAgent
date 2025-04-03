@@ -7,7 +7,7 @@
  */
 
 import { conversation as kpLib } from "knowledge-processor";
-import { collections, getTopK } from "typeagent";
+import { async, asyncArray, collections, getTopK } from "typeagent";
 import { unionArrays } from "./collections.js";
 import {
     ScoredKnowledge,
@@ -16,6 +16,53 @@ import {
     Topic,
 } from "./interfaces.js";
 import { Scored } from "./common.js";
+import { ChatModel } from "aiclient";
+import { createKnowledgeModel } from "./conversationIndex.js";
+import { Result, success } from "typechat";
+
+/**
+ * Create a knowledge extractor using the given Chat Model
+ * @param chatModel
+ * @returns
+ */
+export function createKnowledgeExtractor(
+    chatModel?: ChatModel,
+): kpLib.KnowledgeExtractor {
+    chatModel ??= createKnowledgeModel();
+    const extractor = kpLib.createKnowledgeExtractor(chatModel, {
+        maxContextLength: 4096,
+        /**
+         * This should *ALWAYS* be false.
+         * Merging is handled during indexing:
+         */
+        mergeActionKnowledge: false,
+    });
+    return extractor;
+}
+
+export async function extractKnowledgeBatch(
+    extractor: kpLib.KnowledgeExtractor,
+    textBatch: string[],
+    maxRetries: number,
+): Promise<Result<kpLib.KnowledgeResponse[]>> {
+    const results = await asyncArray.mapAsync(
+        textBatch,
+        textBatch.length,
+        (text) =>
+            async.callWithRetry(() =>
+                extractor.extractWithRetry(text, maxRetries),
+            ),
+    );
+    let responses: kpLib.KnowledgeResponse[] = [];
+    for (const result of results) {
+        if (result.success) {
+            responses.push(result.data);
+        } else {
+            return result;
+        }
+    }
+    return success(responses);
+}
 
 export function facetValueToString(facet: kpLib.Facet): string {
     const value = facet.value;

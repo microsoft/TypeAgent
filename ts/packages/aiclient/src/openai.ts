@@ -673,7 +673,7 @@ function createAzureOpenAIChatModel(
 
     function verifyContentSafety(data: ChatCompletionChunk): boolean {
         data.choices.map((c: ChatCompletionDelta) => {
-            if (c.finish_reason === "content_filter_error" ) {
+            if (c.finish_reason === "content_filter_error") {
                 const err = c.content_filter_results as FilterError;
                 throw new Error(
                     `There was a content filter error (${err.code}): ${err.message}`,

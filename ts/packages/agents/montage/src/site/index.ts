@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 
 //import { SearchInput } from "./searchInput";
-import { ChangeTitleAction, FindPhotosAction, RemovePhotosAction, SelectPhotosAction } from "../agent/montageActionSchema.js";
+import {
+    ChangeTitleAction,
+    FindPhotosAction,
+    RemovePhotosAction,
+    SelectPhotosAction,
+} from "../agent/montageActionSchema.js";
 import { PhotoMontage } from "../agent/montageActionHandler.js";
 import { Photo } from "./photo";
 
@@ -10,7 +15,7 @@ import { Photo } from "./photo";
 
 export type Message = {
     type: "listPhotos";
-}
+};
 
 export type ListPhotosMessage = Message & {
     files: string[];
@@ -23,19 +28,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
-    eventSource.onmessage = function (event: MessageEvent) {        
+    eventSource.onmessage = function (event: MessageEvent) {
         const e = JSON.parse(event.data);
         console.log(e);
 
-        // check to see if we are getting initial data and handle that, otherwise process actions        
+        // check to see if we are getting initial data and handle that, otherwise process actions
         if (e.actionName !== undefined && e.actionName !== "") {
             processAction(e);
         } else {
-            
             reset();
 
             // repopulate
-            const montage = e as PhotoMontage            
+            const montage = e as PhotoMontage;
             montage.selected.forEach((value) => selected.add(value));
             setTitle(montage.title);
             addImages(montage.files, true);
@@ -48,7 +52,6 @@ document.addEventListener("DOMContentLoaded", function () {
      */
     function processAction(action) {
         switch (action.actionName) {
-
             case "reset": {
                 reset();
                 break;
@@ -59,7 +62,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 const msg: FindPhotosAction = action as FindPhotosAction;
 
                 addImages(msg.parameters.files);
-                
+
                 break;
             }
 
@@ -73,15 +76,27 @@ document.addEventListener("DOMContentLoaded", function () {
                 const msg: SelectPhotosAction = action as SelectPhotosAction;
                 // select image by indicies first
                 if (msg.parameters.indicies) {
-                    for(let i = 0; i < msg.parameters.indicies.length; i++) {
-                        mainContainer.children[msg.parameters.indicies[i] - 1].classList.add("selected");
-                        selected.add(mainContainer.children[msg.parameters.indicies[i] - 1].getAttribute("path"))
+                    for (let i = 0; i < msg.parameters.indicies.length; i++) {
+                        mainContainer.children[
+                            msg.parameters.indicies[i] - 1
+                        ].classList.add("selected");
+                        selected.add(
+                            mainContainer.children[
+                                msg.parameters.indicies[i] - 1
+                            ].getAttribute("path"),
+                        );
                     }
 
                     // unselect anything that's not selected
-                    for(let i = 0; i < mainContainer.children.length; i++) {
-                        if (!mainContainer.children[i].classList.contains("selected")) {
-                            mainContainer.children[i].classList.add("unselected");
+                    for (let i = 0; i < mainContainer.children.length; i++) {
+                        if (
+                            !mainContainer.children[i].classList.contains(
+                                "selected",
+                            )
+                        ) {
+                            mainContainer.children[i].classList.add(
+                                "unselected",
+                            );
                         }
                     }
                 }
@@ -96,16 +111,22 @@ document.addEventListener("DOMContentLoaded", function () {
                 const msg: RemovePhotosAction = action as RemovePhotosAction;
 
                 // remove all selected images
-                if (msg.parameters.selected === "selected" || msg.parameters.selected === "all") {
+                if (
+                    msg.parameters.selected === "selected" ||
+                    msg.parameters.selected === "all"
+                ) {
                     selected.forEach((value: string) => {
                         imgMap.get(value).remove();
-                        imgMap.delete(value);                        
+                        imgMap.delete(value);
                     });
-                    selected.clear();                    
+                    selected.clear();
                 }
-                
+
                 // remove unselected images
-                if (msg.parameters.selected === "inverse" || msg.parameters.selected === "all") {
+                if (
+                    msg.parameters.selected === "inverse" ||
+                    msg.parameters.selected === "all"
+                ) {
                     imgMap.forEach((value, key) => {
                         if (!selected.has(key)) {
                             value.remove();
@@ -120,50 +141,63 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (msg.parameters.selected === "inverse") {
                         const keep: Set<string> = new Set<string>();
                         msg.parameters.indicies.forEach((v) => {
-                            keep.add(mainContainer.children[v - 1].getAttribute("path"));
+                            keep.add(
+                                mainContainer.children[v - 1].getAttribute(
+                                    "path",
+                                ),
+                            );
                         });
 
                         keep.forEach((img) => {
                             imgMap.get(img).remove();
                             imgMap.delete(img);
                         });
-
                     } else {
                         // have to start at the end otherwise indexes will be wrong
-                        for(let i = msg.parameters.indicies.length - 1; i >= 0 ; i--) {
+                        for (
+                            let i = msg.parameters.indicies.length - 1;
+                            i >= 0;
+                            i--
+                        ) {
                             const index = msg.parameters.indicies[i] - 1;
-                            const file: string | undefined = mainContainer.children[index].getAttribute("path");
+                            const file: string | undefined =
+                                mainContainer.children[index].getAttribute(
+                                    "path",
+                                );
                             mainContainer.children[index].remove();
 
                             imgMap.delete(file);
                             selected.delete(file);
-                        }       
-                    }             
+                        }
+                    }
                 }
 
                 // remove specific files
                 if (msg.parameters.files) {
-                    for(let i = 0; i < msg.parameters.files.length; i++) {
-
+                    for (let i = 0; i < msg.parameters.files.length; i++) {
                         if (imgMap.has(msg.parameters.files[i])) {
                             imgMap.get(msg.parameters.files[i]).remove();
                             imgMap.delete(msg.parameters.files[i]);
                         }
                         selected.delete(msg.parameters.files[i]);
-                    }                    
+                    }
                 }
 
                 // remove everything
-                if (msg.parameters.indicies === undefined 
-                    && msg.parameters.files === undefined 
-                    && msg.parameters.search_filters === undefined
-                    && msg.parameters.selected === undefined) {
+                if (
+                    msg.parameters.indicies === undefined &&
+                    msg.parameters.files === undefined &&
+                    msg.parameters.search_filters === undefined &&
+                    msg.parameters.selected === undefined
+                ) {
                     reset();
                 }
 
                 // update indicies
-                for(let i = 0; i < mainContainer.children.length; i++) {
-                    mainContainer.children[i].lastElementChild.innerHTML = (i + 1).toString();
+                for (let i = 0; i < mainContainer.children.length; i++) {
+                    mainContainer.children[i].lastElementChild.innerHTML = (
+                        i + 1
+                    ).toString();
                 }
 
                 // Don't break because we want to clear the selection after doing a "remove"
@@ -178,11 +212,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 for (let i = 0; i < mainContainer.children.length; i++) {
                     mainContainer.children[i].classList.remove("selected");
                     mainContainer.children[i].classList.remove("unselected");
-                }                
+                }
                 break;
             }
-        }    
-        
+        }
+
         // let the server know which files are being shown
         updateFileList(imgMap, selected);
     }
@@ -202,17 +236,22 @@ document.addEventListener("DOMContentLoaded", function () {
      * @param files The images to add to the main container
      * @param setSelectionState Flag indicating if we shoud set the selection state of the image elements
      */
-    function addImages(files: string[] | undefined, setSelectionState: boolean = false) {
+    function addImages(
+        files: string[] | undefined,
+        setSelectionState: boolean = false,
+    ) {
         if (files !== undefined) {
             files.forEach(async (f) => {
-                if (!imgMap.has(f)) {        
-                
+                if (!imgMap.has(f)) {
                     // create the image control
-                    const img: Photo = new Photo(f, mainContainer.children.length + 1);
-                    
+                    const img: Photo = new Photo(
+                        f,
+                        mainContainer.children.length + 1,
+                    );
+
                     // store the reference to the container
                     imgMap.set(f, img);
-        
+
                     // add the image div to the page
                     mainContainer.append(img.container);
 
@@ -223,15 +262,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
             });
         }
-    }  
-    
+    }
+
     /**
      * The files to select
      * @param files the files to select
      */
     function selectFiles(files: string[] | undefined) {
         if (files !== undefined) {
-            for(let i = 0; i < files.length; i++) {
+            for (let i = 0; i < files.length; i++) {
                 if (imgMap.has(files[i])) {
                     imgMap.get(files[i]).container.classList.add("selected");
                     selected.add(files[i]);
@@ -242,12 +281,14 @@ document.addEventListener("DOMContentLoaded", function () {
         // remove or add "unselected" as needed
         if (selected.size > 0) {
             for (let i = 0; i < mainContainer.children.length; i++) {
-                if (selected.has(mainContainer.children[i].getAttribute("path"))) {
+                if (
+                    selected.has(mainContainer.children[i].getAttribute("path"))
+                ) {
                     mainContainer.children[i].classList.remove("unselected");
                 } else {
                     mainContainer.children[i].classList.add("unselected");
                 }
-            } 
+            }
         }
     }
 
@@ -269,20 +310,20 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 });
 
-/** 
+/**
  * Notify the server of the files in the viewer
  */
 function updateFileList(files: Map<string, Photo>, selected: Set<string>) {
     // tell the server what images are being show
     fetch("/montageUpdated", {
-        method: 'POST',
+        method: "POST",
         headers: {
-            'Content-Type': 'application/json'
+            "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
-            title: document.getElementById("title").innerHTML, 
-            files: [...files.keys()], 
-            selected: [...selected.values()]
-        })
+        body: JSON.stringify({
+            title: document.getElementById("title").innerHTML,
+            files: [...files.keys()],
+            selected: [...selected.values()],
+        }),
     });
 }

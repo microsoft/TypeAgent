@@ -852,7 +852,7 @@ export async function createKnowproCommands(
         commandDef: CommandMetadata,
         andTerms: boolean = false,
     ): kp.SearchTermGroup {
-        const searchTerms = parseQueryTerms(termArgs);
+        const searchTerms = kp.createSearchTerms(termArgs);
         const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
         return {
             booleanOp: andTerms ? "and" : "or",
@@ -864,28 +864,8 @@ export async function createKnowproCommands(
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
     ): kp.PropertySearchTerm[] {
-        return createPropertyTerms(namedArgs, commandDef);
-    }
-
-    function createPropertyTerms(
-        namedArgs: NamedArgs,
-        commandDef: CommandMetadata,
-        nameFilter?: (name: string) => boolean,
-    ): kp.PropertySearchTerm[] {
         const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
-        const propertyNames = nameFilter
-            ? Object.keys(keyValues).filter(nameFilter)
-            : Object.keys(keyValues);
-        const propertySearchTerms: kp.PropertySearchTerm[] = [];
-        for (const propertyName of propertyNames) {
-            const allValues = splitTermValues(keyValues[propertyName]);
-            for (const value of allValues) {
-                propertySearchTerms.push(
-                    kp.createPropertySearchTerm(propertyName, value),
-                );
-            }
-        }
-        return propertySearchTerms;
+        return kp.createPropertySearchTerms(keyValues);
     }
 
     function whenFilterFromNamedArgs(
@@ -952,33 +932,4 @@ export async function createKnowproCommands(
     function podcastNameToFilePath(podcastName: string): string {
         return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
-}
-
-export function parseQueryTerms(args: string[]): kp.SearchTerm[] {
-    const queryTerms: kp.SearchTerm[] = [];
-    for (const arg of args) {
-        let allTermStrings = splitTermValues(arg);
-        if (allTermStrings.length > 0) {
-            allTermStrings = allTermStrings.map((t) => t.toLowerCase());
-            const queryTerm: kp.SearchTerm = {
-                term: { text: allTermStrings[0] },
-            };
-            if (allTermStrings.length > 1) {
-                queryTerm.relatedTerms = [];
-                for (let i = 1; i < allTermStrings.length; ++i) {
-                    queryTerm.relatedTerms.push({ text: allTermStrings[i] });
-                }
-            }
-            queryTerms.push(queryTerm);
-        }
-    }
-    return queryTerms;
-}
-
-function splitTermValues(term: string): string[] {
-    let allTermStrings = knowLib.split(term, ";", {
-        trim: true,
-        removeEmpty: true,
-    });
-    return allTermStrings;
 }

@@ -1,6 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * INTERNAL COLLECTIONS USED BY QUERY PROCESSOR
+ * These should not be exposed in the public APIs
+ */
+
 import { collections, createTopNList } from "typeagent";
 import {
     IMessage,
@@ -85,6 +90,7 @@ export class MatchAccumulator<T = any> {
         return maxHitCount;
     }
 
+    // TODO: make this 2 methods: addExact and addRelated
     public add(value: T, score: number, isExactMatch: boolean) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
@@ -116,8 +122,10 @@ export class MatchAccumulator<T = any> {
         }
     }
 
-    public addUnion(other: MatchAccumulator) {
-        for (const otherMatch of other.getMatches()) {
+    public addUnion(other: MatchAccumulator | IterableIterator<Match>) {
+        const otherMatches =
+            other instanceof MatchAccumulator ? other.getMatches() : other;
+        for (const otherMatch of otherMatches) {
             const existingMatch = this.getMatch(otherMatch.value);
             if (existingMatch) {
                 this.combineMatches(existingMatch, otherMatch);
@@ -465,12 +473,6 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
             };
         }, 0);
     }
-    /*
-    public override clearMatches() {
-        super.clearMatches();
-        this.searchTermMatches.clear();
-    }
-    */
 }
 
 export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
@@ -529,6 +531,12 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
+    public override intersect(other: MessageAccumulator): MessageAccumulator {
+        const intersection = new MessageAccumulator();
+        super.intersect(other, intersection);
+        return intersection;
+    }
+
     public smoothScores() {
         // Normalize the score relative to # of hits.
         for (const match of this.getMatches()) {
@@ -564,7 +572,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     }
 }
 
-export class TextRangeCollection {
+export class TextRangeCollection implements Iterable<TextRange> {
     // Maintains ranges sorted by message index
     private ranges: TextRange[];
 
@@ -574,6 +582,10 @@ export class TextRangeCollection {
 
     public get size() {
         return this.ranges.length;
+    }
+
+    public [Symbol.iterator](): Iterator<TextRange, any, any> {
+        return this.ranges[Symbol.iterator]();
     }
 
     public addRange(textRange: TextRange): boolean {
@@ -813,5 +825,23 @@ function* union<T>(
 function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
     for (const value of values) {
         set.add(value);
+    }
+}
+
+export type Batch<T = any> = {
+    startAt: number;
+    value: T[];
+};
+
+export function* getBatches<T = any>(
+    array: T[],
+    size: number,
+): IterableIterator<Batch<T>> {
+    for (let i = 0; i < array.length; i += size) {
+        const slice = array.slice(i, i + size);
+        if (slice.length === 0) {
+            break;
+        }
+        yield { startAt: i, value: slice };
     }
 }

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { split } from "knowledge-processor";
+import * as kpLib from "knowledge-processor";
 import { dateTime, getFileName, readAllText } from "typeagent";
 import {
     Podcast,
@@ -9,19 +9,17 @@ import {
     PodcastMessageMeta,
     assignMessageListeners,
 } from "./podcast.js";
-import { IMessage } from "knowpro";
+import { ConversationSettings, IMessage } from "knowpro";
 
 export function parsePodcastTranscript(
     transcriptText: string,
 ): [PodcastMessage[], Set<string>] {
-    const transcriptLines = split(transcriptText, /\r?\n/, {
-        removeEmpty: true,
-        trim: true,
-    });
+    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)?(?<speech>.*)$/;
+    const transcriptLines = getTranscriptLines(transcriptText);
     const participants = new Set<string>();
     const messages: PodcastMessage[] = [];
     let curMsg: PodcastMessage | undefined = undefined;
-    const turnParserRegex = /^(?<speaker>[A-Z0-9 ]+:)\s*?(?<speech>.*)$/;
+
     for (const line of transcriptLines) {
         const match = turnParserRegex.exec(line);
         if (match && match.groups) {
@@ -31,21 +29,17 @@ export function parsePodcastTranscript(
                 if (speaker) {
                     messages.push(curMsg);
                     curMsg = undefined;
-                } else {
+                } else if (speech) {
                     curMsg.addContent("\n" + speech);
                 }
             }
             if (!curMsg) {
                 if (speaker) {
-                    speaker = speaker.trim();
-                    if (speaker.endsWith(":")) {
-                        speaker = speaker.slice(0, speaker.length - 1);
-                    }
-                    speaker = speaker.toLocaleLowerCase();
+                    speaker = prepareSpeakerName(speaker);
                     participants.add(speaker);
                 }
                 curMsg = new PodcastMessage(
-                    [speech],
+                    [speech.trim()],
                     new PodcastMessageMeta(speaker),
                 );
             }
@@ -62,6 +56,7 @@ export async function importPodcast(
     podcastName?: string,
     startDate?: Date,
     lengthMinutes: number = 60,
+    settings?: ConversationSettings,
 ): Promise<Podcast> {
     const transcriptText = await readAllText(transcriptFilePath);
     podcastName ??= getFileName(transcriptFilePath);
@@ -74,7 +69,7 @@ export async function importPodcast(
             dateTime.addMinutesToDate(startDate, lengthMinutes),
         );
     }
-    const pod = new Podcast(podcastName, messages, [podcastName]);
+    const pod = new Podcast(podcastName, messages, [podcastName], settings);
     // TODO: add more tags
     return pod;
 }
@@ -116,4 +111,20 @@ export function timestampMessages(
             0,
         );
     }
+}
+
+function getTranscriptLines(transcriptText: string): string[] {
+    return kpLib.split(transcriptText, /\r?\n/, {
+        removeEmpty: true,
+        trim: true,
+    });
+}
+
+function prepareSpeakerName(speaker: string): string {
+    speaker = speaker.trim();
+    if (speaker.endsWith(":")) {
+        speaker = speaker.slice(0, speaker.length - 1);
+    }
+    speaker = speaker.toLocaleLowerCase();
+    return speaker;
 }

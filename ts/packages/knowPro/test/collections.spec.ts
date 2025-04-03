@@ -4,7 +4,7 @@
 import { MessageCollection } from "../src/storage.js";
 import { createMessage } from "./testCommon.js";
 
-describe("knowpro.MessageCollection", () => {
+describe("messageCollection", () => {
     test("addMessage", () => {
         const messageCollection = new MessageCollection();
         messageCollection.append(createMessage("One"));

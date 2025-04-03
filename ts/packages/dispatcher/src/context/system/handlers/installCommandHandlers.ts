@@ -9,13 +9,8 @@ import {
     installAppProvider,
 } from "../../commandHandlerContext.js";
 import path from "node:path";
-import os from "node:os";
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
-
-function expandHome(pathname: string): string {
-    if (pathname[0] != "~") return pathname;
-    return path.join(os.homedir() + pathname.substring(1));
-}
+import { expandHome } from "../../../utils/fsUtils.js";
 
 export class InstallCommandHandler implements CommandHandler {
     public readonly description = "Install an agent";
