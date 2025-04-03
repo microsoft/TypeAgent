@@ -14,7 +14,7 @@ const app: Express = express();
 const port = process.env.PORT || 9012;
 
 // TODO: make this configurable based on user setup/input
-const allowedFolders: string[] = [ "f:\\pictures", "c:\\temp\\pictures" ];
+const allowedFolders: string[] = ["f:\\pictures", "c:\\temp\\pictures"];
 
 // limit request rage
 const limiter = rateLimit({
@@ -40,9 +40,8 @@ app.get("/", (req: Request, res: Response) => {
 /**
  * Serves up requested images
  */
-app.get("/image", (req: Request, res: Response) => {    
-
-    const file = req.query.path as string | undefined;    
+app.get("/image", (req: Request, res: Response) => {
+    const file = req.query.path as string | undefined;
     let served: boolean = false;
 
     if (file === undefined) {
@@ -54,7 +53,7 @@ app.get("/image", (req: Request, res: Response) => {
             if (normalized.startsWith(path.resolve(folder))) {
                 // send the file
                 res.sendFile(normalized);
-                served = true
+                served = true;
             }
         });
     }
@@ -68,18 +67,16 @@ app.get("/image", (req: Request, res: Response) => {
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
 app.get("/thumbnail", async (req: Request, res: Response) => {
-
-    const file = req.query.path as string | undefined;    
+    const file = req.query.path as string | undefined;
     let served: boolean = false;
 
     if (file === undefined) {
         res.status(400).send("Bad Request");
         return;
     } else {
-        const normalizedPath = path.resolve(file)
+        const normalizedPath = path.resolve(file);
         allowedFolders.forEach(async (folder) => {
             if (normalizedPath.startsWith(path.resolve(folder))) {
-
                 // get the thumbnail of the supplied image or make it if it doesn't exist
                 const thumbnail = `${normalizedPath}.thumbnail.jpg`;
                 if (!fs.existsSync(thumbnail)) {
@@ -91,7 +88,7 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
                     } catch (e) {
                         console.log(e);
                     }
-                }                
+                }
 
                 // send the thumbnail if it's a valid size
                 // otherwise send the original
@@ -101,7 +98,7 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
                     res.sendFile(normalizedPath);
                 }
 
-                served = true
+                served = true;
             }
         });
     }
@@ -149,7 +146,7 @@ app.get("/knowlegeResponse", (req: Request, res: Response) => {
     // File isn't in an allowed folder
     if (!served) {
         res.status(403).send("Forbidden");
-    }  
+    }
 });
 
 /**

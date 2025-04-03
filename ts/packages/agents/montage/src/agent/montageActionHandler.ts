@@ -86,8 +86,10 @@ async function executeMontageAction(
 }
 
 // Define the nativew functions we'll be using function
-const shell32: koffi.IKoffiLib | undefined = process.platform === "win32" ? koffi.load("shell32.dll") : undefined;
-const crypt32: koffi.IKoffiLib | undefined = process.platform === "win32" ? koffi.load("crypt32.dll") : undefined;
+const shell32: koffi.IKoffiLib | undefined =
+    process.platform === "win32" ? koffi.load("shell32.dll") : undefined;
+const crypt32: koffi.IKoffiLib | undefined =
+    process.platform === "win32" ? koffi.load("crypt32.dll") : undefined;
 
 // define types
 koffi.opaque("ITEMIDLIST");
@@ -163,11 +165,11 @@ async function updateMontageContext(
                         "index",
                     );
             } else if (existsSync("f:\\pictures_index")) {
-            context.agentContext.imageCollection =
-                await im.ImageCollection.readFromFile(
-                    "f:\\pictures_index",
-                    "index",
-                );
+                context.agentContext.imageCollection =
+                    await im.ImageCollection.readFromFile(
+                        "f:\\pictures_index",
+                        "index",
+                    );
             } else {
                 debug(
                     "Unable to load image index, please create one using the image indexer.",
@@ -933,7 +935,12 @@ function startSlideShow(context: MontageActionContext) {
  * @returns - The encrypted PIDL
  */
 function createEncryptedPIDLFromPath(path: string) {
-    if (ILCreateFromPathW !== undefined && CryptBinaryToStringW !== undefined && ILGetSize !== undefined && ILFree !== undefined) {
+    if (
+        ILCreateFromPathW !== undefined &&
+        CryptBinaryToStringW !== undefined &&
+        ILGetSize !== undefined &&
+        ILFree !== undefined
+    ) {
         const pidl = ILCreateFromPathW(path);
         const size: number = ILGetSize(pidl);
 
