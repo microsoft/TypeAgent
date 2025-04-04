@@ -90,7 +90,7 @@ async function handlePhotoAction(
                     result.entities.push({
                         name: path.basename(searchResults[i].contentUrl),
                         type: ["image", "url", "search"],
-                        additionalEntityText: searchResults[i].contentUrl,
+                        uniqueId: searchResults[i].contentUrl,
                     });
                 }
             }
