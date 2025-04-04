@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type LookupAction = LookupAndAnswerAction;
+export type LookupAction = LookupAndAnswerAction | StartLookupAction;
 export type DateVal = {
     day: number;
     month: number;
@@ -71,5 +71,22 @@ export interface LookupAndAnswerAction {
         // The question to get answer for.
         question: string;
         lookup: LookupConversation | LookupInternet;
+    };
+}
+
+export type StartLookupConversation = {
+    source: "conversation";
+};
+
+export type StartLookupInternet = {
+    source: "internet";
+    site?: string[]; // specific sites to look up in.
+};
+
+// The user want to start looking information for a specific source.
+export interface StartLookupAction {
+    actionName: "startLookup";
+    parameters: {
+        lookup: StartLookupConversation | StartLookupInternet;
     };
 }
