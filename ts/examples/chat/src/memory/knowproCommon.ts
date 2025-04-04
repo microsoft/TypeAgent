@@ -124,12 +124,12 @@ export function createIndexingEventHandler(
     let startedRelated = false;
     let startedMessages = false;
     return {
-        onKnowledgeExtracted() {
+        onKnowledgeExtracted(upto, knowledge) {
             if (!startedKnowledge) {
                 printer.writeLine("Indexing knowledge");
                 startedKnowledge = true;
             }
-            progress.advance();
+            progress.advance(Array.isArray(knowledge) ? knowledge.length : 1);
             return progress.count < maxMessages;
         },
         onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {

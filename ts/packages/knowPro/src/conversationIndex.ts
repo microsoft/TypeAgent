@@ -31,6 +31,7 @@ import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { textRangeFromMessageChunk } from "./message.js";
 import { Result, success } from "typechat";
+import { getBatches } from "./collections.js";
 
 export type KnowledgeValidator = (
     knowledgeType: KnowledgeType,
@@ -274,26 +275,76 @@ export async function buildSemanticRefIndex(
     return indexingResult;
 }
 
+export async function buildSemanticRefIndexBatched(
+    conversation: IConversation,
+    knowledgeExtractor?: kpLib.KnowledgeExtractor,
+    eventHandler?: IndexingEventHandlers,
+    batchSize: number = 2,
+    maxRetries: number = 4,
+): Promise<TextIndexingResult> {
+    beginIndexing(conversation);
+
+    knowledgeExtractor ??= createKnowledgeExtractor();
+    let indexingResult: TextIndexingResult = {};
+    for (const batch of getBatches(conversation.messages, batchSize)) {
+        const result = await addMessageBatchToConversationIndex(
+            conversation,
+            batch.value,
+            knowledgeExtractor,
+            maxRetries,
+        );
+        if (!result.success) {
+            return indexingResult;
+        }
+        const [completedUpto, knowledge] = result.data;
+        completedUpto.messageOrdinal += batch.startAt;
+        indexingResult.completedUpto = completedUpto;
+        if (
+            eventHandler?.onKnowledgeExtracted &&
+            !eventHandler.onKnowledgeExtracted(completedUpto, knowledge)
+        ) {
+            break;
+        }
+    }
+    return indexingResult;
+}
+
+/**
+ * Add a message batch to the conversation index
+ * Requires that the conversation have a conversation index object
+ * @param conversation
+ * @param messageBatch
+ * @param knowledgeExtractor
+ * @returns
+ */
 export async function addMessageBatchToConversationIndex(
     conversation: IConversation,
     messageBatch: IMessage[],
-    extractor: kpLib.KnowledgeExtractor,
-): Promise<Result<number>> {
-    ensureIndex(conversation);
-    const maxRetries = 4;
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    maxRetries: number = 4,
+): Promise<Result<[TextLocation, kpLib.KnowledgeResponse[]]>> {
+    beginIndexing(conversation);
+    const completedUpto: TextLocation = {
+        messageOrdinal: -1,
+        chunkOrdinal: -1,
+    };
+    // TODO: All chunks
     const chunkOrdinal = 0;
     const textChunks = messageBatch.map((m) => m.textChunks[chunkOrdinal]);
-    const extractResults = await extractKnowledgeBatch(
-        extractor,
+    // FUTURE: make better use of partial knowledge extraction success
+    const knowledgeResults = await extractKnowledgeBatch(
+        knowledgeExtractor,
         textChunks,
         maxRetries,
     );
-    if (!extractResults.success) {
-        return extractResults;
+    if (!knowledgeResults.success) {
+        return knowledgeResults;
     }
-    const knowledgeBatch = extractResults.data;
+    const knowledgeBatch = knowledgeResults.data;
     addToConversationIndex(conversation, messageBatch, knowledgeBatch);
-    return success(messageBatch.length);
+    completedUpto.messageOrdinal = messageBatch.length - 1;
+    completedUpto.chunkOrdinal = 0;
+    return success([completedUpto, knowledgeBatch]);
 }
 
 export function addToConversationIndex(
@@ -301,7 +352,7 @@ export function addToConversationIndex(
     messages: IMessage[],
     knowledgeResponses: kpLib.KnowledgeResponse[],
 ): void {
-    ensureIndex(conversation);
+    beginIndexing(conversation);
     for (let i = 0; i < messages.length; i++) {
         const messageOrdinal: MessageOrdinal = conversation.messages.length;
         conversation.messages.push(messages[i]);
@@ -317,7 +368,7 @@ export function addToConversationIndex(
     }
 }
 
-function ensureIndex(conversation: IConversation) {
+function beginIndexing(conversation: IConversation) {
     if (conversation.semanticRefIndex === undefined) {
         conversation.semanticRefIndex = new ConversationIndex();
     }
