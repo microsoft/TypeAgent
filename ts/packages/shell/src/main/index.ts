@@ -184,7 +184,7 @@ async function createWindow() {
                 mainWindow.webContents.isDevToolsOpened();
 
             mainWindow.hide();
-            ShellSettings.getinstance().closeInlineBrowser();
+            ShellSettings.getinstance().closeInlineBrowser(false);
             ShellSettings.getinstance().size = mainWindow.getSize();
         }
     });
@@ -299,6 +299,7 @@ async function createWindow() {
         targetUrl: URL,
     ): void => {
         const mainWindowSize = mainWindow?.getBounds();
+        let justopened: boolean = false;
 
         if (!inlineWebContentView && mainWindowSize) {
             inlineWebContentView = new WebContentsView({
@@ -309,6 +310,7 @@ async function createWindow() {
             });
 
             inlineWebContentView.webContents.setUserAgent(userAgent);
+            justopened = true;
 
             mainWindow?.contentView.addChildView(inlineWebContentView);
 
@@ -321,10 +323,26 @@ async function createWindow() {
             setContentSize();
         }
 
-        inlineWebContentView?.webContents.loadURL(targetUrl.toString());
+        // only open the requested canvas if it isn't already opened
+        if (
+            ShellSettings.getinstance().canvas !== targetUrl.toString() ||
+            justopened
+        ) {
+            inlineWebContentView?.webContents.loadURL(targetUrl.toString());
+
+            // indicate in the settings which canvas is open
+            ShellSettings.getinstance().canvas = targetUrl
+                .toString()
+                .toLocaleLowerCase();
+
+            // write the settings to disk
+            ShellSettings.getinstance().save();
+        }
     };
 
-    ShellSettings.getinstance().onCloseInlineBrowser = (): void => {
+    ShellSettings.getinstance().onCloseInlineBrowser = (
+        save: boolean = true,
+    ): void => {
         const mainWindowSize = mainWindow?.getBounds();
 
         if (inlineWebContentView && mainWindowSize) {
@@ -338,6 +356,14 @@ async function createWindow() {
             });
 
             setContentSize();
+
+            // clear the canvas settings
+            if (save) {
+                ShellSettings.getinstance().canvas = undefined;
+            }
+
+            // write the settings to disk
+            ShellSettings.getinstance().save();
         }
     };
 
@@ -667,6 +693,16 @@ async function initialize() {
         }
         updateSummary(dispatcher);
 
+        // open the canvas if it was previously open
+        if (
+            ShellSettings.getinstance().canvas !== undefined &&
+            ShellSettings.getinstance().onOpenInlineBrowser !== null
+        ) {
+            ShellSettings.getinstance().onOpenInlineBrowser!(
+                new URL(ShellSettings.getinstance().canvas!),
+            );
+        }
+
         // send the agent greeting if it's turned on
         if (ShellSettings.getinstance().agentGreeting) {
             dispatcher.processCommand("@greeting", "agent-0", []);
@@ -771,7 +807,11 @@ async function initialize() {
             });
         });
 
-        server.listen(pipePath);
+        try {
+            server.listen(pipePath);
+        } catch {
+            debugShellError(`Error creating pipe at ${pipePath}`);
+        }
     }
     return Promise.all(contentLoadP);
 }

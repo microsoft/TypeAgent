@@ -14,18 +14,6 @@ export type ActionResultError = {
     error: string;
 };
 
-export type ActionResultSuccessNoDisplay = {
-    literalText?: string | undefined;
-    displayContent?: undefined;
-    entities: Entity[];
-    resultEntity?: Entity | undefined;
-    dynamicDisplayId?: string | undefined;
-    dynamicDisplayNextRefreshMs?: number | undefined;
-    additionalInstructions?: string[] | undefined;
-    additionalActions?: AppAction[];
-    error?: undefined;
-};
-
 export type ActionResultSuccess = {
     literalText?: string | undefined;
     displayContent: DisplayContent;
@@ -36,6 +24,18 @@ export type ActionResultSuccess = {
     additionalInstructions?: string[] | undefined;
     additionalActions?: AppAction[];
     error?: undefined;
+    activityContext?: {
+        activity: string;
+        description: string;
+        state: Record<string, unknown>;
+    };
+};
+
+export type ActionResultSuccessNoDisplay = Omit<
+    ActionResultSuccess,
+    "displayContent"
+> & {
+    displayContent?: undefined;
 };
 
 export type ActionResult =

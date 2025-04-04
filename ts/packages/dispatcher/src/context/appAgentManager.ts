@@ -19,7 +19,10 @@ import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/actionHandlers.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
-import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
+import {
+    DispatcherActivityName,
+    DispatcherName,
+} from "./dispatcher/dispatcherUtils.js";
 import {
     ActionSchemaSemanticMap,
     EmbeddingCache,
@@ -88,8 +91,8 @@ export type SetStateResult = {
 };
 
 export const alwaysEnabledAgents = {
-    schemas: [DispatcherName],
-    actions: [DispatcherName],
+    schemas: [DispatcherName, DispatcherActivityName],
+    actions: [DispatcherName, DispatcherActivityName],
     commands: ["system"],
 };
 
@@ -233,38 +236,33 @@ export class AppAgentManager implements ActionConfigProvider {
 
         const entries = Object.entries(actionConfigs);
         const schemaErrors = new Map<string, Error>();
-        try {
-            for (const [schemaName, config] of entries) {
-                debug(`Adding action config: ${schemaName}`);
-                this.actionConfigs.set(schemaName, config);
-                this.emojis[schemaName] = config.emojiChar;
-                if (config.transient) {
-                    this.transientAgents[schemaName] = false;
-                }
-                try {
-                    const actionSchemaFile =
-                        this.actionSchemaFileCache.getActionSchemaFile(config);
 
-                    if (this.actionSemanticMap) {
-                        semanticMapP.push(
-                            this.actionSemanticMap.addActionSchemaFile(
-                                config,
-                                actionSchemaFile,
-                                actionEmbeddingCache,
-                            ),
-                        );
-                    }
-                } catch (e: any) {
-                    schemaErrors.set(schemaName, e);
-                }
+        for (const [schemaName, config] of entries) {
+            debug(`Adding action config: ${schemaName}`);
+            this.actionConfigs.set(schemaName, config);
+            this.emojis[schemaName] = config.emojiChar;
+            if (config.transient) {
+                this.transientAgents[schemaName] = false;
             }
+            try {
+                const actionSchemaFile =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
 
-            this.emojis[appAgentName] = manifest.emojiChar;
-        } catch (e: any) {
-            // Clean up what we did.
-            this.cleanupAgent(appAgentName);
-            throw e;
+                if (this.actionSemanticMap) {
+                    semanticMapP.push(
+                        this.actionSemanticMap.addActionSchemaFile(
+                            config,
+                            actionSchemaFile,
+                            actionEmbeddingCache,
+                        ),
+                    );
+                }
+            } catch (e: any) {
+                schemaErrors.set(schemaName, e);
+            }
         }
+
+        this.emojis[appAgentName] = manifest.emojiChar;
 
         const record: AppAgentRecord = {
             name: appAgentName,

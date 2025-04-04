@@ -46,6 +46,7 @@ import { conversation } from "knowledge-processor";
 import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
+    DispatcherActivityName,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -751,6 +752,25 @@ export async function executeActions(
                         `${action.translatorName}.${action.actionName} returned an invalid action: ${e}`,
                     );
                 }
+            }
+
+            if (result.activityContext !== undefined) {
+                if (actionQueue.length > 0) {
+                    throw new Error(
+                        `Cannot start an activity when there are pending actions.`,
+                    );
+                }
+                // TODO: validation
+                systemContext.activityContext = {
+                    appAgentName: getAppAgentName(
+                        executableAction.action.translatorName,
+                    ),
+                    ...result.activityContext,
+                };
+                systemContext.agents.toggleTransient(
+                    DispatcherActivityName,
+                    true,
+                );
             }
         }
         actionIndex++;

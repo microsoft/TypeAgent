@@ -14,10 +14,11 @@ export async function lookupAndAnswer(
 ): Promise<ActionResult> {
     switch (lookupAction.parameters.lookup.source) {
         case "internet":
-            console.log("Running internet lookups");
+            const { question, lookup } = lookupAction.parameters;
             return handleLookup(
-                lookupAction.parameters.question,
-                lookupAction.parameters.lookup.internetLookups,
+                question,
+                lookup.internetLookups,
+                lookup.site,
                 context,
                 await getLookupSettings(true),
             );
