@@ -7,6 +7,7 @@ import {
     SearchTermGroup,
 } from "../src/interfaces.js";
 import {
+    ConversationSearchResult,
     searchConversation,
     searchConversationKnowledge,
     SemanticRefSearchResult,
@@ -18,6 +19,7 @@ import {
     createOrTermGroup,
 } from "../src/searchLib.js";
 import {
+    createTestSearchOptions,
     emptyConversation,
     loadTestConversationForOffline,
     loadTestConversationForOnline,
@@ -29,6 +31,7 @@ import {
     expectHasEntities,
     resolveAndVerifyKnowledgeMatches,
     resolveAndVerifySemanticRefs,
+    verifyDidMatchSearchGroup,
     verifyMessageOrdinals,
     verifySemanticRefResult,
 } from "./verify.js";
@@ -138,9 +141,7 @@ describe("search.offline", () => {
                 conversation,
                 termGroup,
             );
-            if (results) {
-                resolveAndVerifyKnowledgeMatches(conversation, results);
-            }
+            resolveAndVerifyKnowledgeMatches(conversation, results);
         },
         testTimeout,
     );
@@ -154,6 +155,7 @@ describe("search.offline", () => {
             conversation,
             termGroup,
             { knowledgeType },
+            createTestSearchOptions(),
         );
         if (expectMatches) {
             expect(matches).toBeDefined();
@@ -200,7 +202,23 @@ describeIf(
                         searchExpr.searchTermGroup,
                         searchExpr.when,
                     );
-                    if (results) {
+                    const kType = searchExpr.when?.knowledgeType;
+                    if (kType !== undefined) {
+                        const knowledgeMatches =
+                            results.knowledgeMatches.get(kType);
+                        expect(knowledgeMatches).toBeDefined();
+                        const semanticRefs = resolveAndVerifySemanticRefs(
+                            conversation,
+                            knowledgeMatches!,
+                        );
+                        for (const semanticRef of semanticRefs) {
+                            verifyDidMatchSearchGroup(
+                                searchExpr.searchTermGroup,
+                                semanticRef,
+                                kType,
+                            );
+                        }
+                    } else {
                         resolveAndVerifyKnowledgeMatches(conversation, results);
                     }
                 }
@@ -214,12 +232,15 @@ async function runSearchConversation(
     conversation: IConversation,
     termGroup: SearchTermGroup,
     when?: WhenFilter,
-) {
-    const matches = await searchConversation(conversation, termGroup, when);
+): Promise<ConversationSearchResult> {
+    const matches = await searchConversation(
+        conversation,
+        termGroup,
+        when,
+        createTestSearchOptions(),
+    );
     expect(matches).toBeDefined();
-    if (matches) {
-        expect(matches.messageMatches.length).toBeGreaterThan(0);
-        verifyMessageOrdinals(conversation, matches.messageMatches);
-    }
-    return matches;
+    expect(matches!.messageMatches.length).toBeGreaterThan(0);
+    verifyMessageOrdinals(conversation, matches!.messageMatches);
+    return matches!;
 }

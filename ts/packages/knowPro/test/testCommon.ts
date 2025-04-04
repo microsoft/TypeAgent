@@ -26,6 +26,7 @@ import {
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 import {
+    SearchOptions,
     SearchSelectExpr,
     SemanticRefSearchResult,
     WhenFilter,
@@ -143,7 +144,8 @@ export async function loadTestConversationForOnline(name?: string) {
 }
 
 export function loadTestQueries(filePath: string): string[] {
-    return readTestFileLines(filePath);
+    const lines = readTestFileLines(filePath);
+    return lines.filter((l) => !l.startsWith("#"));
 }
 
 export function parseTestQuery(
@@ -276,4 +278,15 @@ export function createQueryContext(conversation: IConversation) {
         secondaryIndexes.propertyToSemanticRefIndex,
         secondaryIndexes.timestampIndex,
     );
+}
+
+export function createTestSearchOptions(): SearchOptions {
+    return {
+        usePropertyIndex: true,
+        useTimestampIndex: true,
+    };
+}
+
+export function stringify(obj: any) {
+    return JSON.stringify(obj, undefined, 2);
 }

@@ -4,8 +4,11 @@
 import { TextRangeCollection } from "../src/collections.js";
 import {
     IConversation,
+    KnowledgeType,
     MessageOrdinal,
     ScoredMessageOrdinal,
+    SearchTermGroup,
+    SearchTermGroupTypes,
     SemanticRef,
     TextRange,
 } from "../src/interfaces.js";
@@ -16,7 +19,13 @@ import {
 import {
     findEntityWithName,
     getSemanticRefsForSearchResult,
+    stringify,
 } from "./testCommon.js";
+import {
+    matchPropertySearchTermToEntity,
+    matchSearchTermToEntity,
+} from "../src/query.js";
+import { isPropertyTerm, isSearchGroupTerm } from "../src/compileLib.js";
 
 export function expectHasEntities(
     semanticRefs: SemanticRef[],
@@ -101,4 +110,70 @@ export function resolveAndVerifySemanticRefs(
     expect(semanticRefs).toHaveLength(matches.semanticRefMatches.length);
     expect(semanticRefs).not.toContain(undefined);
     return semanticRefs;
+}
+
+function logBadMatch(termGroup: SearchTermGroup, semanticRef: SemanticRef) {
+    console.log(
+        `Bad match:\n${stringify(termGroup)}\n\n${stringify(semanticRef)}`,
+    );
+}
+
+export function didEntityDidMatchTerm(
+    term: SearchTermGroupTypes,
+    semanticRef: SemanticRef,
+) {
+    if (isPropertyTerm(term)) {
+        return matchPropertySearchTermToEntity(term, semanticRef);
+    } else if (!isSearchGroupTerm(term)) {
+        return matchSearchTermToEntity(term, semanticRef);
+    } else {
+        throw new Error("Not implemented");
+    }
+}
+
+export function didSemanticRefDidMatchTerm(
+    term: SearchTermGroupTypes,
+    semanticRef: SemanticRef,
+    kType: KnowledgeType,
+) {
+    switch (kType) {
+        default:
+            throw new Error("Not implemented");
+            break;
+        case "entity":
+            return didEntityDidMatchTerm(term, semanticRef);
+    }
+}
+
+export function verifyDidMatchOneOfTerms(
+    termGroup: SearchTermGroup,
+    semanticRef: SemanticRef,
+    kType: KnowledgeType,
+) {
+    let didMatch = false;
+    for (const term of termGroup.terms) {
+        didMatch = didSemanticRefDidMatchTerm(term, semanticRef, kType);
+        if (didMatch) {
+            break;
+        }
+    }
+    if (!didMatch) {
+        logBadMatch(termGroup, semanticRef);
+    }
+    expect(didMatch).toBeTruthy();
+}
+
+export function verifyDidMatchSearchGroup(
+    termGroup: SearchTermGroup,
+    semanticRef: SemanticRef,
+    kType: KnowledgeType,
+) {
+    switch (termGroup.booleanOp) {
+        default:
+            throw new Error("Not implemented");
+        case "or":
+        case "or_max":
+            verifyDidMatchOneOfTerms(termGroup, semanticRef, kType);
+            break;
+    }
 }
