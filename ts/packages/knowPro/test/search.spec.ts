@@ -4,13 +4,14 @@
 import {
     IConversation,
     KnowledgeType,
-    ScoredMessageOrdinal,
     SearchTermGroup,
 } from "../src/interfaces.js";
 import {
+    ConversationSearchResult,
     searchConversation,
     searchConversationKnowledge,
     SemanticRefSearchResult,
+    WhenFilter,
 } from "../src/search.js";
 import {
     createSearchTerm,
@@ -18,13 +19,23 @@ import {
     createOrTermGroup,
 } from "../src/searchLib.js";
 import {
-    createOfflineConversationSettings,
+    createTestSearchOptions,
     emptyConversation,
-    getSemanticRefsForSearchResult,
-    loadTestConversation,
+    loadTestConversationForOffline,
+    loadTestConversationForOnline,
+    loadTestQueries,
+    parseTestQuery,
 } from "./testCommon.js";
-import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
-import { expectDoesNotHaveEntities, expectHasEntities } from "./verify.js";
+import {
+    expectDoesNotHaveEntities,
+    expectHasEntities,
+    resolveAndVerifyKnowledgeMatches,
+    resolveAndVerifySemanticRefs,
+    verifyDidMatchSearchGroup,
+    verifyMessageOrdinals,
+    verifySemanticRefResult,
+} from "./verify.js";
+import { hasTestKeys, describeIf } from "test-lib";
 
 /**
  * These tests are designed to run offline.
@@ -32,16 +43,11 @@ import { expectDoesNotHaveEntities, expectHasEntities } from "./verify.js";
  * This allows us to run fuzzy matching entirely offline
  */
 describe("search.offline", () => {
-    const testTimeout = 1000 * 60 * 5;
+    const testTimeout = 5 * 60 * 1000;
     let conversation: IConversation = emptyConversation();
-    let secondaryIndex: ConversationSecondaryIndexes | undefined;
+
     beforeAll(async () => {
-        let settings = createOfflineConversationSettings(() => {
-            return secondaryIndex?.termToRelatedTermsIndex.fuzzyIndex;
-        });
-        conversation = await loadTestConversation(settings);
-        secondaryIndex =
-            conversation.secondaryIndexes as ConversationSecondaryIndexes;
+        conversation = await loadTestConversationForOffline();
     });
     test(
         "lookup",
@@ -61,7 +67,10 @@ describe("search.offline", () => {
             );
             let matches = await runSearchKnowledge(termGroup, "entity");
             if (matches) {
-                const semanticRefs = resolveAndVerifySemanticRefs(matches);
+                const semanticRefs = resolveAndVerifySemanticRefs(
+                    conversation,
+                    matches,
+                );
                 expectHasEntities(semanticRefs, "Starship Troopers");
                 expectDoesNotHaveEntities(semanticRefs, "Children of Time");
             }
@@ -85,7 +94,10 @@ describe("search.offline", () => {
             );
             let matches = await runSearchKnowledge(termGroup, "entity");
             if (matches) {
-                const semanticRefs = resolveAndVerifySemanticRefs(matches);
+                const semanticRefs = resolveAndVerifySemanticRefs(
+                    conversation,
+                    matches,
+                );
                 expectHasEntities(semanticRefs, "Starship Troopers");
                 expectDoesNotHaveEntities(semanticRefs, "Children of Time");
             }
@@ -102,7 +114,10 @@ describe("search.offline", () => {
             );
             let matches = await runSearchKnowledge(termGroup, "entity");
             if (matches) {
-                const semanticRefs = resolveAndVerifySemanticRefs(matches);
+                const semanticRefs = resolveAndVerifySemanticRefs(
+                    conversation,
+                    matches,
+                );
                 expectHasEntities(
                     semanticRefs,
                     "Starship Troopers",
@@ -122,7 +137,11 @@ describe("search.offline", () => {
                 createSearchTerm("book"),
                 createSearchTerm("movie"),
             );
-            await runSearchConversation(termGroup);
+            const results = await runSearchConversation(
+                conversation,
+                termGroup,
+            );
+            resolveAndVerifyKnowledgeMatches(conversation, results);
         },
         testTimeout,
     );
@@ -136,15 +155,15 @@ describe("search.offline", () => {
             conversation,
             termGroup,
             { knowledgeType },
+            createTestSearchOptions(),
         );
         if (expectMatches) {
             expect(matches).toBeDefined();
             if (matches) {
                 expect(matches.size).toEqual(1);
                 const entities = matches.get(knowledgeType);
-                expect(entities).toBeDefined();
-                expect(entities?.semanticRefMatches.length).toBeGreaterThan(0);
-                return matches.get(knowledgeType);
+                verifySemanticRefResult(entities);
+                return entities;
             }
         } else {
             if (matches) {
@@ -153,31 +172,75 @@ describe("search.offline", () => {
         }
         return undefined;
     }
-
-    async function runSearchConversation(termGroup: SearchTermGroup) {
-        const matches = await searchConversation(conversation, termGroup);
-        expect(matches).toBeDefined();
-        if (matches) {
-            expect(matches.messageMatches.length).toBeGreaterThan(0);
-            verifyMessageOrdinals(matches.messageMatches);
-        }
-        return matches;
-    }
-
-    function verifyMessageOrdinals(scoredOrdinals: ScoredMessageOrdinal[]) {
-        for (const ordinal of scoredOrdinals) {
-            const message = conversation.messages[ordinal.messageOrdinal];
-            expect(message).toBeDefined();
-        }
-    }
-
-    function resolveAndVerifySemanticRefs(matches: SemanticRefSearchResult) {
-        const semanticRefs = getSemanticRefsForSearchResult(
-            conversation,
-            matches,
-        );
-        expect(semanticRefs).toHaveLength(matches.semanticRefMatches.length);
-        expect(semanticRefs).not.toContain(undefined);
-        return semanticRefs;
-    }
 });
+
+/**
+ * Online set of tests. Will run only if keys are available
+ */
+describeIf(
+    "search.online",
+    () => hasTestKeys(),
+    () => {
+        const testTimeout = 5 * 60 * 1000;
+        let conversation: IConversation = emptyConversation();
+
+        beforeAll(async () => {
+            conversation = await loadTestConversationForOnline();
+        });
+
+        test(
+            "search.queries",
+            async () => {
+                const maxQueries = 100;
+                const testFile = "./test/data/Episode_53_query.txt";
+                let queries = loadTestQueries(testFile);
+                queries = queries.slice(0, maxQueries);
+                for (const query of queries) {
+                    const searchExpr = parseTestQuery(conversation, query);
+                    const results = await runSearchConversation(
+                        conversation,
+                        searchExpr.searchTermGroup,
+                        searchExpr.when,
+                    );
+                    const kType = searchExpr.when?.knowledgeType;
+                    if (kType !== undefined) {
+                        const knowledgeMatches =
+                            results.knowledgeMatches.get(kType);
+                        expect(knowledgeMatches).toBeDefined();
+                        const semanticRefs = resolveAndVerifySemanticRefs(
+                            conversation,
+                            knowledgeMatches!,
+                        );
+                        for (const semanticRef of semanticRefs) {
+                            verifyDidMatchSearchGroup(
+                                searchExpr.searchTermGroup,
+                                semanticRef,
+                                kType,
+                            );
+                        }
+                    } else {
+                        resolveAndVerifyKnowledgeMatches(conversation, results);
+                    }
+                }
+            },
+            testTimeout,
+        );
+    },
+);
+
+async function runSearchConversation(
+    conversation: IConversation,
+    termGroup: SearchTermGroup,
+    when?: WhenFilter,
+): Promise<ConversationSearchResult> {
+    const matches = await searchConversation(
+        conversation,
+        termGroup,
+        when,
+        createTestSearchOptions(),
+    );
+    expect(matches).toBeDefined();
+    expect(matches!.messageMatches.length).toBeGreaterThan(0);
+    verifyMessageOrdinals(conversation, matches!.messageMatches);
+    return matches!;
+}

@@ -88,7 +88,10 @@ export function* generateRandomDates(
 export function stringToDate(value: string | undefined): Date | undefined {
     if (value) {
         try {
-            return new Date(value);
+            const date = new Date(value);
+            if (!isNaN(date.getTime())) {
+                return date;
+            }
         } catch {}
     }
     return undefined;

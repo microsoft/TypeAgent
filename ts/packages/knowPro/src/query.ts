@@ -145,6 +145,23 @@ function matchSearchTermToOneOfText(
     return false;
 }
 
+export function matchSearchTermToEntity(
+    searchTerm: SearchTerm,
+    semanticRef: SemanticRef,
+) {
+    if (semanticRef.knowledgeType !== "entity") {
+        return false;
+    }
+    const entity: kpLib.ConcreteEntity =
+        semanticRef.knowledge as kpLib.ConcreteEntity;
+
+    const isMatch =
+        matchEntityNameOrType(searchTerm, entity) ||
+        matchPropertyNameToFacetName(searchTerm, entity) ||
+        matchPropertyValueToFacetValue(searchTerm, entity);
+    return isMatch;
+}
+
 export function matchPropertySearchTermToEntity(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
@@ -192,7 +209,7 @@ export function matchEntityNameOrType(
     );
 }
 
-function matchPropertyNameToFacetName(
+export function matchPropertyNameToFacetName(
     propertyValue: SearchTerm,
     entity: kpLib.ConcreteEntity,
 ) {
@@ -206,7 +223,7 @@ function matchPropertyNameToFacetName(
     return false;
 }
 
-function matchPropertyValueToFacetValue(
+export function matchPropertyValueToFacetValue(
     propertyValue: SearchTerm,
     entity: kpLib.ConcreteEntity,
 ) {

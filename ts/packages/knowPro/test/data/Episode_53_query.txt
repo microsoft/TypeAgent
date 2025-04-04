@@ -1,0 +1,15 @@
+book --ktype entity
+movie --ktype entity
+book novel --ktype entity
+book movie --ktype entity
+
+novel "EMPIRE IN BLACK AND GOLD" --ktype entity
+book "EMPIRE IN BLACK AND GOLD" --ktype entity
+"novel;book" "EMPIRE IN BLACK AND GOLD" --ktype entity
+
+"EMPIRE IN BLACK AND GOLD" novel --ktype entity
+"EMPIRE IN BLACK AND GOLD" "Children of Time" --ktype entity
+"Children of Time" --ktype entity
+
+--type book --ktype entity --startMinute 0 --endMinute 15
+#--type book --genre fantasy --ktype entity

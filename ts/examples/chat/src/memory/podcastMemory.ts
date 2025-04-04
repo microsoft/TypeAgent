@@ -204,7 +204,7 @@ export function createPodcastCommands(
                 const podcastMessage = podcastMessageFromEmailText(
                     message.value.value,
                 );
-                podcastMessage.addTimestamp(message.timestamp.toISOString());
+                podcastMessage.timestamp = message.timestamp.toISOString();
                 threadRange.end = {
                     messageOrdinal: podcastMessages.length,
                 };
