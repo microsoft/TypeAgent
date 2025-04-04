@@ -378,6 +378,7 @@ async function handleListAction(
                 action.parameters.listName,
                 "What do you want to add or remove from this list?",
             );
+            // TODO: formalize the schema for activityContext
             result.activityContext = {
                 activity: "edit",
                 description: "editing list",

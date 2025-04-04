@@ -27,7 +27,10 @@ import {
 } from "./schema/clarifyActionSchema.js";
 import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
 import { lookupAndAnswer } from "../../search/search.js";
-import { LookupAndAnswerAction } from "./schema/lookupActionSchema.js";
+import {
+    LookupAction,
+    LookupAndAnswerAction,
+} from "./schema/lookupActionSchema.js";
 import {
     getHistoryContext,
     translateRequest,
@@ -48,7 +51,7 @@ async function executeDispatcherAction(
     action: TypeAgentAction<
         | DispatcherActions
         | ClarifyRequestAction
-        | LookupAndAnswerAction
+        | LookupAction
         | ActivityActions
     >,
     context: ActionContext<CommandHandlerContext>,
@@ -69,6 +72,28 @@ async function executeDispatcherAction(
             switch (action.actionName) {
                 case "lookupAndAnswer":
                     return lookupAndAnswer(action, context);
+                case "startLookup":
+                    const location =
+                        action.parameters.lookup.source === "internet"
+                            ? action.parameters.lookup.site !== undefined
+                                ? `on internet sites ${action.parameters.lookup.site.join(", ")}`
+                                : `on the internet`
+                            : `in the conversation`;
+
+                    const displayText = `Ok. What do you want to look up ${location}?`;
+                    const result = createActionResultFromTextDisplay(
+                        displayText,
+                        displayText,
+                    );
+                    // TODO: formalize the schema for activityContext
+                    result.activityContext = {
+                        activity: "lookup",
+                        description: `Looking up ${location}`,
+                        state: {
+                            ...action.parameters.lookup,
+                        },
+                    };
+                    return result;
             }
             break;
         case "dispatcher.activity":
