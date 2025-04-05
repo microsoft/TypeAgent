@@ -165,7 +165,6 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
-        batchSize: number = 2,
     ): Promise<IndexingResults> {
         this.addMetadataToIndex();
         this.beginIndexing();
@@ -174,7 +173,6 @@ export class Podcast implements IConversation<PodcastMessage> {
                 this,
                 this.settings,
                 eventHandler,
-                batchSize,
             );
             // buildConversationIndex now automatically builds standard secondary indexes
             // Pass false to build podcast specific secondary indexes only

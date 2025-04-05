@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Knowledge processing functions INTERNAL to the library.
+ * INTERNAL LIBRARY
  * These should not be exposed via index.ts
  */
 

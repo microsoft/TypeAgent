@@ -53,10 +53,10 @@ describeIf(
                     true,
                     maxMessages,
                 );
-                const batchSize = 3;
+                podcast.settings.semanticRefIndexSettings.batchSize = 3;
                 const results = await buildSemanticRefIndexBatched(
                     podcast,
-                    batchSize,
+                    podcast.settings.semanticRefIndexSettings,
                 );
                 verifyNoTextIndexingError(results);
 

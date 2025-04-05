@@ -40,7 +40,7 @@ export async function buildSecondaryIndexes(
     );
     result.relatedTerms = await buildRelatedTermsIndex(
         conversation,
-        conversationSettings,
+        conversationSettings.relatedTermIndexSettings,
         eventHandler,
     );
     if (!result.relatedTerms?.error) {

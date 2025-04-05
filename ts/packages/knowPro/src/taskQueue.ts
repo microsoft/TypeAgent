@@ -44,7 +44,6 @@ export async function runInBatches<TTask, TResult>(
     tasks: BatchTask<TTask, TResult>[],
     taskHandler: (task: TTask) => Promise<Result<TResult>>,
     batchSize: number,
-    pauseOnError: boolean = false,
     taskQueue?: QueueObject<BatchTask<TTask, TResult>>,
 ): Promise<void> {
     taskQueue ??= createBatchQueue<TTask, TResult>(taskHandler, batchSize);
