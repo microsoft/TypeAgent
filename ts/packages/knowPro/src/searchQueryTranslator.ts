@@ -143,7 +143,7 @@ class SearchQueryCompiler {
         }
         if (filter.actionSearchTerm) {
             termGroup.terms.push(
-                this.compileActionTerm(filter.actionSearchTerm),
+                this.compileActionTerm(filter.actionSearchTerm, false),
             );
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
@@ -173,36 +173,6 @@ class SearchQueryCompiler {
             when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
         }
         return when;
-    }
-
-    private compileActionTerm(
-        actionTerm: querySchema.ActionTerm,
-    ): SearchTermGroup {
-        const termGroup = createAndTermGroup();
-        if (actionTerm.actionVerbs !== undefined) {
-            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
-        }
-        if (isEntityTermArray(actionTerm.actorEntities)) {
-            this.addEntityNamesToGroup(
-                actionTerm.actorEntities,
-                PropertyNames.Subject,
-                termGroup,
-            );
-        }
-        if (isEntityTermArray(actionTerm.targetEntities)) {
-            let objectTerms = createOrTermGroup();
-            this.addEntityNamesToGroup(
-                actionTerm.targetEntities,
-                PropertyNames.Object,
-                objectTerms,
-            );
-            if (objectTerms.terms.length == 1) {
-                termGroup.terms.push(objectTerms.terms[0]);
-            } else if (objectTerms.terms.length > 1) {
-                termGroup.terms.push(objectTerms);
-            }
-        }
-        return termGroup;
     }
 
     private compileActionTermAsSearchTerms(
@@ -239,11 +209,14 @@ class SearchQueryCompiler {
         useOrMax: boolean = true,
     ): void {
         if (useOrMax) {
+            const dedupe = this.dedupe;
+            this.dedupe = false;
             for (const term of entityTerms) {
                 const orMax = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, orMax);
                 termGroup.terms.push(orMax);
             }
+            this.dedupe = dedupe;
         } else {
             for (const term of entityTerms) {
                 this.addEntityTermToGroup(term, termGroup);
@@ -256,39 +229,49 @@ class SearchQueryCompiler {
         includeAdditional: boolean = true,
     ): SearchTermGroup {
         const dedupe = this.dedupe;
-        try {
-            this.dedupe = false;
-            let termGroup: SearchTermGroup;
-            if (isEntityTermArray(actionTerm.targetEntities)) {
-                termGroup = createOrTermGroup();
-                for (const entity of actionTerm.targetEntities) {
-                    const svo = this.compileSubjectVerb(actionTerm);
-                    // A target can be the name of an object of an action OR the name of an entity
-                    svo.terms.push(this.compileObjectOrEntityName(entity));
-                    termGroup.terms.push(svo);
-                }
-                if (termGroup.terms.length === 1) {
-                    termGroup = termGroup.terms[0] as SearchTermGroup;
-                }
-            } else {
-                termGroup = this.compileSubjectVerb(actionTerm);
-            }
+        this.dedupe = false;
 
-            if (
-                includeAdditional &&
-                isEntityTermArray(actionTerm.additionalEntities)
-            ) {
-                this.addEntityNamesToGroup(
-                    actionTerm.additionalEntities,
-                    PropertyNames.EntityName,
-                    termGroup,
-                    this.exactScoping,
-                );
-            }
-            return termGroup;
-        } finally {
-            this.dedupe = dedupe;
+        let termGroup = this.compileActionTerm(actionTerm, true);
+        if (
+            includeAdditional &&
+            isEntityTermArray(actionTerm.additionalEntities)
+        ) {
+            this.addEntityNamesToGroup(
+                actionTerm.additionalEntities,
+                PropertyNames.EntityName,
+                termGroup,
+                this.exactScoping,
+            );
         }
+
+        this.dedupe = dedupe;
+        return termGroup;
+    }
+
+    private compileActionTerm(
+        actionTerm: querySchema.ActionTerm,
+        useAnd: boolean,
+    ) {
+        const dedupe = this.dedupe;
+        this.dedupe = false;
+        let termGroup: SearchTermGroup;
+        if (isEntityTermArray(actionTerm.targetEntities)) {
+            termGroup = useAnd ? createAndTermGroup() : createOrTermGroup();
+            for (const entity of actionTerm.targetEntities) {
+                const svo = this.compileSubjectVerb(actionTerm);
+                // A target can be the name of an object of an action OR the name of an entity
+                svo.terms.push(this.compileObjectOrEntityName(entity));
+                termGroup.terms.push(svo);
+            }
+            if (termGroup.terms.length === 1) {
+                termGroup = termGroup.terms[0] as SearchTermGroup;
+            }
+        } else {
+            termGroup = this.compileSubjectVerb(actionTerm);
+        }
+
+        this.dedupe = dedupe;
+        return termGroup;
     }
 
     private compileSubjectVerb(
