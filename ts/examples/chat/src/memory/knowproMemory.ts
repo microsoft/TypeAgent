@@ -121,6 +121,7 @@ export async function createKnowproCommands(
             options: {
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
+                batchSize: argNum("Indexing batch size", 4),
                 length: argNum("Length of the podcast in minutes", 60),
                 buildIndex: argBool("Index the imported podcast", true),
             },
@@ -714,6 +715,7 @@ export async function createKnowproCommands(
             options: {
                 maxMessages: argNum("Maximum messages to index"),
                 relatedOnly: argBool("Index related terms only", false),
+                batchSize: argNum("Indexing batch size", 4),
             },
         };
     }
@@ -743,8 +745,17 @@ export async function createKnowproCommands(
         );
         // Build full index?
         if (!namedArgs.relatedOnly) {
-            const indexResult = await context.podcast.buildIndex(eventHandler);
+            const clock = new StopWatch();
+            clock.start();
+
+            const indexResult = await context.podcast.buildIndex(
+                eventHandler,
+                namedArgs.batchSize,
+            );
+
+            clock.stop();
             progress.complete();
+            context.printer.writeTiming(chalk.gray, clock);
             context.printer.writeIndexingResults(indexResult);
             return;
         }

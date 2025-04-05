@@ -517,10 +517,12 @@ export async function buildConversationIndex(
     conversation: IConversation,
     conversationSettings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
+    batchSize: number = 2,
 ): Promise<IndexingResults> {
     const indexingResult: IndexingResults = {};
-    indexingResult.semanticRefs = await buildSemanticRefIndex(
+    indexingResult.semanticRefs = await buildSemanticRefIndexBatched(
         conversation,
+        batchSize,
         undefined,
         eventHandler,
     );
