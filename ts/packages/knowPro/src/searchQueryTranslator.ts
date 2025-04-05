@@ -190,11 +190,17 @@ class SearchQueryCompiler {
             );
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
+            let objectTerms = createOrTermGroup();
             this.addEntityNamesToGroup(
                 actionTerm.targetEntities,
                 PropertyNames.Object,
-                termGroup,
+                objectTerms,
             );
+            if (objectTerms.terms.length == 1) {
+                termGroup.terms.push(objectTerms.terms[0]);
+            } else if (objectTerms.terms.length > 1) {
+                termGroup.terms.push(objectTerms);
+            }
         }
         return termGroup;
     }
