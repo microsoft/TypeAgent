@@ -124,7 +124,7 @@ export function createIndexingEventHandler(
     let startedRelated = false;
     let startedMessages = false;
     return {
-        onKnowledgeExtracted() {
+        onKnowledgeExtracted(upto, knowledge) {
             if (!startedKnowledge) {
                 printer.writeLine("Indexing knowledge");
                 startedKnowledge = true;

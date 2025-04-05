@@ -2,19 +2,22 @@
 // Licensed under the MIT License.
 
 import { MessageCollection } from "../src/storage.js";
-import { createMessage } from "./testCommon.js";
+import { TestMessage } from "./testMessage.js";
 
 describe("messageCollection", () => {
     test("addMessage", () => {
         const messageCollection = new MessageCollection();
-        messageCollection.append(createMessage("One"));
+        messageCollection.append(new TestMessage("One"));
         expect(messageCollection).toHaveLength(1);
         const m = messageCollection.get(0);
         expect(m).toBeDefined();
     });
     test("addMessages", () => {
         const messageCollection = new MessageCollection();
-        messageCollection.append(createMessage("One"), createMessage("Two"));
+        messageCollection.append(
+            new TestMessage("One"),
+            new TestMessage("Two"),
+        );
         expect(messageCollection).toHaveLength(2);
 
         let ordinals = [0, 1];

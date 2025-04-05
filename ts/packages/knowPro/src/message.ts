@@ -1,7 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IMessage, MessageOrdinal, TextRange } from "./interfaces.js";
+import {
+    IMessage,
+    MessageOrdinal,
+    TextLocation,
+    TextRange,
+} from "./interfaces.js";
+
+/**
+ * INTERNAL LIBRARY
+ */
 
 /**
  * Returns the text range represented by a message (and an optional chunk ordinal)
@@ -48,6 +57,13 @@ export function getMessageCharCount(message: IMessage): number {
         total += message.textChunks[i].length;
     }
     return total;
+}
+
+export function getCountOfChunksInMessages(messages: IMessage[]): number {
+    return messages.reduce<number>(
+        (total, message) => total + message.textChunks.length,
+        0,
+    );
 }
 
 /**
@@ -105,4 +121,36 @@ export function textRangesFromMessageOrdinals(
     }
     ranges.push(textRangeFromMessageRange(startOrdinal, endOrdinal));
     return ranges;
+}
+
+export function* getMessageChunkBatch(
+    messages: IMessage[],
+    ordinalStartAt: MessageOrdinal,
+    batchSize: number,
+): IterableIterator<TextLocation[]> {
+    let batch: TextLocation[] = [];
+    for (
+        let messageOrdinal = ordinalStartAt;
+        messageOrdinal < messages.length;
+        ++messageOrdinal
+    ) {
+        const message = messages[messageOrdinal];
+        for (
+            let chunkOrdinal = 0;
+            chunkOrdinal < message.textChunks.length;
+            ++chunkOrdinal
+        ) {
+            batch.push({
+                messageOrdinal,
+                chunkOrdinal,
+            });
+            if (batch.length === batchSize) {
+                yield batch;
+                batch = [];
+            }
+        }
+    }
+    if (batch.length > 0) {
+        yield batch;
+    }
 }

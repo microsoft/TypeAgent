@@ -9,10 +9,8 @@ import {
     readTestFileLines,
 } from "test-lib";
 import {
-    DeletionInfo,
     IConversation,
     IConversationSecondaryIndexes,
-    IMessage,
     ITermToSemanticRefIndex,
     SemanticRef,
     PropertySearchTerm,
@@ -43,41 +41,7 @@ import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
 import { openai } from "aiclient";
 import { dateTime } from "typeagent";
-
-export class TestMessage implements IMessage {
-    constructor(
-        public textChunks: string[] = [],
-        public tags: string[] = [],
-        public timestamp?: string,
-        public deletionInfo?: DeletionInfo,
-    ) {}
-
-    public getKnowledge() {
-        return undefined;
-    }
-}
-
-export class TestConversation implements IConversation<TestMessage> {
-    public semanticRefs: SemanticRef[] | undefined;
-    public semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    public secondaryIndexes?: IConversationSecondaryIndexes | undefined;
-
-    constructor(
-        public nameTag: string,
-        public tags: string[] = [],
-        public messages: TestMessage[] = [],
-    ) {}
-}
-
-export function emptyConversation() {
-    return new TestConversation("Empty Conversation");
-}
-
-export function createMessage(messageText: string): TestMessage {
-    const message = new TestMessage([messageText]);
-    message.timestamp = createTimestamp();
-    return message;
-}
+import { TestMessage } from "./testMessage.js";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
@@ -105,7 +69,41 @@ export function createOnlineConversationSettings(
     return createConversationSettings(cachingModel);
 }
 
+export class TestConversation implements IConversation<TestMessage> {
+    public semanticRefs: SemanticRef[] | undefined;
+    public semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    public secondaryIndexes?: IConversationSecondaryIndexes | undefined;
+
+    constructor(
+        public nameTag: string,
+        public tags: string[] = [],
+        public messages: TestMessage[] = [],
+    ) {}
+}
+
+export function emptyConversation() {
+    return new TestConversation("Empty Conversation");
+}
+
 export const defaultConversationName = "Episode_53_AdrianTchaikovsky_index";
+
+export async function createConversationFromFile(
+    dirPath: string,
+    baseFileName: string,
+    settings: ConversationSettings,
+) {
+    const data = await readConversationDataFromFile(
+        dirPath,
+        baseFileName,
+        settings.relatedTermIndexSettings.embeddingIndexSettings?.embeddingSize,
+    );
+    if (data === undefined) {
+        throw new Error(
+            `Corrupt test data ${path.join(dirPath, baseFileName)}`,
+        );
+    }
+    return createConversationFromData(data, settings);
+}
 
 export function loadTestConversation(
     settings: ConversationSettings,
@@ -227,24 +225,6 @@ export function parseWhenFilter(
 
 export function stringToDate(value: string | undefined): Date | undefined {
     return value ? dateTime.stringToDate(value) : undefined;
-}
-
-export async function createConversationFromFile(
-    dirPath: string,
-    baseFileName: string,
-    settings: ConversationSettings,
-) {
-    const data = await readConversationDataFromFile(
-        dirPath,
-        baseFileName,
-        settings.relatedTermIndexSettings.embeddingIndexSettings?.embeddingSize,
-    );
-    if (data === undefined) {
-        throw new Error(
-            `Corrupt test data ${path.join(dirPath, baseFileName)}`,
-        );
-    }
-    return createConversationFromData(data, settings);
 }
 
 export function getSemanticRefsForSearchResult(

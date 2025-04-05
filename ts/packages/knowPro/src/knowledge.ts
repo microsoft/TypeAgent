@@ -18,7 +18,7 @@ import {
 import { Scored } from "./common.js";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
-import { Result, success } from "typechat";
+import { Result } from "typechat";
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -40,28 +40,17 @@ export function createKnowledgeExtractor(
     return extractor;
 }
 
-export async function extractKnowledgeBatch(
-    extractor: kpLib.KnowledgeExtractor,
+export function extractKnowledgeForTextBatch(
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
     textBatch: string[],
-    maxRetries: number,
-): Promise<Result<kpLib.KnowledgeResponse[]>> {
-    const results = await asyncArray.mapAsync(
-        textBatch,
-        textBatch.length,
-        (text) =>
-            async.callWithRetry(() =>
-                extractor.extractWithRetry(text, maxRetries),
-            ),
+    concurrency: number = 2,
+    maxRetries: number = 3,
+): Promise<Result<kpLib.KnowledgeResponse>[]> {
+    return asyncArray.mapAsync(textBatch, concurrency, (text) =>
+        async.callWithRetry(() =>
+            knowledgeExtractor.extractWithRetry(text, maxRetries),
+        ),
     );
-    let responses: kpLib.KnowledgeResponse[] = [];
-    for (const result of results) {
-        if (result.success) {
-            responses.push(result.data);
-        } else {
-            return result;
-        }
-    }
-    return success(responses);
 }
 
 export function facetValueToString(facet: kpLib.Facet): string {

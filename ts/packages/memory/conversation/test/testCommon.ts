@@ -2,7 +2,13 @@
 // Licensed under the MIT License.
 
 import { createConversationSettings } from "knowpro";
-import { createTestEmbeddingModel, NullEmbeddingModel } from "test-lib";
+import {
+    createTestEmbeddingModel,
+    getAbsolutePath,
+    NullEmbeddingModel,
+} from "test-lib";
+import { importPodcast } from "../src/importPodcast.js";
+import { Podcast } from "../src/podcast.js";
 
 export type TestTranscriptInfo = {
     filePath: string;
@@ -61,4 +67,24 @@ export function createOfflineConversationSettings() {
 export function createOnlineConversationSettings() {
     const [model, size] = createTestEmbeddingModel();
     return createConversationSettings(model, size);
+}
+
+export async function loadTestPodcast(
+    test: TestTranscriptInfo,
+    online: boolean,
+    maxMessages?: number,
+): Promise<Podcast> {
+    const podcast = await importPodcast(
+        getAbsolutePath(test.filePath),
+        test.name,
+        test.date,
+        test.length,
+        online
+            ? createOnlineConversationSettings()
+            : createOfflineConversationSettings(),
+    );
+    if (maxMessages !== undefined && maxMessages > 0) {
+        podcast.messages = podcast.messages.slice(0, maxMessages);
+    }
+    return podcast;
 }

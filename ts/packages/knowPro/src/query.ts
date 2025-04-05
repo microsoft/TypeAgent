@@ -166,13 +166,17 @@ export function matchPropertySearchTermToEntity(
     searchTerm: PropertySearchTerm,
     semanticRef: SemanticRef,
 ): boolean {
-    if (
-        semanticRef.knowledgeType !== "entity" ||
-        typeof searchTerm.propertyName !== "string"
-    ) {
+    if (semanticRef.knowledgeType !== "entity") {
         return false;
     }
     const entity = semanticRef.knowledge as kpLib.ConcreteEntity;
+    if (typeof searchTerm.propertyName !== "string") {
+        return (
+            matchPropertyNameToFacetName(searchTerm.propertyName, entity) ||
+            matchPropertyValueToFacetValue(searchTerm.propertyValue, entity)
+        );
+    }
+
     switch (<string>searchTerm.propertyName) {
         default:
             break;
