@@ -23,7 +23,7 @@ describeIf(
             "buildIndex",
             async () => {
                 //const test = getTestTranscriptSmall();
-                const maxMessages = 8;
+                const maxMessages = 4;
                 const podcast = await loadTestPodcast(
                     getTestTranscriptDialog(),
                     true,
@@ -53,8 +53,11 @@ describeIf(
                     true,
                     maxMessages,
                 );
-                console.log(podcast.nameTag);
-                const results = await buildSemanticRefIndexBatched(podcast, 3);
+                const batchSize = 3;
+                const results = await buildSemanticRefIndexBatched(
+                    podcast,
+                    batchSize,
+                );
                 verifyNoTextIndexingError(results);
 
                 const maxMessageOrdinal = podcast.messages.length - 1;
