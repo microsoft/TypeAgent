@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { readTestJsonFile } from "test-lib";
 import { IMessage, DeletionInfo } from "../src/interfaces.js";
 import { createTimestamp } from "./testCommon.js";
 
@@ -56,4 +57,13 @@ export function createTestMessages(
         }
     }
     return messages;
+}
+
+export type TestTurn = {
+    source: string;
+    text: string;
+};
+
+export function loadTunsFromFile(filePath: string): TestTurn[] {
+    return readTestJsonFile(filePath);
 }

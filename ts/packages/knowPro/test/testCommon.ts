@@ -3,10 +3,12 @@
 
 import path from "path";
 import {
+    createTestModels,
     getAbsolutePath,
     NullEmbeddingModel,
     parseCommandArgs,
     readTestFileLines,
+    TestModels,
 } from "test-lib";
 import {
     IConversation,
@@ -39,12 +41,21 @@ import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
-import { openai } from "aiclient";
 import { dateTime } from "typeagent";
 import { TestMessage } from "./testMessage.js";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
+}
+
+const testModels: TestModels = createTestModels("knowpro");
+
+export function getTestChatModel() {
+    return testModels.chat;
+}
+
+export function getTestEmbeddingModel() {
+    return testModels.embeddings;
 }
 
 export function createOfflineConversationSettings(
@@ -62,7 +73,7 @@ export function createOnlineConversationSettings(
     getCache: () => TextEmbeddingCache | undefined,
 ) {
     const cachingModel = createEmbeddingCache(
-        openai.createEmbeddingModel(),
+        getTestEmbeddingModel(),
         32,
         getCache,
     );

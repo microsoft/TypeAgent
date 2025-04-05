@@ -24,7 +24,7 @@ import { openai } from "aiclient";
 import { async } from "typeagent";
 import {
     createKnowledgeExtractor,
-    extractKnowledgeForTextBatch,
+    extractKnowledgeFromTextBatch,
     facetValueToString,
 } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
@@ -338,7 +338,7 @@ async function addBatchToSemanticRefIndex(
             messages[tl.messageOrdinal].textChunks[tl.chunkOrdinal ?? 0];
         return text.trim();
     });
-    const knowledgeResults = await extractKnowledgeForTextBatch(
+    const knowledgeResults = await extractKnowledgeFromTextBatch(
         knowledgeExtractor,
         textBatch,
         textBatch.length,
