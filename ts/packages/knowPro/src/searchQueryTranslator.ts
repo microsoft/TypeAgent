@@ -232,11 +232,11 @@ class SearchQueryCompiler {
         useOrMax: boolean = true,
     ): void {
         if (useOrMax) {
-            const orMax = createOrMaxTermGroup();
             for (const term of entityTerms) {
+                const orMax = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, orMax);
+                termGroup.terms.push(orMax);
             }
-            termGroup.terms.push(orMax);
         } else {
             for (const term of entityTerms) {
                 this.addEntityTermToGroup(term, termGroup);
@@ -244,7 +244,10 @@ class SearchQueryCompiler {
         }
     }
 
-    private compileScope(actionTerm: querySchema.ActionTerm): SearchTermGroup {
+    private compileScope(
+        actionTerm: querySchema.ActionTerm,
+        includeAdditional: boolean = false,
+    ): SearchTermGroup {
         const termGroup = createAndTermGroup();
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(
@@ -261,11 +264,14 @@ class SearchQueryCompiler {
         if (isEntityTermArray(actionTerm.targetEntities)) {
             // A target can be the name of an object of an action OR the name of an entity
             termGroup.terms.push(
-                this.compileObjectOrEntityName(actionTerm.targetEntities),
+                this.compileObjectOrEntityNames(actionTerm.targetEntities),
             );
         }
 
-        if (isEntityTermArray(actionTerm.additionalEntities)) {
+        if (
+            includeAdditional &&
+            isEntityTermArray(actionTerm.additionalEntities)
+        ) {
             this.addEntityNamesToGroup(
                 actionTerm.additionalEntities,
                 PropertyNames.EntityName,
@@ -276,18 +282,32 @@ class SearchQueryCompiler {
         return termGroup;
     }
 
-    private compileObjectOrEntityName(
+    private compileObjectOrEntityNames(
         targetEntities: querySchema.EntityTerm[],
     ): SearchTermGroup {
         // A target can be the name of an object of an action OR the name of an entity
+        if (targetEntities.length === 1) {
+            return this.compileObjectOrEntityName(targetEntities[0]);
+        }
+        const objectTermGroup = createAndTermGroup();
+        for (const entity of targetEntities) {
+            objectTermGroup.terms.push(this.compileObjectOrEntityName(entity));
+        }
+        return objectTermGroup;
+    }
+
+    private compileObjectOrEntityName(
+        entity: querySchema.EntityTerm,
+    ): SearchTermGroup {
+        // A target can be the name of an object of an action OR the name of an entity
         const objectTermGroup = createOrTermGroup();
-        this.addEntityNamesToGroup(
-            targetEntities,
+        this.addEntityNameToGroup(
+            entity,
             PropertyNames.Object,
             objectTermGroup,
         );
-        this.addEntityNamesToGroup(
-            targetEntities,
+        this.addEntityNameToGroup(
+            entity,
             PropertyNames.EntityName,
             objectTermGroup,
             this.exactScoping,
@@ -358,14 +378,23 @@ class SearchQueryCompiler {
         exactMatchValue: boolean = false,
     ): void {
         for (const entityTerm of entityTerms) {
-            if (!entityTerm.isNamePronoun) {
-                this.addPropertyTermToGroup(
-                    propertyName,
-                    entityTerm.name,
-                    termGroup,
-                    exactMatchValue,
-                );
-            }
+            this.addEntityNameToGroup(entityTerm, propertyName, termGroup);
+        }
+    }
+
+    private addEntityNameToGroup(
+        entityTerm: querySchema.EntityTerm,
+        propertyName: PropertyNames,
+        termGroup: SearchTermGroup,
+        exactMatchValue: boolean = false,
+    ): void {
+        if (!entityTerm.isNamePronoun) {
+            this.addPropertyTermToGroup(
+                propertyName,
+                entityTerm.name,
+                termGroup,
+                exactMatchValue,
+            );
         }
     }
 
