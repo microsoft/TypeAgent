@@ -88,6 +88,7 @@ export function compileSearchQueryForConversation(
 
 class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
+    private dedupe: boolean = true;
     public queryExpressions: SearchQueryExpr[];
     public exactScoping: boolean = false;
 
@@ -248,6 +249,45 @@ class SearchQueryCompiler {
         actionTerm: querySchema.ActionTerm,
         includeAdditional: boolean = false,
     ): SearchTermGroup {
+        const dedupe = this.dedupe;
+        try {
+            this.dedupe = false;
+            let termGroup: SearchTermGroup;
+            if (isEntityTermArray(actionTerm.targetEntities)) {
+                termGroup = createOrTermGroup();
+                for (const entity of actionTerm.targetEntities) {
+                    const svo = this.compileSubjectVerb(actionTerm);
+                    // A target can be the name of an object of an action OR the name of an entity
+                    svo.terms.push(this.compileObjectOrEntityName(entity));
+                    termGroup.terms.push(svo);
+                }
+                if (termGroup.terms.length === 1) {
+                    termGroup = termGroup.terms[0] as SearchTermGroup;
+                }
+            } else {
+                termGroup = this.compileSubjectVerb(actionTerm);
+            }
+
+            if (
+                includeAdditional &&
+                isEntityTermArray(actionTerm.additionalEntities)
+            ) {
+                this.addEntityNamesToGroup(
+                    actionTerm.additionalEntities,
+                    PropertyNames.EntityName,
+                    termGroup,
+                    this.exactScoping,
+                );
+            }
+            return termGroup;
+        } finally {
+            this.dedupe = dedupe;
+        }
+    }
+
+    private compileSubjectVerb(
+        actionTerm: querySchema.ActionTerm,
+    ): SearchTermGroup {
         const termGroup = createAndTermGroup();
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(
@@ -260,40 +300,7 @@ class SearchQueryCompiler {
         if (actionTerm.actionVerbs !== undefined) {
             this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
         }
-
-        if (isEntityTermArray(actionTerm.targetEntities)) {
-            // A target can be the name of an object of an action OR the name of an entity
-            termGroup.terms.push(
-                this.compileObjectOrEntityNames(actionTerm.targetEntities),
-            );
-        }
-
-        if (
-            includeAdditional &&
-            isEntityTermArray(actionTerm.additionalEntities)
-        ) {
-            this.addEntityNamesToGroup(
-                actionTerm.additionalEntities,
-                PropertyNames.EntityName,
-                termGroup,
-                this.exactScoping,
-            );
-        }
         return termGroup;
-    }
-
-    private compileObjectOrEntityNames(
-        targetEntities: querySchema.EntityTerm[],
-    ): SearchTermGroup {
-        // A target can be the name of an object of an action OR the name of an entity
-        if (targetEntities.length === 1) {
-            return this.compileObjectOrEntityName(targetEntities[0]);
-        }
-        const objectTermGroup = createAndTermGroup();
-        for (const entity of targetEntities) {
-            objectTermGroup.terms.push(this.compileObjectOrEntityName(entity));
-        }
-        return objectTermGroup;
     }
 
     private compileObjectOrEntityName(
@@ -378,7 +385,12 @@ class SearchQueryCompiler {
         exactMatchValue: boolean = false,
     ): void {
         for (const entityTerm of entityTerms) {
-            this.addEntityNameToGroup(entityTerm, propertyName, termGroup);
+            this.addEntityNameToGroup(
+                entityTerm,
+                propertyName,
+                termGroup,
+                exactMatchValue,
+            );
         }
     }
 
@@ -412,7 +424,10 @@ class SearchQueryCompiler {
             return;
         }
         // Dedupe any terms already added to the group earlier
-        if (!this.entityTermsAdded.has(propertyName, propertyValue)) {
+        if (
+            !this.dedupe ||
+            !this.entityTermsAdded.has(propertyName, propertyValue)
+        ) {
             const searchTerm = createPropertySearchTerm(
                 propertyName,
                 propertyValue,
