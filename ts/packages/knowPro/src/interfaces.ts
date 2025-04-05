@@ -330,7 +330,7 @@ export interface ITermToSemanticRefIndexItem {
 export interface IndexingEventHandlers {
     onKnowledgeExtracted?: (
         chunk: TextLocation,
-        knowledgeResult: kpLib.KnowledgeResponse | kpLib.KnowledgeResponse[],
+        knowledgeResult: kpLib.KnowledgeResponse,
     ) => boolean;
     onEmbeddingsCreated?: (
         sourceTexts: string[],

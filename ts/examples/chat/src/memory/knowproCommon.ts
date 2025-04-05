@@ -129,7 +129,7 @@ export function createIndexingEventHandler(
                 printer.writeLine("Indexing knowledge");
                 startedKnowledge = true;
             }
-            progress.advance(Array.isArray(knowledge) ? knowledge.length : 1);
+            progress.advance();
             return progress.count < maxMessages;
         },
         onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {

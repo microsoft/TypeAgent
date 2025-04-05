@@ -24,14 +24,12 @@ import { openai } from "aiclient";
 import { async } from "typeagent";
 import {
     createKnowledgeExtractor,
-    extractKnowledgeBatch,
+    extractKnowledgeForTextBatch,
     facetValueToString,
 } from "./knowledge.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
-import { textRangeFromMessageChunk } from "./message.js";
-import { Result, success } from "typechat";
-import { getBatches } from "./collections.js";
+import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";
 
 export type KnowledgeValidator = (
     knowledgeType: KnowledgeType,
@@ -84,12 +82,12 @@ export function addEntityToIndex(
     semanticRefs: SemanticRef[],
     semanticRefIndex: ITermToSemanticRefIndex,
     messageOrdinal: MessageOrdinal,
-    chunkIndex = 0,
+    chunkOrdinal = 0,
 ) {
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.push({
         semanticRefOrdinal,
-        range: textRangeFromMessageChunk(messageOrdinal, chunkIndex),
+        range: textRangeFromMessageChunk(messageOrdinal, chunkOrdinal),
         knowledgeType: "entity",
         knowledge: entity,
     });
@@ -181,18 +179,23 @@ export function addActionToIndex(
     addFacet(action.subjectEntityFacet, semanticRefOrdinal, semanticRefIndex);
 }
 
-export function addKnowledgeToIndex(
-    semanticRefs: SemanticRef[],
-    semanticRefIndex: ITermToSemanticRefIndex,
+function addKnowledgeToIndex(
+    conversation: IConversation,
     messageOrdinal: MessageOrdinal,
+    chunkOrdinal: number,
     knowledge: kpLib.KnowledgeResponse,
 ): void {
+    verifyHasSemanticRefIndex(conversation);
+
+    const semanticRefs = conversation.semanticRefs!;
+    const semanticRefIndex = conversation.semanticRefIndex!;
     for (const entity of knowledge.entities) {
         addEntityToIndex(
             entity,
             semanticRefs,
             semanticRefIndex,
             messageOrdinal,
+            chunkOrdinal,
         );
     }
     for (const action of knowledge.actions) {
@@ -201,6 +204,7 @@ export function addKnowledgeToIndex(
             semanticRefs,
             semanticRefIndex,
             messageOrdinal,
+            chunkOrdinal,
         );
     }
     for (const inverseAction of knowledge.inverseActions) {
@@ -209,6 +213,7 @@ export function addKnowledgeToIndex(
             semanticRefs,
             semanticRefIndex,
             messageOrdinal,
+            chunkOrdinal,
         );
     }
     for (const topic of knowledge.topics) {
@@ -218,6 +223,7 @@ export function addKnowledgeToIndex(
             semanticRefs,
             semanticRefIndex,
             messageOrdinal,
+            chunkOrdinal,
         );
     }
 }
@@ -227,17 +233,11 @@ export async function buildSemanticRefIndex(
     extractor?: kpLib.KnowledgeExtractor,
     eventHandler?: IndexingEventHandlers,
 ): Promise<TextIndexingResult> {
-    conversation.semanticRefIndex ??= new ConversationIndex();
-    const semanticRefIndex = conversation.semanticRefIndex;
-    conversation.semanticRefIndex = semanticRefIndex;
-    if (conversation.semanticRefs === undefined) {
-        conversation.semanticRefs = [];
-    }
-    const semanticRefs = conversation.semanticRefs;
+    beginIndexing(conversation);
+
     extractor ??= createKnowledgeExtractor();
     const maxRetries = 4;
     let indexingResult: TextIndexingResult = {};
-    // TODO: Support batching
     for (let i = 0; i < conversation.messages.length; i++) {
         let messageOrdinal: MessageOrdinal = i;
         const chunkOrdinal = 0;
@@ -254,9 +254,9 @@ export async function buildSemanticRefIndex(
         const knowledge = knowledgeResult.data;
         if (knowledge) {
             addKnowledgeToIndex(
-                semanticRefs,
-                semanticRefIndex,
+                conversation,
                 messageOrdinal,
+                chunkOrdinal,
                 knowledge,
             );
         }
@@ -277,31 +277,89 @@ export async function buildSemanticRefIndex(
 
 export async function buildSemanticRefIndexBatched(
     conversation: IConversation,
+    batchSize: number,
     knowledgeExtractor?: kpLib.KnowledgeExtractor,
     eventHandler?: IndexingEventHandlers,
-    batchSize: number = 2,
-    maxRetries: number = 4,
 ): Promise<TextIndexingResult> {
     beginIndexing(conversation);
 
     knowledgeExtractor ??= createKnowledgeExtractor();
-    let indexingResult: TextIndexingResult = {};
-    for (const batch of getBatches(conversation.messages, batchSize)) {
-        const result = await addMessageBatchToConversationIndex(
+    return addToSemanticRefIndex(
+        conversation,
+        0,
+        batchSize,
+        knowledgeExtractor,
+        eventHandler,
+    );
+}
+
+export async function addToSemanticRefIndex(
+    conversation: IConversation,
+    messageOrdinalStartAt: MessageOrdinal,
+    batchSize: number,
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    eventHandler?: IndexingEventHandlers,
+    maxRetries: number = 3,
+): Promise<TextIndexingResult> {
+    let indexingResult: TextIndexingResult | undefined;
+    for (const textLocationBatch of getMessageChunkBatch(
+        conversation.messages,
+        messageOrdinalStartAt,
+        batchSize,
+    )) {
+        indexingResult = await addBatchToSemanticRefIndex(
             conversation,
-            batch.value,
+            textLocationBatch,
             knowledgeExtractor,
+            eventHandler,
             maxRetries,
         );
-        if (!result.success) {
+        if (indexingResult.error !== undefined) {
+            break;
+        }
+    }
+    return indexingResult ?? {};
+}
+
+async function addBatchToSemanticRefIndex(
+    conversation: IConversation,
+    batch: TextLocation[],
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    eventHandler?: IndexingEventHandlers,
+    maxRetries: number = 3,
+): Promise<TextIndexingResult> {
+    beginIndexing(conversation);
+
+    const messages = conversation.messages;
+    let indexingResult: TextIndexingResult = {};
+
+    const textBatch = batch.map(
+        (tl) => messages[tl.messageOrdinal].textChunks[tl.chunkOrdinal ?? 0],
+    );
+    const knowledgeResults = await extractKnowledgeForTextBatch(
+        knowledgeExtractor,
+        textBatch,
+        textBatch.length,
+        maxRetries,
+    );
+    for (let i = 0; i < knowledgeResults.length; ++i) {
+        const knowledgeResult = knowledgeResults[i];
+        if (!knowledgeResult.success) {
+            indexingResult.error = knowledgeResult.message;
             return indexingResult;
         }
-        const [completedUpto, knowledge] = result.data;
-        completedUpto.messageOrdinal += batch.startAt;
-        indexingResult.completedUpto = completedUpto;
+        const textLocation = batch[i];
+        const knowledge = knowledgeResult.data;
+        addKnowledgeToIndex(
+            conversation,
+            textLocation.messageOrdinal,
+            textLocation.charOrdinal ?? 0,
+            knowledge,
+        );
+        indexingResult.completedUpto = textLocation;
         if (
             eventHandler?.onKnowledgeExtracted &&
-            !eventHandler.onKnowledgeExtracted(completedUpto, knowledge)
+            !eventHandler.onKnowledgeExtracted(textLocation, knowledge)
         ) {
             break;
         }
@@ -310,44 +368,12 @@ export async function buildSemanticRefIndexBatched(
 }
 
 /**
- * Add a message batch to the conversation index
- * Requires that the conversation have a conversation index object
+ * Appends the given messages and their associated knowledge to the conversation index
  * @param conversation
- * @param messageBatch
- * @param knowledgeExtractor
- * @returns
+ * @param messages
+ * @param knowledgeResponses
  */
-export async function addMessageBatchToConversationIndex(
-    conversation: IConversation,
-    messageBatch: IMessage[],
-    knowledgeExtractor: kpLib.KnowledgeExtractor,
-    maxRetries: number = 4,
-): Promise<Result<[TextLocation, kpLib.KnowledgeResponse[]]>> {
-    beginIndexing(conversation);
-    const completedUpto: TextLocation = {
-        messageOrdinal: -1,
-        chunkOrdinal: -1,
-    };
-    // TODO: All chunks
-    const chunkOrdinal = 0;
-    const textChunks = messageBatch.map((m) => m.textChunks[chunkOrdinal]);
-    // FUTURE: make better use of partial knowledge extraction success
-    const knowledgeResults = await extractKnowledgeBatch(
-        knowledgeExtractor,
-        textChunks,
-        maxRetries,
-    );
-    if (!knowledgeResults.success) {
-        return knowledgeResults;
-    }
-    const knowledgeBatch = knowledgeResults.data;
-    addToConversationIndex(conversation, messageBatch, knowledgeBatch);
-    completedUpto.messageOrdinal = messageBatch.length - 1;
-    completedUpto.chunkOrdinal = 0;
-    return success([completedUpto, knowledgeBatch]);
-}
-
-export function addToConversationIndex(
+export function addToConversation(
     conversation: IConversation,
     messages: IMessage[],
     knowledgeResponses: kpLib.KnowledgeResponse[],
@@ -355,13 +381,14 @@ export function addToConversationIndex(
     beginIndexing(conversation);
     for (let i = 0; i < messages.length; i++) {
         const messageOrdinal: MessageOrdinal = conversation.messages.length;
+        const chunkOrdinal = 0;
         conversation.messages.push(messages[i]);
         const knowledge = knowledgeResponses[i];
         if (knowledge) {
             addKnowledgeToIndex(
-                conversation.semanticRefs!,
-                conversation.semanticRefIndex!,
+                conversation,
                 messageOrdinal,
+                chunkOrdinal,
                 knowledge,
             );
         }
@@ -377,6 +404,14 @@ function beginIndexing(conversation: IConversation) {
     }
 }
 
+function verifyHasSemanticRefIndex(conversation: IConversation) {
+    if (
+        conversation.secondaryIndexes === undefined ||
+        conversation.semanticRefs === undefined
+    ) {
+        throw new Error("Conversation does not have an index");
+    }
+}
 /**
  * Notes:
  *  Case-insensitive

@@ -224,11 +224,7 @@ export function createPodcastCommands(
         }
 
         const kpPodcast = new cm.Podcast("AllEpisodes");
-        kp.addToConversationIndex(
-            kpPodcast,
-            podcastMessages,
-            knowledgeResponses,
-        );
+        kp.addToConversation(kpPodcast, podcastMessages, knowledgeResponses);
         kpPodcast.secondaryIndexes.threads.threads.push(...podcastThreads);
         const progress = new ProgressBar(
             context.printer,
