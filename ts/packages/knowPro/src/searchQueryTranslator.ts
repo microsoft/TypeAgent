@@ -247,7 +247,7 @@ class SearchQueryCompiler {
 
     private compileScope(
         actionTerm: querySchema.ActionTerm,
-        includeAdditional: boolean = false,
+        includeAdditional: boolean = true,
     ): SearchTermGroup {
         const dedupe = this.dedupe;
         try {
