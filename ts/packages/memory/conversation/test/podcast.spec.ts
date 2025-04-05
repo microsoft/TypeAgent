@@ -23,7 +23,7 @@ describeIf(
             "buildIndex",
             async () => {
                 //const test = getTestTranscriptSmall();
-                const maxMessages = 4;
+                const maxMessages = 8;
                 const podcast = await loadTestPodcast(
                     getTestTranscriptDialog(),
                     true,
