@@ -333,9 +333,11 @@ async function addBatchToSemanticRefIndex(
     const messages = conversation.messages;
     let indexingResult: TextIndexingResult = {};
 
-    const textBatch = batch.map(
-        (tl) => messages[tl.messageOrdinal].textChunks[tl.chunkOrdinal ?? 0],
-    );
+    const textBatch = batch.map((tl) => {
+        const text =
+            messages[tl.messageOrdinal].textChunks[tl.chunkOrdinal ?? 0];
+        return text.trim();
+    });
     const knowledgeResults = await extractKnowledgeForTextBatch(
         knowledgeExtractor,
         textBatch,

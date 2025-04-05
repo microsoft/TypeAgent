@@ -1,84 +1,110 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { describeIf, hasTestKeys } from "test-lib";
 import {
-    getAbsolutePath,
-    hasTestKeys,
-    /*hasTestKeys,*/ testIf,
-} from "test-lib";
-import {
-    createOnlineConversationSettings,
     getTestTranscriptDialog,
+    loadTestPodcast,
     // getTestTranscriptSmall,
 } from "./testCommon.js";
-import { importPodcast } from "../src/importPodcast.js";
-import { IndexingResults, TextIndexingResult, TextLocation } from "knowpro";
+import {
+    buildSemanticRefIndexBatched,
+    IndexingResults,
+    TextIndexingResult,
+    TextLocation,
+} from "knowpro";
 
-describe("podcast", () => {
-    const testTimeout = 10 * 60 * 1000;
-    testIf(
-        "buildIndex",
-        () => hasTestKeys(),
-        async () => {
-            //const test = getTestTranscriptSmall();
-            const maxMessages = 4;
-            const test = getTestTranscriptDialog();
-            const podcast = await importPodcast(
-                getAbsolutePath(test.filePath),
-                test.name,
-                test.date,
-                test.length,
-                createOnlineConversationSettings(),
+describeIf(
+    "podcast.online",
+    () => hasTestKeys(),
+    () => {
+        const testTimeout = 10 * 60 * 1000;
+        test(
+            "buildIndex",
+            async () => {
+                //const test = getTestTranscriptSmall();
+                const maxMessages = 4;
+                const podcast = await loadTestPodcast(
+                    getTestTranscriptDialog(),
+                    true,
+                    maxMessages,
+                );
+                const results = await podcast.buildIndex();
+                verifyNoIndexingErrors(results);
+
+                const maxMessageOrdinal = podcast.messages.length - 1;
+                verifyCompletedUpto(
+                    results.semanticRefs?.completedUpto,
+                    maxMessageOrdinal,
+                );
+                verifyNumberCompleted(
+                    results.secondaryIndexResults?.message?.numberCompleted,
+                    podcast.messages.length,
+                );
+            },
+            testTimeout,
+        );
+        test(
+            "buildIndex.batch",
+            async () => {
+                const maxMessages = 8;
+                const podcast = await loadTestPodcast(
+                    getTestTranscriptDialog(),
+                    true,
+                    maxMessages,
+                );
+                console.log(podcast.nameTag);
+                const results = await buildSemanticRefIndexBatched(podcast, 3);
+                verifyNoTextIndexingError(results);
+
+                const maxMessageOrdinal = podcast.messages.length - 1;
+                verifyCompletedUpto(results.completedUpto, maxMessageOrdinal);
+            },
+            testTimeout,
+        );
+
+        function verifyNoIndexingErrors(results: IndexingResults) {
+            verifyNoTextIndexingError(results.semanticRefs);
+            verifyNoTextIndexingError(results.secondaryIndexResults?.message);
+            verifyNoTextIndexingError(
+                results.secondaryIndexResults?.properties,
             );
-            if (maxMessages < podcast.messages.length) {
-                podcast.messages = podcast.messages.slice(0, maxMessages);
+            verifyNoTextIndexingError(
+                results.secondaryIndexResults?.relatedTerms,
+            );
+            verifyNoTextIndexingError(
+                results.secondaryIndexResults?.timestamps,
+            );
+        }
+
+        function verifyNoTextIndexingError(
+            result: TextIndexingResult | undefined,
+        ) {
+            expect(result).toBeDefined();
+            if (result?.error) {
+                console.log(`Text indexing error ${result.error}`);
             }
-            const results = await podcast.buildIndex();
-            verifyNoErrors(results);
-
-            const maxMessageOrdinal = podcast.messages.length - 1;
-            verifyCompletedUpto(
-                results.semanticRefs?.completedUpto,
-                maxMessageOrdinal,
-            );
-            verifyNumberCompleted(
-                results.secondaryIndexResults?.message?.numberCompleted,
-                podcast.messages.length,
-            );
-        },
-        testTimeout,
-    );
-
-    function verifyNoErrors(results: IndexingResults) {
-        verifyNoError(results.semanticRefs);
-        verifyNoError(results.secondaryIndexResults?.message);
-        verifyNoError(results.secondaryIndexResults?.properties);
-        verifyNoError(results.secondaryIndexResults?.relatedTerms);
-        verifyNoError(results.secondaryIndexResults?.timestamps);
-    }
-
-    function verifyNoError(result: TextIndexingResult | undefined) {
-        expect(result).toBeDefined();
-        expect(result?.error).toBeUndefined();
-    }
-
-    function verifyCompletedUpto(
-        upto: TextLocation | undefined,
-        expectedUpto: number,
-    ): void {
-        expect(upto).toBeDefined();
-        if (upto) {
-            expect(upto.messageOrdinal).toEqual(expectedUpto);
+            expect(result?.error).toBeUndefined();
         }
-    }
 
-    function verifyNumberCompleted(
-        numberCompleted: number | undefined,
-        expected: number,
-    ): void {
-        expect(numberCompleted).toBeDefined();
-        if (numberCompleted) {
-            expect(numberCompleted).toEqual(expected);
+        function verifyCompletedUpto(
+            upto: TextLocation | undefined,
+            expectedUpto: number,
+        ): void {
+            expect(upto).toBeDefined();
+            if (upto) {
+                expect(upto.messageOrdinal).toEqual(expectedUpto);
+            }
         }
-    }
-});
+
+        function verifyNumberCompleted(
+            numberCompleted: number | undefined,
+            expected: number,
+        ): void {
+            expect(numberCompleted).toBeDefined();
+            if (numberCompleted) {
+                expect(numberCompleted).toEqual(expected);
+            }
+        }
+    },
+);
