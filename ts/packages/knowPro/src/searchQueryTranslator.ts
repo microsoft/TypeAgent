@@ -175,22 +175,27 @@ class SearchQueryCompiler {
         return when;
     }
 
-    private compileActionTermAsSearchTerms(
+    public compileActionTermAsSearchTerms(
         actionTerm: querySchema.ActionTerm,
         termGroup?: SearchTermGroup,
+        useOrMax: boolean = true,
     ): SearchTermGroup {
         termGroup ??= createOrTermGroup();
+        const actionGroup = useOrMax ? createOrMaxTermGroup() : termGroup;
         if (actionTerm.actionVerbs !== undefined) {
-            this.compileSearchTerms(actionTerm.actionVerbs.words, termGroup);
+            this.compileSearchTerms(actionTerm.actionVerbs.words, actionGroup);
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
-            this.compileEntityTerms(actionTerm.actorEntities, termGroup);
+            this.compileEntityTerms(actionTerm.actorEntities, actionGroup);
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
-            this.compileEntityTerms(actionTerm.targetEntities, termGroup);
+            this.compileEntityTerms(actionTerm.targetEntities, actionGroup);
         }
         if (isEntityTermArray(actionTerm.additionalEntities)) {
-            this.compileEntityTerms(actionTerm.additionalEntities, termGroup);
+            this.compileEntityTerms(actionTerm.additionalEntities, actionGroup);
+        }
+        if (actionGroup !== termGroup) {
+            termGroup.terms.push(actionGroup);
         }
         return termGroup;
     }
@@ -217,11 +222,7 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 const orMax = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, orMax);
-                if (orMax.terms.length > 1) {
-                    termGroup.terms.push(orMax);
-                } else if (orMax.terms.length === 1) {
-                    termGroup.terms.push(orMax.terms[0]);
-                }
+                termGroup.terms.push(optimizeOrMax(orMax));
             }
             this.dedupe = dedupe;
         } else {
@@ -477,4 +478,11 @@ function isWildcard(value: string | undefined): boolean {
 
 function isEmptyString(value: string): boolean {
     return value === undefined || value.length === 0;
+}
+
+function optimizeOrMax(termGroup: SearchTermGroup) {
+    if (termGroup.terms.length === 1) {
+        return termGroup.terms[0];
+    }
+    return termGroup;
 }
