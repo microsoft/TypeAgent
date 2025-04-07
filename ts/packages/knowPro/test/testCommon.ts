@@ -5,10 +5,10 @@ import path from "path";
 import {
     createTestModels,
     getAbsolutePath,
+    hasTestKeys,
     NullEmbeddingModel,
     parseCommandArgs,
     readTestFileLines,
-    TestModels,
 } from "test-lib";
 import {
     IConversation,
@@ -43,19 +43,22 @@ import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
 import { dateTime } from "typeagent";
 import { TestMessage } from "./testMessage.js";
+import assert from "assert";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
 }
 
-const testModels: TestModels = createTestModels("knowpro");
+const testModels = hasTestKeys() ? createTestModels("knowpro") : undefined;
 
 export function getTestChatModel() {
-    return testModels.chat;
+    assert(testModels !== undefined);
+    return testModels?.chat;
 }
 
 export function getTestEmbeddingModel() {
-    return testModels.embeddings;
+    assert(testModels !== undefined);
+    return testModels?.embeddings;
 }
 
 export function createOfflineConversationSettings(
