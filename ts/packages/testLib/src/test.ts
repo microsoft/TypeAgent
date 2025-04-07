@@ -24,7 +24,9 @@ export function describeIf(
     if (runIf()) {
         describe(name, describeFn);
     } else {
-        describe.skip(name, describeFn);
+        describe.skip(name, () => {
+            test(name + "_skip", () => {});
+        });
     }
 }
 

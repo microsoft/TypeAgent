@@ -10,11 +10,13 @@ import {
 } from "./fuzzyIndex.js";
 import { MessageTextIndexSettings } from "./messageIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
+import { SemanticRefIndexSettings } from "./conversationIndex.js";
 
 export type ConversationSettings = {
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
     messageTextIndexSettings: MessageTextIndexSettings;
+    semanticRefIndexSettings: SemanticRefIndexSettings;
 };
 
 export function createConversationSettings(
@@ -44,6 +46,9 @@ export function createConversationSettings(
                 embeddingSize,
                 minCosineSimilarity,
             ),
+        },
+        semanticRefIndexSettings: {
+            batchSize: 4,
         },
     };
 }

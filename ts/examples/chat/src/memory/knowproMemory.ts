@@ -121,6 +121,7 @@ export async function createKnowproCommands(
             options: {
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
+                batchSize: argNum("Indexing batch size", 4),
                 length: argNum("Length of the podcast in minutes", 60),
                 buildIndex: argBool("Index the imported podcast", true),
             },
@@ -714,6 +715,7 @@ export async function createKnowproCommands(
             options: {
                 maxMessages: argNum("Maximum messages to index"),
                 relatedOnly: argBool("Index related terms only", false),
+                batchSize: argNum("Indexing batch size", 8),
             },
         };
     }
@@ -734,28 +736,48 @@ export async function createKnowproCommands(
         // Build index
         context.printer.writeLine();
         const maxMessages = namedArgs.maxMessages ?? messageCount;
-        context.printer.writeLine(`Building Index`);
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const eventHandler = createIndexingEventHandler(
-            context.printer,
-            progress,
-            maxMessages,
-        );
-        // Build full index?
-        if (!namedArgs.relatedOnly) {
-            const indexResult = await context.podcast.buildIndex(eventHandler);
+        let originalMessages = context.podcast.messages;
+        try {
+            if (maxMessages < messageCount) {
+                context.podcast.messages = context.podcast.messages.slice(
+                    0,
+                    maxMessages,
+                );
+            }
+            context.printer.writeLine(`Building Index`);
+            let progress = new ProgressBar(context.printer, maxMessages);
+            const eventHandler = createIndexingEventHandler(
+                context.printer,
+                progress,
+                maxMessages,
+            );
+            // Build full index?
+            if (!namedArgs.relatedOnly) {
+                const clock = new StopWatch();
+                clock.start();
+
+                context.podcast.settings.semanticRefIndexSettings.batchSize =
+                    namedArgs.batchSize;
+                const indexResult =
+                    await context.podcast.buildIndex(eventHandler);
+
+                clock.stop();
+                progress.complete();
+                context.printer.writeTiming(chalk.gray, clock);
+                context.printer.writeIndexingResults(indexResult);
+                return;
+            }
+            // Build partial index
+            context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
+            await kp.buildRelatedTermsIndex(
+                context.podcast,
+                context.podcast.settings.relatedTermIndexSettings,
+                eventHandler,
+            );
             progress.complete();
-            context.printer.writeIndexingResults(indexResult);
-            return;
+        } finally {
+            context.podcast.messages = originalMessages;
         }
-        // Build partial index
-        context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
-        await kp.buildRelatedTermsIndex(
-            context.podcast,
-            context.podcast.settings,
-            eventHandler,
-        );
-        progress.complete();
     }
 
     function podcastBuildMessageIndexDef(): CommandMetadata {

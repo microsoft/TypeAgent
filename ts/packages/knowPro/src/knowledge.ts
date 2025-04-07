@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Knowledge processing functions INTERNAL to the library.
+ * INTERNAL LIBRARY
  * These should not be exposed via index.ts
  */
 
@@ -18,7 +18,8 @@ import {
 import { Scored } from "./common.js";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
-import { Result } from "typechat";
+import { error, Result } from "typechat";
+import { BatchTask, runInBatches } from "./taskQueue.js";
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -40,17 +41,50 @@ export function createKnowledgeExtractor(
     return extractor;
 }
 
-export function extractKnowledgeForTextBatch(
+export function extractKnowledgeFromText(
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    text: string,
+    maxRetries: number,
+): Promise<Result<kpLib.KnowledgeResponse>> {
+    return async.callWithRetry(() =>
+        knowledgeExtractor.extractWithRetry(text, maxRetries),
+    );
+}
+
+export function extractKnowledgeFromTextBatch(
     knowledgeExtractor: kpLib.KnowledgeExtractor,
     textBatch: string[],
     concurrency: number = 2,
     maxRetries: number = 3,
 ): Promise<Result<kpLib.KnowledgeResponse>[]> {
     return asyncArray.mapAsync(textBatch, concurrency, (text) =>
-        async.callWithRetry(() =>
-            knowledgeExtractor.extractWithRetry(text, maxRetries),
-        ),
+        extractKnowledgeFromText(knowledgeExtractor, text, maxRetries),
     );
+}
+
+export async function extractKnowledgeForTextBatchQ(
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    textBatch: string[],
+    concurrency: number = 2,
+    maxRetries: number = 3,
+): Promise<Result<kpLib.KnowledgeResponse>[]> {
+    const taskBatch: BatchTask<string, kpLib.KnowledgeResponse>[] =
+        textBatch.map((text) => {
+            return {
+                task: text,
+            };
+        });
+    await runInBatches<string, kpLib.KnowledgeResponse>(
+        taskBatch,
+        (text: string) =>
+            extractKnowledgeFromText(knowledgeExtractor, text, maxRetries),
+        concurrency,
+    );
+    const results: Result<kpLib.KnowledgeResponse>[] = [];
+    for (const task of taskBatch) {
+        results.push(task.result ? task.result : error("No result"));
+    }
+    return results;
 }
 
 export function facetValueToString(facet: kpLib.Facet): string {

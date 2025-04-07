@@ -3,7 +3,9 @@
 
 import path from "path";
 import {
+    createTestModels,
     getAbsolutePath,
+    hasTestKeys,
     NullEmbeddingModel,
     parseCommandArgs,
     readTestFileLines,
@@ -39,12 +41,24 @@ import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
-import { openai } from "aiclient";
 import { dateTime } from "typeagent";
 import { TestMessage } from "./testMessage.js";
+import assert from "assert";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
+}
+
+const testModels = hasTestKeys() ? createTestModels("knowpro") : undefined;
+
+export function getTestChatModel() {
+    assert(testModels !== undefined);
+    return testModels?.chat;
+}
+
+export function getTestEmbeddingModel() {
+    assert(testModels !== undefined);
+    return testModels?.embeddings;
 }
 
 export function createOfflineConversationSettings(
@@ -62,7 +76,7 @@ export function createOnlineConversationSettings(
     getCache: () => TextEmbeddingCache | undefined,
 ) {
     const cachingModel = createEmbeddingCache(
-        openai.createEmbeddingModel(),
+        getTestEmbeddingModel(),
         32,
         getCache,
     );

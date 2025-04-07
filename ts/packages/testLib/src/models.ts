@@ -34,7 +34,7 @@ export function createTestEmbeddingModel(): [TextEmbeddingModel, number] {
 
 export function createTestModels(testName: string): TestModels {
     return {
-        chat: openai.createChatModelDefault(testName),
+        chat: openai.createChatModelDefault("test-" + testName),
         embeddings: openai.createEmbeddingModel(),
     };
 }
