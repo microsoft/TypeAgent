@@ -398,6 +398,7 @@ export interface generateCaption {
 }`;
 
 const imageDetailExtractionSchema = `
+// Quantity numbers should not contain any separators (i.e. NO commas)
 export type Quantity = {
     amount: number;
     units: string;
