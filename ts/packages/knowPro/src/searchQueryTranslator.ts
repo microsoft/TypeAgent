@@ -183,6 +183,9 @@ class SearchQueryCompiler {
         if (actionTerm.actionVerbs !== undefined) {
             this.compileSearchTerms(actionTerm.actionVerbs.words, termGroup);
         }
+        if (isEntityTermArray(actionTerm.actorEntities)) {
+            this.compileEntityTerms(actionTerm.actorEntities, termGroup);
+        }
         if (isEntityTermArray(actionTerm.targetEntities)) {
             this.compileEntityTerms(actionTerm.targetEntities, termGroup);
         }
@@ -214,7 +217,11 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 const orMax = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, orMax);
-                termGroup.terms.push(orMax);
+                if (orMax.terms.length > 1) {
+                    termGroup.terms.push(orMax);
+                } else if (orMax.terms.length === 1) {
+                    termGroup.terms.push(orMax.terms[0]);
+                }
             }
             this.dedupe = dedupe;
         } else {
@@ -331,7 +338,7 @@ class SearchQueryCompiler {
             termGroup,
             exactMatchName,
         );
-        if (entityTerm.type) {
+        if (entityTerm.type && entityTerm.type.length > 0) {
             for (const type of entityTerm.type) {
                 this.addPropertyTermToGroup(
                     PropertyNames.EntityType,
