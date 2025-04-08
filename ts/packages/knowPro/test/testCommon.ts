@@ -26,7 +26,9 @@ import {
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 import {
-    SearchOptions,
+    ConversationSearchResult,
+    createTestSearchOptions,
+    searchConversation,
     SearchSelectExpr,
     SemanticRefSearchResult,
     WhenFilter,
@@ -44,6 +46,7 @@ import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
 import { dateTime } from "typeagent";
 import { TestMessage } from "./testMessage.js";
 import assert from "assert";
+import { verifyMessageOrdinals } from "./verify.js";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
@@ -155,9 +158,16 @@ export async function loadTestConversationForOnline(name?: string) {
     return conversation;
 }
 
-export function loadTestQueries(filePath: string): string[] {
-    const lines = readTestFileLines(filePath);
-    return lines.filter((l) => !l.startsWith("#"));
+export function loadTestQueries(
+    filePath: string,
+    maxQueries?: number,
+): string[] {
+    let lines = readTestFileLines(filePath);
+    lines = lines.filter((l) => !l.startsWith("#"));
+    if (maxQueries && maxQueries > 0) {
+        lines = lines.slice(0, maxQueries);
+    }
+    return lines;
 }
 
 export function parseTestQuery(
@@ -274,11 +284,21 @@ export function createQueryContext(conversation: IConversation) {
     );
 }
 
-export function createTestSearchOptions(): SearchOptions {
-    return {
-        usePropertyIndex: true,
-        useTimestampIndex: true,
-    };
+export async function runSearchConversation(
+    conversation: IConversation,
+    termGroup: SearchTermGroup,
+    when?: WhenFilter,
+): Promise<ConversationSearchResult> {
+    const matches = await searchConversation(
+        conversation,
+        termGroup,
+        when,
+        createTestSearchOptions(),
+    );
+    expect(matches).toBeDefined();
+    expect(matches!.messageMatches.length).toBeGreaterThan(0);
+    verifyMessageOrdinals(conversation, matches!.messageMatches);
+    return matches!;
 }
 
 export function stringify(obj: any) {

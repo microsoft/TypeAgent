@@ -4,6 +4,7 @@
 import {
     createJsonTranslator,
     Result,
+    success,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
@@ -57,12 +58,7 @@ export function createSearchQueryTranslator(
     );
 }
 
-export type SearchQueryExpr = {
-    selectExpressions: SearchSelectExpr[];
-    rawQuery?: string | undefined;
-};
-
-export async function createSearchQueryForConversation(
+export async function searchQueryFromLanguage(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
     text: string,
@@ -74,7 +70,12 @@ export async function createSearchQueryForConversation(
     return result;
 }
 
-export function compileSearchQueryForConversation(
+export type SearchQueryExpr = {
+    selectExpressions: SearchSelectExpr[];
+    rawQuery?: string | undefined;
+};
+
+export function compileSearchQuery(
     conversation: IConversation,
     query: querySchema.SearchQuery,
     exactScoping: boolean = true,
@@ -84,6 +85,24 @@ export function compileSearchQueryForConversation(
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
+}
+
+export async function searchQueryExprFromLanguage(
+    conversation: IConversation,
+    translator: SearchQueryTranslator,
+    queryText: string,
+): Promise<Result<SearchQueryExpr[]>> {
+    const result = await searchQueryFromLanguage(
+        conversation,
+        translator,
+        queryText,
+    );
+    if (result.success) {
+        const searchQuery = result.data;
+        const searchExpr = compileSearchQuery(conversation, searchQuery);
+        return success(searchExpr);
+    }
+    return result;
 }
 
 class SearchQueryCompiler {

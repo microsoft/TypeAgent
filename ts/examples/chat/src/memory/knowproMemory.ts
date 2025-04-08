@@ -548,7 +548,7 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const textQuery = namedArgs.query;
-        const result = await kp.createSearchQueryForConversation(
+        const result = await kp.searchQueryFromLanguage(
             context.conversation!,
             context.queryTranslator,
             textQuery,
@@ -562,7 +562,7 @@ export async function createKnowproCommands(
         const searchQuery = result.data;
         context.printer.writeJson(searchQuery, true);
         while (true) {
-            const searchQueryExpressions = kp.compileSearchQueryForConversation(
+            const searchQueryExpressions = kp.compileSearchQuery(
                 context.conversation!,
                 searchQuery,
                 exactScope,

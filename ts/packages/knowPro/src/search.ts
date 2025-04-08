@@ -82,6 +82,13 @@ export type SearchOptions = {
     maxMessageCharsInBudget?: number | undefined;
 };
 
+export function createTestSearchOptions(): SearchOptions {
+    return {
+        usePropertyIndex: true,
+        useTimestampIndex: true,
+    };
+}
+
 export type SemanticRefSearchResult = {
     termMatches: Set<string>;
     semanticRefMatches: ScoredSemanticRefOrdinal[];
