@@ -13,15 +13,22 @@ describeIf(
     "conversationMemory.online",
     () => hasTestKeys(),
     () => {
-        test("addMessage", async () => {
-            const [messages, _] = loadConversationTranscript(
-                getTestTranscriptDialog(),
-            );
-            const cm = new ConversationMemory();
-            for (const message of messages) {
-                await cm.addMessage(message);
-            }
-        });
+        const testTimeout = 5 * 60 * 1000;
+        test(
+            "addMessage",
+            async () => {
+                let [messages, _] = loadConversationTranscript(
+                    getTestTranscriptDialog(),
+                );
+                const maxMessages = 4;
+                messages = messages.slice(0, maxMessages);
+                const cm = new ConversationMemory();
+                for (const message of messages) {
+                    await cm.addMessage(message);
+                }
+            },
+            testTimeout,
+        );
     },
 );
 

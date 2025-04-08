@@ -168,7 +168,10 @@ export class ConversationMemory
     ): Promise<Result<kpLib.KnowledgeResponse>> {
         //
         // Messages can contain prior knowledge extracted during chat responses for example
-        // To avoid knowledge duplication, we manually extract message knowledge and merge it
+        // To avoid knowledge duplication, we:
+        // - (a) Extract message knowledge
+        // - (b) merge it with any prior knowledge
+        // - (c) configure the indexing engine not to automatically extract knowledge
         // with any prior knowledge
         //
         const knowledgeResult = await kp.extractKnowledgeFromText(
