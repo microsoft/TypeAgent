@@ -3,14 +3,18 @@
 
 import { PromptSection } from "typechat";
 import { IConversation, DateRange } from "./interfaces.js";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import {
     TextEmbeddingIndexSettings,
     createTextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { MessageTextIndexSettings } from "./messageIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
-import { SemanticRefIndexSettings } from "./conversationIndex.js";
+import {
+    createKnowledgeModel,
+    SemanticRefIndexSettings,
+} from "./conversationIndex.js";
+import { conversation as kpLib } from "knowledge-processor";
 
 export type ConversationSettings = {
     relatedTermIndexSettings: RelatedTermIndexSettings;
@@ -87,4 +91,24 @@ export function getTimeRangePromptSectionForConversation(
         ];
     }
     return [];
+}
+/**
+ * Create a knowledge extractor using the given Chat Model
+ * @param chatModel
+ * @returns
+ */
+
+export function createKnowledgeExtractor(
+    chatModel?: ChatModel,
+): kpLib.KnowledgeExtractor {
+    chatModel ??= createKnowledgeModel();
+    const extractor = kpLib.createKnowledgeExtractor(chatModel, {
+        maxContextLength: 4096,
+        /**
+         * This should *ALWAYS* be false.
+         * Merging is handled during indexing:
+         */
+        mergeActionKnowledge: false,
+    });
+    return extractor;
 }

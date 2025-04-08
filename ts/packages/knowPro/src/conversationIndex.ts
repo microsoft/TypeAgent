@@ -22,10 +22,10 @@ import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
 import {
-    createKnowledgeExtractor,
     extractKnowledgeFromTextBatch,
     facetValueToString,
 } from "./knowledge.js";
+import { createKnowledgeExtractor } from "./conversation.js";
 import { buildSecondaryIndexes } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";

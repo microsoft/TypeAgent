@@ -108,57 +108,55 @@ export function addActionPropertiesToIndex(
 export function buildPropertyIndex(
     conversation: IConversation,
 ): ListIndexingResult {
-    if (conversation.secondaryIndexes && conversation.semanticRefs) {
-        conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
-            new PropertyIndex();
-        return addToPropertyIndex(
-            conversation.secondaryIndexes.propertyToSemanticRefIndex,
-            conversation.semanticRefs,
-            0,
-        );
-    }
-    return { numberCompleted: 0 };
+    return addToPropertyIndex(conversation, 0);
 }
 
 export function addToPropertyIndex(
-    propertyIndex: IPropertyToSemanticRefIndex,
-    semanticRefs: SemanticRef[],
+    conversation: IConversation,
     baseSemanticRefOrdinal: SemanticRefOrdinal,
 ): ListIndexingResult {
-    for (let i = 0; i < semanticRefs.length; ++i) {
-        const semanticRef = semanticRefs[i];
-        const semanticRefOrdinal: SemanticRefOrdinal =
-            i + baseSemanticRefOrdinal;
-        switch (semanticRef.knowledgeType) {
-            default:
-                break;
-            case "action":
-                addActionPropertiesToIndex(
-                    semanticRef.knowledge as kpLib.Action,
-                    propertyIndex,
-                    semanticRefOrdinal,
-                );
-                break;
-            case "entity":
-                addEntityPropertiesToIndex(
-                    semanticRef.knowledge as kpLib.ConcreteEntity,
-                    propertyIndex,
-                    semanticRefOrdinal,
-                );
-                break;
-            case "tag":
-                const tag = semanticRef.knowledge as Tag;
-                propertyIndex.addProperty(
-                    PropertyNames.Tag,
-                    tag.text,
-                    semanticRefOrdinal,
-                );
-                break;
+    if (conversation.secondaryIndexes && conversation.semanticRefs) {
+        conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
+            new PropertyIndex();
+        const propertyIndex =
+            conversation.secondaryIndexes.propertyToSemanticRefIndex;
+        const semanticRefs = conversation.semanticRefs;
+        for (let i = baseSemanticRefOrdinal; i < semanticRefs.length; ++i) {
+            const semanticRef = semanticRefs[i];
+            const semanticRefOrdinal: SemanticRefOrdinal = i;
+            switch (semanticRef.knowledgeType) {
+                default:
+                    break;
+                case "action":
+                    addActionPropertiesToIndex(
+                        semanticRef.knowledge as kpLib.Action,
+                        propertyIndex,
+                        semanticRefOrdinal,
+                    );
+                    break;
+                case "entity":
+                    addEntityPropertiesToIndex(
+                        semanticRef.knowledge as kpLib.ConcreteEntity,
+                        propertyIndex,
+                        semanticRefOrdinal,
+                    );
+                    break;
+                case "tag":
+                    const tag = semanticRef.knowledge as Tag;
+                    propertyIndex.addProperty(
+                        PropertyNames.Tag,
+                        tag.text,
+                        semanticRefOrdinal,
+                    );
+                    break;
+            }
         }
+        return {
+            numberCompleted: semanticRefs.length - baseSemanticRefOrdinal,
+        };
+    } else {
+        return { numberCompleted: 0 };
     }
-    return {
-        numberCompleted: semanticRefs.length,
-    };
 }
 
 export class PropertyIndex implements IPropertyToSemanticRefIndex {

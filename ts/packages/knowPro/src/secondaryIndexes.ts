@@ -8,7 +8,9 @@ import {
     IConversationData,
     IConversationSecondaryIndexes,
     IndexingEventHandlers,
+    MessageOrdinal,
     SecondaryIndexingResults,
+    SemanticRefOrdinal,
     Term,
 } from "./interfaces.js";
 import {
@@ -16,7 +18,11 @@ import {
     IMessageTextIndexData,
     MessageTextIndex,
 } from "./messageIndex.js";
-import { PropertyIndex, buildPropertyIndex } from "./propertyIndex.js";
+import {
+    PropertyIndex,
+    addToPropertyIndex,
+    buildPropertyIndex,
+} from "./propertyIndex.js";
 import {
     buildRelatedTermsIndex,
     RelatedTermsIndex,
@@ -71,6 +77,21 @@ export function buildTransientSecondaryIndexes(
     const result: SecondaryIndexingResults = {};
     result.properties = buildPropertyIndex(conversation);
     result.timestamps = buildTimestampIndex(conversation);
+    return result;
+}
+
+export function addToTransientSecondaryIndexes(
+    conversation: IConversation,
+    settings: ConversationSettings,
+    baseMessageOrdinal: MessageOrdinal,
+    baseSemanticRefOrdinal: SemanticRefOrdinal,
+): SecondaryIndexingResults {
+    const result: SecondaryIndexingResults = {};
+
+    result.properties = addToPropertyIndex(
+        conversation,
+        baseSemanticRefOrdinal,
+    );
     return result;
 }
 

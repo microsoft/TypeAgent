@@ -64,7 +64,14 @@ export class ConversationMemory
         if (typeof message === "string") {
             message = new ConversationMessage(message);
         }
+        let messageOrdinal = this.messages.length;
         this.messages.push(message);
+        kp.addToSemanticRefIndex(
+            this,
+            messageOrdinal,
+            1,
+            this.settings.semanticRefIndexSettings.knowledgeExtractor!,
+        );
     }
 
     public queueAddMessage(
@@ -103,10 +110,13 @@ export class ConversationMemory
         );
         this.embeddingModel = model;
         this.embeddingSize = size;
-        return kp.createConversationSettings(
+        const settings = kp.createConversationSettings(
             this.embeddingModel,
             this.embeddingSize,
         );
+        settings.semanticRefIndexSettings.knowledgeExtractor =
+            kp.createKnowledgeExtractor();
+        return settings;
     }
 }
 
