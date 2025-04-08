@@ -25,6 +25,7 @@ import {
     buildPropertyIndex,
 } from "./propertyIndex.js";
 import {
+    addToRelatedTermsIndex,
     buildRelatedTermsIndex,
     RelatedTermsIndex,
 } from "./relatedTermsIndex.js";
@@ -67,6 +68,7 @@ export async function addToSecondaryIndexes(
     conversationSettings: ConversationSettings,
     startAtMessageOrdinal: MessageOrdinal,
     startAtSemanticRefOrdinal: SemanticRefOrdinal,
+    relatedTerms: string[],
     eventHandler?: IndexingEventHandlers,
 ): Promise<SecondaryIndexingResults> {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
@@ -78,13 +80,12 @@ export async function addToSecondaryIndexes(
         startAtMessageOrdinal,
         startAtSemanticRefOrdinal,
     );
-    /*
-    result.relatedTerms = await buildRelatedTermsIndex(
+    result.relatedTerms = await addToRelatedTermsIndex(
         conversation,
         conversationSettings.relatedTermIndexSettings,
+        relatedTerms,
         eventHandler,
     );
-    */
     result.message = await addToMessageIndex(
         conversation,
         conversationSettings.messageTextIndexSettings,
