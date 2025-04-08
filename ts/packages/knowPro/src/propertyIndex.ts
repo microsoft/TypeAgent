@@ -113,7 +113,7 @@ export function buildPropertyIndex(
 
 export function addToPropertyIndex(
     conversation: IConversation,
-    baseSemanticRefOrdinal: SemanticRefOrdinal,
+    startAtOrdinal: SemanticRefOrdinal,
 ): ListIndexingResult {
     if (conversation.secondaryIndexes && conversation.semanticRefs) {
         conversation.secondaryIndexes.propertyToSemanticRefIndex ??=
@@ -121,7 +121,7 @@ export function addToPropertyIndex(
         const propertyIndex =
             conversation.secondaryIndexes.propertyToSemanticRefIndex;
         const semanticRefs = conversation.semanticRefs;
-        for (let i = baseSemanticRefOrdinal; i < semanticRefs.length; ++i) {
+        for (let i = startAtOrdinal; i < semanticRefs.length; ++i) {
             const semanticRef = semanticRefs[i];
             const semanticRefOrdinal: SemanticRefOrdinal = i;
             switch (semanticRef.knowledgeType) {
@@ -152,11 +152,10 @@ export function addToPropertyIndex(
             }
         }
         return {
-            numberCompleted: semanticRefs.length - baseSemanticRefOrdinal,
+            numberCompleted: semanticRefs.length - startAtOrdinal,
         };
-    } else {
-        return { numberCompleted: 0 };
     }
+    return { numberCompleted: 0 };
 }
 
 export class PropertyIndex implements IPropertyToSemanticRefIndex {

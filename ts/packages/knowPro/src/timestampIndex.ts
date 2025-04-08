@@ -114,7 +114,7 @@ export function buildTimestampIndex(
 
 export function addToTimestampIndex(
     conversation: IConversation,
-    baseMessageOrdinal: MessageOrdinal,
+    startAtOrdinal: MessageOrdinal,
 ): ListIndexingResult {
     if (conversation.secondaryIndexes) {
         conversation.secondaryIndexes.timestampIndex ??=
@@ -124,7 +124,7 @@ export function addToTimestampIndex(
         const timestampIndex = conversation.secondaryIndexes.timestampIndex;
         const messageTimestamps: [MessageOrdinal, string][] = [];
         for (
-            let messageOrdinal = baseMessageOrdinal;
+            let messageOrdinal = startAtOrdinal;
             messageOrdinal < messages.length;
             ++messageOrdinal
         ) {
@@ -134,7 +134,6 @@ export function addToTimestampIndex(
             }
         }
         return timestampIndex.addTimestamps(messageTimestamps);
-    } else {
-        return { numberCompleted: 0 };
     }
+    return { numberCompleted: 0 };
 }

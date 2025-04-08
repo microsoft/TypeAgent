@@ -14,6 +14,7 @@ import {
     Term,
 } from "./interfaces.js";
 import {
+    addToMessageIndex,
     buildMessageIndex,
     IMessageTextIndexData,
     MessageTextIndex,
@@ -64,8 +65,8 @@ export async function buildSecondaryIndexes(
 export async function addToSecondaryIndexes(
     conversation: IConversation,
     conversationSettings: ConversationSettings,
-    baseMessageOrdinal: MessageOrdinal,
-    baseSemanticRefOrdinal: SemanticRefOrdinal,
+    startAtMessageOrdinal: MessageOrdinal,
+    startAtSemanticRefOrdinal: SemanticRefOrdinal,
     eventHandler?: IndexingEventHandlers,
 ): Promise<SecondaryIndexingResults> {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
@@ -74,8 +75,8 @@ export async function addToSecondaryIndexes(
     let result: SecondaryIndexingResults = addToTransientSecondaryIndexes(
         conversation,
         conversationSettings,
-        baseMessageOrdinal,
-        baseSemanticRefOrdinal,
+        startAtMessageOrdinal,
+        startAtSemanticRefOrdinal,
     );
     /*
     result.relatedTerms = await buildRelatedTermsIndex(
@@ -83,14 +84,13 @@ export async function addToSecondaryIndexes(
         conversationSettings.relatedTermIndexSettings,
         eventHandler,
     );
-    if (!result.relatedTerms?.error) {
-        result.message = await buildMessageIndex(
-            conversation,
-            conversationSettings.messageTextIndexSettings,
-            eventHandler,
-        );
-    }
     */
+    result.message = await addToMessageIndex(
+        conversation,
+        conversationSettings.messageTextIndexSettings,
+        startAtMessageOrdinal,
+        eventHandler,
+    );
     return result;
 }
 

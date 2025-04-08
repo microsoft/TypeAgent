@@ -64,13 +64,15 @@ export class ConversationMemory
         if (typeof message === "string") {
             message = new ConversationMessage(message);
         }
-        let messageOrdinal = this.messages.length;
+        let startAtMessageOrdinal = this.messages.length;
+        let startAtSemanticRefOrdinal = this.semanticRefs.length;
+
         this.messages.push(message);
-        kp.addToSemanticRefIndex(
+        kp.addToConversationIndex(
             this,
-            messageOrdinal,
-            1,
-            this.settings.semanticRefIndexSettings.knowledgeExtractor!,
+            this.settings,
+            startAtMessageOrdinal,
+            startAtSemanticRefOrdinal,
         );
     }
 

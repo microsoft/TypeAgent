@@ -7,12 +7,15 @@ import {
     loadTestPodcast,
     // getTestTranscriptSmall,
 } from "./testCommon.js";
+import { buildSemanticRefIndex } from "knowpro";
 import {
-    buildSemanticRefIndex,
-    IndexingResults,
-    TextIndexingResult,
-    TextLocation,
-} from "knowpro";
+    verifyCompletedUpto,
+    verifyNoIndexingErrors,
+    verifyNoTextIndexingError,
+    verifyNumberCompleted,
+    verifyTermsInSemanticIndex,
+} from "./verify.js";
+import { Podcast } from "../src/podcast.js";
 
 describeIf(
     "podcast.online",
@@ -41,11 +44,13 @@ describeIf(
                     results.secondaryIndexResults?.message?.numberCompleted,
                     podcast.messages.length,
                 );
+                verifyParticipants(podcast);
+                verifyTermsInSemanticIndex(["piano"], podcast.semanticRefIndex);
             },
             testTimeout,
         );
         test(
-            "buildIndex.batch",
+            "buildIndex.semanticRef",
             async () => {
                 const maxMessages = 8;
                 const podcast = await loadTestPodcast(
@@ -66,48 +71,12 @@ describeIf(
             testTimeout,
         );
 
-        function verifyNoIndexingErrors(results: IndexingResults) {
-            verifyNoTextIndexingError(results.semanticRefs);
-            verifyNoTextIndexingError(results.secondaryIndexResults?.message);
-            verifyNoTextIndexingError(
-                results.secondaryIndexResults?.properties,
+        function verifyParticipants(podcast: Podcast): void {
+            const participants = podcast.getParticipants();
+            verifyTermsInSemanticIndex(
+                participants.values(),
+                podcast.semanticRefIndex,
             );
-            verifyNoTextIndexingError(
-                results.secondaryIndexResults?.relatedTerms,
-            );
-            verifyNoTextIndexingError(
-                results.secondaryIndexResults?.timestamps,
-            );
-        }
-
-        function verifyNoTextIndexingError(
-            result: TextIndexingResult | undefined,
-        ) {
-            expect(result).toBeDefined();
-            if (result?.error) {
-                console.log(`Text indexing error ${result.error}`);
-            }
-            expect(result?.error).toBeUndefined();
-        }
-
-        function verifyCompletedUpto(
-            upto: TextLocation | undefined,
-            expectedUpto: number,
-        ): void {
-            expect(upto).toBeDefined();
-            if (upto) {
-                expect(upto.messageOrdinal).toEqual(expectedUpto);
-            }
-        }
-
-        function verifyNumberCompleted(
-            numberCompleted: number | undefined,
-            expected: number,
-        ): void {
-            expect(numberCompleted).toBeDefined();
-            if (numberCompleted) {
-                expect(numberCompleted).toEqual(expected);
-            }
         }
     },
 );

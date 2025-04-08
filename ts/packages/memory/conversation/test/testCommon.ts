@@ -1,8 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createConversationSettings } from "knowpro";
+import { createConversationSettings, createKnowledgeExtractor } from "knowpro";
 import {
+    createTestChatModel,
     createTestEmbeddingModel,
     getAbsolutePath,
     NullEmbeddingModel,
@@ -66,7 +67,11 @@ export function createOfflineConversationSettings() {
 
 export function createOnlineConversationSettings() {
     const [model, size] = createTestEmbeddingModel();
-    return createConversationSettings(model, size);
+    const chatModel = createTestChatModel("conversation-memory");
+    const settings = createConversationSettings(model, size);
+    settings.semanticRefIndexSettings.knowledgeExtractor =
+        createKnowledgeExtractor(chatModel);
+    return settings;
 }
 
 export async function loadTestPodcast(

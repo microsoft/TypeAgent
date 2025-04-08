@@ -26,7 +26,10 @@ import {
     facetValueToString,
 } from "./knowledge.js";
 import { createKnowledgeExtractor } from "./conversation.js";
-import { buildSecondaryIndexes } from "./secondaryIndexes.js";
+import {
+    addToSecondaryIndexes,
+    buildSecondaryIndexes,
+} from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";
 
@@ -237,31 +240,24 @@ export async function buildSemanticRefIndex(
     settings: SemanticRefIndexSettings,
     eventHandler?: IndexingEventHandlers,
 ): Promise<TextIndexingResult> {
-    beginIndexing(conversation);
-
-    const knowledgeExtractor =
-        settings.knowledgeExtractor ?? createKnowledgeExtractor();
-    return addToSemanticRefIndex(
-        conversation,
-        0,
-        settings.batchSize,
-        knowledgeExtractor,
-        eventHandler,
-    );
+    return addToSemanticRefIndex(conversation, settings, 0, eventHandler);
 }
 
 export async function addToSemanticRefIndex(
     conversation: IConversation,
+    settings: SemanticRefIndexSettings,
     messageOrdinalStartAt: MessageOrdinal,
-    batchSize: number,
-    knowledgeExtractor: kpLib.KnowledgeExtractor,
     eventHandler?: IndexingEventHandlers,
 ): Promise<TextIndexingResult> {
+    beginIndexing(conversation);
+
+    const knowledgeExtractor =
+        settings.knowledgeExtractor ?? createKnowledgeExtractor();
     let indexingResult: TextIndexingResult | undefined;
     for (const textLocationBatch of getMessageChunkBatch(
         conversation.messages,
         messageOrdinalStartAt,
-        batchSize,
+        settings.batchSize,
     )) {
         indexingResult = await addBatchToSemanticRefIndex(
             conversation,
@@ -322,34 +318,6 @@ async function addBatchToSemanticRefIndex(
     return indexingResult;
 }
 
-/**
- * Appends the given messages and their associated knowledge to the conversation index
- * @param conversation
- * @param messages
- * @param knowledgeResponses
- */
-export function addToConversation(
-    conversation: IConversation,
-    messages: IMessage[],
-    knowledgeResponses: kpLib.KnowledgeResponse[],
-): void {
-    beginIndexing(conversation);
-    for (let i = 0; i < messages.length; i++) {
-        const messageOrdinal: MessageOrdinal = conversation.messages.length;
-        const chunkOrdinal = 0;
-        conversation.messages.push(messages[i]);
-        const knowledge = knowledgeResponses[i];
-        if (knowledge) {
-            addKnowledgeToSemanticRefIndex(
-                conversation,
-                messageOrdinal,
-                chunkOrdinal,
-                knowledge,
-            );
-        }
-    }
-}
-
 function beginIndexing(conversation: IConversation) {
     if (conversation.semanticRefIndex === undefined) {
         conversation.semanticRefIndex = new ConversationIndex();
@@ -369,6 +337,7 @@ function verifyHasSemanticRefIndex(conversation: IConversation) {
 }
 
 /**
+ * TODO: Should rename this to TermToSemanticRefIndex
  * Notes:
  *  Case-insensitive
  */
@@ -482,6 +451,32 @@ export async function buildConversationIndex(
         indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
             conversation,
             settings,
+            eventHandler,
+        );
+    }
+    return indexingResult;
+}
+
+export async function addToConversationIndex(
+    conversation: IConversation,
+    settings: ConversationSettings,
+    startAtMessageOrdinal: MessageOrdinal,
+    startAtSemanticRefOrdinal: SemanticRefOrdinal,
+    eventHandler?: IndexingEventHandlers,
+): Promise<IndexingResults> {
+    const indexingResult: IndexingResults = {};
+    indexingResult.semanticRefs = await addToSemanticRefIndex(
+        conversation,
+        settings.semanticRefIndexSettings,
+        startAtSemanticRefOrdinal,
+        eventHandler,
+    );
+    if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
+        indexingResult.secondaryIndexResults = await addToSecondaryIndexes(
+            conversation,
+            settings,
+            startAtMessageOrdinal,
+            startAtSemanticRefOrdinal,
             eventHandler,
         );
     }
