@@ -230,14 +230,7 @@ function addEvents(
             }
         }
     });
-    api.onSettingSummaryChanged((_, summary, registeredAgents) => {
-        document.title = summary;
-        if (settingsView.shellSettings.zoomLevel != 0) {
-            document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;
-        } else {
-            document.title += ` Zoom: 100%`;
-        }
-
+    api.onSettingSummaryChanged((_, __, registeredAgents) => {
         agents.clear();
         for (let key of registeredAgents.keys()) {
             agents.set(key, registeredAgents.get(key) as string);
@@ -261,30 +254,19 @@ function addEvents(
         tabsView.showTab(key);
     });
     api.onSettingsChanged((_, value: ShellSettingsType) => {
-        let newTitle = document.title.substring(
-            0,
-            document.title.indexOf("Zoom: "),
-        );
-
-        if (value.zoomLevel != 0) {
-            document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
-        } else {
-            document.title = `${newTitle} Zoom: 100%`;
-        }
-
         settingsView.shellSettings = value;
     });
     api.onChatHistory((_, history: string) => {
         if (settingsView.shellSettings.chatHistory) {
             // load the history
-            chatView.getScollContainer().innerHTML = history;
+            chatView.getScrollContainer().innerHTML = history;
 
             // add the separator
             if (history.length > 0) {
                 // don't add a separator if there's already one there
                 if (
                     !chatView
-                        .getScollContainer()
+                        .getScrollContainer()
                         .children[0].classList.contains("chat-separator")
                 ) {
                     let separator: HTMLDivElement =
@@ -293,18 +275,18 @@ function addEvents(
                     separator.innerHTML =
                         '<div class="chat-separator-line"></div><div class="chat-separator-text">previously</div><div class="chat-separator-line"></div>';
 
-                    chatView.getScollContainer().prepend(separator);
+                    chatView.getScrollContainer().prepend(separator);
                 }
 
                 // make all old messages "inactive" and set the context for each separator
                 let lastSeparatorText: HTMLDivElement | null;
                 for (
                     let i = 0;
-                    i < chatView.getScollContainer().children.length;
+                    i < chatView.getScrollContainer().children.length;
                     i++
                 ) {
                     // gray out this item
-                    const div = chatView.getScollContainer().children[i];
+                    const div = chatView.getScrollContainer().children[i];
                     div.classList.add("history");
 
                     // is this a separator?
@@ -514,7 +496,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     }
 
-    watchForDOMChanges(chatView.getScollContainer());
+    watchForDOMChanges(chatView.getScrollContainer());
 
     if ((window as any).electron) {
         (window as any).electron.ipcRenderer.send("dom ready");
@@ -522,7 +504,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 });
 
 function watchForDOMChanges(element: HTMLDivElement) {
-    // ignore attribute changes but wach for
+    // ignore attribute changes but watch for
     const config = { attributes: false, childList: true, subtree: true };
 
     // timeout

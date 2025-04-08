@@ -127,18 +127,14 @@ export class ShellSettings
     }
 
     public save() {
-        debugShell(
-            `Saving settings to '${ShellSettings.filePath}'.`,
-            performance.now(),
-        );
-
+        debugShell(`Saving settings to '${ShellSettings.filePath}'.`);
+        debugShell(JSON.stringify(this, undefined, 2));
         writeFileSync(ShellSettings.filePath, JSON.stringify(this));
     }
 
     public set(name: string, value: any) {
         const t = typeof ShellSettings.getinstance()[name];
         const oldValue = ShellSettings.getinstance()[name];
-
         if (t === typeof value) {
             ShellSettings.getinstance()[name] = value;
         } else {
