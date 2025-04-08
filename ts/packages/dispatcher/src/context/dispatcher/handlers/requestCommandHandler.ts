@@ -156,7 +156,7 @@ function canBeCachedWithHistory(history?: HistoryContext) {
         history === undefined ||
         ((history.additionalInstructions === undefined ||
             history.additionalInstructions.length === 0) &&
-            history.activityContext !== undefined)
+            history.activityContext === undefined)
     );
 }
 
