@@ -105,7 +105,7 @@ export function createTextEmbeddingModelWithCache(
 
 export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
     readonly cache: collections.Cache<string, number[]>;
-    enabled: boolean;
+    cacheEnabled: boolean;
 }
 
 /**
@@ -133,10 +133,10 @@ export function createEmbeddingCache(
         cache: memCache,
         generateEmbedding,
         maxBatchSize: innerModel.maxBatchSize,
-        get enabled() {
+        get cacheEnabled() {
             return cacheEnabled;
         },
-        set enabled(value: boolean) {
+        set cacheEnabled(value: boolean) {
             cacheEnabled = value;
         },
     };

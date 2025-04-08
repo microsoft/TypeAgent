@@ -2362,6 +2362,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      async:
+        specifier: ^3.2.5
+        version: 3.2.6
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -2378,6 +2381,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
     devDependencies:
+      '@types/async':
+        specifier: ^3.2.24
+        version: 3.2.24
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12

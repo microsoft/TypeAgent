@@ -1,22 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { conversation as kpLib } from "knowledge-processor";
-import * as kp from "knowpro";
 import {
-    ConversationSettings,
-    DeletionInfo,
-    IConversation,
-    IConversationSecondaryIndexes,
-    IMessage,
-    ITermToSemanticRefIndex,
-    SemanticRef,
-} from "knowpro";
+    conversation as kpLib,
+    TextEmbeddingModelWithCache,
+} from "knowledge-processor";
+import * as kp from "knowpro";
+import { createEmbeddingModel } from "./common.js";
+import { queue, QueueObject } from "async";
 
-export class ConversationMessage implements IMessage {
+export class ConversationMessage implements kp.IMessage {
     public textChunks: string[];
     public timestamp?: string | undefined;
-    public deletionInfo?: DeletionInfo | undefined;
+    public deletionInfo?: kp.DeletionInfo | undefined;
 
     constructor(
         messageText: string,
@@ -31,25 +27,94 @@ export class ConversationMessage implements IMessage {
     }
 }
 
-export class ConversationMemory implements IConversation<ConversationMessage> {
-    public semanticRefs: SemanticRef[] | undefined;
-    public semanticRefIndex?: ITermToSemanticRefIndex | undefined;
-    public secondaryIndexes?: IConversationSecondaryIndexes | undefined;
+export class ConversationMemory
+    implements kp.IConversation<ConversationMessage>
+{
+    public settings: kp.ConversationSettings;
+    public semanticRefIndex: kp.ConversationIndex;
+    public secondaryIndexes: kp.ConversationSecondaryIndexes;
+    public semanticRefs: kp.SemanticRef[];
+
+    private embeddingModel: TextEmbeddingModelWithCache | undefined;
+    private embeddingSize: number | undefined;
+    private updateQueue: QueueObject<AddMessageTask>;
 
     constructor(
         public nameTag: string = "",
         public messages: ConversationMessage[] = [],
         public tags: string[] = [],
-        public settings?: ConversationSettings,
+        settings?: kp.ConversationSettings,
     ) {
         this.semanticRefs = [];
         if (!settings) {
-            settings = kp.createConversationSettings();
+            settings = this.createSettings();
         }
         this.settings = settings;
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings,
         );
+        this.updateQueue = queue(() => this.processUpdates, 1);
+    }
+
+    public async addMessage(
+        message: string | ConversationMessage,
+        extractKnowledge: boolean = true,
+    ): Promise<void> {
+        if (typeof message === "string") {
+            message = new ConversationMessage(message);
+        }
+        this.messages.push(message);
+    }
+
+    public queueAddMessage(
+        message: string | ConversationMessage,
+        extractKnowledge: boolean = true,
+    ): void {
+        if (typeof message === "string") {
+            message = new ConversationMessage(message);
+        }
+        this.updateQueue.push({
+            type: "addMessage",
+            message,
+            extractKnowledge,
+        });
+    }
+
+    private processUpdates(task: AddMessageTask) {
+        switch (task.type) {
+            default:
+                break;
+            case "addMessage":
+                this.addMessage(task.message, task.extractKnowledge);
+                break;
+        }
+    }
+
+    /**
+     * Our index already has embeddings for every term in the podcast
+     * Create a caching embedding model that can just leverage those embeddings
+     * @returns embedding model, size of embedding
+     */
+    private createSettings() {
+        const [model, size] = createEmbeddingModel(
+            64,
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
+        this.embeddingModel = model;
+        this.embeddingSize = size;
+        return kp.createConversationSettings(
+            this.embeddingModel,
+            this.embeddingSize,
+        );
     }
 }
+
+type AddMessageTask = {
+    type: "addMessage";
+    message: ConversationMessage;
+    extractKnowledge?: boolean | boolean;
+};
+
+export interface ConversationMemoryData
+    extends kp.IConversationDataWithIndexes<ConversationMessage> {}

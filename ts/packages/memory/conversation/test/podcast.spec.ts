@@ -8,7 +8,7 @@ import {
     // getTestTranscriptSmall,
 } from "./testCommon.js";
 import {
-    buildSemanticRefIndexBatched,
+    buildSemanticRefIndex,
     IndexingResults,
     TextIndexingResult,
     TextLocation,
@@ -54,7 +54,7 @@ describeIf(
                     maxMessages,
                 );
                 podcast.settings.semanticRefIndexSettings.batchSize = 3;
-                const results = await buildSemanticRefIndexBatched(
+                const results = await buildSemanticRefIndex(
                     podcast,
                     podcast.settings.semanticRefIndexSettings,
                 );

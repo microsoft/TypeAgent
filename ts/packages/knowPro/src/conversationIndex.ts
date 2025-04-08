@@ -21,7 +21,6 @@ import {
 import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
-import { async } from "typeagent";
 import {
     createKnowledgeExtractor,
     extractKnowledgeFromTextBatch,
@@ -228,59 +227,12 @@ export function addKnowledgeToSemanticRefIndex(
     }
 }
 
-export async function buildSemanticRefIndex(
-    conversation: IConversation,
-    extractor?: kpLib.KnowledgeExtractor,
-    eventHandler?: IndexingEventHandlers,
-): Promise<TextIndexingResult> {
-    beginIndexing(conversation);
-
-    extractor ??= createKnowledgeExtractor();
-    const maxRetries = 4;
-    let indexingResult: TextIndexingResult = {};
-    for (let i = 0; i < conversation.messages.length; i++) {
-        let messageOrdinal: MessageOrdinal = i;
-        const chunkOrdinal = 0;
-        const message = conversation.messages[messageOrdinal];
-        // only one chunk per message for now
-        const text = message.textChunks[chunkOrdinal].trim();
-        const knowledgeResult = await async.callWithRetry(() =>
-            extractor.extractWithRetry(text, maxRetries),
-        );
-        if (!knowledgeResult.success) {
-            indexingResult.error = knowledgeResult.message;
-            break;
-        }
-        const knowledge = knowledgeResult.data;
-        if (knowledge) {
-            addKnowledgeToSemanticRefIndex(
-                conversation,
-                messageOrdinal,
-                chunkOrdinal,
-                knowledge,
-            );
-        }
-        const completedChunk: TextLocation = {
-            messageOrdinal,
-            chunkOrdinal,
-        };
-        indexingResult.completedUpto = completedChunk;
-        if (
-            eventHandler?.onKnowledgeExtracted &&
-            !eventHandler.onKnowledgeExtracted(completedChunk, knowledge)
-        ) {
-            break;
-        }
-    }
-    return indexingResult;
-}
-
 export type SemanticRefIndexSettings = {
     batchSize: number;
     knowledgeExtractor?: kpLib.KnowledgeExtractor;
 };
 
-export async function buildSemanticRefIndexBatched(
+export async function buildSemanticRefIndex(
     conversation: IConversation,
     settings: SemanticRefIndexSettings,
     eventHandler?: IndexingEventHandlers,
@@ -521,7 +473,7 @@ export async function buildConversationIndex(
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
     const indexingResult: IndexingResults = {};
-    indexingResult.semanticRefs = await buildSemanticRefIndexBatched(
+    indexingResult.semanticRefs = await buildSemanticRefIndex(
         conversation,
         settings.semanticRefIndexSettings,
         eventHandler,
