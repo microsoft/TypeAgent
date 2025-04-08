@@ -28,6 +28,7 @@ import {
     RelatedTermsIndex,
 } from "./relatedTermsIndex.js";
 import {
+    addToTimestampIndex,
     buildTimestampIndex,
     TimestampToTextRangeIndex,
 } from "./timestampIndex.js";
@@ -60,6 +61,39 @@ export async function buildSecondaryIndexes(
     return result;
 }
 
+export async function addToSecondaryIndexes(
+    conversation: IConversation,
+    conversationSettings: ConversationSettings,
+    baseMessageOrdinal: MessageOrdinal,
+    baseSemanticRefOrdinal: SemanticRefOrdinal,
+    eventHandler?: IndexingEventHandlers,
+): Promise<SecondaryIndexingResults> {
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
+        conversationSettings,
+    );
+    let result: SecondaryIndexingResults = addToTransientSecondaryIndexes(
+        conversation,
+        conversationSettings,
+        baseMessageOrdinal,
+        baseSemanticRefOrdinal,
+    );
+    /*
+    result.relatedTerms = await buildRelatedTermsIndex(
+        conversation,
+        conversationSettings.relatedTermIndexSettings,
+        eventHandler,
+    );
+    if (!result.relatedTerms?.error) {
+        result.message = await buildMessageIndex(
+            conversation,
+            conversationSettings.messageTextIndexSettings,
+            eventHandler,
+        );
+    }
+    */
+    return result;
+}
+
 /**
  * Some indexes are not persisted because they are cheap to rebuild on the fly
  * - Property index
@@ -69,10 +103,10 @@ export async function buildSecondaryIndexes(
  */
 export function buildTransientSecondaryIndexes(
     conversation: IConversation,
-    conversationSettings: ConversationSettings,
+    settings: ConversationSettings,
 ): SecondaryIndexingResults {
     conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
-        conversationSettings,
+        settings,
     );
     const result: SecondaryIndexingResults = {};
     result.properties = buildPropertyIndex(conversation);
@@ -86,12 +120,15 @@ export function addToTransientSecondaryIndexes(
     baseMessageOrdinal: MessageOrdinal,
     baseSemanticRefOrdinal: SemanticRefOrdinal,
 ): SecondaryIndexingResults {
+    conversation.secondaryIndexes ??= new ConversationSecondaryIndexes(
+        settings,
+    );
     const result: SecondaryIndexingResults = {};
-
     result.properties = addToPropertyIndex(
         conversation,
         baseSemanticRefOrdinal,
     );
+    result.timestamps = addToTimestampIndex(conversation, baseMessageOrdinal);
     return result;
 }
 
