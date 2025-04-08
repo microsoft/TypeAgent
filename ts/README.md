@@ -39,7 +39,7 @@ You should now be able to access the extension from VS Code.
 
 #### Desktop Agent (Windows only)
 
-To use the [Desktop Agent](./packages/agents/desktop/] for windows, follow the instruction in [README.md](./packages/agents/desktop/README.md) to build the [AutoShell](../dotnet/autoShell/) C# code necessary to interact with the OS.
+To use the [Desktop Agent](./packages/agents/desktop/) for windows, follow the instruction in [README.md](./packages/agents/desktop/README.md) to build the [AutoShell](../dotnet/autoShell/) C# code necessary to interact with the OS.
 
 ### Local Whisper Service (Optional)
 
