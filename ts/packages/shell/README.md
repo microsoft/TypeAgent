@@ -40,12 +40,12 @@ To set up Azure [Speech to Text service](https://learn.microsoft.com/en-us/azure
 
 ## Keyless API Access
 
-If you would like to enable keyless Speech API access you must have performed the following steps: 
+If you would like to enable keyless Speech API access you must have performed the following steps:
 
-1. Specify `identity` as the `SPEECH_SDK_KEY` in the `.env` file. 
-2. Replace the `SPEECH_SDK_ENDPOINT` value with the azure resource id of your cognitive service instance (i.e. `/subscriptions/<your subscription guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`). 
+1. Specify `identity` as the `SPEECH_SDK_KEY` in the `.env` file.
+2. Replace the `SPEECH_SDK_ENDPOINT` value with the azure resource id of your cognitive service instance (i.e. `/subscriptions/<your subscription guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`).
 3. Configure your speech API to support Azure Entra RBAC and add the necessary users/groups with the necessary permissions
-(typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on congitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control). 
+   (typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on congitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control).
 4. If you are using JIT access elevate prior to calling the speech API. Please refer to the [elevate.js](../../tools/scripts/elevate.js) script for doing this efficiently.
 
 ## Trademarks

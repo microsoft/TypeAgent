@@ -6,6 +6,23 @@
 
 The TypeAgent repo contains the personal agent and example application agents, along with internal packages used to build them.
 
+## Getting Started
+
+TypeAgent is written in TypeScript and relies on [TypeChat](https://github.com/microsoft/typechat). To understand how TypeAgent examples work, we recommend getting comfortable with [TypeChat](https://github.com/microsoft/typechat) and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
+
+### Quick start - Agent Shell Example
+
+The main entry point to explore TypeAgent is the [Agent Shell](./ts/packages/shell) example.
+
+Follow these step-by-step instructions to quickly setup tools and environments from scratch to build, run, explore, and develop.
+
+- [Windows](./docs/setup/setup-Windows.md)
+- [WSL2](./docs/setup/setup-WSL2.md)
+- [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
+- MacOS (coming soon)
+
+See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) for more detailed setup instructions.
+
 ## Examples
 
 - Application agents with natural language interfaces:
@@ -24,6 +41,9 @@ The TypeAgent repo contains the personal agent and example application agents, a
   - [Spelunker](./ts/packages/agents/spelunker/)
   - [Test](./ts/packages/agents/test/)
   - [Turtle](./ts/packages/agents/turtle/)
+  - [Phone](.ts/packages/agents/phone/)
+  - [Photo](.ts/packages/agents/photo/)
+  - [androidMobile](.ts/packages/agents/androidMobile/)
 
 - [Agent Dispatcher](./ts/packages/dispatcher/)
 
@@ -63,23 +83,6 @@ TypeAgent is early stage sample code over [TypeChat](https://github.com/microsof
 - TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
 - You are responsible for supplying any **API keys** for services used by examples.
 
-## Getting Started
-
-TypeAgent is written in TypeScript and relies on [TypeChat](https://github.com/microsoft/typechat). To understand how TypeAgent examples work, we recommend getting comfortable with [TypeChat](https://github.com/microsoft/typechat) and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
-
-### Quick start - Agent Shell Example
-
-The main entry point to explore TypeAgent is the [Agent Shell](./ts/packages/shell) example.
-
-Follow these quick starts for step-by-step instructions to quickly setup tools and environments from scratch to build, run and develop.
-
-- [Windows](./docs/setup/setup-Windows.md)
-- [WSL2](./docs/setup/setup-WSL2.md)
-- [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
-- MacOS (coming soon)
-
-See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) for more detailed setup instructions.
-
 ## Developers
 
 ### Custom Dispatcher Agents
@@ -88,13 +91,14 @@ For developer that are interested develop custom agents to show up in our [Agent
 
 ### Developing TypeAgent
 
-For developer who wants to modify TypeAgent and contribute to our repo.
+For developers who want to modify TypeAgent and contribute to our repo.
 
 Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
 
 - [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
 - [`python`](./python) Python code ([Readme](./python/README.md))
 - [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
+- [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
 
 ## Contributing
 
