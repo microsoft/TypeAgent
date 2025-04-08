@@ -169,10 +169,10 @@ export class ConversationMemory
         //
         // Messages can contain prior knowledge extracted during chat responses for example
         // To avoid knowledge duplication, we:
-        // - (a) Extract message knowledge
+        // - (a) Manually extract knowledge from the message
         // - (b) merge it with any prior knowledge
-        // - (c) configure the indexing engine not to automatically extract knowledge
-        // with any prior knowledge
+        // - (c) Surface the combined knowledge from the IMessage.getKnowledge implementation
+        // - (d) configure the indexing engine not to automatically extract any other knowledge
         //
         const knowledgeResult = await kp.extractKnowledgeFromText(
             this.settings.semanticRefIndexSettings.knowledgeExtractor!,
