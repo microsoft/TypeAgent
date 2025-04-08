@@ -2,7 +2,7 @@
 
 **TypeAgent** is **sample code** that explores an architecture for using [TypeChat](https://github.com/microsoft/typechat) to build a _personal agent_ with a _natural language interface_.
 
-**TypeAgent** uses TypeChat to build a set of application agents that **take actions**. Agents define actions using TypeChat schemas.
+**TypeAgent** uses [TypeChat](https://github.com/microsoft/typechat) to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
 
 The TypeAgent repo contains the personal agent and example application agents, along with internal packages used to build them.
 
@@ -18,14 +18,20 @@ The TypeAgent repo contains the personal agent and example application agents, a
   - [Calendar](./ts/packages/agents/calendar/)
   - [Email](./ts/packages/agents/email/)
   - [Desktop](./ts/packages/agents/desktop/)
+  - [Image](./ts/packages/agents/image/)
+  - [Markdown](./ts/packages/agents/markdown/)
+  - [Montage](./ts/packages/agents/montage/)
+  - [Spelunker](./ts/packages/agents/spelunker/)
+  - [Test](./ts/packages/agents/test/)
+  - [Turtle](./ts/packages/agents/turtle/)
 
 - [Agent Dispatcher](./ts/packages/dispatcher/)
 
-  Explores applying TypeChat to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
+  Explores applying [TypeChat](https://github.com/microsoft/typechat) to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
 - [Agent Cache](./ts/packages/cache/)
 
-  Explores how TypeChat translations from user intent to actions can be cached, minimizing the need to go the LLM.
+  Explores how [TypeChat](https://github.com/microsoft/typechat) translations from user intent to actions can be cached, minimizing the need to go the LLM.
 
 - [Agent Shell](./ts/packages/shell/)
 
@@ -44,12 +50,12 @@ Example agents that use the Microsoft Graph or similar external services may sto
 
 ## Intended Uses
 
-- TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using TypeChat.
+- TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using [TypeChat](https://github.com/microsoft/typechat).
 - Sample agents are not intended to be implemented in real-world settings without further testing/validation.
 
 ## Limitations
 
-TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework. All code in this repo is intended for building our own example apps and agents only.
+TypeAgent is early stage sample code over [TypeChat](https://github.com/microsoft/typechat). TypeAgent is not a framework. All code in this repo is intended for building our own example apps and agents only.
 
 - TypeAgent is in **active development** with frequent updates and refactoring.
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
@@ -59,7 +65,7 @@ TypeAgent is early stage sample code over TypeChat. TypeAgent is not a framework
 
 ## Getting Started
 
-TypeAgent is written in TypeScript and relies on TypeChat. To understand how TypeAgent examples work, we recommend getting comfortable with TypeChat and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
+TypeAgent is written in TypeScript and relies on [TypeChat](https://github.com/microsoft/typechat). To understand how TypeAgent examples work, we recommend getting comfortable with [TypeChat](https://github.com/microsoft/typechat) and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
 
 ### Quick start - Agent Shell Example
 
