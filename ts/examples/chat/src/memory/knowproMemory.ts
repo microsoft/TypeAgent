@@ -716,7 +716,6 @@ export async function createKnowproCommands(
             description: "Build index",
             options: {
                 maxMessages: argNum("Maximum messages to index"),
-                relatedOnly: argBool("Index related terms only", false),
                 batchSize: argNum("Indexing batch size", 8),
             },
         };
@@ -754,29 +753,17 @@ export async function createKnowproCommands(
                 maxMessages,
             );
             // Build full index?
-            if (!namedArgs.relatedOnly) {
-                const clock = new StopWatch();
-                clock.start();
+            const clock = new StopWatch();
+            clock.start();
 
-                context.podcast.settings.semanticRefIndexSettings.batchSize =
-                    namedArgs.batchSize;
-                const indexResult =
-                    await context.podcast.buildIndex(eventHandler);
+            context.podcast.settings.semanticRefIndexSettings.batchSize =
+                namedArgs.batchSize;
+            const indexResult = await context.podcast.buildIndex(eventHandler);
 
-                clock.stop();
-                progress.complete();
-                context.printer.writeTiming(chalk.gray, clock);
-                context.printer.writeIndexingResults(indexResult);
-                return;
-            }
-            // Build partial index
-            context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
-            await kp.buildRelatedTermsIndex(
-                context.podcast,
-                context.podcast.settings.relatedTermIndexSettings,
-                eventHandler,
-            );
+            clock.stop();
             progress.complete();
+            context.printer.writeTiming(chalk.gray, clock);
+            context.printer.writeIndexingResults(indexResult);
         } finally {
             context.podcast.messages = originalMessages;
         }

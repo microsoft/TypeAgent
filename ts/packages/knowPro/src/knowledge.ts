@@ -2,8 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * INTERNAL LIBRARY
- * These should not be exposed via index.ts
+ * These are sparingly exposed via index.ts
  */
 
 import { conversation as kpLib } from "knowledge-processor";
@@ -73,7 +72,7 @@ export function facetValueToString(facet: kpLib.Facet): string {
     return value.toString();
 }
 
-export function mergeTopics(
+export function mergeSemanticRefTopics(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
@@ -113,7 +112,7 @@ export function mergeTopics(
     return mergedKnowledge;
 }
 
-export function mergedEntities(
+export function mergeSemanticRefEntities(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
@@ -168,6 +167,35 @@ function mergeScoredEntities(
         });
     }
     return mergedKnowledge;
+}
+
+export function mergeEntities(
+    entities: kpLib.ConcreteEntity[],
+): kpLib.ConcreteEntity[] {
+    let mergedEntities = new Map<string, MergedEntity>();
+    for (let entity of entities) {
+        const mergedEntity = concreteToMergedEntity(entity);
+        const existing = mergedEntities.get(mergedEntity.name);
+        if (existing) {
+            unionEntities(existing, mergedEntity);
+        } else {
+            mergedEntities.set(mergedEntity.name, mergedEntity);
+        }
+    }
+
+    const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
+    for (const mergedEntity of mergedEntities.values()) {
+        mergedConcreteEntities.push(mergedToConcreteEntity(mergedEntity));
+    }
+    return mergedConcreteEntities;
+}
+
+export function mergeTopics(topics: string[]): string[] {
+    let mergedTopics = new Set<string>();
+    for (let topic of topics) {
+        mergedTopics.add(topic);
+    }
+    return [...mergedTopics.values()];
 }
 
 /**

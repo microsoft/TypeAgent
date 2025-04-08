@@ -53,6 +53,7 @@ export function createConversationSettings(
         },
         semanticRefIndexSettings: {
             batchSize: 4,
+            autoExtractKnowledge: true,
         },
     };
 }

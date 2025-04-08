@@ -9,7 +9,6 @@ import {
     ConversationIndex,
     SemanticRef,
     createConversationSettings,
-    addMetadataToIndex,
     IndexingEventHandlers,
     IndexingResults,
     buildConversationIndex,
@@ -74,26 +73,10 @@ export class PodcastMessageMeta implements IKnowledgeSource {
             return {
                 entities,
                 actions,
+                // TODO: Also create inverse actions
                 inverseActions: [],
                 topics: [],
             };
-        }
-    }
-}
-
-export function assignMessageListeners(
-    msgs: PodcastMessage[],
-    participants: Set<string>,
-) {
-    for (const msg of msgs) {
-        if (msg.metadata.speaker) {
-            let listeners: string[] = [];
-            for (const p of participants) {
-                if (p !== msg.metadata.speaker) {
-                    listeners.push(p);
-                }
-            }
-            msg.metadata.listeners = listeners;
         }
     }
 }
@@ -110,8 +93,12 @@ export class PodcastMessage implements IMessage {
         return this.metadata.getKnowledge();
     }
 
-    public addContent(content: string) {
-        this.textChunks[0] += content;
+    public addContent(content: string, chunkOrdinal = 0) {
+        if (chunkOrdinal > this.textChunks.length) {
+            this.textChunks.push(content);
+        } else {
+            this.textChunks[chunkOrdinal] += content;
+        }
     }
 }
 
@@ -139,17 +126,6 @@ export class Podcast implements IConversation<PodcastMessage> {
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
 
-    public addMetadataToIndex() {
-        if (this.semanticRefIndex) {
-            // TODO: do ths using slices/batch so we don't have to load all messages
-            addMetadataToIndex(
-                this.messages,
-                this.semanticRefs,
-                this.semanticRefIndex,
-            );
-        }
-    }
-
     public getParticipants(): Set<string> {
         const participants = new Set<string>();
         for (const message of this.messages) {
@@ -166,7 +142,6 @@ export class Podcast implements IConversation<PodcastMessage> {
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        this.addMetadataToIndex();
         this.beginIndexing();
         try {
             const result = await buildConversationIndex(

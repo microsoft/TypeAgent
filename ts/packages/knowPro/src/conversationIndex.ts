@@ -3,7 +3,6 @@
 
 import {
     IConversation,
-    IMessage,
     IndexingResults,
     ITermToSemanticRefIndex,
     ITermToSemanticRefIndexData,
@@ -32,76 +31,6 @@ import {
 } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";
-
-export type KnowledgeValidator = (
-    knowledgeType: KnowledgeType,
-    knowledge: Knowledge,
-) => boolean;
-
-// TODO: this should be internal only
-export function addMetadataToIndex(
-    messages: IMessage[],
-    semanticRefs: SemanticRef[],
-    semanticRefIndex: ITermToSemanticRefIndex,
-    knowledgeValidator?: KnowledgeValidator,
-) {
-    knowledgeValidator ??= defaultKnowledgeValidator;
-    for (
-        let messageOrdinal = 0;
-        messageOrdinal < messages.length;
-        messageOrdinal++
-    ) {
-        const msg = messages[messageOrdinal];
-        const chunkOrdinal = 0;
-        const knowledgeResponse = msg.getKnowledge();
-        if (knowledgeResponse === undefined) {
-            continue;
-        }
-        if (semanticRefIndex !== undefined) {
-            for (const entity of knowledgeResponse.entities) {
-                if (knowledgeValidator("entity", entity)) {
-                    addEntity(
-                        entity,
-                        semanticRefs,
-                        semanticRefIndex,
-                        messageOrdinal,
-                        chunkOrdinal,
-                    );
-                }
-            }
-            for (const action of knowledgeResponse.actions) {
-                if (knowledgeValidator("action", action)) {
-                    addAction(
-                        action,
-                        semanticRefs,
-                        semanticRefIndex,
-                        messageOrdinal,
-                        chunkOrdinal,
-                    );
-                }
-            }
-            for (const topicResponse of knowledgeResponse.topics) {
-                const topic: Topic = { text: topicResponse };
-                if (knowledgeValidator("topic", topic)) {
-                    addTopic(
-                        topic,
-                        semanticRefs,
-                        semanticRefIndex,
-                        messageOrdinal,
-                        chunkOrdinal,
-                    );
-                }
-            }
-        }
-    }
-}
-
-function defaultKnowledgeValidator(
-    knowledgeType: KnowledgeType,
-    knowledge: Knowledge,
-) {
-    return true;
-}
 
 function addTermToIndex(
     index: ITermToSemanticRefIndex,
@@ -276,6 +205,11 @@ function addAction(
     );
 }
 
+export type KnowledgeValidator = (
+    knowledgeType: KnowledgeType,
+    knowledge: Knowledge,
+) => boolean;
+
 export function addKnowledgeToSemanticRefIndex(
     conversation: IConversation,
     messageOrdinal: MessageOrdinal,
@@ -330,6 +264,17 @@ export function addKnowledgeToSemanticRefIndex(
     }
 }
 
+/**
+ * Given a batch of text locations
+ * - extract knowledge from them (in a batch)
+ * - add the knowledge to the semantic ref index
+ * @param conversation
+ * @param batch
+ * @param knowledgeExtractor
+ * @param eventHandler
+ * @param termsAdded
+ * @returns
+ */
 async function addBatchToSemanticRefIndex(
     conversation: IConversation,
     batch: TextLocation[],
@@ -496,12 +441,22 @@ export function createKnowledgeModel() {
     return chatModel;
 }
 
+/**
+ * Build a conversation index from scratch
+ * @param conversation
+ * @param settings
+ * @param eventHandler
+ * @returns
+ */
 export async function buildConversationIndex(
     conversation: IConversation,
     settings: ConversationSettings,
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
     const indexingResult: IndexingResults = {};
+
+    addMessageKnowledgeToSemanticRefIndex(conversation, 0);
+
     indexingResult.semanticRefs = await buildSemanticRefIndex(
         conversation,
         settings.semanticRefIndexSettings,
@@ -518,11 +473,11 @@ export async function buildConversationIndex(
 }
 
 /**
- * Incrementally add to the conversation index
+ * Incrementally update the conversation index messages and semantic refs > than supplied ordinals
  * @param conversation
  * @param settings
- * @param messageOrdinalStartAt
- * @param semanticRefOrdinalStartAt
+ * @param messageOrdinalStartAt add messages starting at this ordinal
+ * @param semanticRefOrdinalStartAt add semantic refs starting at this ordinal
  * @param eventHandler
  * @returns
  */
@@ -535,13 +490,22 @@ export async function addToConversationIndex(
 ): Promise<IndexingResults> {
     const indexingResult: IndexingResults = {};
     const termsAdded: string[] = [];
-    indexingResult.semanticRefs = await addToSemanticRefIndex(
+
+    addMessageKnowledgeToSemanticRefIndex(
         conversation,
-        settings.semanticRefIndexSettings,
-        semanticRefOrdinalStartAt,
-        eventHandler,
+        messageOrdinalStartAt,
+        undefined,
         termsAdded,
     );
+    if (settings.semanticRefIndexSettings.autoExtractKnowledge) {
+        indexingResult.semanticRefs = await addToSemanticRefIndex(
+            conversation,
+            settings.semanticRefIndexSettings,
+            semanticRefOrdinalStartAt,
+            eventHandler,
+            termsAdded,
+        );
+    }
     if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
         indexingResult.secondaryIndexResults = await addToSecondaryIndexes(
             conversation,
@@ -557,6 +521,7 @@ export async function addToConversationIndex(
 
 export type SemanticRefIndexSettings = {
     batchSize: number;
+    autoExtractKnowledge: boolean;
     knowledgeExtractor?: kpLib.KnowledgeExtractor;
 };
 
@@ -612,4 +577,64 @@ export async function addToSemanticRefIndex(
         }
     }
     return indexingResult ?? {};
+}
+
+/**
+ * Messages are also sources of knowledge. This knowledge may be hardcoded
+ * or extracted using other means
+ * Add this knowledge to the index
+ * @param conversation
+ * @param messageOrdinalStartAt
+ * @param knowledgeValidator
+ * @returns
+ */
+export function addMessageKnowledgeToSemanticRefIndex(
+    conversation: IConversation,
+    messageOrdinalStartAt: MessageOrdinal,
+    knowledgeValidator?: KnowledgeValidator,
+    termsAdded?: string[],
+) {
+    if (!conversation.semanticRefIndex) {
+        return;
+    }
+    const messages = conversation.messages;
+    for (
+        let messageOrdinal = messageOrdinalStartAt;
+        messageOrdinal < messages.length;
+        messageOrdinal++
+    ) {
+        const msg = messages[messageOrdinal];
+        const chunkOrdinal = 0;
+        let knowledge = msg.getKnowledge();
+        if (knowledge !== undefined) {
+            addKnowledgeToSemanticRefIndex(
+                conversation,
+                messageOrdinal,
+                chunkOrdinal,
+                filterKnowledge(knowledge, knowledgeValidator),
+                termsAdded,
+            );
+        }
+    }
+}
+
+function filterKnowledge(
+    knowledge: kpLib.KnowledgeResponse,
+    knowledgeValidator?: KnowledgeValidator,
+) {
+    if (knowledgeValidator) {
+        knowledge.entities = knowledge.entities.filter((entity) =>
+            knowledgeValidator("entity", entity),
+        );
+        knowledge.actions = knowledge.actions.filter((action) =>
+            knowledgeValidator("action", action),
+        );
+        knowledge.inverseActions = knowledge.inverseActions.filter((action) =>
+            knowledgeValidator("action", action),
+        );
+        knowledge.topics = knowledge.topics.filter((topic) =>
+            knowledgeValidator("topic", { text: topic }),
+        );
+    }
+    return knowledge;
 }

@@ -18,6 +18,12 @@ export * from "./search.js";
 export * from "./serialization.js";
 export * from "./queryCmp.js";
 
+export {
+    extractKnowledgeFromText,
+    mergeEntities as mergeConcreteEntities,
+    mergeTopics,
+} from "./knowledge.js";
+
 export * as querySchema from "./searchQuerySchema.js";
 export * from "./dateTimeSchema.js";
 export * from "./searchQueryTranslator.js";

@@ -75,15 +75,15 @@ export function createOnlineConversationSettings() {
 }
 
 export async function loadTestPodcast(
-    test: TestTranscriptInfo,
+    testTranscript: TestTranscriptInfo,
     online: boolean,
     maxMessages?: number,
 ): Promise<Podcast> {
     const podcast = await importPodcast(
-        getAbsolutePath(test.filePath),
-        test.name,
-        test.date,
-        test.length,
+        getAbsolutePath(testTranscript.filePath),
+        testTranscript.name,
+        testTranscript.date,
+        testTranscript.length,
         online
             ? createOnlineConversationSettings()
             : createOfflineConversationSettings(),

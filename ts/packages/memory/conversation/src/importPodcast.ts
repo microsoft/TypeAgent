@@ -2,12 +2,7 @@
 // Licensed under the MIT License.
 
 import { dateTime, getFileName, readAllText } from "typeagent";
-import {
-    Podcast,
-    PodcastMessage,
-    PodcastMessageMeta,
-    assignMessageListeners,
-} from "./podcast.js";
+import { Podcast, PodcastMessage, PodcastMessageMeta } from "./podcast.js";
 import { ConversationSettings } from "knowpro";
 import { parseTranscript, timestampMessages } from "./transcript.js";
 
@@ -62,4 +57,21 @@ export async function importPodcast(
     const pod = new Podcast(podcastName, messages, [podcastName], settings);
     // TODO: add more tags
     return pod;
+}
+
+function assignMessageListeners(
+    msgs: PodcastMessage[],
+    participants: Set<string>,
+) {
+    for (const msg of msgs) {
+        if (msg.metadata.speaker) {
+            let listeners: string[] = [];
+            for (const p of participants) {
+                if (p !== msg.metadata.speaker) {
+                    listeners.push(p);
+                }
+            }
+            msg.metadata.listeners = listeners;
+        }
+    }
 }
