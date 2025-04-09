@@ -8,10 +8,7 @@ import {
     ShellSettingsType,
     TTSSettings,
 } from "../preload/shellSettingsType.js";
-import {
-    ClientSettingsProvider,
-    EmptyFunction,
-} from "../preload/electronTypes.js";
+import { ClientSettingsProvider } from "../preload/electronTypes.js";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "path";
 import { DisplayType } from "@typeagent/agent-sdk";
@@ -38,11 +35,6 @@ export class ShellSettings
     public partialCompletion: boolean;
     public disallowedDisplayType: DisplayType[];
     public onSettingsChanged: ((name?: string | undefined) => void) | null;
-    public onShowSettingsDialog: ((dialogName: string) => void) | null;
-    public onRunDemo: ((interactive: boolean) => void) | null;
-    public onToggleTopMost: EmptyFunction | null;
-    public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
-    public onCloseInlineBrowser: ((save: boolean) => void) | null;
     public darkMode: boolean;
     public chatHistory: boolean;
     public canvas?: string;
@@ -87,11 +79,6 @@ export class ShellSettings
         this.disallowedDisplayType = settings.disallowedDisplayType;
 
         this.onSettingsChanged = null;
-        this.onShowSettingsDialog = null;
-        this.onRunDemo = null;
-        this.onToggleTopMost = null;
-        this.onOpenInlineBrowser = null;
-        this.onCloseInlineBrowser = null;
         this.darkMode = settings.darkMode;
         this.chatHistory = settings.chatHistory;
         this.canvas = settings.canvas;
@@ -166,24 +153,6 @@ export class ShellSettings
         }
     }
 
-    public show(dialogName: string = "settings") {
-        if (ShellSettings.getinstance().onShowSettingsDialog != null) {
-            ShellSettings.getinstance().onShowSettingsDialog!(dialogName);
-        }
-    }
-
-    public runDemo(interactive: boolean = false) {
-        if (ShellSettings.getinstance().onRunDemo != null) {
-            ShellSettings.getinstance().onRunDemo!(interactive);
-        }
-    }
-
-    public toggleTopMost() {
-        if (ShellSettings.getinstance().onToggleTopMost != null) {
-            ShellSettings.getinstance().onToggleTopMost!();
-        }
-    }
-
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
         for (let i = 0; i < this.disallowedDisplayType.length; i++) {
             if (this.disallowedDisplayType[i] === displayType) {
@@ -192,17 +161,5 @@ export class ShellSettings
         }
 
         return false;
-    }
-
-    public async openInlineBrowser(targetUrl: URL) {
-        if (ShellSettings.getinstance().onOpenInlineBrowser != null) {
-            ShellSettings.getinstance().onOpenInlineBrowser!(targetUrl);
-        }
-    }
-
-    public closeInlineBrowser(save: boolean = true) {
-        if (ShellSettings.getinstance().onCloseInlineBrowser != null) {
-            ShellSettings.getinstance().onCloseInlineBrowser!(save);
-        }
     }
 }
