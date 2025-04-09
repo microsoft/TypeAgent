@@ -172,6 +172,14 @@ export async function searchConversationKnowledge(
     return runQuery(conversation, options, query);
 }
 
+/**
+ * Merge any entity matches by name, merging in their types and facets
+ * The resulting distinct array of entities
+ * @param semanticRefs
+ * @param searchResults
+ * @param topK
+ * @returns
+ */
 export function getDistinctEntityMatches(
     semanticRefs: SemanticRef[],
     searchResults: ScoredSemanticRefOrdinal[],
@@ -180,6 +188,13 @@ export function getDistinctEntityMatches(
     return mergeSemanticRefEntities(semanticRefs, searchResults, topK);
 }
 
+/**
+ * Return an array of distinct topics
+ * @param semanticRefs
+ * @param searchResults
+ * @param topK
+ * @returns
+ */
 export function getDistinctTopicMatches(
     semanticRefs: SemanticRef[],
     searchResults: ScoredSemanticRefOrdinal[],

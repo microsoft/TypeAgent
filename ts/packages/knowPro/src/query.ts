@@ -122,7 +122,7 @@ function getMatchingTermForText(
  * @param searchTerm
  * @param text
  */
-function matchSearchTermToText(
+export function matchSearchTermToText(
     searchTerm: SearchTerm,
     text: string | undefined,
 ): boolean {
@@ -171,6 +171,13 @@ export function matchPropertySearchTermToEntity(
         return false;
     }
     const entity = semanticRef.knowledge as kpLib.ConcreteEntity;
+    return matchConcreteEntity(searchTerm, entity);
+}
+
+export function matchConcreteEntity(
+    searchTerm: PropertySearchTerm,
+    entity: kpLib.ConcreteEntity,
+): boolean {
     if (typeof searchTerm.propertyName !== "string") {
         return (
             matchPropertyNameToFacetName(searchTerm.propertyName, entity) ||

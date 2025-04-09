@@ -37,7 +37,7 @@ import {
     createIndexingEventHandler,
     matchFilterToConversation,
 } from "./knowproCommon.js";
-import { createKnowproSchemaCommands } from "./knowproSchema.js";
+import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -66,7 +66,7 @@ export async function createKnowproCommands(
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproSchemaCommands(commands, context.printer);
+    await createKnowproDataFrameCommands(commands, context.printer);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;

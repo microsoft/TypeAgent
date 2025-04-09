@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SemanticRefSearchResult } from "./interfaces.js";
-import { SearchSelectExpr } from "./interfaces.js";
+import { PropertySearchTerm, TextLocation } from "./interfaces.js";
 
 /**
  * Data Frame definition.
@@ -30,25 +29,12 @@ export type DataFrameColumnDef = {
     type?: ValueType;
 };
 
-export interface IDataFrame {
-    readonly definition: DataFrameDef;
-    evalQuery(selectExpr: SearchSelectExpr): Promise<SemanticRefSearchResult>;
+export interface IDataFrameRow {
+    key: TextLocation;
 }
 
-export class MemoryDataFrame implements IDataFrame {
-    private def: DataFrameDef;
-
-    constructor(def: DataFrameDef) {
-        this.def = def;
-    }
-
-    public get definition(): DataFrameDef {
-        return this.def;
-    }
-
-    public async evalQuery(
-        selectExpr: SearchSelectExpr,
-    ): Promise<SemanticRefSearchResult> {
-        throw new Error("Method not implemented.");
-    }
+export interface IDataFrame<TRow extends IDataFrameRow> {
+    readonly definition: DataFrameDef;
+    addRows(row: TRow | TRow[]): Promise<void>;
+    searchTerm(searchTerm: PropertySearchTerm): TRow | undefined;
 }
