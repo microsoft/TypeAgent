@@ -68,7 +68,7 @@
             margin-right: 15px;
         }
 
-        .command-description[data-details]:hover:after {
+        .command-container[data-details]:hover:after {
             content: attr(data-details);
             position: absolute;
             display: inline;
@@ -94,11 +94,32 @@
             position: relative;
             bottom: 0px;
         }
+
+        .search {
+            width: 50%; 
+            padding: 10px; 
+            font-size: medium;
+        }
+
+        .filtered {
+            opacity: 0.2;
+        }
+
     </style>
   </head>
   <body>
     <div>
         <div class="title">TypeAgent Cheat sheet</div>
+        <!-- Add search box -->
+        <div style="text-align: center; margin-bottom: 20px;">
+            <input 
+                type="text" 
+                id="searchBox" 
+                placeholder="Search commands..." 
+                class="search" 
+                oninput="filterCommands()"
+            />
+        </div>
     </div>
     <div class="container">
         <div class="section">
@@ -112,7 +133,7 @@
 
             <div class="command-container">
                 <div class="command-description">Enable agent:</div>
-                <div class="command">@config age@nt</div>
+                <div class="command">@config agent</div>
                 <div class="command-parameters">&lt;agent name&gt;</div>
             </div>
             
@@ -165,7 +186,7 @@
             </div>
 
             <div class="command-container">
-                <div class="command-description">Exit the applicaiton:</div>
+                <div class="command-description">Exit the application:</div>
                 <div class="command">@exit</div>
             </div>
 
@@ -175,11 +196,16 @@
                 <div class="command-parameters">&lt;light|dark&gt;</div>
             </div>
 
-            <div class="command-container">
-                <div class="command-description" data-details="The shell canvas can display a URL or you can specify any of the supported aliases (paleobiodb, crossword, commerce, markdown, montage).">Open shell canvas:</div>
+            <div class="command-container" data-details="The shell canvas can display a URL or you can specify any of the supported aliases (paleobiodb, crossword, commerce, markdown, montage).">
+                <div class="command-description" >Open shell canvas:</div>
                 <div class="command">@shell open</div>
                 <div class="command-parameters">&lt;URL|alias&gt;</div>
             </div>
+
+            <div class="command-container">
+                <div class="command-description">Close the shell canvas:</div>
+                <div class="command">@shell close</div>
+            </div>            
 
         </div>
         <div class="section">
@@ -199,7 +225,13 @@
                 <div class="command-description">Change default request handler:</div>
                 <div class="command">@config request</div>
                 <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show environment variables:</div>
+                <div class="command">@env</div>
             </div> 
+
         </div>
         <div class="section">
             <div class="sectionTitle">Models</div>
@@ -208,6 +240,18 @@
                 <div class="command-description">Show translation model being used:</div>
                 <div class="command">@config translation model</div>
             </div> 
+
+            <div class="command-container">
+                <div class="command-description" data-details="Current model options are: GPT_35_TURBO, GPT_4_O, GPT_4_O_MINI, GPT_v, openai:LOCAL">Change LLM models for translation:</div>
+                <div class="command">@config translation model set</div>
+                <div class="command-parameters">GPT_4_O</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Reset model configuration:</div>
+                <div class="command">@config translation model --reset</div>
+            </div> 
+
         </div>
         <div class="section">
             <div class="sectionTitle">Debugging</div>
@@ -278,7 +322,36 @@
                 <div class="command">@calendar login</div>
             </div>                
 
-        </div>                   
+        </div>    
+        
+        <div class="section">
+            <div class="sectionTitle">Chat History</div>
+
+            <div class="command-container">
+                <div class="command-description">Show chat history:</div>
+                <div class="command">@history</div>
+            </div>            
+
+        </div>         
     </div>
+
+    <script>
+        function filterCommands() {
+            const searchValue = document.getElementById('searchBox').value.toLowerCase();
+            const commands = document.querySelectorAll('.command-container');
+
+            commands.forEach(command => {
+                const description = command.querySelector('.command-description').textContent.toLowerCase();
+                const commandText = command.querySelector('.command').textContent.toLowerCase();
+                const parameters = command.querySelector('.command-parameters')?.textContent.toLowerCase() || '';
+
+                if (description.includes(searchValue) || commandText.includes(searchValue) || parameters.includes(searchValue)) {
+                    command.classList.remove("filtered");
+                } else {
+                    command.classList.add("filtered");
+                }
+            });
+        }
+    </script>
   </body>
 </html>
