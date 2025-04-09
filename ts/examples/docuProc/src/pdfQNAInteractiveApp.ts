@@ -72,7 +72,7 @@ function writeHeading(
     writeColor(io, chalk.green, message);
 }
 
-export async function interactiveDocQueryLoop(
+export async function interactiveRagOnDocQueryLoop(
     chunkyIndex: ChunkyIndex,
     verbose = false,
 ): Promise<void> {
@@ -630,6 +630,177 @@ export async function interactiveDocQueryLoop(
         handlers,
         prompt: "\n🤖> ",
     });
+}
+
+export async function interactiveSRagOnDocQueryLoop(
+    verbose = false,
+): Promise<void> {
+    const handlers: Record<string, iapp.CommandHandler> = {
+        import: importHandler, // Since you can't name a function "import".
+        download,
+        clearMemory,
+    };
+
+    iapp.addStandardHandlers(handlers);
+    const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
+    const pdfDownloader = createPDFDownloadTranslator(model);
+
+    function createPDFDownloadTranslator(
+        model: TypeChatLanguageModel,
+    ): TypeChatJsonTranslator<PdfDownloadQuery> {
+        const typeName = "PdfDownloadQuery";
+
+        const schema = loadSchema(["pdfDownloadSchema.ts"], import.meta.url);
+        const validator = createTypeScriptJsonValidator<PdfDownloadQuery>(
+            schema,
+            typeName,
+        );
+        const translator = createJsonTranslator<PdfDownloadQuery>(
+            model,
+            validator,
+        );
+        return translator;
+    }
+
+    // Handle @download command.// Handle @download command.
+    function downloadDef(): iapp.CommandMetadata {
+        return {
+            description: "Download a PDF file with the query string.",
+            args: {
+                query: {
+                    description: "Natural language query",
+                    type: "string",
+                },
+            },
+        };
+    }
+    handlers.download.metadata = downloadDef();
+    async function download(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = iapp.parseNamedArguments(args, downloadDef());
+        const query: string = namedArgs.query;
+        const result = await pdfDownloader.translate(query);
+        if (!result.success) {
+            writeError(io, `[Error: ${result.message}]`);
+            return;
+        } else {
+            const pdfDownloadQuery = result.data;
+            const pdfs = await downloadArxivPapers(pdfDownloadQuery);
+            if (pdfs !== undefined) {
+                writeMain(io, `[Downloaded ${pdfs.length} PDFs]`);
+            } else {
+                writeError(io, `[No PDFs downloaded]`);
+            }
+        }
+    }
+
+    // Handle @import command.
+    function importDef(): iapp.CommandMetadata {
+        return {
+            description: "Import a single or multiple PDF files.",
+            options: {
+                fileName: {
+                    description:
+                        "File to import (or multiple files separated by commas)",
+                    type: "string",
+                },
+                files: {
+                    description: "File containing the list of files to import",
+                    type: "string",
+                },
+                verbose: {
+                    description: "More verbose output",
+                    type: "boolean",
+                    defaultValue: verbose,
+                },
+                chunkPdfs: {
+                    description: "Chunk the PDFs",
+                    type: "boolean",
+                    defaultValue: true,
+                },
+                maxPages: {
+                    description:
+                        "Maximum number of pages to process, default is all pages.",
+                    type: "integer",
+                    defaultValue: -1,
+                },
+            },
+        };
+    }
+    handlers.import.metadata = importDef();
+    async function importHandler(
+        args: string[] | iapp.NamedArgs,
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        const namedArgs = iapp.parseNamedArguments(args, importDef());
+        const files = namedArgs.fileName
+            ? (namedArgs.fileName as string).trim().split(",")
+            : namedArgs.files
+              ? fs
+                    .readFileSync(namedArgs.files as string, "utf-8")
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0 && line[0] !== "#")
+              : [];
+        if (!files.length) {
+            writeError(io, "[No files to import (use --? for help)]");
+            return;
+        }
+
+        const chunkPdfs =
+            namedArgs.chunkPdfs === undefined
+                ? true
+                : namedArgs.chunkPdfs?.toString().toLowerCase() === "true";
+
+        const maxPagesToProcess =
+            namedArgs.maxPages === undefined
+                ? -1
+                : parseInt(namedArgs.maxPages as string);
+        if (isNaN(maxPagesToProcess)) {
+            writeError(io, "[Invalid maxPages value]");
+            return;
+        }
+
+        if (chunkPdfs) {
+            writeColor(
+                io,
+                chalk.yellow,
+                "[Chunk PDFs is not supported in SRAG mode]",
+            );
+            return;
+        }
+
+        // import files in to srag index
+
+        // await importAllFiles(
+        //     files,
+        //     idx,
+        //     io,
+        //     namedArgs.verbose,
+        //     chunkPdfs,
+        //     maxPagesToProcess,
+        // );
+    }
+
+    // Handle @clearMemory command.
+    handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
+    async function clearMemory(
+        args: string[],
+        io: iapp.InteractiveIo,
+    ): Promise<void> {
+        // TB Impl
+        // await fs.promises.rm(chunkyIndex.rootDir, {
+        //     recursive: true,
+        //     force: true,
+        // });
+        // await chunkyIndex.reInitialize(chunkyIndex.rootDir);
+        // writeNote(io, "[All memory and all indexes cleared]");
+        // Actually the embeddings cache isn't. But we shouldn't have to care.
+    }
+
+    return;
 }
 
 export async function purgeNormalizedFile(

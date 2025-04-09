@@ -28,10 +28,12 @@
     "aiclient": "workspace:*",
     "canvas": "^3.1.0",
     "chalk": "^5.4.1",
+    "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "fast-xml-parser": "4.5.1",
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
+    "knowpro": "workspace:*",
     "memory-providers": "workspace:*",
     "pdfjs-dist": "^4.10.38",
     "typeagent": "workspace:*",
@@ -39,7 +41,9 @@
     "typescript": "^5.4.2"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.12",
     "copyfiles": "^2.4.1",
+    "prettier": "^3.5.3",
     "rimraf": "^6.0.1"
   },
   "engines": {

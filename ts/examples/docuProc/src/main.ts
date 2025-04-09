@@ -9,7 +9,10 @@ import { fileURLToPath } from "url";
 
 // Local imports
 import { importAllFiles } from "./pdfImporter.js";
-import { interactiveDocQueryLoop } from "./pdfQNAInteractiveApp.js";
+import {
+    interactiveRagOnDocQueryLoop,
+    interactiveSRagOnDocQueryLoop,
+} from "./pdfQNAInteractiveApp.js";
 import { ChunkyIndex } from "./pdfChunkyIndex.js";
 
 // Set __dirname to emulate old JS behavior
@@ -36,6 +39,15 @@ You can also use 'pnpm start' instead of 'node dist/main.js'.
 Actual args: '${process.argv[0]}' '${process.argv[1]}'
 `;
 
+enum AppFlags {
+    Verbose = "verbose",
+    Help = "help",
+    Rag = "run the interactive query loop using RAG",
+    SRag = "run the interactive query loop using Structured RAG",
+    RagImport = "import files and add then to the rag index",
+    SRagImport = "import files and add then to the srag index",
+}
+
 async function main(): Promise<void> {
     const helpFlags = ["-h", "--help", "-?", "--?"];
     const help = helpFlags.some((arg) => process.argv.includes(arg));
@@ -52,44 +64,88 @@ async function main(): Promise<void> {
         );
     }
 
-    const files = parseCommandLine();
+    const { mode, files } = parseCommandLine();
     const databaseRootDir = path.join(__dirname, "/papers/docuproc-index");
     const chunkyIndex = await ChunkyIndex.createInstance(databaseRootDir);
 
-    if (files.length > 0) {
-        await importAllFiles(files, chunkyIndex, undefined, verbose, true, -1);
-    } else {
-        await interactiveDocQueryLoop(chunkyIndex, verbose);
+    switch (mode) {
+        case AppFlags.RagImport:
+        case AppFlags.SRagImport:
+            console.log(
+                `Importing files using ${mode === AppFlags.RagImport ? "RAG" : "Structured RAG"}`,
+            );
+            await importAllFiles(
+                files,
+                chunkyIndex,
+                undefined,
+                verbose,
+                true,
+                -1,
+            );
+            break;
+        case AppFlags.Rag:
+            console.log("Running interactive query loop using RAG");
+            await interactiveRagOnDocQueryLoop(chunkyIndex, verbose);
+            break;
+        case AppFlags.SRag:
+            console.log("Running interactive query loop using Structured RAG");
+            await interactiveSRagOnDocQueryLoop(true);
+            break;
+        default:
+            console.error(
+                "No valid mode selected. Please specify --rag-import, --srag-import, --rag, or --srag.",
+            );
+            process.exit(1);
     }
 }
 
-function parseCommandLine(): string[] {
-    let files: string[];
-    if (process.argv.length > 2) {
-        files = process.argv.slice(2);
-        if (files.length === 1 && files[0] === "-") {
-            // Load all PDF files from the data directory
-            try {
-                const items = fs.readdirSync(dataFolder);
-                files = items
-                    .filter((item) => item.toLowerCase().endsWith(".pdf"))
-                    .map((item) => path.join(dataFolder, item));
-            } catch (err) {
-                console.error("Error reading directory:", err);
-            }
-        } else if (files.length === 2 && files[0] === "--files") {
-            // Read list of files from a file.
-            const fileList = files[1];
+function parseCommandLine() {
+    const args = process.argv.slice(2);
+    let mode = null;
+    let files: string[] = [];
+
+    const isRagImport = args.includes("--rag-import");
+    const isSRagImport = args.includes("--srag-import");
+
+    const fileFlagIndex = args.findIndex(
+        (arg) => arg === "-file" || arg === "--files",
+    );
+
+    if (isRagImport) mode = AppFlags.Rag;
+    else if (isSRagImport) mode = AppFlags.SRag;
+
+    if (fileFlagIndex !== -1 && args[fileFlagIndex + 1]) {
+        const fileListPath = args[fileFlagIndex + 1];
+        try {
             files = fs
-                .readFileSync(fileList, "utf-8")
+                .readFileSync(fileListPath, "utf-8")
                 .split("\n")
                 .map((line) => line.trim())
-                .filter((line) => line.length > 0 && line[0] !== "#");
+                .filter((line) => line && !line.startsWith("#"));
+
+            mode = isSRagImport ? AppFlags.SRagImport : AppFlags.RagImport;
+        } catch (err) {
+            console.error("Error reading file list:", err);
+        }
+    } else if (args.includes("-")) {
+        try {
+            files = fs
+                .readdirSync(dataFolder)
+                .filter((item) => item.toLowerCase().endsWith(".pdf"))
+                .map((item) => path.join(dataFolder, item));
+
+            mode = isSRagImport ? AppFlags.SRagImport : AppFlags.RagImport;
+        } catch (err) {
+            console.error("Error reading data folder:", err);
         }
     } else {
-        files = [];
+        files = args.filter((arg) => !arg.startsWith("--"));
+        if (files.length) {
+            mode = isSRagImport ? AppFlags.SRagImport : AppFlags.RagImport;
+        }
     }
-    return files;
+
+    return { mode, files };
 }
 
 await main();
