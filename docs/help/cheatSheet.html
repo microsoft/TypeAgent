@@ -8,6 +8,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TypeAgent Cheatsheet</title>
     <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, Arial, Helvetica, sans-serif;
+        }
+
         .title
         {
             font-size: xx-large;
@@ -19,18 +23,19 @@
             display: flex;
             flex-wrap:  wrap;
             flex-direction: row;
-            justify-content: space-around;
+            justify-content: center;
             gap: 15px;
         }
 
         .section {
             border: solid;
             border-width: 3px;
-            border-color: black;
+            border-color: royalblue;
             border-radius: 7px;
         }
 
         .sectionTitle {
+            color: goldenrod;
             font-size: larger;
             font-weight: 700;
             margin: 5px;
@@ -48,8 +53,8 @@
             background-color: skyblue;
             border: darkblue;
             border-style: dashed;
-            border-width: 3px;
-            border-radius: 2px;
+            border-width: 1px;
+            border-radius: 3px;
         }
 
         .command {
@@ -58,11 +63,27 @@
         }
 
         .command-description {
-            text-align: righth;
+            color: #313131;
+            text-align: right;
             margin-right: 15px;
         }
 
-        .command-parameters {
+        .command-description[data-details]:hover:after {
+            content: attr(data-details);
+            position: absolute;
+            display: inline;
+            text-align: right;
+            white-space: nowrap;
+            color: gray;
+            background-color: lightyellow;
+            border: 1px solid black;
+            padding: 1px 5px 1px 5px;
+            font-size: 70%;
+            margin: 10px;
+            white-space: wrap;;
+        }        
+
+        .command-parameters {            
             margin-left: 3px;
             font-style: italic;
         }
@@ -85,13 +106,13 @@
 
             <div class="command-container">
                 <div class="command-description">Disable agent:</div>
-                <div class="command">@config agent</div>
+                <div class="command">@config agent -off</div>
                 <div class="command-parameters">&lt;agent name&gt;</div>
             </div>
 
             <div class="command-container">
                 <div class="command-description">Enable agent:</div>
-                <div class="command">@config agent</div>
+                <div class="command">@config age@nt</div>
                 <div class="command-parameters">&lt;agent name&gt;</div>
             </div>
             
@@ -141,11 +162,28 @@
             <div class="command-container">
                 <div class="command-description">Show shell settings:</div>
                 <div class="command">@shell show settings</div>
-                <div class="command-notes">*shell only, not CLI</div>
             </div>
+
+            <div class="command-container">
+                <div class="command-description">Exit the applicaiton:</div>
+                <div class="command">@exit</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Set the theme:</div>
+                <div class="command">@shell theme</div>
+                <div class="command-parameters">&lt;light|dark&gt;</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description" data-details="The shell canvas can display a URL or you can specify any of the supported aliases (paleobiodb, crossword, commerce, markdown, montage).">Open shell canvas:</div>
+                <div class="command">@shell open</div>
+                <div class="command-parameters">&lt;URL|alias&gt;</div>
+            </div>
+
         </div>
         <div class="section">
-            <div class="sectionTitle">Miscellaneous</div>
+            <div class="sectionTitle">Misc@ellaneous</div>
 
             <div class="command-container">
                 <div class="command-description">Make a random request:</div>
@@ -175,6 +213,11 @@
             <div class="sectionTitle">Debugging</div>
 
             <div class="command-container">
+                <div class="command-description" data-details="Developer mode confirms actions before executing them and prompts the user to make corrections and/or select alternate actions.">Turn on developer mode:</div>
+                <div class="command">@config dev on</div>
+            </div> 
+
+            <div class="command-container">
                 <div class="command-description">Turn on all tracing:</div>
                 <div class="command">@trace *</div>
             </div> 
@@ -184,6 +227,58 @@
                 <div class="command">F12</div>
             </div> 
         </div>
+        <div class="section">
+            <div class="sectionTitle">Actions</div>
+
+            <div class="command-container">
+                <div class="command-description">Reset action status (on/off) to defaults:</div>
+                <div class="command">@config action --reset</div>
+            </div>            
+
+            <div class="command-container">
+                <div class="command-description">Turn OFF actions for a specific agent:</div>
+                <div class="command">@config action --off</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Turn ON actions for a specific agent:</div>
+                <div class="command">@config action</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div> 
+        </div> 
+        <div class="section">
+            <div class="sectionTitle">Session</div>
+
+            <div class="command-container">
+                <div class="command-description">Create a new session:</div>
+                <div class="command">@session new</div>
+            </div>            
+
+            <div class="command-container">
+                <div class="command-description">Show current session info:</div>
+                <div class="command">@session info</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">List all sessions:</div>
+                <div class="command">@session list</div>
+            </div> 
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Calendar</div>
+
+            <div class="command-container">
+                <div class="command-description">Login to the calendar account:</div>
+                <div class="command">@calendar login</div>
+            </div>            
+
+            <div class="command-container">
+                <div class="command-description">Logout of the calendar account:</div>
+                <div class="command">@calendar login</div>
+            </div>                
+
+        </div>                   
     </div>
   </body>
 </html>

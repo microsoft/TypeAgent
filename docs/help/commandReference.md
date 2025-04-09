@@ -25,92 +25,8 @@ Usage: `@calendar login`
 ## @calendar logout - Log out of MS Graph to access calendar  
 Usage: `@calendar logout`  
 
-## @const new - Create a new construction store  
-Usage: `@const new [<file>]`  
-### Arguments:  
-  - &lt;file&gt; - (optional) File name to be created in the session directory or path to the file to be created. (type: string)
-
-## @const load - Load a construction store from disk  
-   
-Usage: `@const load [<file>]`  
-   
-### Arguments:  
-- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)  
-      
-## @const save - Save construction store to disk  
-   
-Usage: `@const save [<file>]`  
-   
-### Arguments:  
-- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)  
-   
-## @const auto on - Turn on construction auto save  
-   
-Usage: `@const auto on`  
-      
-## @const auto off - Turn off construction auto save  
-   
-Usage: `@const auto off`  
-   
-## @const off - Disable construction store  
-   
-Usage: `@const off`  
-   
-## @const info - Show current construction store info  
-   
-Usage: `@const info`  
-   
-## @const list - List constructions  
-   
-Usage: `@const list [--id <number>] [-p|--part <string>] [-m|--match <string>] [-b|--builtin] [-a|--all] [-v|--verbose]`  
-   
-### Flags:  
-- --verbose -v : Verbose only. Includes part index, and list all string in match set (default: false)  
-- --all -a : List all string in match set (default: false)  
-- --builtin -b : List the construction in the built-in cache (default: false)  
-- --match -m &lt;string&gt; : Filter to constructions that has the string in the match set  
-- --part -p &lt;string&gt; : Filter to constructions that has the string match in the part name  
-- --id &lt;number&gt; : Construction id to list  
-   
-## @const import - Import constructions from test data  
-   
-Usage: `@const import [-t|--extended] [<file>...]`  
-   
-### Arguments:  
-- &lt;file&gt; - (optional) Path to the construction file to import from. Load host specified test files if not specified. (type: string)  
-   
-### Flags:  
-- --extended -t : Load host specified extended test files if no file argument is specified (default: false)  
-   
-## @const prune - Prune out of date construction from the cache  
-   
-Usage: `@const prune`  
-   
-## @const delete - Delete a construction by id  
-   
-Usage: `@const delete <namespace> <id>`  
-   
-### Arguments:  
-- &lt;namespace&gt; - namespace the construction in (type: string)  
-- &lt;id&gt; - construction id to delete (type: number)
-
-## @const builtin on - Turn on construction built-in cache  
-Usage: `@const builtin on`  
-   
-## @const builtin off - Turn off construction built-in cache  
-Usage: `@const builtin off`  
-   
-## @const merge on - Turn on construction merge  
-Usage: `@const merge on`  
-   
-## @const merge off - Turn off construction merge  
-Usage: `@const merge off`  
-   
-## @const wildcard on - Turn on wildcard matching  
-Usage: `@const wildcard on`  
-   
-## @const wildcard off - Turn off wildcard matching  
-Usage: `@const wildcard off`  
+## @clear - Clear the console  
+Usage: `@clear` 
    
 ## @config schema - Toggle agent schemas  
 Usage: `@config schema [-f|--priority <string>] [-x|--off <string>] [-r|--reset] [<agentNames>...]`  
@@ -251,7 +167,6 @@ Usage: `@config translation schema generation jsonFunc on`
 ## @config translation schema generation jsonFunc off - Turn off use generate json schema function if model supports it  
 Usage: `@config translation schema generation jsonFunc off`  
 
-
 ## @config translation schema optimize on - Turn on schema optimization  
 Usage: `@config translation schema optimize on`  
   
@@ -347,8 +262,92 @@ Usage: `@config pen on`
 ## @config pen off - Turn off Surface Pen Click Handler  
 Usage: `@config pen off`  
 
-## @clear - Clear the console  
-Usage: `@clear` 
+## @const new - Create a new construction store  
+Usage: `@const new [<file>]`  
+### Arguments:  
+  - &lt;file&gt; - (optional) File name to be created in the session directory or path to the file to be created. (type: string)
+
+## @const load - Load a construction store from disk  
+   
+Usage: `@const load [<file>]`  
+   
+### Arguments:  
+- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)  
+      
+## @const save - Save construction store to disk  
+   
+Usage: `@const save [<file>]`  
+   
+### Arguments:  
+- &lt;file&gt; - (optional) Construction file in the session directory or path to file (type: string)  
+   
+## @const auto on - Turn on construction auto save  
+   
+Usage: `@const auto on`  
+      
+## @const auto off - Turn off construction auto save  
+   
+Usage: `@const auto off`  
+   
+## @const off - Disable construction store  
+   
+Usage: `@const off`  
+   
+## @const info - Show current construction store info  
+   
+Usage: `@const info`  
+   
+## @const list - List constructions  
+   
+Usage: `@const list [--id <number>] [-p|--part <string>] [-m|--match <string>] [-b|--builtin] [-a|--all] [-v|--verbose]`  
+   
+### Flags:  
+- --verbose -v : Verbose only. Includes part index, and list all string in match set (default: false)  
+- --all -a : List all string in match set (default: false)  
+- --builtin -b : List the construction in the built-in cache (default: false)  
+- --match -m &lt;string&gt; : Filter to constructions that has the string in the match set  
+- --part -p &lt;string&gt; : Filter to constructions that has the string match in the part name  
+- --id &lt;number&gt; : Construction id to list  
+   
+## @const import - Import constructions from test data  
+   
+Usage: `@const import [-t|--extended] [<file>...]`  
+   
+### Arguments:  
+- &lt;file&gt; - (optional) Path to the construction file to import from. Load host specified test files if not specified. (type: string)  
+   
+### Flags:  
+- --extended -t : Load host specified extended test files if no file argument is specified (default: false)  
+   
+## @const prune - Prune out of date construction from the cache  
+   
+Usage: `@const prune`  
+   
+## @const delete - Delete a construction by id  
+   
+Usage: `@const delete <namespace> <id>`  
+   
+### Arguments:  
+- &lt;namespace&gt; - namespace the construction in (type: string)  
+- &lt;id&gt; - construction id to delete (type: number)
+
+## @const builtin on - Turn on construction built-in cache  
+Usage: `@const builtin on`  
+   
+## @const builtin off - Turn off construction built-in cache  
+Usage: `@const builtin off`  
+   
+## @const merge on - Turn on construction merge  
+Usage: `@const merge on`  
+   
+## @const merge off - Turn off construction merge  
+Usage: `@const merge off`  
+   
+## @const wildcard on - Turn on wildcard matching  
+Usage: `@const wildcard on`  
+   
+## @const wildcard off - Turn off wildcard matching  
+Usage: `@const wildcard off`  
 
 ## @debug - Start node inspector  
 Usage: `@debug`    
