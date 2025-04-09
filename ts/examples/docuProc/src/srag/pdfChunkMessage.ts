@@ -10,7 +10,7 @@ import {
     IndexingResults,
     buildConversationIndex,
     //MessageTextIndex,
-    //writeConversationDataToFile,
+    writeConversationDataToFile,
     //readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     //Term,
@@ -74,7 +74,6 @@ export class PdfChunkMessage implements IMessage {
 export class PdfDocument implements IConversation<PdfChunkMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
-    //public secondaryIndexes: PdfDocSecondaryIndexes;
     public semanticRefs: SemanticRef[];
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
@@ -141,6 +140,25 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         if (this.embeddingModel) {
             this.embeddingModel.cacheEnabled = true;
         }
+    }
+
+    public async serialize(): Promise<PdfChunkData> {
+        const data: PdfChunkData = {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+        };
+        return data;
+    }
+
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const data = await this.serialize();
+        await writeConversationDataToFile(data, dirPath, baseFileName);
     }
  
 }
