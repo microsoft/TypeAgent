@@ -6,7 +6,6 @@ import {
     ConversationIndex,
     SemanticRef,
     createConversationSettings,
-    addMetadataToIndex,
     IndexingEventHandlers,
     IndexingResults,
     buildConversationIndex,
@@ -101,21 +100,9 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         this.secondaryIndexes = new PdfDocSecondaryIndexes(this.settings);
     }
 
-    public addMetadataToIndex() {
-        if (this.semanticRefIndex) {
-            // TODO: do ths using slices/batch so we don't have to load all messages
-            addMetadataToIndex(
-                this.messages,
-                this.semanticRefs,
-                this.semanticRefIndex,
-            );
-        }
-    }
-
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        this.addMetadataToIndex();
         this.beginIndexing();
         try {
             const result = await buildConversationIndex(
@@ -170,12 +157,12 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
 
     private beginIndexing(): void {
         if (this.embeddingModel) {
-            this.embeddingModel.enabled = false;
+            this.embeddingModel.cacheEnabled = false;
         }
     }
     private endIndexing(): void {
         if (this.embeddingModel) {
-            this.embeddingModel.enabled = true;
+            this.embeddingModel.cacheEnabled = true;
         }
     }
  

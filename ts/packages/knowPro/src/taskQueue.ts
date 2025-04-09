@@ -1,41 +1,52 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { queue, QueueObject, AsyncResultCallback } from "async";
-import { error, Result } from "typechat";
+import { queue, QueueObject } from "async";
+import { Result, error } from "typechat";
 
-function createQueue<TTask = any, TResult = void>(
-    worker: (task: TTask) => Result<TResult>,
-    concurrency: number = 2,
-) {
-    return queue(
-        async (task: TTask, callback: AsyncResultCallback<Result<TResult>>) => {
-            try {
-                const result = await worker(task);
-                if (callback) {
-                    callback(null, result);
-                }
-            } catch (ex: any) {
-                const result = error(`${ex}`);
-                if (callback) {
-                    callback(ex, result);
-                }
-            }
-        },
-        concurrency,
-    );
+export function createQueue<T>(
+    worker: (task: T) => void,
+    concurrency?: number,
+): QueueObject<T> {
+    return queue(async (task: T, callback) => {
+        try {
+            await worker(task);
+            callback();
+        } catch (ex: any) {
+            callback(ex);
+        }
+    }, concurrency);
 }
 
-export class TaskQueue<TTask = any, TResult = void> {
-    private taskQueue: QueueObject<TTask>;
+export interface BatchTask<TTask, TResult> {
+    task: TTask;
+    result?: Result<TResult> | undefined;
+}
 
-    constructor(worker: (task: TTask) => Result<TResult>, concurrency: number) {
-        this.taskQueue = createQueue<TTask, TResult>(worker, concurrency);
-    }
+export function createBatchQueue<TTask, TResult>(
+    taskHandler: (task: TTask) => Promise<Result<TResult>>,
+    batchSize: number,
+) {
+    const queue = createQueue<BatchTask<TTask, TResult>>(runTask, batchSize);
+    return queue;
 
-    public async runBatch(tasks: TTask[]): Promise<Result<TResult>[]> {
-        const results: Result<TResult>[] =
-            await this.taskQueue.pushAsync(tasks);
-        return results;
+    async function runTask(task: BatchTask<TTask, TResult>): Promise<void> {
+        try {
+            task.result = await taskHandler(task.task);
+        } catch (ex) {
+            task.result = error(`${ex}`);
+            throw ex;
+        }
     }
+}
+
+export async function runInBatches<TTask, TResult>(
+    tasks: BatchTask<TTask, TResult>[],
+    taskHandler: (task: TTask) => Promise<Result<TResult>>,
+    batchSize: number,
+    taskQueue?: QueueObject<BatchTask<TTask, TResult>>,
+): Promise<void> {
+    taskQueue ??= createBatchQueue<TTask, TResult>(taskHandler, batchSize);
+    taskQueue.push(tasks);
+    await taskQueue.drain();
 }

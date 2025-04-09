@@ -37,6 +37,7 @@
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "memory-providers": "workspace:*",
+    "schema-dts": "1.1.5",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"

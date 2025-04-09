@@ -12,6 +12,7 @@
         margin: 0;
         overflow: hidden;
       }
+
       .divider {
         position: absolute;
         top: 0;
@@ -23,6 +24,7 @@
       }
     </style>
   </head>
+
   <body>
     <div class="divider" id="divider"></div>
     <script>
@@ -46,11 +48,11 @@
         isDragging = false;
       });
 
-      ipcRenderer.on("chat-view-resized", (_, newX) => {
-        divider.style.left = `${newX}px`;
-        if (Math.abs(document.body.clientWidth - newX) < 10) {
+      ipcRenderer.on("set-divider-left", (_, newX) => {
+        if (newX < 0) {
           divider.style.visibility = "hidden";
         } else {
+          divider.style.left = `${newX}px`;
           divider.style.visibility = "visible";
         }
       });

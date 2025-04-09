@@ -1,0 +1,39 @@
+[
+    {
+        "source": "BACKGROUND",
+        "text": "Morning-room in Algernon’s flat in Half-Moon Street.The room is luxuriously and artistically furnished. The sound of a piano is heard in the adjoining room.\n\nLane is arranging afternoon tea on the table, and after the music has ceased, Algernon enters."
+    },
+    {
+        "source": "ALGERNON",
+        "text": "Did you hear what I was playing, Lane?"
+    },
+    {
+        "source": "LANE",
+        "text": "I didn’t think it polite to listen, sir."
+    },
+    {
+        "source": "ALGERNON",
+        "text": "I’m sorry for that, for your sake. I don’t play accurately—any one can play accurately—but I play with wonderful expression. As far as the piano is concerned, sentiment is my forte. I keep science for Life."        
+    },
+    {
+        "source": "LANE",
+        "text": "Yes, sir."
+    },
+    {
+        "source":"ALGERNON",
+        "text": "And, speaking of the science of Life, have you got the cucumber sandwiches cut for Lady Bracknell?"
+    },
+    {
+        "source":"LANE",
+        "text": "Yes, sir. [Hands them on a salver.]"
+    },
+    {
+        "source":"ALGERNON",
+        "text": "[Inspects them, takes two, and sits down on the sofa.] Oh! . . . by the way, Lane, I see from your book that on Thursday night, when Lord Shoreman and Mr. Worthing were dining with me, eight bottles of champagne are entered as having been consumed."
+    },
+    {
+        "source":"LANE",
+        "text": "Yes, sir; eight bottles and a pint."
+    }
+]
+

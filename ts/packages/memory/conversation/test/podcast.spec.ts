@@ -3,16 +3,21 @@
 
 import { describeIf, hasTestKeys } from "test-lib";
 import {
+    ensureOutputDir,
     getTestTranscriptDialog,
     loadTestPodcast,
     // getTestTranscriptSmall,
 } from "./testCommon.js";
+import { buildSemanticRefIndex } from "knowpro";
 import {
-    buildSemanticRefIndexBatched,
-    IndexingResults,
-    TextIndexingResult,
-    TextLocation,
-} from "knowpro";
+    verifyCompletedUpto,
+    verifyConversationBasic,
+    verifyNoIndexingErrors,
+    verifyNoTextIndexingError,
+    verifyNumberCompleted,
+    verifyTermsInSemanticIndex,
+} from "./verify.js";
+import { Podcast } from "../src/podcast.js";
 
 describeIf(
     "podcast.online",
@@ -24,7 +29,7 @@ describeIf(
             async () => {
                 //const test = getTestTranscriptSmall();
                 const maxMessages = 4;
-                const podcast = await loadTestPodcast(
+                let podcast = await loadTestPodcast(
                     getTestTranscriptDialog(),
                     true,
                     maxMessages,
@@ -41,11 +46,27 @@ describeIf(
                     results.secondaryIndexResults?.message?.numberCompleted,
                     podcast.messages.length,
                 );
+                verifyPodcast(podcast, maxMessages);
+
+                const dirPath = await ensureOutputDir(
+                    "podcast.online.buildIndex",
+                );
+                await podcast.writeToFile(dirPath, podcast.nameTag);
+                const podcast2 = await Podcast.readFromFile(
+                    dirPath,
+                    podcast.nameTag,
+                );
+                expect(podcast2).toBeDefined();
+                verifyPodcast(
+                    podcast2!,
+                    podcast.messages.length,
+                    podcast.semanticRefs.length,
+                );
             },
             testTimeout,
         );
         test(
-            "buildIndex.batch",
+            "buildIndex.semanticRef",
             async () => {
                 const maxMessages = 8;
                 const podcast = await loadTestPodcast(
@@ -53,10 +74,10 @@ describeIf(
                     true,
                     maxMessages,
                 );
-                const batchSize = 3;
-                const results = await buildSemanticRefIndexBatched(
+                podcast.settings.semanticRefIndexSettings.batchSize = 3;
+                const results = await buildSemanticRefIndex(
                     podcast,
-                    batchSize,
+                    podcast.settings.semanticRefIndexSettings,
                 );
                 verifyNoTextIndexingError(results);
 
@@ -66,48 +87,27 @@ describeIf(
             testTimeout,
         );
 
-        function verifyNoIndexingErrors(results: IndexingResults) {
-            verifyNoTextIndexingError(results.semanticRefs);
-            verifyNoTextIndexingError(results.secondaryIndexResults?.message);
-            verifyNoTextIndexingError(
-                results.secondaryIndexResults?.properties,
-            );
-            verifyNoTextIndexingError(
-                results.secondaryIndexResults?.relatedTerms,
-            );
-            verifyNoTextIndexingError(
-                results.secondaryIndexResults?.timestamps,
-            );
-        }
-
-        function verifyNoTextIndexingError(
-            result: TextIndexingResult | undefined,
+        // This will obviously grow...
+        function verifyPodcast(
+            podcast: Podcast,
+            expectedMessageCount: number,
+            expectedSemanticRefCount?: number,
         ) {
-            expect(result).toBeDefined();
-            if (result?.error) {
-                console.log(`Text indexing error ${result.error}`);
-            }
-            expect(result?.error).toBeUndefined();
+            verifyConversationBasic(
+                podcast,
+                expectedMessageCount,
+                expectedSemanticRefCount,
+            );
+            verifyParticipants(podcast);
+            verifyTermsInSemanticIndex(["piano"], podcast.semanticRefIndex);
         }
 
-        function verifyCompletedUpto(
-            upto: TextLocation | undefined,
-            expectedUpto: number,
-        ): void {
-            expect(upto).toBeDefined();
-            if (upto) {
-                expect(upto.messageOrdinal).toEqual(expectedUpto);
-            }
-        }
-
-        function verifyNumberCompleted(
-            numberCompleted: number | undefined,
-            expected: number,
-        ): void {
-            expect(numberCompleted).toBeDefined();
-            if (numberCompleted) {
-                expect(numberCompleted).toEqual(expected);
-            }
+        function verifyParticipants(podcast: Podcast): void {
+            const participants = podcast.getParticipants();
+            verifyTermsInSemanticIndex(
+                participants.values(),
+                podcast.semanticRefIndex,
+            );
         }
     },
 );

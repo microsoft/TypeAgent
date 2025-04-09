@@ -109,32 +109,31 @@ export class TimestampToTextRangeIndex implements ITimestampToTextRangeIndex {
 export function buildTimestampIndex(
     conversation: IConversation,
 ): ListIndexingResult {
-    if (conversation.messages && conversation.secondaryIndexes) {
-        conversation.secondaryIndexes.timestampIndex ??=
-            new TimestampToTextRangeIndex();
-        // TODO: do ths using slices/batch so we don't have to load all messages
-        return addToTimestampIndex(
-            conversation.secondaryIndexes.timestampIndex,
-            conversation.messages,
-            0,
-        );
-    }
-    return {
-        numberCompleted: 0,
-    };
+    return addToTimestampIndex(conversation, 0);
 }
 
 export function addToTimestampIndex(
-    timestampIndex: ITimestampToTextRangeIndex,
-    messages: IMessage[],
-    baseMessageOrdinal: MessageOrdinal,
+    conversation: IConversation,
+    startAtOrdinal: MessageOrdinal,
 ): ListIndexingResult {
-    const messageTimestamps: [MessageOrdinal, string][] = [];
-    for (let i = 0; i < messages.length; ++i) {
-        const timestamp = messages[i].timestamp;
-        if (timestamp) {
-            messageTimestamps.push([i + baseMessageOrdinal, timestamp]);
+    if (conversation.secondaryIndexes) {
+        conversation.secondaryIndexes.timestampIndex ??=
+            new TimestampToTextRangeIndex();
+
+        const messages: IMessage[] = conversation.messages;
+        const timestampIndex = conversation.secondaryIndexes.timestampIndex;
+        const messageTimestamps: [MessageOrdinal, string][] = [];
+        for (
+            let messageOrdinal = startAtOrdinal;
+            messageOrdinal < messages.length;
+            ++messageOrdinal
+        ) {
+            const timestamp = messages[messageOrdinal].timestamp;
+            if (timestamp) {
+                messageTimestamps.push([messageOrdinal, timestamp]);
+            }
         }
+        return timestampIndex.addTimestamps(messageTimestamps);
     }
-    return timestampIndex.addTimestamps(messageTimestamps);
+    return { numberCompleted: 0 };
 }

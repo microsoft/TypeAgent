@@ -1,6 +1,8 @@
 # conversation-memory
 
-**Experimental prototype**: Working toward a shared understanding of implementing conversation-memory using structured RAG and the [knowpro](../../knowPro/) experimental library.
+**Experimental prototype**: Working toward a shared understanding of implementing conversation-memory V2.0 using structured RAG and the [knowpro](../../knowPro/) experimental library.
+
+See [conversationManager](../../knowledgeProcessor/src/conversation/conversationManager.ts) in the [knowledgeProcessor](../../knowledgeProcessor) package for existing conversation memory implemented with structured RAG.
 
 This is **sample code** only.
 

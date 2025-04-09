@@ -3,7 +3,9 @@
 
 import path from "path";
 import {
+    createTestModels,
     getAbsolutePath,
+    hasTestKeys,
     NullEmbeddingModel,
     parseCommandArgs,
     readTestFileLines,
@@ -15,6 +17,9 @@ import {
     SemanticRef,
     PropertySearchTerm,
     SearchTermGroup,
+    SearchSelectExpr,
+    WhenFilter,
+    SemanticRefSearchResult,
 } from "../src/interfaces.js";
 import {
     ConversationSettings,
@@ -24,10 +29,9 @@ import {
 import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 import {
-    SearchOptions,
-    SearchSelectExpr,
-    SemanticRefSearchResult,
-    WhenFilter,
+    ConversationSearchResult,
+    createDefaultSearchOptions,
+    searchConversation,
 } from "../src/search.js";
 import {
     createOrTermGroup,
@@ -39,12 +43,25 @@ import * as q from "../src/query.js";
 import { PropertyNames } from "../src/propertyIndex.js";
 import { createEmbeddingCache, TextEmbeddingCache } from "knowledge-processor";
 import { ConversationSecondaryIndexes } from "../src/secondaryIndexes.js";
-import { openai } from "aiclient";
 import { dateTime } from "typeagent";
 import { TestMessage } from "./testMessage.js";
+import assert from "assert";
+import { verifyMessageOrdinals } from "./verify.js";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
+}
+
+const testModels = hasTestKeys() ? createTestModels("knowpro") : undefined;
+
+export function getTestChatModel() {
+    assert(testModels !== undefined);
+    return testModels?.chat;
+}
+
+export function getTestEmbeddingModel() {
+    assert(testModels !== undefined);
+    return testModels?.embeddings;
 }
 
 export function createOfflineConversationSettings(
@@ -62,7 +79,7 @@ export function createOnlineConversationSettings(
     getCache: () => TextEmbeddingCache | undefined,
 ) {
     const cachingModel = createEmbeddingCache(
-        openai.createEmbeddingModel(),
+        getTestEmbeddingModel(),
         32,
         getCache,
     );
@@ -141,9 +158,16 @@ export async function loadTestConversationForOnline(name?: string) {
     return conversation;
 }
 
-export function loadTestQueries(filePath: string): string[] {
-    const lines = readTestFileLines(filePath);
-    return lines.filter((l) => !l.startsWith("#"));
+export function loadTestQueries(
+    filePath: string,
+    maxQueries?: number,
+): string[] {
+    let lines = readTestFileLines(filePath);
+    lines = lines.filter((l) => !l.startsWith("#"));
+    if (maxQueries && maxQueries > 0) {
+        lines = lines.slice(0, maxQueries);
+    }
+    return lines;
 }
 
 export function parseTestQuery(
@@ -260,11 +284,21 @@ export function createQueryContext(conversation: IConversation) {
     );
 }
 
-export function createTestSearchOptions(): SearchOptions {
-    return {
-        usePropertyIndex: true,
-        useTimestampIndex: true,
-    };
+export async function runSearchConversation(
+    conversation: IConversation,
+    termGroup: SearchTermGroup,
+    when?: WhenFilter,
+): Promise<ConversationSearchResult> {
+    const matches = await searchConversation(
+        conversation,
+        termGroup,
+        when,
+        createDefaultSearchOptions(),
+    );
+    expect(matches).toBeDefined();
+    expect(matches!.messageMatches.length).toBeGreaterThan(0);
+    verifyMessageOrdinals(conversation, matches!.messageMatches);
+    return matches!;
 }
 
 export function stringify(obj: any) {

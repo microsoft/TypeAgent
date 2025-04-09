@@ -109,6 +109,9 @@ importers:
       memory-providers:
         specifier: workspace:*
         version: link:../memoryProviders
+      schema-dts:
+        specifier: 1.1.5
+        version: 1.1.5
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -2371,6 +2374,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      async:
+        specifier: ^3.2.5
+        version: 3.2.6
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -2387,6 +2393,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
     devDependencies:
+      '@types/async':
+        specifier: ^3.2.24
+        version: 3.2.24
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -8622,6 +8631,9 @@ packages:
 
   scheduler@0.23.2:
     resolution: {integrity: sha512-UOShsPwz7NrMUqhR6t0hWjFduvOzbtv7toDH1/hIrfRNIDBnnBWd0CwJTGvTpngVlmwGCdP9/Zl/tVrDqcuYzQ==}
+
+  schema-dts@1.1.5:
+    resolution: {integrity: sha512-RJr9EaCmsLzBX2NDiO5Z3ux2BVosNZN5jo0gWgsyKvxKIUL5R3swNvoorulAeL9kLB0iTSX7V6aokhla2m7xbg==}
 
   schema-utils@3.3.0:
     resolution: {integrity: sha512-pN/yOAvcC+5rQ5nERGuwrjLlYvLTbCibnZ1I7B1LaiAz9BRBlE9GMgE/eqV30P7aJQUf7Ddimy/RsbYO/GrVGg==}
@@ -17130,6 +17142,8 @@ snapshots:
   scheduler@0.23.2:
     dependencies:
       loose-envify: 1.4.0
+
+  schema-dts@1.1.5: {}
 
   schema-utils@3.3.0:
     dependencies:

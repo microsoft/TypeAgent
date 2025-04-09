@@ -11,11 +11,9 @@ import {
     SearchTermGroupTypes,
     SemanticRef,
     TextRange,
-} from "../src/interfaces.js";
-import {
-    ConversationSearchResult,
     SemanticRefSearchResult,
-} from "../src/search.js";
+} from "../src/interfaces.js";
+import { ConversationSearchResult } from "../src/search.js";
 import {
     findEntityWithName,
     getSemanticRefsForSearchResult,
