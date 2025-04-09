@@ -1,0 +1,189 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TypeAgent Cheatsheet</title>
+    <style>
+        .title
+        {
+            font-size: xx-large;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap:  wrap;
+            flex-direction: row;
+            justify-content: space-around;
+            gap: 15px;
+        }
+
+        .section {
+            border: solid;
+            border-width: 3px;
+            border-color: black;
+            border-radius: 7px;
+        }
+
+        .sectionTitle {
+            font-size: larger;
+            font-weight: 700;
+            margin: 5px;
+            text-align: center;
+        }
+
+        .command-container {
+            white-space: nowrap;
+            margin: 10px 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .command-container:hover {
+            background-color: skyblue;
+            border: darkblue;
+            border-style: dashed;
+            border-width: 3px;
+            border-radius: 2px;
+        }
+
+        .command {
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .command-description {
+            text-align: righth;
+            margin-right: 15px;
+        }
+
+        .command-parameters {
+            margin-left: 3px;
+            font-style: italic;
+        }
+
+        .command-notes {
+            font-size: small;
+            align-self: baseline;
+            position: relative;
+            bottom: 0px;
+        }
+    </style>
+  </head>
+  <body>
+    <div>
+        <div class="title">TypeAgent Cheat sheet</div>
+    </div>
+    <div class="container">
+        <div class="section">
+            <div class="sectionTitle">Agents</div>
+
+            <div class="command-container">
+                <div class="command-description">Disable agent:</div>
+                <div class="command">@config agent</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Enable agent:</div>
+                <div class="command">@config agent</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>
+            
+            <div class="command-container">
+                <div class="command-description">List all agents:</div>
+                <div class="command">@config agent</div>
+            </div>  
+            
+            <div class="command-container">
+                <div class="command-description">Show agent commands:</div>
+                <div class="command">@help</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>                            
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Cache</div>
+
+            <div class="command-container">
+                <div class="command-description">Clear the cache:</div>
+                <div class="command">@const new</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Print the cache to the debug console:</div>
+                <div class="command">@const list</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show cache info:</div>
+                <div class="command">@const info</div>
+            </div>
+
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Shell / CLI</div>
+
+            <div class="command-container">
+                <div class="command-description">Clear the display:</div>
+                <div class="command">@clear</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show help:</div>
+                <div class="command">@help</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show shell settings:</div>
+                <div class="command">@shell show settings</div>
+                <div class="command-notes">*shell only, not CLI</div>
+            </div>
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Miscellaneous</div>
+
+            <div class="command-container">
+                <div class="command-description">Make a random request:</div>
+                <div class="command">@random</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Show help:</div>
+                <div class="command">@help</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Change default request handler:</div>
+                <div class="command">@config request</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div> 
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Models</div>
+
+            <div class="command-container">
+                <div class="command-description">Show translation model being used:</div>
+                <div class="command">@config translation model</div>
+            </div> 
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Debugging</div>
+
+            <div class="command-container">
+                <div class="command-description">Turn on all tracing:</div>
+                <div class="command">@trace *</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Open DevTools:</div>
+                <div class="command">F12</div>
+            </div> 
+        </div>
+    </div>
+  </body>
+</html>
