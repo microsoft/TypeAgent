@@ -623,7 +623,6 @@ export async function loadImageWithKnowledge(
     loadCachedDetails: boolean = true,
     maxSize: number = 20 * 1024 * 1024,
 ): Promise<Image | undefined> {
-
     const cachedFileName: string = path.join(
         cachePath,
         path.basename(fileName) + ".kr.json",
@@ -634,9 +633,9 @@ export async function loadImageWithKnowledge(
     }
 
     console.log(`Processing ${fileName}`);
-    
+
     // if the image exceeds the supplied limit we'll resize the image to fit under that threshold
-    const fileSize: number = fs.statSync(fileName, { }).size;
+    const fileSize: number = fs.statSync(fileName, {}).size;
     let buffer: Buffer = fs.readFileSync(fileName);
     let smaller_buffer: Buffer | undefined = undefined;
     if (maxSize != -1 && fileSize > maxSize) {
@@ -649,7 +648,9 @@ export async function loadImageWithKnowledge(
             const newWidth = Math.round((1 - over) * md.width!);
             const newHeight = Math.round((1 - over) * md.height!);
 
-            const resized = img_sharp.resize(newWidth, newHeight, { fit: "inside" }).withMetadata();
+            const resized = img_sharp
+                .resize(newWidth, newHeight, { fit: "inside" })
+                .withMetadata();
             smaller_buffer = await resized.toBuffer();
         } catch (error) {
             console.log(`Unable to resize '${fileName}'. ${error}`);
@@ -660,7 +661,7 @@ export async function loadImageWithKnowledge(
     let tags: ExifReader.Tags | undefined = undefined;
     const properties: string[][] = [];
     try {
-        tags = ExifReader.load(buffer);        
+        tags = ExifReader.load(buffer);
         for (const tag of Object.keys(tags)) {
             if (tags[tag]) {
                 properties.push([tag, tags[tag].description]);
@@ -673,7 +674,7 @@ export async function loadImageWithKnowledge(
     const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(
         tags,
         fileName,
-        `data:image/${mimeType};base64,${ smaller_buffer ? smaller_buffer.toString("base64") : buffer.toString("base64")}`,
+        `data:image/${mimeType};base64,${smaller_buffer ? smaller_buffer.toString("base64") : buffer.toString("base64")}`,
     );
 
     const validator =

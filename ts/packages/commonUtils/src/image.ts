@@ -40,7 +40,6 @@ export function getImageElement(imgData: string): string {
 }
 
 export function extractRelevantExifTags(exifTags: ExifReader.Tags | undefined) {
-
     let tags: string = "";
 
     if (exifTags) {
@@ -57,7 +56,7 @@ export function extractRelevantExifTags(exifTags: ExifReader.Tags | undefined) {
         ${exifTags.Orientation ? "Orientation: " + exifTags.Orientation.description : ""}
         `;
         console.log(tags.replace("\n\n", "\n"));
-        }
+    }
     return tags;
 }
 
