@@ -32,9 +32,16 @@ export function createTestEmbeddingModel(): [TextEmbeddingModel, number] {
     return [openai.createEmbeddingModel(), 1536];
 }
 
+export function createTestChatModel(testName: string = "string"): ChatModel {
+    const model = openai.createChatModelDefault("UnitTest_" + testName);
+    model.completionSettings.seed = 1234;
+    model.completionSettings.temperature = 0;
+    return model;
+}
+
 export function createTestModels(testName: string): TestModels {
     return {
-        chat: openai.createChatModelDefault(testName),
+        chat: createTestChatModel(testName),
         embeddings: openai.createEmbeddingModel(),
     };
 }

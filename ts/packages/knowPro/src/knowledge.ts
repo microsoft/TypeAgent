@@ -2,8 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Knowledge processing functions INTERNAL to the library.
- * These should not be exposed via index.ts
+ * These are sparingly exposed via index.ts
  */
 
 import { conversation as kpLib } from "knowledge-processor";
@@ -16,9 +15,10 @@ import {
     Topic,
 } from "./interfaces.js";
 import { Scored } from "./common.js";
+import { error, Result } from "typechat";
+import { BatchTask, runInBatches } from "./taskQueue.js";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
-import { Result, success } from "typechat";
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -40,28 +40,50 @@ export function createKnowledgeExtractor(
     return extractor;
 }
 
-export async function extractKnowledgeBatch(
-    extractor: kpLib.KnowledgeExtractor,
-    textBatch: string[],
+export function extractKnowledgeFromText(
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    text: string,
     maxRetries: number,
-): Promise<Result<kpLib.KnowledgeResponse[]>> {
-    const results = await asyncArray.mapAsync(
-        textBatch,
-        textBatch.length,
-        (text) =>
-            async.callWithRetry(() =>
-                extractor.extractWithRetry(text, maxRetries),
-            ),
+): Promise<Result<kpLib.KnowledgeResponse>> {
+    return async.callWithRetry(() =>
+        knowledgeExtractor.extractWithRetry(text, maxRetries),
     );
-    let responses: kpLib.KnowledgeResponse[] = [];
-    for (const result of results) {
-        if (result.success) {
-            responses.push(result.data);
-        } else {
-            return result;
-        }
+}
+
+export function extractKnowledgeFromTextBatch(
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    textBatch: string[],
+    concurrency: number = 2,
+    maxRetries: number = 3,
+): Promise<Result<kpLib.KnowledgeResponse>[]> {
+    return asyncArray.mapAsync(textBatch, concurrency, (text) =>
+        extractKnowledgeFromText(knowledgeExtractor, text, maxRetries),
+    );
+}
+
+export async function extractKnowledgeForTextBatchQ(
+    knowledgeExtractor: kpLib.KnowledgeExtractor,
+    textBatch: string[],
+    concurrency: number = 2,
+    maxRetries: number = 3,
+): Promise<Result<kpLib.KnowledgeResponse>[]> {
+    const taskBatch: BatchTask<string, kpLib.KnowledgeResponse>[] =
+        textBatch.map((text) => {
+            return {
+                task: text,
+            };
+        });
+    await runInBatches<string, kpLib.KnowledgeResponse>(
+        taskBatch,
+        (text: string) =>
+            extractKnowledgeFromText(knowledgeExtractor, text, maxRetries),
+        concurrency,
+    );
+    const results: Result<kpLib.KnowledgeResponse>[] = [];
+    for (const task of taskBatch) {
+        results.push(task.result ? task.result : error("No result"));
     }
-    return success(responses);
+    return results;
 }
 
 export function facetValueToString(facet: kpLib.Facet): string {
@@ -72,7 +94,7 @@ export function facetValueToString(facet: kpLib.Facet): string {
     return value.toString();
 }
 
-export function mergeTopics(
+export function mergeSemanticRefTopics(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
@@ -112,7 +134,7 @@ export function mergeTopics(
     return mergedKnowledge;
 }
 
-export function mergedEntities(
+export function mergeSemanticRefEntities(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
@@ -167,6 +189,35 @@ function mergeScoredEntities(
         });
     }
     return mergedKnowledge;
+}
+
+export function mergeEntities(
+    entities: kpLib.ConcreteEntity[],
+): kpLib.ConcreteEntity[] {
+    let mergedEntities = new Map<string, MergedEntity>();
+    for (let entity of entities) {
+        const mergedEntity = concreteToMergedEntity(entity);
+        const existing = mergedEntities.get(mergedEntity.name);
+        if (existing) {
+            unionEntities(existing, mergedEntity);
+        } else {
+            mergedEntities.set(mergedEntity.name, mergedEntity);
+        }
+    }
+
+    const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
+    for (const mergedEntity of mergedEntities.values()) {
+        mergedConcreteEntities.push(mergedToConcreteEntity(mergedEntity));
+    }
+    return mergedConcreteEntities;
+}
+
+export function mergeTopics(topics: string[]): string[] {
+    let mergedTopics = new Set<string>();
+    for (let topic of topics) {
+        mergedTopics.add(topic);
+    }
+    return [...mergedTopics.values()];
 }
 
 /**

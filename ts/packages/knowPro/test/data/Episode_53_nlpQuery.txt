@@ -1,0 +1,16 @@
+--query "List all books" --ktype entity
+
+--query "List all books" --showMessages true
+
+--query "List all books and movies"
+
+--query "List all books and also list all movies"
+
+--query "List all books that are also movies" --ktype entity
+
+--query "Do we have anything on the novel empire in black and gold?" --ktype entity
+
+--query "Do we have anything on empire of black and gold?" --ktype entity
+
+--query "Do we have anything on empire of black and gold or children of ruin?" --ktype entity
+

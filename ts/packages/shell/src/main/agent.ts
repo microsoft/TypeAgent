@@ -22,11 +22,13 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 import { ShellAction } from "./shellActionSchema.js";
+import { ShellWindow } from "./shellWindow.js";
 
 const port = process.env.PORT || 9001;
 
 type ShellContext = {
     settings: ShellSettings;
+    shellWindow: ShellWindow;
 };
 
 const config: AppAgentManifest = {
@@ -43,7 +45,7 @@ class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell settings";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
-        agentContext.settings.show("settings");
+        agentContext.shellWindow.showDialog("settings");
     }
 }
 
@@ -51,7 +53,7 @@ class ShellShowHelpCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell help";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
-        agentContext.settings.show("help");
+        agentContext.shellWindow.showDialog("help");
     }
 }
 
@@ -59,7 +61,7 @@ class ShellShowMetricsCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Show shell metrics";
     public async run(context: ActionContext<ShellContext>) {
         const agentContext = context.sessionContext.agentContext;
-        agentContext.settings.show("Metrics");
+        agentContext.shellWindow.showDialog("Metrics");
     }
 }
 
@@ -142,14 +144,14 @@ class ShellSetSettingCommandHandler implements CommandHandler {
 class ShellRunDemoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Run Demo";
     public async run(context: ActionContext<ShellContext>) {
-        context.sessionContext.agentContext.settings.runDemo();
+        context.sessionContext.agentContext.shellWindow.runDemo();
     }
 }
 
 class ShellRunDemoInteractiveCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Run Demo Interactive";
     public async run(context: ActionContext<ShellContext>) {
-        context.sessionContext.agentContext.settings.runDemo(true);
+        context.sessionContext.agentContext.shellWindow.runDemo(true);
     }
 }
 
@@ -157,7 +159,7 @@ class ShellSetTopMostCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Always keep the shell window on top of other windows";
     public async run(context: ActionContext<ShellContext>) {
-        context.sessionContext.agentContext.settings.toggleTopMost();
+        context.sessionContext.agentContext.shellWindow.toggleTopMost();
     }
 }
 
@@ -230,7 +232,7 @@ class ShellOpenWebContentView implements CommandHandler {
 
                 break;
         }
-        context.sessionContext.agentContext.settings.openInlineBrowser(
+        context.sessionContext.agentContext.shellWindow.openInlineBrowser(
             targetUrl,
         );
     }
@@ -239,7 +241,7 @@ class ShellOpenWebContentView implements CommandHandler {
 class ShellCloseWebContentView implements CommandHandlerNoParams {
     public readonly description = "Close the new Web Content view";
     public async run(context: ActionContext<ShellContext>) {
-        context.sessionContext.agentContext.settings.closeInlineBrowser();
+        context.sessionContext.agentContext.shellWindow.closeInlineBrowser();
     }
 }
 
@@ -272,57 +274,61 @@ const handlers: CommandHandlerTable = {
     },
 };
 
-const agent: AppAgent = {
-    async initializeAgentContext(): Promise<ShellContext> {
-        return {
-            settings: ShellSettings.getinstance(),
-        };
-    },
-    async executeAction(
-        action: AppAction,
-        context: ActionContext<ShellContext>,
-    ) {
-        const shellAction = action as ShellAction;
-        switch (shellAction.actionName) {
-            case "openCanvas":
-                const openCmd = new ShellOpenWebContentView();
-                const parameters = {
-                    args: {
-                        site: shellAction.parameters.site,
-                    },
-                };
-                openCmd.run(context, parameters as any);
-                break;
-            case "closeCanvas":
-                const closeCmd = new ShellCloseWebContentView();
-                closeCmd.run(context);
-                break;
-        }
+export function createShellAgentProvider(shellWindow: ShellWindow) {
+    const agent: AppAgent = {
+        async initializeAgentContext(): Promise<ShellContext> {
+            return {
+                settings: ShellSettings.getinstance(),
+                shellWindow,
+            };
+        },
+        async executeAction(
+            action: AppAction,
+            context: ActionContext<ShellContext>,
+        ) {
+            const shellAction = action as ShellAction;
+            switch (shellAction.actionName) {
+                case "openCanvas":
+                    const openCmd = new ShellOpenWebContentView();
+                    const parameters = {
+                        args: {
+                            site: shellAction.parameters.site,
+                        },
+                    };
+                    openCmd.run(context, parameters as any);
+                    break;
+                case "closeCanvas":
+                    const closeCmd = new ShellCloseWebContentView();
+                    closeCmd.run(context);
+                    break;
+            }
 
-        return undefined;
-    },
-    ...getCommandInterface(handlers),
-};
+            return undefined;
+        },
+        ...getCommandInterface(handlers),
+    };
 
-export const shellAgentProvider: AppAgentProvider = {
-    getAppAgentNames: () => {
-        return ["shell"];
-    },
-    getAppAgentManifest: async (appAgentName: string) => {
-        if (appAgentName !== "shell") {
-            throw new Error(`Unknown app agent: ${appAgentName}`);
-        }
-        return config;
-    },
-    loadAppAgent: async (appAgentName: string) => {
-        if (appAgentName !== "shell") {
-            throw new Error(`Unknown app agent: ${appAgentName}`);
-        }
-        return agent;
-    },
-    unloadAppAgent: async (appAgentName: string) => {
-        if (appAgentName !== "shell") {
-            throw new Error(`Unknown app agent: ${appAgentName}`);
-        }
-    },
-};
+    const shellAgentProvider: AppAgentProvider = {
+        getAppAgentNames: () => {
+            return ["shell"];
+        },
+        getAppAgentManifest: async (appAgentName: string) => {
+            if (appAgentName !== "shell") {
+                throw new Error(`Unknown app agent: ${appAgentName}`);
+            }
+            return config;
+        },
+        loadAppAgent: async (appAgentName: string) => {
+            if (appAgentName !== "shell") {
+                throw new Error(`Unknown app agent: ${appAgentName}`);
+            }
+            return agent;
+        },
+        unloadAppAgent: async (appAgentName: string) => {
+            if (appAgentName !== "shell") {
+                throw new Error(`Unknown app agent: ${appAgentName}`);
+            }
+        },
+    };
+    return shellAgentProvider;
+}

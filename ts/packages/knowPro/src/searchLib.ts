@@ -142,6 +142,7 @@ function parseSearchTerm(text: string): SearchTerm | undefined {
     }
     return undefined;
 }
+
 /**
  * Create property search from the given record of name, value pairs
  * To search for multiple values for same property name, the value should be a ',' separated list of sub values

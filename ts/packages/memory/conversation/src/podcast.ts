@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import {
     IKnowledgeSource,
     IMessage,
@@ -8,7 +9,6 @@ import {
     ConversationIndex,
     SemanticRef,
     createConversationSettings,
-    addMetadataToIndex,
     IndexingEventHandlers,
     IndexingResults,
     buildConversationIndex,
@@ -24,11 +24,14 @@ import {
     IConversationDataWithIndexes,
 } from "knowpro";
 import {
-    createEmbeddingCache,
     conversation as kpLib,
+    TextEmbeddingModelWithCache,
 } from "knowledge-processor";
 import { collections } from "typeagent";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { createEmbeddingModel } from "./common.js";
+
+import registerDebug from "debug";
+const debugLogger = registerDebug("conversation-memory.podcast");
 
 // metadata for podcast messages
 
@@ -70,26 +73,10 @@ export class PodcastMessageMeta implements IKnowledgeSource {
             return {
                 entities,
                 actions,
+                // TODO: Also create inverse actions
                 inverseActions: [],
                 topics: [],
             };
-        }
-    }
-}
-
-export function assignMessageListeners(
-    msgs: PodcastMessage[],
-    participants: Set<string>,
-) {
-    for (const msg of msgs) {
-        if (msg.metadata.speaker) {
-            let listeners: string[] = [];
-            for (const p of participants) {
-                if (p !== msg.metadata.speaker) {
-                    listeners.push(p);
-                }
-            }
-            msg.metadata.listeners = listeners;
         }
     }
 }
@@ -102,15 +89,16 @@ export class PodcastMessage implements IMessage {
         public timestamp: string | undefined = undefined,
     ) {}
 
-    getKnowledge(): kpLib.KnowledgeResponse {
+    public getKnowledge(): kpLib.KnowledgeResponse {
         return this.metadata.getKnowledge();
     }
 
-    addTimestamp(timestamp: string) {
-        this.timestamp = timestamp;
-    }
-    addContent(content: string) {
-        this.textChunks[0] += content;
+    public addContent(content: string, chunkOrdinal = 0) {
+        if (chunkOrdinal > this.textChunks.length) {
+            this.textChunks.push(content);
+        } else {
+            this.textChunks[chunkOrdinal] += content;
+        }
     }
 }
 
@@ -120,6 +108,9 @@ export class Podcast implements IConversation<PodcastMessage> {
     public secondaryIndexes: PodcastSecondaryIndexes;
     public semanticRefs: SemanticRef[];
 
+    private embeddingModel: TextEmbeddingModelWithCache | undefined;
+    private embeddingSize: number | undefined;
+
     constructor(
         public nameTag: string = "",
         public messages: PodcastMessage[] = [],
@@ -128,23 +119,11 @@ export class Podcast implements IConversation<PodcastMessage> {
     ) {
         this.semanticRefs = [];
         if (!settings) {
-            const [model, embeddingSize] = this.createEmbeddingModel();
-            settings = createConversationSettings(model, embeddingSize);
+            settings = this.createSettings();
         }
         this.settings = settings;
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
-    }
-
-    public addMetadataToIndex() {
-        if (this.semanticRefIndex) {
-            // TODO: do ths using slices/batch so we don't have to load all messages
-            addMetadataToIndex(
-                this.messages,
-                this.semanticRefs,
-                this.semanticRefIndex,
-            );
-        }
     }
 
     public getParticipants(): Set<string> {
@@ -163,17 +142,24 @@ export class Podcast implements IConversation<PodcastMessage> {
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        this.addMetadataToIndex();
-        const result = await buildConversationIndex(
-            this,
-            this.settings,
-            eventHandler,
-        );
-        // buildConversationIndex now automatically builds standard secondary indexes
-        // Pass false to build podcast specific secondary indexes only
-        await this.buildTransientSecondaryIndexes(false);
-        await this.secondaryIndexes.threads.buildIndex();
-        return result;
+        this.beginIndexing();
+        try {
+            const result = await buildConversationIndex(
+                this,
+                this.settings,
+                eventHandler,
+            );
+            // buildConversationIndex now automatically builds standard secondary indexes
+            // Pass false to build podcast specific secondary indexes only
+            await this.buildTransientSecondaryIndexes(false);
+            await this.secondaryIndexes.threads.buildIndex();
+            return result;
+        } catch (ex) {
+            debugLogger(`Podcast ${this.nameTag} buildIndex failed\n${ex}`);
+            throw ex;
+        } finally {
+            this.endIndexing();
+        }
     }
 
     public async buildSecondaryIndexes(
@@ -326,15 +312,28 @@ export class Podcast implements IConversation<PodcastMessage> {
      * Create a caching embedding model that can just leverage those embeddings
      * @returns embedding model, size of embedding
      */
-    private createEmbeddingModel(): [TextEmbeddingModel, number] {
-        return [
-            createEmbeddingCache(
-                openai.createEmbeddingModel(),
-                64,
-                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-            ),
-            1536,
-        ];
+    private createSettings() {
+        const [model, size] = createEmbeddingModel(
+            64,
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
+        this.embeddingModel = model;
+        this.embeddingSize = size;
+        return createConversationSettings(
+            this.embeddingModel,
+            this.embeddingSize,
+        );
+    }
+
+    private beginIndexing(): void {
+        if (this.embeddingModel) {
+            this.embeddingModel.cacheEnabled = false;
+        }
+    }
+    private endIndexing(): void {
+        if (this.embeddingModel) {
+            this.embeddingModel.cacheEnabled = true;
+        }
     }
 }
 

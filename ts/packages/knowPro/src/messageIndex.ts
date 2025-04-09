@@ -159,13 +159,27 @@ export async function buildMessageIndex(
     settings: MessageTextIndexSettings,
     eventHandler?: IndexingEventHandlers,
 ): Promise<ListIndexingResult> {
+    return addToMessageIndex(conversation, settings, 0, eventHandler);
+}
+
+export async function addToMessageIndex(
+    conversation: IConversation,
+    settings: MessageTextIndexSettings,
+    startAtOrdinal: MessageOrdinal,
+    eventHandler?: IndexingEventHandlers,
+): Promise<ListIndexingResult> {
     if (conversation.secondaryIndexes) {
         conversation.secondaryIndexes.messageIndex ??= new MessageTextIndex(
             settings,
         );
         const messageIndex = conversation.secondaryIndexes.messageIndex;
-        const messages = conversation.messages;
-        return messageIndex.addMessages(messages, eventHandler);
+        const messages =
+            startAtOrdinal > 0
+                ? conversation.messages.slice(startAtOrdinal)
+                : conversation.messages;
+        if (messages.length > 0) {
+            return messageIndex.addMessages(messages, eventHandler);
+        }
     }
     return {
         numberCompleted: 0,

@@ -105,6 +105,7 @@ export function createTextEmbeddingModelWithCache(
 
 export interface TextEmbeddingModelWithCache extends TextEmbeddingModel {
     readonly cache: collections.Cache<string, number[]>;
+    cacheEnabled: boolean;
 }
 
 /**
@@ -123,6 +124,7 @@ export function createEmbeddingCache(
 ): TextEmbeddingModelWithCache {
     const memCache: collections.Cache<string, number[]> =
         collections.createLRUCache(memCacheSize);
+    let cacheEnabled: boolean = true;
     innerModel = createTextEmbeddingModelWithCache(innerModel, {
         getEmbedding: getFromCache,
         putEmbedding: putInCache,
@@ -131,6 +133,12 @@ export function createEmbeddingCache(
         cache: memCache,
         generateEmbedding,
         maxBatchSize: innerModel.maxBatchSize,
+        get cacheEnabled() {
+            return cacheEnabled;
+        },
+        set cacheEnabled(value: boolean) {
+            cacheEnabled = value;
+        },
     };
     if (innerModel.generateEmbeddingBatch) {
         modelWithCache.generateEmbeddingBatch = generateEmbeddingBatch;
@@ -148,6 +156,9 @@ export function createEmbeddingCache(
     }
 
     function getFromCache(text: string): number[] | undefined {
+        if (!cacheEnabled) {
+            return undefined;
+        }
         const persistentCache = getPersistentCache
             ? getPersistentCache()
             : undefined;

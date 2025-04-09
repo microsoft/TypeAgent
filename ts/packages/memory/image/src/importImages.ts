@@ -11,7 +11,7 @@ import {
     createKnowledgeModel,
     ConversationSettings,
     createConversationSettings,
-    addMetadataToIndex,
+    addMessageKnowledgeToSemanticRefIndex,
     buildSecondaryIndexes,
     ConversationSecondaryIndexes,
     IndexingEventHandlers,
@@ -371,10 +371,9 @@ export class ImageCollection implements IConversation {
 
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
-            addMetadataToIndex(
-                this.messages,
-                this.semanticRefs,
-                this.semanticRefIndex,
+            addMessageKnowledgeToSemanticRefIndex(
+                this,
+                0,
                 (type, knowledge) => {
                     if (type === "entity") {
                         return !isDuplicateEntity(

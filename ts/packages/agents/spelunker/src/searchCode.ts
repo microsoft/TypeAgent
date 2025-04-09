@@ -177,7 +177,7 @@ async function queryOracle(
 }
 
 function produceEntitiesFromResult(
-    result: any,
+    result: OracleSpecs,
     allChunks: Chunk[],
     db: sqlite.Database,
 ): Entity[] {
@@ -195,8 +195,7 @@ function produceEntitiesFromResult(
         const entity = {
             name: chunk.codeName,
             type: ["code", chunk.treeName.replace(/Def$/, "").toLowerCase()],
-            uniqueId: ref,
-            additionalEntityText: `${chunk.fileName}#${blob.start + 1}`,
+            uniqueId: `${ref}|${chunk.fileName}#${blob.start + 1}`,
         };
         outputEntities.push(entity);
     }
@@ -207,8 +206,7 @@ function createResultEntity(input: string, answer: string): Entity {
     return {
         name: `answer for ${input}`,
         type: ["text", "answer", "markdown"],
-        uniqueId: "", // TODO
-        additionalEntityText: answer,
+        uniqueId: answer,
     };
 }
 

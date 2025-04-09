@@ -7,8 +7,10 @@
  * These should not be exposed via index.ts
  */
 
+import { conversation as kpLib } from "knowledge-processor";
 import { ConversationSettings } from "./conversation.js";
 import { ConversationIndex } from "./conversationIndex.js";
+import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
     IConversation,
@@ -79,6 +81,15 @@ export function isInTextRange(
         outerRange.end ?? outerRange.start,
     );
     return cmpStart <= 0 && cmpEnd < 0;
+}
+
+export function dateRangeFromDateTimeRange(
+    dateTimeRange: DateTimeRange,
+): DateRange {
+    return {
+        start: kpLib.toStartDate(dateTimeRange.startDate),
+        end: kpLib.toStopDate(dateTimeRange.stopDate),
+    };
 }
 
 export function compareDates(x: Date, y: Date): number {

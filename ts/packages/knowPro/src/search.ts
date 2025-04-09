@@ -3,22 +3,26 @@
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
 import { createAndTermGroup } from "./searchLib.js";
-import { DateTimeRange } from "./dateTimeSchema.js";
 import {
-    DateRange,
     IConversation,
-    KnowledgeType,
-    ScoredKnowledge,
-    ScoredSemanticRefOrdinal,
-    SemanticRef,
-    Term,
     IConversationSecondaryIndexes,
+    KnowledgeType,
+    PropertySearchTerm,
+    ScoredKnowledge,
     ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
+    SearchSelectExpr,
     SearchTerm,
     SearchTermGroup,
-    PropertySearchTerm,
+    SemanticRef,
+    SemanticRefSearchResult,
+    Term,
+    WhenFilter,
 } from "./interfaces.js";
-import { mergedEntities, mergeTopics } from "./knowledge.js";
+import {
+    mergeSemanticRefEntities,
+    mergeSemanticRefTopics,
+} from "./knowledge.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
@@ -35,38 +39,15 @@ import {
 } from "./compileLib.js";
 
 /**
- * Please inspect the following in interfaces.ts
- * @see {@link ./interfaces.ts}
- *
- * Term: {@link Term}
- * SearchTerm: {@link SearchTerm}
- * PropertySearchTerm: {@link PropertySearchTerm}
- * SearchTermGroup: {@link SearchTermGroup}
- * ITermToSemanticRefIndex: {@link ITermToSemanticRefIndex}
- * IPropertyToSemanticRefIndex: {@link IPropertyToSemanticRefIndex}
+ * A Search Query expr consists:
+ *  - A set of select expressions to evaluate against structured data
+ *  - The raw natural language search query. This may be used to do a
+ *  non-structured query
  */
-
-/**
- * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match
- * when:
- *   knowledgeType == 'entity'
- *   dateRange...(Jan 3rd to Jan 10th)
- */
-export type WhenFilter = {
-    knowledgeType?: KnowledgeType | undefined;
-    dateRange?: DateRange | undefined;
-    threadDescription?: string | undefined;
-    scopeDefiningTerms?: SearchTermGroup | undefined;
+export type SearchQueryExpr = {
+    selectExpressions: SearchSelectExpr[];
+    rawQuery?: string | undefined;
 };
-
-export function dateRangeFromDateTimeRange(
-    dateTimeRange: DateTimeRange,
-): DateRange {
-    return {
-        start: kpLib.toStartDate(dateTimeRange.startDate),
-        end: kpLib.toStopDate(dateTimeRange.stopDate),
-    };
-}
 
 export type SearchOptions = {
     maxKnowledgeMatches?: number | undefined;
@@ -77,15 +58,45 @@ export type SearchOptions = {
     maxMessageCharsInBudget?: number | undefined;
 };
 
-export type SemanticRefSearchResult = {
-    termMatches: Set<string>;
-    semanticRefMatches: ScoredSemanticRefOrdinal[];
-};
+export function createDefaultSearchOptions(): SearchOptions {
+    return {
+        usePropertyIndex: true,
+        useTimestampIndex: true,
+    };
+}
 
 export type ConversationSearchResult = {
     messageMatches: ScoredMessageOrdinal[];
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
 };
+
+/**
+ * Run a search query over the given conversation
+ * @param conversation
+ * @param query
+ * @returns The result of running each individual sub query
+ */
+export async function runSearchQuery(
+    conversation: IConversation,
+    query: SearchQueryExpr,
+    options?: SearchOptions,
+) {
+    options ??= createDefaultSearchOptions();
+    const results: ConversationSearchResult[] = [];
+    for (const expr of query.selectExpressions) {
+        const searchResults = await searchConversation(
+            conversation,
+            expr.searchTermGroup,
+            expr.when,
+            options,
+            query.rawQuery,
+        );
+        if (searchResults) {
+            results.push(searchResults);
+        }
+    }
+    return results;
+}
 
 /**
  * Search a conversation for messages and knowledge that match the supplied search terms
@@ -166,7 +177,7 @@ export function getDistinctEntityMatches(
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return mergedEntities(semanticRefs, searchResults, topK);
+    return mergeSemanticRefEntities(semanticRefs, searchResults, topK);
 }
 
 export function getDistinctTopicMatches(
@@ -174,7 +185,7 @@ export function getDistinctTopicMatches(
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return mergeTopics(semanticRefs, searchResults, topK);
+    return mergeSemanticRefTopics(semanticRefs, searchResults, topK);
 }
 
 function runQuery<T = any>(

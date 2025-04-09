@@ -1,0 +1,30 @@
+book --ktype entity
+movie --ktype entity
+book novel --ktype entity
+book movie --ktype entity
+
+novel "EMPIRE IN BLACK AND GOLD" --ktype entity
+book "EMPIRE IN BLACK AND GOLD" --ktype entity
+"novel;book" "EMPIRE IN BLACK AND GOLD" --ktype entity
+
+"EMPIRE IN BLACK AND GOLD" novel --ktype entity
+"EMPIRE IN BLACK AND GOLD" "Children of Time" --ktype entity
+"EMPIRE IN BLACK AND GOLD" "Children of Time" novel --ktype entity
+"Children of Time" --ktype entity
+
+# Fuzzy
+"Child of Times" --ktype entity
+"Memory Kids" "Future Profiles" --ktype entity
+
+# Time ranges
+--type book --ktype entity --startMinute 0 --endMinute 15
+--type book --ktype entity --startMinute 5 --endMinute 10
+
+# Facets
+--type book --genre fantasy --ktype entity
+--type book --category fantasy
+
+# Scope
+--subject "kevin" --verb say --name "Profiles of the Future" --ktype entity
+--subject "kevin" --verb mention --name "Profiles of the Future" --ktype entity
+--subject "Kevin" --verb say --object Adrian --name "Profiles of the Future" --ktype entity
