@@ -3,7 +3,6 @@
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
 import { createAndTermGroup } from "./searchLib.js";
-import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
     IConversation,
@@ -37,8 +36,17 @@ import {
     isSearchGroupTerm,
 } from "./compileLib.js";
 
+/**
+ * An expression used to select contents structured contents of the conversation
+ */
 export type SearchSelectExpr = {
+    /**
+     * A Term group that matches information
+     */
     searchTermGroup: SearchTermGroup;
+    /**
+     * A filter that scopes what information to match
+     */
     when?: WhenFilter | undefined;
 };
 
@@ -67,14 +75,16 @@ export type WhenFilter = {
     scopeDefiningTerms?: SearchTermGroup | undefined;
 };
 
-export function dateRangeFromDateTimeRange(
-    dateTimeRange: DateTimeRange,
-): DateRange {
-    return {
-        start: kpLib.toStartDate(dateTimeRange.startDate),
-        end: kpLib.toStopDate(dateTimeRange.stopDate),
-    };
-}
+/**
+ * A Search Query expr consists:
+ *  - A set of select expressions to evaluate against structured data
+ *  - The raw natural language search query. This may be used to do a
+ *  non-structured query
+ */
+export type SearchQueryExpr = {
+    selectExpressions: SearchSelectExpr[];
+    rawQuery?: string | undefined;
+};
 
 export type SearchOptions = {
     maxKnowledgeMatches?: number | undefined;
@@ -85,22 +95,45 @@ export type SearchOptions = {
     maxMessageCharsInBudget?: number | undefined;
 };
 
-export function createTestSearchOptions(): SearchOptions {
+export function createDefaultSearchOptions(): SearchOptions {
     return {
         usePropertyIndex: true,
         useTimestampIndex: true,
     };
 }
 
-export type SemanticRefSearchResult = {
-    termMatches: Set<string>;
-    semanticRefMatches: ScoredSemanticRefOrdinal[];
-};
-
 export type ConversationSearchResult = {
     messageMatches: ScoredMessageOrdinal[];
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
 };
+
+/**
+ * Run a search query over the given conversation
+ * @param conversation
+ * @param query
+ * @returns The result of running each individual sub query
+ */
+export async function runSearchQuery(
+    conversation: IConversation,
+    query: SearchQueryExpr,
+    options?: SearchOptions,
+) {
+    options ??= createDefaultSearchOptions();
+    const results: ConversationSearchResult[] = [];
+    for (const expr of query.selectExpressions) {
+        const searchResults = await searchConversation(
+            conversation,
+            expr.searchTermGroup,
+            expr.when,
+            options,
+            query.rawQuery,
+        );
+        if (searchResults) {
+            results.push(searchResults);
+        }
+    }
+    return results;
+}
 
 /**
  * Search a conversation for messages and knowledge that match the supplied search terms
@@ -146,6 +179,11 @@ export async function searchConversation(
         knowledgeMatches,
     };
 }
+
+export type SemanticRefSearchResult = {
+    termMatches: Set<string>;
+    semanticRefMatches: ScoredSemanticRefOrdinal[];
+};
 
 /**
  * Search a conversation for knowledge that matches the given search terms

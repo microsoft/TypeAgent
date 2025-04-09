@@ -27,7 +27,7 @@ import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 import {
     ConversationSearchResult,
-    createTestSearchOptions,
+    createDefaultSearchOptions,
     searchConversation,
     SearchSelectExpr,
     SemanticRefSearchResult,
@@ -293,7 +293,7 @@ export async function runSearchConversation(
         conversation,
         termGroup,
         when,
-        createTestSearchOptions(),
+        createDefaultSearchOptions(),
     );
     expect(matches).toBeDefined();
     expect(matches!.messageMatches.length).toBeGreaterThan(0);

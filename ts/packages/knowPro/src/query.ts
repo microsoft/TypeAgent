@@ -22,7 +22,6 @@ import {
     Term,
     TextRange,
 } from "./interfaces.js";
-import { SemanticRefSearchResult } from "./search.js";
 import { KnowledgePropertyName, PropertySearchTerm } from "./interfaces.js";
 import { SearchTerm } from "./interfaces.js";
 import {
@@ -48,6 +47,7 @@ import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import { textRangesFromMessageOrdinals } from "./message.js";
+import { SemanticRefSearchResult } from "./search.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (

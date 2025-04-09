@@ -3,11 +3,17 @@
 
 import { conversation as kpLib } from "knowledge-processor";
 
-// an object that can provide a KnowledgeResponse structure
+/**
+ * A Knowledge Source is any object that returns knowledge
+ * Knowledge is returned in the form of a KnowledgeResponse
+ */
 export interface IKnowledgeSource {
     getKnowledge(): kpLib.KnowledgeResponse | undefined;
 }
 
+/**
+ * Messages are referenced by their sequential ordinal numbers
+ */
 export type MessageOrdinal = number;
 
 /**
@@ -283,6 +289,9 @@ export type PropertySearchTerm = {
     propertyValue: SearchTerm;
 };
 
+/**
+ * Terms in a SearchTermGroup can of these types
+ */
 export type SearchTermGroupTypes =
     | SearchTerm
     | PropertySearchTerm
