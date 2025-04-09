@@ -68,7 +68,8 @@ async function createWindow() {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(ShellSettings.getinstance());
+    const settings = ShellSettings.getinstance();
+    const shellWindow = new ShellWindow(settings);
     const mainWindow = shellWindow.mainWindow;
     const chatView = shellWindow.chatView;
 
@@ -79,28 +80,20 @@ async function createWindow() {
     });
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = (
-        settingName?: string | undefined,
-    ): void => {
+    settings.onSettingsChanged = (settingName?: string | undefined): void => {
         chatView.webContents.send(
             "settings-changed",
-            ShellSettings.getinstance().getSerializable(),
+            settings.getSerializable(),
         );
 
         if (settingName == "size") {
-            mainWindow.setSize(
-                ShellSettings.getinstance().width,
-                ShellSettings.getinstance().height,
-            );
+            mainWindow.setSize(settings.width, settings.height);
         } else if (settingName == "position") {
-            mainWindow.setPosition(
-                ShellSettings.getinstance().x!,
-                ShellSettings.getinstance().y!,
-            );
+            mainWindow.setPosition(settings.x!, settings.y!);
         }
 
         if (settingName === "zoomLevel") {
-            shellWindow.setZoomLevel(ShellSettings.getinstance().zoomLevel);
+            shellWindow.setZoomLevel(settings.zoomLevel);
         }
     };
 
@@ -326,17 +319,14 @@ async function initialize() {
         mainWindow.webContents.zoomFactor = 1;
 
         // Send settings asap
-        ShellSettings.getinstance().onSettingsChanged!();
+        shellWindow.settings.onSettingsChanged!();
 
         // Load chat history if enabled
         const chatHistory: string = path.join(
             getInstanceDir(),
             "chat_history.html",
         );
-        if (
-            ShellSettings.getinstance().chatHistory &&
-            existsSync(chatHistory)
-        ) {
+        if (shellWindow.settings.chatHistory && existsSync(chatHistory)) {
             chatView.webContents.send(
                 "chat-history",
                 readFileSync(
@@ -354,14 +344,14 @@ async function initialize() {
         }
         updateTitle(dispatcher);
         // open the canvas if it was previously open
-        if (ShellSettings.getinstance().canvas !== undefined) {
+        if (shellWindow.settings.canvas !== undefined) {
             shellWindow.openInlineBrowser(
                 new URL(ShellSettings.getinstance().canvas!),
             );
         }
 
         // send the agent greeting if it's turned on
-        if (ShellSettings.getinstance().agentGreeting) {
+        if (shellWindow.settings.agentGreeting) {
             dispatcher.processCommand("@greeting", "agent-0", []);
         }
     });
@@ -389,19 +379,7 @@ async function initialize() {
     });
 
     ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
-        // Save the shell configurable settings
-        ShellSettings.getinstance().microphoneId = settings.microphoneId;
-        ShellSettings.getinstance().microphoneName = settings.microphoneName;
-        ShellSettings.getinstance().tts = settings.tts;
-        ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
-        ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
-        ShellSettings.getinstance().partialCompletion =
-            settings.partialCompletion;
-        ShellSettings.getinstance().darkMode = settings.darkMode;
-        ShellSettings.getinstance().chatHistory = settings.chatHistory;
-
-        // write the settings to disk
-        ShellSettings.getinstance().save();
+        shellWindow.updateSettings(settings);
     });
 
     ipcMain.on("open-image-file", async () => {
@@ -508,7 +486,7 @@ function setupQuit(dispatcher: Dispatcher) {
         if (canQuit) {
             return;
         }
-        // Stop the quiting to finish async tasks.
+        // Stop the quitting to finish async tasks.
         e.preventDefault();
 
         // if we are already quitting, do nothing

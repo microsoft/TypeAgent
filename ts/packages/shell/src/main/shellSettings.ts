@@ -97,7 +97,7 @@ export class ShellSettings
     };
 
     public getSerializable(): ShellSettings {
-        return new ShellSettings(ShellSettings.getinstance());
+        return new ShellSettings(this);
     }
 
     private static load(): Partial<ShellSettingsType> | null {
@@ -120,36 +120,31 @@ export class ShellSettings
     }
 
     public set(name: string, value: any) {
-        const t = typeof ShellSettings.getinstance()[name];
-        const oldValue = ShellSettings.getinstance()[name];
+        const t = typeof this[name];
+        const oldValue = this[name];
         if (t === typeof value) {
-            ShellSettings.getinstance()[name] = value;
+            this[name] = value;
         } else {
             switch (t) {
                 case "string":
-                    ShellSettings.getinstance()[name] = value;
+                    this[name] = value;
                     break;
                 case "number":
-                    ShellSettings.getinstance()[name] = Number(value);
+                    this[name] = Number(value);
                     break;
                 case "boolean":
-                    if (typeof value === t) {
-                    }
-                    ShellSettings.getinstance()[name] =
+                    this[name] =
                         value.toLowerCase() === "true" || value === "1";
                     break;
                 case "object":
                 case "undefined":
-                    ShellSettings.getinstance()[name] = JSON.parse(value);
+                    this[name] = JSON.parse(value);
                     break;
             }
         }
 
-        if (
-            ShellSettings.getinstance().onSettingsChanged != null &&
-            oldValue != value
-        ) {
-            ShellSettings.getinstance().onSettingsChanged!(name);
+        if (this.onSettingsChanged != null && oldValue != value) {
+            this.onSettingsChanged!(name);
         }
     }
 

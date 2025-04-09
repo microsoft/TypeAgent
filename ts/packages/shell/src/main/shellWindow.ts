@@ -25,7 +25,7 @@ export class ShellWindow {
     private inlineWebContentView: WebContentsView | undefined;
     private readonly contentLoadP: Promise<void>[];
 
-    constructor(private readonly settings: ShellSettings) {
+    constructor(public readonly settings: ShellSettings) {
         const mainWindow = createMainWindow(settings);
         const chatView = createChatView(settings);
 
@@ -212,6 +212,20 @@ export class ShellWindow {
         this.settings.save();
     }
 
+    public updateSettings(settings: ShellSettings) {
+        // Save the shell configurable settings
+        this.settings.microphoneId = settings.microphoneId;
+        this.settings.microphoneName = settings.microphoneName;
+        this.settings.tts = settings.tts;
+        this.settings.ttsSettings = settings.ttsSettings;
+        this.settings.agentGreeting = settings.agentGreeting;
+        this.settings.partialCompletion = settings.partialCompletion;
+        this.settings.darkMode = settings.darkMode;
+        this.settings.chatHistory = settings.chatHistory;
+
+        // write the settings to disk
+        this.settings.save();
+    }
     public toggleTopMost() {
         this.mainWindow.setAlwaysOnTop(!this.mainWindow.isAlwaysOnTop());
     }
