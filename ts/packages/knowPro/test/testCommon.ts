@@ -17,6 +17,9 @@ import {
     SemanticRef,
     PropertySearchTerm,
     SearchTermGroup,
+    SearchSelectExpr,
+    WhenFilter,
+    SemanticRefSearchResult,
 } from "../src/interfaces.js";
 import {
     ConversationSettings,
@@ -29,9 +32,6 @@ import {
     ConversationSearchResult,
     createDefaultSearchOptions,
     searchConversation,
-    SearchSelectExpr,
-    SemanticRefSearchResult,
-    WhenFilter,
 } from "../src/search.js";
 import {
     createOrTermGroup,

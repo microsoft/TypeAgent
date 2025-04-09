@@ -21,9 +21,14 @@ import {
     Tag,
     Term,
     TextRange,
+    KnowledgePropertyName,
+    PropertySearchTerm,
+    SearchTerm,
+    Thread,
+    ITimestampToTextRangeIndex,
+    IPropertyToSemanticRefIndex,
+    SemanticRefSearchResult,
 } from "./interfaces.js";
-import { KnowledgePropertyName, PropertySearchTerm } from "./interfaces.js";
-import { SearchTerm } from "./interfaces.js";
 import {
     Match,
     MatchAccumulator,
@@ -38,16 +43,12 @@ import {
     lookupPropertyInPropertyIndex,
     PropertyNames,
 } from "./propertyIndex.js";
-import { ITimestampToTextRangeIndex } from "./interfaces.js";
-import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections, NormalizedEmbedding } from "typeagent";
-import { Thread } from "./interfaces.js";
 import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import { textRangesFromMessageOrdinals } from "./message.js";
-import { SemanticRefSearchResult } from "./search.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (

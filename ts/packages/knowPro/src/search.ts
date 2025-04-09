@@ -4,18 +4,20 @@
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
 import { createAndTermGroup } from "./searchLib.js";
 import {
-    DateRange,
     IConversation,
-    KnowledgeType,
-    ScoredKnowledge,
-    ScoredSemanticRefOrdinal,
-    SemanticRef,
-    Term,
     IConversationSecondaryIndexes,
+    KnowledgeType,
+    PropertySearchTerm,
+    ScoredKnowledge,
     ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
+    SearchSelectExpr,
     SearchTerm,
     SearchTermGroup,
-    PropertySearchTerm,
+    SemanticRef,
+    SemanticRefSearchResult,
+    Term,
+    WhenFilter,
 } from "./interfaces.js";
 import {
     mergeSemanticRefEntities,
@@ -35,45 +37,6 @@ import {
     isPropertyTerm,
     isSearchGroupTerm,
 } from "./compileLib.js";
-
-/**
- * An expression used to select contents structured contents of the conversation
- */
-export type SearchSelectExpr = {
-    /**
-     * A Term group that matches information
-     */
-    searchTermGroup: SearchTermGroup;
-    /**
-     * A filter that scopes what information to match
-     */
-    when?: WhenFilter | undefined;
-};
-
-/**
- * Please inspect the following in interfaces.ts
- * @see {@link ./interfaces.ts}
- *
- * Term: {@link Term}
- * SearchTerm: {@link SearchTerm}
- * PropertySearchTerm: {@link PropertySearchTerm}
- * SearchTermGroup: {@link SearchTermGroup}
- * ITermToSemanticRefIndex: {@link ITermToSemanticRefIndex}
- * IPropertyToSemanticRefIndex: {@link IPropertyToSemanticRefIndex}
- */
-
-/**
- * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match
- * when:
- *   knowledgeType == 'entity'
- *   dateRange...(Jan 3rd to Jan 10th)
- */
-export type WhenFilter = {
-    knowledgeType?: KnowledgeType | undefined;
-    dateRange?: DateRange | undefined;
-    threadDescription?: string | undefined;
-    scopeDefiningTerms?: SearchTermGroup | undefined;
-};
 
 /**
  * A Search Query expr consists:
@@ -179,11 +142,6 @@ export async function searchConversation(
         knowledgeMatches,
     };
 }
-
-export type SemanticRefSearchResult = {
-    termMatches: Set<string>;
-    semanticRefMatches: ScoredSemanticRefOrdinal[];
-};
 
 /**
  * Search a conversation for knowledge that matches the given search terms

@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { SemanticRefSearchResult } from "./interfaces.js";
+import { SearchSelectExpr } from "./interfaces.js";
+
 /**
  * Data Frame definition.
  * Since TypeScript type information is NOT available at runtime, we need to
@@ -65,4 +68,8 @@ export function dataFrameDefToSqlSchema(dataFrame: DataFrameDef): string {
         sql += "  " + colSql;
     }
     return sql + "}\n";
+}
+
+export interface IDataFrame {
+    evalQuery(selectExpr: SearchSelectExpr): Promise<SemanticRefSearchResult>;
 }

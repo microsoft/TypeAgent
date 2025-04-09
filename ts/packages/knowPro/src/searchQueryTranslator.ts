@@ -11,7 +11,9 @@ import {
 import * as querySchema from "./searchQuerySchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "typeagent";
-import { SearchQueryExpr, SearchSelectExpr, WhenFilter } from "./search.js";
+import { SearchQueryExpr } from "./search.js";
+import { WhenFilter } from "./interfaces.js";
+import { SearchSelectExpr } from "./interfaces.js";
 import { dateRangeFromDateTimeRange } from "./common.js";
 import { createPropertySearchTerm, createSearchTerm } from "./searchLib.js";
 import { SearchTermGroup } from "./interfaces.js";
