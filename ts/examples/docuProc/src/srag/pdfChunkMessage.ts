@@ -9,48 +9,23 @@ import {
     IndexingEventHandlers,
     IndexingResults,
     buildConversationIndex,
-    SecondaryIndexingResults,
-    buildSecondaryIndexes,
-    ConversationThreads,
     //MessageTextIndex,
     //writeConversationDataToFile,
     //readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     //Term,
-    ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
-} from "knowpro";import {
-    createEmbeddingCache,
+} from "knowpro";
+import {
     conversation as kpLib,
     TextEmbeddingModelWithCache,
 } from "knowledge-processor";
 
-import { openai, TextEmbeddingModel } from "aiclient";
+//import { openai, TextEmbeddingModel } from "aiclient";
 
 import registerDebug from "debug";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");
 ////import { interactiveRagOnDocQueryLoop } from "../pdfQNAInteractiveApp.js";
-
-export class PdfChunkMessage implements IMessage {
-    constructor(
-        public textChunks: string[],
-        public metadata: PdfChunkMessageMeta,
-        public tags: string[] = [],
-        public timestamp: string | undefined = undefined,
-    ) {}
-
-    public getKnowledge(): kpLib.KnowledgeResponse {
-        return this.metadata.getKnowledge();
-    }
-
-    public addContent(content: string | string[]) {
-        if (Array.isArray(content)) {
-            this.textChunks[0] += content.join("\n");
-        } else {
-            this.textChunks[0] += content;
-        }
-    }
-}
 
 export class PdfChunkMessageMeta implements IKnowledgeSource {
 
@@ -75,11 +50,31 @@ export class PdfChunkMessageMeta implements IKnowledgeSource {
         };
     }
 }
+export class PdfChunkMessage implements IMessage {
+    constructor(
+        public textChunks: string[],
+        public metadata: PdfChunkMessageMeta,
+        public tags: string[] = [],
+        public timestamp: string | undefined = undefined,
+    ) {}
+
+    public getKnowledge(): kpLib.KnowledgeResponse {
+        return this.metadata.getKnowledge();
+    }
+
+    public addContent(content: string | string[]) {
+        if (Array.isArray(content)) {
+            this.textChunks[0] += content.join("\n");
+        } else {
+            this.textChunks[0] += content;
+        }
+    }
+}
 
 export class PdfDocument implements IConversation<PdfChunkMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
-    public secondaryIndexes: PdfDocSecondaryIndexes;
+    //public secondaryIndexes: PdfDocSecondaryIndexes;
     public semanticRefs: SemanticRef[];
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
@@ -91,13 +86,13 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         settings?: ConversationSettings,
     ) {
         this.semanticRefs = [];
-        if (!settings) {
-            const [model, embeddingSize] = this.getEmbeddingModel();
-            settings = createConversationSettings(model, embeddingSize);
+        if (settings === undefined) {
+            this.settings = createConversationSettings();
         }
-        this.settings = settings;
+        else {
+            this.settings = settings;
+        }
         this.semanticRefIndex = new ConversationIndex();
-        this.secondaryIndexes = new PdfDocSecondaryIndexes(this.settings);
     }
 
     public async buildIndex(
@@ -110,8 +105,7 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
                 this.settings,
                 eventHandler,
             );
-            await this.buildTransientSecondaryIndexes(false);
-            await this.secondaryIndexes.threads.buildIndex();
+            //await this.buildTransientSecondaryIndexes(false);
             return result;
         } catch (ex) {
             debugLogger(`Pdf Document ${this.nameTag} buildIndex failed\n${ex}`);
@@ -123,16 +117,9 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
 
     public async buildSecondaryIndexes(
         eventHandler?: IndexingEventHandlers,
-    ): Promise<SecondaryIndexingResults> {
-        this.secondaryIndexes = new PdfDocSecondaryIndexes(this.settings);
-        const result = await buildSecondaryIndexes(
-            this,
-            this.settings,
-            eventHandler,
-        );
+    ): Promise<void> {
         await this.buildTransientSecondaryIndexes(false);
-        await this.secondaryIndexes.threads.buildIndex();
-        return result;
+        return;
     }
 
     private async buildTransientSecondaryIndexes(all: boolean): Promise<void> {
@@ -143,16 +130,6 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
             await buildTransientSecondaryIndexes(this, this.settings);
         }
         //this.buildParticipantAliases();
-    }
-
-    private getEmbeddingModel(): [TextEmbeddingModel, number] {
-        this.embeddingModel ??= createEmbeddingCache(
-            openai.createEmbeddingModel(),
-            64,
-            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-        );
-
-        return [this.embeddingModel, 1536];
     }
 
     private beginIndexing(): void {
@@ -167,17 +144,6 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
     }
  
 }
-
-
-export class PdfDocSecondaryIndexes extends ConversationSecondaryIndexes {
-    public threads: ConversationThreads;
-
-    constructor(settings: ConversationSettings) {
-        super(settings);
-        this.threads = new ConversationThreads(settings.threadSettings);
-    }
-}
-
 export interface PdfChunkData
     extends IConversationDataWithIndexes<PdfChunkMessage>{}
 
