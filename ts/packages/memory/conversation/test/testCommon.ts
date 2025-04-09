@@ -1,14 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createConversationSettings } from "knowpro";
+import { createConversationSettings, createKnowledgeExtractor } from "knowpro";
 import {
+    createTestChatModel,
     createTestEmbeddingModel,
     getAbsolutePath,
+    getOutputDirPath,
     NullEmbeddingModel,
 } from "test-lib";
 import { importPodcast } from "../src/importPodcast.js";
 import { Podcast } from "../src/podcast.js";
+import { ensureDir, removeDir } from "typeagent";
 
 export type TestTranscriptInfo = {
     filePath: string;
@@ -66,19 +69,23 @@ export function createOfflineConversationSettings() {
 
 export function createOnlineConversationSettings() {
     const [model, size] = createTestEmbeddingModel();
-    return createConversationSettings(model, size);
+    const chatModel = createTestChatModel("conversation-memory");
+    const settings = createConversationSettings(model, size);
+    settings.semanticRefIndexSettings.knowledgeExtractor =
+        createKnowledgeExtractor(chatModel);
+    return settings;
 }
 
 export async function loadTestPodcast(
-    test: TestTranscriptInfo,
+    testTranscript: TestTranscriptInfo,
     online: boolean,
     maxMessages?: number,
 ): Promise<Podcast> {
     const podcast = await importPodcast(
-        getAbsolutePath(test.filePath),
-        test.name,
-        test.date,
-        test.length,
+        getAbsolutePath(testTranscript.filePath),
+        testTranscript.name,
+        testTranscript.date,
+        testTranscript.length,
         online
             ? createOnlineConversationSettings()
             : createOfflineConversationSettings(),
@@ -87,4 +94,13 @@ export async function loadTestPodcast(
         podcast.messages = podcast.messages.slice(0, maxMessages);
     }
     return podcast;
+}
+
+export async function ensureOutputDir(name: string, clean: boolean = true) {
+    const dirPath = getOutputDirPath(name);
+    if (clean) {
+        await removeDir(dirPath);
+    }
+    await ensureDir(dirPath);
+    return dirPath;
 }

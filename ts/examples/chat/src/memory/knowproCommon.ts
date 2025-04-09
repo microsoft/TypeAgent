@@ -6,6 +6,44 @@ import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
 import { ChatPrinter } from "../chatPrinter.js";
 
+/**
+ * Appends the given messages and their pre-extracted associated knowledge to the conversation index
+ * Will no do any knowledge extraction.
+ * @param conversation
+ * @param messages
+ * @param knowledgeResponses
+ */
+export function addToConversation(
+    conversation: kp.IConversation,
+    messages: kp.IMessage[],
+    knowledgeResponses: knowLib.conversation.KnowledgeResponse[],
+): void {
+    beginIndexing(conversation);
+    for (let i = 0; i < messages.length; i++) {
+        const messageOrdinal: kp.MessageOrdinal = conversation.messages.length;
+        const chunkOrdinal = 0;
+        conversation.messages.push(messages[i]);
+        const knowledge = knowledgeResponses[i];
+        if (knowledge) {
+            kp.addKnowledgeToSemanticRefIndex(
+                conversation,
+                messageOrdinal,
+                chunkOrdinal,
+                knowledge,
+            );
+        }
+    }
+}
+
+function beginIndexing(conversation: kp.IConversation) {
+    if (conversation.semanticRefIndex === undefined) {
+        conversation.semanticRefIndex = new kp.ConversationIndex();
+    }
+    if (conversation.semanticRefs === undefined) {
+        conversation.semanticRefs = [];
+    }
+}
+
 export function textLocationToString(location: kp.TextLocation): string {
     let text = `MessageOrdinal: ${location.messageOrdinal}`;
     if (location.chunkOrdinal) {
@@ -115,6 +153,7 @@ export function actionFilterToSearchGroup(
 export interface IMessageMetadata<TMeta = any> {
     metadata: TMeta;
 }
+
 export function createIndexingEventHandler(
     printer: ChatPrinter,
     progress: ProgressBar,

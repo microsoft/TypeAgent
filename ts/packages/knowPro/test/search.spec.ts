@@ -7,11 +7,8 @@ import {
     SearchTermGroup,
 } from "../src/interfaces.js";
 import {
-    ConversationSearchResult,
-    searchConversation,
     searchConversationKnowledge,
     SemanticRefSearchResult,
-    WhenFilter,
 } from "../src/search.js";
 import {
     createSearchTerm,
@@ -19,20 +16,20 @@ import {
     createOrTermGroup,
 } from "../src/searchLib.js";
 import {
-    createTestSearchOptions,
     emptyConversation,
     loadTestConversationForOffline,
     loadTestConversationForOnline,
     loadTestQueries,
     parseTestQuery,
 } from "./testCommon.js";
+import { createTestSearchOptions } from "../src/search.js";
+import { runSearchConversation } from "./testCommon.js";
 import {
     expectDoesNotHaveEntities,
     expectHasEntities,
     resolveAndVerifyKnowledgeMatches,
     resolveAndVerifySemanticRefs,
     verifyDidMatchSearchGroup,
-    verifyMessageOrdinals,
     verifySemanticRefResult,
 } from "./verify.js";
 import { hasTestKeys, describeIf } from "test-lib";
@@ -191,10 +188,10 @@ describeIf(
         test(
             "search.queries",
             async () => {
-                const maxQueries = 100;
-                const testFile = "./test/data/Episode_53_query.txt";
-                let queries = loadTestQueries(testFile);
-                queries = queries.slice(0, maxQueries);
+                let queries = loadTestQueries(
+                    "./test/data/Episode_53_query.txt",
+                    100,
+                );
                 for (const query of queries) {
                     const searchExpr = parseTestQuery(conversation, query);
                     const results = await runSearchConversation(
@@ -227,20 +224,3 @@ describeIf(
         );
     },
 );
-
-async function runSearchConversation(
-    conversation: IConversation,
-    termGroup: SearchTermGroup,
-    when?: WhenFilter,
-): Promise<ConversationSearchResult> {
-    const matches = await searchConversation(
-        conversation,
-        termGroup,
-        when,
-        createTestSearchOptions(),
-    );
-    expect(matches).toBeDefined();
-    expect(matches!.messageMatches.length).toBeGreaterThan(0);
-    verifyMessageOrdinals(conversation, matches!.messageMatches);
-    return matches!;
-}

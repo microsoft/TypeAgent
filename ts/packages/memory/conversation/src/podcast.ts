@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import {
     IKnowledgeSource,
     IMessage,
@@ -8,7 +9,6 @@ import {
     ConversationIndex,
     SemanticRef,
     createConversationSettings,
-    addMetadataToIndex,
     IndexingEventHandlers,
     IndexingResults,
     buildConversationIndex,
@@ -24,12 +24,11 @@ import {
     IConversationDataWithIndexes,
 } from "knowpro";
 import {
-    createEmbeddingCache,
     conversation as kpLib,
     TextEmbeddingModelWithCache,
 } from "knowledge-processor";
 import { collections } from "typeagent";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { createEmbeddingModel } from "./common.js";
 
 import registerDebug from "debug";
 const debugLogger = registerDebug("conversation-memory.podcast");
@@ -74,26 +73,10 @@ export class PodcastMessageMeta implements IKnowledgeSource {
             return {
                 entities,
                 actions,
+                // TODO: Also create inverse actions
                 inverseActions: [],
                 topics: [],
             };
-        }
-    }
-}
-
-export function assignMessageListeners(
-    msgs: PodcastMessage[],
-    participants: Set<string>,
-) {
-    for (const msg of msgs) {
-        if (msg.metadata.speaker) {
-            let listeners: string[] = [];
-            for (const p of participants) {
-                if (p !== msg.metadata.speaker) {
-                    listeners.push(p);
-                }
-            }
-            msg.metadata.listeners = listeners;
         }
     }
 }
@@ -110,8 +93,12 @@ export class PodcastMessage implements IMessage {
         return this.metadata.getKnowledge();
     }
 
-    public addContent(content: string) {
-        this.textChunks[0] += content;
+    public addContent(content: string, chunkOrdinal = 0) {
+        if (chunkOrdinal > this.textChunks.length) {
+            this.textChunks.push(content);
+        } else {
+            this.textChunks[chunkOrdinal] += content;
+        }
     }
 }
 
@@ -122,6 +109,7 @@ export class Podcast implements IConversation<PodcastMessage> {
     public semanticRefs: SemanticRef[];
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
+    private embeddingSize: number | undefined;
 
     constructor(
         public nameTag: string = "",
@@ -131,23 +119,11 @@ export class Podcast implements IConversation<PodcastMessage> {
     ) {
         this.semanticRefs = [];
         if (!settings) {
-            const [model, embeddingSize] = this.getEmbeddingModel();
-            settings = createConversationSettings(model, embeddingSize);
+            settings = this.createSettings();
         }
         this.settings = settings;
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
-    }
-
-    public addMetadataToIndex() {
-        if (this.semanticRefIndex) {
-            // TODO: do ths using slices/batch so we don't have to load all messages
-            addMetadataToIndex(
-                this.messages,
-                this.semanticRefs,
-                this.semanticRefIndex,
-            );
-        }
     }
 
     public getParticipants(): Set<string> {
@@ -166,7 +142,6 @@ export class Podcast implements IConversation<PodcastMessage> {
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        this.addMetadataToIndex();
         this.beginIndexing();
         try {
             const result = await buildConversationIndex(
@@ -337,24 +312,27 @@ export class Podcast implements IConversation<PodcastMessage> {
      * Create a caching embedding model that can just leverage those embeddings
      * @returns embedding model, size of embedding
      */
-    private getEmbeddingModel(): [TextEmbeddingModel, number] {
-        this.embeddingModel ??= createEmbeddingCache(
-            openai.createEmbeddingModel(),
+    private createSettings() {
+        const [model, size] = createEmbeddingModel(
             64,
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
-
-        return [this.embeddingModel, 1536];
+        this.embeddingModel = model;
+        this.embeddingSize = size;
+        return createConversationSettings(
+            this.embeddingModel,
+            this.embeddingSize,
+        );
     }
 
     private beginIndexing(): void {
         if (this.embeddingModel) {
-            this.embeddingModel.enabled = false;
+            this.embeddingModel.cacheEnabled = false;
         }
     }
     private endIndexing(): void {
         if (this.embeddingModel) {
-            this.embeddingModel.enabled = true;
+            this.embeddingModel.cacheEnabled = true;
         }
     }
 }

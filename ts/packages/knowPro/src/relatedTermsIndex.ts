@@ -143,16 +143,35 @@ export async function buildRelatedTermsIndex(
     eventHandler?: IndexingEventHandlers,
 ): Promise<ListIndexingResult> {
     if (conversation.semanticRefIndex && conversation.secondaryIndexes) {
+        const allTerms = conversation.semanticRefIndex.getTerms();
+        return addToRelatedTermsIndex(
+            conversation,
+            settings,
+            allTerms,
+            eventHandler,
+        );
+    }
+    return {
+        numberCompleted: 0,
+    };
+}
+
+export async function addToRelatedTermsIndex(
+    conversation: IConversation,
+    settings: RelatedTermIndexSettings,
+    terms: string[],
+    eventHandler?: IndexingEventHandlers,
+): Promise<ListIndexingResult> {
+    if (conversation.semanticRefIndex && conversation.secondaryIndexes) {
         conversation.secondaryIndexes.termToRelatedTermsIndex ??=
             new RelatedTermsIndex(settings);
         const fuzzyIndex =
             conversation.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
-        const allTerms = conversation.semanticRefIndex.getTerms();
-        if (fuzzyIndex && allTerms.length > 0) {
-            return await fuzzyIndex.addTerms(allTerms, eventHandler);
+        if (fuzzyIndex && terms.length > 0) {
+            return await fuzzyIndex.addTerms(terms, eventHandler);
         }
         return {
-            numberCompleted: allTerms.length,
+            numberCompleted: terms.length,
         };
     }
     return {

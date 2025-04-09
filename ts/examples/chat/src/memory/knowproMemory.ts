@@ -37,6 +37,7 @@ import {
     createIndexingEventHandler,
     matchFilterToConversation,
 } from "./knowproCommon.js";
+import { createKnowproSchemaCommands } from "./knowproSchema.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -65,6 +66,7 @@ export async function createKnowproCommands(
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
+    await createKnowproSchemaCommands(commands, context.printer);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
@@ -546,7 +548,7 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const textQuery = namedArgs.query;
-        const result = await kp.createSearchQueryForConversation(
+        const result = await kp.searchQueryFromLanguage(
             context.conversation!,
             context.queryTranslator,
             textQuery,
@@ -560,7 +562,7 @@ export async function createKnowproCommands(
         const searchQuery = result.data;
         context.printer.writeJson(searchQuery, true);
         while (true) {
-            const searchQueryExpressions = kp.compileSearchQueryForConversation(
+            const searchQueryExpressions = kp.compileSearchQuery(
                 context.conversation!,
                 searchQuery,
                 exactScope,
@@ -714,7 +716,6 @@ export async function createKnowproCommands(
             description: "Build index",
             options: {
                 maxMessages: argNum("Maximum messages to index"),
-                relatedOnly: argBool("Index related terms only", false),
                 batchSize: argNum("Indexing batch size", 8),
             },
         };
@@ -752,29 +753,17 @@ export async function createKnowproCommands(
                 maxMessages,
             );
             // Build full index?
-            if (!namedArgs.relatedOnly) {
-                const clock = new StopWatch();
-                clock.start();
+            const clock = new StopWatch();
+            clock.start();
 
-                context.podcast.settings.semanticRefIndexSettings.batchSize =
-                    namedArgs.batchSize;
-                const indexResult =
-                    await context.podcast.buildIndex(eventHandler);
+            context.podcast.settings.semanticRefIndexSettings.batchSize =
+                namedArgs.batchSize;
+            const indexResult = await context.podcast.buildIndex(eventHandler);
 
-                clock.stop();
-                progress.complete();
-                context.printer.writeTiming(chalk.gray, clock);
-                context.printer.writeIndexingResults(indexResult);
-                return;
-            }
-            // Build partial index
-            context.podcast.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex?.clear();
-            await kp.buildRelatedTermsIndex(
-                context.podcast,
-                context.podcast.settings.relatedTermIndexSettings,
-                eventHandler,
-            );
+            clock.stop();
             progress.complete();
+            context.printer.writeTiming(chalk.gray, clock);
+            context.printer.writeIndexingResults(indexResult);
         } finally {
             context.podcast.messages = originalMessages;
         }

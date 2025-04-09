@@ -18,7 +18,10 @@ import {
     SearchTermGroup,
     PropertySearchTerm,
 } from "./interfaces.js";
-import { mergedEntities, mergeTopics } from "./knowledge.js";
+import {
+    mergeSemanticRefEntities,
+    mergeSemanticRefTopics,
+} from "./knowledge.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
@@ -81,6 +84,13 @@ export type SearchOptions = {
     maxMessageMatches?: number | undefined;
     maxMessageCharsInBudget?: number | undefined;
 };
+
+export function createTestSearchOptions(): SearchOptions {
+    return {
+        usePropertyIndex: true,
+        useTimestampIndex: true,
+    };
+}
 
 export type SemanticRefSearchResult = {
     termMatches: Set<string>;
@@ -171,7 +181,7 @@ export function getDistinctEntityMatches(
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return mergedEntities(semanticRefs, searchResults, topK);
+    return mergeSemanticRefEntities(semanticRefs, searchResults, topK);
 }
 
 export function getDistinctTopicMatches(
@@ -179,7 +189,7 @@ export function getDistinctTopicMatches(
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return mergeTopics(semanticRefs, searchResults, topK);
+    return mergeSemanticRefTopics(semanticRefs, searchResults, topK);
 }
 
 function runQuery<T = any>(

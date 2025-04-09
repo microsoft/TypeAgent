@@ -44,7 +44,10 @@ import { runImportQueue } from "./importer.js";
 import chalk from "chalk";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
-import { createIndexingEventHandler } from "./knowproCommon.js";
+import {
+    addToConversation,
+    createIndexingEventHandler,
+} from "./knowproCommon.js";
 
 export async function createPodcastMemory(
     models: Models,
@@ -224,7 +227,7 @@ export function createPodcastCommands(
         }
 
         const kpPodcast = new cm.Podcast("AllEpisodes");
-        kp.addToConversation(kpPodcast, podcastMessages, knowledgeResponses);
+        addToConversation(kpPodcast, podcastMessages, knowledgeResponses);
         kpPodcast.secondaryIndexes.threads.threads.push(...podcastThreads);
         const progress = new ProgressBar(
             context.printer,
