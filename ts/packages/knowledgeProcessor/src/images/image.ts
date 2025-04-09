@@ -629,9 +629,11 @@ export async function loadImageWithKnowledge(
         path.basename(fileName) + ".kr.json",
     );
     if (loadCachedDetails && fs.existsSync(cachedFileName)) {
+        console.log(`Skipping ${fileName}`);
         return JSON.parse(fs.readFileSync(cachedFileName, "utf8"));
     }
 
+    console.log(`Processing ${fileName}`);
     
     // if the image exceeds the supplied limit we'll resize the image to fit under that threshold
     const fileSize: number = fs.statSync(fileName, { }).size;
@@ -655,12 +657,17 @@ export async function loadImageWithKnowledge(
     }
 
     // load EXIF properties
-    const tags: ExifReader.Tags = ExifReader.load(buffer);
+    let tags: ExifReader.Tags | undefined = undefined;
     const properties: string[][] = [];
-    for (const tag of Object.keys(tags)) {
-        if (tags[tag]) {
-            properties.push([tag, tags[tag].description]);
+    try {
+        tags = ExifReader.load(buffer);        
+        for (const tag of Object.keys(tags)) {
+            if (tags[tag]) {
+                properties.push([tag, tags[tag].description]);
+            }
         }
+    } catch (error) {
+        // continue
     }
     const mimeType = getMimeType(path.extname(fileName));
     const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(
