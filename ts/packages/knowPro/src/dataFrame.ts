@@ -20,56 +20,35 @@ export type DataFrameDef = {
     columns: DataFrameColumnDef[];
 };
 
+export type ValueType = "number" | "string";
+
 /**
  * A column in a data frame
  */
 export type DataFrameColumnDef = {
     name: string;
-    type?: string;
+    type?: ValueType;
 };
 
-export function getColumnDef(
-    frameDef: DataFrameDef,
-    columnName: string,
-): DataFrameColumnDef | undefined {
-    return frameDef.columns.find((c) => c.name === columnName);
-}
-
-/**
- * INFER a data frame definition from a prototypical record.
- * The keys of the record become column names.
- * The types of the values become the column data types
- *
- * I am sure there is a better way to do this
- * @param obj
- */
-export function dataFrameDefForType<T extends object>(record: T): DataFrameDef {
-    const columns: DataFrameColumnDef[] = [];
-    for (let key in Object.keys(record)) {
-        const value = record[key as keyof T];
-        columns.push({ name: key, type: typeof value });
-    }
-    return { name: "DataFrame", columns: columns };
-}
-
-export function dataFrameDefToSqlSchema(dataFrame: DataFrameDef): string {
-    let sql = `${dataFrame.name}\n{\n`;
-    const columns = dataFrame.columns;
-    for (let i = 0; i < columns.length; ++i) {
-        const col = columns[i];
-        let colSql = col.type
-            ? `${col.name} ${col.type}`
-            : `${col.name} string`;
-        if (i < columns.length - 1) {
-            colSql += ",\n";
-        } else {
-            colSql += "\n";
-        }
-        sql += "  " + colSql;
-    }
-    return sql + "}\n";
-}
-
 export interface IDataFrame {
+    readonly definition: DataFrameDef;
     evalQuery(selectExpr: SearchSelectExpr): Promise<SemanticRefSearchResult>;
+}
+
+export class MemoryDataFrame implements IDataFrame {
+    private def: DataFrameDef;
+
+    constructor(def: DataFrameDef) {
+        this.def = def;
+    }
+
+    public get definition(): DataFrameDef {
+        return this.def;
+    }
+
+    public async evalQuery(
+        selectExpr: SearchSelectExpr,
+    ): Promise<SemanticRefSearchResult> {
+        throw new Error("Method not implemented.");
+    }
 }
