@@ -11,7 +11,7 @@ import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 
 import registerDebug from "debug";
-import { Result, success } from "typechat";
+import { error, Result, success } from "typechat";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class ConversationMessageMeta implements kp.IKnowledgeSource {
@@ -185,7 +185,7 @@ export class ConversationMemory
         //
         const knowledgeResult = await kp.extractKnowledgeFromText(
             this.settings.semanticRefIndexSettings.knowledgeExtractor!,
-            message.textChunks[0],
+            message.textChunks[0].trim(),
             3,
         );
         if (!knowledgeResult.success) {
@@ -206,7 +206,10 @@ export class ConversationMemory
             semanticRefOrdinalStartAt,
         );
 
-        await this.autoSaveFile();
+        const saveResult = await this.autoSaveFile();
+        if (!saveResult.success) {
+            return saveResult;
+        }
 
         // Clear the knowledge, now that its been indexed
         message.knowledge = undefined;
@@ -286,13 +289,18 @@ export class ConversationMemory
         return podcast;
     }
 
-    private async autoSaveFile() {
-        if (this.fileSaveSettings) {
-            // TODO: Optionally, back up previous file and do a safe read write
-            await this.writeToFile(
-                this.fileSaveSettings.dirPath,
-                this.fileSaveSettings.baseFileName,
-            );
+    private async autoSaveFile(): Promise<Result<boolean>> {
+        try {
+            if (this.fileSaveSettings) {
+                // TODO: Optionally, back up previous file and do a safe read write
+                await this.writeToFile(
+                    this.fileSaveSettings.dirPath,
+                    this.fileSaveSettings.baseFileName,
+                );
+            }
+            return success(true);
+        } catch (ex) {
+            return error(`AutoSaveFile failed ${ex}`);
         }
     }
 

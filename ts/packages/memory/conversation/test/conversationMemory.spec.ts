@@ -37,7 +37,8 @@ describeIf(
                     baseFileName: "endToEnd",
                 };
                 for (const message of messages) {
-                    await cm.addMessage(message);
+                    const result = await cm.addMessage(message);
+                    expect(result.success).toBeTruthy();
                 }
                 verifyMemory(cm, maxMessages);
                 const cm2 = await ConversationMemory.readFromFile(
