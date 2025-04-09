@@ -19,6 +19,7 @@ export * from "./serialization.js";
 export * from "./queryCmp.js";
 
 export {
+    createKnowledgeExtractor,
     extractKnowledgeFromText,
     mergeEntities as mergeConcreteEntities,
     mergeTopics,

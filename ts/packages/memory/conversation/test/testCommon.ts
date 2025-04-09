@@ -6,10 +6,12 @@ import {
     createTestChatModel,
     createTestEmbeddingModel,
     getAbsolutePath,
+    getOutputDirPath,
     NullEmbeddingModel,
 } from "test-lib";
 import { importPodcast } from "../src/importPodcast.js";
 import { Podcast } from "../src/podcast.js";
+import { ensureDir, removeDir } from "typeagent";
 
 export type TestTranscriptInfo = {
     filePath: string;
@@ -92,4 +94,13 @@ export async function loadTestPodcast(
         podcast.messages = podcast.messages.slice(0, maxMessages);
     }
     return podcast;
+}
+
+export async function ensureOutputDir(name: string, clean: boolean = true) {
+    const dirPath = getOutputDirPath(name);
+    if (clean) {
+        await removeDir(dirPath);
+    }
+    await ensureDir(dirPath);
+    return dirPath;
 }

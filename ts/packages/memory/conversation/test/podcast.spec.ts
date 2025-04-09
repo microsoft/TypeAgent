@@ -3,6 +3,7 @@
 
 import { describeIf, hasTestKeys } from "test-lib";
 import {
+    ensureOutputDir,
     getTestTranscriptDialog,
     loadTestPodcast,
     // getTestTranscriptSmall,
@@ -10,6 +11,7 @@ import {
 import { buildSemanticRefIndex } from "knowpro";
 import {
     verifyCompletedUpto,
+    verifyConversationBasic,
     verifyNoIndexingErrors,
     verifyNoTextIndexingError,
     verifyNumberCompleted,
@@ -27,7 +29,7 @@ describeIf(
             async () => {
                 //const test = getTestTranscriptSmall();
                 const maxMessages = 4;
-                const podcast = await loadTestPodcast(
+                let podcast = await loadTestPodcast(
                     getTestTranscriptDialog(),
                     true,
                     maxMessages,
@@ -44,8 +46,22 @@ describeIf(
                     results.secondaryIndexResults?.message?.numberCompleted,
                     podcast.messages.length,
                 );
-                verifyParticipants(podcast);
-                verifyTermsInSemanticIndex(["piano"], podcast.semanticRefIndex);
+                verifyPodcast(podcast, maxMessages);
+
+                const dirPath = await ensureOutputDir(
+                    "podcast.online.buildIndex",
+                );
+                await podcast.writeToFile(dirPath, podcast.nameTag);
+                const podcast2 = await Podcast.readFromFile(
+                    dirPath,
+                    podcast.nameTag,
+                );
+                expect(podcast2).toBeDefined();
+                verifyPodcast(
+                    podcast2!,
+                    podcast.messages.length,
+                    podcast.semanticRefs.length,
+                );
             },
             testTimeout,
         );
@@ -70,6 +86,21 @@ describeIf(
             },
             testTimeout,
         );
+
+        // This will obviously grow...
+        function verifyPodcast(
+            podcast: Podcast,
+            expectedMessageCount: number,
+            expectedSemanticRefCount?: number,
+        ) {
+            verifyConversationBasic(
+                podcast,
+                expectedMessageCount,
+                expectedSemanticRefCount,
+            );
+            verifyParticipants(podcast);
+            verifyTermsInSemanticIndex(["piano"], podcast.semanticRefIndex);
+        }
 
         function verifyParticipants(podcast: Podcast): void {
             const participants = podcast.getParticipants();

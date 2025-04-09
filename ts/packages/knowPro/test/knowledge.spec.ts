@@ -3,9 +3,11 @@
 
 import { describeIf, hasTestKeys } from "test-lib";
 import { loadTunsFromFile } from "./testMessage.js";
-import { extractKnowledgeForTextBatchQ } from "../src/knowledge.js";
+import {
+    createKnowledgeExtractor,
+    extractKnowledgeForTextBatchQ,
+} from "../src/knowledge.js";
 import { getTestChatModel } from "./testCommon.js";
-import { createKnowledgeExtractor } from "../src/conversation.js";
 
 describeIf(
     "knowledge.online",

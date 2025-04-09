@@ -54,3 +54,18 @@ export function verifyTermsInSemanticIndex(
         }
     }
 }
+
+export function verifyConversationBasic(
+    conversation: kp.IConversation,
+    expectedMessageCount: number,
+    expectedSemanticRefCount?: number,
+) {
+    expect(conversation.messages.length).toEqual(expectedMessageCount);
+    expect(conversation.semanticRefs).toBeDefined();
+    expect(conversation.semanticRefs!.length).toBeGreaterThan(0);
+    if (expectedSemanticRefCount && expectedSemanticRefCount > 0) {
+        expect(conversation.semanticRefs).toHaveLength(
+            expectedSemanticRefCount,
+        );
+    }
+}

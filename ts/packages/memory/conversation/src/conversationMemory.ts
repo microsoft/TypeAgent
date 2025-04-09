@@ -76,12 +76,12 @@ export class ConversationMessage implements kp.IMessage {
     constructor(
         messageText: string | string[],
         public metadata: ConversationMessageMeta,
+        public tags: string[] = [],
         /**
          * Any pre-extracted knowledge for this message.
          */
         public knowledge?: kpLib.KnowledgeResponse,
         timestamp?: string,
-        public tags: string[] = [],
     ) {
         this.textChunks = Array.isArray(messageText)
             ? messageText
@@ -97,7 +97,9 @@ export class ConversationMessage implements kp.IMessage {
         }
     }
 
-    public addKnowledge(newKnowledge: kpLib.KnowledgeResponse): void {
+    public addKnowledge(
+        newKnowledge: kpLib.KnowledgeResponse,
+    ): kpLib.KnowledgeResponse {
         if (this.knowledge !== undefined) {
             this.knowledge.entities = kp.mergeConcreteEntities([
                 ...this.knowledge.entities,
@@ -112,6 +114,7 @@ export class ConversationMessage implements kp.IMessage {
         } else {
             this.knowledge = newKnowledge;
         }
+        return this.knowledge;
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
@@ -133,6 +136,11 @@ export class ConversationMessage implements kp.IMessage {
     }
 }
 
+export type FileSaveSettings = {
+    dirPath: string;
+    baseFileName: string;
+};
+
 export class ConversationMemory
     implements kp.IConversation<ConversationMessage>
 {
@@ -140,6 +148,7 @@ export class ConversationMemory
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
+    public fileSaveSettings: FileSaveSettings | undefined;
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
     private embeddingSize: number | undefined;
@@ -183,10 +192,12 @@ export class ConversationMemory
             return knowledgeResult;
         }
         // This will merge the new knowledge with the prior knowledge
-        message.addKnowledge(knowledgeResult.data);
+        let messageKnowledge = knowledgeResult.data;
+        messageKnowledge = message.addKnowledge(messageKnowledge);
+
+        // Now, add the message to memory and index it
         let messageOrdinalStartAt = this.messages.length;
         let semanticRefOrdinalStartAt = this.semanticRefs.length;
-
         this.messages.push(message);
         kp.addToConversationIndex(
             this,
@@ -194,13 +205,108 @@ export class ConversationMemory
             messageOrdinalStartAt,
             semanticRefOrdinalStartAt,
         );
-        return success(message.knowledge!);
+
+        await this.autoSaveFile();
+
+        // Clear the knowledge, now that its been indexed
+        message.knowledge = undefined;
+        return success(messageKnowledge!);
     }
 
     public queueAddMessage(message: ConversationMessage): void {
         this.updatesTaskQueue.push({
             type: "addMessage",
             message,
+        });
+    }
+
+    public async serialize(): Promise<ConversationMemoryData> {
+        const data: ConversationMemoryData = {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermsIndexData:
+                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
+        };
+        return data;
+    }
+
+    public async deserialize(
+        podcastData: ConversationMemoryData,
+    ): Promise<void> {
+        this.nameTag = podcastData.nameTag;
+        this.messages = this.deserializeMessages(podcastData);
+        this.semanticRefs = podcastData.semanticRefs;
+        this.tags = podcastData.tags;
+        if (podcastData.semanticIndexData) {
+            this.semanticRefIndex = new kp.ConversationIndex(
+                podcastData.semanticIndexData,
+            );
+        }
+        if (podcastData.relatedTermsIndexData) {
+            this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
+                podcastData.relatedTermsIndexData,
+            );
+        }
+        if (podcastData.messageIndexData) {
+            this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+                this.settings.messageTextIndexSettings,
+            );
+            this.secondaryIndexes.messageIndex.deserialize(
+                podcastData.messageIndexData,
+            );
+        }
+    }
+
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const data = await this.serialize();
+        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<ConversationMemory | undefined> {
+        const podcast = new ConversationMemory();
+        const data = await kp.readConversationDataFromFile(
+            dirPath,
+            baseFileName,
+            podcast.settings.relatedTermIndexSettings.embeddingIndexSettings
+                ?.embeddingSize,
+        );
+        if (data) {
+            podcast.deserialize(data);
+        }
+        return podcast;
+    }
+
+    private async autoSaveFile() {
+        if (this.fileSaveSettings) {
+            // TODO: Optionally, back up previous file and do a safe read write
+            await this.writeToFile(
+                this.fileSaveSettings.dirPath,
+                this.fileSaveSettings.baseFileName,
+            );
+        }
+    }
+
+    private deserializeMessages(memoryData: ConversationMemoryData) {
+        return memoryData.messages.map((m) => {
+            const metadata = new ConversationMessageMeta(m.metadata.sender);
+            metadata.recipients = m.metadata.recipients;
+            return new ConversationMessage(
+                m.textChunks,
+                metadata,
+                m.tags,
+                undefined,
+                m.timestamp,
+            );
         });
     }
 
@@ -228,12 +334,13 @@ export class ConversationMemory
             }
         }
     }
-    /**
-     * Our index already has embeddings for every term in the podcast
-     * Create a caching embedding model that can just leverage those embeddings
-     * @returns embedding model, size of embedding
-     */
+
     private createSettings() {
+        /**
+         * Our index already has embeddings for every term in the podcast
+         * Create a caching embedding model that can just leverage those embeddings
+         * @returns embedding model, size of embedding
+         */
         const [model, size] = createEmbeddingModel(
             64,
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
@@ -246,9 +353,11 @@ export class ConversationMemory
         );
         settings.semanticRefIndexSettings.knowledgeExtractor =
             kp.createKnowledgeExtractor();
+        //
         // Messages can contain prior knowledge extracted during chat responses for example
         // To avoid knowledge duplication, we manually extract message knowledge and merge it
         // with any prior knowledge
+        //
         settings.semanticRefIndexSettings.autoExtractKnowledge = false;
         return settings;
     }

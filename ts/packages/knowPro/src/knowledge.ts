@@ -17,6 +17,28 @@ import {
 import { Scored } from "./common.js";
 import { error, Result } from "typechat";
 import { BatchTask, runInBatches } from "./taskQueue.js";
+import { ChatModel } from "aiclient";
+import { createKnowledgeModel } from "./conversationIndex.js";
+
+/**
+ * Create a knowledge extractor using the given Chat Model
+ * @param chatModel
+ * @returns
+ */
+export function createKnowledgeExtractor(
+    chatModel?: ChatModel,
+): kpLib.KnowledgeExtractor {
+    chatModel ??= createKnowledgeModel();
+    const extractor = kpLib.createKnowledgeExtractor(chatModel, {
+        maxContextLength: 4096,
+        /**
+         * This should *ALWAYS* be false.
+         * Merging is handled during indexing:
+         */
+        mergeActionKnowledge: false,
+    });
+    return extractor;
+}
 
 export function extractKnowledgeFromText(
     knowledgeExtractor: kpLib.KnowledgeExtractor,

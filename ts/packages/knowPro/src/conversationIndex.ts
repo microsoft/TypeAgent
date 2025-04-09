@@ -24,7 +24,7 @@ import {
     extractKnowledgeFromTextBatch,
     facetValueToString,
 } from "./knowledge.js";
-import { createKnowledgeExtractor } from "./conversation.js";
+import { createKnowledgeExtractor } from "./knowledge.js";
 import {
     addToSecondaryIndexes,
     buildSecondaryIndexes,
