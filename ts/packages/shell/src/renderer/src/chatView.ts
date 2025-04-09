@@ -566,7 +566,7 @@ export class ChatView {
     getMessageElm() {
         return this.topDiv;
     }
-    getScollContainer() {
+    getScrollContainer() {
         return this.messageDiv;
     }
 
