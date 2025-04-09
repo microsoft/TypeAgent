@@ -165,11 +165,18 @@ export class ConversationMemory
             settings = this.createSettings();
         }
         this.settings = settings;
+        //
+        // Messages can contain prior knowledge extracted during chat responses for example
+        // To avoid knowledge duplication, we manually extract message knowledge and merge it
+        // with any prior knowledge
+        //
+        this.settings.semanticRefIndexSettings.autoExtractKnowledge = false;
+
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings,
         );
-        this.updatesTaskQueue = queue(() => this.processUpdates, 1);
+        this.updatesTaskQueue = this.createTaskQueue();
     }
 
     public async addMessage(
@@ -216,11 +223,49 @@ export class ConversationMemory
         return success(messageKnowledge!);
     }
 
-    public queueAddMessage(message: ConversationMessage): void {
+    public queueAddMessage(
+        message: ConversationMessage,
+        completionCallback: ConversationTaskCallback,
+    ): void {
         this.updatesTaskQueue.push({
             type: "addMessage",
             message,
+            callback: completionCallback,
         });
+    }
+
+    public async search(
+        text: string,
+        translator: kp.SearchQueryTranslator,
+    ): Promise<Result<kp.ConversationSearchResult[]>> {
+        const result = await kp.searchQueryExprFromLanguage(
+            this,
+            translator,
+            text,
+        );
+        if (!result.success) {
+            return result;
+        }
+        // TODO: combine results
+        const queryExpressions = result.data;
+        const results: kp.ConversationSearchResult[] = [];
+        for (const searchQuery of queryExpressions) {
+            for (const expr of searchQuery.selectExpressions) {
+                const searchResults = await kp.searchConversation(
+                    this,
+                    expr.searchTermGroup,
+                    expr.when,
+                );
+                if (searchResults) {
+                    results.push(searchResults);
+                }
+            }
+        }
+        return success(results);
+    }
+
+    public async waitForPendingTasks(): Promise<void> {
+        await this.updatesTaskQueue.drain();
     }
 
     public async serialize(): Promise<ConversationMemoryData> {
@@ -318,13 +363,25 @@ export class ConversationMemory
         });
     }
 
-    private async processUpdates(task: AddMessageTask) {
-        let callback: ((error?: any | undefined) => void) | undefined;
+    private createTaskQueue() {
+        return queue(async (task: ConversationMemoryTasks, callback) => {
+            try {
+                await this.processUpdates(task);
+                callback();
+            } catch (ex: any) {
+                callback(ex);
+            }
+        }, 1);
+    }
+
+    private async processUpdates(task: ConversationMemoryTasks) {
+        let callback: ConversationTaskCallback | undefined;
         try {
             switch (task.type) {
                 default:
                     break;
                 case "addMessage":
+                    callback = task.callback;
                     const result = await this.addMessage(task.message);
                     if (callback) {
                         if (result.success) {
@@ -361,20 +418,18 @@ export class ConversationMemory
         );
         settings.semanticRefIndexSettings.knowledgeExtractor =
             kp.createKnowledgeExtractor();
-        //
-        // Messages can contain prior knowledge extracted during chat responses for example
-        // To avoid knowledge duplication, we manually extract message knowledge and merge it
-        // with any prior knowledge
-        //
-        settings.semanticRefIndexSettings.autoExtractKnowledge = false;
         return settings;
     }
 }
 
+export type ConversationTaskCallback =
+    | ((error?: any | undefined) => void)
+    | undefined;
+
 type AddMessageTask = {
     type: "addMessage";
     message: ConversationMessage;
-    callback?: ((error?: any | undefined) => void) | undefined;
+    callback?: ConversationTaskCallback;
 };
 
 type ConversationMemoryTasks = AddMessageTask;

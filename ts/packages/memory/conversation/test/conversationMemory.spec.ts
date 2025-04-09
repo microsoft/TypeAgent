@@ -22,11 +22,8 @@ describeIf(
         test(
             "endToEnd",
             async () => {
-                let [messages, _] = loadConversationTranscript(
-                    getTestTranscriptDialog(),
-                );
                 const maxMessages = 4;
-                messages = messages.slice(0, maxMessages);
+                const messages = loadTestMessages(maxMessages);
                 const cm = new ConversationMemory();
                 const dirPath = await ensureOutputDir(
                     "conversationMemory.online.endToEnd",
@@ -40,13 +37,30 @@ describeIf(
                     const result = await cm.addMessage(message);
                     expect(result.success).toBeTruthy();
                 }
-                verifyMemory(cm, maxMessages);
+                verifyMemory(cm, messages.length);
                 const cm2 = await ConversationMemory.readFromFile(
                     cm.fileSaveSettings.dirPath,
                     cm.fileSaveSettings.baseFileName,
                 );
                 expect(cm2).toBeDefined();
                 verifyMemory(cm2!, cm.messages.length, cm.semanticRefs.length);
+            },
+            testTimeout,
+        );
+
+        test(
+            "queueMessage",
+            async () => {
+                const maxMessages = 3;
+                const messages = loadTestMessages(maxMessages);
+                const cm = new ConversationMemory();
+                for (const message of messages) {
+                    cm.queueAddMessage(message, (error) => {
+                        expect(error).toBeUndefined();
+                    });
+                }
+                await cm.waitForPendingTasks();
+                verifyMemory(cm, messages.length);
             },
             testTimeout,
         );
@@ -62,6 +76,16 @@ describeIf(
                 expectedMessageCount,
                 expectedSemanticRefCount,
             );
+        }
+
+        function loadTestMessages(maxMessages: number) {
+            let [messages, _] = loadConversationTranscript(
+                getTestTranscriptDialog(),
+            );
+            if (maxMessages > 0) {
+                messages = messages.slice(0, maxMessages);
+            }
+            return messages;
         }
     },
 );
