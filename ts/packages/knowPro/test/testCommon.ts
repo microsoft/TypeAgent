@@ -17,6 +17,9 @@ import {
     SemanticRef,
     PropertySearchTerm,
     SearchTermGroup,
+    SearchSelectExpr,
+    WhenFilter,
+    SemanticRefSearchResult,
 } from "../src/interfaces.js";
 import {
     ConversationSettings,
@@ -27,11 +30,8 @@ import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 import {
     ConversationSearchResult,
-    createTestSearchOptions,
+    createDefaultSearchOptions,
     searchConversation,
-    SearchSelectExpr,
-    SemanticRefSearchResult,
-    WhenFilter,
 } from "../src/search.js";
 import {
     createOrTermGroup,
@@ -293,7 +293,7 @@ export async function runSearchConversation(
         conversation,
         termGroup,
         when,
-        createTestSearchOptions(),
+        createDefaultSearchOptions(),
     );
     expect(matches).toBeDefined();
     expect(matches!.messageMatches.length).toBeGreaterThan(0);

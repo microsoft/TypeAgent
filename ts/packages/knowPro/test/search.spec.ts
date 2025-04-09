@@ -5,11 +5,9 @@ import {
     IConversation,
     KnowledgeType,
     SearchTermGroup,
-} from "../src/interfaces.js";
-import {
-    searchConversationKnowledge,
     SemanticRefSearchResult,
-} from "../src/search.js";
+} from "../src/interfaces.js";
+import { searchConversationKnowledge } from "../src/search.js";
 import {
     createSearchTerm,
     createAndTermGroup,
@@ -22,7 +20,7 @@ import {
     loadTestQueries,
     parseTestQuery,
 } from "./testCommon.js";
-import { createTestSearchOptions } from "../src/search.js";
+import { createDefaultSearchOptions } from "../src/search.js";
 import { runSearchConversation } from "./testCommon.js";
 import {
     expectDoesNotHaveEntities,
@@ -152,7 +150,7 @@ describe("search.offline", () => {
             conversation,
             termGroup,
             { knowledgeType },
-            createTestSearchOptions(),
+            createDefaultSearchOptions(),
         );
         if (expectMatches) {
             expect(matches).toBeDefined();
