@@ -216,6 +216,8 @@ async function handleMontageAction(
         return createActionResultFromError(
             `Unable to perform the requeste action. Disconnected from the canvas.`,
         );
+    } else if (!actionContext.sessionContext.agentContext.imageCollection) {
+        return createActionResultFromError('No image index has been loaded!');
     }
 
     switch (action.actionName) {
@@ -269,7 +271,7 @@ async function handleMontageAction(
                 );
             } else {
                 result = createActionResultFromError(
-                    "Unable to search images, no image index available.",
+                    "Unable to search images, no image index available. Please run the image indexer before manipulating montages.",
                 );
             }
 
