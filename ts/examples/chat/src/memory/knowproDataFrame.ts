@@ -9,6 +9,7 @@ import { readAllText } from "typeagent";
 import * as kp from "knowpro";
 import { createIndexingEventHandler } from "./knowproCommon.js";
 import chalk from "chalk";
+import { conversation as kpLib } from "knowledge-processor";
 
 export async function createKnowproDataFrameCommands(
     commands: Record<string, CommandHandler>,
@@ -111,28 +112,7 @@ export type Container<T> = {
     item?: T | undefined;
 };
 
-export function defineGeoFrame(): kp.DataFrameDef {
-    return {
-        name: "Geo",
-        columns: [
-            { name: "latitude", type: "string" },
-            { name: "longitude", type: "string" },
-        ],
-    };
-}
-
-export function defineAddressFrame(): kp.DataFrameDef {
-    return {
-        name: "Address",
-        columns: [
-            { name: "streetAddress", type: "string" },
-            { name: "postalCode", type: "string" },
-            { name: "addressLocality", type: "string" },
-        ],
-    };
-}
-
-export type RestaurantOrdinal = number;
+export type RestaurantOrdinal = kp.DataFrameRowSourceOrdinal;
 
 export class RestaurantTextInfo implements kp.IMessage {
     public textChunks: string[];
@@ -142,7 +122,7 @@ export class RestaurantTextInfo implements kp.IMessage {
 
     constructor(
         public restaurantOrdinal: RestaurantOrdinal,
-        name: string,
+        public name: string,
         description?: string,
     ) {
         let text = `Restaurant:\n${name}`;
@@ -152,8 +132,13 @@ export class RestaurantTextInfo implements kp.IMessage {
         this.textChunks = [text];
     }
 
-    public getKnowledge() {
-        return undefined;
+    public getKnowledge(): kpLib.KnowledgeResponse | undefined {
+        return {
+            entities: [{ name: this.name, type: ["restaurant"] }],
+            actions: [],
+            inverseActions: [],
+            topics: [],
+        };
     }
 }
 
@@ -204,21 +189,49 @@ export class RestaurantTextInfoCollection implements kp.IConversation {
     }
 }
 
-export class RestaurantCollection {
+/**
+ * TODO: need better naming for everything here.
+ */
+export interface IHybridMemory<TMessage extends kp.IMessage = kp.IMessage> {
+    get conversation(): kp.IConversation<TMessage>;
+    get dataFrames(): ReadonlyMap<string, kp.IDataFrame>;
+}
+
+export class RestaurantCollection implements IHybridMemory {
     public restaurants: Restaurant[];
     public textIndex: RestaurantTextInfoCollection;
     public locations: kp.DataFrame<Geo>;
     public addresses: kp.DataFrame<Address>;
     private queryTranslator: kp.SearchQueryTranslator;
+    private allFrames: Map<string, kp.IDataFrame>;
 
     constructor() {
         this.restaurants = [];
         this.textIndex = new RestaurantTextInfoCollection();
-        this.locations = new kp.DataFrame<Geo>(defineGeoFrame());
-        this.addresses = new kp.DataFrame<Address>(defineAddressFrame());
+        this.locations = new kp.DataFrame<Geo>("Geo", [
+            { name: "latitude", type: "string" },
+            { name: "longitude", type: "string" },
+        ]);
+        this.addresses = new kp.DataFrame<Address>("Address", [
+            { name: "streetAddress", type: "string" },
+            { name: "postalCode", type: "string" },
+            { name: "addressLocality", type: "string" },
+        ]);
+        this.allFrames = new Map<string, kp.IDataFrame>();
+        this.allFrames.set(this.locations.name, this.locations);
+        this.allFrames.set(this.addresses.name, this.addresses);
+
         this.queryTranslator = kp.createSearchQueryTranslator(
             openai.createChatModelDefault("knowpro_test"),
         );
+    }
+
+    public get conversation(): kp.IConversation {
+        return this.textIndex;
+    }
+
+    public get dataFrames() {
+        return this.allFrames;
     }
 
     public addRestaurant(restaurant: Restaurant): boolean {
@@ -274,13 +287,13 @@ export class RestaurantCollection {
         }
         const matchedRestaurants: Restaurant[] = [];
         const sq = queryResults.data[0];
-        for (const sexpr of sq.selectExpressions) {
+        for (const sExpr of sq.selectExpressions) {
             // TODO: look at terms in sexpr.searchTermGroup and figure out which should be handled by data frames
             // Then we can intersect results
             const matches = await kp.searchConversation(
                 this.textIndex,
-                sexpr.searchTermGroup,
-                sexpr.when,
+                sExpr.searchTermGroup,
+                sExpr.when,
                 undefined,
                 sq.rawQuery,
             );

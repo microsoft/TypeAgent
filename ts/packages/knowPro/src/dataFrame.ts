@@ -5,33 +5,32 @@ import { TextRange } from "./interfaces.js";
 import { ComparisonOp } from "./queryCmp.js";
 
 /**
- * Data Frame definition.
- * Since TypeScript type information is NOT available at runtime, we need to
- * build and keep this metadata to validate DataFrameActions: column names etc
+ * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
  */
-export type DataFrameDef = {
-    /**
-     * Name of the data frame. Default is DataFrame
-     */
-    name: string;
-    /**
-     * Columns in the data frame
-     */
-    columns: DataFrameColumnDef[];
-};
 
-export type ValueType = "number" | "string";
+export type DataFrameValueType = "number" | "string";
 
 /**
  * A column in a data frame
  */
 export type DataFrameColumnDef = {
     name: string;
-    type?: ValueType;
+    type?: DataFrameValueType;
 };
 
+export function isDataFrameColumn(dataFrame: IDataFrame, columnName: string) {
+    for (const colDef of dataFrame.columns) {
+        if (colDef.name === columnName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export type DataFrameRowSourceOrdinal = number;
+
 export interface IDataFrameRow {
-    sourceOrdinal: number;
+    sourceOrdinal: DataFrameRowSourceOrdinal;
     /**
      * If this data frame row was either extracted from OR
      * associated with a particular text range
@@ -41,8 +40,15 @@ export interface IDataFrameRow {
 
 export type DataFrameValue = number | string;
 
-export interface IDataFrame<TRow extends IDataFrameRow> {
-    readonly definition: DataFrameDef;
+export interface IDataFrame<TRow extends IDataFrameRow = IDataFrameRow> {
+    /**
+     * Name of the data frame. Default is DataFrame
+     */
+    readonly name: string;
+    /**
+     * Columns in the data frame
+     */
+    readonly columns: DataFrameColumnDef[];
     addRows(...rows: TRow[]): Promise<void>;
     findRows(
         name: string,
@@ -58,7 +64,10 @@ export interface IDataFrame<TRow extends IDataFrameRow> {
 export class DataFrame<TRow extends IDataFrameRow> implements IDataFrame<TRow> {
     public rows: TRow[] = [];
 
-    constructor(public readonly definition: DataFrameDef) {}
+    constructor(
+        public name: string,
+        public columns: DataFrameColumnDef[],
+    ) {}
 
     public addRows(...rows: TRow[]): Promise<void> {
         this.rows.push(...rows);
@@ -70,6 +79,10 @@ export class DataFrame<TRow extends IDataFrameRow> implements IDataFrame<TRow> {
         value: DataFrameValue,
         op?: ComparisonOp,
     ): Promise<TRow[] | undefined> {
+        if (!isDataFrameColumn(this, name)) {
+            return Promise.resolve(undefined);
+        }
+
         op ??= ComparisonOp.Eq;
         let matches: TRow[] | undefined;
         for (const row of this.rows) {
