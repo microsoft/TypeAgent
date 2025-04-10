@@ -7,7 +7,7 @@ import {
     ClientAPI,
     NotifyCommands,
     SpeechToken,
-    ShellSettingsType,
+    ShellUserSettings,
     Client,
 } from "../../preload/electronTypes.js";
 import { ChatView } from "./chatView";
@@ -288,7 +288,7 @@ function addEvents(
 
             tabsView.showTab(key);
         },
-        updateSettings(settings: ShellSettingsType): void {
+        updateSettings(settings: ShellUserSettings): void {
             settingsView.shellSettings = settings;
         },
         fileSelected(fileName: string, fileContent: string): void {

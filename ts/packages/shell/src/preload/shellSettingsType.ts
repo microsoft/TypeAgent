@@ -1,20 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DisplayType } from "@typeagent/agent-sdk";
-
 export type TTSSettings = {
-    provider?: string;
-    voice?: string;
+    provider?: string | undefined;
+    voice?: string | undefined;
 };
 
-export type ShellSettingsType = {
-    size: number[];
-    position?: number[];
-    zoomLevel: number;
-    devTools: boolean;
-    microphoneId?: string;
-    microphoneName?: string;
+export type ShellUserSettings = {
+    microphoneId: string | undefined;
+    microphoneName: string | undefined;
     notifyFilter: string;
     tts: boolean;
     ttsSettings: TTSSettings;
@@ -22,24 +16,25 @@ export type ShellSettingsType = {
     multiModalContent: boolean;
     devUI: boolean;
     partialCompletion: boolean;
-    disallowedDisplayType: DisplayType[];
+    disallowedDisplayType: { [key: string]: boolean };
     darkMode: boolean;
     chatHistory: boolean; // should the shell load the chat history?
-    canvas?: string; // should the canvas be reopenend upon start?
 };
 
-export const defaultSettings: ShellSettingsType = {
-    size: [900, 1200],
-    zoomLevel: 1,
-    devTools: false,
+export const defaultUserSettings: ShellUserSettings = {
+    microphoneId: undefined,
+    microphoneName: undefined,
     notifyFilter: "error;warning;",
     tts: false,
-    ttsSettings: {},
+    ttsSettings: {
+        provider: undefined,
+        voice: undefined,
+    },
     agentGreeting: true,
     multiModalContent: true,
     devUI: false,
     partialCompletion: true,
-    disallowedDisplayType: [],
+    disallowedDisplayType: {},
     darkMode: false,
     chatHistory: true,
 };
