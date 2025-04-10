@@ -5,7 +5,6 @@ import dotenv from "dotenv";
 import {
     ipcMain,
     app,
-    BrowserWindow,
     globalShortcut,
     dialog,
     session,
@@ -64,11 +63,11 @@ export function runningTests(): boolean {
 const time = performance.now();
 debugShell("Starting...");
 
-async function createWindow() {
+async function createWindow(settings: ShellSettings) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(ShellSettings.getinstance());
+    const shellWindow = new ShellWindow(settings);
     const mainWindow = shellWindow.mainWindow;
     const chatView = shellWindow.chatView;
 
@@ -79,28 +78,20 @@ async function createWindow() {
     });
 
     // Notify renderer process whenever settings are modified
-    ShellSettings.getinstance().onSettingsChanged = (
-        settingName?: string | undefined,
-    ): void => {
+    settings.onSettingsChanged = (settingName?: string | undefined): void => {
         chatView.webContents.send(
             "settings-changed",
-            ShellSettings.getinstance().getSerializable(),
+            settings.getSerializable(),
         );
 
         if (settingName == "size") {
-            mainWindow.setSize(
-                ShellSettings.getinstance().width,
-                ShellSettings.getinstance().height,
-            );
+            mainWindow.setSize(settings.width, settings.height);
         } else if (settingName == "position") {
-            mainWindow.setPosition(
-                ShellSettings.getinstance().x!,
-                ShellSettings.getinstance().y!,
-            );
+            mainWindow.setPosition(settings.x!, settings.y!);
         }
 
         if (settingName === "zoomLevel") {
-            shellWindow.setZoomLevel(ShellSettings.getinstance().zoomLevel);
+            shellWindow.setZoomLevel(settings.zoomLevel);
         }
     };
 
@@ -279,23 +270,8 @@ async function initializeDispatcher(
     }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-async function initialize() {
-    debugShell("Ready", performance.now() - time);
-    // Set app user model id for windows
-    electronApp.setAppUserModelId("com.electron");
-
-    const browserExtensionPath = join(
-        app.getAppPath(),
-        "../agents/browser/dist/electron",
-    );
-    await session.defaultSession.loadExtension(browserExtensionPath, {
-        allowFileAccess: true,
-    });
-
-    const shellWindow = await createWindow();
+async function initializeInstance(settings: ShellSettings) {
+    const shellWindow = await createWindow(settings);
     const { mainWindow, chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {
@@ -309,7 +285,6 @@ async function initialize() {
             title = newTitle;
             chatView.webContents.send(
                 "setting-summary-changed",
-                newTitle,
                 dispatcher.getTranslatorNameToEmojiMap(),
             );
 
@@ -321,30 +296,9 @@ async function initialize() {
     const dispatcherP = initializeDispatcher(shellWindow, updateTitle);
     ipcMain.on("dom ready", async () => {
         debugShell("Showing window", performance.now() - time);
-        mainWindow.show();
-        // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
-        mainWindow.webContents.zoomFactor = 1;
 
         // Send settings asap
-        ShellSettings.getinstance().onSettingsChanged!();
-
-        // Load chat history if enabled
-        const chatHistory: string = path.join(
-            getInstanceDir(),
-            "chat_history.html",
-        );
-        if (
-            ShellSettings.getinstance().chatHistory &&
-            existsSync(chatHistory)
-        ) {
-            chatView.webContents.send(
-                "chat-history",
-                readFileSync(
-                    path.join(getInstanceDir(), "chat_history.html"),
-                    "utf-8",
-                ),
-            );
-        }
+        shellWindow.settings.onSettingsChanged!();
 
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
         const dispatcher = await dispatcherP;
@@ -353,55 +307,15 @@ async function initialize() {
             return;
         }
         updateTitle(dispatcher);
-        // open the canvas if it was previously open
-        if (ShellSettings.getinstance().canvas !== undefined) {
-            shellWindow.openInlineBrowser(
-                new URL(ShellSettings.getinstance().canvas!),
-            );
-        }
 
         // send the agent greeting if it's turned on
-        if (ShellSettings.getinstance().agentGreeting) {
+        if (shellWindow.settings.agentGreeting) {
             dispatcher.processCommand("@greeting", "agent-0", []);
         }
     });
 
-    // Store the chat history whenever the DOM changes
-    // this let's us rehydrate the chat when reopening the shell
-    ipcMain.on("dom changed", async (_event, html) => {
-        // store the modified DOM contents
-        const file: string = path.join(getInstanceDir(), "chat_history.html");
-
-        debugShell(`Saving chat history to '${file}'.`, performance.now());
-
-        try {
-            writeFileSync(file, html);
-        } catch (e) {
-            debugShell(
-                `Unable to save history to '${file}'. Error: ${e}`,
-                performance.now(),
-            );
-        }
-    });
-
-    ipcMain.handle("get-localWhisper-status", async () => {
-        return isLocalWhisperEnabled();
-    });
-
     ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
-        // Save the shell configurable settings
-        ShellSettings.getinstance().microphoneId = settings.microphoneId;
-        ShellSettings.getinstance().microphoneName = settings.microphoneName;
-        ShellSettings.getinstance().tts = settings.tts;
-        ShellSettings.getinstance().ttsSettings = settings.ttsSettings;
-        ShellSettings.getinstance().agentGreeting = settings.agentGreeting;
-        ShellSettings.getinstance().partialCompletion =
-            settings.partialCompletion;
-        ShellSettings.getinstance().darkMode = settings.darkMode;
-        ShellSettings.getinstance().chatHistory = settings.chatHistory;
-
-        // write the settings to disk
-        ShellSettings.getinstance().save();
+        shellWindow.updateSettings(settings);
     });
 
     ipcMain.on("open-image-file", async () => {
@@ -423,15 +337,65 @@ async function initialize() {
         }
     });
 
-    ipcMain.on(
-        "send-to-browser-ipc",
-        async (_event, data: WebSocketMessageV2) => {
-            await BrowserAgentIpc.getinstance().send(data);
-        },
-    );
+    return shellWindow.waitForContentLoaded();
+}
 
-    globalShortcut.register("Alt+Right", () => {
-        chatView.webContents.send("send-demo-event", "Alt+Right");
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+async function initialize() {
+    debugShell("Ready", performance.now() - time);
+    // Set app user model id for windows
+    electronApp.setAppUserModelId("com.electron");
+
+    const browserExtensionPath = join(
+        app.getAppPath(),
+        "../agents/browser/dist/electron",
+    );
+    await session.defaultSession.loadExtension(browserExtensionPath, {
+        allowFileAccess: true,
+    });
+
+    const settings = ShellSettings.getinstance();
+    ipcMain.handle("get-chat-history", async () => {
+        // Load chat history if enabled
+        const chatHistory: string = path.join(
+            getInstanceDir(),
+            "chat_history.html",
+        );
+        if (settings.chatHistory && existsSync(chatHistory)) {
+            return readFileSync(
+                path.join(getInstanceDir(), "chat_history.html"),
+                "utf-8",
+            );
+        }
+        return undefined;
+    });
+
+    // Store the chat history whenever the DOM changes
+    // this let's us rehydrate the chat when reopening the shell
+    ipcMain.on("save-chat-history", async (_, html) => {
+        // store the modified DOM contents
+        const file: string = path.join(getInstanceDir(), "chat_history.html");
+
+        debugShell(`Saving chat history to '${file}'.`, performance.now());
+
+        try {
+            writeFileSync(file, html);
+        } catch (e) {
+            debugShell(
+                `Unable to save history to '${file}'. Error: ${e}`,
+                performance.now(),
+            );
+        }
+    });
+
+    ipcMain.handle("get-localWhisper-status", async () => {
+        return isLocalWhisperEnabled();
+    });
+
+    ipcMain.on("send-to-browser-ipc", async (_, data: WebSocketMessageV2) => {
+        await BrowserAgentIpc.getinstance().send(data);
     });
 
     // Default open or close DevTools by F12 in development
@@ -444,7 +408,8 @@ async function initialize() {
     app.on("activate", async function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
-        if (BrowserWindow.getAllWindows().length === 0) await createWindow();
+        if (ShellWindow.getInstance() === undefined)
+            await initializeInstance(settings);
     });
 
     // On windows, we will spin up a local end point that listens
@@ -454,9 +419,14 @@ async function initialize() {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {
+                const shellWindow = ShellWindow.getInstance();
+                if (shellWindow === undefined) {
+                    // Ignore if there is no shell window
+                    return;
+                }
                 if (c.toString() == "triggerRecognitionOnce") {
                     console.log("Pen click note button click received!");
-                    triggerRecognitionOnce(chatView);
+                    triggerRecognitionOnce(shellWindow.chatView);
                 }
             });
             stream.on("error", (e) => {
@@ -470,7 +440,7 @@ async function initialize() {
             debugShellError(`Error creating pipe at ${pipePath}`);
         }
     }
-    return shellWindow.waitForContentLoaded();
+    return initializeInstance(settings);
 }
 
 app.whenReady()
@@ -508,7 +478,7 @@ function setupQuit(dispatcher: Dispatcher) {
         if (canQuit) {
             return;
         }
-        // Stop the quiting to finish async tasks.
+        // Stop the quitting to finish async tasks.
         e.preventDefault();
 
         // if we are already quitting, do nothing

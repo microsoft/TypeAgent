@@ -10,6 +10,7 @@ import { ChatView } from "./chatView.js";
 import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
 import { iconMoon, iconSun } from "./icon.js";
 import { DisplayType } from "@typeagent/agent-sdk";
+import { getClientAPI } from "./main";
 
 function addOption(
     select: HTMLSelectElement,
@@ -377,10 +378,7 @@ export class SettingsView {
     }
 
     private saveSettings() {
-        (window as any).electron.ipcRenderer.send(
-            "save-settings",
-            this.shellSettings,
-        );
+        getClientAPI().saveSettings(this.shellSettings);
     }
 
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {

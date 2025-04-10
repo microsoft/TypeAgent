@@ -4,6 +4,8 @@
 import {
     BrowserWindow,
     DevicePermissionHandlerHandlerDetails,
+    globalShortcut,
+    ipcMain,
     shell,
     WebContents,
     WebContentsView,
@@ -20,12 +22,21 @@ const userAgent =
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
 export class ShellWindow {
+    public static getInstance(): ShellWindow | undefined {
+        return this.instance;
+    }
+    private static instance: ShellWindow | undefined;
+
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
     private inlineWebContentView: WebContentsView | undefined;
     private readonly contentLoadP: Promise<void>[];
+    private readonly handlers = new Map<string, (event: any) => void>();
 
-    constructor(private readonly settings: ShellSettings) {
+    constructor(public readonly settings: ShellSettings) {
+        if (ShellWindow.instance !== undefined) {
+            throw new Error("ShellWindow already created");
+        }
         const mainWindow = createMainWindow(settings);
         const chatView = createChatView(settings);
 
@@ -33,15 +44,9 @@ export class ShellWindow {
         this.setupWebContents(mainWindow.webContents);
         this.setupWebContents(chatView.webContents);
 
-        mainWindow.on("ready-to-show", () => {
-            mainWindow.show();
-
-            if (settings.devTools) {
-                chatView.webContents.openDevTools();
-            }
-        });
-
         mainWindow.on("close", () => {
+            this.cleanup();
+
             mainWindow.hide();
             mainWindow.removeAllListeners("move");
             mainWindow.removeAllListeners("moved");
@@ -58,6 +63,7 @@ export class ShellWindow {
 
         mainWindow.on("closed", () => {
             settings.save();
+            ShellWindow.instance = undefined;
         });
 
         if (isLinux) {
@@ -80,6 +86,10 @@ export class ShellWindow {
 
         this.mainWindow = mainWindow;
         this.chatView = chatView;
+
+        this.installHandler("dom ready", () => {
+            this.ready();
+        });
 
         const contentLoadP: Promise<void>[] = [];
         // HMR for renderer base on electron-vite cli.
@@ -107,6 +117,41 @@ export class ShellWindow {
         this.contentLoadP = contentLoadP;
 
         this.updateContentSize();
+        ShellWindow.instance = this;
+    }
+
+    private installHandler(name: string, handler: (event: any) => void) {
+        this.handlers.set(name, handler);
+        ipcMain.on(name, handler);
+    }
+
+    private cleanup() {
+        for (const [key, handler] of this.handlers) {
+            ipcMain.removeListener(key, handler);
+        }
+        this.handlers.clear();
+
+        globalShortcut.unregister("Alt+Right");
+    }
+
+    private ready() {
+        const mainWindow = this.mainWindow;
+        mainWindow.show();
+        // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
+        mainWindow.webContents.zoomFactor = 1;
+
+        if (this.settings.devTools) {
+            this.chatView.webContents.openDevTools();
+        }
+
+        // open the canvas if it was previously open
+        if (this.settings.canvas !== undefined) {
+            this.openInlineBrowser(new URL(this.settings.canvas));
+        }
+
+        globalShortcut.register("Alt+Right", () => {
+            this.chatView.webContents.send("send-demo-event", "Alt+Right");
+        });
     }
 
     public async waitForContentLoaded() {
@@ -212,6 +257,20 @@ export class ShellWindow {
         this.settings.save();
     }
 
+    public updateSettings(settings: ShellSettings) {
+        // Save the shell configurable settings
+        this.settings.microphoneId = settings.microphoneId;
+        this.settings.microphoneName = settings.microphoneName;
+        this.settings.tts = settings.tts;
+        this.settings.ttsSettings = settings.ttsSettings;
+        this.settings.agentGreeting = settings.agentGreeting;
+        this.settings.partialCompletion = settings.partialCompletion;
+        this.settings.darkMode = settings.darkMode;
+        this.settings.chatHistory = settings.chatHistory;
+
+        // write the settings to disk
+        this.settings.save();
+    }
     public toggleTopMost() {
         this.mainWindow.setAlwaysOnTop(!this.mainWindow.isAlwaysOnTop());
     }
@@ -330,7 +389,7 @@ function createMainWindow(settings: ShellSettings) {
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
-            preload: path.join(__dirname, "../preload/index.mjs"),
+            preload: path.join(__dirname, "../preload/main.mjs"),
             sandbox: false,
             zoomFactor: 1,
         },
@@ -338,7 +397,6 @@ function createMainWindow(settings: ShellSettings) {
         y: settings.y,
     });
 
-    console.log(settings.x, settings.y);
     // This (seemingly redundant) call is needed when we use a BrowserView.
     // Without this call, the mainWindow opens using default width/height, not the
     // values saved in ShellSettings
