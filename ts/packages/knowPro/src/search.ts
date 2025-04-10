@@ -80,7 +80,7 @@ export async function runSearchQuery(
     conversation: IConversation,
     query: SearchQueryExpr,
     options?: SearchOptions,
-) {
+): Promise<ConversationSearchResult[]> {
     options ??= createDefaultSearchOptions();
     const results: ConversationSearchResult[] = [];
     for (const expr of query.selectExpressions) {
@@ -113,6 +113,7 @@ export async function searchConversation(
     options?: SearchOptions,
     rawSearchQuery?: string,
 ): Promise<ConversationSearchResult | undefined> {
+    options ??= createDefaultSearchOptions();
     const knowledgeMatches = await searchConversationKnowledge(
         conversation,
         searchTermGroup,
@@ -160,6 +161,7 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
+    options ??= createDefaultSearchOptions();
     const queryBuilder = new QueryCompiler(
         conversation,
         conversation.secondaryIndexes ?? {},
