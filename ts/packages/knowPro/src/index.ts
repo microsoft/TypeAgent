@@ -30,3 +30,4 @@ export * from "./dateTimeSchema.js";
 export * from "./searchQueryTranslator.js";
 
 export * from "./storage.js";
+export * from "./dataFrame.js";

@@ -246,20 +246,12 @@ export class ConversationMemory
         if (!result.success) {
             return result;
         }
-        // TODO: combine results
+        // TODO: combine results from sub-expressions
         const queryExpressions = result.data;
         const results: kp.ConversationSearchResult[] = [];
         for (const searchQuery of queryExpressions) {
-            for (const expr of searchQuery.selectExpressions) {
-                const searchResults = await kp.searchConversation(
-                    this,
-                    expr.searchTermGroup,
-                    expr.when,
-                );
-                if (searchResults) {
-                    results.push(searchResults);
-                }
-            }
+            const queryResult = await kp.runSearchQuery(this, searchQuery);
+            results.push(...queryResult);
         }
         return success(results);
     }
