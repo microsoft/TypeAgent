@@ -63,10 +63,14 @@ export class ShellSettings
             };
         }
 
+        // Window state
         this.size = settings.size;
         this.position = settings.position;
         this.zoomLevel = settings.zoomLevel;
         this.devTools = settings.devTools;
+        this.canvas = settings.canvas;
+
+        // Settings
         this.microphoneId = settings.microphoneId;
         this.microphoneName = settings.microphoneName;
         this.notifyFilter = settings.notifyFilter;
@@ -77,11 +81,10 @@ export class ShellSettings
         this.devUI = settings.devUI;
         this.partialCompletion = settings.partialCompletion;
         this.disallowedDisplayType = settings.disallowedDisplayType;
-
-        this.onSettingsChanged = null;
         this.darkMode = settings.darkMode;
         this.chatHistory = settings.chatHistory;
-        this.canvas = settings.canvas;
+
+        this.onSettingsChanged = null;
     }
 
     public static get filePath(): string {
@@ -146,15 +149,5 @@ export class ShellSettings
         if (this.onSettingsChanged != null && oldValue != value) {
             this.onSettingsChanged!(name);
         }
-    }
-
-    public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        for (let i = 0; i < this.disallowedDisplayType.length; i++) {
-            if (this.disallowedDisplayType[i] === displayType) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

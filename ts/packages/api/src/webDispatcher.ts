@@ -51,7 +51,6 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
                 JSON.stringify({
                     message: "setting-summary-changed",
                     data: {
-                        summary: newSettingSummary,
                         registeredAgents: [
                             ...dispatcher.getTranslatorNameToEmojiMap(),
                         ],

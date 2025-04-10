@@ -586,8 +586,6 @@ export class ChatView {
         });
 
         input.dispatchEvent(keyboardEvent);
-
-        (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
 
     public setMetricsVisible(visible: boolean) {
