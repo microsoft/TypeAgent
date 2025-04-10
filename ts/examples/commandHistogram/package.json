@@ -1,0 +1,53 @@
+{
+  "name": "telemetry-query-example",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Telemetry Database Query Example",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/commandHistogram"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "runchat": "node dist/main.js memory",
+    "runcode": "node dist/main.js code",
+    "runcodememory": "node dist/main.js codeMemory",
+    "runtests": "node dist/main.js tests",
+    "tsc": "tsc -p src"
+  },
+  "dependencies": {
+    "aiclient": "workspace:*",
+    "chalk": "^5.4.1",
+    "code-processor": "workspace:*",
+    "common-utils": "workspace:*",
+    "conversation-memory": "workspace:*",
+    "dotenv": "^16.3.1",
+    "exifreader": "4.23.5",
+    "image-memory": "workspace:*",
+    "interactive-app": "workspace:*",
+    "knowledge-processor": "workspace:*",
+    "knowpro": "workspace:*",
+    "memory-providers": "workspace:*",
+    "mongodb": "^6.15.0",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1",
+    "typescript": "^5.4.2"
+  },
+  "devDependencies": {
+    "copyfiles": "^2.4.1",
+    "rimraf": "^6.0.1"
+  },
+  "engines": {
+    "node": ">=18",
+    "pnpm": ">=8"
+  }
+}

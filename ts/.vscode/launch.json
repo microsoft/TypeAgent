@@ -343,5 +343,14 @@
           "${workspaceFolder}/**/*.js"
       ],
     },
+    {
+      "name": "Launch Command Historgram",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/commandHistogram/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },    
   ]
 }
