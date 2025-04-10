@@ -1,10 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { MatchAccumulator } from "./collections.js";
 import { isPropertyTerm, isSearchGroupTerm } from "./compileLib.js";
 import {
     IConversation,
     IMessage,
+    PropertySearchTerm,
     SearchTermGroup,
     TextRange,
     WhenFilter,
@@ -28,20 +30,32 @@ export type DataFrameColumnDef = {
 
 export type DataFrameColumns = ReadonlyMap<string, DataFrameColumnDef>;
 
-export type DataFrameRowSourceOrdinal = number;
+export type DataFrameRowId = number;
 
-export interface IDataFrameRow {
-    sourceOrdinal: DataFrameRowSourceOrdinal;
+export interface DataFrameRow<
+    TRow extends IDataFrameRowData = IDataFrameRowData,
+> {
+    readonly rowId: DataFrameRowId;
+    data: TRow;
+}
+
+export type DataFrameValue = number | string;
+
+export interface IDataFrameRowData {
     /**
      * If this data frame row was either extracted from OR
      * associated with a particular text range
      */
     range?: TextRange | undefined;
+    /**
+     * Source data that this data frame row was derived from
+     */
+    sourceId?: number | undefined;
 }
 
-export type DataFrameValue = number | string;
-
-export interface IDataFrame<TRow extends IDataFrameRow = IDataFrameRow> {
+export interface IDataFrame<
+    TRowData extends IDataFrameRowData = IDataFrameRowData,
+> {
     /**
      * Name of the data frame. Default is DataFrame
      */
@@ -50,22 +64,24 @@ export interface IDataFrame<TRow extends IDataFrameRow = IDataFrameRow> {
      * Columns in the data frame
      */
     readonly columns: DataFrameColumns;
-    addRows(...rows: TRow[]): Promise<void>;
+    addRows(...rows: TRowData[]): Promise<void>;
     findRows(
         columnName: string,
         value: DataFrameValue,
         op?: ComparisonOp,
-    ): Promise<TRow[] | undefined>;
+    ): Promise<DataFrameRow<TRowData>[] | undefined>;
 }
 
 export type DataFrameCollection = ReadonlyMap<string, IDataFrame>;
 
 /**
- * Simple in-memory data frame that currently implements lookups using loops
- * However, these can be easily optimized
+ * Sample, in-memory data frame that currently implements lookups using loops
+ * In actuality, DataFrames will use more optimal storage like Sql
  */
-export class DataFrame<TRow extends IDataFrameRow> implements IDataFrame<TRow> {
-    public rows: TRow[] = [];
+export class DataFrame<TRowData extends IDataFrameRowData>
+    implements IDataFrame<TRowData>
+{
+    public rows: DataFrameRow<TRowData>[] = [];
     public columns: DataFrameColumns;
     constructor(
         public name: string,
@@ -78,8 +94,13 @@ export class DataFrame<TRow extends IDataFrameRow> implements IDataFrame<TRow> {
         }
     }
 
-    public addRows(...rows: TRow[]): Promise<void> {
-        this.rows.push(...rows);
+    public addRows(...rowsToAdd: TRowData[]): Promise<void> {
+        for (let i = 0; i < rowsToAdd.length; ++i) {
+            this.rows.push({
+                rowId: this.rows.length,
+                data: rowsToAdd[i],
+            });
+        }
         return Promise.resolve();
     }
 
@@ -87,15 +108,15 @@ export class DataFrame<TRow extends IDataFrameRow> implements IDataFrame<TRow> {
         columnName: string,
         value: DataFrameValue,
         op?: ComparisonOp,
-    ): Promise<TRow[] | undefined> {
+    ): Promise<DataFrameRow<TRowData>[] | undefined> {
         if (!this.columns.has(columnName)) {
             return Promise.resolve(undefined);
         }
 
         op ??= ComparisonOp.Eq;
-        let matches: TRow[] | undefined;
+        let matches: DataFrameRow<TRowData>[] | undefined;
         for (const row of this.rows) {
-            if (this.matchRow(row, columnName, value, op)) {
+            if (this.matchRowData(row.data, columnName, value, op)) {
                 matches ??= [];
                 matches.push(row);
             }
@@ -103,7 +124,7 @@ export class DataFrame<TRow extends IDataFrameRow> implements IDataFrame<TRow> {
         return Promise.resolve(matches);
     }
 
-    private matchRow(
+    private matchRowData(
         row: any,
         name: string,
         value: DataFrameValue,
@@ -131,6 +152,12 @@ export class DataFrame<TRow extends IDataFrameRow> implements IDataFrame<TRow> {
         }
     }
 }
+
+export async function lookupDataFrameRow(
+    dataFrame: IDataFrame,
+    term: PropertySearchTerm,
+    exact: boolean = true,
+) {}
 
 export async function searchDataFrames(
     dataFrames: DataFrameCollection,
@@ -165,4 +192,10 @@ export async function searchConversationKnowledgeHybrid(
         options,
     );
     return knowledgeResults;
+}
+
+export class DataFrameRowAccumulator extends MatchAccumulator<DataFrameRowId> {
+    constructor() {
+        super();
+    }
 }
