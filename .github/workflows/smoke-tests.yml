@@ -7,10 +7,10 @@ name: smoke-tests
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["repo-policy-check"]
-    types:
-      - completed
+  push:
+    branches: ["main"]
+  merge_group:
+    branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
