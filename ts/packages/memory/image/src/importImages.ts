@@ -498,6 +498,7 @@ export class ImageCollection implements IConversation {
  *
  * @param imagePath - The path to the image file or a folder containing images
  * @param cachePath - The root cache path, if not specified image path is used
+ * @param cachePath - The root cache path, if not specified image path is used
  * @param recursive - A flag indicating if the search should include subfolders
  * @returns - The imported images as an image collection.
  */

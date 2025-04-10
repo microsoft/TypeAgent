@@ -23,7 +23,7 @@ import { parse } from "date-fns";
 
 export class CachedImageWithDetails {
     constructor(
-        public exifTags: ExifReader.Tags,
+        public exifTags: ExifReader.Tags | undefined,
         public storageLocation: string,
         public image: string,
     ) {}
@@ -39,22 +39,24 @@ export function getImageElement(imgData: string): string {
     return `<img class="chat-input-image" src="${imgData}" />`;
 }
 
-export function extractRelevantExifTags(exifTags: ExifReader.Tags) {
+export function extractRelevantExifTags(exifTags: ExifReader.Tags | undefined) {
     let tags: string = "";
 
-    tags = `${exifTags.Make ? "Make: " + exifTags.Make.value : ""}
-    ${exifTags.Model ? "Model: " + exifTags.Model.value : ""}
-    ${exifTags.DateTime ? "Date Taken: " + exifTags.DateTime.value : ""}
-    ${exifTags.OffsetTime ? "Offset Time: " + exifTags.OffsetTime.value : ""}
-    ${exifTags.GPSLatitude ? "GPS Latitude: " + exifTags.GPSLatitude.description : ""}
-    ${exifTags.GPSLatitudeRef ? "GPS Latitude Reference: " + exifTags.GPSLatitudeRef.value : ""}
-    ${exifTags.GPSLongitude ? "GPS Longitude Reference: " + exifTags.GPSLongitude.description : ""}
-    ${exifTags.GPSLongitudeRef ? "GPS Longitude Reference: " + exifTags.GPSLongitudeRef?.value : ""}
-    ${exifTags.GPSAltitudeRef ? "GPS Altitude Reference: " + exifTags.GPSAltitudeRef.value : ""}
-    ${exifTags.GPSAltitude ? "GPS Altitude: " + exifTags.GPSAltitude.description : ""}
-    ${exifTags.Orientation ? "Orientation: " + exifTags.Orientation.description : ""}
-    `;
-    console.log(tags.replace("\n\n", "\n"));
+    if (exifTags) {
+        tags = `${exifTags.Make ? "Make: " + exifTags.Make.value : ""}
+        ${exifTags.Model ? "Model: " + exifTags.Model.value : ""}
+        ${exifTags.DateTime ? "Date Taken: " + exifTags.DateTime.value : ""}
+        ${exifTags.OffsetTime ? "Offset Time: " + exifTags.OffsetTime.value : ""}
+        ${exifTags.GPSLatitude ? "GPS Latitude: " + exifTags.GPSLatitude.description : ""}
+        ${exifTags.GPSLatitudeRef ? "GPS Latitude Reference: " + exifTags.GPSLatitudeRef.value : ""}
+        ${exifTags.GPSLongitude ? "GPS Longitude Reference: " + exifTags.GPSLongitude.description : ""}
+        ${exifTags.GPSLongitudeRef ? "GPS Longitude Reference: " + exifTags.GPSLongitudeRef?.value : ""}
+        ${exifTags.GPSAltitudeRef ? "GPS Altitude Reference: " + exifTags.GPSAltitudeRef.value : ""}
+        ${exifTags.GPSAltitude ? "GPS Altitude: " + exifTags.GPSAltitude.description : ""}
+        ${exifTags.Orientation ? "Orientation: " + exifTags.Orientation.description : ""}
+        `;
+        console.log(tags.replace("\n\n", "\n"));
+    }
     return tags;
 }
 
@@ -136,12 +138,12 @@ export async function addImagePromptContent(
     }
 
     // include exif tags?
-    if (includeAllExifTags === true) {
+    if (includeAllExifTags === true && image.exifTags) {
         content.push({
             type: "text",
             text: `Image EXIF tags: \n${extractAllExifTags(image.exifTags)}`,
         });
-    } else if (includePartialExifTags === true) {
+    } else if (includePartialExifTags === true && image.exifTags) {
         content.push({
             type: "text",
             text: `Image EXIF tags: \n${extractRelevantExifTags(image.exifTags)}`,
@@ -149,15 +151,17 @@ export async function addImagePromptContent(
     }
 
     // include POI
-    retValue.nearbyPOI = await findNearbyPointsOfInterest(
-        exifGPSTagToLatLong(
-            image.exifTags.GPSLatitude,
-            image.exifTags.GPSLatitudeRef,
-            image.exifTags.GPSLongitude,
-            image.exifTags.GPSLongitudeRef,
-        ),
-        openai.apiSettingsFromEnv(),
-    );
+    if (image.exifTags) {
+        retValue.nearbyPOI = await findNearbyPointsOfInterest(
+            exifGPSTagToLatLong(
+                image.exifTags.GPSLatitude,
+                image.exifTags.GPSLatitudeRef,
+                image.exifTags.GPSLongitude,
+                image.exifTags.GPSLongitudeRef,
+            ),
+            openai.apiSettingsFromEnv(),
+        );
+    }
     if (includePOI !== false) {
         content.push({
             type: "text",
@@ -166,15 +170,18 @@ export async function addImagePromptContent(
     }
 
     // include address
-    retValue.reverseGeocode = await reverseGeocode(
-        exifGPSTagToLatLong(
-            image.exifTags.GPSLatitude,
-            image.exifTags.GPSLatitudeRef,
-            image.exifTags.GPSLongitude,
-            image.exifTags.GPSLongitudeRef,
-        ),
-        openai.apiSettingsFromEnv(),
-    );
+    if (image.exifTags) {
+        retValue.reverseGeocode = await reverseGeocode(
+            exifGPSTagToLatLong(
+                image.exifTags.GPSLatitude,
+                image.exifTags.GPSLatitudeRef,
+                image.exifTags.GPSLongitude,
+                image.exifTags.GPSLongitudeRef,
+            ),
+            openai.apiSettingsFromEnv(),
+        );
+    }
+
     if (includeGeocodedAddress !== false) {
         content.push({
             type: "text",
