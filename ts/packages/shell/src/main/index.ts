@@ -19,7 +19,12 @@ import {
     getDefaultAppAgentInstaller,
     getDefaultConstructionProvider,
 } from "default-agent-provider";
-import { ShellSettings } from "./shellSettings.js";
+import {
+    getSettingsPath,
+    loadShellSettings,
+    ShellSettings,
+    ShellUserSettings,
+} from "./shellSettings.js";
 import { unlinkSync } from "fs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createShellAgentProvider } from "./agent.js";
@@ -48,8 +53,9 @@ process.env.FORCE_COLOR = "true";
 
 // do we need to reset shell settings?
 process.argv.forEach((arg) => {
-    if (arg.toLowerCase() == "--setup" && existsSync(ShellSettings.filePath)) {
-        unlinkSync(ShellSettings.filePath);
+    const settingsPath = getSettingsPath();
+    if (arg.toLowerCase() == "--setup" && existsSync(settingsPath)) {
+        unlinkSync(settingsPath);
     }
 });
 
@@ -63,37 +69,17 @@ export function runningTests(): boolean {
 const time = performance.now();
 debugShell("Starting...");
 
-async function createWindow(settings: ShellSettings) {
+async function createWindow(shellSettings: ShellSettings) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(settings);
-    const mainWindow = shellWindow.mainWindow;
-    const chatView = shellWindow.chatView;
+    const shellWindow = new ShellWindow(shellSettings);
 
-    await initializeSpeech(chatView);
+    await initializeSpeech(shellWindow.chatView);
 
     ipcMain.on("views-resized-by-user", (_, newX: number) => {
         shellWindow.updateContentSize(newX);
     });
-
-    // Notify renderer process whenever settings are modified
-    settings.onSettingsChanged = (settingName?: string | undefined): void => {
-        chatView.webContents.send(
-            "settings-changed",
-            settings.getSerializable(),
-        );
-
-        if (settingName == "size") {
-            mainWindow.setSize(settings.width, settings.height);
-        } else if (settingName == "position") {
-            mainWindow.setPosition(settings.x!, settings.y!);
-        }
-
-        if (settingName === "zoomLevel") {
-            shellWindow.setZoomLevel(settings.zoomLevel);
-        }
-    };
 
     ipcMain.handle("init-browser-ipc", async () => {
         await BrowserAgentIpc.getinstance().ensureWebsocketConnected();
@@ -270,8 +256,8 @@ async function initializeDispatcher(
     }
 }
 
-async function initializeInstance(settings: ShellSettings) {
-    const shellWindow = await createWindow(settings);
+async function initializeInstance(shellSettings: ShellSettings) {
+    const shellWindow = await createWindow(shellSettings);
     const { mainWindow, chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {
@@ -297,9 +283,6 @@ async function initializeInstance(settings: ShellSettings) {
     ipcMain.on("dom ready", async () => {
         debugShell("Showing window", performance.now() - time);
 
-        // Send settings asap
-        shellWindow.settings.onSettingsChanged!();
-
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
         const dispatcher = await dispatcherP;
         if (dispatcher === undefined) {
@@ -309,13 +292,13 @@ async function initializeInstance(settings: ShellSettings) {
         updateTitle(dispatcher);
 
         // send the agent greeting if it's turned on
-        if (shellWindow.settings.agentGreeting) {
+        if (shellSettings.user.agentGreeting) {
             dispatcher.processCommand("@greeting", "agent-0", []);
         }
     });
 
-    ipcMain.on("save-settings", (_event, settings: ShellSettings) => {
-        shellWindow.updateSettings(settings);
+    ipcMain.on("save-settings", (_event, settings: ShellUserSettings) => {
+        shellWindow.setUserSettings(settings);
     });
 
     ipcMain.on("open-image-file", async () => {
@@ -356,7 +339,8 @@ async function initialize() {
         allowFileAccess: true,
     });
 
-    const settings = ShellSettings.getinstance();
+    const shellSettings = loadShellSettings();
+    const settings = shellSettings.user;
     ipcMain.handle("get-chat-history", async () => {
         // Load chat history if enabled
         const chatHistory: string = path.join(
@@ -409,7 +393,7 @@ async function initialize() {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
         if (ShellWindow.getInstance() === undefined)
-            await initializeInstance(settings);
+            await initializeInstance(shellSettings);
     });
 
     // On windows, we will spin up a local end point that listens
@@ -440,14 +424,14 @@ async function initialize() {
             debugShellError(`Error creating pipe at ${pipePath}`);
         }
     }
-    return initializeInstance(settings);
+    return initializeInstance(shellSettings);
 }
 
 app.whenReady()
     .then(initialize)
     .catch((error) => {
         debugShellError(error);
-        console.error(`Error starting shell: ${error.message}`);
+        console.error(`Error starting shell: ${error.message}\n${error.stack}`);
         app.quit();
     });
 

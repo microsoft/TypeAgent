@@ -38,7 +38,11 @@ export {
     isImageFileType,
 } from "./mimeTypes.js";
 
-export { getObjectProperty, setObjectProperty } from "./objectProperty.js";
+export {
+    getObjectPropertyNames,
+    getObjectProperty,
+    setObjectProperty,
+} from "./objectProperty.js";
 
 export * from "./location.js";
 
