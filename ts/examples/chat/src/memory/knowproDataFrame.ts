@@ -30,11 +30,17 @@ export async function createKnowproDataFrameCommands(
         const restaurantCollection: RestaurantCollection =
             new RestaurantCollection();
         for (let i = 0; i < restaurants.length; ++i) {
-            restaurantCollection.addRestaurant(restaurants[i]);
+            const restaurant = restaurants[i];
+            if (restaurantCollection.addRestaurant(restaurant)) {
+                printer.writeLine(restaurant.name);
+            } else {
+                printer.writeLine(`Skipped ${restaurant.name}`);
+            }
         }
         //
         // Build index
         //
+        printer.writeLine("Building index");
         const progress = new ProgressBar(printer, restaurants.length);
         await restaurantCollection.buildIndex(
             createIndexingEventHandler(printer, progress, restaurants.length),
@@ -188,7 +194,11 @@ export class RestaurantCollection {
         );
     }
 
-    public addRestaurant(restaurant: Restaurant) {
+    public addRestaurant(restaurant: Restaurant): boolean {
+        // Bad data in the file
+        if (!this.isValidData(restaurant)) {
+            return false;
+        }
         let restaurantOrdinal = this.restaurants.length;
         this.restaurants.push(restaurant);
         if (restaurant.description) {
@@ -211,6 +221,7 @@ export class RestaurantCollection {
             restaurant.address.sourceOrdinal = restaurantOrdinal;
             this.addresses.addRows(restaurant.address);
         }
+        return true;
     }
 
     public getDescriptionsFromRows(rows: kp.IDataFrameRow[]): string[] {
@@ -264,7 +275,17 @@ export class RestaurantCollection {
     public async buildIndex(
         eventHandler: kp.IndexingEventHandlers,
     ): Promise<void> {
-        this.descriptions.buildIndex(eventHandler);
+        await this.descriptions.buildIndex(eventHandler);
+    }
+
+    private isValidData(restaurant: Restaurant): boolean {
+        if (restaurant.geo && typeof restaurant.geo === "string") {
+            return false;
+        }
+        if (restaurant.address && typeof restaurant.address === "string") {
+            return false;
+        }
+        return true;
     }
 }
 
