@@ -1,12 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MatchAccumulator } from "./collections.js";
-import { isPropertyTerm, isSearchGroupTerm } from "./compileLib.js";
 import {
     IConversation,
     IMessage,
-    PropertySearchTerm,
     SearchTermGroup,
     TextRange,
     WhenFilter,
@@ -69,7 +66,7 @@ export interface IDataFrame<
         columnName: string,
         value: DataFrameValue,
         op?: ComparisonOp,
-    ): Promise<DataFrameRow<TRowData>[] | undefined>;
+    ): DataFrameRow<TRowData>[] | undefined;
 }
 
 export type DataFrameCollection = ReadonlyMap<string, IDataFrame>;
@@ -108,9 +105,9 @@ export class DataFrame<TRowData extends IDataFrameRowData>
         columnName: string,
         value: DataFrameValue,
         op?: ComparisonOp,
-    ): Promise<DataFrameRow<TRowData>[] | undefined> {
+    ): DataFrameRow<TRowData>[] | undefined {
         if (!this.columns.has(columnName)) {
-            return Promise.resolve(undefined);
+            return undefined;
         }
 
         op ??= ComparisonOp.Eq;
@@ -121,7 +118,7 @@ export class DataFrame<TRowData extends IDataFrameRowData>
                 matches.push(row);
             }
         }
-        return Promise.resolve(matches);
+        return matches;
     }
 
     private matchRowData(
@@ -153,24 +150,6 @@ export class DataFrame<TRowData extends IDataFrameRowData>
     }
 }
 
-export async function lookupDataFrameRow(
-    dataFrame: IDataFrame,
-    term: PropertySearchTerm,
-    exact: boolean = true,
-) {}
-
-export async function searchDataFrames(
-    dataFrames: DataFrameCollection,
-    termGroup: SearchTermGroup,
-) {
-    for (const term of termGroup.terms) {
-        if (isPropertyTerm(term)) {
-        } else if (isSearchGroupTerm(term)) {
-        } else {
-        }
-    }
-}
-
 /**
  * TODO: need better naming for everything here.
  */
@@ -192,10 +171,4 @@ export async function searchConversationKnowledgeHybrid(
         options,
     );
     return knowledgeResults;
-}
-
-export class DataFrameRowAccumulator extends MatchAccumulator<DataFrameRowId> {
-    constructor() {
-        super();
-    }
 }

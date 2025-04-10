@@ -1053,11 +1053,32 @@ export class SelectInScopeExpr extends QueryOpExpr<SemanticRefAccumulator> {
     }
 }
 
+/**
+ * Query Text Range selectors return TextRangeCollections
+ * These are typically used to determine the scope for a query
+ */
 export interface IQueryTextRangeSelector {
     eval(
         context: QueryEvalContext,
         semanticRefs?: SemanticRefAccumulator | undefined,
     ): TextRangeCollection | undefined;
+}
+
+/**
+ * A select that returns a hard-coded/pre-computed collection of text ranges
+ */
+export class TextRangeSelector implements IQueryTextRangeSelector {
+    public textRangesInScope: TextRangeCollection;
+    constructor(rangesInScope: TextRange[]) {
+        this.textRangesInScope = new TextRangeCollection(rangesInScope);
+    }
+
+    public eval(
+        context: QueryEvalContext,
+        semanticRefs?: SemanticRefAccumulator | undefined,
+    ): TextRangeCollection | undefined {
+        return this.textRangesInScope;
+    }
 }
 
 export class TextRangesInDateRangeSelector implements IQueryTextRangeSelector {

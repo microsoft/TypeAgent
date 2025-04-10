@@ -191,10 +191,10 @@ export class RestaurantTextInfoCollection implements kp.IConversation {
 export class RestaurantCollection implements kp.IConversationHybrid {
     public restaurants: Restaurant[];
     public textIndex: RestaurantTextInfoCollection;
+    public dataFrames: kp.DataFrameCollection;
     public locations: kp.DataFrame<Geo>;
     public addresses: kp.DataFrame<Address>;
     private queryTranslator: kp.SearchQueryTranslator;
-    private dataFames: kp.DataFrameCollection;
 
     constructor() {
         this.restaurants = [];
@@ -208,7 +208,7 @@ export class RestaurantCollection implements kp.IConversationHybrid {
             ["postalCode", { type: "string" }],
             ["addressLocality", { type: "string" }],
         ]);
-        this.dataFames = new Map<string, kp.IDataFrame>([
+        this.dataFrames = new Map<string, kp.IDataFrame>([
             [this.locations.name, this.locations],
             [this.addresses.name, this.addresses],
         ]);
@@ -220,10 +220,6 @@ export class RestaurantCollection implements kp.IConversationHybrid {
 
     public get conversation(): kp.IConversation {
         return this.textIndex;
-    }
-
-    public get dataFrames() {
-        return this.dataFames;
     }
 
     public addRestaurant(restaurant: Restaurant): boolean {
