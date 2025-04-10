@@ -10,7 +10,7 @@ dotenv.config({ path: envPath });
 
 // Run database query to get all issued commands
 const query = {
-    "event.originalInput": { $regex: "^@"} 
+    "event.originalInput": { $regex: "^@" },
 };
 
 const histogram: Record<string, number> = {};
@@ -31,14 +31,15 @@ await queryMongoDB(query).then((commands) => {
 const sortedHistogram = sortHistogram(histogram);
 printHistogram(Object.fromEntries(sortedHistogram));
 
-
 function sortHistogram(histogram: Record<string, number>): [string, number][] {
     return Object.entries(histogram).sort((a, b) => b[1] - a[1]);
 }
 
 function printHistogram(histogram: Record<string, number>) {
     console.log("\nCommand Histogram:");
-    const maxLabelLength = Math.max(...Object.keys(histogram).map(key => key.length));
+    const maxLabelLength = Math.max(
+        ...Object.keys(histogram).map((key) => key.length),
+    );
     const maxValue = Math.max(...Object.values(histogram));
     const scaleFactor = maxValue > 50 ? 50 / maxValue : 1;
 
