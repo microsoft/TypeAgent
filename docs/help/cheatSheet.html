@@ -1,0 +1,357 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TypeAgent Cheatsheet</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, Arial, Helvetica, sans-serif;
+        }
+
+        .title
+        {
+            font-size: xx-large;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap:  wrap;
+            flex-direction: row;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .section {
+            border: solid;
+            border-width: 3px;
+            border-color: royalblue;
+            border-radius: 7px;
+        }
+
+        .sectionTitle {
+            color: goldenrod;
+            font-size: larger;
+            font-weight: 700;
+            margin: 5px;
+            text-align: center;
+        }
+
+        .command-container {
+            white-space: nowrap;
+            margin: 10px 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .command-container:hover {
+            background-color: skyblue;
+            border: darkblue;
+            border-style: dashed;
+            border-width: 1px;
+            border-radius: 3px;
+        }
+
+        .command {
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .command-description {
+            color: #313131;
+            text-align: right;
+            margin-right: 15px;
+        }
+
+        .command-container[data-details]:hover:after {
+            content: attr(data-details);
+            position: absolute;
+            display: inline;
+            text-align: right;
+            white-space: nowrap;
+            color: gray;
+            background-color: lightyellow;
+            border: 1px solid black;
+            padding: 1px 5px 1px 5px;
+            font-size: 70%;
+            margin: 10px;
+            white-space: wrap;;
+        }        
+
+        .command-parameters {            
+            margin-left: 3px;
+            font-style: italic;
+        }
+
+        .command-notes {
+            font-size: small;
+            align-self: baseline;
+            position: relative;
+            bottom: 0px;
+        }
+
+        .search {
+            width: 50%; 
+            padding: 10px; 
+            font-size: medium;
+        }
+
+        .filtered {
+            opacity: 0.2;
+        }
+
+    </style>
+  </head>
+  <body>
+    <div>
+        <div class="title">TypeAgent Cheat sheet</div>
+        <!-- Add search box -->
+        <div style="text-align: center; margin-bottom: 20px;">
+            <input 
+                type="text" 
+                id="searchBox" 
+                placeholder="Search commands..." 
+                class="search" 
+                oninput="filterCommands()"
+            />
+        </div>
+    </div>
+    <div class="container">
+        <div class="section">
+            <div class="sectionTitle">Agents</div>
+
+            <div class="command-container">
+                <div class="command-description">Disable agent:</div>
+                <div class="command">@config agent -off</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Enable agent:</div>
+                <div class="command">@config agent</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>
+            
+            <div class="command-container">
+                <div class="command-description">List all agents:</div>
+                <div class="command">@config agent</div>
+            </div>  
+            
+            <div class="command-container">
+                <div class="command-description">Show agent commands:</div>
+                <div class="command">@help</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>                            
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Cache</div>
+
+            <div class="command-container">
+                <div class="command-description">Clear the cache:</div>
+                <div class="command">@const new</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Print the cache to the debug console:</div>
+                <div class="command">@const list</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show cache info:</div>
+                <div class="command">@const info</div>
+            </div>
+
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Shell / CLI</div>
+
+            <div class="command-container">
+                <div class="command-description">Clear the display:</div>
+                <div class="command">@clear</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show help:</div>
+                <div class="command">@help</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show shell settings:</div>
+                <div class="command">@shell show settings</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Exit the application:</div>
+                <div class="command">@exit</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Set the theme:</div>
+                <div class="command">@shell theme</div>
+                <div class="command-parameters">&lt;light|dark&gt;</div>
+            </div>
+
+            <div class="command-container" data-details="The shell canvas can display a URL or you can specify any of the supported aliases (paleobiodb, crossword, commerce, markdown, montage).">
+                <div class="command-description" >Open shell canvas:</div>
+                <div class="command">@shell open</div>
+                <div class="command-parameters">&lt;URL|alias&gt;</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Close the shell canvas:</div>
+                <div class="command">@shell close</div>
+            </div>            
+
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Misc@ellaneous</div>
+
+            <div class="command-container">
+                <div class="command-description">Make a random request:</div>
+                <div class="command">@random</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Show help:</div>
+                <div class="command">@help</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Change default request handler:</div>
+                <div class="command">@config request</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div>
+
+            <div class="command-container">
+                <div class="command-description">Show environment variables:</div>
+                <div class="command">@env</div>
+            </div> 
+
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Models</div>
+
+            <div class="command-container">
+                <div class="command-description">Show translation model being used:</div>
+                <div class="command">@config translation model</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description" data-details="Current model options are: GPT_35_TURBO, GPT_4_O, GPT_4_O_MINI, GPT_v, openai:LOCAL">Change LLM models for translation:</div>
+                <div class="command">@config translation model set</div>
+                <div class="command-parameters">GPT_4_O</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Reset model configuration:</div>
+                <div class="command">@config translation model --reset</div>
+            </div> 
+
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Debugging</div>
+
+            <div class="command-container">
+                <div class="command-description" data-details="Developer mode confirms actions before executing them and prompts the user to make corrections and/or select alternate actions.">Turn on developer mode:</div>
+                <div class="command">@config dev on</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Turn on all tracing:</div>
+                <div class="command">@trace *</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Open DevTools:</div>
+                <div class="command">F12</div>
+            </div> 
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Actions</div>
+
+            <div class="command-container">
+                <div class="command-description">Reset action status (on/off) to defaults:</div>
+                <div class="command">@config action --reset</div>
+            </div>            
+
+            <div class="command-container">
+                <div class="command-description">Turn OFF actions for a specific agent:</div>
+                <div class="command">@config action --off</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">Turn ON actions for a specific agent:</div>
+                <div class="command">@config action</div>
+                <div class="command-parameters">&lt;agent name&gt;</div>
+            </div> 
+        </div> 
+        <div class="section">
+            <div class="sectionTitle">Session</div>
+
+            <div class="command-container">
+                <div class="command-description">Create a new session:</div>
+                <div class="command">@session new</div>
+            </div>            
+
+            <div class="command-container">
+                <div class="command-description">Show current session info:</div>
+                <div class="command">@session info</div>
+            </div> 
+
+            <div class="command-container">
+                <div class="command-description">List all sessions:</div>
+                <div class="command">@session list</div>
+            </div> 
+        </div>
+        <div class="section">
+            <div class="sectionTitle">Calendar</div>
+
+            <div class="command-container">
+                <div class="command-description">Login to the calendar account:</div>
+                <div class="command">@calendar login</div>
+            </div>            
+
+            <div class="command-container">
+                <div class="command-description">Logout of the calendar account:</div>
+                <div class="command">@calendar login</div>
+            </div>                
+
+        </div>    
+        
+        <div class="section">
+            <div class="sectionTitle">Chat History</div>
+
+            <div class="command-container">
+                <div class="command-description">Show chat history:</div>
+                <div class="command">@history</div>
+            </div>            
+
+        </div>         
+    </div>
+
+    <script>
+        function filterCommands() {
+            const searchValue = document.getElementById('searchBox').value.toLowerCase();
+            const commands = document.querySelectorAll('.command-container');
+
+            commands.forEach(command => {
+                const description = command.querySelector('.command-description').textContent.toLowerCase();
+                const commandText = command.querySelector('.command').textContent.toLowerCase();
+                const parameters = command.querySelector('.command-parameters')?.textContent.toLowerCase() || '';
+
+                if (description.includes(searchValue) || commandText.includes(searchValue) || parameters.includes(searchValue)) {
+                    command.classList.remove("filtered");
+                } else {
+                    command.classList.add("filtered");
+                }
+            });
+        }
+    </script>
+  </body>
+</html>

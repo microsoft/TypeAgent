@@ -23,9 +23,12 @@ Instructions tested with Ubuntu 24.04.1 LTS and Debian 12.8.0
   - `pnpm i`
   - `pnpm run build`
 
-## Run
+## Configure Services
 
 - Setup Service Keys (See instructions [here](./../../ts/README.md#service-keys))
+
+## Run
+
 - Run the TypeAgent shell:
   - (Ubuntu 24.04) `pnpm run shell --noSandbox` (see [issue](https://github.com/electron/electron/issues/18265))
   - Other: `pnpm run shell`
