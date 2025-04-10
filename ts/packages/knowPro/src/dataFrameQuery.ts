@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import assert from "assert";
 import { MatchAccumulator } from "./collections.js";
 import { isPropertyTerm } from "./compileLib.js";
 import {
@@ -171,6 +172,32 @@ export class MatchDataFrameRowAndExpr extends MatchDataFrameRowBooleanExpr {
             }
         }
         return allMatches ?? new DataFrameRowAccumulator();
+    }
+}
+
+export class MatchDataFramesExpr extends q.QueryOpExpr<
+    Map<string, DataFrameRow[]>
+> {
+    constructor(
+        public dataFrames: IDataFrame[],
+        public matchExpressions: q.IQueryOpExpr<DataFrameRowAccumulator>[],
+    ) {
+        assert(dataFrames.length === matchExpressions.length);
+        super();
+    }
+
+    public override eval(
+        context: q.QueryEvalContext,
+    ): Map<string, DataFrameRow[]> {
+        const allRows = new Map<string, DataFrameRow[]>();
+        for (let i = 0; i < this.matchExpressions.length; ++i) {
+            const rowMatches = this.matchExpressions[i].eval(context);
+            const rowIds = [...rowMatches.getMatchedValues()];
+            const df = this.dataFrames[i];
+            const rows = df.getRows(rowIds);
+            allRows.set(df.name, rows);
+        }
+        return allRows;
     }
 }
 

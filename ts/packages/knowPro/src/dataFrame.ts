@@ -61,7 +61,8 @@ export interface IDataFrame<
      * Columns in the data frame
      */
     readonly columns: DataFrameColumns;
-    addRows(...rows: TRowData[]): Promise<void>;
+    addRows(...rows: TRowData[]): void;
+    getRows(rowIds: DataFrameRowId[]): DataFrameRow<TRowData>[];
     findRows(
         columnName: string,
         value: DataFrameValue,
@@ -91,14 +92,21 @@ export class DataFrame<TRowData extends IDataFrameRowData>
         }
     }
 
-    public addRows(...rowsToAdd: TRowData[]): Promise<void> {
+    public addRows(...rowsToAdd: TRowData[]): void {
         for (let i = 0; i < rowsToAdd.length; ++i) {
             this.rows.push({
                 rowId: this.rows.length,
                 data: rowsToAdd[i],
             });
         }
-        return Promise.resolve();
+    }
+
+    public getRows(rowIds: DataFrameRowId[]): DataFrameRow<TRowData>[] {
+        let rows: DataFrameRow<TRowData>[] = [];
+        for (let i = 0; i < rowIds.length; ++i) {
+            rows.push(this.rows[i]);
+        }
+        return rows;
     }
 
     public findRows(
@@ -155,8 +163,10 @@ export class DataFrame<TRowData extends IDataFrameRowData>
  */
 export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
     get conversation(): IConversation<TMessage>;
-    get dataFrames(): ReadonlyMap<string, IDataFrame>;
+    get dataFrames(): DataFrameCollection;
 }
+
+export async function searchDataFrames(searchTermGroup: SearchTermGroup) {}
 
 export async function searchConversationKnowledgeHybrid(
     hybridConversation: IConversationHybrid,
