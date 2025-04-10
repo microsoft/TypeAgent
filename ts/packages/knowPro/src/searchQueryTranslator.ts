@@ -4,17 +4,17 @@
 import {
     createJsonTranslator,
     Result,
+    success,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
 import * as querySchema from "./searchQuerySchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { loadSchema } from "typeagent";
-import {
-    dateRangeFromDateTimeRange,
-    SearchSelectExpr,
-    WhenFilter,
-} from "./search.js";
+import { SearchQueryExpr } from "./search.js";
+import { WhenFilter } from "./interfaces.js";
+import { SearchSelectExpr } from "./interfaces.js";
+import { dateRangeFromDateTimeRange } from "./common.js";
 import { createPropertySearchTerm, createSearchTerm } from "./searchLib.js";
 import { SearchTermGroup } from "./interfaces.js";
 import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
@@ -57,12 +57,7 @@ export function createSearchQueryTranslator(
     );
 }
 
-export type SearchQueryExpr = {
-    selectExpressions: SearchSelectExpr[];
-    rawQuery?: string | undefined;
-};
-
-export async function createSearchQueryForConversation(
+export async function searchQueryFromLanguage(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
     text: string,
@@ -74,7 +69,7 @@ export async function createSearchQueryForConversation(
     return result;
 }
 
-export function compileSearchQueryForConversation(
+export function compileSearchQuery(
     conversation: IConversation,
     query: querySchema.SearchQuery,
     exactScoping: boolean = true,
@@ -84,6 +79,24 @@ export function compileSearchQueryForConversation(
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
+}
+
+export async function searchQueryExprFromLanguage(
+    conversation: IConversation,
+    translator: SearchQueryTranslator,
+    queryText: string,
+): Promise<Result<SearchQueryExpr[]>> {
+    const result = await searchQueryFromLanguage(
+        conversation,
+        translator,
+        queryText,
+    );
+    if (result.success) {
+        const searchQuery = result.data;
+        const searchExpr = compileSearchQuery(conversation, searchQuery);
+        return success(searchExpr);
+    }
+    return result;
 }
 
 class SearchQueryCompiler {
@@ -175,19 +188,27 @@ class SearchQueryCompiler {
         return when;
     }
 
-    private compileActionTermAsSearchTerms(
+    public compileActionTermAsSearchTerms(
         actionTerm: querySchema.ActionTerm,
         termGroup?: SearchTermGroup,
+        useOrMax: boolean = true,
     ): SearchTermGroup {
         termGroup ??= createOrTermGroup();
+        const actionGroup = useOrMax ? createOrMaxTermGroup() : termGroup;
         if (actionTerm.actionVerbs !== undefined) {
-            this.compileSearchTerms(actionTerm.actionVerbs.words, termGroup);
+            this.compileSearchTerms(actionTerm.actionVerbs.words, actionGroup);
+        }
+        if (isEntityTermArray(actionTerm.actorEntities)) {
+            this.compileEntityTerms(actionTerm.actorEntities, actionGroup);
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
-            this.compileEntityTerms(actionTerm.targetEntities, termGroup);
+            this.compileEntityTerms(actionTerm.targetEntities, actionGroup);
         }
         if (isEntityTermArray(actionTerm.additionalEntities)) {
-            this.compileEntityTerms(actionTerm.additionalEntities, termGroup);
+            this.compileEntityTerms(actionTerm.additionalEntities, actionGroup);
+        }
+        if (actionGroup !== termGroup) {
+            termGroup.terms.push(actionGroup);
         }
         return termGroup;
     }
@@ -214,7 +235,7 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 const orMax = createOrMaxTermGroup();
                 this.addEntityTermToGroup(term, orMax);
-                termGroup.terms.push(orMax);
+                termGroup.terms.push(optimizeOrMax(orMax));
             }
             this.dedupe = dedupe;
         } else {
@@ -331,7 +352,7 @@ class SearchQueryCompiler {
             termGroup,
             exactMatchName,
         );
-        if (entityTerm.type) {
+        if (entityTerm.type && entityTerm.type.length > 0) {
             for (const type of entityTerm.type) {
                 this.addPropertyTermToGroup(
                     PropertyNames.EntityType,
@@ -470,4 +491,11 @@ function isWildcard(value: string | undefined): boolean {
 
 function isEmptyString(value: string): boolean {
     return value === undefined || value.length === 0;
+}
+
+function optimizeOrMax(termGroup: SearchTermGroup) {
+    if (termGroup.terms.length === 1) {
+        return termGroup.terms[0];
+    }
+    return termGroup;
 }

@@ -11,7 +11,7 @@ import {
     createKnowledgeModel,
     ConversationSettings,
     createConversationSettings,
-    addMetadataToIndex,
+    addMessageKnowledgeToSemanticRefIndex,
     buildSecondaryIndexes,
     ConversationSecondaryIndexes,
     IndexingEventHandlers,
@@ -371,10 +371,9 @@ export class ImageCollection implements IConversation {
 
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
-            addMetadataToIndex(
-                this.messages,
-                this.semanticRefs,
-                this.semanticRefIndex,
+            addMessageKnowledgeToSemanticRefIndex(
+                this,
+                0,
                 (type, knowledge) => {
                     if (type === "entity") {
                         return !isDuplicateEntity(
@@ -498,6 +497,7 @@ export class ImageCollection implements IConversation {
  * Indexes the supplied image or images in the supplied folder.
  *
  * @param imagePath - The path to the image file or a folder containing images
+ * @param cachePath - The root cache path, if not specified image path is used
  * @param cachePath - The root cache path, if not specified image path is used
  * @param recursive - A flag indicating if the search should include subfolders
  * @returns - The imported images as an image collection.

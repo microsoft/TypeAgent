@@ -68,10 +68,12 @@ async function initializeGreetingAgentContext(): Promise<GreetingAgentContext> {
 
                 context.user.givenName = user.givenName;
                 context.user.surName = user.surname;
-                if (context.getUserNameResolve) {
-                    context.getUserNameResolve(user);
-                }
             } catch {}
+
+            // Make sure we resolve the promise whether we succeeded or not
+            if (context.getUserNameResolve) {
+                context.getUserNameResolve(context.user);
+            }
         },
     );
 

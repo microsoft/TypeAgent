@@ -8,7 +8,7 @@ import {
     getTestTranscripts,
 } from "./testCommon.js";
 
-describe("conversation.importPodcast", () => {
+describe("importPodcast.offline", () => {
     const testTimeout = 5 * 60 * 1000;
     const testTranscripts = getTestTranscripts();
 

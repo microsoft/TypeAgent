@@ -21,10 +21,14 @@ import {
     Tag,
     Term,
     TextRange,
+    KnowledgePropertyName,
+    PropertySearchTerm,
+    SearchTerm,
+    Thread,
+    ITimestampToTextRangeIndex,
+    IPropertyToSemanticRefIndex,
+    SemanticRefSearchResult,
 } from "./interfaces.js";
-import { SemanticRefSearchResult } from "./search.js";
-import { KnowledgePropertyName, PropertySearchTerm } from "./interfaces.js";
-import { SearchTerm } from "./interfaces.js";
 import {
     Match,
     MatchAccumulator,
@@ -39,11 +43,8 @@ import {
     lookupPropertyInPropertyIndex,
     PropertyNames,
 } from "./propertyIndex.js";
-import { ITimestampToTextRangeIndex } from "./interfaces.js";
-import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections, NormalizedEmbedding } from "typeagent";
-import { Thread } from "./interfaces.js";
 import { facetValueToString } from "./knowledge.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
@@ -121,7 +122,7 @@ function getMatchingTermForText(
  * @param searchTerm
  * @param text
  */
-function matchSearchTermToText(
+export function matchSearchTermToText(
     searchTerm: SearchTerm,
     text: string | undefined,
 ): boolean {
@@ -170,6 +171,13 @@ export function matchPropertySearchTermToEntity(
         return false;
     }
     const entity = semanticRef.knowledge as kpLib.ConcreteEntity;
+    return matchConcreteEntity(searchTerm, entity);
+}
+
+export function matchConcreteEntity(
+    searchTerm: PropertySearchTerm,
+    entity: kpLib.ConcreteEntity,
+): boolean {
     if (typeof searchTerm.propertyName !== "string") {
         return (
             matchPropertyNameToFacetName(searchTerm.propertyName, entity) ||

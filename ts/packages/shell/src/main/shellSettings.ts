@@ -8,10 +8,7 @@ import {
     ShellSettingsType,
     TTSSettings,
 } from "../preload/shellSettingsType.js";
-import {
-    ClientSettingsProvider,
-    EmptyFunction,
-} from "../preload/electronTypes.js";
+import { ClientSettingsProvider } from "../preload/electronTypes.js";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "path";
 import { DisplayType } from "@typeagent/agent-sdk";
@@ -38,11 +35,6 @@ export class ShellSettings
     public partialCompletion: boolean;
     public disallowedDisplayType: DisplayType[];
     public onSettingsChanged: ((name?: string | undefined) => void) | null;
-    public onShowSettingsDialog: ((dialogName: string) => void) | null;
-    public onRunDemo: ((interactive: boolean) => void) | null;
-    public onToggleTopMost: EmptyFunction | null;
-    public onOpenInlineBrowser: ((targetUrl: URL) => void) | null;
-    public onCloseInlineBrowser: ((save: boolean) => void) | null;
     public darkMode: boolean;
     public chatHistory: boolean;
     public canvas?: string;
@@ -71,10 +63,14 @@ export class ShellSettings
             };
         }
 
+        // Window state
         this.size = settings.size;
         this.position = settings.position;
         this.zoomLevel = settings.zoomLevel;
         this.devTools = settings.devTools;
+        this.canvas = settings.canvas;
+
+        // Settings
         this.microphoneId = settings.microphoneId;
         this.microphoneName = settings.microphoneName;
         this.notifyFilter = settings.notifyFilter;
@@ -85,16 +81,10 @@ export class ShellSettings
         this.devUI = settings.devUI;
         this.partialCompletion = settings.partialCompletion;
         this.disallowedDisplayType = settings.disallowedDisplayType;
-
-        this.onSettingsChanged = null;
-        this.onShowSettingsDialog = null;
-        this.onRunDemo = null;
-        this.onToggleTopMost = null;
-        this.onOpenInlineBrowser = null;
-        this.onCloseInlineBrowser = null;
         this.darkMode = settings.darkMode;
         this.chatHistory = settings.chatHistory;
-        this.canvas = settings.canvas;
+
+        this.onSettingsChanged = null;
     }
 
     public static get filePath(): string {
@@ -110,7 +100,7 @@ export class ShellSettings
     };
 
     public getSerializable(): ShellSettings {
-        return new ShellSettings(ShellSettings.getinstance());
+        return new ShellSettings(this);
     }
 
     private static load(): Partial<ShellSettingsType> | null {
@@ -127,86 +117,37 @@ export class ShellSettings
     }
 
     public save() {
-        debugShell(
-            `Saving settings to '${ShellSettings.filePath}'.`,
-            performance.now(),
-        );
-
+        debugShell(`Saving settings to '${ShellSettings.filePath}'.`);
+        debugShell(JSON.stringify(this, undefined, 2));
         writeFileSync(ShellSettings.filePath, JSON.stringify(this));
     }
 
     public set(name: string, value: any) {
-        const t = typeof ShellSettings.getinstance()[name];
-        const oldValue = ShellSettings.getinstance()[name];
-
+        const t = typeof this[name];
+        const oldValue = this[name];
         if (t === typeof value) {
-            ShellSettings.getinstance()[name] = value;
+            this[name] = value;
         } else {
             switch (t) {
                 case "string":
-                    ShellSettings.getinstance()[name] = value;
+                    this[name] = value;
                     break;
                 case "number":
-                    ShellSettings.getinstance()[name] = Number(value);
+                    this[name] = Number(value);
                     break;
                 case "boolean":
-                    if (typeof value === t) {
-                    }
-                    ShellSettings.getinstance()[name] =
+                    this[name] =
                         value.toLowerCase() === "true" || value === "1";
                     break;
                 case "object":
                 case "undefined":
-                    ShellSettings.getinstance()[name] = JSON.parse(value);
+                    this[name] = JSON.parse(value);
                     break;
             }
         }
 
-        if (
-            ShellSettings.getinstance().onSettingsChanged != null &&
-            oldValue != value
-        ) {
-            ShellSettings.getinstance().onSettingsChanged!(name);
-        }
-    }
-
-    public show(dialogName: string = "settings") {
-        if (ShellSettings.getinstance().onShowSettingsDialog != null) {
-            ShellSettings.getinstance().onShowSettingsDialog!(dialogName);
-        }
-    }
-
-    public runDemo(interactive: boolean = false) {
-        if (ShellSettings.getinstance().onRunDemo != null) {
-            ShellSettings.getinstance().onRunDemo!(interactive);
-        }
-    }
-
-    public toggleTopMost() {
-        if (ShellSettings.getinstance().onToggleTopMost != null) {
-            ShellSettings.getinstance().onToggleTopMost!();
-        }
-    }
-
-    public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        for (let i = 0; i < this.disallowedDisplayType.length; i++) {
-            if (this.disallowedDisplayType[i] === displayType) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public async openInlineBrowser(targetUrl: URL) {
-        if (ShellSettings.getinstance().onOpenInlineBrowser != null) {
-            ShellSettings.getinstance().onOpenInlineBrowser!(targetUrl);
-        }
-    }
-
-    public closeInlineBrowser(save: boolean = true) {
-        if (ShellSettings.getinstance().onCloseInlineBrowser != null) {
-            ShellSettings.getinstance().onCloseInlineBrowser!(save);
+        if (this.onSettingsChanged != null && oldValue != value) {
+            this.onSettingsChanged!(name);
         }
     }
 }

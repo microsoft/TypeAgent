@@ -8,6 +8,7 @@ import {
     NotifyCommands,
     SpeechToken,
     ShellSettingsType,
+    Client,
 } from "../../preload/electronTypes.js";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
@@ -55,6 +56,79 @@ export function getWebDispatcher(): Dispatcher {
     }
 
     return globalThis.webDispatcher;
+}
+
+async function initializeChatHistory(chatView: ChatView) {
+    const history = await getClientAPI().getChatHistory();
+    if (history === undefined) {
+        return;
+    }
+    // load the history
+    chatView.getScrollContainer().innerHTML = history;
+
+    // add the separator
+    if (history.length > 0) {
+        // don't add a separator if there's already one there
+        if (
+            !chatView
+                .getScrollContainer()
+                .children[0].classList.contains("chat-separator")
+        ) {
+            let separator: HTMLDivElement = document.createElement("div");
+            separator.classList.add("chat-separator");
+            separator.innerHTML =
+                '<div class="chat-separator-line"></div><div class="chat-separator-text">previously</div><div class="chat-separator-line"></div>';
+
+            chatView.getScrollContainer().prepend(separator);
+        }
+
+        // make all old messages "inactive" and set the context for each separator
+        let lastSeparatorText: HTMLDivElement | null;
+        for (
+            let i = 0;
+            i < chatView.getScrollContainer().children.length;
+            i++
+        ) {
+            // gray out this item
+            const div = chatView.getScrollContainer().children[i];
+            div.classList.add("history");
+
+            // is this a separator?
+            const separator = div.querySelector(".chat-separator-text");
+            if (separator != null) {
+                lastSeparatorText = div.querySelector(".chat-separator-text");
+            }
+
+            // get the timestamp for this chat bubble (if applicable)
+            const span: HTMLSpanElement | null =
+                div.querySelector(".timestring");
+
+            if (span !== null) {
+                const timeStamp: Date = new Date(span.attributes["data"].value);
+                lastSeparatorText!.innerText = getDateDifferenceDescription(
+                    new Date(),
+                    timeStamp,
+                );
+            }
+
+            // rewire up action-data click handler
+            const nameDiv = div.querySelector(".agent-name.clickable");
+            if (nameDiv != null) {
+                const messageDiv = div.querySelector(".chat-message-content");
+
+                if (messageDiv) {
+                    nameDiv.addEventListener("click", () => {
+                        swapContent(
+                            nameDiv as HTMLSpanElement,
+                            messageDiv as HTMLDivElement,
+                        );
+                    });
+                }
+            }
+
+            // TODO: wire up any other functionality (player agent?)
+        }
+    }
 }
 
 function addEvents(
@@ -196,162 +270,68 @@ function addEvents(
         },
     };
 
-    const api = getClientAPI();
-    api.registerClientIO(clientIO);
-
-    api.onListenEvent((_, name, token, useLocalWhisper) => {
-        console.log(`listen event: ${name}`);
-        if (useLocalWhisper) {
-            recognizeOnce(
-                undefined,
-                "phraseDiv",
-                "reco",
-                (message: string) => {
-                    chatView.addUserMessage(message);
-                },
-                useLocalWhisper,
-            );
-        } else {
-            if (token) {
-                setSpeechToken(token);
-                if (name === "Alt+M") {
-                    recognizeOnce(
-                        token,
-                        "phraseDiv",
-                        "reco",
-                        (message: string) => {
-                            chatView.addUserMessage(message);
-                        },
-                        useLocalWhisper,
-                    );
-                }
-            } else {
-                console.log("no token");
+    const client: Client = {
+        clientIO,
+        updateRegisterAgents(updatedAgents: Map<string, string>): void {
+            agents.clear();
+            for (const [key, value] of updatedAgents.entries()) {
+                agents.set(key, value);
             }
-        }
-    });
-    api.onSettingSummaryChanged((_, summary, registeredAgents) => {
-        document.title = summary;
-        if (settingsView.shellSettings.zoomLevel != 0) {
-            document.title += ` Zoom: ${settingsView.shellSettings.zoomLevel * 100}%`;
-        } else {
-            document.title += ` Zoom: 100%`;
-        }
+        },
+        async showInputText(message: string): Promise<void> {
+            return chatView.showInputText(message);
+        },
+        showDialog(key: string): void {
+            if (key.toLocaleLowerCase() == "settings") {
+                tabsView.showTab(key);
+            }
 
-        agents.clear();
-        for (let key of registeredAgents.keys()) {
-            agents.set(key, registeredAgents.get(key) as string);
-        }
-    });
-    api.onSendInputText((_, message) => {
-        chatView.showInputText(message);
-    });
-    api.onSendDemoEvent((_, name) => {
-        (window as any).electron.ipcRenderer.send("send-demo-event", name);
-    });
-    api.onHelpRequested((_, key) => {
-        console.log(`User asked for help via ${key}`);
-        chatView.addUserMessage(`@help`);
-    });
-    api.onShowDialog((_, key) => {
-        if (key.toLocaleLowerCase() == "settings") {
             tabsView.showTab(key);
-        }
-
-        tabsView.showTab(key);
-    });
-    api.onSettingsChanged((_, value: ShellSettingsType) => {
-        let newTitle = document.title.substring(
-            0,
-            document.title.indexOf("Zoom: "),
-        );
-
-        if (value.zoomLevel != 0) {
-            document.title = `${newTitle} Zoom: ${value.zoomLevel * 100}%`;
-        } else {
-            document.title = `${newTitle} Zoom: 100%`;
-        }
-
-        settingsView.shellSettings = value;
-    });
-    api.onChatHistory((_, history: string) => {
-        if (settingsView.shellSettings.chatHistory) {
-            // load the history
-            chatView.getScollContainer().innerHTML = history;
-
-            // add the separator
-            if (history.length > 0) {
-                // don't add a separator if there's already one there
-                if (
-                    !chatView
-                        .getScollContainer()
-                        .children[0].classList.contains("chat-separator")
-                ) {
-                    let separator: HTMLDivElement =
-                        document.createElement("div");
-                    separator.classList.add("chat-separator");
-                    separator.innerHTML =
-                        '<div class="chat-separator-line"></div><div class="chat-separator-text">previously</div><div class="chat-separator-line"></div>';
-
-                    chatView.getScollContainer().prepend(separator);
-                }
-
-                // make all old messages "inactive" and set the context for each separator
-                let lastSeparatorText: HTMLDivElement | null;
-                for (
-                    let i = 0;
-                    i < chatView.getScollContainer().children.length;
-                    i++
-                ) {
-                    // gray out this item
-                    const div = chatView.getScollContainer().children[i];
-                    div.classList.add("history");
-
-                    // is this a separator?
-                    const separator = div.querySelector(".chat-separator-text");
-                    if (separator != null) {
-                        lastSeparatorText = div.querySelector(
-                            ".chat-separator-text",
+        },
+        updateSettings(settings: ShellSettingsType): void {
+            settingsView.shellSettings = settings;
+        },
+        fileSelected(fileName: string, fileContent: string): void {
+            chatView.chatInput.loadImageContent(fileName, fileContent);
+        },
+        listen(
+            name: string,
+            token?: SpeechToken,
+            useLocalWhisper?: boolean,
+        ): void {
+            console.log(`listen event: ${name}`);
+            if (useLocalWhisper) {
+                recognizeOnce(
+                    undefined,
+                    "phraseDiv",
+                    "reco",
+                    (message: string) => {
+                        chatView.addUserMessage(message);
+                    },
+                    useLocalWhisper,
+                );
+            } else {
+                if (token) {
+                    setSpeechToken(token);
+                    if (name === "Alt+M") {
+                        recognizeOnce(
+                            token,
+                            "phraseDiv",
+                            "reco",
+                            (message: string) => {
+                                chatView.addUserMessage(message);
+                            },
+                            useLocalWhisper,
                         );
                     }
-
-                    // get the timestamp for this chat bubble (if applicable)
-                    const span: HTMLSpanElement | null =
-                        div.querySelector(".timestring");
-
-                    if (span !== null) {
-                        const timeStamp: Date = new Date(
-                            span.attributes["data"].value,
-                        );
-                        lastSeparatorText!.innerText =
-                            getDateDifferenceDescription(new Date(), timeStamp);
-                    }
-
-                    // rewire up action-data click handler
-                    const nameDiv = div.querySelector(".agent-name.clickable");
-                    if (nameDiv != null) {
-                        const messageDiv = div.querySelector(
-                            ".chat-message-content",
-                        );
-
-                        if (messageDiv) {
-                            nameDiv.addEventListener("click", () => {
-                                swapContent(
-                                    nameDiv as HTMLSpanElement,
-                                    messageDiv as HTMLDivElement,
-                                );
-                            });
-                        }
-                    }
-
-                    // TODO: wire up any other functionality (player agent?)
+                } else {
+                    console.log("no token");
                 }
             }
-        }
-    });
-    api.onFileSelected((_, fileName: string, fileContent: string) => {
-        chatView.chatInput.loadImageContent(fileName, fileContent);
-    });
+        },
+    };
+
+    getClientAPI().registerClient(client);
 }
 
 function showNotifications(
@@ -451,6 +431,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     };
 
     const chatView = new ChatView(idGenerator, agents);
+    initializeChatHistory(chatView);
+
     const cameraView = new CameraView((image: HTMLImageElement) => {
         // copy image
         const newImage: HTMLImageElement = document.createElement("img");
@@ -474,9 +456,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     };
 
     chatView.chatInput.attachButton.onclick = () => {
-        if ((window as any).electron) {
-            (window as any).electron.ipcRenderer.send("open-image-file");
-        }
+        getClientAPI().openImageFile();
     };
 
     const settingsView = new SettingsView(chatView);
@@ -514,15 +494,11 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     }
 
-    watchForDOMChanges(chatView.getScollContainer());
-
-    if ((window as any).electron) {
-        (window as any).electron.ipcRenderer.send("dom ready");
-    }
+    watchForDOMChanges(chatView.getScrollContainer());
 });
 
 function watchForDOMChanges(element: HTMLDivElement) {
-    // ignore attribute changes but wach for
+    // ignore attribute changes but watch for
     const config = { attributes: false, childList: true, subtree: true };
 
     // timeout
@@ -537,12 +513,7 @@ function watchForDOMChanges(element: HTMLDivElement) {
         setTimeout(() => {
             if (--idleCounter == 0) {
                 // last one notifies main process
-                if ((window as any).electron) {
-                    (window as any).electron.ipcRenderer.send(
-                        "dom changed",
-                        element.innerHTML,
-                    );
-                }
+                getClientAPI().saveChatHistory(element.innerHTML);
             }
         }, 3000);
     });

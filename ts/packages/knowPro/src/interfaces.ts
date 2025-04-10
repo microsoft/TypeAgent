@@ -3,11 +3,17 @@
 
 import { conversation as kpLib } from "knowledge-processor";
 
-// an object that can provide a KnowledgeResponse structure
+/**
+ * A Knowledge Source is any object that returns knowledge
+ * Knowledge is returned in the form of a KnowledgeResponse
+ */
 export interface IKnowledgeSource {
     getKnowledge(): kpLib.KnowledgeResponse | undefined;
 }
 
+/**
+ * Messages are referenced by their sequential ordinal numbers
+ */
 export type MessageOrdinal = number;
 
 /**
@@ -35,6 +41,9 @@ export interface DeletionInfo {
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
 export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 
+/**
+ * Semantic Refs are referenced by their sequential ordinal numbers
+ */
 export type SemanticRefOrdinal = number;
 
 export interface SemanticRef {
@@ -283,6 +292,9 @@ export type PropertySearchTerm = {
     propertyValue: SearchTerm;
 };
 
+/**
+ * Terms in a SearchTermGroup can of these types
+ */
 export type SearchTermGroupTypes =
     | SearchTerm
     | PropertySearchTerm
@@ -298,6 +310,39 @@ export type SearchTermGroup = {
         | "or_max"; // Union matches for each term, add up scores, select matches with max hit count
 
     terms: SearchTermGroupTypes[];
+};
+
+/**
+ * An expression used to select contents structured contents of the conversation
+ */
+export type SearchSelectExpr = {
+    /**
+     * A Term group that matches information
+     */
+    searchTermGroup: SearchTermGroup;
+    /**
+     * A filter that scopes what information to match
+     */
+    when?: WhenFilter | undefined;
+};
+
+/**
+ * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match
+ * when:
+ *   knowledgeType == 'entity'
+ *   dateRange...(Jan 3rd to Jan 10th)
+ */
+
+export type WhenFilter = {
+    knowledgeType?: KnowledgeType | undefined;
+    dateRange?: DateRange | undefined;
+    threadDescription?: string | undefined;
+    scopeDefiningTerms?: SearchTermGroup | undefined;
+};
+
+export type SemanticRefSearchResult = {
+    termMatches: Set<string>;
+    semanticRefMatches: ScoredSemanticRefOrdinal[];
 };
 
 //------------------------

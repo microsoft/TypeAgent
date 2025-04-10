@@ -3,9 +3,19 @@
 
 import fs from "fs";
 import path from "path";
+import os from "node:os";
 
 export function getAbsolutePath(relativePath: string): string {
     return path.join(process.cwd(), relativePath);
+}
+
+export function getRootDataPath() {
+    return path.join(os.tmpdir(), "/data/tests");
+}
+
+export function getOutputDirPath(relativePath: string) {
+    const absPath = path.join(getRootDataPath(), relativePath);
+    return absPath;
 }
 
 export function readTestFile(filePath: string): string {
