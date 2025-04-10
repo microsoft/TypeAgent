@@ -12,6 +12,33 @@
   "author": "Microsoft",
   "type": "module",
   "main": "./out/main/index.js",
+  "config": {
+    "forge": {
+      "packagerConfig": {},
+      "makers": [
+        {
+          "name": "@electron-forge/maker-squirrel",
+          "config": {
+            "name": "typeagent_shell"
+          }
+        },
+        {
+          "name": "@electron-forge/maker-zip",
+          "platforms": [
+            "darwin"
+          ]
+        },
+        {
+          "name": "@electron-forge/maker-deb",
+          "config": {}
+        },
+        {
+          "name": "@electron-forge/maker-rpm",
+          "config": {}
+        }
+      ]
+    }
+  },
   "scripts": {
     "build": "concurrently npm:typecheck npm:build:electron",
     "build:electron": "concurrently npm:build:electron:esm npm:build:electron:cjs",
@@ -28,9 +55,14 @@
     "shell:smoke": "npx playwright test simple.spec.ts",
     "shell:test": "npx playwright test",
     "start": "npm run build:electron && electron-vite preview",
+    
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",
-    "typecheck:web": "tsc -p tsconfig.web.json"
+    "typecheck:web": "tsc -p tsconfig.web.json",
+    "fstart": "electron-forge start",
+    "fpackage": "electron-forge package",
+    "fmake": "electron-forge make",
+    "fpublish": "electron-forge publish"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.26.1",
@@ -47,6 +79,7 @@
     "default-agent-provider": "workspace:*",
     "dompurify": "^3.2.4",
     "dotenv": "^16.3.1",
+    "electron-squirrel-startup": "^1.0.1",
     "electron-updater": "^6.3.2",
     "jose": "^5.9.6",
     "markdown-it": "^14.1.0",
@@ -63,6 +96,11 @@
     "cross-env": "^7.0.3",
     "electron": "^30.0.1",
     "electron-builder": "^24.13.2",
+    "@electron-forge/cli": "7.8.0",
+    "@electron-forge/maker-rpm": "^7.8.0",
+    "@electron-forge/maker-squirrel": "^7.8.0",
+    "@electron-forge/maker-deb": "^7.8.0",
+    "@electron-forge/maker-zip": "^7.8.0",
     "electron-vite": "^3.1.0",
     "less": "^4.2.0",
     "rimraf": "^6.0.1",

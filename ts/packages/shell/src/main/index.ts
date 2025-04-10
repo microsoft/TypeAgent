@@ -37,6 +37,9 @@ import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { ShellWindow } from "./shellWindow.js";
 
+
+if (require('electron-squirrel-startup')) app.quit();
+
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
 
