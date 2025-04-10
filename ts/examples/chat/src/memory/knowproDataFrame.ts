@@ -189,37 +189,30 @@ export class RestaurantTextInfoCollection implements kp.IConversation {
     }
 }
 
-/**
- * TODO: need better naming for everything here.
- */
-export interface IHybridMemory<TMessage extends kp.IMessage = kp.IMessage> {
-    get conversation(): kp.IConversation<TMessage>;
-    get dataFrames(): ReadonlyMap<string, kp.IDataFrame>;
-}
-
-export class RestaurantCollection implements IHybridMemory {
+export class RestaurantCollection implements kp.IConversationHybrid {
     public restaurants: Restaurant[];
     public textIndex: RestaurantTextInfoCollection;
     public locations: kp.DataFrame<Geo>;
     public addresses: kp.DataFrame<Address>;
     private queryTranslator: kp.SearchQueryTranslator;
-    private allFrames: Map<string, kp.IDataFrame>;
+    private dataFames: kp.DataFrameCollection;
 
     constructor() {
         this.restaurants = [];
         this.textIndex = new RestaurantTextInfoCollection();
-        this.locations = new kp.DataFrame<Geo>("Geo", [
-            { name: "latitude", type: "string" },
-            { name: "longitude", type: "string" },
+        this.locations = new kp.DataFrame<Geo>("geo", [
+            ["latitude", { type: "string" }],
+            ["longitude", { type: "string" }],
         ]);
-        this.addresses = new kp.DataFrame<Address>("Address", [
-            { name: "streetAddress", type: "string" },
-            { name: "postalCode", type: "string" },
-            { name: "addressLocality", type: "string" },
+        this.addresses = new kp.DataFrame<Address>("address", [
+            ["streetAddress", { type: "string" }],
+            ["postalCode", { type: "string" }],
+            ["addressLocality", { type: "string" }],
         ]);
-        this.allFrames = new Map<string, kp.IDataFrame>();
-        this.allFrames.set(this.locations.name, this.locations);
-        this.allFrames.set(this.addresses.name, this.addresses);
+        this.dataFames = new Map<string, kp.IDataFrame>([
+            [this.locations.name, this.locations],
+            [this.addresses.name, this.addresses],
+        ]);
 
         this.queryTranslator = kp.createSearchQueryTranslator(
             openai.createChatModelDefault("knowpro_test"),
@@ -231,7 +224,7 @@ export class RestaurantCollection implements IHybridMemory {
     }
 
     public get dataFrames() {
-        return this.allFrames;
+        return this.dataFames;
     }
 
     public addRestaurant(restaurant: Restaurant): boolean {
