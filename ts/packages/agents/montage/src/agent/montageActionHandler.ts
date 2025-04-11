@@ -159,16 +159,28 @@ async function updateMontageContext(
         // TODO: evaluate perf..is this fast enough give a large image index?
         if (!context.agentContext.imageCollection) {
 
-            if (await context.sessionStorage?.exists("index_data.json") && await context.sessionStorage?.exists("index_embeddings.bin")) {    
-                const indexJson: string | undefined = await context.sessionStorage?.read("index_data.json", "utf8");
-                const embeddingsData = await context.sessionStorage?.read("index_embeddings.bin");
-
-                if (indexJson && embeddingsData) {
-                    context.agentContext.imageCollection = await im.ImageCollection.FromBuffer(
-                        indexJson,
-                        Buffer.from(embeddingsData)
+            if (existsSync("c:\\temp\\pictures_index")) {
+                context.agentContext.imageCollection =
+                    await im.ImageCollection.readFromFile(
+                        "c:\\temp\\pictures_index",
+                        "index",
                     );
-                }
+            } else if (existsSync("f:\\pictures_index")) {
+                context.agentContext.imageCollection =
+                    await im.ImageCollection.readFromFile(
+                        "f:\\pictures_index",
+                        "index",
+                    );
+            // if (await context.sessionStorage?.exists("index_data.json") && await context.sessionStorage?.exists("index_embeddings.bin")) {    
+            //     const indexJson: string | undefined = await context.sessionStorage?.read("index_data.json", "utf8");
+            //     const embeddingsData = await context.sessionStorage?.read("index_embeddings.bin");
+
+            //     if (indexJson && embeddingsData) {
+            //         context.agentContext.imageCollection = await im.ImageCollection.fromBuffer(
+            //             indexJson,
+            //             Buffer.from(embeddingsData)
+            //         );
+            //     }
             } else {
                 debug(
                     "Unable to load image index, please create one using the image indexer.",
@@ -278,15 +290,26 @@ async function handleMontageAction(
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
 
-            // report back to the user
-            let selectedCount: number = 0;
-            selectedCount += action.parameters.files
-                ? action.parameters.files.length
-                : 0;
-            selectedCount += action.parameters.indicies
-                ? action.parameters.indicies.length
-                : 0;
 
+            let selectedCount: number = 0;
+            // what is the intersection of the images in the montage and what we found in the search...that is the selection
+            // go through the files by name
+            
+            const intersection = action.parameters.files?.filter(item1 => actionContext.sessionContext.agentContext.montage?.files.some(item2 => item1 === item2));
+            if (intersection) {
+                selectedCount += intersection?.length;
+            }
+
+            action.parameters.indicies?.forEach((value) => {
+                const indexedFile = actionContext.sessionContext.agentContext.montage?.files[value];
+
+                // only count this index if it's not already been identified by file name
+                if (indexedFile && intersection?.indexOf(indexedFile) === -1) {
+                    selectedCount++;
+                }
+            });
+
+            // report back to the user
             result = createActionResult(`Selected ${selectedCount} images.`);
             break;
         }
@@ -339,7 +362,7 @@ async function handleMontageAction(
                     .length - action.parameters.files!.length;
             let message = `Found ${action.parameters.files!.length} images. `;
             if (count > 0) {
-                message += `Merged ${count} new images into the montage.`;
+                message += `New montage image count: ${actionContext.sessionContext.agentContext.montage!.files.length} images.`;
             }
             result = createActionResult(message);
             break;
@@ -476,11 +499,6 @@ async function handleMontageAction(
                 actionContext.sessionContext.agentContext.montages =
                     actionContext.sessionContext.agentContext.montages.filter(
                         (value) => {
-                            // // create new active montage if that's the one we are deleting
-                            // if (value.title == actionContext.sessionContext.agentContext.montage?.title) {
-                            //     actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);
-                            // }
-
                             if (
                                 value.title.toLocaleLowerCase() ===
                                 deleteMontageAction.parameters.title?.toLocaleLowerCase()
