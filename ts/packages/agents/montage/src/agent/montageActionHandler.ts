@@ -156,19 +156,19 @@ async function updateMontageContext(
         // Load the image index from disk
         // TODO: load from sesssion storage/directory
         // TODO: give the user a way to index their images
+        // TODO: evaluate perf..is this fast enough give a large image index?
         if (!context.agentContext.imageCollection) {
-            if (existsSync("c:\\temp\\pictures_index")) {
-                context.agentContext.imageCollection =
-                    await im.ImageCollection.readFromFile(
-                        "c:\\temp\\pictures_index",
-                        "index",
+
+            if (await context.sessionStorage?.exists("index_data.json") && await context.sessionStorage?.exists("index_embeddings.bin")) {    
+                const indexJson: string | undefined = await context.sessionStorage?.read("index_data.json", "utf8");
+                const embeddingsData = await context.sessionStorage?.read("index_embeddings.bin");
+
+                if (indexJson && embeddingsData) {
+                    context.agentContext.imageCollection = await im.ImageCollection.FromBuffer(
+                        indexJson,
+                        Buffer.from(embeddingsData)
                     );
-            } else if (existsSync("f:\\pictures_index")) {
-                context.agentContext.imageCollection =
-                    await im.ImageCollection.readFromFile(
-                        "f:\\pictures_index",
-                        "index",
-                    );
+                }
             } else {
                 debug(
                     "Unable to load image index, please create one using the image indexer.",
