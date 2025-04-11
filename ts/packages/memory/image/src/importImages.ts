@@ -19,6 +19,7 @@ import {
     writeConversationDataToFile,
     readConversationDataFromFile,
     buildTransientSecondaryIndexes,
+    readConversationDataFromBuffer,
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -473,6 +474,26 @@ export class ImageCollection implements IConversation {
         if (data) {
             imageCollection.deserialize(data);
         }
+        return imageCollection;
+    }
+
+    public static async fromBuffer(
+        jsonData: string,
+        embeddingsBuffer: Buffer,
+    ): Promise<ImageCollection> {
+        const imageCollection = new ImageCollection();
+
+        const data = await readConversationDataFromBuffer(
+            jsonData,
+            embeddingsBuffer,
+            imageCollection.settings.relatedTermIndexSettings
+                .embeddingIndexSettings?.embeddingSize,
+        );
+
+        if (data) {
+            imageCollection.deserialize(data);
+        }
+
         return imageCollection;
     }
 

@@ -75,7 +75,6 @@ async function loadModuleAgent(
     }
     return {
         appAgent: module.instantiate(),
-        process: undefined,
         count: 1,
     };
 }
@@ -130,6 +129,11 @@ export function createNpmAppAgentProvider(
             if (--agent.count === 0) {
                 agent.process?.kill();
                 moduleAgents.delete(appAgentName);
+            }
+        },
+        setTraceNamespaces(namespaces: string) {
+            for (const agent of moduleAgents.values()) {
+                agent.trace?.(namespaces);
             }
         },
     };
