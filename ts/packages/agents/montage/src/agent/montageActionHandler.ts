@@ -159,7 +159,6 @@ async function updateMontageContext(
         // TODO: give the user a way to index their images
         // TODO: evaluate perf..is this fast enough give a large image index?
         if (!context.agentContext.imageCollection) {
-
             if (existsSync("c:\\temp\\pictures_index")) {
                 context.agentContext.imageCollection =
                     await im.ImageCollection.readFromFile(
@@ -172,16 +171,16 @@ async function updateMontageContext(
                         "f:\\pictures_index",
                         "index",
                     );
-            // if (await context.sessionStorage?.exists("index_data.json") && await context.sessionStorage?.exists("index_embeddings.bin")) {    
-            //     const indexJson: string | undefined = await context.sessionStorage?.read("index_data.json", "utf8");
-            //     const embeddingsData = await context.sessionStorage?.read("index_embeddings.bin");
+                // if (await context.sessionStorage?.exists("index_data.json") && await context.sessionStorage?.exists("index_embeddings.bin")) {
+                //     const indexJson: string | undefined = await context.sessionStorage?.read("index_data.json", "utf8");
+                //     const embeddingsData = await context.sessionStorage?.read("index_embeddings.bin");
 
-            //     if (indexJson && embeddingsData) {
-            //         context.agentContext.imageCollection = await im.ImageCollection.fromBuffer(
-            //             indexJson,
-            //             Buffer.from(embeddingsData)
-            //         );
-            //     }
+                //     if (indexJson && embeddingsData) {
+                //         context.agentContext.imageCollection = await im.ImageCollection.fromBuffer(
+                //             indexJson,
+                //             Buffer.from(embeddingsData)
+                //         );
+                //     }
             } else {
                 debug(
                     "Unable to load image index, please create one using the image indexer.",
@@ -230,7 +229,7 @@ async function handleMontageAction(
             `Unable to perform the requeste action. Disconnected from the canvas.`,
         );
     } else if (!actionContext.sessionContext.agentContext.imageCollection) {
-        return createActionResultFromError('No image index has been loaded!');
+        return createActionResultFromError("No image index has been loaded!");
     }
 
     switch (action.actionName) {
@@ -291,18 +290,24 @@ async function handleMontageAction(
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
 
-
             let selectedCount: number = 0;
             // what is the intersection of the images in the montage and what we found in the search...that is the selection
             // go through the files by name
-            
-            const intersection = action.parameters.files?.filter(item1 => actionContext.sessionContext.agentContext.montage?.files.some(item2 => item1 === item2));
+
+            const intersection = action.parameters.files?.filter((item1) =>
+                actionContext.sessionContext.agentContext.montage?.files.some(
+                    (item2) => item1 === item2,
+                ),
+            );
             if (intersection) {
                 selectedCount += intersection?.length;
             }
 
             action.parameters.indicies?.forEach((value) => {
-                const indexedFile = actionContext.sessionContext.agentContext.montage?.files[value];
+                const indexedFile =
+                    actionContext.sessionContext.agentContext.montage?.files[
+                        value
+                    ];
 
                 // only count this index if it's not already been identified by file name
                 if (indexedFile && intersection?.indexOf(indexedFile) === -1) {
@@ -934,50 +939,55 @@ function startSlideShow(context: MontageActionContext) {
     // create the key if it doesn't exist
     // BUGBUG - winreg does NOT work if the key has spaces in it
     // https://github.com/fresc81/node-winreg
-    // there's a pending PR to fix but no response from the author so we just do it manually here ourselves        
-    spawnSync("reg", ["add", "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver"]);
+    // there's a pending PR to fix but no response from the author so we just do it manually here ourselves
+    spawnSync("reg", [
+        "add",
+        "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+    ]);
     // key.create((err) => {
     //     // remove spanSync once win-reg get's updated
     // });
-    
 
     // set the registry value
     const pidl = createEncryptedPIDLFromPath(slideShowDir);
     if (pidl) {
         spawnSync("reg", [
-            "add", 
-            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver", 
-            "/v", 
-            "EncryptedPIDL", 
-            "/t", 
-            "REG_SZ", 
-            "/d", 
+            "add",
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+            "/v",
+            "EncryptedPIDL",
+            "/t",
+            "REG_SZ",
+            "/d",
             pidl,
-            "/f" ]);
+            "/f",
+        ]);
 
         // fast
         spawnSync("reg", [
-            "add", 
-            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver", 
-            "/v", 
-            "Speed", 
-            "/t", 
-            "REG_DWORD", 
-            "/d", 
+            "add",
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+            "/v",
+            "Speed",
+            "/t",
+            "REG_DWORD",
+            "/d",
             "2",
-            "/f" ]);
-        
+            "/f",
+        ]);
+
         // shuffle
         spawnSync("reg", [
-            "add", 
-            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver", 
-            "/v", 
-            "Shuffle", 
-            "/t", 
-            "REG_DWORD", 
-            "/d", 
+            "add",
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+            "/v",
+            "Shuffle",
+            "/t",
+            "REG_DWORD",
+            "/d",
             "1",
-            "/f" ]);
+            "/f",
+        ]);
         // key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
         //     if (err) {
         //         console.error("Error reading registry value:", err);

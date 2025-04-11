@@ -480,7 +480,7 @@ export class ImageCollection implements IConversation {
     public static async fromBuffer(
         jsonData: string,
         embeddingsBuffer: Buffer,
-    ): Promise<ImageCollection>  {
+    ): Promise<ImageCollection> {
         const imageCollection = new ImageCollection();
 
         const data = await readConversationDataFromBuffer(

@@ -290,10 +290,15 @@ export class ShellWindow {
 
         // only open the requested canvas if it isn't already opened
         if (this.targetUrl !== targetUrl.toString() || newWindow) {
-
-            inlineWebContentView.webContents.loadURL(targetUrl.toString()).catch((reason) => {    
-                this.openInlineBrowserRetry(reason, targetUrl, inlineWebContentView)
-            });
+            inlineWebContentView.webContents
+                .loadURL(targetUrl.toString())
+                .catch((reason) => {
+                    this.openInlineBrowserRetry(
+                        reason,
+                        targetUrl,
+                        inlineWebContentView,
+                    );
+                });
 
             // indicate in the settings which canvas is open
             this.targetUrl = targetUrl.toString();
@@ -301,27 +306,49 @@ export class ShellWindow {
     }
 
     /*
-    * Retries to open localhost URLs once the dispatcher has loaded
-    */
-    public openInlineBrowserRetry(reason: any, targetUrl: URL, inlineWebContentView: WebContentsView) {
-        
+     * Retries to open localhost URLs once the dispatcher has loaded
+     */
+    public openInlineBrowserRetry(
+        reason: any,
+        targetUrl: URL,
+        inlineWebContentView: WebContentsView,
+    ) {
         // try again since the host process might not be ready
         if (!this.dispatcherReady) {
-            setTimeout(() => { this.openInlineBrowserRetry({ code: "ERR_CONNECTION_REFUSED" }, targetUrl, inlineWebContentView) }, 500)
-        } else if (reason.code === "ERR_CONNECTION_REFUSED"
-            && this.retryCount < 3
-            && (targetUrl.toString().toLowerCase().startsWith("http://localhost") 
-                || targetUrl.toString().toLowerCase().startsWith("https://localhost"))) {
-
-            this.retryCount++;
-            setTimeout(() => { 
-                inlineWebContentView.webContents.loadURL(targetUrl.toString()).catch((reason) => {
-                    this.openInlineBrowserRetry(reason, targetUrl, inlineWebContentView);
-                }); 
+            setTimeout(() => {
+                this.openInlineBrowserRetry(
+                    { code: "ERR_CONNECTION_REFUSED" },
+                    targetUrl,
+                    inlineWebContentView,
+                );
             }, 500);
-        }        
+        } else if (
+            reason.code === "ERR_CONNECTION_REFUSED" &&
+            this.retryCount < 3 &&
+            (targetUrl
+                .toString()
+                .toLowerCase()
+                .startsWith("http://localhost") ||
+                targetUrl
+                    .toString()
+                    .toLowerCase()
+                    .startsWith("https://localhost"))
+        ) {
+            this.retryCount++;
+            setTimeout(() => {
+                inlineWebContentView.webContents
+                    .loadURL(targetUrl.toString())
+                    .catch((reason) => {
+                        this.openInlineBrowserRetry(
+                            reason,
+                            targetUrl,
+                            inlineWebContentView,
+                        );
+                    });
+            }, 500);
+        }
     }
-    
+
     public dispatcherInitialized() {
         this.dispatcherReady = true;
     }
