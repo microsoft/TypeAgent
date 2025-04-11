@@ -740,7 +740,7 @@ async function findRequestedImages(
 
             const imageFiles: Set<string> = new Set<string>();
 
-            console.log(
+            debug(
                 `Found ${matches?.size} matches for: ${action.parameters.search_filters}`,
             );
 
@@ -752,7 +752,6 @@ async function findRequestedImages(
                                 context.imageCollection!.semanticRefs[
                                     value.semanticRefOrdinal
                                 ];
-                            //console.log(`\tMatch (${value.score}): ${JSON.stringify(semanticRef)}`);
                             if (semanticRef) {
                                 if (semanticRef.knowledgeType === "entity") {
                                     const entity: kpLib.ConcreteEntity =
@@ -805,7 +804,7 @@ async function findRequestedImages(
                                     semanticRef.knowledgeType === "topic"
                                 ) {
                                     // TODO: implement
-                                    console.log("topic");
+                                    debug("topic");
                                 }
                             }
                         }
@@ -864,7 +863,7 @@ export async function createViewServiceHost(
                 });
 
                 childProcess.on("exit", (code) => {
-                    console.log("Montage view server exited with code:", code);
+                    debug("Montage view server exited with code:", code);
                 });
             } catch (e: any) {
                 console.error(e);
@@ -936,9 +935,7 @@ function startSlideShow(context: MontageActionContext) {
     // BUGBUG - winreg does NOT work if the key has spaces in it
     // https://github.com/fresc81/node-winreg
     // there's a pending PR to fix but no response from the author so we just do it manually here ourselves        
-    const buff = spawnSync("reg", ["add", "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver"]);
-    console.log(buff.stdout.toString());
-    console.log(buff.stderr.toString());
+    spawnSync("reg", ["add", "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver"]);
     // key.create((err) => {
     //     // remove spanSync once win-reg get's updated
     // });
@@ -997,7 +994,7 @@ function startSlideShow(context: MontageActionContext) {
             "/s",
         ]);
     } catch (e) {
-        console.log(e);
+        debug(e);
     }
 }
 
