@@ -1,15 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { setIntersect, setUnion } from "./collections.js";
+import { DataFrameCompiler } from "./dataFrameQuery.js";
 import {
     IConversation,
     IMessage,
+    ScoredMessageOrdinal,
+    SearchTerm,
     SearchTermGroup,
     TextRange,
     WhenFilter,
 } from "./interfaces.js";
 import { ComparisonOp } from "./queryCmp.js";
-import { searchConversationKnowledge, SearchOptions } from "./search.js";
+import {
+    ConversationSearchResult,
+    createDefaultSearchOptions,
+    searchConversation,
+    SearchOptions,
+} from "./search.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -27,32 +36,20 @@ export type DataFrameColumnDef = {
 
 export type DataFrameColumns = ReadonlyMap<string, DataFrameColumnDef>;
 
-export type DataFrameRowId = number;
+export type RowSourceRef = {
+    range: TextRange;
+    score?: number | undefined;
+};
 
-export interface DataFrameRow<
-    TRow extends IDataFrameRowData = IDataFrameRowData,
-> {
-    readonly rowId: DataFrameRowId;
-    data: TRow;
-}
+export type DataFrameRow = {
+    sourceRef: RowSourceRef;
+    record: DataFrameRecord;
+};
 
-export type DataFrameValue = number | string;
+export type DataFrameRecord = Record<string, DataFrameValue>;
+export type DataFrameValue = number | string | undefined;
 
-export interface IDataFrameRowData {
-    /**
-     * If this data frame row was either extracted from OR
-     * associated with a particular text range
-     */
-    range?: TextRange | undefined;
-    /**
-     * Source data that this data frame row was derived from
-     */
-    sourceId?: number | undefined;
-}
-
-export interface IDataFrame<
-    TRowData extends IDataFrameRowData = IDataFrameRowData,
-> {
+export interface IDataFrame extends Iterable<DataFrameRow> {
     /**
      * Name of the data frame. Default is DataFrame
      */
@@ -61,26 +58,39 @@ export interface IDataFrame<
      * Columns in the data frame
      */
     readonly columns: DataFrameColumns;
-    addRows(...rows: TRowData[]): void;
-    getRows(rowIds: DataFrameRowId[]): DataFrameRow<TRowData>[];
-    findRows(
+
+    addRows(...rows: DataFrameRow[]): void;
+    get(
         columnName: string,
-        value: DataFrameValue,
-        op?: ComparisonOp,
-    ): DataFrameRow<TRowData>[] | undefined;
+        columnValue: DataFrameValue,
+        op: ComparisonOp,
+    ): DataFrameRow[] | undefined;
+    findRows(searchTerms: DataFrameTermGroup): DataFrameRow[] | undefined;
+    findSources(searchTerms: DataFrameTermGroup): RowSourceRef[] | undefined;
 }
 
 export type DataFrameCollection = ReadonlyMap<string, IDataFrame>;
+
+export type DataFrameTermGroup = {
+    booleanOp: "and" | "or" | "or_max";
+    dataFrame: IDataFrame;
+    terms: DataFrameSearchTerm[];
+};
+
+export type DataFrameSearchTerm = {
+    columnName: string;
+    columnValue: SearchTerm;
+    compareOp?: ComparisonOp;
+};
 
 /**
  * Sample, in-memory data frame that currently implements lookups using loops
  * In actuality, DataFrames will use more optimal storage like Sql
  */
-export class DataFrame<TRowData extends IDataFrameRowData>
-    implements IDataFrame<TRowData>
-{
-    public rows: DataFrameRow<TRowData>[] = [];
+export class DataFrame implements IDataFrame {
+    private rows: DataFrameRow[] = [];
     public columns: DataFrameColumns;
+
     constructor(
         public name: string,
         columns: DataFrameColumns | [string, DataFrameColumnDef][],
@@ -92,51 +102,141 @@ export class DataFrame<TRowData extends IDataFrameRowData>
         }
     }
 
-    public addRows(...rowsToAdd: TRowData[]): void {
-        for (let i = 0; i < rowsToAdd.length; ++i) {
-            this.rows.push({
-                rowId: this.rows.length,
-                data: rowsToAdd[i],
-            });
+    public [Symbol.iterator](): Iterator<DataFrameRow> {
+        return this.rows[Symbol.iterator]();
+    }
+
+    public addRows(...rows: DataFrameRow[]): void {
+        this.rows.push(...rows);
+    }
+
+    public get(
+        columnName: string,
+        columnValue: DataFrameValue,
+        compareOp: ComparisonOp,
+    ): DataFrameRow[] | undefined {
+        let ordinals = this.findRowOrdinals(columnName, columnValue, compareOp);
+        const rows = this.getRows(ordinals);
+        return rows.length > 0 ? rows : undefined;
+    }
+
+    public findRows(
+        searchTerms: DataFrameTermGroup,
+    ): DataFrameRow[] | undefined {
+        let ordinalSet = this.searchBoolean(searchTerms);
+        if (ordinalSet === undefined || ordinalSet.size === 0) {
+            return undefined;
+        }
+        return this.getRows(ordinalSet.values());
+    }
+
+    public findSources(
+        searchTerms: DataFrameTermGroup,
+    ): RowSourceRef[] | undefined {
+        let ordinalSet = this.searchBoolean(searchTerms);
+        if (ordinalSet === undefined || ordinalSet.size === 0) {
+            return undefined;
+        }
+        return this.getSources(ordinalSet.values());
+    }
+
+    private *findRowOrdinals(
+        columnName: string,
+        value: DataFrameValue,
+        op?: ComparisonOp,
+    ): IterableIterator<number> {
+        if (!this.columns.has(columnName)) {
+            return;
+        }
+        op ??= ComparisonOp.Eq;
+        for (let rowOrdinal = 0; rowOrdinal < this.rows.length; ++rowOrdinal) {
+            if (
+                this.matchRecord(
+                    this.rows[rowOrdinal].record,
+                    columnName,
+                    value,
+                    op,
+                )
+            ) {
+                yield rowOrdinal;
+            }
         }
     }
 
-    public getRows(rowIds: DataFrameRowId[]): DataFrameRow<TRowData>[] {
-        let rows: DataFrameRow<TRowData>[] = [];
-        for (let i = 0; i < rowIds.length; ++i) {
-            rows.push(this.rows[i]);
+    private getSources(ordinals: IterableIterator<number>) {
+        const rows: RowSourceRef[] = [];
+        for (const ordinal of ordinals) {
+            rows.push(this.rows[ordinal].sourceRef);
         }
         return rows;
     }
 
-    public findRows(
-        columnName: string,
-        value: DataFrameValue,
-        op?: ComparisonOp,
-    ): DataFrameRow<TRowData>[] | undefined {
-        if (!this.columns.has(columnName)) {
-            return undefined;
+    private getRows(ordinals: IterableIterator<number>) {
+        const rows: DataFrameRow[] = [];
+        for (const ordinal of ordinals) {
+            rows.push(this.rows[ordinal]);
         }
-
-        op ??= ComparisonOp.Eq;
-        let matches: DataFrameRow<TRowData>[] | undefined;
-        for (const row of this.rows) {
-            if (this.matchRowData(row.data, columnName, value, op)) {
-                matches ??= [];
-                matches.push(row);
-            }
-        }
-        return matches;
+        return rows;
     }
 
-    private matchRowData(
-        row: any,
+    private searchBoolean(
+        searchTerms: DataFrameTermGroup,
+    ): Set<number> | undefined {
+        let ordinalSet: Set<number> | undefined;
+        switch (searchTerms.booleanOp) {
+            default:
+                ordinalSet = this.searchOr(searchTerms);
+                break;
+            case "and":
+                ordinalSet = this.searchAnd(searchTerms);
+                break;
+        }
+        return ordinalSet;
+    }
+
+    private searchAnd(
+        searchTerms: DataFrameTermGroup,
+    ): Set<number> | undefined {
+        let andSet: Set<number> | undefined;
+        for (const term of searchTerms.terms) {
+            andSet = setIntersect(
+                andSet,
+                this.findRowOrdinals(
+                    term.columnName,
+                    term.columnValue.term.text,
+                    term.compareOp,
+                ),
+            );
+            if (andSet === undefined || andSet.size === 0) {
+                return undefined;
+            }
+        }
+        return andSet;
+    }
+
+    private searchOr(searchTerms: DataFrameTermGroup): Set<number> | undefined {
+        let orSet: Set<number> | undefined;
+        for (const term of searchTerms.terms) {
+            orSet = setUnion(
+                orSet,
+                this.findRowOrdinals(
+                    term.columnName,
+                    term.columnValue.term.text,
+                    term.compareOp,
+                ),
+            );
+        }
+        return orSet;
+    }
+
+    private matchRecord(
+        rowData: DataFrameRecord,
         name: string,
         value: DataFrameValue,
         op: ComparisonOp,
     ): boolean {
-        const propertyValue = row[name];
-        if (propertyValue === undefined) {
+        const propertyValue = (rowData as any)[name];
+        if (value === undefined || propertyValue === undefined) {
             return false;
         }
         switch (op) {
@@ -158,27 +258,91 @@ export class DataFrame<TRowData extends IDataFrameRowData>
     }
 }
 
+export function isDataFrameGroup(
+    term: DataFrameTermGroup | DataFrameSearchTerm,
+): term is DataFrameTermGroup {
+    return term.hasOwnProperty("booleanOp");
+}
+
 /**
  * TODO: need better naming for everything here.
  */
 export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
     get conversation(): IConversation<TMessage>;
-    get dataFrames(): DataFrameCollection;
+    get tables(): DataFrameCollection;
 }
 
-export async function searchDataFrames(searchTermGroup: SearchTermGroup) {}
+export type HybridSearchResults = {
+    conversationMatches?: ConversationSearchResult | undefined;
+    dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
+};
 
-export async function searchConversationKnowledgeHybrid(
+/**
+ * Search the hybrid conversation using dataFrames to determine additional
+ * 'outer' scope
+ * @param hybridConversation
+ * @param searchTermGroup
+ * @param filter
+ * @param options
+ */
+export async function searchConversationWithHybridScope(
     hybridConversation: IConversationHybrid,
     searchTermGroup: SearchTermGroup,
     filter: WhenFilter,
-    options: SearchOptions,
+    options?: SearchOptions,
+    rawSearchQuery?: string,
 ) {
-    const knowledgeResults = await searchConversationKnowledge(
+    const dfCompiler = new DataFrameCompiler(hybridConversation.tables);
+    const dfScopeExpr = dfCompiler.compileScope(searchTermGroup);
+    if (dfScopeExpr) {
+        const scopeRanges = dfScopeExpr.eval();
+        if (scopeRanges) {
+            filter ??= {};
+            filter.textRangesInScope = scopeRanges.getRanges();
+        }
+    }
+    return searchConversation(
         hybridConversation.conversation,
         searchTermGroup,
         filter,
         options,
+        rawSearchQuery,
     );
-    return knowledgeResults;
+}
+
+export async function searchConversationHybrid(
+    hybridConversation: IConversationHybrid,
+    searchTermGroup: SearchTermGroup,
+    filter?: WhenFilter,
+    options?: SearchOptions,
+    rawQuery?: string,
+): Promise<HybridSearchResults> {
+    options ??= createDefaultSearchOptions();
+    const conversationMatches = await searchConversation(
+        hybridConversation.conversation,
+        searchTermGroup,
+        filter,
+        options,
+        rawQuery,
+    );
+    // Also match any messages with matching data frame columns
+    let dataFrameMatches: ScoredMessageOrdinal[] | undefined;
+    const dfCompiler = new DataFrameCompiler(hybridConversation.tables);
+    const dfQuery = dfCompiler.compile(searchTermGroup);
+    if (dfQuery) {
+        const dfResults = dfQuery.eval();
+        if (dfResults) {
+            dataFrameMatches = [];
+            for (const match of dfResults.getMatches()) {
+                dataFrameMatches.push({
+                    messageOrdinal: match.value,
+                    score: match.score,
+                });
+            }
+        }
+    }
+    return {
+        conversationMatches,
+        dataFrameMatches,
+    };
 }

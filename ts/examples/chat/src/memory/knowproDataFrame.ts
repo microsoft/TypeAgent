@@ -49,16 +49,10 @@ export async function createKnowproDataFrameCommands(
         );
         progress.complete();
         //
-        // Print knowledge
-        //
-        printer.writeHeading("Extracted Knowledge");
-        for (const sr of restaurantCollection.textIndex.semanticRefs) {
-            printer.writeSemanticRef(sr);
-        }
-        //
         // Do some querying
         //
-        const rows = await restaurantCollection.locations.findRows(
+        printer.conversation = restaurantCollection.conversation;
+        const rows = await restaurantCollection.locations.get(
             "latitude",
             "50.804436 (nl)",
             kp.ComparisonOp.Eq,
@@ -73,10 +67,26 @@ export async function createKnowproDataFrameCommands(
                 printer.writeLines(descriptions);
             }
         }
-        // So NLP querying
+        // Automatic querying of data frames using standard conversation stuff
+        const termGroup = kp.createAndTermGroup(
+            kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
+            kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
+        );
+        const hybridMatches = await kp.searchConversationHybrid(
+            restaurantCollection,
+            termGroup,
+        );
+        if (hybridMatches && hybridMatches.dataFrameMatches) {
+            printer.writeScoredMessages(
+                hybridMatches.dataFrameMatches,
+                restaurantCollection.conversation.messages,
+                25,
+            );
+        }
+        // NLP querying
         printer.writeInColor(chalk.cyan, "Searching for Punjabi Food");
         const matchResult =
-            await restaurantCollection.findRestaurant("Punjabi Restaurant");
+            await restaurantCollection.findWithLanguage("Punjabi Restaurant");
         if (matchResult.success) {
             for (const match of matchResult.data) {
                 printer.writeJson(match);
@@ -98,12 +108,12 @@ export interface Restaurant extends Thing {
     address?: Address;
 }
 
-export interface Geo extends Thing, kp.IDataFrameRowData {
-    latitude?: string;
-    longitude?: string;
+export interface Geo extends Thing, kp.DataFrameRecord {
+    latitude?: string | undefined;
+    longitude?: string | undefined;
 }
 
-export interface Address extends Thing, kp.IDataFrameRowData {
+export interface Address extends Thing, kp.DataFrameRecord {
     streetAddress?: string;
     postalCode?: string;
     addressLocality?: string;
@@ -113,27 +123,23 @@ export type Container<T> = {
     item?: T | undefined;
 };
 
-export class RestaurantTextInfo implements kp.IMessage {
+export class RestaurantInfo implements kp.IMessage {
     public textChunks: string[];
     public timestamp?: string | undefined;
     public tags: string[] = [];
     public deletionInfo?: kp.DeletionInfo | undefined;
 
-    constructor(
-        public restaurantId: number,
-        public name: string,
-        description?: string,
-    ) {
-        let text = `Restaurant:\n${name}`;
-        if (description) {
-            text += `\n\n${description}`;
+    constructor(public restaurant: Restaurant) {
+        let text = `Restaurant:\n${restaurant.name}`;
+        if (restaurant.description) {
+            text += `\n\n${restaurant.description}`;
         }
         this.textChunks = [text];
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
         return {
-            entities: [{ name: this.name, type: ["restaurant"] }],
+            entities: [{ name: this.restaurant.name, type: ["restaurant"] }],
             actions: [],
             inverseActions: [],
             topics: [],
@@ -141,7 +147,7 @@ export class RestaurantTextInfo implements kp.IMessage {
     }
 }
 
-export class RestaurantTextInfoCollection implements kp.IConversation {
+export class RestaurantInfoCollection implements kp.IConversation {
     public settings: kp.ConversationSettings;
     public nameTag: string = "description";
     public tags: string[] = [];
@@ -150,7 +156,7 @@ export class RestaurantTextInfoCollection implements kp.IConversation {
     public secondaryIndexes: kp.IConversationSecondaryIndexes;
 
     constructor(
-        public messages: RestaurantTextInfo[] = [],
+        public messages: RestaurantInfo[] = [],
         settings?: kp.ConversationSettings,
     ) {
         settings ??= kp.createConversationSettings();
@@ -161,15 +167,9 @@ export class RestaurantTextInfoCollection implements kp.IConversation {
         );
     }
 
-    public add(
-        restaurantId: number,
-        name: string,
-        description?: string,
-    ): kp.TextRange {
+    public add(restaurant: Restaurant): kp.TextRange {
         const messageOrdinal = this.messages.length;
-        this.messages.push(
-            new RestaurantTextInfo(restaurantId, name, description),
-        );
+        this.messages.push(new RestaurantInfo(restaurant));
         return {
             start: { messageOrdinal, chunkOrdinal: 0 },
         };
@@ -177,7 +177,7 @@ export class RestaurantTextInfoCollection implements kp.IConversation {
 
     public getDescriptionFromLocation(
         textLocation: kp.TextLocation,
-    ): RestaurantTextInfo {
+    ): RestaurantInfo {
         return this.messages[textLocation.messageOrdinal];
     }
 
@@ -189,26 +189,24 @@ export class RestaurantTextInfoCollection implements kp.IConversation {
 }
 
 export class RestaurantCollection implements kp.IConversationHybrid {
-    public restaurants: Restaurant[];
-    public textIndex: RestaurantTextInfoCollection;
-    public dataFrames: kp.DataFrameCollection;
-    public locations: kp.DataFrame<Geo>;
-    public addresses: kp.DataFrame<Address>;
+    public restaurants: RestaurantInfoCollection;
+    public tables: kp.DataFrameCollection;
+    public locations: kp.DataFrame;
+    public addresses: kp.DataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor() {
-        this.restaurants = [];
-        this.textIndex = new RestaurantTextInfoCollection();
-        this.locations = new kp.DataFrame<Geo>("geo", [
+        this.restaurants = new RestaurantInfoCollection();
+        this.locations = new kp.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
-        this.addresses = new kp.DataFrame<Address>("address", [
+        this.addresses = new kp.DataFrame("address", [
             ["streetAddress", { type: "string" }],
             ["postalCode", { type: "string" }],
             ["addressLocality", { type: "string" }],
         ]);
-        this.dataFrames = new Map<string, kp.IDataFrame>([
+        this.tables = new Map<string, kp.IDataFrame>([
             [this.locations.name, this.locations],
             [this.addresses.name, this.addresses],
         ]);
@@ -219,7 +217,11 @@ export class RestaurantCollection implements kp.IConversationHybrid {
     }
 
     public get conversation(): kp.IConversation {
-        return this.textIndex;
+        return this.restaurants;
+    }
+
+    public get dataFrames(): kp.DataFrameCollection {
+        return this.dataFrames;
     }
 
     public addRestaurant(restaurant: Restaurant): boolean {
@@ -227,26 +229,17 @@ export class RestaurantCollection implements kp.IConversationHybrid {
         if (!this.isGoodData(restaurant)) {
             return false;
         }
-        let restaurantId = this.restaurants.length;
-        this.restaurants.push(restaurant);
-        const descriptionTextRange = this.textIndex.add(
-            restaurantId,
-            restaurant.name,
-            restaurant.description,
-        );
+        const sourceRef: kp.RowSourceRef = {
+            range: this.restaurants.add(restaurant),
+        };
         if (restaurant.geo) {
-            restaurant.geo.range = descriptionTextRange;
+            this.locations.addRows({
+                sourceRef,
+                record: restaurant.geo,
+            });
         }
         if (restaurant.address) {
-            restaurant.address.range = descriptionTextRange;
-        }
-        if (restaurant.geo) {
-            restaurant.geo.sourceId = restaurantId;
-            this.locations.addRows(restaurant.geo);
-        }
-        if (restaurant.address) {
-            restaurant.address.sourceId = restaurantId;
-            this.addresses.addRows(restaurant.address);
+            this.addresses.addRows({ sourceRef, record: restaurant.address });
         }
         return true;
     }
@@ -254,9 +247,9 @@ export class RestaurantCollection implements kp.IConversationHybrid {
     public getDescriptionsFromRows(rows: kp.DataFrameRow[]): string[] {
         const descriptions: string[] = [];
         for (const row of rows) {
-            if (row.data.range) {
-                const description = this.textIndex.getDescriptionFromLocation(
-                    row.data.range.start,
+            if (row.record) {
+                const description = this.restaurants.getDescriptionFromLocation(
+                    row.sourceRef.range.start,
                 );
                 descriptions.push(description.textChunks[0]);
             }
@@ -264,9 +257,11 @@ export class RestaurantCollection implements kp.IConversationHybrid {
         return descriptions;
     }
 
-    public async findRestaurant(query: string): Promise<Result<Restaurant[]>> {
+    public async findWithLanguage(
+        query: string,
+    ): Promise<Result<Restaurant[]>> {
         const queryResults = await kp.searchQueryExprFromLanguage(
-            this.textIndex,
+            this.conversation,
             this.queryTranslator,
             query,
         );
@@ -276,21 +271,25 @@ export class RestaurantCollection implements kp.IConversationHybrid {
         const matchedRestaurants: Restaurant[] = [];
         const sq = queryResults.data[0];
         for (const sExpr of sq.selectExpressions) {
-            // TODO: look at terms in sExpr.searchTermGroup and figure out which should be handled by data frames
-            // Then we can intersect results
-            const matches = await kp.searchConversation(
-                this.textIndex,
+            const matches = await kp.searchConversationHybrid(
+                this,
                 sExpr.searchTermGroup,
                 sExpr.when,
                 undefined,
                 sq.rawQuery,
             );
-            if (matches) {
-                for (const match of matches.messageMatches) {
-                    matchedRestaurants.push(
-                        this.restaurants[match.messageOrdinal],
-                    );
-                }
+            // TODO: combine these separate matches?
+            if (matches && matches.conversationMatches) {
+                this.collectMessages(
+                    matches.conversationMatches.messageMatches,
+                    matchedRestaurants,
+                );
+            }
+            if (matches && matches.dataFrameMatches) {
+                this.collectMessages(
+                    matches.dataFrameMatches,
+                    matchedRestaurants,
+                );
             }
         }
         return success(matchedRestaurants);
@@ -299,9 +298,19 @@ export class RestaurantCollection implements kp.IConversationHybrid {
     public async buildIndex(
         eventHandler: kp.IndexingEventHandlers,
     ): Promise<void> {
-        await this.textIndex.buildIndex(eventHandler);
+        await this.restaurants.buildIndex(eventHandler);
     }
 
+    private collectMessages(
+        matchedOrdinals: kp.ScoredMessageOrdinal[],
+        matches: Restaurant[],
+    ) {
+        for (const match of matchedOrdinals) {
+            const restaurant =
+                this.restaurants.messages[match.messageOrdinal].restaurant;
+            matches.push(restaurant);
+        }
+    }
     /**
      * Source data is imperfect
      * @param restaurant
