@@ -28,7 +28,11 @@ import {
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
-import { createLimiter } from "common-utils";
+import {
+    base64ToUint8Array,
+    uint8ArrayToBase64,
+    createLimiter,
+} from "common-utils";
 
 export function createAgentRpcServer(
     name: string,
@@ -213,15 +217,25 @@ export function createAgentRpcServer(
             },
         };
 
-        function readStorage(
+        async function readStorage(
             storagePath: string,
             options: StorageEncoding,
         ): Promise<string>;
-        function readStorage(storagePath: string): Promise<Uint8Array>;
-        function readStorage(
+        async function readStorage(storagePath: string): Promise<Uint8Array>;
+        async function readStorage(
             storagePath: string,
             options?: StorageEncoding,
         ): Promise<string | Uint8Array> {
+            if (options === undefined) {
+                return base64ToUint8Array(
+                    await rpc.invoke("storageRead", {
+                        contextId,
+                        session,
+                        storagePath,
+                        options: "base64",
+                    }),
+                );
+            }
             return rpc.invoke("storageRead", {
                 contextId,
                 session,
@@ -236,12 +250,22 @@ export function createAgentRpcServer(
                 data: string | Uint8Array,
                 options?: StorageEncoding,
             ): Promise<void> => {
+                let dataToSend: string;
+                let optionsToSend: StorageEncoding | undefined;
+                if (typeof data === "string") {
+                    dataToSend = data;
+                    optionsToSend = options;
+                } else {
+                    dataToSend = uint8ArrayToBase64(data);
+                    optionsToSend = "base64";
+                }
+
                 return rpc.invoke("storageWrite", {
                     contextId,
                     session,
                     storagePath,
-                    data,
-                    options,
+                    data: dataToSend,
+                    options: optionsToSend,
                 });
             },
             list: (

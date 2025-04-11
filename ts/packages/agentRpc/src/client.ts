@@ -27,6 +27,7 @@ import {
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
+import { uint8ArrayToBase64 } from "common-utils";
 
 type ShimContext =
     | {
@@ -188,23 +189,25 @@ export async function createAgentRpcClient(
             options?: StorageEncoding | undefined;
         }) => {
             const context = contextMap.get(param.contextId);
-            return getStorage(param, context).read(
-                param.storagePath,
-                param.options as any,
-            );
+            const options = param.options;
+            const storage = getStorage(param, context);
+            if (options !== undefined) {
+                return storage.read(param.storagePath, options);
+            }
+            return uint8ArrayToBase64(await storage.read(param.storagePath));
         },
         storageWrite: async (param: {
             contextId: number;
             session: boolean;
             storagePath: string;
-            data: string | Uint8Array;
+            data: string;
             options?: StorageEncoding | undefined;
         }) => {
             const context = contextMap.get(param.contextId);
             return getStorage(param, context).write(
                 param.storagePath,
-                param.data as any,
-                param.options as any,
+                param.data,
+                param.options,
             );
         },
         storageList: async (param: {
