@@ -48,7 +48,8 @@ export type ClientAction =
     | "call-phonenumber"
     | "send-sms"
     | "search-nearby"
-    | "automate-phone-ui";
+    | "automate-phone-ui"
+    | "open-folder";
 
 export interface ActionIO {
     // Set the display to the content provided

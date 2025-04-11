@@ -55,6 +55,7 @@
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dotenv": "^16.3.1",
+    "open": "^10.1.0",
     "ts-node": "^10.9.1",
     "typechat": "^0.1.1"
   },

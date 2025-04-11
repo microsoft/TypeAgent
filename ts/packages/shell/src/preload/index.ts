@@ -76,6 +76,9 @@ const api: ClientAPI = {
     saveSettings: (settings: ShellUserSettings) => {
         ipcRenderer.send("save-settings", settings);
     },
+    openFolder: (path: string) => {
+        ipcRenderer.send("open-folder", path);
+    }
 };
 
 const dispatcherChannel = createGenericChannel((message: any) =>

@@ -9,6 +9,7 @@ import {
     dialog,
     session,
     WebContentsView,
+    shell,
 } from "electron";
 import path, { join } from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
@@ -318,6 +319,10 @@ async function initializeInstance(shellSettings: ShellSettings) {
                 chatView.webContents.send("file-selected", paths[0], content);
             }
         }
+    });
+
+    ipcMain.on("open-folder", async(_event, path: string) => {
+        shell.openPath(path);
     });
 
     return shellWindow.waitForContentLoaded();

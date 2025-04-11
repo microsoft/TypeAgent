@@ -27,7 +27,8 @@ export type ClientActions =
     | "show-camera"
     | "open-app"
     | "show-notification"
-    | "start-intent";
+    | "start-intent"
+    | "open-folder";
 
 // end duplicate type section
 
@@ -40,6 +41,7 @@ export interface ClientAPI {
     saveChatHistory: (history: string) => void;
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
+    openFolder: (path: string) => void;
 }
 
 // Functions that are called from the main process to the renderer process.
