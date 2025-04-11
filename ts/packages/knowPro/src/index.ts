@@ -21,7 +21,8 @@ export * from "./queryCmp.js";
 export {
     createKnowledgeExtractor,
     extractKnowledgeFromText,
-    mergeEntities as mergeConcreteEntities,
+    extractKnowledgeFromTextBatch,
+    mergeConcreteEntities,
     mergeTopics,
 } from "./knowledge.js";
 

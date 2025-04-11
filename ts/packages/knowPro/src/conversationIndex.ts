@@ -222,14 +222,16 @@ export function addKnowledgeToSemanticRefIndex(
     const semanticRefs = conversation.semanticRefs!;
     const semanticRefIndex = conversation.semanticRefIndex!;
     for (const entity of knowledge.entities) {
-        addEntity(
-            entity,
-            semanticRefs,
-            semanticRefIndex,
-            messageOrdinal,
-            chunkOrdinal,
-            termsAdded,
-        );
+        if (validateEntity(entity)) {
+            addEntity(
+                entity,
+                semanticRefs,
+                semanticRefIndex,
+                messageOrdinal,
+                chunkOrdinal,
+                termsAdded,
+            );
+        }
     }
     for (const action of knowledge.actions) {
         addAction(
@@ -262,6 +264,10 @@ export function addKnowledgeToSemanticRefIndex(
             termsAdded,
         );
     }
+}
+
+function validateEntity(entity: kpLib.ConcreteEntity): boolean {
+    return entity.name !== undefined && entity.name.length > 0;
 }
 
 /**
