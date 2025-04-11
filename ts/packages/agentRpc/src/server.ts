@@ -227,6 +227,7 @@ export function createAgentRpcServer(
             options?: StorageEncoding,
         ): Promise<string | Uint8Array> {
             if (options === undefined) {
+                // Binary read turns to base64 read for marshalling
                 return base64ToUint8Array(
                     await rpc.invoke("storageRead", {
                         contextId,
@@ -250,22 +251,23 @@ export function createAgentRpcServer(
                 data: string | Uint8Array,
                 options?: StorageEncoding,
             ): Promise<void> => {
-                let dataToSend: string;
-                let optionsToSend: StorageEncoding | undefined;
-                if (typeof data === "string") {
-                    dataToSend = data;
-                    optionsToSend = options;
-                } else {
-                    dataToSend = uint8ArrayToBase64(data);
-                    optionsToSend = "base64";
+                if (typeof data !== "string") {
+                    // Binary write turns to base64 write for marshalling
+                    return rpc.invoke("storageWrite", {
+                        contextId,
+                        session,
+                        storagePath,
+                        data: uint8ArrayToBase64(data),
+                        options: "base64",
+                    });
                 }
 
                 return rpc.invoke("storageWrite", {
                     contextId,
                     session,
                     storagePath,
-                    data: dataToSend,
-                    options: optionsToSend,
+                    data,
+                    options,
                 });
             },
             list: (

@@ -20,7 +20,11 @@ describe("Storage", () => {
             await storage.delete(fileName);
         } catch {}
     });
-    afterEach(async () => {});
+    afterEach(async () => {
+        try {
+            await storage.delete(fileName);
+        } catch {}
+    });
     it("read/write utf8", async () => {
         const text = "hello world";
         await storage.write(fileName, text);

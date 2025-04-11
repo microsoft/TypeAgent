@@ -51,8 +51,8 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         session: boolean;
         storagePath: string;
-        options?: StorageEncoding | undefined;
-    }) => Promise<any>;
+        options: StorageEncoding;
+    }) => Promise<string>;
     storageWrite: (param: {
         contextId: number;
         session: boolean;
