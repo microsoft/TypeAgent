@@ -47,3 +47,4 @@ export {
 export * from "./location.js";
 
 export * from "./datetimeHelper.js";
+export { uint8ArrayToBase64, base64ToUint8Array } from "./base64Node.js";
