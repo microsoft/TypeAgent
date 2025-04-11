@@ -61,6 +61,29 @@ export async function readConversationDataFromFile(
     return fromConversationFileData(fileData);
 }
 
+export async function readConversationDataFromBuffer(
+    jsonData: string,
+    embeddingsBuffer: Buffer,
+    embeddingSize: number | undefined,
+): Promise<IConversationDataWithIndexes | undefined> {
+    if (!jsonData) {
+        return undefined;
+    }
+    let embeddings: Float32Array[] | undefined;
+    if (embeddingSize && embeddingSize > 0) {
+        if (embeddingsBuffer) {
+            embeddings = deserializeEmbeddings(embeddingsBuffer, embeddingSize);
+        }
+    }
+    let fileData: ConversationFileData = {
+        jsonData: JSON.parse(jsonData),
+        binaryData: { embeddings },
+    };
+    validateFileData(fileData);
+    fileData.jsonData.fileHeader ??= createFileHeader();
+    return fromConversationFileData(fileData);
+}
+
 const DataFileSuffix = "_data.json";
 const EmbeddingFileSuffix = "_embeddings.bin";
 

@@ -531,6 +531,17 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
+    public addRange(range: TextRange, score: number): void {
+        this.add(range.start.messageOrdinal, score);
+        if (range.end) {
+            let ordinal = range.start.messageOrdinal + 1;
+            let endOrdinal = range.end.messageOrdinal;
+            for (; ordinal < endOrdinal; ++ordinal) {
+                this.add(ordinal, score);
+            }
+        }
+    }
+
     public override intersect(other: MessageAccumulator): MessageAccumulator {
         const intersection = new MessageAccumulator();
         super.intersect(other, intersection);
@@ -582,6 +593,10 @@ export class TextRangeCollection implements Iterable<TextRange> {
 
     public get size() {
         return this.ranges.length;
+    }
+
+    public getRanges(): TextRange[] {
+        return this.ranges;
     }
 
     public [Symbol.iterator](): Iterator<TextRange, any, any> {
@@ -822,10 +837,38 @@ function* union<T>(
     }
 }
 
-function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
+export function addToSet<T = any>(set: Set<T>, values: Iterable<T>) {
     for (const value of values) {
         set.add(value);
     }
+}
+
+export function setUnion<T = any>(
+    set: Set<T> | undefined,
+    values: Iterable<T>,
+): Set<T> {
+    if (set === undefined) {
+        set = new Set<T>(values);
+    } else {
+        addToSet(set, values);
+    }
+    return set;
+}
+
+export function setIntersect<T = any>(
+    set: Set<T> | undefined,
+    values: Iterable<T>,
+): Set<T> {
+    if (set === undefined) {
+        set = new Set<T>(values);
+    } else {
+        for (const value of values) {
+            if (!set.has(value)) {
+                set.delete(value);
+            }
+        }
+    }
+    return set;
 }
 
 export type Batch<T = any> = {

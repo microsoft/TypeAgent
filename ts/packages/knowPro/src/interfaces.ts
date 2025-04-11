@@ -328,16 +328,25 @@ export type SearchSelectExpr = {
 
 /**
  * A WhenFilter provides additional constraints on when a SemanticRef that matches a term.. is actually considered a match
- * when:
- *   knowledgeType == 'entity'
- *   dateRange...(Jan 3rd to Jan 10th)
+ * when the following optional conditions are met:
+ *   knowledgeType matches. E.g. knowledgeType == 'entity'
+ *   dateRange matches...E.g. (Jan 3rd to Jan 10th)
+ *   Semantic Refs are within supplied SCOPE.. i.e. only Semantic Refs from a 'scoping' set of text ranges will match
  */
 
 export type WhenFilter = {
     knowledgeType?: KnowledgeType | undefined;
     dateRange?: DateRange | undefined;
     threadDescription?: string | undefined;
+    // SCOPE DEFINITION
+    /**
+     * Search terms whose matching text ranges supply the scope for this query
+     */
     scopeDefiningTerms?: SearchTermGroup | undefined;
+    /**
+     * Additional scoping ranges
+     */
+    textRangesInScope?: TextRange[] | undefined;
 };
 
 export type SemanticRefSearchResult = {

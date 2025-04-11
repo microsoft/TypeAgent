@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * These are sparingly exposed via index.ts
- */
-
 import { conversation as kpLib } from "knowledge-processor";
 import { async, asyncArray, collections, getTopK } from "typeagent";
 import { unionArrays } from "./collections.js";
@@ -19,6 +15,16 @@ import { error, Result } from "typechat";
 import { BatchTask, runInBatches } from "./taskQueue.js";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
+
+/**
+ * Contains a mix of public methods exposed via index.ts and internal only
+ * May need to refactor
+ */
+
+//----------------
+// PUBLIC FUNCTIONS
+// Exposed directly via index.ts
+//---------------
 
 /**
  * Create a knowledge extractor using the given Chat Model
@@ -60,6 +66,39 @@ export function extractKnowledgeFromTextBatch(
         extractKnowledgeFromText(knowledgeExtractor, text, maxRetries),
     );
 }
+
+export function mergeConcreteEntities(
+    entities: kpLib.ConcreteEntity[],
+): kpLib.ConcreteEntity[] {
+    let mergedEntities = new Map<string, MergedEntity>();
+    for (let entity of entities) {
+        const mergedEntity = concreteToMergedEntity(entity);
+        const existing = mergedEntities.get(mergedEntity.name);
+        if (existing) {
+            unionEntities(existing, mergedEntity);
+        } else {
+            mergedEntities.set(mergedEntity.name, mergedEntity);
+        }
+    }
+
+    const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
+    for (const mergedEntity of mergedEntities.values()) {
+        mergedConcreteEntities.push(mergedToConcreteEntity(mergedEntity));
+    }
+    return mergedConcreteEntities;
+}
+
+export function mergeTopics(topics: string[]): string[] {
+    let mergedTopics = new Set<string>();
+    for (let topic of topics) {
+        mergedTopics.add(topic);
+    }
+    return [...mergedTopics.values()];
+}
+
+//-----------------------
+// INTERNAL FUNCTIONS
+//-----------------------
 
 export async function extractKnowledgeForTextBatchQ(
     knowledgeExtractor: kpLib.KnowledgeExtractor,
@@ -189,35 +228,6 @@ function mergeScoredEntities(
         });
     }
     return mergedKnowledge;
-}
-
-export function mergeEntities(
-    entities: kpLib.ConcreteEntity[],
-): kpLib.ConcreteEntity[] {
-    let mergedEntities = new Map<string, MergedEntity>();
-    for (let entity of entities) {
-        const mergedEntity = concreteToMergedEntity(entity);
-        const existing = mergedEntities.get(mergedEntity.name);
-        if (existing) {
-            unionEntities(existing, mergedEntity);
-        } else {
-            mergedEntities.set(mergedEntity.name, mergedEntity);
-        }
-    }
-
-    const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
-    for (const mergedEntity of mergedEntities.values()) {
-        mergedConcreteEntities.push(mergedToConcreteEntity(mergedEntity));
-    }
-    return mergedConcreteEntities;
-}
-
-export function mergeTopics(topics: string[]): string[] {
-    let mergedTopics = new Set<string>();
-    for (let topic of topics) {
-        mergedTopics.add(topic);
-    }
-    return [...mergedTopics.values()];
 }
 
 /**

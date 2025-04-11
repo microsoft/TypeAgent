@@ -39,6 +39,8 @@ export class ShellWindow {
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
     private readonly settings: ShellSettingManager;
+    private dispatcherReady: boolean = false;
+    private retryCount: number = 0;
 
     constructor(shellSettings: ShellSettings) {
         if (ShellWindow.instance !== undefined) {
@@ -288,11 +290,67 @@ export class ShellWindow {
 
         // only open the requested canvas if it isn't already opened
         if (this.targetUrl !== targetUrl.toString() || newWindow) {
-            inlineWebContentView.webContents.loadURL(targetUrl.toString());
+            inlineWebContentView.webContents
+                .loadURL(targetUrl.toString())
+                .catch((reason) => {
+                    this.openInlineBrowserRetry(
+                        reason,
+                        targetUrl,
+                        inlineWebContentView,
+                    );
+                });
 
             // indicate in the settings which canvas is open
             this.targetUrl = targetUrl.toString();
         }
+    }
+
+    /*
+     * Retries to open localhost URLs once the dispatcher has loaded
+     */
+    public openInlineBrowserRetry(
+        reason: any,
+        targetUrl: URL,
+        inlineWebContentView: WebContentsView,
+    ) {
+        // try again since the host process might not be ready
+        if (!this.dispatcherReady) {
+            setTimeout(() => {
+                this.openInlineBrowserRetry(
+                    { code: "ERR_CONNECTION_REFUSED" },
+                    targetUrl,
+                    inlineWebContentView,
+                );
+            }, 500);
+        } else if (
+            reason.code === "ERR_CONNECTION_REFUSED" &&
+            this.retryCount < 3 &&
+            (targetUrl
+                .toString()
+                .toLowerCase()
+                .startsWith("http://localhost") ||
+                targetUrl
+                    .toString()
+                    .toLowerCase()
+                    .startsWith("https://localhost"))
+        ) {
+            this.retryCount++;
+            setTimeout(() => {
+                inlineWebContentView.webContents
+                    .loadURL(targetUrl.toString())
+                    .catch((reason) => {
+                        this.openInlineBrowserRetry(
+                            reason,
+                            targetUrl,
+                            inlineWebContentView,
+                        );
+                    });
+            }, 500);
+        }
+    }
+
+    public dispatcherInitialized() {
+        this.dispatcherReady = true;
     }
 
     public closeInlineBrowser(save: boolean = true) {

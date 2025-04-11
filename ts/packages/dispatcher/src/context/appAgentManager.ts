@@ -667,6 +667,17 @@ export class AppAgentManager implements ActionConfigProvider {
     ): ActionSchemaFile {
         return this.actionSchemaFileCache.getActionSchemaFile(config);
     }
+
+    public setTraceNamespaces(namespaces: string) {
+        const providers = new Set<AppAgentProvider>();
+        for (const { provider } of this.agents.values()) {
+            if (provider === undefined || providers.has(provider)) {
+                continue;
+            }
+            provider.setTraceNamespaces?.(namespaces);
+            providers.add(provider);
+        }
+    }
 }
 
 export type AppAgentStateInitSettings =

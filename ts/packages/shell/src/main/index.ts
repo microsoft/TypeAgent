@@ -243,6 +243,8 @@ async function initializeDispatcher(
 
         setupQuit(dispatcher);
 
+        shellWindow.dispatcherInitialized();
+
         // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
         // using it to process command, so that the client can receive messages.
         debugShell("Dispatcher initialized", performance.now() - time);

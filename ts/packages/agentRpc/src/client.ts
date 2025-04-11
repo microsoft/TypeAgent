@@ -77,7 +77,7 @@ export async function createAgentRpcClient(
     name: string,
     channelProvider: ChannelProvider,
 ) {
-    const channel = channelProvider.createChannel(name);
+    const channel = channelProvider.createChannel(`agent:${name}`);
     const agentInterface = await new Promise<(keyof AgentInvokeFunctions)[]>(
         (resolve, reject) => {
             channel.once("message", (message: any) => {
