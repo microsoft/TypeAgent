@@ -32,6 +32,7 @@ import {
 import {
     createActionResult,
     actionResultToString,
+    createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
@@ -324,6 +325,11 @@ async function executeAction(
             action,
         );
 
+    const prefix = getSchemaNamePrefix(action.translatorName, systemContext);
+    displayStatus(
+        `${prefix}Executing action ${getFullActionName(executableAction)}`,
+        context,
+    );
     actionContext.profiler = systemContext.commandProfiler?.measure(
         ProfileNames.executeAction,
         true,
@@ -331,19 +337,12 @@ async function executeAction(
     );
     let returnedResult: ActionResult | undefined;
     try {
-        const prefix = getSchemaNamePrefix(
-            action.translatorName,
-            systemContext,
-        );
-        displayStatus(
-            `${prefix}Executing action ${getFullActionName(executableAction)}`,
-            context,
-        );
         returnedResult = await appAgent.executeAction(action, actionContext);
-    } finally {
-        actionContext.profiler?.stop();
-        actionContext.profiler = undefined;
+    } catch (e: any) {
+        returnedResult = createActionResultFromError(e.message);
     }
+    actionContext.profiler?.stop();
+    actionContext.profiler = undefined;
 
     let result: ActionResult;
     if (returnedResult === undefined) {
