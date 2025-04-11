@@ -11,7 +11,7 @@ import {
     buildConversationIndex,
     //MessageTextIndex,
     writeConversationDataToFile,
-    //readConversationDataFromFile,
+    readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     //Term,
     IConversationDataWithIndexes,
@@ -32,13 +32,7 @@ export class PdfChunkMessageMeta implements IKnowledgeSource {
     public pageid: string | undefined;
     public topics: string[] | undefined;
 
-    constructor(
-        public readonly fileName: string,
-        public readonly pageNumber: number,
-        public readonly chunkId: string,
-        public readonly startOffset: number,
-        public readonly endOffset: number,
-    ) {}
+    constructor() {}
 
     getKnowledge() {
         const entities: kpLib.ConcreteEntity[] = [];
@@ -142,6 +136,14 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         }
     }
 
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const data = await this.serialize();
+        await writeConversationDataToFile(data, dirPath, baseFileName);
+    }
+
     public async serialize(): Promise<PdfChunkData> {
         const data: PdfChunkData = {
             nameTag: this.nameTag,
@@ -153,14 +155,50 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         return data;
     }
 
-    public async writeToFile(
+    public static async readFromFile(
         dirPath: string,
         baseFileName: string,
-    ): Promise<void> {
-        const data = await this.serialize();
-        await writeConversationDataToFile(data, dirPath, baseFileName);
+    ): Promise<PdfDocument | undefined> {
+        const pdfDoc = new PdfDocument();
+        const data = await readConversationDataFromFile(
+            dirPath,
+            baseFileName,
+            pdfDoc.settings.relatedTermIndexSettings.embeddingIndexSettings
+                ?.embeddingSize,
+        );
+        if (data) {
+            pdfDoc.deserialize(data);
+        }
+        return pdfDoc;
     }
- 
+
+    public async deserialize(pdfChunkData: PdfChunkData): Promise<void> {
+        this.nameTag = pdfChunkData.nameTag;
+        const pdfChunkMessages = pdfChunkData.messages.map((m) => {
+            const metadata = new PdfChunkMessageMeta();
+            return new PdfChunkMessage(
+                m.textChunks,
+                metadata,
+                m.tags,
+                m.timestamp,
+            );
+        });
+        this.messages = pdfChunkMessages;
+        this.semanticRefs = pdfChunkData.semanticRefs;
+        this.tags = pdfChunkData.tags;
+        if (pdfChunkData.semanticIndexData) {
+            this.semanticRefIndex = new ConversationIndex(
+                pdfChunkData.semanticIndexData,
+            );
+        }
+
+        if (pdfChunkData.relatedTermsIndexData) {
+        }
+        
+        if (pdfChunkData.messageIndexData) {
+        }
+        await this.buildTransientSecondaryIndexes(true);
+    }
 }
 export interface PdfChunkData
     extends IConversationDataWithIndexes<PdfChunkMessage>{}
