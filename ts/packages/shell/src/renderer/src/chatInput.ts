@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import DOMPurify from "dompurify";
-import { _arrayBufferToBase64 } from "./chatView";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -14,6 +13,7 @@ import {
 import { getClientAPI } from "./main";
 import { recognizeOnce } from "./speech";
 import { getSpeechToken } from "./speechToken";
+import { uint8ArrayToBase64 } from "common-utils";
 
 export interface ExpandableTextareaHandlers {
     onSend: (text: string) => void;
@@ -346,9 +346,9 @@ export class ChatInput {
      * @param file The file whose contents to load
      */
     async loadImageFile(file: File) {
-        let buffer: ArrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(await file.arrayBuffer());
 
-        this.loadImageContent(file.name, _arrayBufferToBase64(buffer));
+        this.loadImageContent(file.name, uint8ArrayToBase64(bytes));
     }
 
     /**

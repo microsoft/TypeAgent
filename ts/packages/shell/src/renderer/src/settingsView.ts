@@ -3,8 +3,8 @@
 
 import { enumerateMicrophones } from "./speech";
 import {
-    defaultSettings,
-    ShellSettingsType,
+    defaultUserSettings,
+    ShellUserSettings,
 } from "../../preload/shellSettingsType.js";
 import { ChatView } from "./chatView.js";
 import { getTTS, getTTSProviders, getTTSVoices } from "./tts/tts.js";
@@ -89,15 +89,16 @@ export class SettingsView {
     private agentGreetingCheckBox: HTMLInputElement;
     private intellisenseCheckBox: HTMLInputElement;
     private darkModeToggle: HTMLButtonElement;
-    private _shellSettings: ShellSettingsType = defaultSettings;
+    private _shellSettings: ShellUserSettings =
+        structuredClone(defaultUserSettings);
     private updateFromSettings: () => Promise<void>;
-    public get shellSettings(): Readonly<ShellSettingsType> {
+    public get shellSettings(): Readonly<ShellUserSettings> {
         return this._shellSettings;
     }
     private devUICheckBox: HTMLInputElement;
     private saveChatHistoryCheckBox: HTMLInputElement;
 
-    public set shellSettings(value: ShellSettingsType) {
+    public set shellSettings(value: ShellUserSettings) {
         this._shellSettings = value;
         this.ttsCheckBox.checked = value.tts;
         this.microphoneSources.value = value.microphoneId ?? "";
@@ -382,8 +383,6 @@ export class SettingsView {
     }
 
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        return !this.shellSettings.disallowedDisplayType.some(
-            (type) => type === displayType,
-        );
+        return this.shellSettings.disallowedDisplayType[displayType] !== true;
     }
 }

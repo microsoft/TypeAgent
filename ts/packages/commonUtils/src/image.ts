@@ -88,7 +88,7 @@ export async function downloadImage(
         if (blobResponse.success) {
             const ab = Buffer.from(await blobResponse.data.arrayBuffer());
 
-            storage.write(fileName, ab.toString("base64"));
+            storage.write(fileName, ab);
 
             resolve(true);
         }

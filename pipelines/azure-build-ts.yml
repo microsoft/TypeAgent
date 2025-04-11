@@ -34,6 +34,11 @@ jobs:
         node_22:
           nodeVersion: "22"
     steps:
+      - script: |
+          sudo apt install libsecret-1-0
+        displayName: "Install libsecret-1-0"
+        condition: eq(variables['Agent.OS'], 'Linux')
+
       - checkout: TypeAgent-GH
         displayName: "Checkout TypeAgent Repository"
         path: "typeagent"

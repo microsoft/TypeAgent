@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { contextBridge, ipcRenderer } from "electron";
-import { Client, ClientAPI, ShellSettingsType } from "./electronTypes.js"; // Custom APIs for renderer
+import { Client, ClientAPI, ShellUserSettings } from "./electronTypes.js"; // Custom APIs for renderer
 import { Dispatcher } from "agent-dispatcher";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
@@ -42,7 +42,7 @@ function registerClient(client: Client) {
     ipcRenderer.on("show-dialog", (_, key) => {
         client.showDialog(key);
     });
-    ipcRenderer.on("settings-changed", (_, value: ShellSettingsType) => {
+    ipcRenderer.on("settings-changed", (_, value: ShellUserSettings) => {
         client.updateSettings(value);
     });
     ipcRenderer.on(
@@ -73,7 +73,7 @@ const api: ClientAPI = {
     saveChatHistory: (html: string) => {
         ipcRenderer.send("save-chat-history", html);
     },
-    saveSettings: (settings: ShellSettingsType) => {
+    saveSettings: (settings: ShellUserSettings) => {
         ipcRenderer.send("save-settings", settings);
     },
 };

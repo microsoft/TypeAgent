@@ -34,13 +34,14 @@ import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
-import Registry from "winreg";
+//import Registry from "winreg";
 import koffi from "koffi";
 import {
     displayError,
     displayResult,
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
+import { spawnSync } from "node:child_process";
 
 const debug = registerDebug("typeagent:agent:montage");
 
@@ -156,6 +157,7 @@ async function updateMontageContext(
         // Load the image index from disk
         // TODO: load from sesssion storage/directory
         // TODO: give the user a way to index their images
+        // TODO: evaluate perf..is this fast enough give a large image index?
         if (!context.agentContext.imageCollection) {
             if (existsSync("c:\\temp\\pictures_index")) {
                 context.agentContext.imageCollection =
@@ -169,6 +171,16 @@ async function updateMontageContext(
                         "f:\\pictures_index",
                         "index",
                     );
+                // if (await context.sessionStorage?.exists("index_data.json") && await context.sessionStorage?.exists("index_embeddings.bin")) {
+                //     const indexJson: string | undefined = await context.sessionStorage?.read("index_data.json", "utf8");
+                //     const embeddingsData = await context.sessionStorage?.read("index_embeddings.bin");
+
+                //     if (indexJson && embeddingsData) {
+                //         context.agentContext.imageCollection = await im.ImageCollection.fromBuffer(
+                //             indexJson,
+                //             Buffer.from(embeddingsData)
+                //         );
+                //     }
             } else {
                 debug(
                     "Unable to load image index, please create one using the image indexer.",
@@ -216,6 +228,8 @@ async function handleMontageAction(
         return createActionResultFromError(
             `Unable to perform the requeste action. Disconnected from the canvas.`,
         );
+    } else if (!actionContext.sessionContext.agentContext.imageCollection) {
+        return createActionResultFromError("No image index has been loaded!");
     }
 
     switch (action.actionName) {
@@ -269,22 +283,39 @@ async function handleMontageAction(
                 );
             } else {
                 result = createActionResultFromError(
-                    "Unable to search images, no image index available.",
+                    "Unable to search images, no image index available. Please run the image indexer before manipulating montages.",
                 );
             }
 
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
 
-            // report back to the user
             let selectedCount: number = 0;
-            selectedCount += action.parameters.files
-                ? action.parameters.files.length
-                : 0;
-            selectedCount += action.parameters.indicies
-                ? action.parameters.indicies.length
-                : 0;
+            // what is the intersection of the images in the montage and what we found in the search...that is the selection
+            // go through the files by name
 
+            const intersection = action.parameters.files?.filter((item1) =>
+                actionContext.sessionContext.agentContext.montage?.files.some(
+                    (item2) => item1 === item2,
+                ),
+            );
+            if (intersection) {
+                selectedCount += intersection?.length;
+            }
+
+            action.parameters.indicies?.forEach((value) => {
+                const indexedFile =
+                    actionContext.sessionContext.agentContext.montage?.files[
+                        value
+                    ];
+
+                // only count this index if it's not already been identified by file name
+                if (indexedFile && intersection?.indexOf(indexedFile) === -1) {
+                    selectedCount++;
+                }
+            });
+
+            // report back to the user
             result = createActionResult(`Selected ${selectedCount} images.`);
             break;
         }
@@ -337,7 +368,7 @@ async function handleMontageAction(
                     .length - action.parameters.files!.length;
             let message = `Found ${action.parameters.files!.length} images. `;
             if (count > 0) {
-                message += `Merged ${count} new images into the montage.`;
+                message += `New montage image count: ${actionContext.sessionContext.agentContext.montage!.files.length} images.`;
             }
             result = createActionResult(message);
             break;
@@ -474,11 +505,6 @@ async function handleMontageAction(
                 actionContext.sessionContext.agentContext.montages =
                     actionContext.sessionContext.agentContext.montages.filter(
                         (value) => {
-                            // // create new active montage if that's the one we are deleting
-                            // if (value.title == actionContext.sessionContext.agentContext.montage?.title) {
-                            //     actionContext.sessionContext.agentContext.montage = createNewMontage(actionContext.sessionContext.agentContext);
-                            // }
-
                             if (
                                 value.title.toLocaleLowerCase() ===
                                 deleteMontageAction.parameters.title?.toLocaleLowerCase()
@@ -719,7 +745,7 @@ async function findRequestedImages(
 
             const imageFiles: Set<string> = new Set<string>();
 
-            console.log(
+            debug(
                 `Found ${matches?.size} matches for: ${action.parameters.search_filters}`,
             );
 
@@ -731,7 +757,6 @@ async function findRequestedImages(
                                 context.imageCollection!.semanticRefs[
                                     value.semanticRefOrdinal
                                 ];
-                            //console.log(`\tMatch (${value.score}): ${JSON.stringify(semanticRef)}`);
                             if (semanticRef) {
                                 if (semanticRef.knowledgeType === "entity") {
                                     const entity: kpLib.ConcreteEntity =
@@ -784,7 +809,7 @@ async function findRequestedImages(
                                     semanticRef.knowledgeType === "topic"
                                 ) {
                                     // TODO: implement
-                                    console.log("topic");
+                                    debug("topic");
                                 }
                             }
                         }
@@ -843,7 +868,7 @@ export async function createViewServiceHost(
                 });
 
                 childProcess.on("exit", (code) => {
-                    console.log("Montage view server exited with code:", code);
+                    debug("Montage view server exited with code:", code);
                 });
             } catch (e: any) {
                 console.error(e);
@@ -906,19 +931,71 @@ function startSlideShow(context: MontageActionContext) {
     );
 
     // update slideshow screen saver directory
-    const key = new Registry({
-        hive: Registry.HKCU,
-        key: "Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\Screensaver",
-    });
+    // const key = new Registry({
+    //     hive: Registry.HKCU,
+    //     key: "Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\Screensaver",
+    // });
+
+    // create the key if it doesn't exist
+    // BUGBUG - winreg does NOT work if the key has spaces in it
+    // https://github.com/fresc81/node-winreg
+    // there's a pending PR to fix but no response from the author so we just do it manually here ourselves
+    spawnSync("reg", [
+        "add",
+        "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+    ]);
+    // key.create((err) => {
+    //     // remove spanSync once win-reg get's updated
+    // });
 
     // set the registry value
     const pidl = createEncryptedPIDLFromPath(slideShowDir);
     if (pidl) {
-        key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
-            if (err) {
-                console.error("Error reading registry value:", err);
-            }
-        });
+        spawnSync("reg", [
+            "add",
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+            "/v",
+            "EncryptedPIDL",
+            "/t",
+            "REG_SZ",
+            "/d",
+            pidl,
+            "/f",
+        ]);
+
+        // fast
+        spawnSync("reg", [
+            "add",
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+            "/v",
+            "Speed",
+            "/t",
+            "REG_DWORD",
+            "/d",
+            "2",
+            "/f",
+        ]);
+
+        // shuffle
+        spawnSync("reg", [
+            "add",
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
+            "/v",
+            "Shuffle",
+            "/t",
+            "REG_DWORD",
+            "/d",
+            "1",
+            "/f",
+        ]);
+        // key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
+        //     if (err) {
+        //         console.error("Error reading registry value:", err);
+        //     }
+        // });
+
+        // key.set("Shuffle", "REG_DWORD", "1", () => {}); // randomize
+        // key.set("Speed", "REG_DWORD", "2", () => {});   // "fast"
     }
 
     // start slideshow screen saver
@@ -927,7 +1004,7 @@ function startSlideShow(context: MontageActionContext) {
             "/s",
         ]);
     } catch (e) {
-        console.log(e);
+        debug(e);
     }
 }
 

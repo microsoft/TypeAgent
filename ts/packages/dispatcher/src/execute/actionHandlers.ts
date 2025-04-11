@@ -170,6 +170,7 @@ export function createSessionContext<T = unknown>(
     const instanceStorage = context.persistDir
         ? getStorage(name, context.persistDir)
         : undefined;
+    const dynamicAgentNames = new Set<string>();
     const addDynamicAgent = allowDynamicAgent
         ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
               // acquire the lock to prevent change the state while we are processing a command or removing dynamic agent.
@@ -180,6 +181,7 @@ export function createSessionContext<T = unknown>(
                       manifest,
                       appAgent,
                   );
+                  dynamicAgentNames.add(agentName);
                   // Update the enable state to reflect the new agent
                   context.agents.setState(context, context.session.getConfig());
               })
@@ -187,14 +189,19 @@ export function createSessionContext<T = unknown>(
               throw new Error("Permission denied: cannot add dynamic agent");
           };
 
-    // TODO: only allow remove agent added by this agent.
     const removeDynamicAgent = allowDynamicAgent
         ? (agentName: string) =>
               // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
-              // WARNING: deadlock if this is call because we are processing a request
-              context.commandLock(async () =>
-                  context.agents.removeAgent(agentName),
-              )
+              // WARNING: deadlock if this is called while we are processing a request
+              context.commandLock(async () => {
+                  if (!dynamicAgentNames.delete(agentName)) {
+                      throw new Error(
+                          `Permission denied: dynamic agent '${agentName}' not added by this agent`,
+                      );
+                  }
+                  dynamicAgentNames.delete(agentName);
+                  return context.agents.removeAgent(agentName);
+              })
         : () => {
               throw new Error("Permission denied: cannot remove dynamic agent");
           };

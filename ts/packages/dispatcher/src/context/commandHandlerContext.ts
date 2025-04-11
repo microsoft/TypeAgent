@@ -74,9 +74,6 @@ const debugError = registerDebug("typeagent:dispatcher:init:error");
 
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
-export interface ClientSettingsProvider {
-    set: SetSettingFunction | null;
-}
 
 export function getCommandResult(
     context: CommandHandlerContext,

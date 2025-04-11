@@ -75,10 +75,17 @@ export function mergeConfig(
                 : optionValue;
 
         let existingValue = config[key];
-        if (!overwriteKey && typeof existingValue !== typeof value) {
-            throw new Error(
-                `Invalid option '${prefix}${key}': type mismatch (expected: ${typeof existingValue}, actual: ${typeof value})`,
-            );
+        // Assume optional properties are string by default.
+
+        if (!overwriteKey) {
+            const existingValueType =
+                existingValue === undefined ? "string" : typeof existingValue;
+
+            if (existingValueType !== typeof value) {
+                throw new Error(
+                    `Invalid option '${prefix}${key}': type mismatch (expected: ${existingValueType}, actual: ${typeof value})`,
+                );
+            }
         }
         if (typeof value === "object") {
             if (typeof existingValue !== "object") {

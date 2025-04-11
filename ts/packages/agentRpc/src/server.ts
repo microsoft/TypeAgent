@@ -28,14 +28,18 @@ import {
 } from "./types.js";
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
-import { createLimiter } from "common-utils";
+import {
+    base64ToUint8Array,
+    uint8ArrayToBase64,
+    createLimiter,
+} from "common-utils";
 
 export function createAgentRpcServer(
     name: string,
     agent: AppAgent,
     channelProvider: ChannelProvider,
 ) {
-    const channel = channelProvider.createChannel(name);
+    const channel = channelProvider.createChannel(`agent:${name}`);
     const agentInvokeHandlers: AgentInvokeFunctions = {
         async initializeAgentContext(): Promise<unknown> {
             if (agent.initializeAgentContext === undefined) {
@@ -212,24 +216,56 @@ export function createAgentRpcServer(
                 });
             },
         };
+
+        async function readStorage(
+            storagePath: string,
+            options: StorageEncoding,
+        ): Promise<string>;
+        async function readStorage(storagePath: string): Promise<Uint8Array>;
+        async function readStorage(
+            storagePath: string,
+            options?: StorageEncoding,
+        ): Promise<string | Uint8Array> {
+            if (options === undefined) {
+                return base64ToUint8Array(
+                    await rpc.invoke("storageRead", {
+                        contextId,
+                        session,
+                        storagePath,
+                        options: "base64",
+                    }),
+                );
+            }
+            return rpc.invoke("storageRead", {
+                contextId,
+                session,
+                storagePath,
+                options,
+            });
+        }
         return {
-            read: (
+            read: readStorage,
+            write: (
                 storagePath: string,
-                options: StorageEncoding,
-            ): Promise<string> => {
-                return rpc.invoke("storageRead", {
-                    contextId,
-                    session,
-                    storagePath,
-                    options,
-                });
-            },
-            write: (storagePath: string, data: string): Promise<void> => {
+                data: string | Uint8Array,
+                options?: StorageEncoding,
+            ): Promise<void> => {
+                let dataToSend: string;
+                let optionsToSend: StorageEncoding | undefined;
+                if (typeof data === "string") {
+                    dataToSend = data;
+                    optionsToSend = options;
+                } else {
+                    dataToSend = uint8ArrayToBase64(data);
+                    optionsToSend = "base64";
+                }
+
                 return rpc.invoke("storageWrite", {
                     contextId,
                     session,
                     storagePath,
-                    data,
+                    data: dataToSend,
+                    options: optionsToSend,
                 });
             },
             list: (

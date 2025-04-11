@@ -28,6 +28,9 @@ import {
 } from "./greetingActionSchema.js";
 import { conversation as Conversation } from "knowledge-processor";
 import { exec } from "child_process";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:greeting");
 
 export function instantiate(): AppAgent {
     return {
@@ -261,7 +264,7 @@ async function handlePersonalizedGreetingAction(
     let result = createActionResult("Hi!", true, undefined);
     if (greetingAction.parameters !== undefined) {
         const count = greetingAction.parameters.possibleGreetings.length;
-        console.log(`Received ${count} generated greetings`);
+        debug(`Received ${count} generated greetings`);
 
         // //randomly decide on a conversation starter (or not)
         // //TODO: personalize list based on user preferences
@@ -398,7 +401,7 @@ async function getRecentChatHistory(
                     "What were we talking about last?",
                     searchResponse,
                 );
-            console.log(matches);
+            debug(matches);
         }
     }
 

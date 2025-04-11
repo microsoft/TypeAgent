@@ -29,7 +29,7 @@
   },
   "dependencies": {
     "debug": "^4.4.0",
-    "type-fest": "^4.38.0"
+    "type-fest": "^4.39.1"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

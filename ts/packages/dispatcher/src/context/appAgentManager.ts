@@ -30,6 +30,10 @@ import {
 import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
 import path from "path";
 import { callEnsureError } from "../utils/exceptions.js";
+import {
+    AppAgentStateConfig,
+    appAgentStateKeys,
+} from "./appAgentStateConfig.js";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
@@ -47,14 +51,6 @@ type AppAgentRecord = {
     sessionContextP?: Promise<SessionContext> | undefined;
     schemaErrors: Map<string, Error>;
 };
-
-export type AppAgentStateConfig = {
-    schemas: Record<string, boolean>;
-    actions: Record<string, boolean>;
-    commands: Record<string, boolean>;
-};
-
-export const appAgentStateKeys = ["schemas", "actions", "commands"] as const;
 
 export type AppAgentStateSettings = Partial<AppAgentStateConfig>;
 
@@ -209,7 +205,6 @@ export class AppAgentManager implements ActionConfigProvider {
     ) {
         const semanticMapP: Promise<void>[] = [];
         for (const name of provider.getAppAgentNames()) {
-            // TODO: detect duplicate names
             const manifest = await provider.getAppAgentManifest(name);
             this.addAgentManifest(
                 name,
@@ -231,7 +226,9 @@ export class AppAgentManager implements ActionConfigProvider {
         provider?: AppAgentProvider,
         actionEmbeddingCache?: EmbeddingCache,
     ) {
-        // TODO: detect duplicate names
+        if (this.agents.get(appAgentName) !== undefined) {
+            throw new Error(`Conflicting app agents name '${appAgentName}'`);
+        }
         const actionConfigs = convertToActionConfig(appAgentName, manifest);
 
         const entries = Object.entries(actionConfigs);
@@ -669,6 +666,17 @@ export class AppAgentManager implements ActionConfigProvider {
         config: ActionConfig,
     ): ActionSchemaFile {
         return this.actionSchemaFileCache.getActionSchemaFile(config);
+    }
+
+    public setTraceNamespaces(namespaces: string) {
+        const providers = new Set<AppAgentProvider>();
+        for (const { provider } of this.agents.values()) {
+            if (provider === undefined || providers.has(provider)) {
+                continue;
+            }
+            provider.setTraceNamespaces?.(namespaces);
+            providers.add(provider);
+        }
     }
 }
 

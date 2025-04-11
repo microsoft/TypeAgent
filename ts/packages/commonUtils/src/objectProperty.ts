@@ -1,6 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export function getObjectPropertyNames(obj: object) {
+    const names: string[] = [];
+    for (const [key, value] of Object.entries(obj)) {
+        if (typeof value === "object") {
+            const children = getObjectPropertyNames(value);
+            for (const child of children) {
+                names.push(`${key}.${child}`);
+            }
+        } else if (typeof value === "function") {
+            throw new Error("Function is a valid value");
+        } else {
+            names.push(key);
+        }
+    }
+    return names;
+}
+
 export function getObjectProperty(data: any, objectName: string, name: string) {
     if (name === "") {
         return data[objectName];
