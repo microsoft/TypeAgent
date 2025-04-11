@@ -1118,6 +1118,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.0(supports-color@8.1.1)
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
@@ -1131,6 +1134,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
