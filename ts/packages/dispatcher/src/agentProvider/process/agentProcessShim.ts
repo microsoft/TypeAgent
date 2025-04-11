@@ -9,25 +9,30 @@ import { fileURLToPath } from "url";
 
 export type AgentProcess = {
     appAgent: AppAgent;
-    process: child_process.ChildProcess | undefined;
     count: number;
+    process?: child_process.ChildProcess;
+    trace?: (namespaces: string) => void;
 };
 
 export async function createAgentProcess(
     agentName: string,
     modulePath: string,
 ): Promise<AgentProcess> {
-    const process = child_process.fork(
+    const env = { ...process.env };
+    const agentProcess = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [agentName, modulePath],
+        { env },
     );
 
+    const channelProvider = createChannelProvider(agentProcess);
+    const traceChannel = channelProvider.createChannel("trace");
     return {
-        process,
-        appAgent: await createAgentRpcClient(
-            agentName,
-            createChannelProvider(process),
-        ),
+        process: agentProcess,
+        trace: (namespaces: string) => {
+            traceChannel.send(namespaces);
+        },
+        appAgent: await createAgentRpcClient(agentName, channelProvider),
         count: 1,
     };
 }

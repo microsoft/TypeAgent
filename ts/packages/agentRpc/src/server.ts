@@ -39,7 +39,7 @@ export function createAgentRpcServer(
     agent: AppAgent,
     channelProvider: ChannelProvider,
 ) {
-    const channel = channelProvider.createChannel(name);
+    const channel = channelProvider.createChannel(`agent:${name}`);
     const agentInvokeHandlers: AgentInvokeFunctions = {
         async initializeAgentContext(): Promise<unknown> {
             if (agent.initializeAgentContext === undefined) {

@@ -8,6 +8,7 @@ export interface AppAgentProvider {
     getAppAgentManifest(appAgentName: string): Promise<AppAgentManifest>;
     loadAppAgent(appAgentName: string): Promise<AppAgent>;
     unloadAppAgent(appAgentName: string): Promise<void>;
+    setTraceNamespaces?(namespaces: string): void;
 }
 
 export interface AppAgentInstaller {
