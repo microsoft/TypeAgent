@@ -52,19 +52,30 @@ export class TraceCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
+        // Disable the trace namespaces to get the current settings
         let settings = registerDebug.disable();
         if (params.flags.clear) {
             settings = "";
             displaySuccess("All trace namespaces cleared", context);
         }
         if (params.args.namespaces !== undefined) {
+            // Modify the trace namespaces
             settings = (
                 settings
                     ? [settings, ...params.args.namespaces]
                     : params.args.namespaces
             ).join(",");
-            registerDebug.enable(settings);
+
+            // For new processes, set the DEBUG environment variable
+            process.env.DEBUG = settings;
+
+            context.sessionContext.agentContext.agents.setTraceNamespaces(
+                settings,
+            );
         }
+
+        // Reenable the trace namespaces
+        registerDebug.enable(settings);
 
         displaySuccess(`Current trace settings: ${settings}`, context);
     }
