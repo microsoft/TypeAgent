@@ -9,8 +9,6 @@ on:
   workflow_dispatch:
   push:
     branches: ["main"]
-  pull_request_target:
-    branches: ["main"]
   merge_group:
     branches: ["main"]
 

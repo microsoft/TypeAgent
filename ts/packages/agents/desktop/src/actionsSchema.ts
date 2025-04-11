@@ -114,4 +114,5 @@ export type KnownPrograms =
     | "powershell"
     | "snipping tool"
     | "magnifier"
-    | "paint 3d";
+    | "paint 3d"
+    | "task manager";

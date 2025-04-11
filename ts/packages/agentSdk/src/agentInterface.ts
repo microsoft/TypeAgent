@@ -140,8 +140,14 @@ export interface TokenCachePersistence {
 }
 
 export interface Storage {
+    read(storagePath: string): Promise<Uint8Array>;
     read(storagePath: string, options: StorageEncoding): Promise<string>;
-    write(storagePath: string, data: string): Promise<void>;
+    write(
+        storagePath: string,
+        data: string,
+        options?: StorageEncoding, // default is utf8
+    ): Promise<void>;
+    write(storagePath: string, data: Uint8Array): Promise<void>;
     list(storagePath: string, options?: StorageListOptions): Promise<string[]>;
     exists(storagePath: string): Promise<boolean>;
     delete(storagePath: string): Promise<void>;

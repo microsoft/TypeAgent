@@ -11,16 +11,20 @@ import {
     WebContentsView,
 } from "electron";
 import path from "node:path";
-import { ShellSettings } from "./shellSettings.js";
 import { is } from "@electron-toolkit/utils";
 import { WebSocketMessageV2 } from "common-utils";
 import { runDemo } from "./demo.js";
+import {
+    ShellSettings,
+    ShellUserSettings,
+    ShellWindowState,
+    ShellSettingManager,
+} from "./shellSettings.js";
 
-const inlineBrowserSize = 1000;
 const userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
 const isMac = process.platform === "darwin";
-const isLinux = process.platform === "linux";
+
 export class ShellWindow {
     public static getInstance(): ShellWindow | undefined {
         return this.instance;
@@ -30,22 +34,29 @@ export class ShellWindow {
     public readonly mainWindow: BrowserWindow;
     public readonly chatView: WebContentsView;
     private inlineWebContentView: WebContentsView | undefined;
+    private targetUrl: string | undefined;
+    private inlineWidth: number;
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
+    private readonly settings: ShellSettingManager;
 
-    constructor(public readonly settings: ShellSettings) {
+    constructor(shellSettings: ShellSettings) {
         if (ShellWindow.instance !== undefined) {
             throw new Error("ShellWindow already created");
         }
-        const mainWindow = createMainWindow(settings);
-        const chatView = createChatView(settings);
+        this.settings = new ShellSettingManager(shellSettings);
+
+        this.inlineWidth = shellSettings.window.inlineWidth;
+
+        const state = shellSettings.window;
+        const mainWindow = createMainWindow(state);
 
         setupDevicePermissions(mainWindow);
         this.setupWebContents(mainWindow.webContents);
-        this.setupWebContents(chatView.webContents);
 
         mainWindow.on("close", () => {
             this.cleanup();
+            this.settings.save(this.getWindowState());
 
             mainWindow.hide();
             mainWindow.removeAllListeners("move");
@@ -54,34 +65,16 @@ export class ShellWindow {
             mainWindow.removeAllListeners("resized");
 
             this.closeInlineBrowser(false);
-
-            settings.zoomLevel = chatView.webContents.zoomFactor;
-            settings.devTools = chatView.webContents.isDevToolsOpened();
-            settings.size = mainWindow.getSize();
-            settings.position = mainWindow.getPosition();
         });
 
         mainWindow.on("closed", () => {
-            settings.save();
             ShellWindow.instance = undefined;
-        });
-
-        if (isLinux) {
-            mainWindow.on("move", () => {
-                settings.position = mainWindow.getPosition();
-            });
-        } else {
-            mainWindow.on("moved", () => {
-                settings.position = mainWindow.getPosition();
-            });
-        }
-
-        mainWindow.on("resized", () => {
-            settings.size = mainWindow.getSize();
         });
 
         mainWindow.on("resize", () => this.updateContentSize());
 
+        const chatView = createChatView(state);
+        this.setupWebContents(chatView.webContents);
         mainWindow.contentView.addChildView(chatView);
 
         this.mainWindow = mainWindow;
@@ -120,6 +113,40 @@ export class ShellWindow {
         ShellWindow.instance = this;
     }
 
+    public async waitForContentLoaded() {
+        return Promise.all(this.contentLoadP);
+    }
+
+    private ready() {
+        // Send settings asap
+        this.sendUserSettingChanged();
+
+        const mainWindow = this.mainWindow;
+        mainWindow.show();
+        // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
+        mainWindow.webContents.zoomFactor = 1;
+
+        const states = this.settings.window;
+        if (states.devTools) {
+            this.chatView.webContents.openDevTools();
+        }
+
+        // open the canvas if it was previously open
+        if (states.canvas) {
+            this.openInlineBrowser(new URL(states.canvas));
+        }
+
+        globalShortcut.register("Alt+Right", () => {
+            this.chatView.webContents.send("send-demo-event", "Alt+Right");
+        });
+    }
+
+    private setupWebContents(webContents: WebContents) {
+        this.setupZoomHandlers(webContents);
+        setupDevToolsHandlers(webContents);
+        webContents.setUserAgent(userAgent);
+    }
+
     private installHandler(name: string, handler: (event: any) => void) {
         this.handlers.set(name, handler);
         ipcMain.on(name, handler);
@@ -134,30 +161,58 @@ export class ShellWindow {
         globalShortcut.unregister("Alt+Right");
     }
 
-    private ready() {
-        const mainWindow = this.mainWindow;
-        mainWindow.show();
-        // Main window shouldn't zoom, otherwise the divider position won't be correct.  Setting it here just to make sure.
-        mainWindow.webContents.zoomFactor = 1;
-
-        if (this.settings.devTools) {
-            this.chatView.webContents.openDevTools();
-        }
-
-        // open the canvas if it was previously open
-        if (this.settings.canvas !== undefined) {
-            this.openInlineBrowser(new URL(this.settings.canvas));
-        }
-
-        globalShortcut.register("Alt+Right", () => {
-            this.chatView.webContents.send("send-demo-event", "Alt+Right");
-        });
+    public sendMessageToInlineWebContent(message: WebSocketMessageV2) {
+        this.inlineWebContentView?.webContents.send("webview-message", message);
     }
 
-    public async waitForContentLoaded() {
-        return Promise.all(this.contentLoadP);
+    public runDemo(interactive: boolean = false) {
+        runDemo(this.mainWindow, this.chatView, interactive);
     }
 
+    // ================================================================
+    // Settings
+    // ================================================================
+    public getUserSettings() {
+        return this.settings.user;
+    }
+
+    public setUserSettings(userSettings: ShellUserSettings) {
+        // This comes from the renderer process, so we don't need to call sendUserSettingChanged
+        this.settings.setUserSettings(userSettings);
+        this.settings.save(this.getWindowState());
+    }
+    public setUserSettingValue(name: string, value: unknown) {
+        const changed = this.settings.setUserSettingValue(name, value);
+        if (changed) {
+            this.sendUserSettingChanged();
+            this.settings.save(this.getWindowState());
+        }
+        return changed;
+    }
+
+    private getWindowState(): ShellWindowState {
+        const position = this.mainWindow.getPosition();
+        const size = this.mainWindow.getSize();
+
+        return {
+            x: position[0],
+            y: position[1],
+            width: size[0] - (this.inlineWebContentView ? this.inlineWidth : 0),
+            height: size[1],
+            inlineWidth: this.inlineWidth,
+            zoomLevel: this.chatView.webContents.zoomFactor,
+            devTools: this.chatView.webContents.isDevToolsOpened(),
+            canvas: this.targetUrl,
+        };
+    }
+
+    private sendUserSettingChanged() {
+        this.chatView.webContents.send("settings-changed", this.settings.user);
+    }
+
+    // ================================================================
+    // UI
+    // ================================================================
     public updateContentSize(newChatWidth?: number) {
         const bounds = this.mainWindow.getContentBounds();
         const { width, height } = bounds;
@@ -170,6 +225,7 @@ export class ShellWindow {
                 chatWidth = width - 4;
             }
             const inlineWidth = width - chatWidth;
+            this.inlineWidth = inlineWidth;
             this.inlineWebContentView.setBounds({
                 x: chatWidth + 4,
                 y: 0,
@@ -192,6 +248,17 @@ export class ShellWindow {
         );
     }
 
+    public toggleTopMost() {
+        this.mainWindow.setAlwaysOnTop(!this.mainWindow.isAlwaysOnTop());
+    }
+
+    public showDialog(dialogName: string) {
+        this.chatView.webContents.send("show-dialog", dialogName);
+    }
+
+    // ================================================================
+    // Inline browser
+    // ================================================================
     public openInlineBrowser(targetUrl: URL) {
         const mainWindow = this.mainWindow;
         const mainWindowSize = mainWindow.getBounds();
@@ -214,20 +281,17 @@ export class ShellWindow {
             this.inlineWebContentView = inlineWebContentView;
 
             mainWindow.setBounds({
-                width: mainWindowSize.width + inlineBrowserSize,
+                width: mainWindowSize.width + this.inlineWidth,
             });
             this.updateContentSize();
         }
 
         // only open the requested canvas if it isn't already opened
-        if (this.settings.canvas !== targetUrl.toString() || newWindow) {
+        if (this.targetUrl !== targetUrl.toString() || newWindow) {
             inlineWebContentView.webContents.loadURL(targetUrl.toString());
 
             // indicate in the settings which canvas is open
-            this.settings.canvas = targetUrl.toString().toLocaleLowerCase();
-
-            // write the settings to disk
-            this.settings.save();
+            this.targetUrl = targetUrl.toString();
         }
     }
 
@@ -250,70 +314,13 @@ export class ShellWindow {
 
         // clear the canvas settings
         if (save) {
-            this.settings.canvas = undefined;
+            this.targetUrl = undefined;
         }
-
-        // write the settings to disk
-        this.settings.save();
     }
 
-    public updateSettings(settings: ShellSettings) {
-        // Save the shell configurable settings
-        this.settings.microphoneId = settings.microphoneId;
-        this.settings.microphoneName = settings.microphoneName;
-        this.settings.tts = settings.tts;
-        this.settings.ttsSettings = settings.ttsSettings;
-        this.settings.agentGreeting = settings.agentGreeting;
-        this.settings.partialCompletion = settings.partialCompletion;
-        this.settings.darkMode = settings.darkMode;
-        this.settings.chatHistory = settings.chatHistory;
-
-        // write the settings to disk
-        this.settings.save();
-    }
-    public toggleTopMost() {
-        this.mainWindow.setAlwaysOnTop(!this.mainWindow.isAlwaysOnTop());
-    }
-
-    public showDialog(dialogName: string) {
-        this.chatView.webContents.send("show-dialog", dialogName);
-    }
-
-    public sendMessageToInlineWebContent(message: WebSocketMessageV2) {
-        this.inlineWebContentView?.webContents.send("webview-message", message);
-    }
-
-    public runDemo(interactive: boolean = false) {
-        runDemo(this.mainWindow, this.chatView, interactive);
-    }
-    private setupWebContents(webContents: WebContents) {
-        this.setupZoomHandlers(webContents);
-        this.setupDevToolsHandlers(webContents);
-        webContents.setUserAgent(userAgent);
-    }
-
-    private setupDevToolsHandlers(webContents: WebContents) {
-        webContents.on("before-input-event", (_event, input) => {
-            if (input.type === "keyDown") {
-                if (!is.dev) {
-                    // Ignore CommandOrControl + R
-                    if (input.code === "KeyR" && (input.control || input.meta))
-                        _event.preventDefault();
-                } else {
-                    // Toggle devtool(F12)
-                    if (input.code === "F12") {
-                        if (webContents.isDevToolsOpened()) {
-                            webContents.closeDevTools();
-                        } else {
-                            webContents.openDevTools({ mode: "undocked" });
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // Zoom handlers
+    // ================================================================
+    // Zoom Handler
+    // ================================================================
     private setupZoomHandlers(webContents: WebContents) {
         webContents.on("before-input-event", (_event, input) => {
             if (
@@ -364,7 +371,6 @@ export class ShellWindow {
                 view.webContents.zoomFactor = zoomFactor;
             }
         }
-        this.settings.zoomLevel = zoomFactor;
 
         this.updateZoomInTitle(zoomFactor);
     }
@@ -382,10 +388,10 @@ export class ShellWindow {
     }
 }
 
-function createMainWindow(settings: ShellSettings) {
+function createMainWindow(state: ShellWindowState) {
     const mainWindow = new BrowserWindow({
-        width: settings.width,
-        height: settings.height,
+        width: state.width,
+        height: state.height,
         show: false,
         autoHideMenuBar: true,
         webPreferences: {
@@ -393,16 +399,16 @@ function createMainWindow(settings: ShellSettings) {
             sandbox: false,
             zoomFactor: 1,
         },
-        x: settings.x,
-        y: settings.y,
+        x: state.x,
+        y: state.y,
     });
 
     // This (seemingly redundant) call is needed when we use a BrowserView.
     // Without this call, the mainWindow opens using default width/height, not the
     // values saved in ShellSettings
     mainWindow.setBounds({
-        width: settings.width,
-        height: settings.height,
+        width: state.width,
+        height: state.height,
     });
 
     mainWindow.removeMenu();
@@ -416,12 +422,12 @@ function createMainWindow(settings: ShellSettings) {
     return mainWindow;
 }
 
-function createChatView(settings: ShellSettings) {
+function createChatView(state: ShellWindowState) {
     const chatView = new WebContentsView({
         webPreferences: {
             preload: path.join(__dirname, "../preload/index.mjs"),
             sandbox: false,
-            zoomFactor: settings.zoomLevel,
+            zoomFactor: state.zoomLevel,
         },
     });
 
@@ -516,4 +522,25 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
             return false;
         },
     );
+}
+
+function setupDevToolsHandlers(webContents: WebContents) {
+    webContents.on("before-input-event", (_event, input) => {
+        if (input.type === "keyDown") {
+            if (!is.dev) {
+                // Ignore CommandOrControl + R
+                if (input.code === "KeyR" && (input.control || input.meta))
+                    _event.preventDefault();
+            } else {
+                // Toggle devtool(F12)
+                if (input.code === "F12") {
+                    if (webContents.isDevToolsOpened()) {
+                        webContents.closeDevTools();
+                    } else {
+                        webContents.openDevTools({ mode: "undocked" });
+                    }
+                }
+            }
+        }
+    });
 }

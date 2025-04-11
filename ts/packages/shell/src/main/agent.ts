@@ -80,7 +80,7 @@ class ShellShowRawSettingsCommandHandler implements CommandHandlerNoParams {
                 }
             }
         };
-        printConfig(agentContext.shellWindow.settings);
+        printConfig(agentContext.shellWindow.getUserSettings());
         context.actionIO.setDisplay(message.join("\n"));
     }
 }
@@ -95,6 +95,7 @@ class ShellSetSettingCommandHandler implements CommandHandler {
             },
             value: {
                 description: "The new value for the setting",
+                implicitQuotes: true,
             },
         },
     } as const;
@@ -103,39 +104,11 @@ class ShellSetSettingCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const agentContext = context.sessionContext.agentContext;
-        const settings = agentContext.shellWindow.settings;
         const { name, value } = params.args;
-        let found: boolean = false;
-        let oldValue: any;
-        for (const [key, v] of Object.entries(settings)) {
-            if (key === name) {
-                found = true;
-                if (typeof settings[key] === "object") {
-                    try {
-                        settings.set(name, value);
-                    } catch (e) {
-                        throw new Error(
-                            `Unable to set ${key} to ${value}. Details: ${e}`,
-                        );
-                    }
-                } else {
-                    settings.set(name, value);
-                }
-                oldValue = v;
-                break;
-            }
-        }
-
-        if (!found) {
-            throw new Error(
-                `The supplied shell setting '${name}' could not be found.'`,
-            );
-        }
-        const currValue = settings[name];
-        if (oldValue !== currValue) {
-            displaySuccess(`${name} is changed to ${currValue}`, context);
+        if (agentContext.shellWindow.setUserSettingValue(name, value)) {
+            displaySuccess(`${name} is changed to ${value}`, context);
         } else {
-            displayWarn(`${name} is unchanged from ${currValue}`, context);
+            displayWarn(`${name} is unchanged from ${value}`, context);
         }
     }
 }
@@ -169,19 +142,17 @@ function getThemeCommandHandlers(): CommandHandlerTable {
             light: {
                 description: "Set the theme to light",
                 run: async (context: ActionContext<ShellContext>) => {
-                    context.sessionContext.agentContext.shellWindow.settings.set(
-                        "darkMode",
-                        false,
-                    );
+                    const shellWindow =
+                        context.sessionContext.agentContext.shellWindow;
+                    shellWindow.setUserSettingValue("darkMode", false);
                 },
             },
             dark: {
                 description: "Set the theme to dark",
                 run: async (context: ActionContext<ShellContext>) => {
-                    context.sessionContext.agentContext.shellWindow.settings.set(
-                        "darkMode",
-                        true,
-                    );
+                    const shellWindow =
+                        context.sessionContext.agentContext.shellWindow;
+                    shellWindow.setUserSettingValue("darkMode", true);
                 },
             },
         },

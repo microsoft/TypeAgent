@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import type { ShellSettingsType } from "./shellSettingsType.js";
+import type { ShellUserSettings } from "./shellSettingsType.js";
 import type { Dispatcher, ClientIO } from "agent-dispatcher";
 
-export type { ShellSettingsType };
+export type { ShellUserSettings };
 
 export type SpeechToken = {
     token: string;
@@ -22,9 +22,6 @@ export enum NotifyCommands {
 
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
-export interface ClientSettingsProvider {
-    set: SetSettingFunction | null;
-}
 
 export type ClientActions =
     | "show-camera"
@@ -41,7 +38,7 @@ export interface ClientAPI {
     getLocalWhisperStatus: () => Promise<boolean | undefined>;
     getChatHistory: () => Promise<string | undefined>;
     saveChatHistory: (history: string) => void;
-    saveSettings: (settings: ShellSettingsType) => void;
+    saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
 }
 
@@ -51,7 +48,7 @@ export interface Client {
     updateRegisterAgents(agents: Map<string, string>): void;
     showInputText(message: string): Promise<void>;
     showDialog(key: string): void;
-    updateSettings(settings: ShellSettingsType): void;
+    updateSettings(settings: ShellUserSettings): void;
     fileSelected(fileName: string, fileContent: string): void;
     listen(name: string, token?: SpeechToken, useLocalWhisper?: boolean): void;
 }
