@@ -28,7 +28,7 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { askYesNoWithContext } from "../../interactiveIO.js";
-import { appAgentStateKeys } from "../../appAgentManager.js";
+import { appAgentStateKeys } from "../../appAgentStateConfig.js";
 
 class SessionNewCommandHandler implements CommandHandler {
     public readonly description = "Create a new empty session";
