@@ -288,7 +288,12 @@ export class ShellWindow {
 
         // only open the requested canvas if it isn't already opened
         if (this.targetUrl !== targetUrl.toString() || newWindow) {
-            inlineWebContentView.webContents.loadURL(targetUrl.toString());
+            inlineWebContentView.webContents.loadURL(targetUrl.toString()).catch((reason) => {    
+                // try again tild process might not be ready
+                if (reason.code === "ERR_CONNECTION_REFUSED") {
+                    setTimeout(() => { inlineWebContentView.webContents.loadURL(targetUrl.toString()); }, 2000);
+                }
+            });
 
             // indicate in the settings which canvas is open
             this.targetUrl = targetUrl.toString();
