@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "axios": "^1.8.2",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",

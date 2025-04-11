@@ -4,11 +4,10 @@
 import open from "open";
 
 import express from "express";
-import axios, { AxiosRequestConfig } from "axios";
-import { translateAxiosError } from "./utils.js";
 import { Server } from "http";
 import querystring from "querystring";
 import { TokenCachePersistence } from "@typeagent/agent-sdk";
+import { createFetchError } from "./utils.js";
 
 const tokenUri = "https://accounts.spotify.com/api/token";
 function getExpiredDate(expiresIn: number) {
@@ -32,8 +31,9 @@ export class TokenProvider {
         private readonly tokenCachePersistence?: TokenCachePersistence,
     ) {}
 
-    private getAxiosRequestConfig(): AxiosRequestConfig {
-        const config: AxiosRequestConfig = {
+    private getRequestInit(): RequestInit {
+        const options: RequestInit = {
+            method: "POST",
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded",
                 Authorization: `Basic ${Buffer.from(
@@ -41,7 +41,7 @@ export class TokenProvider {
                 ).toString("base64")}`,
             },
         };
-        return config;
+        return options;
     }
 
     public async getAccessToken(silent: boolean = false): Promise<string> {
@@ -61,44 +61,40 @@ export class TokenProvider {
         }
 
         // Use the refresh token to get a new access token
-        const data = {
+        const body = {
             grant_type: "refresh_token",
             refresh_token: refreshToken,
         };
 
-        const config = this.getAxiosRequestConfig();
+        const options = this.getRequestInit();
+        const params = new URLSearchParams(body);
+        options.body = params.toString();
 
-        try {
-            const result = await axios.post(tokenUri, data, config);
-            if (result.status !== 200) {
-                throw new Error(
-                    `Unable to get access token. (Status: ${result.status})`,
-                );
-            }
-            if (
-                result.data.scope.split(" ").sort().join(" ") !==
-                this.scopes.sort().join(" ")
-            ) {
-                if (silent) {
-                    throw new Error("No refresh token");
-                }
-                // request both the refresh token and the access token to update the scope
-                return this.requestTokens();
-            }
-            this.userAccessToken = result.data.access_token;
-            this.userAccessTokenExpiration = getExpiredDate(
-                result.data.expires_in,
-            );
-        } catch (e: any) {
-            if (
-                e.response?.status === 400 &&
-                e.response?.data.error === "invalid_grant"
-            ) {
+        const result = await fetch(tokenUri, options);
+        if (result.status === 400) {
+            const data: any = await result.json();
+            if (data.error === "invalid_grant") {
                 // Request the refresh token again.
                 return this.requestTokens();
             }
-            translateAxiosError(e);
         }
+        if (result.status !== 200) {
+            throw await createFetchError("Unable to get access token", result);
+        }
+        const data: any = await result.json();
+        if (
+            data.scope.split(" ").sort().join(" ") !==
+            this.scopes.sort().join(" ")
+        ) {
+            if (silent) {
+                throw new Error("No refresh token");
+            }
+            // request both the refresh token and the access token to update the scope
+            return this.requestTokens();
+        }
+        this.userAccessToken = data.access_token;
+        this.userAccessTokenExpiration = getExpiredDate(data.expires_in);
+
         return this.userAccessToken!;
     }
 
@@ -110,43 +106,45 @@ export class TokenProvider {
             return this.clientToken;
         }
 
-        const data = "grant_type=client_credentials";
-        const config = this.getAxiosRequestConfig();
+        const options = this.getRequestInit();
+        options.body = "grant_type=client_credentials";
 
-        try {
-            const result = await axios.post(tokenUri, data, config);
-            this.clientToken = result.data.access_token;
-            this.clientTokenExpiration = getExpiredDate(result.data.expires_in);
-        } catch (e) {
-            translateAxiosError(e);
+        const result = await fetch(tokenUri, options);
+        if (result.status !== 200) {
+            throw await createFetchError(
+                "Unable to get client credentials.",
+                result,
+            );
         }
+        const data: any = await result.json();
+        this.clientToken = data.access_token;
+        this.clientTokenExpiration = getExpiredDate(data.expires_in);
 
         return this.clientToken;
     }
 
     private async requestTokens() {
         const authzCode = await this.requestAuthzCode();
-        const data = {
+        const body = {
             grant_type: "authorization_code",
             code: authzCode,
             redirect_uri: this.getRedirectUrl(),
         };
-        const config = this.getAxiosRequestConfig();
-        try {
-            const result = await axios.post(tokenUri, data, config);
-            if (result.status !== 200) {
-                throw new Error(
-                    `Unable to get access token. (Status: ${result.status})`,
-                );
-            }
-            this.userRefreshToken = result.data.refresh_token;
-            this.userAccessToken = result.data.access_token;
-            this.userAccessTokenExpiration = getExpiredDate(
-                result.data.expires_in,
+        const options = this.getRequestInit();
+        const params = new URLSearchParams(body);
+        options.body = params.toString();
+
+        const result = await fetch(tokenUri, options);
+        if (result.status !== 200) {
+            throw await createFetchError(
+                "Unable to get authorization code",
+                result,
             );
-        } catch (e) {
-            translateAxiosError(e);
         }
+        const data: any = await result.json();
+        this.userRefreshToken = data.refresh_token;
+        this.userAccessToken = data.access_token;
+        this.userAccessTokenExpiration = getExpiredDate(data.expires_in);
 
         // Note that we don't await this call, and error is ignored.
         this.saveRefreshToken().catch();
