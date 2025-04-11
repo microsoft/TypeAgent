@@ -212,24 +212,36 @@ export function createAgentRpcServer(
                 });
             },
         };
+
+        function readStorage(
+            storagePath: string,
+            options: StorageEncoding,
+        ): Promise<string>;
+        function readStorage(storagePath: string): Promise<Uint8Array>;
+        function readStorage(
+            storagePath: string,
+            options?: StorageEncoding,
+        ): Promise<string | Uint8Array> {
+            return rpc.invoke("storageRead", {
+                contextId,
+                session,
+                storagePath,
+                options,
+            });
+        }
         return {
-            read: (
+            read: readStorage,
+            write: (
                 storagePath: string,
-                options: StorageEncoding,
-            ): Promise<string> => {
-                return rpc.invoke("storageRead", {
-                    contextId,
-                    session,
-                    storagePath,
-                    options,
-                });
-            },
-            write: (storagePath: string, data: string): Promise<void> => {
+                data: string | Uint8Array,
+                options?: StorageEncoding,
+            ): Promise<void> => {
                 return rpc.invoke("storageWrite", {
                     contextId,
                     session,
                     storagePath,
                     data,
+                    options,
                 });
             },
             list: (

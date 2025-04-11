@@ -16,6 +16,7 @@ import {
     AppAgentManifest,
     AppAction,
     TypeAgentAction,
+    StorageEncoding,
 } from "@typeagent/agent-sdk";
 import {
     AgentCallFunctions,
@@ -184,24 +185,26 @@ export async function createAgentRpcClient(
             contextId: number;
             session: boolean;
             storagePath: string;
-            options: any;
+            options?: StorageEncoding | undefined;
         }) => {
             const context = contextMap.get(param.contextId);
             return getStorage(param, context).read(
                 param.storagePath,
-                param.options,
+                param.options as any,
             );
         },
         storageWrite: async (param: {
             contextId: number;
             session: boolean;
             storagePath: string;
-            data: string;
+            data: string | Uint8Array;
+            options?: StorageEncoding | undefined;
         }) => {
             const context = contextMap.get(param.contextId);
             return getStorage(param, context).write(
                 param.storagePath,
-                param.data,
+                param.data as any,
+                param.options as any,
             );
         },
         storageList: async (param: {
