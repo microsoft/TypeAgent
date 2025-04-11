@@ -34,13 +34,14 @@ import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
-import Registry from "winreg";
+//import Registry from "winreg";
 import koffi from "koffi";
 import {
     displayError,
     displayResult,
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
+import { spawnSync } from "node:child_process";
 
 const debug = registerDebug("typeagent:agent:montage");
 
@@ -926,19 +927,68 @@ function startSlideShow(context: MontageActionContext) {
     );
 
     // update slideshow screen saver directory
-    const key = new Registry({
-        hive: Registry.HKCU,
-        key: "Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\Screensaver",
-    });
+    // const key = new Registry({
+    //     hive: Registry.HKCU,
+    //     key: "Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\Screensaver",
+    // });
+
+    // create the key if it doesn't exist
+    // BUGBUG - winreg does NOT work if the key has spaces in it
+    // https://github.com/fresc81/node-winreg
+    // there's a pending PR to fix but no response from the author so we just do it manually here ourselves        
+    const buff = spawnSync("reg", ["add", "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver"]);
+    console.log(buff.stdout.toString());
+    console.log(buff.stderr.toString());
+    // key.create((err) => {
+    //     // remove spanSync once win-reg get's updated
+    // });
+    
 
     // set the registry value
     const pidl = createEncryptedPIDLFromPath(slideShowDir);
     if (pidl) {
-        key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
-            if (err) {
-                console.error("Error reading registry value:", err);
-            }
-        });
+        spawnSync("reg", [
+            "add", 
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver", 
+            "/v", 
+            "EncryptedPIDL", 
+            "/t", 
+            "REG_SZ", 
+            "/d", 
+            pidl,
+            "/f" ]);
+
+        // fast
+        spawnSync("reg", [
+            "add", 
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver", 
+            "/v", 
+            "Speed", 
+            "/t", 
+            "REG_DWORD", 
+            "/d", 
+            "2",
+            "/f" ]);
+        
+        // shuffle
+        spawnSync("reg", [
+            "add", 
+            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver", 
+            "/v", 
+            "Shuffle", 
+            "/t", 
+            "REG_DWORD", 
+            "/d", 
+            "1",
+            "/f" ]);
+        // key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
+        //     if (err) {
+        //         console.error("Error reading registry value:", err);
+        //     }
+        // });
+
+        // key.set("Shuffle", "REG_DWORD", "1", () => {}); // randomize
+        // key.set("Speed", "REG_DWORD", "2", () => {});   // "fast"
     }
 
     // start slideshow screen saver
