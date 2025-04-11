@@ -30,6 +30,7 @@ import {
 import { ActionSchemaFileCache } from "../translation/actionSchemaFileCache.js";
 import path from "path";
 import { callEnsureError } from "../utils/exceptions.js";
+import { AppAgentStateConfig, appAgentStateKeys } from "./appAgentStateConfig.js";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
@@ -47,14 +48,6 @@ type AppAgentRecord = {
     sessionContextP?: Promise<SessionContext> | undefined;
     schemaErrors: Map<string, Error>;
 };
-
-export type AppAgentStateConfig = {
-    schemas: Record<string, boolean>;
-    actions: Record<string, boolean>;
-    commands: Record<string, boolean>;
-};
-
-export const appAgentStateKeys = ["schemas", "actions", "commands"] as const;
 
 export type AppAgentStateSettings = Partial<AppAgentStateConfig>;
 
