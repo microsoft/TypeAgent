@@ -321,7 +321,7 @@ async function initializeInstance(shellSettings: ShellSettings) {
         }
     });
 
-    ipcMain.on("open-folder", async(_event, path: string) => {
+    ipcMain.on("open-folder", async (_event, path: string) => {
         shell.openPath(path);
     });
 

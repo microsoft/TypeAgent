@@ -78,7 +78,7 @@ const api: ClientAPI = {
     },
     openFolder: (path: string) => {
         ipcRenderer.send("open-folder", path);
-    }
+    },
 };
 
 const dispatcherChannel = createGenericChannel((message: any) =>
