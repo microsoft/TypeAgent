@@ -91,6 +91,24 @@ describe("mergeConfig", () => {
             expect(config).toStrictEqual({ a: 1 });
             expect(changed).toStrictEqual({ a: 1 });
         });
+
+        it("should merge undefined value as string", () => {
+            const config = { a: undefined };
+            const options = { a: "a" };
+            const changed = mergeConfig(config, options);
+            expect(config).toStrictEqual({ a: "a" });
+            expect(changed).toStrictEqual({ a: "a" });
+        });
+
+        it("should throw undefined value with non-string", () => {
+            const config = { a: undefined };
+            const options = { a: 1 };
+            expect(() => {
+                mergeConfig(config, options);
+            }).toThrow(
+                "Invalid option 'a': type mismatch (expected: string, actual: number)",
+            );
+        });
     });
     describe("non-strict", () => {
         it("should merge options into config", () => {

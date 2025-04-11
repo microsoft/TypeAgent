@@ -1,83 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ClientIO } from "agent-dispatcher";
-import { ClientAPI, SpeechToken } from "../../preload/electronTypes.js";
+import { Client, ClientAPI } from "../../preload/electronTypes.js";
 import { createClientIORpcServer } from "agent-dispatcher/rpc/clientio/server";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createDispatcherRpcClient } from "agent-dispatcher/rpc/dispatcher/client";
-
-const fnMap: Map<string, any> = new Map<string, any>();
-
-function placeHolder(category: string, callback: any) {
-    console.log(category + "\n" + JSON.stringify(callback));
-}
-
-let clientIORegistered = false;
-export const webapi: ClientAPI = {
-    // TODO: implement
-    onListenEvent: (
-        callback: (
-            e: Electron.IpcRendererEvent,
-            name: string,
-            token?: SpeechToken,
-            useLocalWhisper?: boolean,
-        ) => void,
-    ) => placeHolder("listen-event", callback),
-    onSettingSummaryChanged(callback) {
-        fnMap.set("setting-summary-changed", callback);
-    },
-
-    getSpeechToken: () => {
-        return new Promise<SpeechToken | undefined>(async (resolve) => {
-            // We are not auth in this case and instead will rely on the device to provide speech reco
-            resolve(undefined);
-        });
-    },
-    getLocalWhisperStatus: () => {
-        // local whisper not supported on mobile
-        return new Promise<boolean | undefined>((resolve) => {
-            resolve(false);
-        });
-    },
-    onSendInputText(callback) {
-        // doesn't apply on mobile
-        fnMap.set("send-input-text", callback);
-    },
-    onSendDemoEvent(callback) {
-        // doesn't apply on mobile
-        fnMap.set("send-demo-event", callback);
-    },
-    onHelpRequested(callback) {
-        // no longer supported (i.e. F1 key)
-        fnMap.set("help-requested", callback);
-    },
-    onShowDialog(callback) {
-        // not supported without @shell command
-        // TODO: inject replacement on mobile?
-        fnMap.set("show-dialog", callback);
-    },
-    onSettingsChanged(callback) {
-        // only applies if we make the mobile agent for settings
-        // TODO: figure out solution for mobile
-        fnMap.set("settings-changed", callback);
-    },
-    onChatHistory(callback) {
-        // TODO: implement proper message rehydration on mobile
-        fnMap.set("chat-history", callback);
-    },
-    onFileSelected(callback) {
-        // TODO: implement image selection on mobile device
-        fnMap.set("file-selected", callback);
-    },
-    registerClientIO(clientIO: ClientIO) {
-        if (clientIORegistered) {
-            throw new Error("ClientIO already registered");
-        }
-        clientIORegistered = true;
-        createClientIORpcServer(clientIO, clientIOChannel.channel);
-    },
-};
 
 const clientIOChannel = createGenericChannel((message: any) =>
     globalThis.ws.send(
@@ -87,6 +14,42 @@ const clientIOChannel = createGenericChannel((message: any) =>
         }),
     ),
 );
+
+let client: Client | undefined = undefined;
+function registerClient(c: Client) {
+    if (client !== undefined) {
+        throw new Error("Client already registered");
+    }
+
+    // Establish the clientIO RPC
+    client = c;
+    createClientIORpcServer(client.clientIO, clientIOChannel.channel);
+}
+
+export const webapi: ClientAPI = {
+    registerClient,
+    getSpeechToken: async () => {
+        // We are not auth in this case and instead will rely on the device to provide speech reco
+        return undefined;
+    },
+    getLocalWhisperStatus: async () => {
+        // local whisper not supported on mobile
+        return false;
+    },
+    openImageFile: () => {
+        // not supported on mobile
+    },
+    getChatHistory: async () => {
+        return undefined;
+    },
+    saveChatHistory: () => {
+        // not supported on mobile
+    },
+    saveSettings: () => {
+        // not supported on mobile
+    },
+};
+
 const dispatcherChannel = createGenericChannel((message: any) =>
     globalThis.ws.send(
         JSON.stringify({
@@ -132,17 +95,36 @@ export async function createWebSocket(autoReconnect: boolean = true) {
                     break;
 
                 case "setting-summary-changed":
-                    let agentsMap: Map<string, string> = new Map<
-                        string,
-                        string
-                    >(msgObj.data.registeredAgents);
-                    fnMap.get("setting-summary-changed")(
-                        undefined,
-                        msgObj.data.summary,
-                        agentsMap,
+                    const agentsMap = new Map<string, string>(
+                        msgObj.data.registeredAgents,
                     );
+                    client?.updateRegisterAgents(agentsMap);
+                    break;
+                /* TODO: Not implemented yet.
+                case "listen-event":
+                    const { name, token, useLocalWhisper } = msgObj.data;
+                    client?.listen(name, token, useLocalWhisper);
+                    break;
+                case "send-input-text":
+                    client?.sendInputText(msgObj.data.message);
+                    break;
+                case "send-demo-event":
+                    // TODO: Not implemented yet.
+                    break;
+                case "show-dialog":
+                    client?.showDialog(msgObj.data.key);
                     break;
 
+                case "settings-changed":
+                    client?.updateSettings(msgObj.data.value);
+                    break;
+                case "file-selected":
+                    client?.fileSelected(
+                        msgObj.data.fileName,
+                        msgObj.data.fileContent,
+                    );
+                    break;
+*/
                 default:
                     console.warn(
                         `websocket message not handled: ${msgObj.message}`,

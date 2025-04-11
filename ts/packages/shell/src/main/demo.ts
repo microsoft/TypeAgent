@@ -31,7 +31,7 @@ function getActionCompleteEvent(awaitKeyboardInput: boolean) {
             if (awaitKeyboardInput) {
                 targetName = "Alt+Right";
             }
-            if (name == targetName) {
+            if (name === targetName) {
                 ipcMain.removeListener("send-demo-event", callback);
                 resolve(undefined);
             }

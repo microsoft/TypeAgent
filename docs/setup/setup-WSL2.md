@@ -21,6 +21,10 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
   - `pnpm i`
   - `pnpm run build`
 
+## Configure Services
+
+- Setup Service Keys (See instructions [here](./../../ts/README.md#service-keys))
+
 ## Run
 
 - Setup for [electron](https://www.electronjs.org/docs/latest/development/build-instructions-linux)
@@ -43,7 +47,6 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
     - `wsl --shutdown`
     - `wsl -d Ubuntu`
     - `cd ~/src/TypeAgent/ts`
-- Setup Service Keys (See instructions [here](./../../ts/README.md#service-keys))
 - Run the TypeAgent shell
   - `pnpm run shell`
   - Dialog will popup to setup up password for the keyring

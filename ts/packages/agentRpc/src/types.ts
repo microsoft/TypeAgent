@@ -14,6 +14,7 @@ import {
     DynamicDisplay,
     ParameterDefinitions,
     ParsedCommandParams,
+    StorageEncoding,
     StorageListOptions,
     TemplateSchema,
     TypeAgentAction,
@@ -50,13 +51,14 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         session: boolean;
         storagePath: string;
-        options: any;
+        options?: StorageEncoding | undefined;
     }) => Promise<any>;
     storageWrite: (param: {
         contextId: number;
         session: boolean;
         storagePath: string;
         data: string;
+        options?: StorageEncoding | undefined;
     }) => Promise<any>;
     storageList: (param: {
         contextId: number;

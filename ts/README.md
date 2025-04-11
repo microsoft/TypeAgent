@@ -39,7 +39,7 @@ You should now be able to access the extension from VS Code.
 
 #### Desktop Agent (Windows only)
 
-To use the [Desktop Agent](./packages/agents/desktop/] for windows, follow the instruction in [README.md](./packages/agents/desktop/README.md) to build the [AutoShell](../dotnet/autoShell/) C# code necessary to interact with the OS.
+To use the [Desktop Agent](./packages/agents/desktop/) for windows, follow the instruction in [README.md](./packages/agents/desktop/README.md) to build the [AutoShell](../dotnet/autoShell/) C# code necessary to interact with the OS.
 
 ### Local Whisper Service (Optional)
 
@@ -49,7 +49,7 @@ If you want to use a local whisper service for voice input in the [TypeAgent She
 
 ### Service Keys
 
-Multiple services are required to run the scenarios. Put the necessary keys in the `.env` file at this directory (TypeAgent repo's `./ts` directory).
+Multiple services are required to run the scenarios. Put the necessary keys in the `.env` file at this directory (TypeAgent repo's `./ts` directory). For more information standing up your own Azure OpenAI service endpoint, [continue here](https://azure.microsoft.com/en-us/products/ai-services/openai-service?msockid=03598722967c6ae20c3f93af97c66bd7).
 
 Here is an example of the minimal `.env` file targeting Azure:
 

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { getObjectPropertyNames } from "common-utils";
 import {
     RequestAction,
     HistoryContext,
@@ -38,7 +39,7 @@ function getContextPart(history?: HistoryContext) {
 
 export function getActionDescription(requestAction: RequestAction) {
     const actions = requestAction.actions;
-    const leafPropertyNames = getLeafNames(toJsonActions(actions));
+    const leafPropertyNames = getObjectPropertyNames(toJsonActions(actions));
     let propertyPart = "";
     if (leafPropertyNames.length > 0) {
         propertyPart = `The property name${
@@ -49,23 +50,6 @@ export function getActionDescription(requestAction: RequestAction) {
     }
 
     return `${propertyPart} Ignore properties that are not listed. ${getContextPart(requestAction.history)}`;
-}
-
-function getLeafNames(params: any) {
-    const names: string[] = [];
-    for (const [key, value] of Object.entries(params)) {
-        if (typeof value === "object") {
-            const children = getLeafNames(value);
-            for (const child of children) {
-                names.push(`${key}.${child}`);
-            }
-        } else if (typeof value === "function") {
-            throw new Error("Function is not supported as an action value");
-        } else {
-            names.push(key);
-        }
-    }
-    return names;
 }
 
 export class Explainer<T extends object> {

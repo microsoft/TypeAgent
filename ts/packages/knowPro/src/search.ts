@@ -80,7 +80,7 @@ export async function runSearchQuery(
     conversation: IConversation,
     query: SearchQueryExpr,
     options?: SearchOptions,
-) {
+): Promise<ConversationSearchResult[]> {
     options ??= createDefaultSearchOptions();
     const results: ConversationSearchResult[] = [];
     for (const expr of query.selectExpressions) {
@@ -113,6 +113,7 @@ export async function searchConversation(
     options?: SearchOptions,
     rawSearchQuery?: string,
 ): Promise<ConversationSearchResult | undefined> {
+    options ??= createDefaultSearchOptions();
     const knowledgeMatches = await searchConversationKnowledge(
         conversation,
         searchTermGroup,
@@ -160,6 +161,7 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
+    options ??= createDefaultSearchOptions();
     const queryBuilder = new QueryCompiler(
         conversation,
         conversation.secondaryIndexes ?? {},
@@ -172,6 +174,14 @@ export async function searchConversationKnowledge(
     return runQuery(conversation, options, query);
 }
 
+/**
+ * Merge any entity matches by name, merging in their types and facets
+ * The resulting distinct array of entities
+ * @param semanticRefs
+ * @param searchResults
+ * @param topK
+ * @returns
+ */
 export function getDistinctEntityMatches(
     semanticRefs: SemanticRef[],
     searchResults: ScoredSemanticRefOrdinal[],
@@ -180,6 +190,13 @@ export function getDistinctEntityMatches(
     return mergeSemanticRefEntities(semanticRefs, searchResults, topK);
 }
 
+/**
+ * Return an array of distinct topics
+ * @param semanticRefs
+ * @param searchResults
+ * @param topK
+ * @returns
+ */
 export function getDistinctTopicMatches(
     semanticRefs: SemanticRef[],
     searchResults: ScoredSemanticRefOrdinal[],

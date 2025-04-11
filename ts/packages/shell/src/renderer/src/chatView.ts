@@ -22,6 +22,7 @@ import { PartialCompletion } from "./partial";
 import { InputChoice } from "./choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "./settingsView";
+import { uint8ArrayToBase64 } from "common-utils";
 
 export function getSelectionXCoord() {
     let sel = window.getSelection();
@@ -430,7 +431,9 @@ export class ChatView {
                 let response = await fetch(images[i].src);
                 let blob = await response.blob();
                 let ab = await blob.arrayBuffer();
-                retVal[i] = `data:image/png;base64,` + _arrayBufferToBase64(ab);
+                retVal[i] =
+                    `data:image/png;base64,` +
+                    uint8ArrayToBase64(new Uint8Array(ab));
             } else {
                 console.log("Unknown image source type.");
             }
@@ -586,8 +589,6 @@ export class ChatView {
         });
 
         input.dispatchEvent(keyboardEvent);
-
-        (window as any).electron.ipcRenderer.send("send-input-text-complete");
     }
 
     public setMetricsVisible(visible: boolean) {
@@ -604,24 +605,4 @@ export class ChatView {
     public get settingsView(): SettingsView | undefined {
         return this._settingsView;
     }
-}
-
-export function _arrayBufferToBase64(buffer: ArrayBuffer) {
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (var i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-}
-
-export function _base64ToArrayBuffer(base64: string): Uint8Array {
-    const binaryString = window.atob(base64);
-    const len = binaryString.length;
-    const bytes: Uint8Array = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes;
 }
