@@ -262,6 +262,11 @@ function addEvents(
                     }
                     case "automate-phone-ui": {
                         Android.automateUI(d.originalRequest);
+                        break;
+                    }
+                    case "open-folder": {
+                        getClientAPI().openFolder(data as string);
+                        break;
                     }
                 }
             } catch (e) {

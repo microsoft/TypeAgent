@@ -1814,6 +1814,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      open:
+        specifier: ^10.1.0
+        version: 10.1.0
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@20.17.28)(typescript@5.4.5)
@@ -2197,6 +2200,9 @@ importers:
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor
+      open:
+        specifier: ^10.1.0
+        version: 10.1.0
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2

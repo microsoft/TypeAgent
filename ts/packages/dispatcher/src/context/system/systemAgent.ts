@@ -42,6 +42,7 @@ import {
 import { ActionCommandHandler } from "./handlers/actionCommandHandler.js";
 import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
 import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
+import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -75,6 +76,7 @@ export const systemHandlers: CommandHandlerTable = {
         env: getEnvCommandHandlers(),
         install: new InstallCommandHandler(),
         uninstall: new UninstallCommandHandler(),
+        open: new OpenCommandHandler(),
     },
 };
 
