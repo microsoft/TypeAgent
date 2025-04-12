@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, AppAction, SessionContext } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    AppAction,
+    AppAgent,
+    SessionContext,
+} from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     disableDesktopActionContext,
@@ -10,7 +15,7 @@ import {
     setupDesktopActionContext,
 } from "./connector.js";
 import { DesktopActions } from "./actionsSchema.js";
-export function instantiate() {
+export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeDesktopContext,
         updateAgentContext: updateDesktopContext,
@@ -18,7 +23,7 @@ export function instantiate() {
     };
 }
 
-function initializeDesktopContext(): DesktopActionContext {
+async function initializeDesktopContext(): Promise<DesktopActionContext> {
     return {
         desktopProcess: undefined,
         programNameIndex: undefined,

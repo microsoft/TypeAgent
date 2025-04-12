@@ -49,7 +49,6 @@
     "onStartupFinished"
   ],
   "dependencies": {
-    "axios": "^1.8.2",
     "body-parser": "^1.20.3",
     "chalk": "^5.4.1",
     "cors": "^2.8.5",

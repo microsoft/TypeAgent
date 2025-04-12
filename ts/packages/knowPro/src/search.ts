@@ -424,6 +424,9 @@ class QueryCompiler {
                 new q.TextRangesInDateRangeSelector(filter.dateRange),
             );
         }
+        //
+        // Apply 'OUTER' scope
+        //
         // If specific scoping terms were provided
         if (filter && filter.scopeDefiningTerms !== undefined) {
             scopeSelectors ??= [];
@@ -439,6 +442,13 @@ class QueryCompiler {
                 scopeSelectors ??= [];
                 this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
             }
+        }
+        // Include any ranges directly provided by the caller
+        if (filter && filter.textRangesInScope) {
+            scopeSelectors ??= [];
+            scopeSelectors?.push(
+                new q.TextRangeSelector(filter.textRangesInScope),
+            );
         }
         // If a thread index is available...
         const threads = this.secondaryIndexes?.threads;
@@ -475,21 +485,7 @@ class QueryCompiler {
             this.allScopeSearchTerms.push(...searchTermsUsed);
         }
     }
-    /*
-    private addTermsScopeSelectorV1(
-        termGroup: SearchTermGroup,
-        scopeSelectors: q.IQueryTextRangeSelector[],
-    ) {
-        if (termGroup.terms.length > 0) {
-            const [searchTermsUsed, selectExpr] =
-                this.compileSearchGroupTerms(termGroup);
-            scopeSelectors.push(
-                new q.TextRangesFromSemanticRefsSelector(selectExpr),
-            );
-            this.allScopeSearchTerms.push(...searchTermsUsed);
-        }
-    }
-    */
+
     private compileWhere(filter: WhenFilter): q.IQuerySemanticRefPredicate[] {
         let predicates: q.IQuerySemanticRefPredicate[] = [];
         if (filter.knowledgeType) {

@@ -9,7 +9,9 @@ import { fileURLToPath } from "url";
 import path from "path";
 import sharp from "sharp";
 import fs from "node:fs";
+import registerDebug from "debug";
 
+const debug = registerDebug("typeagent:agent:montage:route");
 const app: Express = express();
 const port = process.env.PORT || 9012;
 
@@ -79,23 +81,30 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
             if (normalizedPath.startsWith(path.resolve(folder))) {
                 // get the thumbnail of the supplied image or make it if it doesn't exist
                 const thumbnail = `${normalizedPath}.thumbnail.jpg`;
-                if (!fs.existsSync(thumbnail)) {
+                if (
+                    !fs.existsSync(thumbnail) ||
+                    fs.statSync(thumbnail).size === 0
+                ) {
                     const img = sharp(normalizedPath, { failOn: "error" })
                         .resize(800, 800, { fit: "inside" })
                         .withMetadata();
                     try {
-                        await img.toFile(thumbnail);
+                        img.toFile(thumbnail).then((value) => {
+                            sendThumbnailorOriginalImage(
+                                res,
+                                thumbnail,
+                                normalizedPath,
+                            );
+                        });
                     } catch (e) {
                         console.log(e);
                     }
-                }
-
-                // send the thumbnail if it's a valid size
-                // otherwise send the original
-                if (fs.statSync(thumbnail).size > 0) {
-                    res.sendFile(thumbnail);
                 } else {
-                    res.sendFile(normalizedPath);
+                    sendThumbnailorOriginalImage(
+                        res,
+                        thumbnail,
+                        normalizedPath,
+                    );
                 }
 
                 served = true;
@@ -120,6 +129,25 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
 
     // res.write(buffer);
 });
+
+function sendThumbnailorOriginalImage(
+    res: any,
+    thumbnail: string,
+    original: string,
+) {
+    try {
+        // send the thumbnail if it's a valid size
+        // otherwise send the original
+        if (fs.statSync(thumbnail).size > 0) {
+            res.sendFile(thumbnail);
+        } else {
+            res.sendFile(original);
+        }
+    } catch (err) {
+        debug(`Error sending thumbnail: ${err}`);
+        res.status(500).send();
+    }
+}
 
 /**
  * Gets the knowledge reponse file for the supplied image (if available)

@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import axios from "axios";
-import { translateAxiosError, translateAxiosErrorNoThrow } from "./utils.js";
 import { SpotifyService } from "./service.js";
 import registerDebug from "debug";
+import { createFetchError } from "./utils.js";
 
 const debugSpotifyRest = registerDebug("typeagent:spotify:rest");
 
@@ -14,26 +13,11 @@ export async function search(
     query: SpotifyApi.SearchForItemParameterObject,
     service: SpotifyService,
 ) {
-    debugSpotifyRest("search", query);
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getClientCredentials()}`,
-        },
-    };
-
-    const searchUrl = getUrlWithParams(
+    return fetchGet<SpotifyApi.SearchResponse>(
+        service,
         "https://api.spotify.com/v1/search",
         query,
     );
-    try {
-        const spotifyResult = await axios.get(searchUrl, config);
-        debugSpotifyRest("search success");
-        return spotifyResult.data as SpotifyApi.SearchResponse;
-    } catch (e) {
-        debugSpotifyRest("search failed");
-        translateAxiosError(e);
-    }
-    return undefined;
 }
 
 async function getK<T>(
@@ -65,31 +49,136 @@ async function getK<T>(
     return results;
 }
 
-async function callRestAPI<T>(
+async function callFetch<T>(
     service: SpotifyService,
+    method: string,
     restUrl: string,
-    params: Record<string, any>,
-) {
-    const config = {
+    params: Record<string, any> | undefined,
+    successCode: 200 | 201,
+): Promise<T>;
+async function callFetch<T>(
+    service: SpotifyService,
+    method: string,
+    restUrl: string,
+    params: Record<string, any> | undefined,
+    successCode: 204,
+): Promise<undefined>;
+async function callFetch<T>(
+    service: SpotifyService,
+    method: string,
+    restUrl: string,
+    params?: Record<string, any>,
+): Promise<T | undefined>;
+async function callFetch<T>(
+    service: SpotifyService,
+    method: string,
+    restUrl: string,
+    params?: Record<string, any>,
+    successCode?: 200 | 201 | 204,
+): Promise<T | undefined> {
+    const options: RequestInit = {
+        method,
         headers: {
             Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
         },
     };
 
-    const url = getUrlWithParams(restUrl, params);
-    try {
-        const spotifyResult = await axios.get(url, config);
-        debugSpotifyRest(`${restUrl}`, spotifyResult.data);
-        return spotifyResult.data as T;
-    } catch (e) {
-        translateAxiosError(e, url);
+    let url = restUrl;
+
+    if (params !== undefined) {
+        if (method === "GET") {
+            url = getUrlWithParams(restUrl, params);
+        } else {
+            options.body = JSON.stringify(params);
+        }
     }
-    return undefined;
+    try {
+        const result = await fetch(url, options);
+        if (result === undefined) {
+            throw new Error("No response");
+        }
+        debugSpotifyRest(`${restUrl}`, result.status, result.statusText);
+        if (result.ok) {
+            if (successCode === 204) {
+                // pretend we didn't get any data if we expected 204
+                return undefined;
+            }
+            if (successCode === undefined || result.status === successCode) {
+                // spotify only using 200, 201 and 204
+                switch (result.status) {
+                    case 200:
+                    case 201:
+                        const content = await result.text();
+                        if (content === "") {
+                            return {} as T;
+                        }
+                        return JSON.parse(content) as T;
+                    case 204:
+                        return undefined;
+                }
+            }
+        }
+
+        throw await createFetchError(`${method} ${url} failed`, result);
+    } catch (e: any) {
+        const errorStr = `fetch error: ${e.cause?.message ?? e.message}`;
+        debugSpotifyRest(errorStr);
+        throw new Error(errorStr);
+    }
+}
+
+async function fetchGet<T>(
+    service: SpotifyService,
+    restUrl: string,
+    params?: Record<string, any>,
+): Promise<T> {
+    return callFetch<T>(service, "GET", restUrl, params, 200);
+}
+
+async function fetchGetAllowEmptyResult<T>(
+    service: SpotifyService,
+    restUrl: string,
+    params?: Record<string, any>,
+): Promise<T | undefined> {
+    return callFetch<T>(service, "GET", restUrl, params);
+}
+
+async function fetchPutEmptyResult(
+    service: SpotifyService,
+    restUrl: string,
+    params?: Record<string, any>,
+): Promise<void> {
+    // All the put call expects a 204 response
+    await callFetch(service, "PUT", restUrl, params, 204);
+}
+
+async function fetchPost<T>(
+    service: SpotifyService,
+    restUrl: string,
+    params?: Record<string, any>,
+): Promise<T> {
+    return callFetch<T>(service, "POST", restUrl, params, 201);
+}
+
+async function fetchPostEmptyResult(
+    service: SpotifyService,
+    restUrl: string,
+    params?: Record<string, any>,
+): Promise<void> {
+    await callFetch(service, "POST", restUrl, params, 204);
+}
+
+async function fetchDelete<T>(
+    service: SpotifyService,
+    restUrl: string,
+): Promise<T> {
+    // All the delete call expects a 200 response
+    return callFetch<T>(service, "DELETE", restUrl, undefined, 200);
 }
 
 export async function getFavoriteAlbums(service: SpotifyService, k = limitMax) {
     const get = async (limit: number, offset: number) =>
-        callRestAPI<SpotifyApi.UsersSavedAlbumsResponse>(
+        fetchGet<SpotifyApi.UsersSavedAlbumsResponse>(
             service,
             "https://api.spotify.com/v1/me/albums",
             {
@@ -102,7 +191,7 @@ export async function getFavoriteAlbums(service: SpotifyService, k = limitMax) {
 
 export async function getFavoriteTracks(service: SpotifyService, k = limitMax) {
     const get = async (limit: number, offset: number) =>
-        callRestAPI<SpotifyApi.UsersSavedTracksResponse>(
+        fetchGet<SpotifyApi.UsersSavedTracksResponse>(
             service,
             "https://api.spotify.com/v1/me/tracks",
             {
@@ -115,7 +204,7 @@ export async function getFavoriteTracks(service: SpotifyService, k = limitMax) {
 
 export async function getTopUserArtists(service: SpotifyService, k = limitMax) {
     const get = async (limit: number, offset: number) =>
-        callRestAPI<SpotifyApi.UsersTopArtistsResponse>(
+        fetchGet<SpotifyApi.UsersTopArtistsResponse>(
             service,
             "https://api.spotify.com/v1/me/top/artists",
             {
@@ -128,7 +217,7 @@ export async function getTopUserArtists(service: SpotifyService, k = limitMax) {
 
 export async function getTopUserTracks(service: SpotifyService, k = limitMax) {
     const get = async (limit: number, offset: number) =>
-        callRestAPI<SpotifyApi.UsersTopTracksResponse>(
+        fetchGet<SpotifyApi.UsersTopTracksResponse>(
             service,
             "https://api.spotify.com/v1/me/top/tracks",
             {
@@ -181,7 +270,7 @@ export async function getFollowedArtists(
             param.after = after;
         }
         const response =
-            await callRestAPI<SpotifyApi.UsersFollowedArtistsResponse>(
+            await fetchGet<SpotifyApi.UsersFollowedArtistsResponse>(
                 service,
                 "https://api.spotify.com/v1/me/following",
                 param,
@@ -194,7 +283,7 @@ export async function getFollowedArtists(
 
 export async function getRecentlyPlayed(service: SpotifyService, k = limitMax) {
     const get = async (limit: number, after: string | undefined) =>
-        callRestAPI<SpotifyApi.UsersRecentlyPlayedTracksResponse>(
+        fetchGet<SpotifyApi.UsersRecentlyPlayedTracksResponse>(
             service,
             "https://api.spotify.com/v1/me/player/recently-played",
             after
@@ -208,118 +297,37 @@ export async function getRecentlyPlayed(service: SpotifyService, k = limitMax) {
 }
 
 export async function getArtist(service: SpotifyService, id: string) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
     const artistsUrl = `https://api.spotify.com/v1/artists/${encodeURIComponent(id)}`;
-
-    try {
-        const spotifyResult = await axios.get(artistsUrl, config);
-
-        return spotifyResult.data as SpotifyApi.SingleArtistResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.SingleArtistResponse>(service, artistsUrl);
 }
 
 export async function getArtists(service: SpotifyService, ids: string[]) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
-    const artistsUrl = getUrlWithParams("https://api.spotify.com/v1/artists", {
-        ids,
-    });
-    try {
-        const spotifyResult = await axios.get(artistsUrl, config);
-
-        return spotifyResult.data as SpotifyApi.MultipleArtistsResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.MultipleArtistsResponse>(
+        service,
+        "https://api.spotify.com/v1/artists",
+        { ids },
+    );
 }
 
 export async function getArtistTopTracks(service: SpotifyService, id: string) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
-    const artistsUrl = `https://api.spotify.com/v1/artists/${encodeURIComponent(id)}/top-tracks`;
-    try {
-        const spotifyResult = await axios.get(artistsUrl, config);
-        return spotifyResult.data as SpotifyApi.ArtistsTopTracksResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
-}
-
-export async function getHistoryURL(service: SpotifyService, url: string) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
-    console.log(url);
-    try {
-        const spotifyResult = await axios.get(url, config);
-
-        const spotData =
-            spotifyResult.data as SpotifyApi.UsersRecentlyPlayedTracksResponse;
-        return spotData;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.ArtistsTopTracksResponse>(
+        service,
+        `https://api.spotify.com/v1/artists/${encodeURIComponent(id)}/top-tracks`,
+    );
 }
 
 export async function getUserProfile(service: SpotifyService) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const spotifyResult = await axios.get(
-            "https://api.spotify.com/v1/me",
-            config,
-        );
-
-        return spotifyResult.data as SpotifyApi.UserProfileResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.UserProfileResponse>(
+        service,
+        "https://api.spotify.com/v1/me",
+    );
 }
 
 export async function getPlaybackState(service: SpotifyService) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const spotifyResult = await axios.get(
-            "https://api.spotify.com/v1/me/player",
-            config,
-        );
-
-        return spotifyResult.data as SpotifyApi.CurrentPlaybackResponse;
-    } catch (e) {
-        const msg = translateAxiosErrorNoThrow(e);
-        console.log(`getPlaybackState caught axios error: ${msg}`);
-    }
-    return undefined;
+    return fetchGetAllowEmptyResult<SpotifyApi.CurrentPlaybackResponse>(
+        service,
+        "https://api.spotify.com/v1/me/player",
+    );
 }
 
 export async function transferPlayback(
@@ -327,22 +335,12 @@ export async function transferPlayback(
     deviceId: string,
     play = false,
 ) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    const xferUrl = "https://api.spotify.com/v1/me/player/";
-
     const params = { device_ids: [deviceId], play };
-    try {
-        const spotifyResult = await axios.put(xferUrl, params, config);
-
-        return spotifyResult.data;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    await fetchPutEmptyResult(
+        service,
+        "https://api.spotify.com/v1/me/player/",
+        params,
+    );
 }
 
 export async function play(
@@ -353,11 +351,6 @@ export async function play(
     trackNumber?: number,
     seekms?: number,
 ) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
     const smallTrack: SpotifyApi.PlayParameterObject = {};
     if (contextUri) {
         smallTrack.context_uri = contextUri;
@@ -374,93 +367,37 @@ export async function play(
         "https://api.spotify.com/v1/me/player/play",
         { device_id: deviceId },
     );
-    try {
-        const spotifyResult = await axios.put(playUrl, smallTrack, config);
-
-        return spotifyResult.data;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    await fetchPutEmptyResult(service, playUrl, smallTrack);
 }
 
 export async function getDevices(service: SpotifyService) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
-    try {
-        const spotifyResult = await axios.get(
-            "https://api.spotify.com/v1/me/player/devices",
-            config,
-        );
-
-        return spotifyResult.data as SpotifyApi.UserDevicesResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.UserDevicesResponse>(
+        service,
+        "https://api.spotify.com/v1/me/player/devices",
+    );
 }
 
 export async function pause(service: SpotifyService, deviceId: string) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
     const pauseUrl = getUrlWithParams(
         "https://api.spotify.com/v1/me/player/pause",
         { device_id: deviceId },
     );
-    try {
-        const spotifyResult = await axios.put(pauseUrl, {}, config);
-
-        return spotifyResult.data;
-    } catch (e) {
-        translateAxiosError(e);
-    }
+    return fetchPutEmptyResult(service, pauseUrl);
 }
 
 export async function getQueue(service: SpotifyService) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const spotifyResult = await axios.get(
-            `https://api.spotify.com/v1/me/player/queue?limit=50`,
-            config,
-        );
-
-        return spotifyResult.data as SpotifyApi.UsersQueueResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.UsersQueueResponse>(
+        service,
+        "https://api.spotify.com/v1/me/player/queue",
+        { limit: 50 },
+    );
 }
 
 export async function previous(service: SpotifyService, deviceId: string) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const spotifyResult = await axios.post(
-            `https://api.spotify.com/v1/me/player/previous?device_id=${deviceId}`,
-            {},
-            config,
-        );
-
-        return spotifyResult.data;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchPostEmptyResult(
+        service,
+        `https://api.spotify.com/v1/me/player/previous?device_id=${deviceId}`,
+    );
 }
 
 export async function shuffle(
@@ -468,160 +405,74 @@ export async function shuffle(
     deviceId: string,
     newShuffleState: boolean,
 ) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const spotifyResult = await axios.put(
-            `https://api.spotify.com/v1/me/player/shuffle?state=${newShuffleState}&device_id=${deviceId}`,
-            {},
-            config,
-        );
-
-        return spotifyResult.data;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    const url = getUrlWithParams(
+        "https://api.spotify.com/v1/me/player/shuffle",
+        { state: newShuffleState, device_id: deviceId },
+    );
+    return fetchPutEmptyResult(service, url);
 }
 
 export async function next(service: SpotifyService, deviceId: string) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const spotifyResult = await axios.post(
-            `https://api.spotify.com/v1/me/player/next?device_id=${deviceId}`,
-            {},
-            config,
-        );
-
-        return spotifyResult.data;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchPostEmptyResult(
+        service,
+        `https://api.spotify.com/v1/me/player/next?device_id=${deviceId}`,
+    );
 }
 
 export async function getPlaylists(service: SpotifyService) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const getUri = "https://api.spotify.com/v1/me/playlists";
-        const spotifyResult = await axios.get(getUri, config);
-
-        return spotifyResult.data as SpotifyApi.ListOfCurrentUsersPlaylistsResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.ListOfCurrentUsersPlaylistsResponse>(
+        service,
+        "https://api.spotify.com/v1/me/playlists",
+    );
 }
 
 export async function getAlbum(
     service: SpotifyService,
     id: string,
 ): Promise<SpotifyApi.SingleAlbumResponse | undefined> {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
-    const albumUrl = `https://api.spotify.com/v1/albums/${encodeURIComponent(id)}`;
-    try {
-        const spotifyResult = await axios.get(albumUrl, config);
-        return spotifyResult.data as SpotifyApi.SingleAlbumResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
+    return fetchGet<SpotifyApi.SingleAlbumResponse>(
+        service,
+        `https://api.spotify.com/v1/albums/${encodeURIComponent(id)}`,
+    );
 }
 
 export async function getAlbums(
     service: SpotifyService,
     ids: string[],
 ): Promise<SpotifyApi.MultipleAlbumsResponse | undefined> {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
-    const artistsUrl = getUrlWithParams("https://api.spotify.com/v1/albums", {
-        ids,
-    });
-    try {
-        const spotifyResult = await axios.get(artistsUrl, config);
-        return spotifyResult.data as SpotifyApi.MultipleAlbumsResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
+    return fetchGet<SpotifyApi.MultipleAlbumsResponse>(
+        service,
+        "https://api.spotify.com/v1/albums",
+        { ids },
+    );
 }
 
 export async function getAlbumTracks(service: SpotifyService, albumId: string) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const getUri = `https://api.spotify.com/v1/albums/${encodeURIComponent(
-            albumId,
-        )}/tracks`;
-        const spotifyResult = await axios.get(getUri, config);
-
-        return spotifyResult.data as SpotifyApi.AlbumTracksResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.AlbumTracksResponse>(
+        service,
+        `https://api.spotify.com/v1/albums/${encodeURIComponent(albumId)}/tracks`,
+    );
 }
 
 export async function getTrack(
     service: SpotifyService,
     id: string,
 ): Promise<SpotifyApi.SingleTrackResponse | undefined> {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
-    const albumUrl = `https://api.spotify.com/v1/tracks/${encodeURIComponent(id)}`;
-    try {
-        const spotifyResult = await axios.get(albumUrl, config);
-        return spotifyResult.data as SpotifyApi.SingleTrackResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
+    return fetchGet<SpotifyApi.SingleTrackResponse>(
+        service,
+        `https://api.spotify.com/v1/tracks/${encodeURIComponent(id)}`,
+    );
 }
 
 export async function getTracksFromIdsBatch(
     service: SpotifyService,
     trackIds: string[],
 ) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const getUri = `https://api.spotify.com/v1/tracks/?ids=${trackIds.join(
-            ",",
-        )}`;
-        const spotifyResult = await axios.get(getUri, config);
-
-        return spotifyResult.data as SpotifyApi.MultipleTracksResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.MultipleTracksResponse>(
+        service,
+        "https://api.spotify.com/v1/tracks",
+        { ids: trackIds },
+    );
 }
 
 // get tracks from ids 100 ids at a time
@@ -647,44 +498,18 @@ export async function getPlaylistTracks(
     service: SpotifyService,
     playlistId: string,
 ) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const getUri = `https://api.spotify.com/v1/playlists/${encodeURIComponent(
-            playlistId,
-        )}/tracks`;
-        const spotifyResult = await axios.get(getUri, config);
-
-        return spotifyResult.data as SpotifyApi.PlaylistTrackResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    return fetchGet<SpotifyApi.PlaylistTrackResponse>(
+        service,
+        `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/tracks`,
+    );
 }
 
 export async function deletePlaylist(
     service: SpotifyService,
     playlistId: string,
 ) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const deleteUri = `https://api.spotify.com/v1/playlists/${encodeURIComponent(
-            playlistId,
-        )}/followers`;
-        const spotifyResult = await axios.delete(deleteUri, config);
-
-        return spotifyResult.data as SpotifyApi.UnfollowPlaylistResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    const url = `https://api.spotify.com/v1/playlists/${encodeURIComponent(playlistId)}/followers`;
+    return fetchDelete<SpotifyApi.UnfollowPlaylistResponse>(service, url);
 }
 
 export async function createPlaylist(
@@ -694,52 +519,25 @@ export async function createPlaylist(
     uris: string[],
     description = "",
 ) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-    try {
-        const createUri = `https://api.spotify.com/v1/users/${userId}/playlists`;
-        const spotifyResult = await axios.post(
-            createUri,
-            { name, public: false, description },
-            config,
-        );
-        const playlistResponse =
-            spotifyResult.data as SpotifyApi.CreatePlaylistResponse;
-        const addTracksResult = await axios.post(
-            `https://api.spotify.com/v1/playlists/${playlistResponse.id}/tracks`,
-            { uris },
-            config,
-        );
-        return addTracksResult.data as SpotifyApi.AddTracksToPlaylistResponse;
-    } catch (e) {
-        translateAxiosError(e);
-    }
-    return undefined;
+    const createUri = `https://api.spotify.com/v1/users/${userId}/playlists`;
+    const playlistResponse = await fetchPost<SpotifyApi.CreatePlaylistResponse>(
+        service,
+        createUri,
+        { name, public: false, description },
+    );
+    return fetchPost<SpotifyApi.AddTracksToPlaylistResponse>(
+        service,
+        `https://api.spotify.com/v1/playlists/${playlistResponse.id}/tracks`,
+        { uris },
+    );
 }
 
 export async function setVolume(service: SpotifyService, amt = limitMax) {
-    const config = {
-        headers: {
-            Authorization: `Bearer ${await service.tokenProvider.getAccessToken()}`,
-        },
-    };
-
     const volumeUrl = getUrlWithParams(
         "https://api.spotify.com/v1/me/player/volume?volume_percent",
-        {
-            volume_percent: amt,
-        },
+        { volume_percent: amt },
     );
-    try {
-        const spotifyResult = await axios.put(volumeUrl, {}, config);
-
-        return spotifyResult.data;
-    } catch (e) {
-        translateAxiosError(e);
-    }
+    return fetchPutEmptyResult(service, volumeUrl);
 }
 
 function getUrlWithParams(urlString: string, queryParams: Record<string, any>) {

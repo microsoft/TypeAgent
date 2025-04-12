@@ -48,6 +48,9 @@ export const webapi: ClientAPI = {
     saveSettings: () => {
         // not supported on mobile
     },
+    openFolder: () => {
+        // not supported on mobile
+    },
 };
 
 const dispatcherChannel = createGenericChannel((message: any) =>

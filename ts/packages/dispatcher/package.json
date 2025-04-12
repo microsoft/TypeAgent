@@ -48,6 +48,7 @@
     "file-size": "^1.0.0",
     "glob": "^10.3.12",
     "knowledge-processor": "workspace:*",
+    "open": "^10.1.0",
     "proper-lockfile": "^4.1.2",
     "string-width": "^7.2.0",
     "telemetry": "workspace:*",

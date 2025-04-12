@@ -34,7 +34,7 @@ type ChannelData = {
 };
 
 export type ChannelProvider = {
-    createChannel(name: string): RpcChannel;
+    createChannel<T = any>(name: string): RpcChannel<T>;
     deleteChannel(name: string): void;
 };
 export type GenericChannelProvider = ChannelProvider & {

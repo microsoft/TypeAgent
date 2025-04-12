@@ -9,6 +9,7 @@ import {
     dialog,
     session,
     WebContentsView,
+    shell,
 } from "electron";
 import path, { join } from "node:path";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
@@ -242,6 +243,8 @@ async function initializeDispatcher(
 
         setupQuit(dispatcher);
 
+        shellWindow.dispatcherInitialized();
+
         // Dispatcher is ready to be called from the client, but we need to wait for the dom to be ready to start
         // using it to process command, so that the client can receive messages.
         debugShell("Dispatcher initialized", performance.now() - time);
@@ -318,6 +321,10 @@ async function initializeInstance(shellSettings: ShellSettings) {
                 chatView.webContents.send("file-selected", paths[0], content);
             }
         }
+    });
+
+    ipcMain.on("open-folder", async (_event, path: string) => {
+        shell.openPath(path);
     });
 
     return shellWindow.waitForContentLoaded();

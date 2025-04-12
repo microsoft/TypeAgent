@@ -1130,6 +1130,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.0(supports-color@8.1.1)
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
@@ -1143,6 +1146,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -1410,9 +1416,6 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      axios:
-        specifier: ^1.8.2
-        version: 1.8.2(debug@4.4.0)
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -1820,6 +1823,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      open:
+        specifier: ^10.1.0
+        version: 10.1.0
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@20.17.28)(typescript@5.4.5)
@@ -1848,9 +1854,6 @@ importers:
 
   packages/coda:
     dependencies:
-      axios:
-        specifier: ^1.8.2
-        version: 1.8.2(debug@4.4.0)
       body-parser:
         specifier: ^1.20.3
         version: 1.20.3
@@ -2203,6 +2206,9 @@ importers:
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor
+      open:
+        specifier: ^10.1.0
+        version: 10.1.0
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
@@ -5116,9 +5122,6 @@ packages:
   available-typed-arrays@1.0.7:
     resolution: {integrity: sha512-wvUjBtSGN7+7SjNpq/9M2Tg350UZD3q62IFZLbRAR1bSMlCo1ZaeW+BJ+D090e4hIIZLBcTDWe4Mh4jvUDajzQ==}
     engines: {node: '>= 0.4'}
-
-  axios@1.8.2:
-    resolution: {integrity: sha512-ls4GYBm5aig9vWx8AWDSGLpnpDQRtWAfrjU+EuytuODrFBkqesN2RkOQCBzrA1RQNHw1SmRMSDDDSwzNAYQ6Rg==}
 
   azure-devops-node-api@12.5.0:
     resolution: {integrity: sha512-R5eFskGvOm3U/GzeAuxRkUsAl0hrAwGgWn6zAd2KrZmrEhWZVqLew4OOupbQlXUuojUzpGtq62SmdhJ06N88og==}
@@ -12956,14 +12959,6 @@ snapshots:
   available-typed-arrays@1.0.7:
     dependencies:
       possible-typed-array-names: 1.0.0
-
-  axios@1.8.2(debug@4.4.0):
-    dependencies:
-      follow-redirects: 1.15.9(debug@4.4.0)
-      form-data: 4.0.2
-      proxy-from-env: 1.1.0
-    transitivePeerDependencies:
-      - debug
 
   azure-devops-node-api@12.5.0:
     dependencies:

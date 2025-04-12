@@ -18,6 +18,7 @@ import stringWidth from "string-width";
 import { createInterface } from "readline/promises";
 import fs from "fs";
 import readline from "readline";
+import open from "open";
 
 function displayPadEnd(content: string, length: number): string {
     // Account for full width characters
@@ -184,6 +185,11 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
         },
         // Host specific (TODO: Formalize the API)
         takeAction(action: string, data: unknown): void {
+            if (action === "open-folder") {
+                open(data as string);
+                return;
+            }
+
             throw new Error(`Action ${action} not supported`);
         },
     };
