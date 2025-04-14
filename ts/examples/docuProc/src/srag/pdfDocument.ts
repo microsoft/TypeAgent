@@ -9,36 +9,60 @@ import {
     IndexingEventHandlers,
     IndexingResults,
     buildConversationIndex,
+    ConversationSecondaryIndexes,
     //MessageTextIndex,
     writeConversationDataToFile,
     readConversationDataFromFile,
-    buildTransientSecondaryIndexes,
+    //addMessageKnowledgeToSemanticRefIndex,
+    //buildTransientSecondaryIndexes,
     //Term,
     IConversationDataWithIndexes,
 } from "knowpro";
 import {
     conversation as kpLib,
+    createEmbeddingCache,
     TextEmbeddingModelWithCache,
 } from "knowledge-processor";
 
-//import { openai, TextEmbeddingModel } from "aiclient";
+import { openai } from "aiclient";
 
 import registerDebug from "debug";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");
 ////import { interactiveRagOnDocQueryLoop } from "../pdfQNAInteractiveApp.js";
 
 export class PdfChunkMessageMeta implements IKnowledgeSource {
-
-    public pageid: string | undefined;
+    public docChunkId: string = "";
+    public pageNumber: string = "";
     public topics: string[] | undefined;
 
     constructor() {}
 
     getKnowledge() {
         const entities: kpLib.ConcreteEntity[] = [];
+        const actions: kpLib.Action[] = [];
+        const docChunkEntity: kpLib.ConcreteEntity = {
+            name: this.docChunkId,
+            type: ["chunk"],
+            facets: [
+                { name: "Section Title", value: "Header 1" },
+                { name: "Page NUmber", value: "1" },
+            ],
+        };
+        const chunkInPageAction: kpLib.Action = {
+            verbs: ["within", "in"],
+            verbTense: "present",
+            subjectEntityName: "Page Number",
+            objectEntityName: docChunkEntity.name,
+            indirectObjectEntityName: "none",
+            subjectEntityFacet: undefined,
+        };
+
+        entities.push(docChunkEntity);
+        actions.push(chunkInPageAction);
+
         return {
             entities,
-            actions: [],
+            actions,
             inverseActions: [],
             topics: [],
         };
@@ -68,24 +92,31 @@ export class PdfChunkMessage implements IMessage {
 export class PdfDocument implements IConversation<PdfChunkMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
-    public semanticRefs: SemanticRef[];
-
+    public secondaryIndexes: ConversationSecondaryIndexes;
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
 
     constructor(
         public nameTag: string = "",
         public messages: PdfChunkMessage[] = [],
         public tags: string[] = [],
-        settings?: ConversationSettings,
+        public semanticRefs: SemanticRef[] = [],
     ) {
-        this.semanticRefs = [];
-        if (settings === undefined) {
-            this.settings = createConversationSettings();
-        }
-        else {
-            this.settings = settings;
-        }
+        const [model, embeddingSize] = this.createEmbeddingModel();
+        this.embeddingModel = model;
+        this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
+        this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
+    }
+
+    private createEmbeddingModel(): [TextEmbeddingModelWithCache, number] {
+        return [
+            createEmbeddingCache(
+                openai.createEmbeddingModel(),
+                64,
+                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+            ),
+            1536,
+        ];
     }
 
     public async buildIndex(
@@ -101,14 +132,16 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
             //await this.buildTransientSecondaryIndexes(false);
             return result;
         } catch (ex) {
-            debugLogger(`Pdf Document ${this.nameTag} buildIndex failed\n${ex}`);
+            debugLogger(
+                `Pdf Document ${this.nameTag} buildIndex failed\n${ex}`,
+            );
             throw ex;
         } finally {
             this.endIndexing();
         }
     }
 
-    public async buildSecondaryIndexes(
+    /*public async buildSecondaryIndexes(
         eventHandler?: IndexingEventHandlers,
     ): Promise<void> {
         await this.buildTransientSecondaryIndexes(false);
@@ -123,7 +156,7 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
             await buildTransientSecondaryIndexes(this, this.settings);
         }
         //this.buildParticipantAliases();
-    }
+    }*/
 
     private beginIndexing(): void {
         if (this.embeddingModel) {
@@ -151,6 +184,9 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermsIndexData:
+                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
         };
         return data;
     }
@@ -194,12 +230,11 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
 
         if (pdfChunkData.relatedTermsIndexData) {
         }
-        
+
         if (pdfChunkData.messageIndexData) {
         }
-        await this.buildTransientSecondaryIndexes(true);
+        //await this.buildTransientSecondaryIndexes(true);
     }
 }
 export interface PdfChunkData
-    extends IConversationDataWithIndexes<PdfChunkMessage>{}
-
+    extends IConversationDataWithIndexes<PdfChunkMessage> {}
