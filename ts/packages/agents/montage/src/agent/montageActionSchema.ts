@@ -60,7 +60,7 @@ export type ChangeTitleAction = {
     };
 };
 
-// Removes the images the images that match the supplied criteria
+// Removes the images that match the supplied criteria
 export type RemovePhotosAction = {
     actionName: "removePhotos";
     parameters: {
