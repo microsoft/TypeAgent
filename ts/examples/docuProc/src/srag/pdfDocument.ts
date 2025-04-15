@@ -10,11 +10,11 @@ import {
     IndexingResults,
     buildConversationIndex,
     ConversationSecondaryIndexes,
-    //MessageTextIndex,
+    MessageTextIndex,
     writeConversationDataToFile,
     readConversationDataFromFile,
     //addMessageKnowledgeToSemanticRefIndex,
-    //buildTransientSecondaryIndexes,
+    buildTransientSecondaryIndexes,
     //Term,
     IConversationDataWithIndexes,
 } from "knowpro";
@@ -141,23 +141,6 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         }
     }
 
-    /*public async buildSecondaryIndexes(
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<void> {
-        await this.buildTransientSecondaryIndexes(false);
-        return;
-    }
-
-    private async buildTransientSecondaryIndexes(all: boolean): Promise<void> {
-        if (all) {
-            // Build transient secondary indexes associated with the conversation
-            // These are automatically build by calls to buildConversationIndex, but
-            // may need to get rebuilt when we deserialize persisted conversations
-            await buildTransientSecondaryIndexes(this, this.settings);
-        }
-        //this.buildParticipantAliases();
-    }*/
-
     private beginIndexing(): void {
         if (this.embeddingModel) {
             this.embeddingModel.cacheEnabled = false;
@@ -229,11 +212,21 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         }
 
         if (pdfChunkData.relatedTermsIndexData) {
+            this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
+                pdfChunkData.relatedTermsIndexData,
+            );
         }
 
         if (pdfChunkData.messageIndexData) {
+            this.secondaryIndexes.messageIndex = new MessageTextIndex(
+                this.settings.messageTextIndexSettings,
+            );
+            this.secondaryIndexes.messageIndex.deserialize(
+                pdfChunkData.messageIndexData,
+            );
         }
-        //await this.buildTransientSecondaryIndexes(true);
+
+        await buildTransientSecondaryIndexes(this, this.settings);
     }
 }
 export interface PdfChunkData
