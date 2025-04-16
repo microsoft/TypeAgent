@@ -71,6 +71,9 @@ export async function displaySuccess(
     displayMessage(message, context, "success");
 }
 
+/*
+* Displays a message without any adornment.
+*/
 export async function displayResult(
     message: MessageContent | LogFn,
     context: ActionContext<unknown>,

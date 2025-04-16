@@ -2191,9 +2191,15 @@ importers:
       glob:
         specifier: ^10.3.12
         version: 10.3.12
+      image-memory:
+        specifier: workspace:*
+        version: link:../memory/image
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor
+      knowpro:
+        specifier: workspace:*
+        version: link:../knowPro
       open:
         specifier: ^10.1.0
         version: 10.1.0

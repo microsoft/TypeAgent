@@ -4,6 +4,7 @@
 import {
     DeepPartialUndefined,
     DeepPartialUndefinedAndNull,
+    getFileExtensionForMimeType,
 } from "common-utils";
 import { CacheConfig, AgentCache, getDefaultExplainerName } from "agent-cache";
 import registerDebug from "debug";
@@ -25,6 +26,7 @@ import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import { ConstructionProvider } from "../agentProvider/agentProvider.js";
 import { MultipleActionConfig } from "../translation/multipleActionSchema.js";
+import { IndexData, IndexManager } from "./indexManager.js";
 
 const debugSession = registerDebug("typeagent:session");
 
@@ -221,6 +223,7 @@ type SessionData = {
     settings?: SessionSettings | undefined;
     cacheData: SessionCacheData;
     tokens?: TokenCounterData;
+    indexes?: IndexData[];
 };
 
 // Fill in missing fields when loading sessions from disk
@@ -315,6 +318,11 @@ export class Session {
         // rehydrate token stats
         if (sessionData.tokens) {
             TokenCounter.load(sessionData.tokens);
+        }
+
+        // rehydrate indexes
+        if (sessionData.indexes) {
+            IndexManager.load(sessionData.indexes);
         }
     }
 
@@ -447,6 +455,7 @@ export class Session {
                     : this.settings,
                 cacheData: this.cacheData,
                 tokens: TokenCounter.getInstance(),
+                indexes: IndexManager.getInstance().indexes,
             };
             debugSession(
                 `Saving session: ${getSessionName(this.sessionDirPath)}`,
@@ -472,7 +481,7 @@ export class Session {
         await fs.promises.mkdir(filesDir, { recursive: true });
 
         // get the extension for the  mime type for the supplied file
-        const fileExtension: string = this.getFileExtensionForMimeType(
+        const fileExtension: string = getFileExtensionForMimeType(
             file.substring(5, file.indexOf(";")),
         );
         const uniqueFileName: string = getUniqueFileName(
@@ -491,17 +500,6 @@ export class Session {
         fs.writeFile(fileName, buffer, () => {});
 
         return [uniqueFileName, tags];
-    }
-
-    getFileExtensionForMimeType(mime: string): string {
-        switch (mime) {
-            case "image/png":
-                return ".png";
-            case "image/jpeg":
-                return ".jpeg";
-        }
-
-        throw "Unsupported MIME type"!;
     }
 }
 
