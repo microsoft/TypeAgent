@@ -136,43 +136,55 @@ async function getRestaurantLinks(page: puppeteer.Page): Promise<string[]> {
     });
 }
 
-async function extractJsonLdData(page: puppeteer.Page): Promise<any[]> {
-    return await page.evaluate(() => {
-        return Array.from(
-            document.querySelectorAll('script[type="application/ld+json"]'),
-        )
-            .map((script) => {
-                try {
-                    return JSON.parse(script.textContent || "{}");
-                } catch (e) {
-                    return null;
+async function extractJsonLdData(page: puppeteer.Page): Promise<any | null> {
+    try {
+        const jsonLd = await page.$$eval('script[type="application/ld+json"]', nodes =>
+            nodes.map(n => n.textContent).filter(Boolean)
+        );
+
+        for (const json of jsonLd) {
+            try {
+                const parsed = JSON.parse(json!);
+                const entryType = parsed['@type'];
+                if (entryType === 'Restaurant' || entryType === "FoodEstablishment" || entryType === "LocalBusiness"|| entryType?.includes('Restaurant')) {
+                    return parsed;
                 }
-            })
-            .filter((data) => data !== null); // Remove invalid JSON entries
-    });
+            } catch {}
+        }
+    } catch (err) {
+        console.error("Error extracting schema:", err);
+    }
+    return null;
 }
 
-const BASE_URL =
-    "https://www.tripadvisor.com/Restaurants-g58541-Kirkland_Washington.html"; // Seattle restaurants
-const dirName = fileURLToPath(new URL(".", import.meta.url));
-const OUTPUT_FILE = path.join(dirName, "tripadvisor_restaurants.json");
-const numPages = 8; // Number of search result pages to scrape
+async function scrapePage(browser: puppeteer.Browser, url: string): Promise<any | null> {
+    const page = await browser.newPage();
+    try {
+        await page.goto(url, { waitUntil: "load" });
+        await page.waitForSelector('div[data-test-target="restaurants-detail"]', {
+            timeout: 5000
+        });
 
-(async () => {
-    await closeChrome();
-
-    const browser = await puppeteer.launch({
-        executablePath: getChromeExecutablePath(),
-        userDataDir: getChromeProfilePath(),
-        headless: false,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
-
+        const data = await extractJsonLdData(page);
+        if (data) {
+            data.url = url;
+            console.log(`Extracted data for ${url}`)
+        }
+        return data;
+    } catch (err) {
+        console.error(`Failed to scrape ${url}:`, err);
+        return null;
+    } finally {
+        await page.close();
+    }
+}
+ 
+async function runDiscoveryMode(browser: puppeteer.Browser, baseUrl: string, numPages:number, outputFile:string) {
     const page = await browser.newPage();
     let allRestaurantData: any[] = [];
 
     let currentPage = 1;
-    let nextPageUrl: string | null = BASE_URL;
+    let nextPageUrl: string | null = baseUrl;
 
     while (nextPageUrl && currentPage <= numPages) {
         console.log(`Scraping page: ${nextPageUrl}`);
@@ -191,25 +203,21 @@ const numPages = 8; // Number of search result pages to scrape
             console.log(`Waiting ${waitTime}ms before the next request...`);
             await delay(waitTime);
 
-            await page.goto(link, { waitUntil: "load" });
-
-            const jsonLdEntries = await extractJsonLdData(page);
+            const jsonLdData = await scrapePage(browser, link);
 
             // Check for duplicates before adding
-            jsonLdEntries.forEach((jsonLdData) => {
-                if (
-                    jsonLdData &&
-                    jsonLdData.name &&
-                    !allRestaurantData.some(
-                        (entry) => entry.name === jsonLdData.name,
-                    )
-                ) {
-                    console.log(`Adding: ${jsonLdData.name}`);
-                    allRestaurantData.push(jsonLdData);
-                } else {
-                    console.log(`Skipping duplicate: ${jsonLdData.name}`);
-                }
-            });
+            if (
+                jsonLdData &&
+                jsonLdData?.name &&
+                !allRestaurantData.some(
+                    (entry) => entry.name === jsonLdData.name,
+                )
+            ) {
+                console.log(`Adding: ${jsonLdData.name}`);
+                allRestaurantData.push(jsonLdData);
+            } else {
+                console.log(`Skipping duplicate: ${jsonLdData.name}`);
+            }        
         }
 
         // Find the "Next" button for pagination
@@ -233,8 +241,63 @@ const numPages = 8; // Number of search result pages to scrape
     console.log(`Scraped a total of ${allRestaurantData.length} restaurants.`);
 
     // Save the extracted data to a file
-    await fs.writeJson(OUTPUT_FILE, allRestaurantData, { spaces: 2 });
-    console.log(`Data saved to ${OUTPUT_FILE}`);
+    await fs.writeJson(outputFile, allRestaurantData, { spaces: 2 });
+    console.log(`Data saved to ${outputFile}`);
 
     await browser.close();
+}
+
+async function runDirectMode(browser: puppeteer.Browser, inputFile: string) {
+    const urls: string[] = fs.readJsonSync(inputFile);
+    const results: any[] = [];
+
+    for (const url of urls) {
+        const waitTime = getRandomDelay(2000, 3000);
+        console.log(`Waiting ${waitTime}ms before the next request...`);
+        await delay(waitTime);
+
+        const data = await scrapePage(browser, url);
+        if (data) results.push(data);
+    }
+
+    const outPath = path.join(path.dirname(inputFile), 'output_direct.json');
+    fs.writeJsonSync(outPath, results, { spaces: 2 });
+    console.log(`Saved ${results.length} entries to ${outPath}`);
+}
+
+(async () => {
+    const args = process.argv.slice(2);
+    const modeArg = args.find(arg => arg.startsWith('--mode='));
+    const mode = modeArg?.split('=')[1] || 'discovery';
+    const inputFile = args.find(arg => arg.endsWith('.json'));
+
+    await closeChrome();
+
+    const browser = await puppeteer.launch({
+        executablePath: getChromeExecutablePath(),
+        userDataDir: getChromeProfilePath(),
+        headless: false,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    try {
+        if (mode === 'direct') {
+            if (inputFile) {
+                await runDirectMode(browser, inputFile);
+            }else{
+                console.error('Please provide a JSON file of URLs for direct mode.');
+            }
+        } else {
+            const baseUrl = "https://www.tripadvisor.com/Restaurants-g58541-Kirkland_Washington.html";
+            const dirName = fileURLToPath(new URL(".", import.meta.url));
+            const outputFile = path.join(dirName, "tripadvisor_restaurants.json");
+            const numPages = 8;
+            await runDiscoveryMode(browser, baseUrl, numPages, outputFile);
+        }
+    } catch (error) {
+        console.error("An error occurred during scraping:", error);
+    } finally {
+        await browser.close();
+        console.log("Browser closed.");
+    }
 })();
