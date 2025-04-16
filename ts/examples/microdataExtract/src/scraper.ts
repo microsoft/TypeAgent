@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import puppeteer from "puppeteer";
+import puppeteer, { TimeoutError } from "puppeteer";
 import fs from "fs-extra";
 import { fileURLToPath } from "node:url";
 import path from "path";
@@ -138,15 +138,21 @@ async function getRestaurantLinks(page: puppeteer.Page): Promise<string[]> {
 
 async function extractJsonLdData(page: puppeteer.Page): Promise<any | null> {
     try {
-        const jsonLd = await page.$$eval('script[type="application/ld+json"]', nodes =>
-            nodes.map(n => n.textContent).filter(Boolean)
+        const jsonLd = await page.$$eval(
+            'script[type="application/ld+json"]',
+            (nodes) => nodes.map((n) => n.textContent).filter(Boolean),
         );
 
         for (const json of jsonLd) {
             try {
                 const parsed = JSON.parse(json!);
-                const entryType = parsed['@type'];
-                if (entryType === 'Restaurant' || entryType === "FoodEstablishment" || entryType === "LocalBusiness"|| entryType?.includes('Restaurant')) {
+                const entryType = parsed["@type"];
+                if (
+                    entryType === "Restaurant" ||
+                    entryType === "FoodEstablishment" ||
+                    entryType === "LocalBusiness" ||
+                    entryType?.includes("Restaurant")
+                ) {
                     return parsed;
                 }
             } catch {}
@@ -157,29 +163,46 @@ async function extractJsonLdData(page: puppeteer.Page): Promise<any | null> {
     return null;
 }
 
-async function scrapePage(browser: puppeteer.Browser, url: string): Promise<any | null> {
+async function scrapePage(
+    browser: puppeteer.Browser,
+    url: string,
+): Promise<any | null> {
     const page = await browser.newPage();
     try {
         await page.goto(url, { waitUntil: "load" });
-        await page.waitForSelector('div[data-test-target="restaurants-detail"]', {
-            timeout: 5000
-        });
+        await page.waitForSelector(
+            'div[data-test-target="restaurants-detail"]',
+            {
+                timeout: 5000,
+            },
+        );
 
         const data = await extractJsonLdData(page);
         if (data) {
             data.url = url;
-            console.log(`Extracted data for ${url}`)
+            console.log(`Extracted data for ${url}`);
         }
         return data;
     } catch (err) {
-        console.error(`Failed to scrape ${url}:`, err);
+        if (err instanceof TimeoutError) {
+            console.error(
+                "Custom Message: Element did not appear within 10 seconds.",
+            );
+        } else {
+            console.error(`Failed to scrape ${url}:`, err);
+        }
         return null;
     } finally {
         await page.close();
     }
 }
- 
-async function runDiscoveryMode(browser: puppeteer.Browser, baseUrl: string, numPages:number, outputFile:string) {
+
+async function runDiscoveryMode(
+    browser: puppeteer.Browser,
+    baseUrl: string,
+    numPages: number,
+    outputFile: string,
+) {
     const page = await browser.newPage();
     let allRestaurantData: any[] = [];
 
@@ -217,7 +240,7 @@ async function runDiscoveryMode(browser: puppeteer.Browser, baseUrl: string, num
                 allRestaurantData.push(jsonLdData);
             } else {
                 console.log(`Skipping duplicate: ${jsonLdData.name}`);
-            }        
+            }
         }
 
         // Find the "Next" button for pagination
@@ -260,16 +283,16 @@ async function runDirectMode(browser: puppeteer.Browser, inputFile: string) {
         if (data) results.push(data);
     }
 
-    const outPath = path.join(path.dirname(inputFile), 'output_direct.json');
+    const outPath = path.join(path.dirname(inputFile), "output_direct.json");
     fs.writeJsonSync(outPath, results, { spaces: 2 });
     console.log(`Saved ${results.length} entries to ${outPath}`);
 }
 
 (async () => {
     const args = process.argv.slice(2);
-    const modeArg = args.find(arg => arg.startsWith('--mode='));
-    const mode = modeArg?.split('=')[1] || 'discovery';
-    const inputFile = args.find(arg => arg.endsWith('.json'));
+    const modeArg = args.find((arg) => arg.startsWith("--mode="));
+    const mode = modeArg?.split("=")[1] || "discovery";
+    const inputFile = args.find((arg) => arg.endsWith(".json"));
 
     await closeChrome();
 
@@ -281,16 +304,22 @@ async function runDirectMode(browser: puppeteer.Browser, inputFile: string) {
     });
 
     try {
-        if (mode === 'direct') {
+        if (mode === "direct") {
             if (inputFile) {
                 await runDirectMode(browser, inputFile);
-            }else{
-                console.error('Please provide a JSON file of URLs for direct mode.');
+            } else {
+                console.error(
+                    "Please provide a JSON file of URLs for direct mode.",
+                );
             }
         } else {
-            const baseUrl = "https://www.tripadvisor.com/Restaurants-g58541-Kirkland_Washington.html";
+            const baseUrl =
+                "https://www.tripadvisor.com/Restaurants-g58541-Kirkland_Washington.html";
             const dirName = fileURLToPath(new URL(".", import.meta.url));
-            const outputFile = path.join(dirName, "tripadvisor_restaurants.json");
+            const outputFile = path.join(
+                dirName,
+                "tripadvisor_restaurants.json",
+            );
             const numPages = 8;
             await runDiscoveryMode(browser, baseUrl, numPages, outputFile);
         }
