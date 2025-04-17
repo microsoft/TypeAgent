@@ -17,7 +17,8 @@ class IndexListCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
 
-        if (systemContext.indexManager.indexes.length > 0) {
+        const indexes = systemContext.indexManager.indexes;
+        if (indexes.length > 0) {
             systemContext.indexManager.indexes.forEach((index: IndexData) => {
                 displayResult(`Index: ${index.name}, Type: ${index.source}, Location: ${index.location}, Items: ${index.size}`, context);
             });

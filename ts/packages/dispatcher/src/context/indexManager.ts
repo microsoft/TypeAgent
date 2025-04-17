@@ -17,9 +17,10 @@ export type IndexSource = "image" | "email";
 export type IndexData = {
     source: IndexSource,// the data source of the index
     name: string,       // the name of the index 
-    location: string    // the location that has been index
-    size: number        // the # of items in the index
-    path: string        // the path to the index
+    location: string,    // the location that has been index
+    size: number,        // the # of items in the index
+    path: string,        // the path to the index
+    state: "new" | "running" | "finished" | "stopped" | "error" // the state of the indexing service for this index
 }
 
 /*
@@ -27,16 +28,11 @@ export type IndexData = {
 */
 export class IndexManager {
     private static instance: IndexManager;
-    private idx: IndexData[] = [];
-    private indexingServicePromise: Promise<ChildProcess | undefined> | undefined;
-    private indexingService: ChildProcess | undefined;
+    private indexingServices: Map<IndexData, ChildProcess | undefined> = new Map<IndexData, ChildProcess | undefined>();
 
     public static getInstance = (): IndexManager => {
         if (!IndexManager.instance) {
             IndexManager.instance = new IndexManager();
-
-            // spin up the indexing service
-            IndexManager.instance.indexingServicePromise = IndexManager.startIndexingService();
         }
         return IndexManager.instance;
     }
@@ -45,25 +41,31 @@ export class IndexManager {
     * Loads the supplied indexes
     */
     public static load(indexesToLoad: IndexData[]) {
-        this.getInstance().idx = indexesToLoad;
+        indexesToLoad.map((value) => {
 
-        // TODO: parse, get their status, resume indexing, setup monitors, etc.
+            // TODO: does this index need to be updated
+            // if so start a new indexing service and save it here
+
+            // TODO: parse, get their status, resume indexing, setup monitors, etc.
+
+            this.getInstance().indexingServices.set(value, undefined);
+        });
     }
 
     /*
     * Gets the available indexes
     */
     public get indexes(): IndexData[] {
-        return this.idx;
+        const indexes: IndexData[] = [];
+        this.indexingServices.forEach((cp, key) => indexes.push(key));
+
+        return indexes;
     }
 
     /*
     * Creates the the index with the supplied settings
     */
     public async createIndex(name: string, source: IndexSource, location: string): Promise<boolean> {
-
-        // make sure we're loaded
-        this.indexingService = await Promise.resolve(this.indexingServicePromise);
 
         // spin up the correct indexer based on the request
         switch (source) {
@@ -89,32 +91,43 @@ export class IndexManager {
 
         const folder = await ensureDir(getUniqueFileName(path.join(getInstanceSessionsDirPath(), "indexes", "image")));
 
-        this.idx.push({
+        const index: IndexData = {
             source: "image",
             name,
             location,
             size: 0,
-            path: folder
-        });
+            path: folder,
+            state: "new"
+        };
 
         // TODO: start indexing
-        this.indexingService?.send({ start: true });
+        this.startIndexingService(index);
+        // .then((childProc: ChildProcess | undefined) => {
+        //     this.indexingServices.set(index, childProc);
+        //     childProc?.send(index);
+        // });
     }
 
     public deleteIndex(name: string): boolean {
         
         // TODO: stop indexing
+        this.indexingServices.forEach((childProc, index) => {
+            if (index.name == name) {
+                // kill the index process
+                childProc?.kill();
 
-        this.idx.filter((index: IndexData) => index.name === name).forEach((index: IndexData) => {
-            this.idx.splice(this.idx.indexOf(index), 1);
+                // remove the index from the list of indexes
+                this.indexingServices.delete(index);
 
-            fs.promises.rm(index.path, { recursive: true, force: true }).catch((reason) => debug(reason));
+                // remove the folder where the index is stored
+                fs.promises.rm(index.path, { recursive: true, force: true }).catch((reason) => debug(reason));                
+            }
         });
 
         return true;
     }
 
-    private static startIndexingService(): Promise<ChildProcess | undefined> {
+    private startIndexingService(index: IndexData): Promise<ChildProcess | undefined> {
         return new Promise<ChildProcess | undefined>(
             (resolve, reject) => {
                 try {
@@ -123,21 +136,19 @@ export class IndexManager {
     
                     childProcess.on("message", function (message) {
                         if (message === "Success") {
+                            childProcess.send(index);
                             resolve(childProcess);
                         } else if (message === "Failure") {
+                            index.state = "error";
                             resolve(undefined);
                         } else {
 
-                            // const mon: PhotoMontage | undefined =
-                            //     message as PhotoMontage;
-                            // if (mon) {
-                            //     montageUpdatedCallback(mon);
-                            // }
+                            // TODO: handle index progres/status updates
                         }
                     });
     
                     childProcess.on("exit", (code) => {
-                        debug("Montage view server exited with code:", code);
+                        debug(`Index service ${index.name} exited with code:`, code);
                     });
                 } catch (e: any) {
                     console.error(e);
