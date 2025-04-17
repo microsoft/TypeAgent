@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 export type ChunkId = string;
 
 export interface Blob {
@@ -10,12 +13,11 @@ export interface Blob {
         | "image_label"
         | "table_label"; // e.g. "text", "table", "image"
     start: number; // Page number (0-based)
+    paraHeader?: string[]; // Optional paragraph header
     content?: string | string[]; // e.g. chunk of text
     bbox?: number[]; // Optional bounding box
     img_name?: string; // Optional image name
     img_path?: string; // Optional image path
-    para_id?: number; // Optional paragraph ID
-    paraHeader?: string[]; // Optional paragraph header
     image_chunk_ref?: string[]; // Optional reference to image chunk(s)
 }
 
