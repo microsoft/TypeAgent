@@ -5,17 +5,21 @@ import { ChildProcess, fork } from "node:child_process";
 import fs, { existsSync } from "node:fs";
 import registerDebug from "debug";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { getUniqueFileName } from "../utils/fsUtils.js";
+import path from "node:path";
+import { ensureDir } from "typeagent";
+import { getInstanceSessionsDirPath } from "../explorer.js";
 
 const debug = registerDebug("typeagent:indexManager");
 
-export type IndexSource = "images" | "email";
+export type IndexSource = "image" | "email";
 
 export type IndexData = {
     source: IndexSource,// the data source of the index
     name: string,       // the name of the index 
     location: string    // the location that has been index
     size: number        // the # of items in the index
-    files: string[];    // the files that constitute the index
+    path: string        // the path to the index
 }
 
 /*
@@ -53,16 +57,18 @@ export class IndexManager {
         return this.idx;
     }
 
+    /*
+    * Creates the the index with the supplied settings
+    */
     public async createIndex(name: string, source: IndexSource, location: string): Promise<boolean> {
 
         // make sure we're loaded
         this.indexingService = await Promise.resolve(this.indexingServicePromise);
 
-        // TODO: implement
-
+        // spin up the correct indexer based on the request
         switch (source) {
-            case "images":
-                this.createImageIndex(name, location);
+            case "image":
+                await this.createImageIndex(name, location);
                 break;
             case "email":
                 throw new Error("Email indexing is not implemented yet.");
@@ -73,17 +79,22 @@ export class IndexManager {
         return true;
     }
 
-    private createImageIndex(name: string, location: string) {
+    /*
+    * Create the image index for the specified location
+    */
+    private async createImageIndex(name: string, location: string) {
         if (!existsSync(location)) {
             throw new Error(`Location ${location} does not exist.`);
         }
 
+        const folder = await ensureDir(getUniqueFileName(path.join(getInstanceSessionsDirPath(), "indexes", "image")));
+
         this.idx.push({
-            source: "images",
+            source: "image",
             name,
             location,
-            size: 0,    // TODO: implement size calculation
-            files: []   // TODO: populate when the index has been created
+            size: 0,
+            path: folder
         });
 
         // TODO: start indexing
@@ -97,9 +108,7 @@ export class IndexManager {
         this.idx.filter((index: IndexData) => index.name === name).forEach((index: IndexData) => {
             this.idx.splice(this.idx.indexOf(index), 1);
 
-            index.files.forEach((file: string) => {                 
-                fs.rmSync(index.location)
-            });
+            fs.promises.rm(index.path, { recursive: true, force: true }).catch((reason) => debug(reason));
         });
 
         return true;
