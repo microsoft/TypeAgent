@@ -41,7 +41,7 @@ export class IndexManager {
     * Loads the supplied indexes
     */
     public static load(indexesToLoad: IndexData[]) {
-        indexesToLoad.map((value) => {
+        indexesToLoad.forEach((value) => {
 
             // TODO: does this index need to be updated
             // if so start a new indexing service and save it here
@@ -131,7 +131,7 @@ export class IndexManager {
         return new Promise<ChildProcess | undefined>(
             (resolve, reject) => {
                 try {
-                    const serviceRoot = getPackageFilePath("./node_modules/image-memory/dist/service.js");                    
+                    const serviceRoot = getPackageFilePath("./node_modules/image-memory/dist/indexingService.js");                    
                     const childProcess = fork(serviceRoot);
     
                     childProcess.on("message", function (message) {
