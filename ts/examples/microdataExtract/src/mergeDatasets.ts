@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import * as fs from "fs";
 import * as path from "path";
 import { URL } from "url";
@@ -15,13 +18,11 @@ function normalizeSameAs(sameAs: string | string[] | undefined): string[] {
             const url = new URL(rawUrl);
 
             if (url.hostname.includes("tripadvisor.com")) {
-                // Normalize to https://www.tripadvisor.com + path + search
                 return `https://www.tripadvisor.com${url.pathname}${url.search}`;
             }
 
             return rawUrl;
         } catch (e) {
-            // In case of an invalid URL, return as-is
             return rawUrl;
         }
     });
