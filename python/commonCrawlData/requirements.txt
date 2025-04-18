@@ -1,0 +1,10 @@
+azure-functions
+azure-functions-durable
+requests
+warcio
+extruct
+w3lib
+pandas
+beautifulsoup4
+azure-storage-blob
+tldextract
