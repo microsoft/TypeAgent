@@ -8,7 +8,6 @@
 - **Parse**: Parse restaurant data from N-Quad format
 - **Scrape**: Scrape restaurant data from TripAdvisor
 
-
 ## Usage
 
 ### Deduplicate Restaurants
@@ -52,6 +51,7 @@ pnpm start parse path/to/data.nq path/to/output.json --debug
 Scrape restaurant data from TripAdvisor:
 
 #### Discovery Mode
+
 Automatically discovers and scrapes restaurant data:
 
 ```bash
@@ -60,6 +60,7 @@ pnpm start scrape --mode=discovery --base-url="https://www.tripadvisor.com/Resta
 ```
 
 #### Direct Mode
+
 Scrapes data from a list of URLs:
 
 ```bash
@@ -79,7 +80,6 @@ pnpm start help [COMMAND]
 # Show version
 pnpm start --version
 ```
-
 
 ## Trademarks
 

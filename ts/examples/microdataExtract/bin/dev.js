@@ -2,7 +2,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 // eslint-disable-next-line node/shebang
 async function main() {
     const { execute } = await import("@oclif/core");

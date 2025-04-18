@@ -22,7 +22,7 @@
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node ./bin/run.js",
     "start:dev": "node --loader ts-node/esm --no-warnings=ExperimentalWarning ./bin/dev.js",
-     "tsc": "tsc -b"
+    "tsc": "tsc -b"
   },
   "oclif": {
     "bin": "restaurant-data-cli",
@@ -50,7 +50,7 @@
     "copyfiles": "^2.4.1",
     "rimraf": "^6.0.1",
     "typescript": "^5.4.2"
-  },  
+  },
   "engines": {
     "node": ">=18",
     "pnpm": ">=8"
