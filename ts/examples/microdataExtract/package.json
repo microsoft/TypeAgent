@@ -1,6 +1,7 @@
 {
   "name": "restaurant-data-cli",
   "version": "0.0.1",
+  "private": true,
   "description": "CLI for schema.org restaurant data processing",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
