@@ -321,8 +321,8 @@ export class Session {
         }
 
         // rehydrate indexes
-        if (sessionData.indexes) {
-            IndexManager.load(sessionData.indexes);
+        if (sessionData.indexes && sessionDirPath) {
+            IndexManager.load(sessionData.indexes, sessionDirPath);
         }
     }
 

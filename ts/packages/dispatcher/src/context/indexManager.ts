@@ -5,10 +5,9 @@ import { ChildProcess, fork } from "node:child_process";
 import fs, { existsSync } from "node:fs";
 import registerDebug from "debug";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { getUniqueFileName } from "../utils/fsUtils.js";
+import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 import path from "node:path";
 import { ensureDir } from "typeagent";
-import { getInstanceSessionsDirPath } from "../explorer.js";
 
 const debug = registerDebug("typeagent:indexManager");
 
@@ -29,6 +28,9 @@ export type IndexData = {
 export class IndexManager {
     private static instance: IndexManager;
     private indexingServices: Map<IndexData, ChildProcess | undefined> = new Map<IndexData, ChildProcess | undefined>();
+    private static rootPath: string;
+    private imageRoot: string;
+    private emailRoot: string;
 
     public static getInstance = (): IndexManager => {
         if (!IndexManager.instance) {
@@ -37,10 +39,24 @@ export class IndexManager {
         return IndexManager.instance;
     }
 
+    private constructor() {
+        ensureDirectory(IndexManager.rootPath);
+
+        // make sure the indexes folder exists
+        this.imageRoot = path.join(IndexManager.rootPath, "image")
+        ensureDirectory(this.imageRoot);
+
+        this.emailRoot = path.join(IndexManager.rootPath, "email");
+        ensureDirectory(this.emailRoot);  
+    }
+
     /*
     * Loads the supplied indexes
     */
-    public static load(indexesToLoad: IndexData[]) {
+    public static load(indexesToLoad: IndexData[], sessionDir: string) {
+
+        this.rootPath = path.join(sessionDir, "indexes");
+
         indexesToLoad.forEach((value) => {
 
             // TODO: does this index need to be updated
@@ -89,7 +105,8 @@ export class IndexManager {
             throw new Error(`Location ${location} does not exist.`);
         }
 
-        const folder = await ensureDir(getUniqueFileName(path.join(getInstanceSessionsDirPath(), "indexes", "image")));
+        const dirName = getUniqueFileName(this.imageRoot, "index");
+        const folder = await ensureDir(path.join(this.imageRoot, dirName));
 
         const index: IndexData = {
             source: "image",
@@ -158,3 +175,4 @@ export class IndexManager {
         );
     }
 }
+
