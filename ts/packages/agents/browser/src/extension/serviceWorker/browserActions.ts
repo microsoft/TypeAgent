@@ -2,9 +2,26 @@
 // Licensed under the MIT License.
 
 import { AppAction } from "./types";
-import { getActiveTab, getTabByTitle, awaitPageLoad, awaitPageIncrementalUpdates, downloadStringAsFile, downloadImageAsFile } from "./tabManager";
-import { getTabScreenshot, getTabAnnotatedScreenshot, getTabHTMLFragments, getFilteredHTMLFragments } from "./capture";
-import { getPageSchema, setPageSchema, getStoredPageProperty, setStoredPageProperty } from "./storage";
+import {
+    getActiveTab,
+    getTabByTitle,
+    awaitPageLoad,
+    awaitPageIncrementalUpdates,
+    downloadStringAsFile,
+    downloadImageAsFile,
+} from "./tabManager";
+import {
+    getTabScreenshot,
+    getTabAnnotatedScreenshot,
+    getTabHTMLFragments,
+    getFilteredHTMLFragments,
+} from "./capture";
+import {
+    getPageSchema,
+    setPageSchema,
+    getStoredPageProperty,
+    setStoredPageProperty,
+} from "./storage";
 import { showBadgeHealthy } from "./ui";
 
 /**
@@ -17,7 +34,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
     let confirmationMessage = "OK";
     const actionName =
         action.actionName ?? action.fullActionName?.split(".").at(-1);
-    
+
     switch (actionName) {
         case "openTab": {
             if (action.parameters.url) {
@@ -176,7 +193,11 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
                 query: action.parameters.keywords,
             });
 
-            if (OpenFromBookmarksItems && OpenFromBookmarksItems.length > 0 && OpenFromBookmarksItems[0].url) {
+            if (
+                OpenFromBookmarksItems &&
+                OpenFromBookmarksItems.length > 0 &&
+                OpenFromBookmarksItems[0].url
+            ) {
                 console.log(OpenFromBookmarksItems);
                 await chrome.tabs.create({
                     url: OpenFromBookmarksItems[0].url,

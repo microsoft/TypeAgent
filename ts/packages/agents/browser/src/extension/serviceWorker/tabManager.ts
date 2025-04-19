@@ -72,7 +72,9 @@ export function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
  * @param title The title to search for
  * @returns Promise resolving to the tab or undefined
  */
-export async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | undefined> {
+export async function getTabByTitle(
+    title: string,
+): Promise<chrome.tabs.Tab | undefined> {
     if (!title) {
         return undefined;
     }
@@ -83,7 +85,7 @@ export async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | un
             query: title,
         },
     };
-    
+
     const matchedId = await sendActionToTabIndex(getTabAction);
     if (matchedId) {
         const tabId = parseInt(matchedId);
@@ -106,7 +108,9 @@ export async function getTabByTitle(title: string): Promise<chrome.tabs.Tab | un
  * @param targetTab The tab to wait for
  * @returns Promise resolving when the page is loaded
  */
-export async function awaitPageLoad(targetTab: chrome.tabs.Tab): Promise<string | undefined> {
+export async function awaitPageLoad(
+    targetTab: chrome.tabs.Tab,
+): Promise<string | undefined> {
     return new Promise<string | undefined>((resolve, reject) => {
         if (targetTab.status == "complete") {
             resolve("OK");
@@ -132,7 +136,9 @@ export async function awaitPageLoad(targetTab: chrome.tabs.Tab): Promise<string 
  * @param targetTab The tab to wait for
  * @returns Promise resolving when incremental updates are finished
  */
-export async function awaitPageIncrementalUpdates(targetTab: chrome.tabs.Tab): Promise<void> {
+export async function awaitPageIncrementalUpdates(
+    targetTab: chrome.tabs.Tab,
+): Promise<void> {
     const loadingCompleted = await chrome.tabs.sendMessage(
         targetTab.id!,
         {
@@ -151,7 +157,9 @@ export async function awaitPageIncrementalUpdates(targetTab: chrome.tabs.Tab): P
  * @param action The action to send
  * @returns Promise resolving to the result or undefined
  */
-export async function sendActionToTabIndex(action: any): Promise<string | undefined> {
+export async function sendActionToTabIndex(
+    action: any,
+): Promise<string | undefined> {
     // This function depends on the websocket module, which would be imported
     // The implementation would be updated to use the imported function
     return Promise.resolve(undefined);
@@ -166,7 +174,7 @@ export async function sendActionToTabIndex(action: any): Promise<string | undefi
 export async function downloadStringAsFile(
     targetTab: chrome.tabs.Tab,
     data: string,
-    filename: string
+    filename: string,
 ): Promise<void> {
     const download = (data: string, filename: string) => {
         const link = document.createElement("a");
@@ -191,7 +199,7 @@ export async function downloadStringAsFile(
 export async function downloadImageAsFile(
     targetTab: chrome.tabs.Tab,
     dataUrl: string,
-    filename: string
+    filename: string,
 ): Promise<void> {
     const download = (dataUrl: string, filename: string) => {
         const link = document.createElement("a");

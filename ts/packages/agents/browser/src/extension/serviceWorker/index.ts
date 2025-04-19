@@ -2,19 +2,27 @@
 // Licensed under the MIT License.
 
 import { initializeContextMenu, handleContextMenuClick } from "./contextMenu";
-import { ensureWebsocketConnected, getWebSocket, reconnectWebSocket } from "./websocket";
+import {
+    ensureWebsocketConnected,
+    getWebSocket,
+    reconnectWebSocket,
+} from "./websocket";
 import { toggleSiteTranslator } from "./siteTranslator";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { getActiveTab } from "./tabManager";
 import { handleMessage } from "./messageHandlers";
-import { isWebAgentMessage, isWebAgentMessageFromDispatcher, WebAgentDisconnectMessage } from "./types";
+import {
+    isWebAgentMessage,
+    isWebAgentMessageFromDispatcher,
+    WebAgentDisconnectMessage,
+} from "./types";
 
 /**
  * Initializes the service worker
  */
 async function initialize(): Promise<void> {
     console.log("Browser Agent Service Worker initializing");
-    
+
     try {
         const connected = await ensureWebsocketConnected();
         if (!connected) {
@@ -26,10 +34,10 @@ async function initialize(): Promise<void> {
         reconnectWebSocket();
         showBadgeError();
     }
-    
+
     // Initialize context menu
     initializeContextMenu();
-    
+
     // Set up event listeners
     setupEventListeners();
 }
@@ -107,7 +115,7 @@ function setupEventListeners(): void {
     });
 
     let embeddingsInitializedWindowId: number;
-    
+
     // Window focus change
     chrome.windows?.onFocusChanged.addListener(async (windowId) => {
         if (windowId == chrome.windows.WINDOW_ID_NONE) {
@@ -176,7 +184,7 @@ function setupEventListeners(): void {
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
             handleMessage(message, sender).then(sendResponse);
             return true; // Important: indicates we'll send response asynchronously
-        }
+        },
     );
 
     // Context menu clicks
@@ -185,7 +193,10 @@ function setupEventListeners(): void {
     // Storage changes
     chrome.storage.onChanged.addListener((changes, namespace) => {
         if (namespace === "sync" && changes.websocketHost) {
-            console.log("WebSocket host changed:", changes.websocketHost.newValue);
+            console.log(
+                "WebSocket host changed:",
+                changes.websocketHost.newValue,
+            );
 
             const webSocket = getWebSocket();
             if (webSocket) {
@@ -193,7 +204,10 @@ function setupEventListeners(): void {
                 try {
                     webSocket.close();
                 } catch (error) {
-                    console.error("Error closing WebSocket on host change:", error);
+                    console.error(
+                        "Error closing WebSocket on host change:",
+                        error,
+                    );
                 }
             }
         }
@@ -205,7 +219,7 @@ function setupEventListeners(): void {
             // This shouldn't happen.
             return;
         }
-        
+
         const webSocket = getWebSocket();
         if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
             port.disconnect();
@@ -230,7 +244,7 @@ function setupEventListeners(): void {
                 webSocket.send(JSON.stringify(data));
             }
         });
-        
+
         port.onDisconnect.addListener(() => {
             for (const name of agentNames) {
                 const message: WebAgentDisconnectMessage = {
@@ -254,7 +268,7 @@ async function sendActionToTabIndex(action: any): Promise<string | undefined> {
     if (!webSocket) {
         return undefined;
     }
-    
+
     return new Promise<string | undefined>((resolve, reject) => {
         try {
             const callId = new Date().getTime().toString();

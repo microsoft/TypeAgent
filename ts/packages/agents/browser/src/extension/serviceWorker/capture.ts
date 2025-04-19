@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { BoundingBox, HTMLFragment } from "./types";
-import { getActiveTab, downloadImageAsFile, downloadStringAsFile } from "./tabManager";
+import {
+    getActiveTab,
+    downloadImageAsFile,
+    downloadStringAsFile,
+} from "./tabManager";
 
 /**
  * Gets HTML fragments from a tab
@@ -18,7 +22,7 @@ export async function getTabHTMLFragments(
     fullSize?: boolean,
     downloadAsFile?: boolean,
     extractText?: boolean,
-    useTimestampIds?: boolean
+    useTimestampIds?: boolean,
 ): Promise<HTMLFragment[]> {
     const frames = await chrome.webNavigation.getAllFrames({
         tabId: targetTab.id!,
@@ -76,7 +80,10 @@ export async function getTabHTMLFragments(
                     });
                 }
             } catch (error) {
-                console.error(`Error getting HTML for frame ${frames[i].frameId}:`, error);
+                console.error(
+                    `Error getting HTML for frame ${frames[i].frameId}:`,
+                    error,
+                );
             }
         }
     }
@@ -94,7 +101,7 @@ export async function getTabHTMLFragments(
 export async function getFilteredHTMLFragments(
     targetTab: chrome.tabs.Tab,
     inputHtmlFragments: HTMLFragment[],
-    cssSelectorsToKeep: string[]
+    cssSelectorsToKeep: string[],
 ): Promise<any[]> {
     let htmlFragments: any[] = [];
 
@@ -115,7 +122,10 @@ export async function getFilteredHTMLFragments(
                 htmlFragments.push(...frameHTMLFragments);
             }
         } catch (error) {
-            console.error(`Error filtering HTML for frame ${inputHtmlFragments[i].frameId}:`, error);
+            console.error(
+                `Error filtering HTML for frame ${inputHtmlFragments[i].frameId}:`,
+                error,
+            );
         }
     }
 
@@ -127,7 +137,9 @@ export async function getFilteredHTMLFragments(
  * @param downloadImage Whether to download the image
  * @returns Promise resolving to the data URL of the screenshot
  */
-export async function getTabScreenshot(downloadImage: boolean): Promise<string> {
+export async function getTabScreenshot(
+    downloadImage: boolean,
+): Promise<string> {
     const targetTab = await getActiveTab();
     const dataUrl = await chrome.tabs.captureVisibleTab({ quality: 100 });
     if (downloadImage && targetTab) {
@@ -142,7 +154,9 @@ export async function getTabScreenshot(downloadImage: boolean): Promise<string> 
  * @param downloadImage Whether to download the image
  * @returns Promise resolving to the data URL of the annotated screenshot
  */
-export async function getTabAnnotatedScreenshot(downloadImage: boolean): Promise<string> {
+export async function getTabAnnotatedScreenshot(
+    downloadImage: boolean,
+): Promise<string> {
     const targetTab = await getActiveTab();
     if (!targetTab || !targetTab.id) {
         return "";

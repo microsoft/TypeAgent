@@ -10,24 +10,36 @@ let currentCrosswordUrl = "";
  * Determines and enables the appropriate site translator based on the URL of the tab
  * @param targetTab The tab to enable the translator for
  */
-export async function toggleSiteTranslator(targetTab: chrome.tabs.Tab): Promise<void> {
+export async function toggleSiteTranslator(
+    targetTab: chrome.tabs.Tab,
+): Promise<void> {
     let method = "enableSiteTranslator";
     let translatorName = "";
     await ensureWebsocketConnected();
-    
+
     if (targetTab.url) {
         const host = new URL(targetTab.url).host;
 
         // Crossword site handling
         if (
             targetTab.url.startsWith("https://embed.universaluclick.com/") ||
-            targetTab.url.startsWith("https://data.puzzlexperts.com/puzzleapp") ||
+            targetTab.url.startsWith(
+                "https://data.puzzlexperts.com/puzzleapp",
+            ) ||
             targetTab.url.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
             targetTab.url.startsWith("https://www.wsj.com/puzzles/crossword") ||
-            targetTab.url.startsWith("https://www.seattletimes.com/games-nytimes-crossword") ||
-            targetTab.url.startsWith("https://www.denverpost.com/games/daily-crossword") ||
-            targetTab.url.startsWith("https://www.denverpost.com/puzzles/?amu=/iwin-crossword") ||
-            targetTab.url.startsWith("https://www.bestcrosswords.com/bestcrosswords/guestconstructor")
+            targetTab.url.startsWith(
+                "https://www.seattletimes.com/games-nytimes-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.denverpost.com/games/daily-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.denverpost.com/puzzles/?amu=/iwin-crossword",
+            ) ||
+            targetTab.url.startsWith(
+                "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
+            )
         ) {
             method = "enableSiteTranslator";
             translatorName = "browser.crossword";

@@ -45,7 +45,9 @@ export async function createWebSocket(): Promise<WebSocket | undefined> {
  * Ensures a WebSocket connection is established
  * @returns Promise resolving to the WebSocket or undefined
  */
-export async function ensureWebsocketConnected(): Promise<WebSocket | undefined> {
+export async function ensureWebsocketConnected(): Promise<
+    WebSocket | undefined
+> {
     return new Promise<WebSocket | undefined>(async (resolve, reject) => {
         if (webSocket) {
             if (webSocket.readyState === WebSocket.OPEN) {
@@ -165,7 +167,9 @@ export function reconnectWebSocket(): void {
  * @param action The action to send
  * @returns Promise resolving to the result or undefined
  */
-export async function sendActionToAgent(action: AppAction): Promise<any | undefined> {
+export async function sendActionToAgent(
+    action: AppAction,
+): Promise<any | undefined> {
     return new Promise<any | undefined>((resolve, reject) => {
         if (webSocket) {
             try {

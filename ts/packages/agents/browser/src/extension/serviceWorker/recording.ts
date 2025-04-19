@@ -3,7 +3,11 @@
 
 import { getActiveTab } from "./tabManager";
 import { getTabHTMLFragments } from "./capture";
-import { saveRecordedActions, getRecordedActions, clearRecordedActions } from "./storage";
+import {
+    saveRecordedActions,
+    getRecordedActions,
+    clearRecordedActions,
+} from "./storage";
 
 /**
  * Starts recording user actions in the active tab
@@ -73,14 +77,14 @@ export async function recordingStopped(
     recordedActions: any[],
     recordedActionPageHTML: any,
     recordedActionScreenshot: string,
-    actionIndex: number
+    actionIndex: number,
 ): Promise<void> {
     await saveRecordedActions(
         recordedActions,
         recordedActionPageHTML,
         recordedActionScreenshot,
         actionIndex,
-        false
+        false,
     );
 }
 
@@ -89,11 +93,13 @@ export async function recordingStopped(
  * @param data The data to download
  * @param filename The filename to use
  */
-export async function downloadData(data: any, filename?: string): Promise<void> {
+export async function downloadData(
+    data: any,
+    filename?: string,
+): Promise<void> {
     const jsonString = JSON.stringify(data, null, 2);
     const dataUrl =
-        "data:application/json;charset=utf-8," +
-        encodeURIComponent(jsonString);
+        "data:application/json;charset=utf-8," + encodeURIComponent(jsonString);
 
     chrome.downloads.download({
         url: dataUrl,

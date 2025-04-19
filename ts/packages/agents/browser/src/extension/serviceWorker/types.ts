@@ -30,8 +30,8 @@ export interface HTMLFragment {
 }
 
 // Re-export types that are used across multiple files
-export {    
+export {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
-    WebAgentDisconnectMessage
+    WebAgentDisconnectMessage,
 } from "../../../dist/common/webAgentMessageTypes.mjs";

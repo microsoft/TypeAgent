@@ -3,7 +3,11 @@
 
 import { getActiveTab } from "./tabManager";
 import { getTabHTMLFragments, getTabAnnotatedScreenshot } from "./capture";
-import { getRecordedActions, clearRecordedActions, saveRecordedActions } from "./storage";
+import {
+    getRecordedActions,
+    clearRecordedActions,
+    saveRecordedActions,
+} from "./storage";
 import { sendActionToAgent, ensureWebsocketConnected } from "./websocket";
 
 /**
@@ -14,7 +18,7 @@ import { sendActionToAgent, ensureWebsocketConnected } from "./websocket";
  */
 export async function handleMessage(
     message: any,
-    sender: chrome.runtime.MessageSender
+    sender: chrome.runtime.MessageSender,
 ): Promise<any> {
     switch (message.type) {
         case "initialize": {
@@ -121,7 +125,7 @@ export async function handleMessage(
                 message.recordedActionPageHTML,
                 message.recordedActionScreenshot,
                 message.actionIndex,
-                message.isCurrentlyRecording
+                message.isCurrentlyRecording,
             );
             return {};
         }
@@ -131,7 +135,7 @@ export async function handleMessage(
                 message.recordedActionPageHTML,
                 message.recordedActionScreenshot,
                 message.actionIndex,
-                false
+                false,
             );
             return {};
         }

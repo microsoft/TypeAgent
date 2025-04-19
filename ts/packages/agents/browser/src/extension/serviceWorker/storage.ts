@@ -7,7 +7,10 @@
  * @param key The property key
  * @returns The stored property value or undefined
  */
-export async function getStoredPageProperty(url: string, key: string): Promise<any> {
+export async function getStoredPageProperty(
+    url: string,
+    key: string,
+): Promise<any> {
     const storageKey = `${url}:${key}`;
     const result = await chrome.storage.session.get([storageKey]);
     return result[storageKey];
@@ -19,7 +22,11 @@ export async function getStoredPageProperty(url: string, key: string): Promise<a
  * @param key The property key
  * @param value The property value
  */
-export async function setStoredPageProperty(url: string, key: string, value: any): Promise<void> {
+export async function setStoredPageProperty(
+    url: string,
+    key: string,
+    value: any,
+): Promise<void> {
     const storageKey = `${url}:${key}`;
     await chrome.storage.session.set({ [storageKey]: value });
 }
@@ -32,9 +39,11 @@ export async function setStoredPageProperty(url: string, key: string, value: any
 export async function setPageSchema(url: string, schema: any): Promise<void> {
     let value = await chrome.storage.session.get(["pageSchema"]);
     let updatedSchema = value.pageSchema;
-    
+
     if (value && Array.isArray(value.pageSchema)) {
-        updatedSchema = value.pageSchema.filter((c: { url: string }) => c.url !== url);
+        updatedSchema = value.pageSchema.filter(
+            (c: { url: string }) => c.url !== url,
+        );
     } else {
         updatedSchema = [];
     }
@@ -56,14 +65,14 @@ export async function getPageSchema(url: string): Promise<any> {
     const value = await chrome.storage.session.get(["pageSchema"]);
     if (value && Array.isArray(value.pageSchema)) {
         const targetSchema = value.pageSchema.filter(
-            (c: { url: string }) => c.url === url
+            (c: { url: string }) => c.url === url,
         );
 
         if (targetSchema && targetSchema.length > 0) {
             return targetSchema[0].body;
         }
     }
-    
+
     return undefined;
 }
 
@@ -75,7 +84,7 @@ export async function removePageSchema(url: string): Promise<void> {
     const value = await chrome.storage.session.get(["pageSchema"]);
     if (value && Array.isArray(value.pageSchema)) {
         const updatedSchema = value.pageSchema.filter(
-            (c: { url: string }) => c.url !== url
+            (c: { url: string }) => c.url !== url,
         );
 
         await chrome.storage.session.set({ pageSchema: updatedSchema });
@@ -95,7 +104,7 @@ export async function saveRecordedActions(
     recordedActionPageHTML: any,
     recordedActionScreenshot: string,
     actionIndex: number,
-    isCurrentlyRecording: boolean
+    isCurrentlyRecording: boolean,
 ): Promise<void> {
     await chrome.storage.session.set({
         recordedActions,
