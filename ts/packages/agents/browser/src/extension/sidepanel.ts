@@ -600,7 +600,11 @@ function renderTimelineSteps(
         "#downloadHtml",
     )! as HTMLElement;
 
-    if (screenshotData !== undefined && screenshotData.length > 0) {
+    if (
+        screenshotData !== undefined &&
+        Array.isArray(screenshotData) &&
+        screenshotData.length > 0
+    ) {
         screenshotData.forEach((screenshot) => {
             const img = document.createElement("img");
             img.src = screenshot;

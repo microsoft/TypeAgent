@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * Configuration for the skeleton loading detector
+ */
 export interface DetectorConfig {
     // CSS selectors that identify skeleton elements
     skeletonSelectors: string[];
@@ -27,6 +30,9 @@ const DEFAULT_CONFIG: DetectorConfig = {
     intersectionThreshold: 0,
 };
 
+/**
+ * Observer that watches for mutations only on elements visible in the viewport
+ */
 class ViewportMutationObserver {
     private mutationObserver: MutationObserver;
     private intersectionObserver: IntersectionObserver;
@@ -38,6 +44,11 @@ class ViewportMutationObserver {
         intersectionThreshold?: number | number[];
     };
 
+    /**
+     * Creates a new ViewportMutationObserver
+     * @param callback The callback to invoke on mutations
+     * @param options The options for the observer
+     */
     constructor(callback: MutationCallback, options = {}) {
         this.callback = callback;
         this.options = options;
@@ -70,17 +81,28 @@ class ViewportMutationObserver {
         );
     }
 
+    /**
+     * Starts observing the target node
+     * @param targetNode The node to observe
+     */
     public observe(targetNode: Element): void {
         this.mutationObserver.observe(targetNode, this.options);
         this.trackElementAndChildren(targetNode);
     }
 
+    /**
+     * Stops observing all nodes
+     */
     public disconnect(): void {
         this.mutationObserver.disconnect();
         this.intersectionObserver.disconnect();
         this.visibleElements.clear();
     }
 
+    /**
+     * Tracks an element and all its children for visibility
+     * @param element The element to track
+     */
     private trackElementAndChildren(element: Element): void {
         this.intersectionObserver.observe(element);
         element.querySelectorAll("*").forEach((child) => {
@@ -88,6 +110,11 @@ class ViewportMutationObserver {
         });
     }
 
+    /**
+     * Checks if an element or any of its parents is visible
+     * @param element The element to check
+     * @returns Whether the element or a parent is visible
+     */
     private isElementOrParentVisible(element: Element | null): boolean {
         while (element) {
             if (this.visibleElements.has(element)) {
@@ -99,6 +126,9 @@ class ViewportMutationObserver {
     }
 }
 
+/**
+ * Detects when skeleton loading elements have disappeared from the page
+ */
 export class SkeletonLoadingDetector {
     private config: DetectorConfig;
     private observer: ViewportMutationObserver | null;
@@ -107,6 +137,10 @@ export class SkeletonLoadingDetector {
     private intersectionObserver: IntersectionObserver | null;
     private visibleSkeletons: Set<Element>;
 
+    /**
+     * Creates a new SkeletonLoadingDetector
+     * @param config The configuration for the detector
+     */
     constructor(config: Partial<DetectorConfig> = {}) {
         this.config = { ...DEFAULT_CONFIG, ...config };
         this.observer = null;
@@ -118,6 +152,7 @@ export class SkeletonLoadingDetector {
 
     /**
      * Starts monitoring the page for skeleton elements in the viewport
+     * @returns Promise that resolves when loading is complete
      */
     public detect(): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -193,6 +228,7 @@ export class SkeletonLoadingDetector {
 
     /**
      * Handles the case when no skeletons are detected
+     * @param resolve The function to call when stable
      */
     private handleNoSkeletons(resolve: () => void): void {
         if (this.stabilityTimeout) {
@@ -230,4 +266,27 @@ export class SkeletonLoadingDetector {
         }
         this.visibleSkeletons.clear();
     }
+}
+
+/**
+ * Waits for incremental page updates to complete
+ * @returns Promise resolving when the page is stable
+ */
+export async function awaitPageIncrementalUpdates(): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+        const detector = new SkeletonLoadingDetector({
+            stabilityThresholdMs: 500,
+            // Consider elements visible when they're at least 10% in view
+            intersectionThreshold: 0.1,
+        });
+
+        detector
+            .detect()
+            .then(() => {
+                resolve("true");
+            })
+            .catch((_error: Error) => {
+                resolve("false");
+            });
+    });
 }
