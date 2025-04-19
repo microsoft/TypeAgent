@@ -272,6 +272,7 @@ export async function main() {
         extensionPath: extensionPath,
         isVisible: JSON.parse(consoleArgs[0]),
         timeout: 2000,
+        useChrome: JSON.parse(consoleArgs[1]),
     });
 
     try {
