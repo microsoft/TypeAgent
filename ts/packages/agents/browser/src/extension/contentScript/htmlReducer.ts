@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 import DOMPurify from "dompurify";
 
+/**
+ * Class for reducing HTML size by removing unnecessary elements and attributes
+ */
 export class HTMLReducer {
     linkSelectors: string[] = [
         'link[rel="icon"]',
@@ -115,6 +118,11 @@ export class HTMLReducer {
     removeNonVisibleNodes: boolean = true;
     removeMiscTags: boolean = true;
 
+    /**
+     * Reduces HTML by removing unnecessary elements and attributes
+     * @param html The HTML to reduce
+     * @returns The reduced HTML
+     */
     reduce(html: string): string {
         const domParser = new DOMParser();
         let doc = domParser.parseFromString(
@@ -159,6 +167,12 @@ export class HTMLReducer {
         return reduced;
     }
 
+    /**
+     * Removes nodes from the document that match the given selectors
+     * @param doc The document to modify
+     * @param selectors The selectors to match
+     * @param removeFlag Whether to remove the nodes
+     */
     private removeNodes(
         doc: Document,
         selectors: string[],
@@ -172,6 +186,10 @@ export class HTMLReducer {
         }
     }
 
+    /**
+     * Processes media elements by removing certain attributes
+     * @param doc The document to process
+     */
     private processMediaElements(doc: Document): void {
         for (const selector of this.mediaElementSelectors) {
             const elements = doc.querySelectorAll(selector);
@@ -185,6 +203,10 @@ export class HTMLReducer {
         }
     }
 
+    /**
+     * Processes class attributes by removing classes or all classes
+     * @param doc The document to process
+     */
     private processClassAttributes(doc: Document): void {
         const elements = doc.querySelectorAll("[class]");
         elements.forEach((element) => {
@@ -205,6 +227,10 @@ export class HTMLReducer {
         });
     }
 
+    /**
+     * Removes miscellaneous attributes from all elements
+     * @param doc The document to process
+     */
     private removeMiscAttributes(doc: Document): void {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
@@ -216,6 +242,10 @@ export class HTMLReducer {
         });
     }
 
+    /**
+     * Removes data attributes from all elements
+     * @param doc The document to process
+     */
     private removeDataAttributes(doc: Document): void {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
@@ -228,6 +258,10 @@ export class HTMLReducer {
         });
     }
 
+    /**
+     * Replaces links with placeholder values
+     * @param doc The document to process
+     */
     private replaceLinks(doc: Document): void {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
@@ -239,6 +273,10 @@ export class HTMLReducer {
         });
     }
 
+    /**
+     * Removes duplicate alt text where the same text appears in title and alt attributes
+     * @param doc The document to process
+     */
     private removeDuplicateAltText(doc: Document): void {
         const elements = doc.querySelectorAll("*");
         elements.forEach((element) => {
@@ -253,6 +291,10 @@ export class HTMLReducer {
         });
     }
 
+    /**
+     * Removes comment nodes from the document
+     * @param doc The document to process
+     */
     private removeCommentNodes(doc: Document): void {
         const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT);
         let node = walker.nextNode();
@@ -264,6 +306,11 @@ export class HTMLReducer {
         }
     }
 
+    /**
+     * Removes empty nodes from the document
+     * @param doc The document to process
+     * @param selectors The selectors to match
+     */
     private removeEmptyNodes(doc: Document, selectors: string[]): void {
         const selector = selectors.join(", ");
         let nodes;
@@ -287,6 +334,11 @@ export class HTMLReducer {
         } while (emptyNodes && emptyNodes.length > 1);
     }
 
+    /**
+     * Reduces element nesting by moving children up when parent has only one child
+     * @param doc The document to process
+     * @param selectors The selectors to match
+     */
     private reduceElementNesting(doc: Document, selectors: string[]): void {
         const selector = selectors.join(", ");
         let nodes;
@@ -312,6 +364,10 @@ export class HTMLReducer {
         } while (nestedNodes && nestedNodes.length > 1);
     }
 
+    /**
+     * Removes span elements by moving their children up
+     * @param doc The document to process
+     */
     private removeSpans(doc: Document): void {
         const selector = "span";
         const nodes = Array.from(doc.querySelectorAll(selector));

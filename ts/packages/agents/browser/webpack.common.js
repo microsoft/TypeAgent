@@ -10,13 +10,13 @@ const electronSrcDir = path.join(__dirname, "src", "electron");
 module.exports = {
     mode: "production",
     entry: {
-        "extension/contentScript": path.join(srcDir, "contentScript.ts"),
+        "extension/contentScript": path.join(srcDir, "contentScript/index.ts"),
         "extension/webTypeAgentMain": path.join(srcDir, "webTypeAgentMain.ts"),
         "extension/webTypeAgentContentScript": path.join(
             srcDir,
             "webTypeAgentContentScript.ts",
         ),
-        "electron/contentScript": path.join(srcDir, "contentScript.ts"),
+        "electron/contentScript": path.join(srcDir, "contentScript/index.ts"),
         "electron/agentActivation": path.join(
             electronSrcDir,
             "agentActivation.ts",
