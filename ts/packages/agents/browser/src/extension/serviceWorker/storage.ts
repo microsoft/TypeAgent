@@ -10,10 +10,14 @@
 export async function getStoredPageProperty(
     url: string,
     key: string,
-): Promise<any> {
-    const storageKey = `${url}:${key}`;
-    const result = await chrome.storage.session.get([storageKey]);
-    return result[storageKey];
+): Promise<any | null> {
+    try {
+        const result = await chrome.storage.local.get([url]);
+        return result[url]?.[key] ?? null;
+    } catch (error) {
+        console.error("Error retrieving data:", error);
+        return null;
+    }
 }
 
 /**
@@ -27,8 +31,45 @@ export async function setStoredPageProperty(
     key: string,
     value: any,
 ): Promise<void> {
-    const storageKey = `${url}:${key}`;
-    await chrome.storage.session.set({ [storageKey]: value });
+    try {
+        const result = await chrome.storage.local.get([url]);
+        const urlData = result[url] || {};
+        urlData[key] = value;
+
+        await chrome.storage.local.set({ [url]: urlData });
+        console.log(`Saved property '${key}' for ${url}`);
+    } catch (error) {
+        console.error("Error saving data:", error);
+    }
+}
+
+/**
+ * Gets a stored property for a specific page
+ * @param url The URL of the page
+ * @param key The property key
+ */
+export async function deleteStoredPageProperty(
+    url: string,
+    key: string,
+): Promise<void> {
+    try {
+        const result = await chrome.storage.local.get([url]);
+        const urlData = result[url] || {};
+
+        if (key in urlData) {
+            delete urlData[key];
+
+            if (Object.keys(urlData).length === 0) {
+                await chrome.storage.local.remove(url);
+                console.log(`All properties deleted for ${url}`);
+            } else {
+                await chrome.storage.local.set({ [url]: urlData });
+                console.log(`Deleted property '${key}' for ${url}`);
+            }
+        }
+    } catch (error) {
+        console.error("Error deleting data:", error);
+    }
 }
 
 /**
