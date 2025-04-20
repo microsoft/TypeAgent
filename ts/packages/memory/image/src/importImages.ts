@@ -519,8 +519,8 @@ export class ImageCollection implements IConversation {
  *
  * @param imagePath - The path to the image file or a folder containing images
  * @param cachePath - The root cache path, if not specified image path is used
- * @param cachePath - The root cache path, if not specified image path is used
  * @param recursive - A flag indicating if the search should include subfolders
+ * @param callback - A callback after the image has been indexed.
  * @returns - The imported images as an image collection.
  */
 export async function importImages(
@@ -574,6 +574,7 @@ export async function importImages(
  * @param cachePath - The folder to cache the knowledge responses in
  * @param recursive - A flag indicating whether or not subfolders are imported.
  * @param chatModel - The model used to extract data from the image.
+ * @param callback - A callback after the image has been indexed.
  * @returns - The imported images from the supplied folder.
  */
 async function indexImages(

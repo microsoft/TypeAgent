@@ -26,7 +26,8 @@ import { TokenCounter, TokenCounterData } from "aiclient";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import { ConstructionProvider } from "../agentProvider/agentProvider.js";
 import { MultipleActionConfig } from "../translation/multipleActionSchema.js";
-import { IndexData, IndexManager } from "./indexManager.js";
+import { IndexManager } from "./indexManager.js";
+import { IndexData } from "image-memory";
 
 const debugSession = registerDebug("typeagent:session");
 

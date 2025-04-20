@@ -2502,6 +2502,9 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
+      telemetry:
+        specifier: workspace:*
+        version: link:../../telemetry
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent

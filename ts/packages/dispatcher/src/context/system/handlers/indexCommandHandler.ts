@@ -5,7 +5,7 @@ import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
 import { CommandHandler, CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { displayResult, displaySuccess, displayWarn } from "@typeagent/agent-sdk/helpers/display";
-import { IndexData, IndexSource } from "../../indexManager.js";
+import { IndexData, IndexSource } from "image-memory";
 
 class IndexListCommandHandler implements CommandHandler {
     public readonly description = "List indexes";

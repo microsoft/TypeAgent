@@ -7,20 +7,10 @@ import registerDebug from "debug";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 import path from "node:path";
-import { ensureDir } from "typeagent";
+import { ensureDir, isDirectoryPath } from "typeagent";
+import { IndexData, IndexSource } from "image-memory";
 
 const debug = registerDebug("typeagent:indexManager");
-
-export type IndexSource = "image" | "email";
-
-export type IndexData = {
-    source: IndexSource,// the data source of the index
-    name: string,       // the name of the index 
-    location: string,    // the location that has been index
-    size: number,        // the # of items in the index
-    path: string,        // the path to the index
-    state: "new" | "running" | "finished" | "stopped" | "error" // the state of the indexing service for this index
-}
 
 /*
 * IndexManager is a singleton class that manages the indexes for the system.
@@ -29,6 +19,7 @@ export class IndexManager {
     private static instance: IndexManager;
     private indexingServices: Map<IndexData, ChildProcess | undefined> = new Map<IndexData, ChildProcess | undefined>();
     private static rootPath: string;
+    private cacheRoot: string;
     private imageRoot: string;
     private emailRoot: string;
 
@@ -46,6 +37,9 @@ export class IndexManager {
         this.imageRoot = path.join(IndexManager.rootPath, "image")
         ensureDirectory(this.imageRoot);
 
+        this.cacheRoot = path.join(IndexManager.rootPath, "cache");
+        ensureDirectory(this.cacheRoot);
+
         this.emailRoot = path.join(IndexManager.rootPath, "email");
         ensureDirectory(this.emailRoot);  
     }
@@ -59,10 +53,12 @@ export class IndexManager {
 
         indexesToLoad.forEach((value) => {
 
-            // TODO: does this index need to be updated
-            // if so start a new indexing service and save it here
-
-            // TODO: parse, get their status, resume indexing, setup monitors, etc.
+            // restart any indexing that's not done
+            if (value.state != "finished") {
+                this.getInstance().startIndexingService(value).then((service) => {
+                    this.getInstance().indexingServices.set(value, service);
+                });
+            }
 
             this.getInstance().indexingServices.set(value, undefined);
         });
@@ -102,7 +98,11 @@ export class IndexManager {
     */
     private async createImageIndex(name: string, location: string) {
         if (!existsSync(location)) {
-            throw new Error(`Location ${location} does not exist.`);
+            throw new Error(`Location '${location}' does not exist.`);
+        }
+
+        if (!isDirectoryPath(location)) {
+            throw new Error (`Location '${location}' is not a directory.  Please specify a valid diretory.`);
         }
 
         const dirName = getUniqueFileName(this.imageRoot, "index");
@@ -117,12 +117,8 @@ export class IndexManager {
             state: "new"
         };
 
-        // TODO: start indexing
+        // start indexing
         this.startIndexingService(index);
-        // .then((childProc: ChildProcess | undefined) => {
-        //     this.indexingServices.set(index, childProc);
-        //     childProc?.send(index);
-        // });
     }
 
     public deleteIndex(name: string): boolean {
@@ -159,8 +155,7 @@ export class IndexManager {
                             index.state = "error";
                             resolve(undefined);
                         } else {
-
-                            // TODO: handle index progres/status updates
+                            // TODO: handle index progres/status updates from the indexing service
                         }
                     });
     
