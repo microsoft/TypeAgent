@@ -44,7 +44,7 @@ export class GeoTable implements kp.IDataFrame {
     public addRows(...rows: kp.DataFrameRow[]): void {
         for (const row of rows) {
             const geoRow: GeoRow = {
-                id: 0,
+                geoId: 0,
                 sourceRef: JSON.stringify(row.sourceRef),
                 latitude: row.record.latitude?.toString(),
                 longitude: row.record.longitude?.toString(),
@@ -124,7 +124,7 @@ export class GeoTable implements kp.IDataFrame {
 
     private ensureTable() {
         let schemaSql = `CREATE TABLE IF NOT EXISTS ${this.name} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            geoId INTEGER PRIMARY KEY AUTOINCREMENT,
             sourceRef TEXT NOT NULL,
             latitude TEXT,
             longitude TEXT
@@ -134,8 +134,18 @@ export class GeoTable implements kp.IDataFrame {
 }
 
 type GeoRow = {
-    id: number;
+    geoId: number;
     sourceRef: string;
     latitude?: string | undefined;
     longitude?: string | undefined;
 };
+
+/*
+type AddressRow = {
+    addressId: number;
+    sourceRef: string;
+    streetAddress?: string;
+    postalCode?: string;
+    addressLocality?: string;
+};
+*/

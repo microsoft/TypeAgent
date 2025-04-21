@@ -247,16 +247,19 @@ export class RestaurantInfoCollection implements kp.IConversation {
 export class RestaurantCollection implements kp.IConversationHybrid {
     public restaurants: RestaurantInfoCollection;
     public dataFrames: kp.DataFrameCollection;
-    public locations: kp.DataFrame;
+    public locations: kp.IDataFrame;
     public addresses: kp.DataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor(private db: RestaurantDb) {
         this.restaurants = new RestaurantInfoCollection();
+        /*
         this.locations = new kp.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
+        */
+        this.locations = this.db.geo;
         this.addresses = new kp.DataFrame("address", [
             ["streetAddress", { type: "string" }],
             ["postalCode", { type: "string" }],
@@ -289,10 +292,12 @@ export class RestaurantCollection implements kp.IConversationHybrid {
                 sourceRef,
                 record: restaurant.geo,
             });
+            /*
             this.db.geo.addRows({
                 sourceRef,
                 record: restaurant.geo!,
             });
+            */
         }
         if (restaurant.address) {
             this.addresses.addRows({ sourceRef, record: restaurant.address });
