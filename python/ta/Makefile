@@ -31,8 +31,9 @@ venv:
 	python3 -m venv venv || (rm -rf venv && exit 1)
 	venv/bin/pip -q install -r requirements.txt
 	@venv/bin/python --version
+	@venv/bin/black --version | head -1
 	@venv/bin/pyright --version
-	@venv/bin/black --version
+	@python -m pytest --version
 
 .PHONY: clean
 clean:
