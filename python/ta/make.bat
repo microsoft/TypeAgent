@@ -5,13 +5,14 @@
 if "%~1"=="" goto help
 
 if /I "%~1"=="help" goto help
-if /I "%~1"=="venv" goto venv
+if /I "%~1"=="format" goto format
 if /I "%~1"=="check" goto check
 if /I "%~1"=="test" goto test
 if /I "%~1"=="demo" goto demo
-if /I "%~1"=="clean" goto clean
-if /I "%~1"=="format" goto format
 if /I "%~1"=="build" goto build
+if /I "%~1"=="venv" goto venv
+if /I "%~1"=="clean" goto clean
+if /I "%~1"=="help" goto help
 
 echo Unknown command: %~1
 goto help
@@ -64,7 +65,7 @@ echo The others are products of the build step.
 goto end
 
 :help
-echo Usage: make.bat [format^|check^|test^|demo^|build^|venv^|clean^|help]
+echo Usage: ./make [format^|check^|test^|demo^|build^|venv^|clean^|help]
 goto end
 
 :end
