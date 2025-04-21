@@ -7,7 +7,6 @@ if "%~1"=="" goto help
 if /I "%~1"=="format" goto format
 if /I "%~1"=="check" goto check
 if /I "%~1"=="test" goto test
-if /I "%~1"=="demo" goto demo
 if /I "%~1"=="build" goto build
 if /I "%~1"=="venv" goto venv
 if /I "%~1"=="clean" goto clean
@@ -31,13 +30,8 @@ goto end
 :test
 if not exist "venv\" call make.bat venv
 echo Running tests...
-venv\Scripts\python -m typeagent.podcasts testdata\npr.txt
-goto end
-
-:demo
-if not exist "venv\" call make.bat venv
-echo Running demo...
-venv\Scripts\python demo.py
+set PYTHONPATH=%CD%
+venv\Scripts\pytest -s
 goto end
 
 :build
@@ -51,8 +45,9 @@ echo Creating virtual environment...
 python3.12 -m venv venv
 venv\Scripts\pip -q install -r requirements.txt
 venv\Scripts\python --version
-venv\Scripts\pyright --version
 venv\Scripts\black --version
+venv\Scripts\pyright --version
+venv\Scripts\pytest --version
 
 goto end
 
@@ -64,7 +59,7 @@ echo The others are products of the build step.
 goto end
 
 :help
-echo Usage: ./make [format^|check^|test^|demo^|build^|venv^|clean^|help]
+echo Usage: .\make [format^|check^|test^|build^|venv^|clean^|help]
 goto end
 
 :end
