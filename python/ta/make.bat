@@ -4,7 +4,6 @@
 @echo off
 if "%~1"=="" goto help
 
-if /I "%~1"=="help" goto help
 if /I "%~1"=="format" goto format
 if /I "%~1"=="check" goto check
 if /I "%~1"=="test" goto test
