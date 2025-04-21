@@ -11,25 +11,33 @@ from typeagent.aitools import auth
 from typeagent.knowpro.importing import ConversationSettings
 from typeagent.podcasts import podcast
 
+from fixtures import needs_auth
+
+tests_dir = os.path.dirname(__file__)
+root_dir = os.path.dirname(tests_dir)
+DEFAULT_FILE = os.path.join(root_dir, "testdata", "Episode_53_AdrianTchaikovsky_index")
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "filename",
     nargs="?",
     type=str,
-    default=os.path.expanduser(
-        "~/TypeAgent/python/ta/testdata/Episode_53_AdrianTchaikovsky_index"
-    ),
+    default=DEFAULT_FILE,
 )
 
 
-async def main():
-    auth.load_dotenv()
-    args = parser.parse_args()
+def test_main(needs_auth):
+    # auth is needed because we use embeddings.
+    # TODO: Only use the embeddings loaded from the file and cached.
+    asyncio.run(main(DEFAULT_FILE))
+
+
+async def main(filename: str):
     print("Create conversation settings ...")
     settings = ConversationSettings()
-    print(f"Loading {args.filename} ...")
+    print(f"Loading {filename} ...")
     t0 = time.time()
-    pod = podcast.Podcast.read_from_file(args.filename, settings)
+    pod = podcast.Podcast.read_from_file(filename, settings)
     t1 = time.time()
     print(f"Loading took {t1-t0:.3f} seconds")
     if pod is None:
@@ -72,4 +80,6 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    args = parser.parse_args()
+    needs_auth()
+    asyncio.run(main(args.filename))
