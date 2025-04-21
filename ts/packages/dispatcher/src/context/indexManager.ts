@@ -114,7 +114,8 @@ export class IndexManager {
             location,
             size: 0,
             path: folder,
-            state: "new"
+            state: "new",
+            progress: 0,
         };
 
         // start indexing
@@ -146,6 +147,8 @@ export class IndexManager {
                 try {
                     const serviceRoot = getPackageFilePath("./node_modules/image-memory/dist/indexingService.js");                    
                     const childProcess = fork(serviceRoot);
+
+                    IndexManager.getInstance().indexingServices.set(index, childProcess);
     
                     childProcess.on("message", function (message) {
                         if (message === "Success") {
@@ -156,6 +159,14 @@ export class IndexManager {
                             resolve(undefined);
                         } else {
                             // TODO: handle index progres/status updates from the indexing service
+                            const idx: IndexData | undefined = message as IndexData;
+                            IndexManager.getInstance().indexingServices.forEach((childProc, index) => {
+                                if (index.location === idx.location) {
+                                    index.size = idx.size;
+                                    index.state = idx.state;
+                                    index.progress = idx.progress;
+                                }
+                            });
                         }
                     });
     

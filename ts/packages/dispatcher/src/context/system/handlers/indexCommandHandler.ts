@@ -32,15 +32,15 @@ class IndexCreateCommandHandler implements CommandHandler {
     public readonly description = "Create a new index";
     public readonly parameters = {
         flags: {
+        },
+        args: {
             type: {
                 description: "The type of index to create (images, email)",
                 char: "t",
                 type: "string",
                 enum: ["image", "email"],
                 default: "image",
-            }
-        },
-        args: {
+            },
             name: {
                 description: "Name of the index",
                 type: "string",
@@ -60,7 +60,11 @@ class IndexCreateCommandHandler implements CommandHandler {
     ) {
         const systemContext = context.sessionContext.agentContext;
 
-        if (await systemContext.indexManager.createIndex(params.args.name, params.flags.type as IndexSource, params.args.location)) {
+        if (await systemContext.indexManager.createIndex(params.args.name, params.args.type as IndexSource, params.args.location)) {
+
+            // save the index by saving the session
+            systemContext.session.save();
+
             displayResult(`Index ${params.args.name} created successfully.`, context);
         } else {
             displayWarn(`Failed to create index ${params.args.name}.`, context);
@@ -87,6 +91,10 @@ class IndexDeleteCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
 
         if (systemContext.indexManager.deleteIndex(params.args.name)) {
+
+            // save the index by saving the session
+            systemContext.session.save();
+
             displaySuccess(`Index ${params.args.name} deleted successfully.`, context);
         } else {
             displayWarn(`Failed to delete index with the name '${params.args.name}'.`, context);
@@ -100,7 +108,7 @@ class IndexDeleteCommandHandler implements CommandHandler {
 export function getIndexCommandHandlers(): CommandHandlerTable {
     return {
         description: "Indexing commands",
-        defaultSubCommand: "status",
+        defaultSubCommand: "list",
         commands: {
             // status: new IndexStatusCommandHandler(),
             list: new IndexListCommandHandler(),

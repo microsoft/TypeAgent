@@ -5,11 +5,11 @@
 
 import fs from "node:fs";
 //import { StopWatch } from "telemetry";
-import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
+import { ChatModel, TextEmbeddingModel } from "aiclient";
 import { isDirectoryPath } from "typeagent";
 import path from "node:path";
 //import { isImageFileType } from "common-utils";
-import * as knowLib from "knowledge-processor";
+//import * as knowLib from "knowledge-processor";
 import { ImageCollection, importImages }  from "image-memory";
 import { IndexingResults } from "knowpro";
 
@@ -24,6 +24,7 @@ export type IndexData = {
     size: number,        // the # of items in the index
     path: string,        // the path to the index
     state: "new" | "running" | "finished" | "stopped" | "error" // the state of the indexing service for this index
+    progress: number,   // the # of items processed for indexing (knowledge extraction)
 }
 
 // The different models being used for the index
@@ -35,7 +36,7 @@ export type Models = {
 };
 
 let index: IndexData | undefined = undefined;
-let stats: knowLib.IndexingStats | undefined;
+//let stats: knowLib.IndexingStats | undefined;
 //const maxCharsPerChunk: number = 4096;
 let images: ImageCollection | undefined = undefined;
 
@@ -65,50 +66,50 @@ process.on("disconnect", () => {
     process.exit(1);
 });
 
-export function createModels(): Models {
-    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
-    chatModelSettings.retryPauseMs = 10000;
-    const embeddingModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Embedding,
-    );
-    embeddingModelSettings.retryPauseMs = 25 * 1000;
+// export function createModels(): Models {
+//     const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+//     chatModelSettings.retryPauseMs = 10000;
+//     const embeddingModelSettings = openai.apiSettingsFromEnv(
+//         openai.ModelType.Embedding,
+//     );
+//     embeddingModelSettings.retryPauseMs = 25 * 1000;
 
-    const models: Models = {
-        chatModel: openai.createJsonChatModel(chatModelSettings, [
-            "chatMemory",
-        ]),
-        answerModel: openai.createChatModel(),
-        embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(embeddingModelSettings),
-            1024,
-        ),
-        /*
-        embeddingModelSmall: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel("3_SMALL", 1536),
-            256,
-        ),
-        */
-    };
-    models.chatModel.completionSettings.seed = 123;
-    models.answerModel.completionSettings.seed = 123;
-    return models;
-}
+//     const models: Models = {
+//         chatModel: openai.createJsonChatModel(chatModelSettings, [
+//             "chatMemory",
+//         ]),
+//         answerModel: openai.createChatModel(),
+//         embeddingModel: knowLib.createEmbeddingCache(
+//             openai.createEmbeddingModel(embeddingModelSettings),
+//             1024,
+//         ),
+//         /*
+//         embeddingModelSmall: knowLib.createEmbeddingCache(
+//             openai.createEmbeddingModel("3_SMALL", 1536),
+//             256,
+//         ),
+//         */
+//     };
+//     models.chatModel.completionSettings.seed = 123;
+//     models.answerModel.completionSettings.seed = 123;
+//     return models;
+// }
 
-function captureTokenStats(req: any, response: any): void {
-    if (stats) {
-        stats.updateCurrentTokenStats(response.usage);
-    }
-    if (false) {
-        //printer.writeCompletionStats(response.usage);
-        //printer.writeLine();
-    } else {
-        //printer.write(".");
-    }
-}
+// function captureTokenStats(req: any, response: any): void {
+//     if (stats) {
+//         stats.updateCurrentTokenStats(response.usage);
+//     }
+//     if (false) {
+//         //printer.writeCompletionStats(response.usage);
+//         //printer.writeLine();
+//     } else {
+//         //printer.write(".");
+//     }
+// }
 
-const models: Models = createModels();
-models.chatModel.completionCallback = captureTokenStats;
-models.answerModel.completionCallback = captureTokenStats;
+// const models: Models = createModels();
+// models.chatModel.completionCallback = captureTokenStats;
+// models.answerModel.completionCallback = captureTokenStats;
 
 // const imageMemory: knowLib.conversation.ConversationManager = await createImageMemory(
 //     models,
@@ -117,6 +118,31 @@ models.answerModel.completionCallback = captureTokenStats;
 //     true,
 //     false,
 // );
+
+// Sends the index state to the host process
+function sendIndexStatus() {
+    process.send?.(index);
+}
+
+/*
+* Notifies the host process of the progress of the indexing
+*
+* @param text - The name of the item that just got indexed
+* @param count - The index of the item that just got indexed (of the total items in the same folder)
+* @param max - The number of items in the current folder being indexed
+*/
+function indexingProgress(text: string, count: number, max: number) {
+
+    index!.progress++;
+    index!.size++;
+    index!.state = "running";
+
+    // only report when we get to the end of a folder
+    // TODO: make this less chatty - maybe percentage based or something?
+//    if (count === max) {
+        sendIndexStatus();
+//    }
+}
 
 async function startIndexing() {
 
@@ -146,8 +172,9 @@ async function startIndexing() {
     // get image knowledge
     images = await importImages(
         index.location,
-        path.join(index.location, "cache"),
+        path.join(index.path, "cache"),
         true,
+        indexingProgress
     );
 
     // build the index
@@ -157,6 +184,11 @@ async function startIndexing() {
             console.log(`Found ${images!.messages.entries} images`);
 
             images?.writeToFile(index!.path, "index");
+
+            console.log(`Index saved to ${index!.path}`);
+
+            index!.state = "finished";
+            sendIndexStatus();
         }
     );
 
