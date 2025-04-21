@@ -130,7 +130,7 @@ export function valueToSql(value: kp.DataFrameValue) {
 export function boolOpToSql(group: kp.DataFrameTermGroup): string {
     switch (group.booleanOp) {
         case "and":
-            return "AND ";
+            return " AND ";
         case "or":
         case "or_max":
             return " OR ";

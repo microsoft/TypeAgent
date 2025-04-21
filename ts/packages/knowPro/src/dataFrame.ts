@@ -269,7 +269,7 @@ export function isDataFrameGroup(
  */
 export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
     get conversation(): IConversation<TMessage>;
-    get tables(): DataFrameCollection;
+    get dataFrames(): DataFrameCollection;
 }
 
 export type HybridSearchResults = {
@@ -292,7 +292,7 @@ export async function searchConversationWithHybridScope(
     options?: SearchOptions,
     rawSearchQuery?: string,
 ) {
-    const dfCompiler = new DataFrameCompiler(hybridConversation.tables);
+    const dfCompiler = new DataFrameCompiler(hybridConversation.dataFrames);
     const dfScopeExpr = dfCompiler.compileScope(searchTermGroup);
     if (dfScopeExpr) {
         const scopeRanges = dfScopeExpr.eval();
@@ -326,8 +326,25 @@ export async function searchConversationHybrid(
         rawQuery,
     );
     // Also match any messages with matching data frame columns
+    let dataFrameMatches = searchDataFrames(
+        hybridConversation.dataFrames,
+        searchTermGroup,
+        options,
+    );
+    return {
+        conversationMatches,
+        dataFrameMatches,
+    };
+}
+
+export function searchDataFrames(
+    dataFrames: DataFrameCollection,
+    searchTermGroup: SearchTermGroup,
+    options?: SearchOptions,
+): ScoredMessageOrdinal[] | undefined {
+    options ??= createDefaultSearchOptions();
     let dataFrameMatches: ScoredMessageOrdinal[] | undefined;
-    const dfCompiler = new DataFrameCompiler(hybridConversation.tables);
+    const dfCompiler = new DataFrameCompiler(dataFrames);
     const dfQuery = dfCompiler.compile(searchTermGroup);
     if (dfQuery) {
         const dfResults = dfQuery.eval();
@@ -341,8 +358,5 @@ export async function searchConversationHybrid(
             }
         }
     }
-    return {
-        conversationMatches,
-        dataFrameMatches,
-    };
+    return dataFrameMatches;
 }

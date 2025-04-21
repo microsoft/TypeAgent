@@ -46,6 +46,21 @@ export async function createKnowproDataFrameCommands(
                     printer.writeError(`Skipped ${restaurant.name}`);
                 }
             }
+            testDb(db, restaurantCollection);
+            //
+            // Direct querying, without AI
+            //
+            printer.conversation = restaurantCollection.conversation;
+            let latitude = "50.804436 (nl)";
+            let rows = restaurantCollection.locations.getRow(
+                "latitude",
+                latitude,
+                kp.ComparisonOp.Eq,
+            );
+            if (rows) {
+                printer.writeLine("Geo matches");
+                writeRows(rows, restaurantCollection);
+            }
             //
             // Build index
             //
@@ -59,27 +74,13 @@ export async function createKnowproDataFrameCommands(
                 ),
             );
             progress.complete();
-            //
-            // Do some querying
-            //
-            printer.conversation = restaurantCollection.conversation;
-            const rows = await restaurantCollection.locations.getRow(
-                "latitude",
-                "50.804436 (nl)",
-                kp.ComparisonOp.Eq,
-            );
-            if (rows) {
-                printer.writeLine("Geo matches");
-                printer.writeJson(rows);
-                const descriptions =
-                    restaurantCollection.getDescriptionsFromRows(rows);
-                if (descriptions.length > 0) {
-                    printer.writeLine("Descriptions");
-                    printer.writeLines(descriptions);
-                }
-            }
             // Automatic querying of data frames using standard conversation stuff
-            const termGroup = kp.createAndTermGroup(
+            printer.writeInColor(
+                chalk.cyan,
+                "Searching for 50.804436 (nl), 5.8997846 (nl)",
+            );
+            // Hybrid querying
+            let termGroup = kp.createAndTermGroup(
                 kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
                 kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
             );
@@ -112,6 +113,43 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
+    function writeRows(
+        rows: kp.DataFrameRow[],
+        restaurantCollection: RestaurantCollection,
+    ) {
+        printer.writeJson(rows);
+        const descriptions = restaurantCollection.getDescriptionsFromRows(rows);
+        if (descriptions.length > 0) {
+            printer.writeLine("Descriptions");
+            printer.writeLines(descriptions);
+        }
+    }
+
+    function testDb(
+        db: RestaurantDb,
+        restaurantCollection: RestaurantCollection,
+    ) {
+        let latitude = "50.804436 (nl)";
+        let rows = db.geo.getRow("latitude", latitude, kp.ComparisonOp.Eq);
+        if (rows) {
+            printer.writeInColor(chalk.cyan, "Geo matches Sqlite");
+            writeRows(rows, restaurantCollection);
+        }
+
+        // Hybrid querying
+        let termGroup = kp.createAndTermGroup(
+            kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
+            kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
+        );
+        const dataFrameMatches = kp.searchDataFrames(db.dataFrames, termGroup);
+        if (dataFrameMatches) {
+            printer.writeScoredMessages(
+                dataFrameMatches,
+                restaurantCollection.conversation.messages,
+                25,
+            );
+        }
+    }
     return;
 }
 
@@ -208,7 +246,7 @@ export class RestaurantInfoCollection implements kp.IConversation {
 
 export class RestaurantCollection implements kp.IConversationHybrid {
     public restaurants: RestaurantInfoCollection;
-    public tables: kp.DataFrameCollection;
+    public dataFrames: kp.DataFrameCollection;
     public locations: kp.DataFrame;
     public addresses: kp.DataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
@@ -224,7 +262,7 @@ export class RestaurantCollection implements kp.IConversationHybrid {
             ["postalCode", { type: "string" }],
             ["addressLocality", { type: "string" }],
         ]);
-        this.tables = new Map<string, kp.IDataFrame>([
+        this.dataFrames = new Map<string, kp.IDataFrame>([
             [this.locations.name, this.locations],
             [this.addresses.name, this.addresses],
         ]);
@@ -236,10 +274,6 @@ export class RestaurantCollection implements kp.IConversationHybrid {
 
     public get conversation(): kp.IConversation {
         return this.restaurants;
-    }
-
-    public get dataFrames(): kp.DataFrameCollection {
-        return this.dataFrames;
     }
 
     public addRestaurant(restaurant: Restaurant): kp.RowSourceRef | undefined {

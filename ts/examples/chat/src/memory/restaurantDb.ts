@@ -7,10 +7,14 @@ import * as ms from "memory-storage";
 export class RestaurantDb {
     private db: sqlite.Database;
     public geo: GeoTable;
+    public dataFrames: kp.DataFrameCollection;
 
     constructor(dbPath: string) {
         this.db = ms.sqlite.createDatabase(dbPath, true);
         this.geo = new GeoTable(this.db);
+        this.dataFrames = new Map<string, kp.IDataFrame>([
+            [this.geo.name, this.geo],
+        ]);
     }
 
     public close() {
@@ -73,10 +77,23 @@ export class GeoTable implements kp.IDataFrame {
         throw new Error("Method not implemented.");
     }
 
-    findSources(
+    public findSources(
         searchTerms: kp.DataFrameTermGroup,
     ): kp.RowSourceRef[] | undefined {
-        throw new Error("Method not implemented.");
+        //throw new Error("Method not implemented.");
+        let sql = `SELECT sourceRef from ${this.name} WHERE `;
+        const where = ms.sqlite.dataFrameTermGroupToSql(
+            searchTerms,
+            this.columns,
+        );
+        sql += where;
+        const sources: kp.RowSourceRef[] = [];
+        const stmt = this.db.prepare(sql);
+        for (const row of stmt.iterate()) {
+            const geoRow = row as GeoRow;
+            sources.push(JSON.parse(geoRow.sourceRef));
+        }
+        return sources;
     }
 
     public *[Symbol.iterator](): Iterator<kp.DataFrameRow, any, any> {
