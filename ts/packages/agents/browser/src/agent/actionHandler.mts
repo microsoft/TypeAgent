@@ -128,6 +128,7 @@ async function updateBrowserContext(
                                 );
                                 context.agentContext.crossWordState =
                                     await getBoardSchema(context);
+
                                 sendSiteTranslatorStatus(
                                     targetTranslator,
                                     "initialized",
