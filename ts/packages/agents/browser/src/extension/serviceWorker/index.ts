@@ -182,7 +182,12 @@ function setupEventListeners(): void {
     // Message handling
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-            handleMessage(message, sender).then(sendResponse);
+            const handleAction = async () => {
+                const result = await handleMessage(message, sender);
+                sendResponse(result);
+            };
+
+            handleAction();
             return true; // Important: indicates we'll send response asynchronously
         },
     );
