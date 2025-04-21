@@ -294,7 +294,7 @@ function sendSiteTranslatorStatus(
             JSON.stringify({
                 method: "browser/siteTranslatorStatus",
                 id: callId,
-                body: {
+                params: {
                     translator: translatorName,
                     status: status,
                 },

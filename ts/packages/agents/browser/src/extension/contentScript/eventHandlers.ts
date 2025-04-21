@@ -55,7 +55,12 @@ function setupMessageListeners(): void {
     // Listen for messages from the background script
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-            handleMessage(message, sendResponse);
+            const handleAction = async () => {
+                await handleMessage(message, sendResponse);
+            };
+
+            handleAction();
+
             return true; // Indicates we'll send response asynchronously
         },
     );

@@ -19,14 +19,15 @@
   "main": "index.js",
   "scripts": {
     "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack",
+    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack:dev",
     "clean": "rimraf dist",
-    "dev": "webpack --config webpack.dev.js",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
-    "webpack": "webpack --config webpack.prod.js"
+    "webpack": "webpack --config webpack.prod.js",
+    "webpack:dev": "webpack --config webpack.dev.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

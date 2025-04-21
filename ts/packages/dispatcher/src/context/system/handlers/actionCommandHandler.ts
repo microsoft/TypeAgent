@@ -121,9 +121,9 @@ export class ActionCommandHandler implements CommandHandler {
                 if (actionInfo === undefined) {
                     continue;
                 }
-                const data = { action };
+
                 const getCurrentValue = (name: string) =>
-                    getObjectProperty(data, "action", name);
+                    getObjectProperty(action, name);
                 const parameterNames = getParameterNames(
                     actionInfo,
                     getCurrentValue,
