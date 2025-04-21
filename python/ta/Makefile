@@ -48,7 +48,7 @@ help:
 	@echo "make format # Run black"
 	@echo "make check  # Run pyright"
 	@echo "make test   # Run import_podcast test"
-	@echo "make test   # Run the demo of the week"
+	@echo "make demo   # Run the demo of the week"
 	@echo "make build  # Build the wheel (under dist/)"
 	@echo "make venv   # Create venv/"
 	@echo "make clean  # Remove build/, dist/, venv/, *.egg-info/"
