@@ -81,16 +81,9 @@ export class GeoTable implements kp.IDataFrame {
         searchTerms: kp.DataFrameTermGroup,
     ): kp.RowSourceRef[] | undefined {
         //throw new Error("Method not implemented.");
-        let sql = `SELECT sourceRef from ${this.name} WHERE `;
-        const where = ms.sqlite.dataFrameTermGroupToSql(
-            searchTerms,
-            this.columns,
-        );
-        sql += where;
         const sources: kp.RowSourceRef[] = [];
-        const stmt = this.db.prepare(sql);
-        for (const row of stmt.iterate()) {
-            const geoRow = row as GeoRow;
+        const rows = this.queryRows(searchTerms);
+        for (const geoRow of rows) {
             sources.push(JSON.parse(geoRow.sourceRef));
         }
         return sources;
@@ -110,6 +103,21 @@ export class GeoTable implements kp.IDataFrame {
             sourceRef: JSON.parse(row.sourceRef),
             record: row,
         };
+    }
+
+    private *queryRows(
+        searchTerms: kp.DataFrameTermGroup,
+    ): IterableIterator<GeoRow> {
+        let sql = `SELECT sourceRef from ${this.name} WHERE `;
+        const where = ms.sqlite.dataFrameTermGroupToSql(
+            searchTerms,
+            this.columns,
+        );
+        sql += where;
+        const stmt = this.db.prepare(sql);
+        for (const row of stmt.iterate()) {
+            yield row as GeoRow;
+        }
     }
 
     private sqlGetAll() {
@@ -149,3 +157,15 @@ type AddressRow = {
     addressLocality?: string;
 };
 */
+
+export type NumberAndText = {
+    number: number;
+    text: string;
+};
+
+export function parseNumberAndText(str: string): NumberAndText {
+    const match = str.match(/^([\d.]+)\s*(.*)$/);
+    return match
+        ? { number: parseFloat(match[1]), text: match[2].trim() }
+        : { number: NaN, text: str };
+}

@@ -34,8 +34,8 @@ export async function createKnowproDataFrameCommands(
                 filePath,
                 numRestaurants,
             );
-            const restaurantCollection: RestaurantCollection =
-                new RestaurantCollection(db);
+            const restaurantCollection: HybridRestaurantCollection =
+                new HybridRestaurantCollection(db);
             for (let i = 0; i < restaurants.length; ++i) {
                 const restaurant = restaurants[i];
                 const sourceRef =
@@ -96,7 +96,10 @@ export async function createKnowproDataFrameCommands(
                 );
             }
             // NLP querying
-            printer.writeInColor(chalk.cyan, "Searching for Punjabi Food");
+            printer.writeInColor(
+                chalk.cyan,
+                "Searching for 'Punjabi Restaurant'",
+            );
             const matchResult =
                 await restaurantCollection.findWithLanguage(
                     "Punjabi Restaurant",
@@ -115,7 +118,7 @@ export async function createKnowproDataFrameCommands(
 
     function writeRows(
         rows: kp.DataFrameRow[],
-        restaurantCollection: RestaurantCollection,
+        restaurantCollection: HybridRestaurantCollection,
     ) {
         printer.writeJson(rows);
         const descriptions = restaurantCollection.getDescriptionsFromRows(rows);
@@ -127,7 +130,7 @@ export async function createKnowproDataFrameCommands(
 
     function testDb(
         db: RestaurantDb,
-        restaurantCollection: RestaurantCollection,
+        restaurantCollection: HybridRestaurantCollection,
     ) {
         let latitude = "50.804436 (nl)";
         let rows = db.geo.getRow("latitude", latitude, kp.ComparisonOp.Eq);
@@ -175,17 +178,26 @@ export interface Address extends Thing, kp.DataFrameRecord {
     addressLocality?: string;
 }
 
+export interface Rating extends Thing, kp.DataFrameRecord {
+    bestRating?: string;
+    reviewCount?: string;
+    ratingValue?: string;
+    worstRating?: string;
+}
+
 export type Container<T> = {
     item?: T | undefined;
 };
 
 export class RestaurantInfo implements kp.IMessage {
+    public restaurant: Restaurant;
     public textChunks: string[];
     public timestamp?: string | undefined;
     public tags: string[] = [];
     public deletionInfo?: kp.DeletionInfo | undefined;
 
-    constructor(public restaurant: Restaurant) {
+    constructor(restaurant: Restaurant) {
+        this.restaurant = restaurant;
         let text = `Restaurant:\n${restaurant.name}`;
         if (restaurant.description) {
             text += `\n\n${restaurant.description}`;
@@ -203,7 +215,7 @@ export class RestaurantInfo implements kp.IMessage {
     }
 }
 
-export class RestaurantInfoCollection implements kp.IConversation {
+export class RestaurantCollection implements kp.IConversation {
     public settings: kp.ConversationSettings;
     public nameTag: string = "description";
     public tags: string[] = [];
@@ -244,22 +256,23 @@ export class RestaurantInfoCollection implements kp.IConversation {
     }
 }
 
-export class RestaurantCollection implements kp.IConversationHybrid {
-    public restaurants: RestaurantInfoCollection;
+export class HybridRestaurantCollection implements kp.IConversationHybrid {
+    public restaurants: RestaurantCollection;
+    // Some information for restaurants is stored in data frames
     public dataFrames: kp.DataFrameCollection;
     public locations: kp.IDataFrame;
-    public addresses: kp.DataFrame;
+    public addresses: kp.IDataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
-    constructor(private db: RestaurantDb) {
-        this.restaurants = new RestaurantInfoCollection();
+    constructor(private restaurantDb: RestaurantDb) {
+        this.restaurants = new RestaurantCollection();
         /*
         this.locations = new kp.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
         */
-        this.locations = this.db.geo;
+        this.locations = this.restaurantDb.geo;
         this.addresses = new kp.DataFrame("address", [
             ["streetAddress", { type: "string" }],
             ["postalCode", { type: "string" }],
@@ -292,12 +305,6 @@ export class RestaurantCollection implements kp.IConversationHybrid {
                 sourceRef,
                 record: restaurant.geo,
             });
-            /*
-            this.db.geo.addRows({
-                sourceRef,
-                record: restaurant.geo!,
-            });
-            */
         }
         if (restaurant.address) {
             this.addresses.addRows({ sourceRef, record: restaurant.address });
@@ -339,7 +346,6 @@ export class RestaurantCollection implements kp.IConversationHybrid {
                 undefined,
                 sq.rawQuery,
             );
-            // TODO: combine these separate matches?
             if (matches && matches.conversationMatches) {
                 this.collectMessages(
                     matches.conversationMatches.messageMatches,
