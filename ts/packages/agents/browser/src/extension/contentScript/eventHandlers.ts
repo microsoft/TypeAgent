@@ -56,9 +56,9 @@ function setupMessageListeners(): void {
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
             const handleAction = async () => {
-                await handleMessage(message, sendResponse);;
+                await handleMessage(message, sendResponse);
             };
-    
+
             handleAction();
 
             return true; // Indicates we'll send response asynchronously
