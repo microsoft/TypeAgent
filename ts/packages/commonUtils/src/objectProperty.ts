@@ -18,42 +18,53 @@ export function getObjectPropertyNames(obj: object) {
     return names;
 }
 
-export function getObjectProperty(data: any, objectName: string, name: string) {
-    if (name === "") {
-        return data[objectName];
+function safeGetProperty(obj: any, name: string | number) {
+    // Protect against prototype pollution
+    if (
+        name === "__proto__" ||
+        name === "constructor" ||
+        name === "prototype"
+    ) {
+        throw new Error(`Invalid property name: ${name}`);
     }
+    return obj[name];
+}
+
+export function getObjectProperty(data: any, name: string) {
+    if (name === "") {
+        return data;
+    }
+    let curr = data;
     const properties = name.split(".");
-    let lastName: string | number = objectName;
-    let curr: any = data;
     for (const name of properties) {
-        // Protect against prototype pollution
-        if (
-            name === "__proto__" ||
-            name === "constructor" ||
-            name === "prototype"
-        ) {
-            throw new Error(`Invalid property name: ${name}`);
-        }
-        const next = curr[lastName];
-        if (next === undefined) {
-            return undefined;
-        }
         const maybeIndex = parseInt(name);
         if (maybeIndex.toString() === name) {
             // Array index
-            if (!Array.isArray(next)) {
+            if (!Array.isArray(curr)) {
                 return undefined;
             }
-            lastName = maybeIndex;
+            curr = curr[maybeIndex];
         } else {
-            if (typeof next !== "object") {
+            if (typeof curr !== "object" || curr === null) {
                 return undefined;
             }
-            lastName = name;
+
+            curr = safeGetProperty(curr, name);
         }
-        curr = next;
     }
-    return curr[lastName];
+    return curr;
+}
+
+function safeSetProperty(obj: any, name: string | number, value: any) {
+    // Protect against prototype pollution
+    if (
+        name === "__proto__" ||
+        name === "constructor" ||
+        name === "prototype"
+    ) {
+        throw new Error(`Invalid property name: ${name}`);
+    }
+    obj[name] = value;
 }
 
 export function setObjectProperty(
@@ -67,22 +78,13 @@ export function setObjectProperty(
     let lastName: string | number = objectName;
     let curr = data;
     for (const name of properties) {
-        // Protect against prototype pollution
-        if (
-            name === "__proto__" ||
-            name === "constructor" ||
-            name === "prototype"
-        ) {
-            throw new Error(`Invalid property name: ${name}`);
-        }
-
-        let next = curr[lastName];
+        let next = safeGetProperty(curr, lastName);
         const maybeIndex = parseInt(name);
         if (maybeIndex.toString() === name) {
             // Array index
             if (next === undefined || (override && !Array.isArray(next))) {
                 next = [];
-                curr[lastName] = next;
+                safeSetProperty(curr, lastName, next);
             }
             curr = next;
             if (!Array.isArray(curr)) {
@@ -92,7 +94,7 @@ export function setObjectProperty(
         } else {
             if (next === undefined || (override && typeof next !== "object")) {
                 next = {};
-                curr[lastName] = next;
+                safeSetProperty(curr, lastName, next);
             }
             curr = next;
             if (typeof curr !== "object") {
@@ -101,5 +103,5 @@ export function setObjectProperty(
             lastName = name;
         }
     }
-    curr[lastName] = value;
+    safeSetProperty(curr, lastName, value);
 }
