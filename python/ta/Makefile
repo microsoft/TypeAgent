@@ -29,7 +29,7 @@ venv:
 	@venv/bin/python --version
 	@venv/bin/black --version | head -1
 	@venv/bin/pyright --version
-	@python -m pytest --version
+	@venv/bin/pytest --version
 
 .PHONY: clean
 clean:
