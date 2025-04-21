@@ -30,8 +30,7 @@ goto end
 :test
 if not exist "venv\" call make.bat venv
 echo Running tests...
-set PYTHONPATH=%CD%
-venv\Scripts\pytest -s
+venv\Scripts\python -m pytest -s
 goto end
 
 :build
@@ -47,7 +46,7 @@ venv\Scripts\pip -q install -r requirements.txt
 venv\Scripts\python --version
 venv\Scripts\black --version
 venv\Scripts\pyright --version
-venv\Scripts\pytest --version
+venv\Scripts\python -m pytest --version
 
 goto end
 

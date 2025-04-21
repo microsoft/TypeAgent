@@ -16,7 +16,7 @@ check: venv
 
 .PHONY: test
 test: venv
-	PYTHONPATH=`pwd` venv/bin/pytest -s
+	venv/bin/python -m pytest -s
 
 .PHONY: build
 build: venv
@@ -29,7 +29,7 @@ venv:
 	@venv/bin/python --version
 	@venv/bin/black --version | head -1
 	@venv/bin/pyright --version
-	@venv/bin/pytest --version
+	@venv/bin/python -m pytest --version
 
 .PHONY: clean
 clean:
