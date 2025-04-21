@@ -10,6 +10,7 @@ import * as kp from "knowpro";
 import { createIndexingEventHandler } from "./knowproCommon.js";
 import chalk from "chalk";
 import { conversation as kpLib } from "knowledge-processor";
+import { RestaurantDb } from "./restaurantDb.js";
 
 export async function createKnowproDataFrameCommands(
     commands: Record<string, CommandHandler>,
@@ -19,78 +20,95 @@ export async function createKnowproDataFrameCommands(
     commands.kpDataFrame = testDataFrame;
 
     async function testDataFrame(args: string[]) {
-        //
-        // Load some restaurants into a collection
-        //
-        const filePath =
-            "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
-        const numRestaurants = 16;
-        const restaurants: Restaurant[] = await loadThings<Restaurant>(
-            filePath,
-            numRestaurants,
+        const db = new RestaurantDb(
+            "/data/testChat/knowpro/restaurants/restaurants.db",
         );
-        const restaurantCollection: RestaurantCollection =
-            new RestaurantCollection();
-        for (let i = 0; i < restaurants.length; ++i) {
-            const restaurant = restaurants[i];
-            if (restaurantCollection.addRestaurant(restaurant)) {
-                printer.writeLine(restaurant.name);
-            } else {
-                printer.writeError(`Skipped ${restaurant.name}`);
-            }
-        }
-        //
-        // Build index
-        //
-        printer.writeHeading("Building index");
-        const progress = new ProgressBar(printer, restaurants.length);
-        await restaurantCollection.buildIndex(
-            createIndexingEventHandler(printer, progress, restaurants.length),
-        );
-        progress.complete();
-        //
-        // Do some querying
-        //
-        printer.conversation = restaurantCollection.conversation;
-        const rows = await restaurantCollection.locations.get(
-            "latitude",
-            "50.804436 (nl)",
-            kp.ComparisonOp.Eq,
-        );
-        if (rows) {
-            printer.writeLine("Geo matches");
-            printer.writeJson(rows);
-            const descriptions =
-                restaurantCollection.getDescriptionsFromRows(rows);
-            if (descriptions.length > 0) {
-                printer.writeLine("Descriptions");
-                printer.writeLines(descriptions);
-            }
-        }
-        // Automatic querying of data frames using standard conversation stuff
-        const termGroup = kp.createAndTermGroup(
-            kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
-            kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
-        );
-        const hybridMatches = await kp.searchConversationHybrid(
-            restaurantCollection,
-            termGroup,
-        );
-        if (hybridMatches && hybridMatches.dataFrameMatches) {
-            printer.writeScoredMessages(
-                hybridMatches.dataFrameMatches,
-                restaurantCollection.conversation.messages,
-                25,
+        try {
+            //
+            // Load some restaurants into a collection
+            //
+            const filePath =
+                "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
+            const numRestaurants = 16;
+            const restaurants: Restaurant[] = await loadThings<Restaurant>(
+                filePath,
+                numRestaurants,
             );
-        }
-        // NLP querying
-        printer.writeInColor(chalk.cyan, "Searching for Punjabi Food");
-        const matchResult =
-            await restaurantCollection.findWithLanguage("Punjabi Restaurant");
-        if (matchResult.success) {
-            for (const match of matchResult.data) {
-                printer.writeJson(match);
+            const restaurantCollection: RestaurantCollection =
+                new RestaurantCollection(db);
+            for (let i = 0; i < restaurants.length; ++i) {
+                const restaurant = restaurants[i];
+                const sourceRef =
+                    restaurantCollection.addRestaurant(restaurant);
+                if (sourceRef !== undefined) {
+                    printer.writeLine(restaurant.name);
+                } else {
+                    printer.writeError(`Skipped ${restaurant.name}`);
+                }
             }
+            //
+            // Build index
+            //
+            printer.writeHeading("Building index");
+            const progress = new ProgressBar(printer, restaurants.length);
+            await restaurantCollection.buildIndex(
+                createIndexingEventHandler(
+                    printer,
+                    progress,
+                    restaurants.length,
+                ),
+            );
+            progress.complete();
+            //
+            // Do some querying
+            //
+            printer.conversation = restaurantCollection.conversation;
+            const rows = await restaurantCollection.locations.getRow(
+                "latitude",
+                "50.804436 (nl)",
+                kp.ComparisonOp.Eq,
+            );
+            if (rows) {
+                printer.writeLine("Geo matches");
+                printer.writeJson(rows);
+                const descriptions =
+                    restaurantCollection.getDescriptionsFromRows(rows);
+                if (descriptions.length > 0) {
+                    printer.writeLine("Descriptions");
+                    printer.writeLines(descriptions);
+                }
+            }
+            // Automatic querying of data frames using standard conversation stuff
+            const termGroup = kp.createAndTermGroup(
+                kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
+                kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
+            );
+            const hybridMatches = await kp.searchConversationHybrid(
+                restaurantCollection,
+                termGroup,
+            );
+            if (hybridMatches && hybridMatches.dataFrameMatches) {
+                printer.writeScoredMessages(
+                    hybridMatches.dataFrameMatches,
+                    restaurantCollection.conversation.messages,
+                    25,
+                );
+            }
+            // NLP querying
+            printer.writeInColor(chalk.cyan, "Searching for Punjabi Food");
+            const matchResult =
+                await restaurantCollection.findWithLanguage(
+                    "Punjabi Restaurant",
+                );
+            if (matchResult.success) {
+                for (const match of matchResult.data) {
+                    printer.writeJson(match);
+                }
+            }
+        } catch (ex) {
+            printer.writeError(`${ex}`);
+        } finally {
+            db.close();
         }
     }
 
@@ -195,7 +213,7 @@ export class RestaurantCollection implements kp.IConversationHybrid {
     public addresses: kp.DataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
-    constructor() {
+    constructor(private db: RestaurantDb) {
         this.restaurants = new RestaurantInfoCollection();
         this.locations = new kp.DataFrame("geo", [
             ["latitude", { type: "string" }],
@@ -224,10 +242,10 @@ export class RestaurantCollection implements kp.IConversationHybrid {
         return this.dataFrames;
     }
 
-    public addRestaurant(restaurant: Restaurant): boolean {
+    public addRestaurant(restaurant: Restaurant): kp.RowSourceRef | undefined {
         // Bad data in the file
         if (!this.isGoodData(restaurant)) {
-            return false;
+            return undefined;
         }
         const sourceRef: kp.RowSourceRef = {
             range: this.restaurants.add(restaurant),
@@ -237,11 +255,15 @@ export class RestaurantCollection implements kp.IConversationHybrid {
                 sourceRef,
                 record: restaurant.geo,
             });
+            this.db.geo.addRows({
+                sourceRef,
+                record: restaurant.geo!,
+            });
         }
         if (restaurant.address) {
             this.addresses.addRows({ sourceRef, record: restaurant.address });
         }
-        return true;
+        return sourceRef;
     }
 
     public getDescriptionsFromRows(rows: kp.DataFrameRow[]): string[] {

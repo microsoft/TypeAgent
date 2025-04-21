@@ -60,7 +60,7 @@ export interface IDataFrame extends Iterable<DataFrameRow> {
     readonly columns: DataFrameColumns;
 
     addRows(...rows: DataFrameRow[]): void;
-    get(
+    getRow(
         columnName: string,
         columnValue: DataFrameValue,
         op: ComparisonOp,
@@ -110,7 +110,7 @@ export class DataFrame implements IDataFrame {
         this.rows.push(...rows);
     }
 
-    public get(
+    public getRow(
         columnName: string,
         columnValue: DataFrameValue,
         compareOp: ComparisonOp,

@@ -76,6 +76,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      better-sqlite3:
+        specifier: 11.8.1
+        version: 11.8.1
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -109,6 +112,9 @@ importers:
       memory-providers:
         specifier: workspace:*
         version: link:../memoryProviders
+      memory-storage:
+        specifier: workspace:*
+        version: link:../../packages/memory/storage
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent
@@ -119,6 +125,9 @@ importers:
         specifier: ^5.4.2
         version: 5.4.5
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1

@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "aiclient": "workspace:*",
+    "better-sqlite3": "11.8.1",
     "chalk": "^5.4.1",
     "code-processor": "workspace:*",
     "common-utils": "workspace:*",
@@ -37,11 +38,13 @@
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "memory-providers": "workspace:*",
+    "memory-storage": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typescript": "^5.4.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "7.6.11",
     "copyfiles": "^2.4.1",
     "rimraf": "^6.0.1"
   },
