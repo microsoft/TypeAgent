@@ -162,7 +162,9 @@ export function resolveDataFrameColumn(
     return undefined;
 }
 
-function getDataFrameAndColumnName(text: string): [string | undefined, string] {
+export function getDataFrameAndColumnName(
+    text: string,
+): [string | undefined, string] {
     const frameNameStartAt = text.indexOf(".");
     if (frameNameStartAt >= 0) {
         return [

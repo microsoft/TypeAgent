@@ -43,8 +43,7 @@ export async function createKnowproDataFrameCommands(
             //
             let query =
                 "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
-            const expr =
-                await restaurantCollection.queryExprFromLanguage(query);
+            const expr = await restaurantCollection.findWithLanguage(query);
             if (!expr.success) {
                 printer.writeError(expr.message);
             } else {
@@ -86,9 +85,7 @@ export async function createKnowproDataFrameCommands(
                 "Searching for 'Punjabi Restaurant'",
             );
             const matchResult =
-                await restaurantCollection.findWithLanguage(
-                    "Punjabi Restaurant",
-                );
+                await restaurantCollection.findWithLanguage(query);
             if (matchResult.success) {
                 for (const match of matchResult.data) {
                     printer.writeJson(match);
@@ -380,23 +377,70 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
     }
 
     public async queryExprFromLanguage(query: string) {
-        return kp.searchQueryExprFromLanguage(
+        return kp.searchQueryFromLanguage(
             this.conversation,
             this.queryTranslator,
             query,
         );
     }
 
-    public async findWithLanguage(
+    public async findWithLanguage1(
         query: string,
     ): Promise<Result<Restaurant[]>> {
-        const queryResults = await this.queryExprFromLanguage(query);
+        const queryResults = await kp.searchQueryExprFromLanguage(
+            this.conversation,
+            this.queryTranslator,
+            query,
+        );
         if (!queryResults.success) {
             return queryResults;
         }
         const matchedRestaurants: Restaurant[] = [];
         const sq = queryResults.data[0];
         for (const sExpr of sq.selectExpressions) {
+            const matches = await kp.searchConversationHybrid(
+                this,
+                sExpr.searchTermGroup,
+                sExpr.when,
+                undefined,
+                sq.rawQuery,
+            );
+            if (matches && matches.conversationMatches) {
+                this.collectMessages(
+                    matches.conversationMatches.messageMatches,
+                    matchedRestaurants,
+                );
+            }
+            if (matches && matches.dataFrameMatches) {
+                this.collectMessages(
+                    matches.dataFrameMatches,
+                    matchedRestaurants,
+                );
+            }
+        }
+        return success(matchedRestaurants);
+    }
+
+    public async findWithLanguage(
+        query: string,
+    ): Promise<Result<Restaurant[]>> {
+        const queryResults = await kp.searchQueryFromLanguage(
+            this.conversation,
+            this.queryTranslator,
+            query,
+        );
+        if (!queryResults.success) {
+            return queryResults;
+        }
+        const searchQuery = queryResults.data;
+        const dfTerms = kp.extractDataFrameTerms(this.dataFrames, searchQuery);
+        const sq = kp.compileSearchQuery(this.conversation, searchQuery)[0];
+        const matchedRestaurants: Restaurant[] = [];
+        for (let i = 0; i < sq.selectExpressions.length; ++i) {
+            const sExpr = sq.selectExpressions[i];
+            sExpr.searchTermGroup.terms.push(
+                ...kp.facetTermsToSearchTerms(dfTerms[i]),
+            );
             const matches = await kp.searchConversationHybrid(
                 this,
                 sExpr.searchTermGroup,

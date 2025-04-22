@@ -2,10 +2,14 @@
 // Licensed under the MIT License.
 
 import { setIntersect, setUnion } from "./collections.js";
-import { DataFrameCompiler } from "./dataFrameQuery.js";
+import {
+    DataFrameCompiler,
+    getDataFrameAndColumnName,
+} from "./dataFrameQuery.js";
 import {
     IConversation,
     IMessage,
+    PropertySearchTerm,
     ScoredMessageOrdinal,
     SearchTerm,
     SearchTermGroup,
@@ -19,6 +23,8 @@ import {
     searchConversation,
     SearchOptions,
 } from "./search.js";
+import { createPropertySearchTerm } from "./searchLib.js";
+import { FacetTerm, SearchFilter, SearchQuery } from "./searchQuerySchema.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -359,4 +365,52 @@ export function searchDataFrames(
         }
     }
     return dataFrameMatches;
+}
+
+export function extractDataFrameFacetTerms(
+    dataFrames: DataFrameCollection,
+    searchFilters: SearchFilter[],
+    dfFacets: FacetTerm[],
+) {
+    for (const searchFilter of searchFilters) {
+        if (searchFilter.entitySearchTerms) {
+            for (const entityTerm of searchFilter.entitySearchTerms) {
+                if (entityTerm.facets) {
+                    const facets = entityTerm.facets;
+                    entityTerm.facets = [];
+                    for (const ff of facets) {
+                        const [dfName, colName] = getDataFrameAndColumnName(
+                            ff.facetName,
+                        );
+                        if (!dfName || !dataFrames.has(dfName) || !colName) {
+                            entityTerm.facets.push(ff);
+                        } else {
+                            dfFacets.push(ff);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export function extractDataFrameTerms(
+    dataFrames: DataFrameCollection,
+    query: SearchQuery,
+): FacetTerm[][] {
+    const allDfTerms: FacetTerm[][] = [];
+    for (const expr of query.searchExpressions) {
+        const dfTerms: FacetTerm[] = [];
+        extractDataFrameFacetTerms(dataFrames, expr.filters, dfTerms);
+        allDfTerms.push(dfTerms);
+    }
+    return allDfTerms;
+}
+
+export function facetTermsToSearchTerms(
+    facetTerms: FacetTerm[],
+): PropertySearchTerm[] {
+    return facetTerms.map((f) => {
+        return createPropertySearchTerm(f.facetName, f.facetValue);
+    });
 }
