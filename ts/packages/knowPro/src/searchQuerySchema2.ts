@@ -4,14 +4,11 @@
 import { DateTimeRange } from "./dateTimeSchema.js";
 import { KnownFacet } from "./knownFacetsSchema.js";
 
-export type CmpOp = "eq" | "neq" | "lt" | "lte" | "gt" | "gte";
-
 export type FacetTerm = {
     // the name of the facet, such as "color", "profession"; "*" means match any facet name
     facetName: string;
     // the value of the facet, such as "red", "writer"; "*" means match any facet value
     facetValue: KnownFacet | string;
-    cmpOp?: CmpOp | undefined;
 };
 
 // Use to find information about specific, tangible people, places, institutions or things only..

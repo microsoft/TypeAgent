@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
 import * as ms from "memory-storage";

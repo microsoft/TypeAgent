@@ -41,32 +41,24 @@ export async function createKnowproDataFrameCommands(
             );
             //testDb(db, restaurantCollection);
             //
+            let query =
+                "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
+            const expr =
+                await restaurantCollection.queryExprFromLanguage(query);
+            if (!expr.success) {
+                printer.writeError(expr.message);
+            } else {
+                printer.writeJson(expr.data);
+            }
             // Direct querying, without AI
             //
             printer.conversation = restaurantCollection.conversation;
-            let latitude = "50.804436 (nl)";
-            let rows = restaurantCollection.locations.getRow(
-                "latitude",
-                latitude,
-                kp.ComparisonOp.Eq,
-            );
-            if (rows) {
-                printer.writeLine("Geo matches");
-                writeRows(rows, restaurantCollection);
-            }
+            testGeo(restaurantCollection);
             //
             // Build index
             //
             printer.writeHeading("Building index");
-            const progress = new ProgressBar(printer, restaurants.length);
-            await restaurantCollection.buildIndex(
-                createIndexingEventHandler(
-                    printer,
-                    progress,
-                    restaurants.length,
-                ),
-            );
-            progress.complete();
+            await buildIndex(restaurantCollection);
             // Automatic querying of data frames using standard conversation stuff
             printer.writeInColor(
                 chalk.cyan,
@@ -131,6 +123,18 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
+    async function buildIndex(
+        restaurantCollection: HybridRestaurantCollection,
+    ) {
+        const numRestaurants =
+            restaurantCollection.conversation.messages.length;
+        const progress = new ProgressBar(printer, numRestaurants);
+        await restaurantCollection.buildIndex(
+            createIndexingEventHandler(printer, progress, numRestaurants),
+        );
+        progress.complete();
+    }
+
     function writeRows(
         rows: kp.DataFrameRow[],
         restaurantCollection: HybridRestaurantCollection,
@@ -140,6 +144,19 @@ export async function createKnowproDataFrameCommands(
         if (descriptions.length > 0) {
             printer.writeLine("Descriptions");
             printer.writeLines(descriptions);
+        }
+    }
+
+    function testGeo(restaurantCollection: HybridRestaurantCollection) {
+        let latitude = "50.804436 (nl)";
+        let rows = restaurantCollection.locations.getRow(
+            "latitude",
+            latitude,
+            kp.ComparisonOp.Eq,
+        );
+        if (rows) {
+            printer.writeLine("Geo matches");
+            writeRows(rows, restaurantCollection);
         }
     }
     /*
@@ -315,7 +332,7 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
             [this.facets.name, this.facets],
         ]);
 
-        this.queryTranslator = kp.createSearchQueryTranslator(
+        this.queryTranslator = kp.createSearchQueryTranslator2(
             openai.createChatModelDefault("knowpro_test"),
         );
     }
@@ -362,14 +379,18 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
         return descriptions;
     }
 
-    public async findWithLanguage(
-        query: string,
-    ): Promise<Result<Restaurant[]>> {
-        const queryResults = await kp.searchQueryExprFromLanguage(
+    public async queryExprFromLanguage(query: string) {
+        return kp.searchQueryExprFromLanguage(
             this.conversation,
             this.queryTranslator,
             query,
         );
+    }
+
+    public async findWithLanguage(
+        query: string,
+    ): Promise<Result<Restaurant[]>> {
+        const queryResults = await this.queryExprFromLanguage(query);
         if (!queryResults.success) {
             return queryResults;
         }
