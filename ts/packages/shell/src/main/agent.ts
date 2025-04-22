@@ -7,6 +7,8 @@ import {
     AppAgent,
     AppAgentManifest,
     ParsedCommandParams,
+    PartialParsedCommandParams,
+    SessionContext,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -22,6 +24,7 @@ import {
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 import { ShellAction } from "./shellActionSchema.js";
 import { ShellWindow } from "./shellWindow.js";
+import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 
 const port = process.env.PORT || 9001;
 
@@ -110,6 +113,36 @@ class ShellSetSettingCommandHandler implements CommandHandler {
         } else {
             displayWarn(`${name} is unchanged from ${value}`, context);
         }
+    }
+    public async getCompletion(
+        context: SessionContext<ShellContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<string[]> {
+        const completions: string[] = [];
+        for (const name of names) {
+            if (name === "name") {
+                completions.push(
+                    ...getObjectPropertyNames(
+                        context.agentContext.shellWindow.getUserSettings(),
+                    ),
+                );
+            }
+
+            if (name === "value") {
+                const settingName = params.args?.name;
+                if (settingName) {
+                    const settings =
+                        context.agentContext.shellWindow.getUserSettings();
+                    const value = getObjectProperty(settings, settingName);
+                    if (typeof value === "boolean") {
+                        completions.push("true");
+                        completions.push("false");
+                    }
+                }
+            }
+        }
+        return completions;
     }
 }
 
