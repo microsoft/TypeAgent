@@ -81,11 +81,11 @@ export async function createKnowproDataFrameCommands(
 
     async function seachDataFrame(args: string[]) {
         // NLP querying
-        printer.writeInColor(chalk.cyan, "Searching for 'Punjabi Restaurant'");
+        printer.writeInColor(chalk.cyan, query);
         const matchResult = await restaurantCollection.findWithLanguage(query);
         if (matchResult.success) {
             for (const match of matchResult.data) {
-                printer.writeJson(match);
+                printer.writeLine(match.name);
             }
         }
     }
