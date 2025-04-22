@@ -624,7 +624,7 @@ async function indexImages(
                 // index the image
                 const img = await indexImage(fullFilePath, cachePath, chatModel);
 
-                if (callback) {
+                if (callback && img) {
                     callback(fileNames[i], i, fileNames.length);
                 }
 

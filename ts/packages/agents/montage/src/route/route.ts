@@ -63,12 +63,13 @@ app.get("/image", (req: Request, res: Response) => {
 
     // File isn't in an allowed folder
     if (!served) {
-        res.status(403).send("Forbidden");
+        res.status(403).send();
     }
 });
 
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
+// TODO: write thumbnails to image cache folder instead of in place
 app.get("/thumbnail", async (req: Request, res: Response) => {
     const file = req.query.path as string | undefined;
     let served: boolean = false;
@@ -115,7 +116,7 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
 
     // File isn't in an allowed folder
     if (!served) {
-        res.status(403).send("Forbidden");
+        res.status(403).send();
     }
 
     // TOOD: figure out why this fails for most images
@@ -174,7 +175,7 @@ app.get("/knowlegeResponse", (req: Request, res: Response) => {
 
     // File isn't in an allowed folder
     if (!served) {
-        res.status(403).send("Forbidden");
+        res.status(403).send();
     }
 });
 

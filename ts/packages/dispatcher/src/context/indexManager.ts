@@ -46,7 +46,7 @@ export class IndexManager {
         IndexManager.imageRoot = path.join(IndexManager.rootPath, "image")
         ensureDirectory(IndexManager.imageRoot!);
 
-        // TODO: find a good way to make a shared cache of .kr files for images
+        // TODO: find a good way to make a shared cache of .kr files and thumbnails for images
         // IndexManager.cacheRoot = path.join(IndexManager.rootPath, "cache");
         // ensureDirectory(IndexManager.cacheRoot);
 
@@ -118,6 +118,7 @@ export class IndexManager {
             path: folder,
             state: "new",
             progress: 0,
+            sizeOnDisk: 0
         };
 
         // start indexing
@@ -126,7 +127,6 @@ export class IndexManager {
 
     public deleteIndex(name: string): boolean {
         
-        // TODO: stop indexing
         this.indexingServices.forEach((childProc, index) => {
             if (index.name == name) {
                 // kill the index process
@@ -160,15 +160,15 @@ export class IndexManager {
                             index.state = "error";
                             resolve(undefined);
                         } else {
-                            // TODO: handle index progres/status updates from the indexing service
                             const idx: IndexData | undefined = message as IndexData;
                             IndexManager.getInstance().indexingServices.forEach((childProc, index) => {
                                 if (index.location === idx.location) {
                                     index.size = idx.size;
                                     index.state = idx.state;
                                     index.progress = idx.progress;
+                                    index.sizeOnDisk = idx.sizeOnDisk;
                                 }
-                            });
+                            });                            
                         }
                     });
     

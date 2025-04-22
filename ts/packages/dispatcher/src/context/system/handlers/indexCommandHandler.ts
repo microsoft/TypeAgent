@@ -6,6 +6,7 @@ import { CommandHandler, CommandHandlerTable } from "@typeagent/agent-sdk/helper
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { displayResult, displaySuccess, displayWarn } from "@typeagent/agent-sdk/helpers/display";
 import { IndexData, IndexSource } from "image-memory";
+import fileSize from "file-size";
 
 class IndexListCommandHandler implements CommandHandler {
     public readonly description = "List indexes";
@@ -22,7 +23,6 @@ class IndexListCommandHandler implements CommandHandler {
         if (indexes.length > 0) {
             iiPrint.push(["Name", "Type", "Status", "Location", "Size"]);
             systemContext.indexManager.indexes.forEach((index: IndexData) => {
-                //displayResult(`Index: ${index.name}, Type: ${index.source}, Location: ${index.location}, Items: ${index.size}`, context);
                 iiPrint.push([index.name, index.source, index.state, index.location, index.size.toString()]);
             });
             displayResult(iiPrint, context);
@@ -32,6 +32,50 @@ class IndexListCommandHandler implements CommandHandler {
     }
 }
 
+class IndexInfoCommandHandler implements CommandHandler {
+    public readonly description = "Show index details";
+    public readonly parameters = {
+        flags: {
+
+        },
+        args: {
+            name: {
+                description: "Name of the index",
+                type: "string",
+                required: true,
+            }
+        }
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+
+        let found = false;
+        let output: string = "";
+        systemContext.indexManager.indexes.forEach(async (value: IndexData) => {
+            if (value.name === params.args.name) {
+                found = true;
+                output = `${JSON.stringify(value, null, 2)}`;
+                output += `\nSize on Disk: ${fileSize(value.sizeOnDisk).human("si")}\n\n`;
+
+                if (value.state != "finished") {
+                    output += "Indexing is incomplete, reported size may change!";
+                }
+            }
+        });
+
+        if (!found) {
+            output = `There are no indexes with the name ${params.args.name}.`;
+        }
+
+        displayResult(output, context);
+    }
+}
+
+
 class IndexCreateCommandHandler implements CommandHandler {
     public readonly description = "Create a new index";
     public readonly parameters = {
@@ -39,7 +83,7 @@ class IndexCreateCommandHandler implements CommandHandler {
         },
         args: {
             type: {
-                description: "The type of index to create (images, email)",
+                description: "The type of index to create [image, email]",
                 char: "t",
                 type: "string",
                 enum: ["image", "email"],
@@ -63,6 +107,15 @@ class IndexCreateCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const systemContext = context.sessionContext.agentContext;
+
+        const filtered = systemContext.indexManager.indexes.filter((value) => {
+            return value.name === params.args.name;
+        })
+
+        if (filtered.length > 0) {
+            displayWarn(`There is already an index with the name '${params.args.name}'.  Please specify a different name.`, context);
+            return;
+        }
 
         if (await systemContext.indexManager.createIndex(params.args.name, params.args.type as IndexSource, params.args.location)) {
 
@@ -114,13 +167,13 @@ export function getIndexCommandHandlers(): CommandHandlerTable {
         description: "Indexing commands",
         defaultSubCommand: "list",
         commands: {
-            // status: new IndexStatusCommandHandler(),
             list: new IndexListCommandHandler(),
             create: new IndexCreateCommandHandler(),
             delete: new IndexDeleteCommandHandler(),
-            // rebuild: new IndexRebuildCommandHandler(),
-            // watch: new IndexWatchCommandHandler(),
-            // info: new IndexInfoCommandHandler(),
+            info: new IndexInfoCommandHandler(),
+            // TODO: implement
+            // rebuild: new IndexRebuildCommandHandler(), // is this necessary?
+            // watch: new IndexWatchCommandHandler(),     // Toggle file watching
         }
     };
 }

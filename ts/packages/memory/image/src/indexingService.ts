@@ -12,6 +12,7 @@ import { ImageCollection, importImages }  from "image-memory";
 import { IndexingResults } from "knowpro";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";
+import getFolderSize from "get-folder-size";
 
 const debug = registerDebug("typeagent:indexingService");
 
@@ -19,6 +20,7 @@ const debug = registerDebug("typeagent:indexingService");
 export type IndexSource = "image" | "email";
 
 // The meta data about the index
+// TODO: add token stats
 export type IndexData = {
     source: IndexSource,    // the data source of the index
     name: string,           // the name of the index 
@@ -27,6 +29,7 @@ export type IndexData = {
     path: string,           // the path to the index
     state: "new" | "indexing" | "finished" | "stopped" | "idle" | "error" // the state of the indexing service for this index
     progress: number,   // the # of items processed for indexing (knowledge extraction)
+    sizeOnDisk: number      // the amount of space on disk this index is consuming
 }
 
 // The different models being used for the index
@@ -94,6 +97,8 @@ if (process.argv.filter((value: string) => {
         index!.size++;
         index!.state = "indexing";
 
+        // TODO: incremental index rebuilding
+
         // TODO: make this less chatty - maybe percentage based or something?
         // only report when we get to the end of a folder        
         //    if (count === max) {
@@ -133,15 +138,18 @@ if (process.argv.filter((value: string) => {
 
         // build the index
         images.buildIndex().then(
-            (value: IndexingResults) => {
+           async (value: IndexingResults) => {
 
                 debug(`Found ${images!.messages.entries} images`);
 
-                images?.writeToFile(index!.path, "index");
+                await images?.writeToFile(index!.path, "index");
 
                 debug(`Index saved to ${index!.path}`);
 
                 index!.state = "finished";
+
+                index!.sizeOnDisk = (await getFolderSize(index!.path as string)).size;
+
                 sendIndexStatus();
             }
         );
