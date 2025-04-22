@@ -17,38 +17,31 @@ export async function createKnowproDataFrameCommands(
     printer: KnowProPrinter,
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
-    commands.kpDataFrame = testDataFrame;
+    commands.kpDataFrameIndex = indexDataFrame;
+    commands.kpDataFrameSearch = seachDataFrame;
 
-    async function testDataFrame(args: string[]) {
-        const db = new RestaurantDb(
-            "/data/testChat/knowpro/restaurants/restaurants.db",
-        );
+    const db = new RestaurantDb(
+        "/data/testChat/knowpro/restaurants/restaurants.db",
+    );
+    const restaurantCollection: HybridRestaurantCollection =
+        new HybridRestaurantCollection(db);
+    const filePath =
+        "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
+    let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
+
+    async function indexDataFrame(args: string[]) {
         try {
             //
             // Load some restaurants into a collection
             //
-            const filePath =
-                "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
             let numRestaurants = 16;
             const restaurants: Restaurant[] =
                 await loadThings<Restaurant>(filePath);
-            const restaurantCollection: HybridRestaurantCollection =
-                new HybridRestaurantCollection(db);
             importRestaurants(
                 restaurantCollection,
                 restaurants,
                 numRestaurants,
             );
-            //testDb(db, restaurantCollection);
-            //
-            let query =
-                "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
-            const expr = await restaurantCollection.findWithLanguage(query);
-            if (!expr.success) {
-                printer.writeError(expr.message);
-            } else {
-                printer.writeJson(expr.data);
-            }
             // Direct querying, without AI
             //
             printer.conversation = restaurantCollection.conversation;
@@ -79,22 +72,21 @@ export async function createKnowproDataFrameCommands(
                     25,
                 );
             }
-            // NLP querying
-            printer.writeInColor(
-                chalk.cyan,
-                "Searching for 'Punjabi Restaurant'",
-            );
-            const matchResult =
-                await restaurantCollection.findWithLanguage(query);
-            if (matchResult.success) {
-                for (const match of matchResult.data) {
-                    printer.writeJson(match);
-                }
-            }
         } catch (ex) {
             printer.writeError(`${ex}`);
         } finally {
             db.close();
+        }
+    }
+
+    async function seachDataFrame(args: string[]) {
+        // NLP querying
+        printer.writeInColor(chalk.cyan, "Searching for 'Punjabi Restaurant'");
+        const matchResult = await restaurantCollection.findWithLanguage(query);
+        if (matchResult.success) {
+            for (const match of matchResult.data) {
+                printer.writeJson(match);
+            }
         }
     }
 
@@ -531,8 +523,8 @@ function parseAddressFacets(address: Address, facets: RestaurantFacets) {
     if (address.addressLocality) {
         const location = parseLocation(address.addressLocality);
         if (location) {
-            facets.city = location.city;
-            facets.country = location.country;
+            facets.city = location.city?.toLowerCase();
+            facets.country = location.country?.toLowerCase();
         }
     }
 }

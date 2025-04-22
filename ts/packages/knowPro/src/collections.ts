@@ -868,11 +868,13 @@ export function setIntersect<T = any>(
     if (set === undefined) {
         set = new Set<T>(values);
     } else {
+        let intersect = new Set<T>();
         for (const value of values) {
-            if (!set.has(value)) {
-                set.delete(value);
+            if (set.has(value)) {
+                intersect.add(value);
             }
         }
+        set = intersect;
     }
     return set;
 }
