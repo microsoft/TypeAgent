@@ -37,15 +37,12 @@ export async function createKnowproDataFrameCommands(
             let numRestaurants = 16;
             const restaurants: Restaurant[] =
                 await loadThings<Restaurant>(filePath);
+
             importRestaurants(
                 restaurantCollection,
                 restaurants,
                 numRestaurants,
             );
-            // Direct querying, without AI
-            //
-            printer.conversation = restaurantCollection.conversation;
-            testGeo(restaurantCollection);
             //
             // Build index
             //
@@ -80,12 +77,19 @@ export async function createKnowproDataFrameCommands(
     }
 
     async function seachDataFrame(args: string[]) {
+        const nlpQuery = args[0] ?? query;
         // NLP querying
-        printer.writeInColor(chalk.cyan, query);
-        const matchResult = await restaurantCollection.findWithLanguage(query);
+        printer.writeInColor(chalk.cyan, nlpQuery);
+        const matchResult = await restaurantCollection.findWithLanguage(
+            nlpQuery,
+            (q) => {
+                printer.writeJson(q);
+            },
+        );
         if (matchResult.success) {
             for (const match of matchResult.data) {
-                printer.writeLine(match.name);
+                printer.writeInColor(chalk.green, match.name);
+                printer.writeJsonInColor(chalk.gray, match.facets);
             }
         }
     }
@@ -123,6 +127,7 @@ export async function createKnowproDataFrameCommands(
         );
         progress.complete();
     }
+    /*
 
     function writeRows(
         rows: kp.DataFrameRow[],
@@ -148,7 +153,7 @@ export async function createKnowproDataFrameCommands(
             writeRows(rows, restaurantCollection);
         }
     }
-    /*
+
     function testDb(
         db: RestaurantDb,
         restaurantCollection: HybridRestaurantCollection,
@@ -188,6 +193,7 @@ export interface Restaurant extends Thing {
     geo?: Geo;
     address?: Address;
     aggregateRating?: AggregateRating;
+    facets?: RestaurantFacets;
 }
 
 export interface Geo extends Thing, kp.DataFrameRecord {
@@ -287,38 +293,28 @@ export class RestaurantCollection implements kp.IConversation {
 
 export class HybridRestaurantCollection implements kp.IConversationHybrid {
     public restaurants: RestaurantCollection;
+    //
     // Some information for restaurants is stored in data frames
+    //
     public dataFrames: kp.DataFrameCollection;
     public locations: kp.IDataFrame;
-    // public addresses: kp.IDataFrame;
-    public facets: kp.IDataFrame;
+    public restaurantFacets: kp.IDataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
-    constructor(private restaurantDb: RestaurantDb) {
+    constructor(public restaurantDb: RestaurantDb) {
         this.restaurants = new RestaurantCollection();
-        /*
         this.locations = new kp.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
-        */
-        this.locations = this.restaurantDb.geo;
-        /*
-        this.addresses = new kp.DataFrame("address", [
-            ["streetAddress", { type: "string" }],
-            ["postalCode", { type: "string" }],
-            ["addressLocality", { type: "string" }],
-        ]);
-        */
-        this.facets = new kp.DataFrame("restaurant", [
+        this.restaurantFacets = new kp.DataFrame("restaurant", [
             ["rating", { type: "number" }],
             ["city", { type: "string" }],
             ["country", { type: "string" }],
         ]);
         this.dataFrames = new Map<string, kp.IDataFrame>([
             [this.locations.name, this.locations],
-            // [this.addresses.name, this.addresses],
-            [this.facets.name, this.facets],
+            [this.restaurantFacets.name, this.restaurantFacets],
         ]);
 
         this.queryTranslator = kp.createSearchQueryTranslator2(
@@ -342,7 +338,8 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
         const sourceRef: kp.RowSourceRef = {
             range: this.restaurants.add(restaurant),
         };
-        this.facets.addRows({ sourceRef, record: facets });
+        restaurant.facets = facets;
+        this.restaurantFacets.addRows({ sourceRef, record: facets });
         if (restaurant.geo) {
             this.locations.addRows({
                 sourceRef,
@@ -415,6 +412,7 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
 
     public async findWithLanguage(
         query: string,
+        callback?: (sq: kp.querySchema.SearchQuery) => void,
     ): Promise<Result<Restaurant[]>> {
         const queryResults = await kp.searchQueryFromLanguage(
             this.conversation,
@@ -425,6 +423,9 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
             return queryResults;
         }
         const searchQuery = queryResults.data;
+        if (callback) {
+            callback(searchQuery);
+        }
         const dfTerms = kp.extractDataFrameTerms(this.dataFrames, searchQuery);
         const sq = kp.compileSearchQuery(this.conversation, searchQuery)[0];
         const matchedRestaurants: Restaurant[] = [];
@@ -586,3 +587,12 @@ function parseLocation(location: string): Location | undefined {
     } catch {}
     return undefined;
 }
+
+/**
+ * 
+        this.addresses = new kp.DataFrame("address", [
+            ["streetAddress", { type: "string" }],
+            ["postalCode", { type: "string" }],
+            ["addressLocality", { type: "string" }],
+        ]);
+ */

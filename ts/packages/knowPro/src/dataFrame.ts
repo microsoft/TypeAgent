@@ -193,6 +193,7 @@ export class DataFrame implements IDataFrame {
             default:
                 ordinalSet = this.searchOr(searchTerms);
                 break;
+            case "or":
             case "and":
                 ordinalSet = this.searchAnd(searchTerms);
                 break;
@@ -347,7 +348,7 @@ export async function searchConversationHybrid(
         let y = new MessageAccumulator();
         y.addScoredMatches(dataFrameMatches);
         y = x.intersect(y);
-        joinedMatches = x.toScoredMessageOrdinals();
+        joinedMatches = y.toScoredMessageOrdinals();
     }
     return {
         conversationMatches,
