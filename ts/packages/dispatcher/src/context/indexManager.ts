@@ -12,6 +12,9 @@ import { IndexData, IndexSource } from "image-memory";
 
 const debug = registerDebug("typeagent:indexManager");
 
+
+// TODO: add support to be able to "disable" an index
+
 /*
 * IndexManager is a singleton class that manages the indexes for the system.
 */
@@ -19,9 +22,9 @@ export class IndexManager {
     private static instance: IndexManager;
     private indexingServices: Map<IndexData, ChildProcess | undefined> = new Map<IndexData, ChildProcess | undefined>();
     private static rootPath: string;
-    private cacheRoot: string;
-    private imageRoot: string;
-    private emailRoot: string;
+    //private cacheRoot: string;
+    private static imageRoot: string | undefined;
+    private static emailRoot: string | undefined;
 
     public static getInstance = (): IndexManager => {
         if (!IndexManager.instance) {
@@ -30,26 +33,25 @@ export class IndexManager {
         return IndexManager.instance;
     }
 
-    private constructor() {
-        ensureDirectory(IndexManager.rootPath);
-
-        // make sure the indexes folder exists
-        this.imageRoot = path.join(IndexManager.rootPath, "image")
-        ensureDirectory(this.imageRoot);
-
-        this.cacheRoot = path.join(IndexManager.rootPath, "cache");
-        ensureDirectory(this.cacheRoot);
-
-        this.emailRoot = path.join(IndexManager.rootPath, "email");
-        ensureDirectory(this.emailRoot);  
-    }
-
     /*
     * Loads the supplied indexes
     */
     public static load(indexesToLoad: IndexData[], sessionDir: string) {
 
         this.rootPath = path.join(sessionDir, "indexes");
+
+        ensureDirectory(IndexManager.rootPath);
+
+        // make sure the indexes folder exists
+        IndexManager.imageRoot = path.join(IndexManager.rootPath, "image")
+        ensureDirectory(IndexManager.imageRoot!);
+
+        // TODO: find a good way to make a shared cache of .kr files for images
+        // IndexManager.cacheRoot = path.join(IndexManager.rootPath, "cache");
+        // ensureDirectory(IndexManager.cacheRoot);
+
+        IndexManager.emailRoot = path.join(IndexManager.rootPath, "email");
+        ensureDirectory(IndexManager.emailRoot!);          
 
         indexesToLoad.forEach((value) => {
 
@@ -105,8 +107,8 @@ export class IndexManager {
             throw new Error (`Location '${location}' is not a directory.  Please specify a valid diretory.`);
         }
 
-        const dirName = getUniqueFileName(this.imageRoot, "index");
-        const folder = await ensureDir(path.join(this.imageRoot, dirName));
+        const dirName = getUniqueFileName(IndexManager.imageRoot!, "index");
+        const folder = await ensureDir(path.join(IndexManager.imageRoot!, dirName));
 
         const index: IndexData = {
             source: "image",

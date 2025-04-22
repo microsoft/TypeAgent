@@ -15,8 +15,9 @@ const debug = registerDebug("typeagent:agent:montage:route");
 const app: Express = express();
 const port = process.env.PORT || 9012;
 
-// TODO: make this configurable based on user setup/input
-const allowedFolders: string[] = ["f:\\pictures", "c:\\temp\\pictures"];
+// configurable folders for securing folder access. Is populated based on available indexes
+// but can be customized further here
+let allowedFolders: string[] = ["f:\\pictures", "c:\\temp\\pictures"];
 
 // limit request rage
 const limiter = rateLimit({
@@ -238,8 +239,13 @@ process.send?.("Success");
  * Processes messages received from the host/parent process
  */
 process.on("message", (message: any) => {
-    // forward the message to any clients
-    sendDataToClients(message);
+
+    if (message.allowedFolders) {
+        allowedFolders = [...allowedFolders, ...message.allowedFolders];
+    } else {
+        // forward the message to any clients
+        sendDataToClients(message);
+    }
 });
 
 /**

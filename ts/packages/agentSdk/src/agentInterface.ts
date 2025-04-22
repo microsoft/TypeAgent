@@ -123,6 +123,9 @@ export interface SessionContext<T = unknown> {
     ): Promise<void>;
 
     removeDynamicAgent(agentName: string): Promise<void>;
+
+    // get the available indexes
+    indexes(type: "image" | "email" | "all"): Promise<any[]>;
 }
 
 // TODO: only utf8 & base64 is supported for now.

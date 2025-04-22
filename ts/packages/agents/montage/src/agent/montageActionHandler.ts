@@ -67,6 +67,7 @@ type MontageActionContext = {
         minScore: number;
         exactMatch: boolean;
     };
+    indexes: im.IndexData[];
 };
 
 // Montage definition
@@ -159,31 +160,17 @@ async function updateMontageContext(
         // TODO: give the user a way to index their images
         // TODO: evaluate perf..is this fast enough give a large image index?
         if (!context.agentContext.imageCollection) {
-            if (existsSync("c:\\temp\\pictures_index")) {
-                context.agentContext.imageCollection =
-                    await im.ImageCollection.readFromFile(
-                        "c:\\temp\\pictures_index",
-                        "index",
-                    );
-            } else if (existsSync("f:\\pictures_index")) {
-                context.agentContext.imageCollection =
-                    await im.ImageCollection.readFromFile(
-                        "f:\\pictures_index",
-                        "index",
-                    );
-                // if (await context.sessionStorage?.exists("index_data.json") && await context.sessionStorage?.exists("index_embeddings.bin")) {
-                //     const indexJson: string | undefined = await context.sessionStorage?.read("index_data.json", "utf8");
-                //     const embeddingsData = await context.sessionStorage?.read("index_embeddings.bin");
+            context.agentContext.indexes = await context.indexes("image");
 
-                //     if (indexJson && embeddingsData) {
-                //         context.agentContext.imageCollection = await im.ImageCollection.fromBuffer(
-                //             indexJson,
-                //             Buffer.from(embeddingsData)
-                //         );
-                //     }
+            // TODO: allow the montage agent to switch between image indexes
+            // TODO: handle the case where the image index is locked
+            // TODO: handle image index that has been updated since we loaded it
+            if (context.agentContext.indexes.length > 0) {
+                // For now just load the first image index
+                context.agentContext.imageCollection = await im.ImageCollection.readFromFile(context.agentContext.indexes[0].path, "index");
             } else {
                 debug(
-                    "Unable to load image index, please create one using the image indexer.",
+                    "Unable to load image index, please create one using the @index.",
                 );
             }
         }
@@ -201,8 +188,16 @@ async function updateMontageContext(
                 },
             );
 
-            // send initial state
+            // send initial state and allowed folder(s)
             if (context.agentContext.montage) {
+
+                const folders: string[] = [];
+                context.agentContext.indexes.forEach((idx) => {
+                    folders.push(idx.location);
+                })
+
+                context.agentContext.viewProcess?.send({ allowedFolders: folders });
+
                 context.agentContext.viewProcess?.send(
                     context.agentContext.montage,
                 );
@@ -229,7 +224,7 @@ async function handleMontageAction(
             `Unable to perform the requeste action. Disconnected from the canvas.`,
         );
     } else if (!actionContext.sessionContext.agentContext.imageCollection) {
-        return createActionResultFromError("No image index has been loaded!");
+        return createActionResultFromError("No image index has been loaded! Please create one with the @index command.");
     }
 
     switch (action.actionName) {
@@ -870,6 +865,7 @@ export async function createViewServiceHost(
                 childProcess.on("exit", (code) => {
                     debug("Montage view server exited with code:", code);
                 });
+
             } catch (e: any) {
                 console.error(e);
                 resolve(undefined);

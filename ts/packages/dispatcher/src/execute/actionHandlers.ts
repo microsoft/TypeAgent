@@ -58,6 +58,8 @@ import {
 } from "../translation/translateRequest.js";
 import { getActionSchema } from "../internal.js";
 import { validateAction } from "action-schema";
+import { IndexManager } from "../context/indexManager.js";
+import { IndexData } from "image-memory";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -250,6 +252,16 @@ export function createSessionContext<T = unknown>(
         },
         addDynamicAgent,
         removeDynamicAgent,
+        indexes(type: string): Promise<any[]> {
+            return new Promise<IndexData[]>((resolve, reject) => {
+
+                const iidx: IndexData[] = IndexManager.getInstance().indexes.filter((value) => {
+                    return type === "all" || value.source === type;
+                });
+
+                resolve(iidx);
+            });
+        }
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;
