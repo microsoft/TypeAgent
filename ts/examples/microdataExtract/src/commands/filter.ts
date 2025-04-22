@@ -55,9 +55,11 @@ export default class Filter extends Command {
         return restaurants
             .map((restaurant) => this.normalizeRestaurant(restaurant))
             .filter((restaurant: FilterRestaurant) => {
+                let allowedHosts = ["tripadvisor.com", "www.tripadvisor.com"];
+
                 const sourceIncludesTripAdvisor =
                     typeof restaurant.source === "string" &&
-                    restaurant.source.includes("tripadvisor.com");
+                    allowedHosts.includes(new URL(restaurant.source)?.hostname);
 
                 const sameAsIncludesTripAdvisor = Array.isArray(
                     restaurant.sameAs,
@@ -65,10 +67,12 @@ export default class Filter extends Command {
                     ? restaurant.sameAs.some(
                           (url) =>
                               typeof url === "string" &&
-                              url.includes("tripadvisor.com"),
+                              allowedHosts.includes(new URL(url).hostname),
                       )
                     : typeof restaurant.sameAs === "string" &&
-                      restaurant.sameAs.includes("tripadvisor.com");
+                      allowedHosts.includes(
+                          new URL(restaurant.sameAs)?.hostname,
+                      );
 
                 return sourceIncludesTripAdvisor || sameAsIncludesTripAdvisor;
             });
