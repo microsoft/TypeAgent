@@ -29,24 +29,17 @@ export async function createKnowproDataFrameCommands(
             //
             const filePath =
                 "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
-            const numRestaurants = 16;
-            const restaurants: Restaurant[] = await loadThings<Restaurant>(
-                filePath,
-                numRestaurants,
-            );
+            let numRestaurants = 16;
+            const restaurants: Restaurant[] =
+                await loadThings<Restaurant>(filePath);
             const restaurantCollection: HybridRestaurantCollection =
                 new HybridRestaurantCollection(db);
-            for (let i = 0; i < restaurants.length; ++i) {
-                const restaurant = restaurants[i];
-                const sourceRef =
-                    restaurantCollection.addRestaurant(restaurant);
-                if (sourceRef !== undefined) {
-                    printer.writeLine(restaurant.name);
-                } else {
-                    printer.writeError(`Skipped ${restaurant.name}`);
-                }
-            }
-            testDb(db, restaurantCollection);
+            importRestaurants(
+                restaurantCollection,
+                restaurants,
+                numRestaurants,
+            );
+            //testDb(db, restaurantCollection);
             //
             // Direct querying, without AI
             //
@@ -116,6 +109,28 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
+    function importRestaurants(
+        restaurantCollection: HybridRestaurantCollection,
+        restaurants: Restaurant[],
+        numRestaurants: number,
+    ) {
+        let countAdded = 0;
+        for (let i = 0; i < restaurants.length; ++i) {
+            const restaurant = restaurants[i];
+            const facets = restaurantCollection.addRestaurant(restaurant);
+            if (facets !== undefined) {
+                printer.writeInColor(chalk.cyan, restaurant.name);
+                printer.writeJson(facets);
+                countAdded++;
+                if (countAdded === numRestaurants) {
+                    break;
+                }
+            } else {
+                printer.writeError(`Skipped ${restaurant.name}`);
+            }
+        }
+    }
+
     function writeRows(
         rows: kp.DataFrameRow[],
         restaurantCollection: HybridRestaurantCollection,
@@ -127,7 +142,7 @@ export async function createKnowproDataFrameCommands(
             printer.writeLines(descriptions);
         }
     }
-
+    /*
     function testDb(
         db: RestaurantDb,
         restaurantCollection: HybridRestaurantCollection,
@@ -153,6 +168,7 @@ export async function createKnowproDataFrameCommands(
             );
         }
     }
+        */
     return;
 }
 
@@ -165,6 +181,7 @@ export interface Restaurant extends Thing {
     description?: string;
     geo?: Geo;
     address?: Address;
+    aggregateRating?: AggregateRating;
 }
 
 export interface Geo extends Thing, kp.DataFrameRecord {
@@ -178,11 +195,17 @@ export interface Address extends Thing, kp.DataFrameRecord {
     addressLocality?: string;
 }
 
-export interface Rating extends Thing, kp.DataFrameRecord {
-    bestRating?: string;
-    reviewCount?: string;
+export interface AggregateRating extends Thing {
     ratingValue?: string;
-    worstRating?: string;
+}
+
+export interface Location {
+    city?: string | undefined;
+    country?: string | undefined;
+}
+
+export interface RestaurantFacets extends kp.DataFrameRecord, Location {
+    rating?: number | undefined;
 }
 
 export type Container<T> = {
@@ -261,7 +284,8 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
     // Some information for restaurants is stored in data frames
     public dataFrames: kp.DataFrameCollection;
     public locations: kp.IDataFrame;
-    public addresses: kp.IDataFrame;
+    // public addresses: kp.IDataFrame;
+    public facets: kp.IDataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor(private restaurantDb: RestaurantDb) {
@@ -273,14 +297,22 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
         ]);
         */
         this.locations = this.restaurantDb.geo;
+        /*
         this.addresses = new kp.DataFrame("address", [
             ["streetAddress", { type: "string" }],
             ["postalCode", { type: "string" }],
             ["addressLocality", { type: "string" }],
         ]);
+        */
+        this.facets = new kp.DataFrame("restaurant", [
+            ["rating", { type: "number" }],
+            ["city", { type: "string" }],
+            ["country", { type: "string" }],
+        ]);
         this.dataFrames = new Map<string, kp.IDataFrame>([
             [this.locations.name, this.locations],
-            [this.addresses.name, this.addresses],
+            // [this.addresses.name, this.addresses],
+            [this.facets.name, this.facets],
         ]);
 
         this.queryTranslator = kp.createSearchQueryTranslator(
@@ -292,14 +324,19 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
         return this.restaurants;
     }
 
-    public addRestaurant(restaurant: Restaurant): kp.RowSourceRef | undefined {
+    public addRestaurant(restaurant: Restaurant): RestaurantFacets | undefined {
         // Bad data in the file
         if (!this.isGoodData(restaurant)) {
+            return undefined;
+        }
+        const facets = parseRestaurantFacets(restaurant);
+        if (facets === undefined || !this.isGoodFacets(facets)) {
             return undefined;
         }
         const sourceRef: kp.RowSourceRef = {
             range: this.restaurants.add(restaurant),
         };
+        this.facets.addRows({ sourceRef, record: facets });
         if (restaurant.geo) {
             this.locations.addRows({
                 sourceRef,
@@ -307,9 +344,9 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
             });
         }
         if (restaurant.address) {
-            this.addresses.addRows({ sourceRef, record: restaurant.address });
+            // this.addresses.addRows({ sourceRef, record: restaurant.address });
         }
-        return sourceRef;
+        return facets;
     }
 
     public getDescriptionsFromRows(rows: kp.DataFrameRow[]): string[] {
@@ -398,6 +435,37 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
         }
         return true;
     }
+    private isGoodFacets(facets: RestaurantFacets): boolean {
+        return (
+            //facets.city !== undefined &&
+            //facets.city.length > 0 &&
+            facets.rating !== undefined && facets.rating > 0
+        );
+    }
+}
+
+function parseRestaurantFacets(
+    restaurant: Restaurant,
+): RestaurantFacets | undefined {
+    let facets: RestaurantFacets = { rating: 3.0 };
+    if (restaurant.address) {
+        parseAddressFacets(restaurant.address, facets);
+    }
+    if (restaurant.aggregateRating) {
+        facets.rating =
+            parseNumber(restaurant.aggregateRating.ratingValue) ?? 3.0;
+    }
+    return facets;
+}
+
+function parseAddressFacets(address: Address, facets: RestaurantFacets) {
+    if (address.addressLocality) {
+        const location = parseLocation(address.addressLocality);
+        if (location) {
+            facets.city = location.city;
+            facets.country = location.country;
+        }
+    }
 }
 
 export async function loadThings<T extends Thing>(
@@ -424,4 +492,36 @@ export async function fetchSchema(url: string): Promise<Result<unknown>> {
         return success(result.data.json());
     }
     return result;
+}
+
+export type NumberAndText = {
+    number: number;
+    text: string;
+};
+
+export function parseNumberAndText(str: string): NumberAndText {
+    const match = str.match(/^([\d.]+)\s*(.*)$/);
+    return match
+        ? { number: parseFloat(match[1]), text: match[2].trim() }
+        : { number: NaN, text: str };
+}
+
+function parseNumber(str: string | undefined): number | undefined {
+    try {
+        return str ? Number.parseFloat(str.trim()) : undefined;
+    } catch {}
+    return undefined;
+}
+
+function parseLocation(location: string): Location | undefined {
+    try {
+        const match = location.match(/^(.+?)\s*\((.+?)\)$/);
+        if (match && match.length > 1) {
+            return {
+                city: match[1].trim(),
+                country: match[2].trim(),
+            };
+        }
+    } catch {}
+    return undefined;
 }

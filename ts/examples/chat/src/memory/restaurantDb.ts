@@ -147,25 +147,3 @@ type GeoRow = {
     latitude?: string | undefined;
     longitude?: string | undefined;
 };
-
-/*
-type AddressRow = {
-    addressId: number;
-    sourceRef: string;
-    streetAddress?: string;
-    postalCode?: string;
-    addressLocality?: string;
-};
-*/
-
-export type NumberAndText = {
-    number: number;
-    text: string;
-};
-
-export function parseNumberAndText(str: string): NumberAndText {
-    const match = str.match(/^([\d.]+)\s*(.*)$/);
-    return match
-        ? { number: parseFloat(match[1]), text: match[2].trim() }
-        : { number: NaN, text: str };
-}
