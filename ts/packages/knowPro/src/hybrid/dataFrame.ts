@@ -6,7 +6,7 @@ import {
     MatchAccumulator,
     setIntersect,
     setUnion,
-} from "./collections.js";
+} from "../collections.js";
 import {
     DataFrameCompiler,
     getDataFrameAndColumnName,
@@ -21,17 +21,17 @@ import {
     SearchTermGroup,
     TextRange,
     WhenFilter,
-} from "./interfaces.js";
-import { ComparisonOp } from "./queryCmp.js";
+} from "../interfaces.js";
+import { ComparisonOp } from "../queryCmp.js";
 import {
     ConversationSearchResult,
     createDefaultSearchOptions,
     searchConversation,
     SearchOptions,
-} from "./search.js";
-import { createPropertySearchTerm } from "./searchLib.js";
-import { FacetTerm, SearchFilter, SearchQuery } from "./searchQuerySchema.js";
-import { compileSearchFilter } from "./searchQueryTranslator.js";
+} from "../search.js";
+import { createPropertySearchTerm } from "../searchLib.js";
+import { FacetTerm, SearchFilter, SearchQuery } from "../searchQuerySchema.js";
+import { compileSearchFilter } from "../searchQueryTranslator.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -326,39 +326,6 @@ export function compileHybridSearchFilter(
     selectExpr.searchTermGroup.terms.push(...facetTermsToSearchTerms(dfTerms));
     selectExpr.when ??= {};
     return selectExpr;
-}
-
-/**
- * Search the hybrid conversation using dataFrames to determine additional
- * 'outer' scope
- * @param hybridConversation
- * @param searchTermGroup
- * @param when
- * @param options
- */
-export async function searchConversationWithHybridScope(
-    hybridConversation: IConversationHybrid,
-    searchTermGroup: SearchTermGroup,
-    when?: WhenFilter | undefined,
-    options?: SearchOptions,
-    rawSearchQuery?: string,
-) {
-    const dfCompiler = new DataFrameCompiler(hybridConversation.dataFrames);
-    const dfScopeExpr = dfCompiler.compileScope(searchTermGroup);
-    if (dfScopeExpr) {
-        const scopeRanges = dfScopeExpr.eval();
-        if (scopeRanges) {
-            when ??= {};
-            when.textRangesInScope = scopeRanges.getRanges();
-        }
-    }
-    return searchConversation(
-        hybridConversation.conversation,
-        searchTermGroup,
-        when,
-        options,
-        rawSearchQuery,
-    );
 }
 
 export type HybridSearchResults = {

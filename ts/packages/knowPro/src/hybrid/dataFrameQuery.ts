@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MessageAccumulator, TextRangeCollection } from "./collections.js";
-import { BooleanOp, isPropertyTerm } from "./compileLib.js";
+import { MessageAccumulator, TextRangeCollection } from "../collections.js";
+import { BooleanOp, isPropertyTerm } from "../compileLib.js";
 import {
     DataFrameCollection,
     DataFrameSearchTerm,
@@ -14,13 +14,16 @@ import {
     SearchTerm,
     SearchTermGroup,
     Term,
-} from "./interfaces.js";
-import * as q from "./query.js";
+} from "../interfaces.js";
+import * as q from "../query.js";
 
 export class TextRangeFromDataFrameExpr implements q.IQueryTextRangeSelector {
     constructor(public termGroups: DataFrameTermGroup[]) {}
 
     public eval(context?: q.QueryEvalContext): TextRangeCollection | undefined {
+        if (this.termGroups.length === 0) {
+            return undefined;
+        }
         const rangeCollection = new TextRangeCollection();
         for (const termGroup of this.termGroups) {
             const matches = termGroup.dataFrame.findSources(termGroup);
@@ -30,7 +33,7 @@ export class TextRangeFromDataFrameExpr implements q.IQueryTextRangeSelector {
                 }
             }
         }
-        return rangeCollection.size > 0 ? rangeCollection : undefined;
+        return rangeCollection;
     }
 }
 
@@ -152,7 +155,7 @@ export function getDataFrameTermGroups(
             columnValue = term.propertyValue;
         } else {
             // Nested or straight search terms not yet supported
-            throw new Error("Nested SearchTermGroups not supported yet");
+            continue;
         }
         if (qualifiedColumn !== undefined && columnValue) {
             let dataFrame = qualifiedColumn[0];

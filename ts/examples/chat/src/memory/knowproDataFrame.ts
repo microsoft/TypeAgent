@@ -19,7 +19,6 @@ export async function createKnowproDataFrameCommands(
     //commands.kpGetSchema = getSchema;
     commands.kpDataFrameIndex = indexDataFrame;
     commands.kpDataFrameSearch = searchDataFrame;
-    commands.kpDataFrameSearch2 = searchDataFrame2;
 
     const db = new RestaurantDb(
         "/data/testChat/knowpro/restaurants/restaurants.db",
@@ -44,27 +43,7 @@ export async function createKnowproDataFrameCommands(
             //
             printer.writeHeading("Building index");
             await buildIndex(restaurantIndex);
-            // Automatic querying of data frames using standard conversation stuff
-            printer.writeInColor(
-                chalk.cyan,
-                "Searching for 50.804436 (nl), 5.8997846 (nl)",
-            );
-            // Hybrid querying
-            let termGroup = kp.createAndTermGroup(
-                kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
-                kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
-            );
-            const hybridMatches = await kp.searchConversationHybrid(
-                restaurantIndex,
-                termGroup,
-            );
-            if (hybridMatches && hybridMatches.dataFrameMatches) {
-                printer.writeScoredMessages(
-                    hybridMatches.dataFrameMatches,
-                    restaurantIndex.conversation.messages,
-                    25,
-                );
-            }
+            await testHybridQuery();
         } catch (ex) {
             printer.writeError(`${ex}`);
         } finally {
@@ -77,29 +56,6 @@ export async function createKnowproDataFrameCommands(
         // NLP querying
         printer.writeInColor(chalk.cyan, nlpQuery);
         const matchResult = await restaurantIndex.findWithLanguage(
-            nlpQuery,
-            (q) => {
-                printer.writeJson(q);
-            },
-        );
-        if (!matchResult.success) {
-            printer.writeError(matchResult.message);
-            return;
-        }
-        if (matchResult.data.length === 0) {
-            printer.writeLine("No matches");
-            return;
-        }
-        matchResult.data.forEach((restaurant) =>
-            writeRestaurantMatch(restaurant),
-        );
-    }
-
-    async function searchDataFrame2(args: string[]) {
-        const nlpQuery = args[0] ?? query;
-        // NLP querying
-        printer.writeInColor(chalk.cyan, nlpQuery);
-        const matchResult = await restaurantIndex.findWithLanguage2(
             nlpQuery,
             (q) => {
                 printer.writeJson(q);
@@ -155,6 +111,29 @@ export async function createKnowproDataFrameCommands(
     function writeRestaurantMatch(restaurant: Restaurant): void {
         printer.writeInColor(chalk.green, restaurant.name);
         printer.writeJsonInColor(chalk.gray, restaurant.facets);
+    }
+
+    async function testHybridQuery() {
+        printer.writeInColor(
+            chalk.cyan,
+            "Searching for 50.804436 (nl), 5.8997846 (nl)",
+        );
+        // Hybrid querying
+        let termGroup = kp.createAndTermGroup(
+            kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
+            kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
+        );
+        const hybridMatches = await kp.hybrid.searchConversationHybrid(
+            restaurantIndex,
+            termGroup,
+        );
+        if (hybridMatches && hybridMatches.dataFrameMatches) {
+            printer.writeScoredMessages(
+                hybridMatches.dataFrameMatches,
+                restaurantIndex.conversation.messages,
+                25,
+            );
+        }
     }
     /*
     function writeRows(
@@ -224,12 +203,12 @@ export interface Restaurant extends Thing {
     facets?: RestaurantFacets;
 }
 
-export interface Geo extends Thing, kp.DataFrameRecord {
+export interface Geo extends Thing, kp.hybrid.DataFrameRecord {
     latitude?: string | undefined;
     longitude?: string | undefined;
 }
 
-export interface Address extends Thing, kp.DataFrameRecord {
+export interface Address extends Thing, kp.hybrid.DataFrameRecord {
     streetAddress?: string;
     postalCode?: string;
     addressLocality?: string;
@@ -244,7 +223,7 @@ export interface Location {
     country?: string | undefined;
 }
 
-export interface RestaurantFacets extends kp.DataFrameRecord, Location {
+export interface RestaurantFacets extends kp.hybrid.DataFrameRecord, Location {
     rating?: number | undefined;
 }
 
@@ -322,7 +301,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     }
 }
 
-export class RestaurantIndex implements kp.IConversationHybrid {
+export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
     /**
      * All raw textual data (descriptions, etc) is indexed using structured RAG
      * Knowledge and other salient information is auto-extracted from the
@@ -334,24 +313,24 @@ export class RestaurantIndex implements kp.IConversationHybrid {
      * strongly typed data frames ("tables") with spatial and other indexes.
      * These can be used as needed during query processing
      */
-    public dataFrames: kp.DataFrameCollection;
-    public locations: kp.IDataFrame;
-    public restaurantFacets: kp.IDataFrame;
+    public dataFrames: kp.hybrid.DataFrameCollection;
+    public locations: kp.hybrid.IDataFrame;
+    public restaurantFacets: kp.hybrid.IDataFrame;
 
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor(public restaurantDb: RestaurantDb) {
         this.textIndex = new RestaurantStructuredRagIndex();
-        this.locations = new kp.DataFrame("geo", [
+        this.locations = new kp.hybrid.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
-        this.restaurantFacets = new kp.DataFrame("restaurant", [
+        this.restaurantFacets = new kp.hybrid.DataFrame("restaurant", [
             ["rating", { type: "number" }],
             ["city", { type: "string" }],
             ["country", { type: "string" }],
         ]);
-        this.dataFrames = new Map<string, kp.IDataFrame>([
+        this.dataFrames = new Map<string, kp.hybrid.IDataFrame>([
             [this.locations.name, this.locations],
             [this.restaurantFacets.name, this.restaurantFacets],
         ]);
@@ -374,7 +353,7 @@ export class RestaurantIndex implements kp.IConversationHybrid {
         if (facets === undefined || !this.isGoodFacets(facets)) {
             return undefined;
         }
-        const sourceRef: kp.RowSourceRef = {
+        const sourceRef: kp.hybrid.RowSourceRef = {
             range: this.textIndex.add(restaurant),
         };
         restaurant.facets = facets;
@@ -391,7 +370,7 @@ export class RestaurantIndex implements kp.IConversationHybrid {
         return facets;
     }
 
-    public getDescriptionsFromRows(rows: kp.DataFrameRow[]): string[] {
+    public getDescriptionsFromRows(rows: kp.hybrid.DataFrameRow[]): string[] {
         const descriptions: string[] = [];
         for (const row of rows) {
             if (row.record) {
@@ -415,60 +394,6 @@ export class RestaurantIndex implements kp.IConversationHybrid {
     public async findWithLanguage(
         query: string,
         callback?: (sq: kp.querySchema.SearchQuery) => void,
-    ): Promise<Result<Restaurant[]>> {
-        const queryResults = await kp.searchQueryFromLanguage(
-            this.conversation,
-            this.queryTranslator,
-            query,
-        );
-        if (!queryResults.success) {
-            return queryResults;
-        }
-        const searchQuery = queryResults.data;
-        if (callback) {
-            callback(searchQuery);
-        }
-        const dfTerms = kp.extractDataFrameTerms(this.dataFrames, searchQuery);
-        const sq = kp.compileSearchQuery(this.conversation, searchQuery)[0];
-        const matchedRestaurants: Restaurant[] = [];
-        for (let i = 0; i < sq.selectExpressions.length; ++i) {
-            const sExpr = sq.selectExpressions[i];
-            sExpr.searchTermGroup.terms.push(
-                ...kp.facetTermsToSearchTerms(dfTerms[i]),
-            );
-            const matches = await kp.searchConversationHybrid(
-                this,
-                sExpr.searchTermGroup,
-                sExpr.when,
-                undefined,
-                sq.rawQuery,
-            );
-            if (matches.joinedMatches) {
-                this.collectRestaurants(
-                    matches.joinedMatches,
-                    matchedRestaurants,
-                );
-            } else {
-                if (matches && matches.conversationMatches) {
-                    this.collectRestaurants(
-                        matches.conversationMatches.messageMatches,
-                        matchedRestaurants,
-                    );
-                }
-                if (matches && matches.dataFrameMatches) {
-                    this.collectRestaurants(
-                        matches.dataFrameMatches,
-                        matchedRestaurants,
-                    );
-                }
-            }
-        }
-        return success(matchedRestaurants);
-    }
-
-    public async findWithLanguage2(
-        query: string,
-        callback?: (sq: kp.querySchema.SearchQuery) => void,
     ): Promise<Result<Restaurant[][]>> {
         const queryResults = await kp.searchQueryFromLanguage(
             this.conversation,
@@ -484,22 +409,14 @@ export class RestaurantIndex implements kp.IConversationHybrid {
         }
         const matchedRestaurants: Restaurant[][] = [];
         for (const searchExpr of searchQuery.searchExpressions) {
-            for (const searchFilter of searchExpr.filters) {
-                const selectExpr = kp.compileHybridSearchFilter(
-                    this,
-                    searchFilter,
-                );
-                const results = await kp.searchConversationWithHybridScope(
-                    this,
-                    selectExpr.searchTermGroup,
-                    selectExpr.when,
-                    undefined,
-                    searchExpr.rewrittenQuery,
-                );
-                if (results) {
-                    const matches = this.collectRestaurants(
-                        results.messageMatches,
-                    );
+            const results = await kp.hybrid.lang.searchConversationMessages(
+                this,
+                searchExpr,
+                undefined,
+            );
+            if (results) {
+                for (const result of results) {
+                    const matches = this.collectRestaurants(result);
                     if (matches.length > 0) {
                         matchedRestaurants.push(matches);
                     }

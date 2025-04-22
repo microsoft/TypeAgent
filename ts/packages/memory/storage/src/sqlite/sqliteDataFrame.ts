@@ -4,8 +4,8 @@
 import * as kp from "knowpro";
 
 export function dataFrameTermGroupToSql(
-    group: kp.DataFrameTermGroup,
-    colDefs: kp.DataFrameColumns,
+    group: kp.hybrid.DataFrameTermGroup,
+    colDefs: kp.hybrid.DataFrameColumns,
 ): string {
     let clauses: string[] = [];
     for (let searchTerm of group.terms) {
@@ -22,8 +22,8 @@ export function dataFrameTermGroupToSql(
 }
 
 export function dataFrameSearchTermToSql(
-    term: kp.DataFrameSearchTerm,
-    colDef: kp.DataFrameColumnDef,
+    term: kp.hybrid.DataFrameSearchTerm,
+    colDef: kp.hybrid.DataFrameColumnDef,
 ): string {
     const op = comparisonOpToSql(term.compareOp ?? kp.ComparisonOp.Eq);
     const val = searchTermToSql(term.columnValue, colDef);
@@ -32,7 +32,7 @@ export function dataFrameSearchTermToSql(
 
 export function searchTermToSql(
     valueTerm: kp.SearchTerm,
-    columnDef: kp.DataFrameColumnDef,
+    columnDef: kp.hybrid.DataFrameColumnDef,
 ): string {
     const valueText = valueTerm.term.text;
     if (columnDef.type === "number") {
@@ -41,11 +41,11 @@ export function searchTermToSql(
     return `'${valueText}'`;
 }
 
-export function valueToSql(value: kp.DataFrameValue) {
+export function valueToSql(value: kp.hybrid.DataFrameValue) {
     return typeof value === "number" ? value : `${value}`;
 }
 
-export function boolOpToSql(group: kp.DataFrameTermGroup): string {
+export function boolOpToSql(group: kp.hybrid.DataFrameTermGroup): string {
     switch (group.booleanOp) {
         case "and":
             return " AND ";
