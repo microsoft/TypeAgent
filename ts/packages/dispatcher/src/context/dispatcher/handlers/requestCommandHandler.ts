@@ -58,7 +58,7 @@ async function canTranslateWithoutContext(
     const request = requestAction.request;
     try {
         const translations = new Map<string, TranslatedAction>();
-        for (const [translatorName, translator] of usedTranslators) {
+        for (const [schemaName, translator] of usedTranslators) {
             const result = await translator.checkTranslate(request);
             if (!result.success) {
                 throw new Error("Failed to translate without history context");
@@ -71,7 +71,7 @@ async function canTranslateWithoutContext(
             if (count !== oldActions.length) {
                 throw new Error("Action count mismatch without context");
             }
-            translations.set(translatorName, result.data);
+            translations.set(schemaName, result.data);
         }
 
         let index = 0;

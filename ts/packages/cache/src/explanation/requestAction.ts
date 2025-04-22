@@ -107,9 +107,9 @@ const format =
 
 function parseFullActionNameParts(fullActionName: string) {
     const parts = fullActionName.split(".");
-    const translatorName = parts.slice(0, -1).join(".");
+    const schemaName = parts.slice(0, -1).join(".");
     const actionName = parts.at(-1)!;
-    return { translatorName, actionName };
+    return { schemaName, actionName };
 }
 
 function parseAction(action: string, index: number = -1) {
@@ -120,8 +120,7 @@ function parseAction(action: string, index: number = -1) {
         );
     }
     const functionName = action.substring(0, leftParan);
-    const { translatorName, actionName } =
-        parseFullActionNameParts(functionName);
+    const { schemaName, actionName } = parseFullActionNameParts(functionName);
     if (!actionName) {
         throw new Error(
             `${index !== -1 ? `Action ${index}: ` : ""}Unable to parse action name from '${functionName}'. Input must be in the form of ${format}`,
@@ -143,7 +142,7 @@ function parseAction(action: string, index: number = -1) {
             );
         }
     }
-    return createExecutableAction(translatorName, actionName, parameters);
+    return createExecutableAction(schemaName, actionName, parameters);
 }
 
 function parseActions(actionStr: string) {
@@ -197,7 +196,7 @@ function executableActionsToString(actions: ExecutableAction[]): string {
 }
 
 function fromJsonAction(actionJSON: JSONAction) {
-    const { translatorName, actionName } = parseFullActionNameParts(
+    const { schemaName: translatorName, actionName } = parseFullActionNameParts(
         actionJSON.fullActionName,
     );
     return createExecutableAction(

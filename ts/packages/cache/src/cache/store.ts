@@ -83,7 +83,7 @@ export interface ConstructionStore {
     print(options: PrintOptions): void;
 
     // Editing
-    delete(translatorName: string, id: number): Promise<void>;
+    delete(schemaName: string, id: number): Promise<void>;
 
     // Usage
     match(request: string, options?: MatchOptions): MatchResult[];
@@ -348,7 +348,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
      * Try to match the request and transform it into action using constructions
      *
      * @param request The request to match
-     * @param translatorName optional scoping to only match against single translator
+     * @param options Options to control the match
      * @returns All possible matches sorted by some heuristics of the likeliest match
      */
     public match(request: string, options?: MatchOptions) {
