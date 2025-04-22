@@ -3,6 +3,7 @@
 
 import {
     intersectScoredMessageOrdinals,
+    MatchAccumulator,
     setIntersect,
     setUnion,
 } from "./collections.js";
@@ -200,6 +201,8 @@ export class DataFrame implements IDataFrame {
                 ordinalSet = this.searchOr(searchTerms);
                 break;
             case "or_max":
+                ordinalSet = this.searchOrMax(searchTerms);
+                break;
             case "and":
                 ordinalSet = this.searchAnd(searchTerms);
                 break;
@@ -240,6 +243,29 @@ export class DataFrame implements IDataFrame {
             );
         }
         return orSet;
+    }
+
+    private searchOrMax(
+        searchTerms: DataFrameTermGroup,
+    ): Set<number> | undefined {
+        let matches: MatchAccumulator<number> = new MatchAccumulator();
+        for (const term of searchTerms.terms) {
+            for (const ordinal of this.findRowOrdinals(
+                term.columnName,
+                term.columnValue.term.text,
+                term.compareOp,
+            )) {
+                matches.add(ordinal, 1.0, true);
+            }
+        }
+        if (matches.size === 0) {
+            return undefined;
+        }
+        const maxHitCount = matches.getMaxHitCount();
+        if (maxHitCount > 1) {
+            matches.selectWithHitCount(maxHitCount);
+        }
+        return new Set<number>(matches.getMatchedValues());
     }
 
     private matchRecord(
@@ -284,12 +310,6 @@ export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
     get conversation(): IConversation<TMessage>;
     get dataFrames(): DataFrameCollection;
 }
-
-export type HybridSearchResults = {
-    conversationMatches?: ConversationSearchResult | undefined;
-    dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
-    joinedMatches?: ScoredMessageOrdinal[] | undefined;
-};
 
 export function compileHybridSearchFilter(
     hybridConversation: IConversationHybrid,
@@ -340,6 +360,12 @@ export async function searchConversationWithHybridScope(
         rawSearchQuery,
     );
 }
+
+export type HybridSearchResults = {
+    conversationMatches?: ConversationSearchResult | undefined;
+    dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
+    joinedMatches?: ScoredMessageOrdinal[] | undefined;
+};
 
 export async function searchConversationHybrid(
     hybridConversation: IConversationHybrid,

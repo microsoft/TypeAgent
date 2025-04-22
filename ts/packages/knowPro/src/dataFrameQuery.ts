@@ -151,8 +151,8 @@ export function getDataFrameTermGroups(
             );
             columnValue = term.propertyValue;
         } else {
-            // Nested or straight search terms not supported
-            continue;
+            // Nested or straight search terms not yet supported
+            throw new Error("Nested SearchTermGroups not supported yet");
         }
         if (qualifiedColumn !== undefined && columnValue) {
             let dataFrame = qualifiedColumn[0];
