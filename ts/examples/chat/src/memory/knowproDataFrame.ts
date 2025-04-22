@@ -23,8 +23,7 @@ export async function createKnowproDataFrameCommands(
     const db = new RestaurantDb(
         "/data/testChat/knowpro/restaurants/restaurants.db",
     );
-    const restaurantCollection: HybridRestaurantCollection =
-        new HybridRestaurantCollection(db);
+    const restaurantCollection: RestaurantIndex = new RestaurantIndex(db);
     const filePath =
         "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
@@ -87,15 +86,19 @@ export async function createKnowproDataFrameCommands(
             },
         );
         if (matchResult.success) {
-            for (const match of matchResult.data) {
-                printer.writeInColor(chalk.green, match.name);
-                printer.writeJsonInColor(chalk.gray, match.facets);
+            if (matchResult.data.length === 0) {
+                printer.writeLine("No matches");
+            } else {
+                for (const match of matchResult.data) {
+                    printer.writeInColor(chalk.green, match.name);
+                    printer.writeJsonInColor(chalk.gray, match.facets);
+                }
             }
         }
     }
 
     function importRestaurants(
-        restaurantCollection: HybridRestaurantCollection,
+        restaurantCollection: RestaurantIndex,
         restaurants: Restaurant[],
         numRestaurants: number,
     ) {
@@ -116,9 +119,7 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
-    async function buildIndex(
-        restaurantCollection: HybridRestaurantCollection,
-    ) {
+    async function buildIndex(restaurantCollection: RestaurantIndex) {
         const numRestaurants =
             restaurantCollection.conversation.messages.length;
         const progress = new ProgressBar(printer, numRestaurants);
@@ -250,7 +251,10 @@ export class RestaurantInfo implements kp.IMessage {
     }
 }
 
-export class RestaurantCollection implements kp.IConversation {
+/**
+ * Maintains all textual information for the restaurant + any knowledge extracted from it
+ */
+export class RestaurantStructuredRagIndex implements kp.IConversation {
     public settings: kp.ConversationSettings;
     public nameTag: string = "description";
     public tags: string[] = [];
@@ -291,18 +295,26 @@ export class RestaurantCollection implements kp.IConversation {
     }
 }
 
-export class HybridRestaurantCollection implements kp.IConversationHybrid {
-    public restaurants: RestaurantCollection;
-    //
-    // Some information for restaurants is stored in data frames
-    //
+export class RestaurantIndex implements kp.IConversationHybrid {
+    /**
+     * All raw textual data (descriptions, etc) is indexed using structured RAG
+     * Knowledge and other salient information is auto-extracted from the
+     * text by structured RAG and indexed
+     */
+    public textIndex: RestaurantStructuredRagIndex;
+    /**
+     * Restaurant details like LOCATION and other FACETS can be stored in
+     * strongly typed data frames ("tables") with spatial and other indexes.
+     * These can be used as needed during query processing
+     */
     public dataFrames: kp.DataFrameCollection;
     public locations: kp.IDataFrame;
     public restaurantFacets: kp.IDataFrame;
+
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor(public restaurantDb: RestaurantDb) {
-        this.restaurants = new RestaurantCollection();
+        this.textIndex = new RestaurantStructuredRagIndex();
         this.locations = new kp.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
@@ -323,7 +335,7 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
     }
 
     public get conversation(): kp.IConversation {
-        return this.restaurants;
+        return this.textIndex;
     }
 
     public addRestaurant(restaurant: Restaurant): RestaurantFacets | undefined {
@@ -336,7 +348,7 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
             return undefined;
         }
         const sourceRef: kp.RowSourceRef = {
-            range: this.restaurants.add(restaurant),
+            range: this.textIndex.add(restaurant),
         };
         restaurant.facets = facets;
         this.restaurantFacets.addRows({ sourceRef, record: facets });
@@ -356,7 +368,7 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
         const descriptions: string[] = [];
         for (const row of rows) {
             if (row.record) {
-                const description = this.restaurants.getDescriptionFromLocation(
+                const description = this.textIndex.getDescriptionFromLocation(
                     row.sourceRef.range.start,
                 );
                 descriptions.push(description.textChunks[0]);
@@ -464,7 +476,7 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
     public async buildIndex(
         eventHandler: kp.IndexingEventHandlers,
     ): Promise<void> {
-        await this.restaurants.buildIndex(eventHandler);
+        await this.textIndex.buildIndex(eventHandler);
     }
 
     private collectMessages(
@@ -473,7 +485,7 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
     ) {
         for (const match of matchedOrdinals) {
             const restaurant =
-                this.restaurants.messages[match.messageOrdinal].restaurant;
+                this.textIndex.messages[match.messageOrdinal].restaurant;
             matches.push(restaurant);
         }
     }
