@@ -39,9 +39,8 @@ function displayMessage(
 export async function displayInfo(
     message: MessageContent | LogFn,
     context: ActionContext<unknown>,
-    appendMode: DisplayAppendMode = "inline"
 ) {
-    displayMessage(message, context, "info", appendMode);
+    displayMessage(message, context, "info");
 }
 
 export async function displayStatus(
