@@ -124,6 +124,14 @@ export function setContent(
         speak = content.speak ?? false;
     }
 
+    if (!settingsView.isDisplayTypeAllowed(type)) {
+        message = `The supplied content type (${type}) is not allowed by the configured settings.`;
+        appendMode = "block";
+        speak = false;
+        kind = "error";
+        type = "text";
+    }
+
     const kindStyle = kind ? `chat-message-kind-${kind}` : undefined;
 
     let contentDiv = elm.lastChild as HTMLDivElement | null;
@@ -146,10 +154,6 @@ export function setContent(
     }
 
     let contentElm: HTMLElement = contentDiv;
-    if (!settingsView.isDisplayTypeAllowed(type)) {
-        contentElm.innerText = `The supplied content type (${type}) is not allowed by the configured settings.`;
-        return contentElm.innerText;
-    }
 
     if (type === "text") {
         const prevElm = contentDiv.lastChild as HTMLElement | null;
