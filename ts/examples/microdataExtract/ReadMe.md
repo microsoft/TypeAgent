@@ -1,8 +1,103 @@
 ## Scheam.org microdata extractor
 
-### Running
+## Features
 
-node dist/main.js
+- **Deduplicate**: Remove duplicate restaurant entries based on URL
+- **Filter**: Filter restaurant data for TripAdvisor entries
+- **Merge**: Merge restaurant datasets from different sources
+- **Parse**: Parse restaurant data from N-Quad format
+- **Scrape**: Scrape restaurant data from TripAdvisor
+
+## Usage
+
+### Deduplicate Restaurants
+
+Remove duplicate restaurant entries based on URL:
+
+```bash
+pnpm start dedupe path/to/restaurants.json
+pnpm start dedupe path/to/restaurants.json --output custom_output.json
+```
+
+### Filter TripAdvisor Restaurants
+
+Filter restaurant data for TripAdvisor entries:
+
+```bash
+pnpm start filter path/to/restaurants1.json path/to/restaurants2.json
+pnpm start filter path/to/*.json --output custom_output.json
+```
+
+### Merge Datasets
+
+Merge restaurant datasets from different sources:
+
+```bash
+pnpm start merge path/to/parsed.json path/to/crawl.json
+pnpm start merge path/to/parsed.json path/to/crawl.json --dir custom_output_dir
+```
+
+### Parse Restaurant Data
+
+Parse restaurant data from N-Quad format:
+
+```bash
+pnpm start parse path/to/data.nq path/to/output.json
+pnpm start parse path/to/data.nq path/to/output.json --debug
+```
+
+### Scrape TripAdvisor
+
+Scrape restaurant data from TripAdvisor:
+
+#### Discovery Mode
+
+Automatically discovers and scrapes restaurant data:
+
+```bash
+pnpm start scrape --mode=discovery
+pnpm start scrape --mode=discovery --base-url="https://www.tripadvisor.com/Restaurants-g60878-Seattle_Washington.html" --pages=5
+```
+
+#### Direct Mode
+
+Scrapes data from a list of URLs:
+
+```bash
+pnpm start scrape --mode=direct --input=path/to/urls.json
+pnpm start scrape --mode=direct --input=path/to/urls.json --output=path/to/results.json
+```
+
+### Process Sitemaps
+
+Extract restaurant URLs from sitemaps:
+
+```bash
+# Process TripAdvisor sitemaps
+restaurant-data-cli sitemap --source=tripadvisor
+
+# Process OpenTable sitemaps
+restaurant-data-cli sitemap --source=opentable --output=./urls
+
+# Process a custom sitemap
+restaurant-data-cli sitemap --source=custom --url=https://example.com/sitemap.xml
+
+# Without timestamp in filename
+restaurant-data-cli sitemap --source=tripadvisor --timestamp=false
+```
+
+## Commands Reference
+
+```bash
+# Show help
+pnpm start help
+
+# Show help for a specific command
+pnpm start help [COMMAND]
+
+# Show version
+pnpm start --version
+```
 
 ## Trademarks
 

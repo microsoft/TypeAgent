@@ -97,7 +97,7 @@ export class ShellSettingManager {
         if (!names.includes(name)) {
             throw new Error(`Invalid property name '${name}'.`);
         }
-        const currentValue = getObjectProperty(this.settings, "user", name);
+        const currentValue = getObjectProperty(this.settings.user, name);
         let newValue: any = value;
         let valueType = typeof currentValue;
         if (valueType !== typeof value) {

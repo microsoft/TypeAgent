@@ -385,19 +385,19 @@ async function runSiteAction(schemaName: string, action: any) {
 ipcRenderer.invoke("init-browser-ipc");
 
 contextBridge.exposeInMainWorld("browserConnect", {
-    enableSiteAgent: (translatorName) => {
-        if (translatorName) {
+    enableSiteAgent: (schemaName) => {
+        if (schemaName) {
             sendToBrowserAgent({
                 method: "enableSiteTranslator",
-                params: { translator: translatorName },
+                params: { translator: schemaName },
             });
         }
     },
-    disableSiteAgent: (translatorName) => {
-        if (translatorName) {
+    disableSiteAgent: (schemaName) => {
+        if (schemaName) {
             sendToBrowserAgent({
                 method: "disableSiteTranslator",
-                params: { translator: translatorName },
+                params: { translator: schemaName },
             });
         }
     },

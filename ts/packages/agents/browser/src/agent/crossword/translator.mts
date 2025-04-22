@@ -21,6 +21,14 @@ export type HtmlFragments = {
     cssSelector?: string;
 };
 
+export interface ContentSection {
+    type: "text" | "image_url";
+    text?: string;
+    image_url?: {
+        url: string;
+    };
+}
+
 function getBootstrapPrefixPromptSection() {
     let prefixSection = [];
     prefixSection.push({
@@ -28,6 +36,17 @@ function getBootstrapPrefixPromptSection() {
         text: "You are a virtual assistant that can help users to complete requests by interacting with the UI of a webpage.",
     });
     return prefixSection;
+}
+
+function getSuffixPromptSection() {
+    let suffixSection = [];
+    suffixSection.push({
+        type: "text",
+        text: `
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+`,
+    });
+    return suffixSection;
 }
 
 function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
@@ -46,6 +65,58 @@ function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
         });
     }
     return htmlSection;
+}
+
+function getScreenshotPromptSection(
+    screenshots: string[] | undefined,
+    fragments: HtmlFragments[] | undefined,
+) {
+    let screenshotSection = [];
+    if (screenshots) {
+        screenshots.forEach((screenshot) => {
+            screenshotSection.push({
+                type: "text",
+                text: "Here is a screenshot of the currently visible webpage",
+            });
+
+            screenshotSection.push({
+                type: "image_url",
+                image_url: {
+                    url: screenshot,
+                },
+            });
+        });
+
+        if (fragments) {
+            const textFragments = fragments.map((a) => a.text);
+            screenshotSection.push({
+                type: "text",
+                text: `Here is the text content of the page
+            '''
+            ${textFragments}
+            '''            
+            `,
+            });
+        }
+    }
+    return screenshotSection;
+}
+
+async function getSchemaFileContents(fileName: string): Promise<string> {
+    const packageRoot = path.join("..", "..", "..");
+    return await fs.promises.readFile(
+        fileURLToPath(
+            new URL(
+                path.join(
+                    packageRoot,
+                    "./src/agent/crossword/schema",
+                    fileName,
+                ),
+                import.meta.url,
+            ),
+        ),
+        "utf8",
+    );
 }
 
 function getHtmlTextOnlyPromptSection(fragments: HtmlFragments[] | undefined) {
@@ -346,6 +417,85 @@ export class CrosswordPageTranslator<T extends object> {
         bootstrapTranslator.createRequestPrompt = (input: string) => {
             return "";
         };
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response;
+    }
+
+    private getCssSelectorForElementPrompt<U extends object>(
+        translator: TypeChatJsonTranslator<U>,
+        userRequest?: string,
+        fragments?: HtmlFragments[],
+        screenshots?: string[],
+    ) {
+        const screenshotSection = getScreenshotPromptSection(
+            screenshots,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getBootstrapPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+
+        let requestSection = [];
+        if (userRequest) {
+            requestSection.push({
+                type: "text",
+                text: `
+                Here is  user request
+                '''
+                ${userRequest}
+                '''
+                `,
+            });
+        }
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+            Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below.
+            For schemas that include CSS selectors, construct the selector based on the element's Id attribute if the id is present.
+            You should stop searching and return current result as soon as you find a result that matches the user's criteria:
+            
+            '''
+            ${translator.validator.getSchemaText()}
+            '''
+            `,
+            },
+            ...requestSection,
+            ...suffixSection,
+        ];
+        return promptSections;
+    }
+
+    async getPageComponentSchema(
+        componentTypeName: string,
+        userRequest?: string,
+        fragments?: HtmlFragments[],
+        screenshots?: string[],
+    ) {
+        const componentsSchema =
+            await getSchemaFileContents("pageComponents.mts");
+
+        const validator = createTypeScriptJsonValidator(
+            componentsSchema,
+            "CrosswordClue",
+        );
+        const bootstrapTranslator = createJsonTranslator(this.model, validator);
+
+        const promptSections = this.getCssSelectorForElementPrompt(
+            bootstrapTranslator,
+            userRequest,
+            fragments,
+            screenshots,
+        ) as ContentSection[];
 
         const response = await bootstrapTranslator.translate("", [
             {

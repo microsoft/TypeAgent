@@ -18,42 +18,58 @@ export function getObjectPropertyNames(obj: object) {
     return names;
 }
 
-export function getObjectProperty(data: any, objectName: string, name: string) {
-    if (name === "") {
-        return data[objectName];
+function safeGetProperty(obj: any, name: string | number) {
+    // Protect against prototype pollution
+    if (
+        name === "__proto__" ||
+        name === "constructor" ||
+        name === "prototype"
+    ) {
+        throw new Error(`Invalid property name: ${name}`);
     }
+    return obj[name];
+}
+
+export function getObjectProperty(data: any, name: string) {
+    if (name === "") {
+        return data;
+    }
+    let curr = data;
     const properties = name.split(".");
-    let lastName: string | number = objectName;
-    let curr: any = data;
     for (const name of properties) {
-        // Protect against prototype pollution
-        if (
-            name === "__proto__" ||
-            name === "constructor" ||
-            name === "prototype"
-        ) {
-            throw new Error(`Invalid property name: ${name}`);
-        }
-        const next = curr[lastName];
-        if (next === undefined) {
+        if (typeof curr !== "object" || curr === null) {
+            // Can't index into a non-object
             return undefined;
         }
         const maybeIndex = parseInt(name);
-        if (maybeIndex.toString() === name) {
-            // Array index
-            if (!Array.isArray(next)) {
-                return undefined;
-            }
-            lastName = maybeIndex;
-        } else {
-            if (typeof next !== "object") {
-                return undefined;
-            }
-            lastName = name;
+        const isArrayIndex = maybeIndex.toString() === name;
+        if (isArrayIndex !== Array.isArray(curr)) {
+            return undefined;
         }
-        curr = next;
+
+        if (isArrayIndex) {
+            curr = curr[maybeIndex];
+        } else {
+            curr = safeGetProperty(curr, name);
+        }
     }
-    return curr[lastName];
+    return curr;
+}
+
+function safeSetProperty(obj: any, name: string | number, value: any) {
+    // Protect against prototype pollution
+    if (
+        name === "__proto__" ||
+        name === "constructor" ||
+        name === "prototype"
+    ) {
+        throw new Error(`Invalid property name: ${name}`);
+    }
+    obj[name] = value;
+}
+
+function canSetProperty(obj: any) {
+    return typeof obj === "object" && obj !== null && !Array.isArray(obj);
 }
 
 export function setObjectProperty(
@@ -67,39 +83,31 @@ export function setObjectProperty(
     let lastName: string | number = objectName;
     let curr = data;
     for (const name of properties) {
-        // Protect against prototype pollution
-        if (
-            name === "__proto__" ||
-            name === "constructor" ||
-            name === "prototype"
-        ) {
-            throw new Error(`Invalid property name: ${name}`);
-        }
-
-        let next = curr[lastName];
+        let next = safeGetProperty(curr, lastName);
         const maybeIndex = parseInt(name);
         if (maybeIndex.toString() === name) {
             // Array index
             if (next === undefined || (override && !Array.isArray(next))) {
                 next = [];
-                curr[lastName] = next;
-            }
-            curr = next;
-            if (!Array.isArray(curr)) {
-                throw new Error(`Internal error: ${lastName} is not an array`);
+                safeSetProperty(curr, lastName, next);
+            } else if (!Array.isArray(next)) {
+                throw new Error(
+                    `Cannot set index '${maybeIndex}' on object property '${lastName}'`,
+                );
             }
             lastName = maybeIndex;
         } else {
-            if (next === undefined || (override && typeof next !== "object")) {
+            if (next === undefined || (override && !canSetProperty(next))) {
                 next = {};
-                curr[lastName] = next;
-            }
-            curr = next;
-            if (typeof curr !== "object") {
-                throw new Error(`Internal error: ${lastName} is not an object`);
+                safeSetProperty(curr, lastName, next);
+            } else if (!canSetProperty(next)) {
+                throw new Error(
+                    `Cannot set property '${name}' on ${Array.isArray(next) ? "array" : next === null ? "null" : "non-object"} property '${lastName}'`,
+                );
             }
             lastName = name;
         }
+        curr = next;
     }
-    curr[lastName] = value;
+    safeSetProperty(curr, lastName, value);
 }

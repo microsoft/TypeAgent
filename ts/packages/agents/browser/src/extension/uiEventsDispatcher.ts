@@ -77,14 +77,21 @@ function enterTextInElement(
 
             // Check if inputElement is an input or textarea
             if (
-                !config.enterAtPageScope &&
                 !(inputElement instanceof HTMLInputElement) &&
                 !(inputElement instanceof HTMLTextAreaElement) &&
                 !inputElement.isContentEditable
             ) {
                 // fall back to page-level scope
-                inputElement =
-                    (document.activeElement as HTMLElement) || document.body;
+                if (
+                    document.activeElement instanceof HTMLInputElement ||
+                    document.activeElement instanceof HTMLTextAreaElement ||
+                    inputElement.isContentEditable
+                ) {
+                    inputElement = document.activeElement as HTMLElement;
+                } else {
+                    inputElement = document.body;
+                }
+
                 config.enterAtPageScope = true;
             }
 

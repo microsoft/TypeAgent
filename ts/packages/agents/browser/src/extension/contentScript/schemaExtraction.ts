@@ -1,11 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * Schema.org metadata
+ */
 export interface SchemaMetadata {
     url: string;
     data: any[];
 }
 
+/**
+ * Extracts schema.org metadata from a document
+ * @param doc The document to extract from (defaults to current document)
+ * @returns The extracted metadata
+ */
 export function extractSchemaMetadata(doc?: Document): any[] {
     if (doc == undefined) {
         doc = document;
@@ -13,6 +21,7 @@ export function extractSchemaMetadata(doc?: Document): any[] {
 
     const metadata: any[] = [];
 
+    // Extract JSON-LD
     const scriptTags = doc.querySelectorAll(
         'script[type="application/ld+json"]',
     );
@@ -27,6 +36,7 @@ export function extractSchemaMetadata(doc?: Document): any[] {
         }
     });
 
+    // Extract Microdata
     const microdataElements = doc.querySelectorAll("[itemscope]");
     microdataElements.forEach((element) => {
         const microdataObj = extractMicrodata(element as HTMLElement);
@@ -35,6 +45,7 @@ export function extractSchemaMetadata(doc?: Document): any[] {
         }
     });
 
+    // Extract RDFa
     const rdfaElements = doc.querySelectorAll("[typeof]");
     rdfaElements.forEach((element) => {
         const rdfaObj = extractRDFa(element as HTMLElement);
@@ -46,14 +57,21 @@ export function extractSchemaMetadata(doc?: Document): any[] {
     return metadata;
 }
 
+/**
+ * Extracts microdata from an element
+ * @param element The element to extract from
+ * @returns The extracted microdata
+ */
 function extractMicrodata(element: HTMLElement): any {
     const result: any = {};
 
+    // Get item type
     const itemtype = element.getAttribute("itemtype");
     if (itemtype) {
         result["@type"] = itemtype.split("/").pop();
     }
 
+    // Get item properties
     const itemprops = element.querySelectorAll("[itemprop]");
     itemprops.forEach((itemprop) => {
         const propName = itemprop.getAttribute("itemprop");
@@ -76,14 +94,21 @@ function extractMicrodata(element: HTMLElement): any {
     return result;
 }
 
+/**
+ * Extracts RDFa data from an element
+ * @param element The element to extract from
+ * @returns The extracted RDFa data
+ */
 function extractRDFa(element: HTMLElement): any {
     const result: any = {};
 
+    // Get type
     const type = element.getAttribute("typeof");
     if (type) {
         result["@type"] = type;
     }
 
+    // Get properties
     const properties = element.querySelectorAll("[property]");
     properties.forEach((prop) => {
         const propName = prop.getAttribute("property");
@@ -104,7 +129,11 @@ function extractRDFa(element: HTMLElement): any {
     return result;
 }
 
-export async function extractSchemaFromLinkedPages() {
+/**
+ * Extracts schema.org metadata from linked pages
+ * Creates an iframe for each linked page to extract data without navigating away
+ */
+export async function extractSchemaFromLinkedPages(): Promise<void> {
     const isTripAdvisor = window.location.hostname.includes("tripadvisor");
     let uniqueLinks: string[] = [];
 
@@ -113,7 +142,6 @@ export async function extractSchemaFromLinkedPages() {
         let restaurantLinks: string[] = [];
 
         // TripAdvisor-specific selectors for restaurant search results
-        // These selectors may need adjustment based on TripAdvisor's current HTML structure
         const restaurantElements = document.querySelectorAll(
             ".result-title, .listing_title a, .property_title a, .qoImL a",
         );
@@ -156,6 +184,7 @@ export async function extractSchemaFromLinkedPages() {
             (link) => new URL(link, window.location.href).href,
         );
 
+        // Filter to only include links from the same domain
         const currentDomain = new URL(window.location.href).hostname;
         uniqueLinks = [...new Set(absoluteLinks)].filter((url) => {
             try {
@@ -191,6 +220,7 @@ export async function extractSchemaFromLinkedPages() {
     };
 
     try {
+        // Process each link
         for (let i = 0; i < uniqueLinks.length; i++) {
             const link = uniqueLinks[i];
             try {
@@ -218,6 +248,7 @@ export async function extractSchemaFromLinkedPages() {
                     iframe.src = link;
                 });
 
+                // Extract metadata from the iframe's document
                 const iframeDoc = iframe.contentDocument;
                 if (iframeDoc) {
                     const metadata = extractSchemaMetadata(iframeDoc);
@@ -241,6 +272,7 @@ export async function extractSchemaFromLinkedPages() {
             await new Promise((resolve) => setTimeout(resolve, delay));
         }
 
+        // Download results if any metadata was found
         if (allMetadata.length > 0) {
             chrome.runtime.sendMessage({
                 type: "downloadData",
