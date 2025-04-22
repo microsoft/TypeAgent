@@ -326,7 +326,7 @@ export class Session {
             if (!sessionData.indexes) {
                 sessionData.indexes = [];
             }
-            
+
             IndexManager.load(sessionData.indexes, sessionDirPath);
         }
     }

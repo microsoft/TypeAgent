@@ -586,7 +586,6 @@ async function indexImages(
     chatModel: ChatModel,
     callback?: (text: string, count: number, max: number) => void,
 ): Promise<Image[]> {
-
     const retVal: Image[] = [];
 
     // load files from the supplied directory
@@ -622,7 +621,11 @@ async function indexImages(
                 );
             } else {
                 // index the image
-                const img = await indexImage(fullFilePath, cachePath, chatModel);
+                const img = await indexImage(
+                    fullFilePath,
+                    cachePath,
+                    chatModel,
+                );
 
                 if (callback && img) {
                     callback(fileNames[i], i, fileNames.length);

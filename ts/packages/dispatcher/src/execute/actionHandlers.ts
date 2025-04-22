@@ -254,14 +254,14 @@ export function createSessionContext<T = unknown>(
         removeDynamicAgent,
         indexes(type: string): Promise<any[]> {
             return new Promise<IndexData[]>((resolve, reject) => {
-
-                const iidx: IndexData[] = IndexManager.getInstance().indexes.filter((value) => {
-                    return type === "all" || value.source === type;
-                });
+                const iidx: IndexData[] =
+                    IndexManager.getInstance().indexes.filter((value) => {
+                        return type === "all" || value.source === type;
+                    });
 
                 resolve(iidx);
             });
-        }
+        },
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;

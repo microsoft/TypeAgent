@@ -417,7 +417,7 @@ export async function initializeCommandHandlerContext(
             instanceDirLock,
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,
-            indexManager: IndexManager.getInstance()
+            indexManager: IndexManager.getInstance(),
         };
 
         await addAppAgentProviders(context, options?.appAgentProviders);

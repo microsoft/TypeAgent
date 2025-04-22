@@ -12,15 +12,15 @@ import { IndexData, IndexSource } from "image-memory";
 
 const debug = registerDebug("typeagent:indexManager");
 
-
 // TODO: add support to be able to "disable" an index
 
 /*
-* IndexManager is a singleton class that manages the indexes for the system.
-*/
+ * IndexManager is a singleton class that manages the indexes for the system.
+ */
 export class IndexManager {
     private static instance: IndexManager;
-    private indexingServices: Map<IndexData, ChildProcess | undefined> = new Map<IndexData, ChildProcess | undefined>();
+    private indexingServices: Map<IndexData, ChildProcess | undefined> =
+        new Map<IndexData, ChildProcess | undefined>();
     private static rootPath: string;
     //private cacheRoot: string;
     private static imageRoot: string | undefined;
@@ -31,19 +31,18 @@ export class IndexManager {
             IndexManager.instance = new IndexManager();
         }
         return IndexManager.instance;
-    }
+    };
 
     /*
-    * Loads the supplied indexes
-    */
+     * Loads the supplied indexes
+     */
     public static load(indexesToLoad: IndexData[], sessionDir: string) {
-
         this.rootPath = path.join(sessionDir, "indexes");
 
         ensureDirectory(IndexManager.rootPath);
 
         // make sure the indexes folder exists
-        IndexManager.imageRoot = path.join(IndexManager.rootPath, "image")
+        IndexManager.imageRoot = path.join(IndexManager.rootPath, "image");
         ensureDirectory(IndexManager.imageRoot!);
 
         // TODO: find a good way to make a shared cache of .kr files and thumbnails for images
@@ -51,15 +50,16 @@ export class IndexManager {
         // ensureDirectory(IndexManager.cacheRoot);
 
         IndexManager.emailRoot = path.join(IndexManager.rootPath, "email");
-        ensureDirectory(IndexManager.emailRoot!);          
+        ensureDirectory(IndexManager.emailRoot!);
 
         indexesToLoad.forEach((value) => {
-
             // restart any indexing that's not done
             if (value.state != "finished") {
-                this.getInstance().startIndexingService(value).then((service) => {
-                    this.getInstance().indexingServices.set(value, service);
-                });
+                this.getInstance()
+                    .startIndexingService(value)
+                    .then((service) => {
+                        this.getInstance().indexingServices.set(value, service);
+                    });
             }
 
             this.getInstance().indexingServices.set(value, undefined);
@@ -67,8 +67,8 @@ export class IndexManager {
     }
 
     /*
-    * Gets the available indexes
-    */
+     * Gets the available indexes
+     */
     public get indexes(): IndexData[] {
         const indexes: IndexData[] = [];
         this.indexingServices.forEach((cp, key) => indexes.push(key));
@@ -77,10 +77,13 @@ export class IndexManager {
     }
 
     /*
-    * Creates the the index with the supplied settings
-    */
-    public async createIndex(name: string, source: IndexSource, location: string): Promise<boolean> {
-
+     * Creates the the index with the supplied settings
+     */
+    public async createIndex(
+        name: string,
+        source: IndexSource,
+        location: string,
+    ): Promise<boolean> {
         // spin up the correct indexer based on the request
         switch (source) {
             case "image":
@@ -96,19 +99,23 @@ export class IndexManager {
     }
 
     /*
-    * Create the image index for the specified location
-    */
+     * Create the image index for the specified location
+     */
     private async createImageIndex(name: string, location: string) {
         if (!existsSync(location)) {
             throw new Error(`Location '${location}' does not exist.`);
         }
 
         if (!isDirectoryPath(location)) {
-            throw new Error (`Location '${location}' is not a directory.  Please specify a valid diretory.`);
+            throw new Error(
+                `Location '${location}' is not a directory.  Please specify a valid diretory.`,
+            );
         }
 
         const dirName = getUniqueFileName(IndexManager.imageRoot!, "index");
-        const folder = await ensureDir(path.join(IndexManager.imageRoot!, dirName));
+        const folder = await ensureDir(
+            path.join(IndexManager.imageRoot!, dirName),
+        );
 
         const index: IndexData = {
             source: "image",
@@ -118,7 +125,7 @@ export class IndexManager {
             path: folder,
             state: "new",
             progress: 0,
-            sizeOnDisk: 0
+            sizeOnDisk: 0,
         };
 
         // start indexing
@@ -126,7 +133,6 @@ export class IndexManager {
     }
 
     public deleteIndex(name: string): boolean {
-        
         this.indexingServices.forEach((childProc, index) => {
             if (index.name == name) {
                 // kill the index process
@@ -136,51 +142,62 @@ export class IndexManager {
                 this.indexingServices.delete(index);
 
                 // remove the folder where the index is stored
-                fs.promises.rm(index.path, { recursive: true, force: true }).catch((reason) => debug(reason));                
+                fs.promises
+                    .rm(index.path, { recursive: true, force: true })
+                    .catch((reason) => debug(reason));
             }
         });
 
         return true;
     }
 
-    private startIndexingService(index: IndexData): Promise<ChildProcess | undefined> {
-        return new Promise<ChildProcess | undefined>(
-            (resolve, reject) => {
-                try {
-                    const serviceRoot = getPackageFilePath("./node_modules/image-memory/dist/indexingService.js");                    
-                    const childProcess = fork(serviceRoot);
+    private startIndexingService(
+        index: IndexData,
+    ): Promise<ChildProcess | undefined> {
+        return new Promise<ChildProcess | undefined>((resolve, reject) => {
+            try {
+                const serviceRoot = getPackageFilePath(
+                    "./node_modules/image-memory/dist/indexingService.js",
+                );
+                const childProcess = fork(serviceRoot);
 
-                    IndexManager.getInstance().indexingServices.set(index, childProcess);
-    
-                    childProcess.on("message", function (message) {
-                        if (message === "Success") {
-                            childProcess.send(index);
-                            resolve(childProcess);
-                        } else if (message === "Failure") {
-                            index.state = "error";
-                            resolve(undefined);
-                        } else {
-                            const idx: IndexData | undefined = message as IndexData;
-                            IndexManager.getInstance().indexingServices.forEach((childProc, index) => {
+                IndexManager.getInstance().indexingServices.set(
+                    index,
+                    childProcess,
+                );
+
+                childProcess.on("message", function (message) {
+                    if (message === "Success") {
+                        childProcess.send(index);
+                        resolve(childProcess);
+                    } else if (message === "Failure") {
+                        index.state = "error";
+                        resolve(undefined);
+                    } else {
+                        const idx: IndexData | undefined = message as IndexData;
+                        IndexManager.getInstance().indexingServices.forEach(
+                            (childProc, index) => {
                                 if (index.location === idx.location) {
                                     index.size = idx.size;
                                     index.state = idx.state;
                                     index.progress = idx.progress;
                                     index.sizeOnDisk = idx.sizeOnDisk;
                                 }
-                            });                            
-                        }
-                    });
-    
-                    childProcess.on("exit", (code) => {
-                        debug(`Index service ${index.name} exited with code:`, code);
-                    });
-                } catch (e: any) {
-                    console.error(e);
-                    resolve(undefined);
-                }
-            },
-        );
+                            },
+                        );
+                    }
+                });
+
+                childProcess.on("exit", (code) => {
+                    debug(
+                        `Index service ${index.name} exited with code:`,
+                        code,
+                    );
+                });
+            } catch (e: any) {
+                console.error(e);
+                resolve(undefined);
+            }
+        });
     }
 }
-

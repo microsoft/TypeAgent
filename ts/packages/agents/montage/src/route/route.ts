@@ -240,7 +240,6 @@ process.send?.("Success");
  * Processes messages received from the host/parent process
  */
 process.on("message", (message: any) => {
-
     if (message.allowedFolders) {
         allowedFolders = [...allowedFolders, ...message.allowedFolders];
     } else {

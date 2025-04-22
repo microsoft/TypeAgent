@@ -167,7 +167,11 @@ async function updateMontageContext(
             // TODO: handle image index that has been updated since we loaded it
             if (context.agentContext.indexes.length > 0) {
                 // For now just load the first image index
-                context.agentContext.imageCollection = await im.ImageCollection.readFromFile(context.agentContext.indexes[0].path, "index");
+                context.agentContext.imageCollection =
+                    await im.ImageCollection.readFromFile(
+                        context.agentContext.indexes[0].path,
+                        "index",
+                    );
             } else {
                 debug(
                     "Unable to load image index, please create one using the @index.",
@@ -190,13 +194,14 @@ async function updateMontageContext(
 
             // send initial state and allowed folder(s)
             if (context.agentContext.montage) {
-
                 const folders: string[] = [];
                 context.agentContext.indexes.forEach((idx) => {
                     folders.push(idx.location);
-                })
+                });
 
-                context.agentContext.viewProcess?.send({ allowedFolders: folders });
+                context.agentContext.viewProcess?.send({
+                    allowedFolders: folders,
+                });
 
                 context.agentContext.viewProcess?.send(
                     context.agentContext.montage,
@@ -224,7 +229,9 @@ async function handleMontageAction(
             `Unable to perform the requeste action. Disconnected from the canvas.`,
         );
     } else if (!actionContext.sessionContext.agentContext.imageCollection) {
-        return createActionResultFromError("No image index has been loaded! Please create one with the @index command.");
+        return createActionResultFromError(
+            "No image index has been loaded! Please create one with the @index command.",
+        );
     }
 
     switch (action.actionName) {
@@ -865,7 +872,6 @@ export async function createViewServiceHost(
                 childProcess.on("exit", (code) => {
                     debug("Montage view server exited with code:", code);
                 });
-
             } catch (e: any) {
                 console.error(e);
                 resolve(undefined);

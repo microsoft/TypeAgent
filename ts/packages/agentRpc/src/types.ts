@@ -103,10 +103,7 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         name: string;
     }) => Promise<void>;
-    indexes: (param: {
-        contextId: number;
-        type: string;
-    }) => Promise<any>;
+    indexes: (param: { contextId: number; type: string }) => Promise<any>;
 };
 
 export type AgentCallFunctions = {

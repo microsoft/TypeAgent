@@ -2,9 +2,16 @@
 // Licensed under the MIT License.
 
 import { ActionContext, ParsedCommandParams } from "@typeagent/agent-sdk";
-import { CommandHandler, CommandHandlerTable } from "@typeagent/agent-sdk/helpers/command";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/command";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { displayResult, displaySuccess, displayWarn } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayResult,
+    displaySuccess,
+    displayWarn,
+} from "@typeagent/agent-sdk/helpers/display";
 import { IndexData, IndexSource } from "image-memory";
 import fileSize from "file-size";
 
@@ -23,7 +30,13 @@ class IndexListCommandHandler implements CommandHandler {
         if (indexes.length > 0) {
             iiPrint.push(["Name", "Type", "Status", "Location", "Size"]);
             systemContext.indexManager.indexes.forEach((index: IndexData) => {
-                iiPrint.push([index.name, index.source, index.state, index.location, index.size.toString()]);
+                iiPrint.push([
+                    index.name,
+                    index.source,
+                    index.state,
+                    index.location,
+                    index.size.toString(),
+                ]);
             });
             displayResult(iiPrint, context);
         } else {
@@ -35,16 +48,14 @@ class IndexListCommandHandler implements CommandHandler {
 class IndexInfoCommandHandler implements CommandHandler {
     public readonly description = "Show index details";
     public readonly parameters = {
-        flags: {
-
-        },
+        flags: {},
         args: {
             name: {
                 description: "Name of the index",
                 type: "string",
                 required: true,
-            }
-        }
+            },
+        },
     } as const;
 
     public async run(
@@ -62,7 +73,8 @@ class IndexInfoCommandHandler implements CommandHandler {
                 output += `\nSize on Disk: ${fileSize(value.sizeOnDisk).human("si")}\n\n`;
 
                 if (value.state != "finished") {
-                    output += "Indexing is incomplete, reported size may change!";
+                    output +=
+                        "Indexing is incomplete, reported size may change!";
                 }
             }
         });
@@ -75,12 +87,10 @@ class IndexInfoCommandHandler implements CommandHandler {
     }
 }
 
-
 class IndexCreateCommandHandler implements CommandHandler {
     public readonly description = "Create a new index";
     public readonly parameters = {
-        flags: {
-        },
+        flags: {},
         args: {
             type: {
                 description: "The type of index to create [image, email]",
@@ -99,7 +109,7 @@ class IndexCreateCommandHandler implements CommandHandler {
                 type: "string",
                 required: true,
             },
-        }
+        },
     } as const;
 
     public async run(
@@ -110,19 +120,30 @@ class IndexCreateCommandHandler implements CommandHandler {
 
         const filtered = systemContext.indexManager.indexes.filter((value) => {
             return value.name === params.args.name;
-        })
+        });
 
         if (filtered.length > 0) {
-            displayWarn(`There is already an index with the name '${params.args.name}'.  Please specify a different name.`, context);
+            displayWarn(
+                `There is already an index with the name '${params.args.name}'.  Please specify a different name.`,
+                context,
+            );
             return;
         }
 
-        if (await systemContext.indexManager.createIndex(params.args.name, params.args.type as IndexSource, params.args.location)) {
-
+        if (
+            await systemContext.indexManager.createIndex(
+                params.args.name,
+                params.args.type as IndexSource,
+                params.args.location,
+            )
+        ) {
             // save the index by saving the session
             systemContext.session.save();
 
-            displayResult(`Index ${params.args.name} created successfully.`, context);
+            displayResult(
+                `Index ${params.args.name} created successfully.`,
+                context,
+            );
         } else {
             displayWarn(`Failed to create index ${params.args.name}.`, context);
         }
@@ -138,7 +159,7 @@ class IndexDeleteCommandHandler implements CommandHandler {
                 type: "string",
                 required: true,
             },
-        }
+        },
     } as const;
 
     public async run(
@@ -148,20 +169,25 @@ class IndexDeleteCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
 
         if (systemContext.indexManager.deleteIndex(params.args.name)) {
-
             // save the index by saving the session
             systemContext.session.save();
 
-            displaySuccess(`Index ${params.args.name} deleted successfully.`, context);
+            displaySuccess(
+                `Index ${params.args.name} deleted successfully.`,
+                context,
+            );
         } else {
-            displayWarn(`Failed to delete index with the name '${params.args.name}'.`, context);
+            displayWarn(
+                `Failed to delete index with the name '${params.args.name}'.`,
+                context,
+            );
         }
     }
 }
 
 /*
-* Gets all of the available indexing commands
-*/
+ * Gets all of the available indexing commands
+ */
 export function getIndexCommandHandlers(): CommandHandlerTable {
     return {
         description: "Indexing commands",
@@ -174,6 +200,6 @@ export function getIndexCommandHandlers(): CommandHandlerTable {
             // TODO: implement
             // rebuild: new IndexRebuildCommandHandler(), // is this necessary?
             // watch: new IndexWatchCommandHandler(),     // Toggle file watching
-        }
+        },
     };
 }

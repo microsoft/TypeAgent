@@ -385,12 +385,12 @@ export function createAgentRpcServer(
                         closeFn();
                     }
                 }),
-            indexes: async(type: string): Promise<any[]> => {
+            indexes: async (type: string): Promise<any[]> => {
                 return await rpc.invoke("indexes", {
                     contextId,
-                    type
+                    type,
                 });
-            }
+            },
         };
     }
 
