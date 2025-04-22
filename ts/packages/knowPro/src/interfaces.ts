@@ -344,7 +344,7 @@ export type WhenFilter = {
      */
     scopeDefiningTerms?: SearchTermGroup | undefined;
     /**
-     * Additional scoping ranges
+     * Additional scoping ranges separately computed by caller
      */
     textRangesInScope?: TextRange[] | undefined;
 };

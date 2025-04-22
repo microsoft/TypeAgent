@@ -18,12 +18,13 @@ export async function createKnowproDataFrameCommands(
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
     commands.kpDataFrameIndex = indexDataFrame;
-    commands.kpDataFrameSearch = seachDataFrame;
+    commands.kpDataFrameSearch = searchDataFrame;
+    commands.kpDataFrameSearch2 = searchDataFrame2;
 
     const db = new RestaurantDb(
         "/data/testChat/knowpro/restaurants/restaurants.db",
     );
-    const restaurantCollection: RestaurantIndex = new RestaurantIndex(db);
+    const restaurantIndex: RestaurantIndex = new RestaurantIndex(db);
     const filePath =
         "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
@@ -34,19 +35,15 @@ export async function createKnowproDataFrameCommands(
             // Load some restaurants into a collection
             //
             let numRestaurants = 16;
-            const restaurants: Restaurant[] =
+            const restaurantData: Restaurant[] =
                 await loadThings<Restaurant>(filePath);
 
-            importRestaurants(
-                restaurantCollection,
-                restaurants,
-                numRestaurants,
-            );
+            importRestaurants(restaurantIndex, restaurantData, numRestaurants);
             //
             // Build index
             //
             printer.writeHeading("Building index");
-            await buildIndex(restaurantCollection);
+            await buildIndex(restaurantIndex);
             // Automatic querying of data frames using standard conversation stuff
             printer.writeInColor(
                 chalk.cyan,
@@ -58,13 +55,13 @@ export async function createKnowproDataFrameCommands(
                 kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
             );
             const hybridMatches = await kp.searchConversationHybrid(
-                restaurantCollection,
+                restaurantIndex,
                 termGroup,
             );
             if (hybridMatches && hybridMatches.dataFrameMatches) {
                 printer.writeScoredMessages(
                     hybridMatches.dataFrameMatches,
-                    restaurantCollection.conversation.messages,
+                    restaurantIndex.conversation.messages,
                     25,
                 );
             }
@@ -75,25 +72,51 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
-    async function seachDataFrame(args: string[]) {
+    async function searchDataFrame(args: string[]) {
         const nlpQuery = args[0] ?? query;
         // NLP querying
         printer.writeInColor(chalk.cyan, nlpQuery);
-        const matchResult = await restaurantCollection.findWithLanguage(
+        const matchResult = await restaurantIndex.findWithLanguage(
             nlpQuery,
             (q) => {
                 printer.writeJson(q);
             },
         );
-        if (matchResult.success) {
-            if (matchResult.data.length === 0) {
-                printer.writeLine("No matches");
-            } else {
-                for (const match of matchResult.data) {
-                    printer.writeInColor(chalk.green, match.name);
-                    printer.writeJsonInColor(chalk.gray, match.facets);
-                }
-            }
+        if (!matchResult.success) {
+            printer.writeError(matchResult.message);
+            return;
+        }
+        if (matchResult.data.length === 0) {
+            printer.writeLine("No matches");
+            return;
+        }
+        matchResult.data.forEach((restaurant) =>
+            writeRestaurantMatch(restaurant),
+        );
+    }
+
+    async function searchDataFrame2(args: string[]) {
+        const nlpQuery = args[0] ?? query;
+        // NLP querying
+        printer.writeInColor(chalk.cyan, nlpQuery);
+        const matchResult = await restaurantIndex.findWithLanguage2(
+            nlpQuery,
+            (q) => {
+                printer.writeJson(q);
+            },
+        );
+        if (!matchResult.success) {
+            printer.writeError(matchResult.message);
+            return;
+        }
+        if (matchResult.data.length === 0) {
+            printer.writeLine("No matches");
+            return;
+        }
+        for (const restaurantList of matchResult.data) {
+            restaurantList.forEach((restaurant) =>
+                writeRestaurantMatch(restaurant),
+            );
         }
     }
 
@@ -128,8 +151,12 @@ export async function createKnowproDataFrameCommands(
         );
         progress.complete();
     }
-    /*
 
+    function writeRestaurantMatch(restaurant: Restaurant): void {
+        printer.writeInColor(chalk.green, restaurant.name);
+        printer.writeJsonInColor(chalk.gray, restaurant.facets);
+    }
+    /*
     function writeRows(
         rows: kp.DataFrameRow[],
         restaurantCollection: HybridRestaurantCollection,
@@ -385,43 +412,6 @@ export class RestaurantIndex implements kp.IConversationHybrid {
         );
     }
 
-    public async findWithLanguage1(
-        query: string,
-    ): Promise<Result<Restaurant[]>> {
-        const queryResults = await kp.searchQueryExprFromLanguage(
-            this.conversation,
-            this.queryTranslator,
-            query,
-        );
-        if (!queryResults.success) {
-            return queryResults;
-        }
-        const matchedRestaurants: Restaurant[] = [];
-        const sq = queryResults.data[0];
-        for (const sExpr of sq.selectExpressions) {
-            const matches = await kp.searchConversationHybrid(
-                this,
-                sExpr.searchTermGroup,
-                sExpr.when,
-                undefined,
-                sq.rawQuery,
-            );
-            if (matches && matches.conversationMatches) {
-                this.collectMessages(
-                    matches.conversationMatches.messageMatches,
-                    matchedRestaurants,
-                );
-            }
-            if (matches && matches.dataFrameMatches) {
-                this.collectMessages(
-                    matches.dataFrameMatches,
-                    matchedRestaurants,
-                );
-            }
-        }
-        return success(matchedRestaurants);
-    }
-
     public async findWithLanguage(
         query: string,
         callback?: (sq: kp.querySchema.SearchQuery) => void,
@@ -454,19 +444,65 @@ export class RestaurantIndex implements kp.IConversationHybrid {
                 sq.rawQuery,
             );
             if (matches.joinedMatches) {
-                this.collectMessages(matches.joinedMatches, matchedRestaurants);
+                this.collectRestaurants(
+                    matches.joinedMatches,
+                    matchedRestaurants,
+                );
             } else {
                 if (matches && matches.conversationMatches) {
-                    this.collectMessages(
+                    this.collectRestaurants(
                         matches.conversationMatches.messageMatches,
                         matchedRestaurants,
                     );
                 }
                 if (matches && matches.dataFrameMatches) {
-                    this.collectMessages(
+                    this.collectRestaurants(
                         matches.dataFrameMatches,
                         matchedRestaurants,
                     );
+                }
+            }
+        }
+        return success(matchedRestaurants);
+    }
+
+    public async findWithLanguage2(
+        query: string,
+        callback?: (sq: kp.querySchema.SearchQuery) => void,
+    ): Promise<Result<Restaurant[][]>> {
+        const queryResults = await kp.searchQueryFromLanguage(
+            this.conversation,
+            this.queryTranslator,
+            query,
+        );
+        if (!queryResults.success) {
+            return queryResults;
+        }
+        const searchQuery = queryResults.data;
+        if (callback) {
+            callback(searchQuery);
+        }
+        const matchedRestaurants: Restaurant[][] = [];
+        for (const searchExpr of searchQuery.searchExpressions) {
+            for (const searchFilter of searchExpr.filters) {
+                const selectExpr = kp.compileHybridSearchFilter(
+                    this,
+                    searchFilter,
+                );
+                const results = await kp.searchConversationWithHybridScope(
+                    this,
+                    selectExpr.searchTermGroup,
+                    selectExpr.when,
+                    undefined,
+                    searchExpr.rewrittenQuery,
+                );
+                if (results) {
+                    const matches = this.collectRestaurants(
+                        results.messageMatches,
+                    );
+                    if (matches.length > 0) {
+                        matchedRestaurants.push(matches);
+                    }
                 }
             }
         }
@@ -479,16 +515,19 @@ export class RestaurantIndex implements kp.IConversationHybrid {
         await this.textIndex.buildIndex(eventHandler);
     }
 
-    private collectMessages(
+    private collectRestaurants(
         matchedOrdinals: kp.ScoredMessageOrdinal[],
-        matches: Restaurant[],
-    ) {
+        matches?: Restaurant[],
+    ): Restaurant[] {
+        matches ??= [];
         for (const match of matchedOrdinals) {
             const restaurant =
                 this.textIndex.messages[match.messageOrdinal].restaurant;
             matches.push(restaurant);
         }
+        return matches;
     }
+
     /**
      * Source data is imperfect
      * @param restaurant

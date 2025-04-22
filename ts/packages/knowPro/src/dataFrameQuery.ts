@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, TextRangeCollection } from "./collections.js";
-import { isPropertyTerm } from "./compileLib.js";
+import { BooleanOp, isPropertyTerm } from "./compileLib.js";
 import {
     DataFrameCollection,
+    DataFrameSearchTerm,
     DataFrameTermGroup,
     IDataFrame,
 } from "./dataFrame.js";
@@ -12,6 +13,7 @@ import {
     PropertySearchTerm,
     SearchTerm,
     SearchTermGroup,
+    Term,
 } from "./interfaces.js";
 import * as q from "./query.js";
 
@@ -81,6 +83,7 @@ export class DataFrameCompiler {
         if (dfTermGroups === undefined || dfTermGroups.length === 0) {
             return undefined;
         }
+        this.validateAndPrepareGroups(dfTermGroups);
         let termExpressions: MatchDataFrameTermsExpr[] = [];
         for (const dfTermGroup of dfTermGroups) {
             termExpressions.push(new MatchDataFrameTermsExpr(dfTermGroup));
@@ -89,8 +92,41 @@ export class DataFrameCompiler {
     }
 
     public compileScope(termGroup: SearchTermGroup) {
-        const dfTermGroups = getDataFrameTermGroups(this.dataFrames, termGroup);
+        const dfTermGroups = getDataFrameTermGroups(
+            this.dataFrames,
+            termGroup,
+            "and",
+        );
+        if (dfTermGroups === undefined || dfTermGroups.length === 0) {
+            return undefined;
+        }
+        this.validateAndPrepareGroups(dfTermGroups);
         return new TextRangeFromDataFrameExpr(dfTermGroups);
+    }
+
+    private validateAndPrepareGroups(dfGroups: DataFrameTermGroup[]): boolean {
+        for (const dfGroup of dfGroups) {
+            if (!this.validateAndPrepareTerms(dfGroup.terms)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private validateAndPrepareTerms(dfTerms: DataFrameSearchTerm[]): boolean {
+        for (const dfTerm of dfTerms) {
+            if (!this.validateAndPrepareTerm(dfTerm.columnValue.term)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private validateAndPrepareTerm(term: Term | undefined): boolean {
+        if (term) {
+            term.text = term.text.toLowerCase();
+        }
+        return true;
     }
 }
 
@@ -101,6 +137,7 @@ export class DataFrameCompiler {
 export function getDataFrameTermGroups(
     dataFrames: DataFrameCollection,
     termGroup: SearchTermGroup,
+    booleanOp?: BooleanOp,
 ): DataFrameTermGroup[] {
     const dfTermGroups = new Map<string, DataFrameTermGroup>();
     for (const term of termGroup.terms) {
@@ -122,7 +159,7 @@ export function getDataFrameTermGroups(
             let dfGroup = dfTermGroups.get(dataFrame.name);
             if (dfGroup === undefined) {
                 dfGroup = {
-                    booleanOp: termGroup.booleanOp,
+                    booleanOp: booleanOp ?? termGroup.booleanOp,
                     dataFrame,
                     terms: [],
                 };

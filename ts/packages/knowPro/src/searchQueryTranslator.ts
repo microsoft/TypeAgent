@@ -99,6 +99,16 @@ export function compileSearchQuery(
     return searchQueryExprs;
 }
 
+export function compileSearchFilter(
+    conversation: IConversation,
+    searchFilter: querySchema.SearchFilter,
+    exactScoping: boolean = true,
+): SearchSelectExpr {
+    const queryBuilder = new SearchQueryCompiler(conversation);
+    queryBuilder.exactScoping = exactScoping;
+    return queryBuilder.compileSearchFilter(searchFilter);
+}
+
 export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
@@ -138,22 +148,30 @@ class SearchQueryCompiler {
         return queryExpressions;
     }
 
-    private compileSearchExpr(expr: querySchema.SearchExpr): SearchQueryExpr {
+    /**
+     * Every searchExpr has one or more filters.
+     * Each filter is compiled into a selectExpr
+     * @param searchExpr
+     * @returns
+     */
+    public compileSearchExpr(
+        searchExpr: querySchema.SearchExpr,
+    ): SearchQueryExpr {
         const queryExpr: SearchQueryExpr = {
             selectExpressions: [],
         };
-        if (expr.filters) {
-            for (const filter of expr.filters) {
+        if (searchExpr.filters) {
+            for (const filter of searchExpr.filters) {
                 queryExpr.selectExpressions.push(
-                    this.compileFilterExpr(filter),
+                    this.compileSearchFilter(filter),
                 );
             }
         }
-        queryExpr.rawQuery = expr.rewrittenQuery;
+        queryExpr.rawQuery = searchExpr.rewrittenQuery;
         return queryExpr;
     }
 
-    private compileFilterExpr(
+    public compileSearchFilter(
         filter: querySchema.SearchFilter,
     ): SearchSelectExpr {
         let searchTermGroup = this.compileTermGroup(filter);
