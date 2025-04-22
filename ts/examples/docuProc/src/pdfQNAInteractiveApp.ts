@@ -26,6 +26,7 @@ import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai } from "aiclient";
 import { downloadArxivPapers } from "./pdfDownLoader.js";
+import { importPdf } from "./srag/importPdf.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -72,7 +73,7 @@ function writeHeading(
     writeColor(io, chalk.green, message);
 }
 
-export async function interactiveRagOnDocQueryLoop(
+export async function interactiveAppLoop(
     chunkyIndex: ChunkyIndex,
     verbose = false,
 ): Promise<void> {
@@ -88,6 +89,8 @@ export async function interactiveRagOnDocQueryLoop(
         synonyms,
         files,
         purgeFile,
+        kpimport: kpImportHandler,
+        kpclearMemory,
     };
 
     iapp.addStandardHandlers(handlers);
@@ -630,74 +633,10 @@ export async function interactiveRagOnDocQueryLoop(
         handlers,
         prompt: "\n🤖> ",
     });
-}
 
-export async function interactiveSRagOnDocQueryLoop(
-    verbose = false,
-): Promise<void> {
-    const handlers: Record<string, iapp.CommandHandler> = {
-        import: importHandler, // Since you can't name a function "import".
-        download,
-        clearMemory,
-    };
-
-    iapp.addStandardHandlers(handlers);
-    const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
-    const pdfDownloader = createPDFDownloadTranslator(model);
-
-    function createPDFDownloadTranslator(
-        model: TypeChatLanguageModel,
-    ): TypeChatJsonTranslator<PdfDownloadQuery> {
-        const typeName = "PdfDownloadQuery";
-
-        const schema = loadSchema(["pdfDownloadSchema.ts"], import.meta.url);
-        const validator = createTypeScriptJsonValidator<PdfDownloadQuery>(
-            schema,
-            typeName,
-        );
-        const translator = createJsonTranslator<PdfDownloadQuery>(
-            model,
-            validator,
-        );
-        return translator;
-    }
-
-    // Handle @download command.// Handle @download command.
-    function downloadDef(): iapp.CommandMetadata {
-        return {
-            description: "Download a PDF file with the query string.",
-            args: {
-                query: {
-                    description: "Natural language query",
-                    type: "string",
-                },
-            },
-        };
-    }
-    handlers.download.metadata = downloadDef();
-    async function download(
-        args: string[] | iapp.NamedArgs,
-        io: iapp.InteractiveIo,
-    ): Promise<void> {
-        const namedArgs = iapp.parseNamedArguments(args, downloadDef());
-        const query: string = namedArgs.query;
-        const result = await pdfDownloader.translate(query);
-        if (!result.success) {
-            writeError(io, `[Error: ${result.message}]`);
-            return;
-        } else {
-            const pdfDownloadQuery = result.data;
-            const pdfs = await downloadArxivPapers(pdfDownloadQuery);
-            if (pdfs !== undefined) {
-                writeMain(io, `[Downloaded ${pdfs.length} PDFs]`);
-            } else {
-                writeError(io, `[No PDFs downloaded]`);
-            }
-        }
-    }
 
     // Handle @import command.
-    function importDef(): iapp.CommandMetadata {
+    function kpimportDef(): iapp.CommandMetadata {
         return {
             description: "Import a single or multiple PDF files.",
             options: {
@@ -729,12 +668,13 @@ export async function interactiveSRagOnDocQueryLoop(
             },
         };
     }
-    handlers.import.metadata = importDef();
-    async function importHandler(
+    handlers.import.metadata = kpimportDef();
+    async function kpImportHandler(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        const namedArgs = iapp.parseNamedArguments(args, importDef());
+        const namedArgs = 
+        iapp.parseNamedArguments(args, importDef());
         const files = namedArgs.fileName
             ? (namedArgs.fileName as string).trim().split(",")
             : namedArgs.files
@@ -763,30 +703,20 @@ export async function interactiveSRagOnDocQueryLoop(
             return;
         }
 
-        if (chunkPdfs) {
-            writeColor(
-                io,
-                chalk.yellow,
-                "[Chunk PDFs is not supported in SRAG mode]",
-            );
-            return;
-        }
-
         // import files in to srag index
-
-        // await importAllFiles(
-        //     files,
-        //     idx,
-        //     io,
-        //     namedArgs.verbose,
-        //     chunkPdfs,
-        //     maxPagesToProcess,
-        // );
+        await importPdf(
+            io,
+            files[0],
+            undefined,
+            namedArgs.verbose,
+            chunkPdfs,
+            maxPagesToProcess,
+        );
     }
 
     // Handle @clearMemory command.
-    handlers.clearMemory.metadata = "Clear all memory (and all indexes)";
-    async function clearMemory(
+    handlers.kpclearMemory.metadata = "Clear all memory (and all indexes)";
+    async function kpclearMemory(
         args: string[],
         io: iapp.InteractiveIo,
     ): Promise<void> {
@@ -799,8 +729,6 @@ export async function interactiveSRagOnDocQueryLoop(
         // writeNote(io, "[All memory and all indexes cleared]");
         // Actually the embeddings cache isn't. But we shouldn't have to care.
     }
-
-    return;
 }
 
 export async function purgeNormalizedFile(

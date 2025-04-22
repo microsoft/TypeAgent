@@ -31,7 +31,7 @@ import { openai } from "aiclient";
 
 import registerDebug from "debug";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");
-////import { interactiveRagOnDocQueryLoop } from "../pdfQNAInteractiveApp.js";
+
 
 export class PdfChunkMessageMeta implements IKnowledgeSource {
     public docChunkId: string = "";

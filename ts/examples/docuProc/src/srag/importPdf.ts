@@ -11,6 +11,7 @@ import * as iapp from "interactive-app";
 import { ChunkedFile, ErrorItem } from "./pdfDocSchema.js";
 import { promisify } from "node:util";
 import { exec } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const execPromise = promisify(exec);
 
@@ -27,20 +28,28 @@ function log(
     }
 }
 
+function resolveFilePath(filePath: string): string {
+    if (path.isAbsolute(filePath)) {
+        return filePath;
+    }
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    return path.join(__dirname, filePath);
+}
+
 export async function chunkifyPdfFiles(
-    rootDir: string,
+    outputDir: string,
     filenames: string[],
 ): Promise<(ChunkedFile | ErrorItem)[]> {
     let output,
         errors,
         success = false;
     try {
-        const chunkerPath = path.join(__dirname, "pdfChunker.py");
-        const absChunkerPath = path.resolve(chunkerPath);
+        const absChunkerPath = resolveFilePath("pdfChunkerV2.py");
         const absFilenames = filenames.map(
-            (f) => `"${path.join(__dirname, f)}"`,
+            (f) => `"${resolveFilePath(f)}"`,
         );
-        const outputDir = path.join(rootDir, "chunked-docs");
+       
         let { stdout, stderr } = await execPromise(
             `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${outputDir}`,
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
@@ -76,32 +85,39 @@ export async function chunkifyPdfFiles(
 export async function importPdf(
     io: iapp.InteractiveIo | undefined,
     pdfFilePath: string,
-    cachePath: string | undefined,
+    outputDir: string | undefined,
     verbose = false,
     fChunkPdfFiles: boolean = true,
     maxPagesToProcess: number = -1,
 ): Promise<PdfDocument | undefined> {
-    if (!fs.existsSync(pdfFilePath)) {
-        log(io, `The file path '${pdfFilePath}' does not exist.`, chalk.red);
-        throw Error(`The file path '${pdfFilePath}' does not exist.`);
+
+    if (!pdfFilePath) {
+        log(io, "No PDF file path provided.", chalk.red);
+        return undefined;
     }
 
-    const pdfFolderPath = path.dirname(pdfFilePath);
-    if (cachePath !== undefined) {
-        if (!fs.existsSync(cachePath)) {
-            fs.mkdirSync(cachePath);
-        }
-    } else {
-        cachePath = pdfFolderPath;
+    if (outputDir === undefined) {
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = path.dirname(__filename);
+        const distRoot = path.dirname(__dirname);
+        outputDir = path.join(distRoot, "output-data", "chunked-docs");
+    }
+
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
     }
 
     // Run the PDF chunking step
     const t0 = Date.now();
     let t1 = t0;
-    //let results = undefined;
+    let results = undefined;
 
     if (fChunkPdfFiles) {
-        //results = await chunkifyPdfFiles(chunkyIndex.rootDir, filenames);
+        results = await chunkifyPdfFiles(outputDir, [pdfFilePath]);
+        if (Array.isArray(results) && results.some((item) => "error" in item)) {
+            const errorItem = results.find((item) => "error" in item) as ErrorItem;
+            log(io, `Error chunking PDF: ${errorItem.error}`, chalk.red);
+        }
         t1 = Date.now();
     } else {
         //results = await loadPdfChunksFromJson(chunkyIndex.rootDir, filenames);

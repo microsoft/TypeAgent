@@ -336,6 +336,7 @@
       "skipFiles": [
           "<node_internals>/**"
       ],
+      "args": [],
       "program": "${workspaceFolder}/examples/docuProc/src/main.ts",
       "console": "integratedTerminal",
       //"preLaunchTask": "pnpm: build",

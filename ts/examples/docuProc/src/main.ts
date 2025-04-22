@@ -10,8 +10,7 @@ import { fileURLToPath } from "url";
 // Local imports
 import { importAllFiles } from "./pdfImporter.js";
 import {
-    interactiveRagOnDocQueryLoop,
-    interactiveSRagOnDocQueryLoop,
+    interactiveAppLoop,
 } from "./pdfQNAInteractiveApp.js";
 import { ChunkyIndex } from "./pdfChunkyIndex.js";
 
@@ -42,10 +41,9 @@ Actual args: '${process.argv[0]}' '${process.argv[1]}'
 enum AppFlags {
     Verbose = "verbose",
     Help = "help",
-    Rag = "run the interactive query loop using RAG",
-    SRag = "run the interactive query loop using Structured RAG",
     RagImport = "import files and add then to the rag index",
     SRagImport = "import files and add then to the srag index",
+    App = "Run in interactive mode",
 }
 
 async function main(): Promise<void> {
@@ -83,25 +81,15 @@ async function main(): Promise<void> {
                 -1,
             );
             break;
-        case AppFlags.Rag:
-            console.log("Running interactive query loop using RAG");
-            await interactiveRagOnDocQueryLoop(chunkyIndex, verbose);
-            break;
-        case AppFlags.SRag:
-            console.log("Running interactive query loop using Structured RAG");
-            await interactiveSRagOnDocQueryLoop(true);
-            break;
         default:
-            console.error(
-                "No valid mode selected. Please specify --rag-import, --srag-import, --rag, or --srag.",
-            );
-            process.exit(1);
+            console.log("Running interactive query loop using RAG");
+            await interactiveAppLoop(chunkyIndex, verbose);
+            break;
     }
 }
 
 function parseCommandLine() {
     const args = process.argv.slice(2);
-    let mode = null;
     let files: string[] = [];
 
     const isRagImport = args.includes("--rag-import");
@@ -111,9 +99,15 @@ function parseCommandLine() {
         (arg) => arg === "-file" || arg === "--files",
     );
 
-    if (isRagImport) mode = AppFlags.Rag;
-    else if (isSRagImport) mode = AppFlags.SRag;
+    let mode = undefined;
 
+    if(isRagImport)
+        mode = AppFlags.RagImport;
+    else if(isSRagImport)
+        mode = AppFlags.SRagImport;
+    else
+        mode = AppFlags.App;
+    
     if (fileFlagIndex !== -1 && args[fileFlagIndex + 1]) {
         const fileListPath = args[fileFlagIndex + 1];
         try {
@@ -138,13 +132,7 @@ function parseCommandLine() {
         } catch (err) {
             console.error("Error reading data folder:", err);
         }
-    } else {
-        files = args.filter((arg) => !arg.startsWith("--"));
-        if (files.length) {
-            mode = isSRagImport ? AppFlags.SRagImport : AppFlags.RagImport;
-        }
-    }
-
+    } 
     return { mode, files };
 }
 
