@@ -542,6 +542,12 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
+    public addScoredMatches(matches: ScoredMessageOrdinal[]): void {
+        for (const match of matches) {
+            this.add(match.messageOrdinal, match.score);
+        }
+    }
+
     public override intersect(other: MessageAccumulator): MessageAccumulator {
         const intersection = new MessageAccumulator();
         super.intersect(other, intersection);

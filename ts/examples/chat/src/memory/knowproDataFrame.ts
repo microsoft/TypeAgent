@@ -448,17 +448,21 @@ export class HybridRestaurantCollection implements kp.IConversationHybrid {
                 undefined,
                 sq.rawQuery,
             );
-            if (matches && matches.conversationMatches) {
-                this.collectMessages(
-                    matches.conversationMatches.messageMatches,
-                    matchedRestaurants,
-                );
-            }
-            if (matches && matches.dataFrameMatches) {
-                this.collectMessages(
-                    matches.dataFrameMatches,
-                    matchedRestaurants,
-                );
+            if (matches.joinedMatches) {
+                this.collectMessages(matches.joinedMatches, matchedRestaurants);
+            } else {
+                if (matches && matches.conversationMatches) {
+                    this.collectMessages(
+                        matches.conversationMatches.messageMatches,
+                        matchedRestaurants,
+                    );
+                }
+                if (matches && matches.dataFrameMatches) {
+                    this.collectMessages(
+                        matches.dataFrameMatches,
+                        matchedRestaurants,
+                    );
+                }
             }
         }
         return success(matchedRestaurants);

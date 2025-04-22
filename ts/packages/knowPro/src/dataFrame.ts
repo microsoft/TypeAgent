@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { setIntersect, setUnion } from "./collections.js";
+import { MessageAccumulator, setIntersect, setUnion } from "./collections.js";
 import {
     DataFrameCompiler,
     getDataFrameAndColumnName,
@@ -249,7 +249,7 @@ export class DataFrame implements IDataFrame {
             default:
                 return false;
             case ComparisonOp.Eq:
-                return value === propertyValue;
+                return value == propertyValue;
             case ComparisonOp.Lt:
                 return value < propertyValue;
             case ComparisonOp.Lte:
@@ -259,7 +259,7 @@ export class DataFrame implements IDataFrame {
             case ComparisonOp.Gte:
                 return value >= propertyValue;
             case ComparisonOp.Neq:
-                return value !== propertyValue;
+                return value != propertyValue;
         }
     }
 }
@@ -281,6 +281,7 @@ export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
 export type HybridSearchResults = {
     conversationMatches?: ConversationSearchResult | undefined;
     dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
+    joinedMatches?: ScoredMessageOrdinal[] | undefined;
 };
 
 /**
@@ -324,6 +325,7 @@ export async function searchConversationHybrid(
     rawQuery?: string,
 ): Promise<HybridSearchResults> {
     options ??= createDefaultSearchOptions();
+
     const conversationMatches = await searchConversation(
         hybridConversation.conversation,
         searchTermGroup,
@@ -337,9 +339,20 @@ export async function searchConversationHybrid(
         searchTermGroup,
         options,
     );
+
+    let joinedMatches: ScoredMessageOrdinal[] | undefined;
+    if (conversationMatches?.messageMatches && dataFrameMatches) {
+        let x = new MessageAccumulator();
+        x.addScoredMatches(conversationMatches.messageMatches);
+        let y = new MessageAccumulator();
+        y.addScoredMatches(dataFrameMatches);
+        y = x.intersect(y);
+        joinedMatches = x.toScoredMessageOrdinals();
+    }
     return {
         conversationMatches,
         dataFrameMatches,
+        joinedMatches,
     };
 }
 
