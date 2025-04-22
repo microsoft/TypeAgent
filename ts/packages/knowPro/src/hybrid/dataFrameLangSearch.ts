@@ -10,6 +10,11 @@ import { SearchExpr, SearchFilter } from "../searchQuerySchema.js";
 import { compileHybridSearchFilter, IConversationHybrid } from "./dataFrame.js";
 import { DataFrameCompiler } from "./dataFrameQuery.js";
 import * as search from "../search.js";
+import { loadSchema } from "typeagent";
+import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import * as querySchema from "../searchQuerySchema.js";
+import { SearchQueryTranslator } from "../searchQueryTranslator.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -81,5 +86,27 @@ async function searchConversationWithHybridScope(
         when,
         options,
         rawSearchQuery,
+    );
+}
+
+export function createSearchQueryTranslator(
+    model: TypeChatLanguageModel,
+): SearchQueryTranslator {
+    const typeName = "SearchQuery";
+    const searchActionSchema = loadSchema(
+        [
+            "../dateTimeSchema.ts",
+            "knownFacetsSchema.ts",
+            "searchQuerySchema2.ts",
+        ],
+        import.meta.url,
+    );
+
+    return createJsonTranslator<querySchema.SearchQuery>(
+        model,
+        createTypeScriptJsonValidator<querySchema.SearchQuery>(
+            searchActionSchema,
+            typeName,
+        ),
     );
 }

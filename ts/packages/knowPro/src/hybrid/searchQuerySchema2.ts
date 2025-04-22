@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DateTimeRange } from "./dateTimeSchema.js";
+import { DateTimeRange } from "../dateTimeSchema.js";
 import { KnownFacet } from "./knownFacetsSchema.js";
 
 export type FacetTerm = {

@@ -335,7 +335,7 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
             [this.restaurantFacets.name, this.restaurantFacets],
         ]);
 
-        this.queryTranslator = kp.createSearchQueryTranslator2(
+        this.queryTranslator = kp.hybrid.lang.createSearchQueryTranslator(
             openai.createChatModelDefault("knowpro_test"),
         );
     }

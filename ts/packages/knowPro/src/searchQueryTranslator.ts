@@ -57,24 +57,6 @@ export function createSearchQueryTranslator(
     );
 }
 
-export function createSearchQueryTranslator2(
-    model: TypeChatLanguageModel,
-): SearchQueryTranslator {
-    const typeName = "SearchQuery";
-    const searchActionSchema = loadSchema(
-        ["dateTimeSchema.ts", "knownFacetsSchema.ts", "searchQuerySchema2.ts"],
-        import.meta.url,
-    );
-
-    return createJsonTranslator<querySchema.SearchQuery>(
-        model,
-        createTypeScriptJsonValidator<querySchema.SearchQuery>(
-            searchActionSchema,
-            typeName,
-        ),
-    );
-}
-
 export async function searchQueryFromLanguage(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
