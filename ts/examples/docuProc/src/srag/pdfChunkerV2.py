@@ -222,7 +222,6 @@ class PDFChunker:
     
     def print_tables(self, tables: list[tuple[list[float], list[list[str]]]]) -> None:
         if self.debug:
-            print(f"\n--- DEBUG: Found {len(tables)} tables on the page ---")
             for idx, (bbox, table_data) in enumerate(tables):
                 x0, y0, x1, y1 = bbox
                 print(f"  🟦 Table {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
@@ -319,6 +318,172 @@ class PDFChunker:
         line_entries.sort(key=sort_key)
 
     def get_lines_from_dict(self, page: fitz.Page) -> list[tuple[str, str, list[Chunk]]]:
+        Y_THRESHOLD = 2.0  
+        X_GAP_THRESHOLD = 15.0
+        PARA_GAP_THRESHOLD = 8.0  
+        PARA_MARKER = "<PARA_BREAK>"
+
+        data = page.get_text("dict")  
+        line_entries = []
+
+        image_bboxes = []
+        for img in page.get_images(full=True):
+            xref = img[0]
+            img_rects = page.get_image_rects(xref)
+            if img_rects:
+                image_bboxes.append(list(img_rects[0]))
+
+        if self.debug:
+            print(f"\n--- DEBUG: Found {len(image_bboxes)} images on the page ---")
+            for idx, (x0, y0, x1, y1) in enumerate(image_bboxes):
+                print(f"  Image {idx}: BBox ({x0}, {y0}, {x1}, {y1})")
+
+        page_num = page.number
+        for block in data["blocks"]:
+            if block["type"] == 0:  # Text block
+                for ln_idx, ln in enumerate(block["lines"]):
+                    line_text = ""
+                    line_bold = False
+                    line_font_sizes = []
+
+                    for span in ln["spans"]:
+                        line_text += span["text"]
+                        line_font_sizes.append(span["size"])
+                        # Check for bold style in font name
+                        if "Bold" in span["font"]:
+                            line_bold = True
+
+                    line_text = line_text.strip()
+                    if not line_text:
+                        continue
+
+                    x0, y0, x1, y1 = ln["bbox"]
+                    avg_font_size = sum(line_font_sizes) / len(line_font_sizes)
+                    # if self.debug:
+                        #     print(f"\n--- DEBUG: Checking line '{line_text}' ---")
+                        #     print(f"  Line BBox: ({x0}, {y0}, {x1}, {y1})")
+
+                    nearby_images = self._find_nearest_image_chunk(page_num, [x0, y0, x1, y1])
+                    if nearby_images is not None:
+                        _, chunk_list = nearby_images
+                        label = "image"
+                        if self.debug:
+                            print("  🖼️ Marked as IMAGE label (title or caption logic)")
+                            print(f"  Related Image Chunks: {[chunk.id for chunk in chunk_list]}")
+                            related_chunks = chunk_list
+                        related_chunks = chunk_list
+                    else:
+                        label = "text"
+                        related_chunks = []
+
+                    line_entries.append({
+                        "text": line_text,
+                        "label": label,
+                        "line_index": ln_idx,
+                        "x0": x0,
+                        "y0": y0,
+                        "x1": x1,
+                        "y1": y1,
+                        "related_chunks": related_chunks,
+                        "font_size": avg_font_size,
+                        "is_bold": line_bold
+                    })
+
+        self.sort_line_entries_with_threshold(line_entries, y_threshold=1.0)
+        if(self.debug):
+            print(f"\n--- DEBUG Line entries: Found {len(line_entries)} lines ---")
+            for entry in line_entries:
+                print(f"  Line: {entry['text']}, Label: {entry['label']}, BBox: ({entry['x0']}, {entry['y0']}, {entry['x1']}, {entry['y1']})")
+
+
+        # Improved merging with bold/size-based paragraph breaks
+        merged_lines: list[tuple[str, str, List[Chunk]]] = []
+        i = 0
+        while i < len(line_entries):
+            current = line_entries[i]
+            current_text = current["text"]
+            current_label = current["label"]
+            current_chunks = current["related_chunks"]
+            current_bold = current["is_bold"]
+            current_font_size = current["font_size"]
+
+            x0_c, y0_c, x1_c, y1_c = current["x0"], current["y0"], current["x1"], current["y1"]
+
+            # Insert explicit paragraph break before bold or significantly large-font lines
+            if i > 0:
+                prev_entry = line_entries[i - 1]
+                if (current_bold and not prev_entry["is_bold"]) or \
+                (current_font_size > prev_entry["font_size"] + 1.0):
+                    merged_lines.append((PARA_MARKER, "text", []))
+
+            # original merging logic (unchanged)
+            if current_label in ["image", "table"]:
+                j = i + 1
+                while j < len(line_entries):
+                    next_line = line_entries[j]
+                    next_y0, next_y1 = next_line["y0"], next_line["y1"]
+                    if next_y0 - y1_c < PARA_GAP_THRESHOLD:
+                        next_line["label"] = current_label
+                        next_line["related_chunks"] = current_chunks
+                        j += 1
+                    else:
+                        break
+
+            if i < len(line_entries) - 1:
+                next_line = line_entries[i + 1]
+                x0_n, y0_n, x1_n, y1_n = next_line["x0"], next_line["y0"], next_line["x1"], next_line["y1"]
+                text_n, label_n, chunks_n = next_line["text"], next_line["label"], next_line["related_chunks"]
+
+                midY_c = (y0_c + y1_c) / 2.0
+                midY_n = (y0_n + y1_n) / 2.0
+                y_diff = abs(midY_c - midY_n)
+
+                if y_diff < Y_THRESHOLD:
+                    x_gap = x0_n - x1_c
+                    if 0 <= x_gap < X_GAP_THRESHOLD:
+                        unified_text = current_text.rstrip() + " " + text_n.lstrip()
+
+                        if current_label == "image" or label_n == "image":
+                            final_label = "image"
+                            final_chunks = current_chunks or chunks_n
+                        elif current_label == "table" or label_n == "table":
+                            final_label = "table"
+                            final_chunks = current_chunks or chunks_n
+                        else:
+                            final_label = "text"
+                            final_chunks = []
+
+                        new_entry = {
+                            "text": unified_text,
+                            "label": final_label,
+                            "x0": x0_c,
+                            "y0": min(y0_c, y0_n),
+                            "x1": x1_n,
+                            "y1": max(y1_c, y1_n),
+                            "related_chunks": final_chunks,
+                            "font_size": max(current_font_size, next_line["font_size"]),
+                            "is_bold": current_bold or next_line["is_bold"]
+                        }
+                        line_entries[i] = new_entry
+                        del line_entries[i + 1]
+                        continue  
+
+            merged_lines.append((current_text, current_label, current_chunks))
+
+            # Explicit paragraph break after bold or large-font headers
+            if current_bold or current_font_size > 1.0 + sum(e["font_size"] for e in line_entries)/len(line_entries):
+                merged_lines.append((PARA_MARKER, "text", []))
+
+            if i < len(line_entries) - 1:
+                next_line = line_entries[i + 1]
+                gap = next_line["y0"] - current["y1"]
+                if gap >= PARA_GAP_THRESHOLD:
+                    merged_lines.append((PARA_MARKER, "text", []))
+
+            i += 1
+        return merged_lines
+
+    def get_lines_from_dict_orig(self, page: fitz.Page) -> list[tuple[str, str, list[Chunk]]]:
         # Thresholds for merging lines
         Y_THRESHOLD = 2.0  
         X_GAP_THRESHOLD = 15.0
@@ -541,6 +706,29 @@ class PDFChunker:
                 merged_paragraphs.append((merged_texts, final_label, merged_chunks))
                 i = j
         return merged_paragraphs
+    
+    def is_potential_header(self, line: str) -> bool:
+        """
+        Determine if a line is a potential header based on length, punctuation,
+        capitalization, and common trailing words.
+        """
+        if not line:
+            return False
+
+        words = line.strip().split()
+        if len(words) > 10:
+            return False  # too long
+
+        if line[-1] in ".?!":
+            return False  # ends like a sentence
+
+        if not line[0].isupper():
+            return False  # likely not a section heading
+
+        # Avoid lines ending in incomplete thoughts (prepositions)
+        trailing_words = {"to", "of", "the", "and", "in", "for", "with", "on", "at", "by"}
+        if words[-1].lower() in trailing_words:
+            return False
 
     def merge_single_line_headings(
         self, 
@@ -556,7 +744,6 @@ class PDFChunker:
             # Check if this paragraph is a single-line potential header
             if len(p_texts) == 1:
                 line = p_texts[0].strip()
-                # Potential header check
                 if line and (len(line.split()) <= 10) and (line[-1] not in ".?!"):
                     # Candidate header found
                     if i + 1 < len(paragraphs):
