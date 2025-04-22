@@ -52,8 +52,9 @@ process.on("message", (message: any) => {
     console.log(message);
 
     if (message as IndexData != undefined) {
+        console.log(message);
         index = message as IndexData;
-
+// TODO: figure out why this gets hit multiple times... DEBUG
         startIndexing();
     }
     

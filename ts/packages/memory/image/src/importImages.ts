@@ -32,6 +32,9 @@ import { isImageFileType } from "common-utils";
 import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:image-memory");
 
 export interface ImageCollectionData
     extends IConversationDataWithIndexes<Image> {}
@@ -583,49 +586,55 @@ async function indexImages(
     chatModel: ChatModel,
     callback?: (text: string, count: number, max: number) => void,
 ): Promise<Image[]> {
-    // load files from the supplied directory
-    const fileNames = await fs.promises.readdir(sourcePath, {
-        recursive: true,
-    });
 
-    // create the cache path if it doesn't exist
-    if (!fs.existsSync(cachePath)) {
-        fs.mkdirSync(cachePath);
-    }
-
-    // index each image
     const retVal: Image[] = [];
-    for (let i = 0; i < fileNames.length; i++) {
-        // ignore thumbnail images
-        if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
-            console.log(`ignoring '${fileNames[i]}'`);
-            continue;
+
+    // load files from the supplied directory
+    try {
+        const fileNames = await fs.promises.readdir(sourcePath, {
+            recursive: true,
+        });
+
+        // create the cache path if it doesn't exist
+        if (!fs.existsSync(cachePath)) {
+            fs.mkdirSync(cachePath);
         }
 
-        const fullFilePath: string = path.join(sourcePath, fileNames[i]);
-
-        if (isDirectoryPath(fullFilePath)) {
-            retVal.push(
-                ...(await indexImages(
-                    fullFilePath,
-                    path.join(cachePath, fileNames[i]),
-                    true,
-                    chatModel,
-                    callback,
-                )),
-            );
-        } else {
-            // index the image
-            const img = await indexImage(fullFilePath, cachePath, chatModel);
-
-            if (callback) {
-                callback(fileNames[i], i, fileNames.length);
+        // index each image
+        for (let i = 0; i < fileNames.length; i++) {
+            // ignore thumbnail images
+            if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
+                console.log(`ignoring '${fileNames[i]}'`);
+                continue;
             }
 
-            if (img !== undefined) {
-                retVal.push(img);
+            const fullFilePath: string = path.join(sourcePath, fileNames[i]);
+
+            if (isDirectoryPath(fullFilePath)) {
+                retVal.push(
+                    ...(await indexImages(
+                        fullFilePath,
+                        path.join(cachePath, fileNames[i]),
+                        true,
+                        chatModel,
+                        callback,
+                    )),
+                );
+            } else {
+                // index the image
+                const img = await indexImage(fullFilePath, cachePath, chatModel);
+
+                if (callback) {
+                    callback(fileNames[i], i, fileNames.length);
+                }
+
+                if (img !== undefined) {
+                    retVal.push(img);
+                }
             }
         }
+    } catch (error) {
+        debug(error);
     }
 
     return retVal;

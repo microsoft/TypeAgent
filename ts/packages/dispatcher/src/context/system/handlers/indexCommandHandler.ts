@@ -18,10 +18,14 @@ class IndexListCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
 
         const indexes = systemContext.indexManager.indexes;
+        const iiPrint: string[][] = [];
         if (indexes.length > 0) {
+            iiPrint.push(["Name", "Type", "Status", "Location", "Size"]);
             systemContext.indexManager.indexes.forEach((index: IndexData) => {
-                displayResult(`Index: ${index.name}, Type: ${index.source}, Location: ${index.location}, Items: ${index.size}`, context);
+                //displayResult(`Index: ${index.name}, Type: ${index.source}, Location: ${index.location}, Items: ${index.size}`, context);
+                iiPrint.push([index.name, index.source, index.state, index.location, index.size.toString()]);
             });
+            displayResult(iiPrint, context);
         } else {
             displayResult("There are no indexes.", context);
         }
