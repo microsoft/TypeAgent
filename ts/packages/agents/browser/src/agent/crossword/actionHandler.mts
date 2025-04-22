@@ -3,7 +3,7 @@
 
 import jp from "jsonpath";
 import { SessionContext } from "@typeagent/agent-sdk";
-import { Crossword } from "./schema/pageSchema.mjs";
+import { Crossword, CrosswordClue } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
 import { BrowserActionContext } from "../actionHandler.mjs";
@@ -148,6 +148,67 @@ export async function handleCrosswordAction(
             } else {
                 message = `${number} ${direction} is not a valid position for this crossword"`;
             }
+        }
+    } else {
+        message = await handleCrosswordActionWithoutCache(action, context);
+    }
+
+    return message;
+}
+
+export async function handleCrosswordActionWithoutCache(
+    action: any,
+    context: SessionContext<BrowserActionContext>,
+) {
+    let message = "OK";
+    if (!context.agentContext.browserConnector) {
+        throw new Error("No connection to browser session.");
+    }
+
+    const browser = context.agentContext.browserConnector;
+    const htmlFragments = await browser.getHtmlFragments();
+    const agent = await createCrosswordPageTranslator("GPT_4_O_MINI");
+
+    const direction = action.parameters.clueDirection;
+    const number = action.parameters.clueNumber;
+
+    const response = await agent.getPageComponentSchema(
+        "CrosswordClue",
+        `clue for ${number} ${direction}`,
+        htmlFragments,
+        [],
+    );
+
+    if (!response.success) {
+        console.error(`Attempt to get crossword clue failed`);
+        console.error(response.message);
+        return message;
+    }
+
+    const clueElement = response.data as CrosswordClue;
+
+    const actionName =
+        action.actionName ?? action.fullActionName.split(".").at(-1);
+    if (actionName === "enterText") {
+        const text = action.parameters.value;
+        const selector = clueElement.cssSelector;
+
+        if (selector) {
+            await browser.clickOn(selector);
+            await browser.enterTextIn(text.replace(/\s/g, "")?.toUpperCase());
+            message = `OK. Setting the value of ${number} ${direction} to "${text}"`;
+        } else {
+            message = `${number} ${direction} is not a valid position for this crossword`;
+        }
+    }
+    if (actionName === "getClueValue") {
+        if (message === "OK") message = "";
+        const selector = clueElement.text;
+
+        if (selector) {
+            message = `The clue is: ${selector}`;
+        } else {
+            message = `${number} ${direction} is not a valid position for this crossword"`;
         }
     }
 

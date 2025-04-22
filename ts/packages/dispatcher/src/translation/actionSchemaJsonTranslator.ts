@@ -61,7 +61,9 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
         : generateJsonSchema
           ? generateActionJsonSchema(actionSchemaGroup)
           : undefined;
-    const jsonSchemaValidate = generateOptions?.jsonSchemaValidate ?? false;
+    const schemaValidate =
+        jsonSchema === undefined ||
+        (generateOptions?.jsonSchemaValidate ?? false);
     return {
         getSchemaText: () => schema,
         getTypeName: () => actionSchemaGroup.entry.name,
@@ -84,7 +86,7 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
                     return error(`Unknown action name: ${value.actionName}`);
                 }
 
-                if (jsonSchemaValidate) {
+                if (schemaValidate) {
                     validateAction(actionSchema, value);
                 }
                 // Return the unwrapped value with generateJsonSchema as the translated result

@@ -151,7 +151,6 @@ async function clarifyWithLookup(
 
     const actionConfigs = [
         agents.getActionConfig("dispatcher.lookup"),
-        agents.getActionConfig("dispatcher.clarify"),
         agents.getActionConfig("dispatcher"),
     ];
     // TODO: cache this?

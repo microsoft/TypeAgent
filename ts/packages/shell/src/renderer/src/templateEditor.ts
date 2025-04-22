@@ -61,7 +61,7 @@ class FieldContainer {
     }
 
     public getProperty(name: string) {
-        return getObjectProperty(this, "current", name);
+        return getObjectProperty(this.current, name);
     }
 
     public setProperty(name: string, value: any) {

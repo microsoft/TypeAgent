@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ESNext", "DOM"],
+
+    // These settings need to match src/tsconfig.json and needed here for oclif dev mode to work for ts-node to work
+    "rootDir": "./src",
+    "outDir": "./dist"
+  },
+  "include": [],
+  "references": [{ "path": "./src" }],
+  "ts-node": {
+    "esm": true
+  },
+  
+}
