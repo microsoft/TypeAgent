@@ -29,7 +29,7 @@ function toTransformInfosKey(transformInfos: TransformInfo[] | undefined) {
 function getMatchSetNamespace(transformInfos: TransformInfo[] | undefined) {
     // Since the matchset needs to grow along with the available transform, we need to use the same
     // namespace schema, which is the transform namespace determined when the construction is created.
-    // Currently the transform namespace is <translatorName> or <translatorName>.<actionName> depending on the SchemaConfig
+    // Currently the transform namespace is <schemaName> or <schemaName>.<actionName> depending on the SchemaConfig
     // See `getNamespaceForCache` in schemaConfig.ts
 
     // Flattening the pair using :: as the separator, and sort them so that it is stable for equality comparison

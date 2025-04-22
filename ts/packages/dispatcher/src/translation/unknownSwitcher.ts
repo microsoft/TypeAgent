@@ -60,13 +60,10 @@ function createSelectionActionTypeDefinition(
 }
 
 function createSelectionSchema(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
-    const schema = createSelectionActionTypeDefinition(
-        translatorName,
-        provider,
-    );
+    const schema = createSelectionActionTypeDefinition(schemaName, provider);
     if (schema === undefined) {
         return undefined;
     }
@@ -83,15 +80,15 @@ const selectSchemaCache = new Map<
     InlineTranslatorSchemaDef | undefined
 >();
 function getSelectionSchema(
-    translatorName: string,
+    schemaName: string,
     provider: ActionConfigProvider,
 ): InlineTranslatorSchemaDef | undefined {
-    if (selectSchemaCache.has(translatorName)) {
-        return selectSchemaCache.get(translatorName);
+    if (selectSchemaCache.has(schemaName)) {
+        return selectSchemaCache.get(schemaName);
     }
 
-    const result = createSelectionSchema(translatorName, provider);
-    selectSchemaCache.set(translatorName, result);
+    const result = createSelectionSchema(schemaName, provider);
+    selectSchemaCache.set(schemaName, result);
     return result;
 }
 

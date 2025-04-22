@@ -303,20 +303,20 @@ function getPropertyTransformInfo(
         propertyName,
         actions,
     );
-    const translatorName = action.translatorName;
-    if (translatorName === undefined) {
+    const schemaName = action.translatorName;
+    if (schemaName === undefined) {
         throw new Error("Action without translator name");
     }
     const namespace = parameterName
         ? getNamespaceForCache(
-              translatorName,
+              schemaName,
               action.actionName,
               schemaInfoProvider,
           )
         : // Since constructions translated to a specific schema based on the actionName, we should not merge different actions.
           // Add the actionName to the namespace
           // TODO: consider to improve this for cases where different actions have the same parameters schema.
-          `${translatorName}.${action.actionName}`;
+          `${schemaName}.${action.actionName}`;
 
     const transformName = parameterName
         ? `parameters.${parameterName}`

@@ -498,17 +498,17 @@ function processSetAppAgentStateResult(
     let hasFailed = false;
     const rollback = { schemas: {}, actions: {}, commands: {} };
     for (const [stateName, failed] of Object.entries(result.failed)) {
-        for (const [translatorName, enable, e] of failed) {
+        for (const [schemaName, enable, e] of failed) {
             hasFailed = true;
             const prefix =
                 stateName === "commands"
-                    ? systemContext.agents.getEmojis()[translatorName]
-                    : getSchemaNamePrefix(translatorName, systemContext);
+                    ? systemContext.agents.getEmojis()[schemaName]
+                    : getSchemaNamePrefix(schemaName, systemContext);
             debugError(e);
             cbError(
                 `${prefix}: Failed to ${enable ? "enable" : "disable"} ${stateName}: ${e.message}`,
             );
-            (rollback as any)[stateName][translatorName] = !enable;
+            (rollback as any)[stateName][schemaName] = !enable;
         }
     }
 

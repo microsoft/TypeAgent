@@ -14,7 +14,7 @@ export async function toggleSiteTranslator(
     targetTab: chrome.tabs.Tab,
 ): Promise<void> {
     let method = "enableSiteTranslator";
-    let translatorName = "";
+    let schemaName = "";
     await ensureWebsocketConnected();
 
     if (targetTab.url) {
@@ -42,8 +42,8 @@ export async function toggleSiteTranslator(
             )
         ) {
             method = "enableSiteTranslator";
-            translatorName = "browser.crossword";
-            currentSiteTranslator = translatorName;
+            schemaName = "browser.crossword";
+            currentSiteTranslator = schemaName;
             currentCrosswordUrl = targetTab.url;
         }
 
@@ -56,22 +56,22 @@ export async function toggleSiteTranslator(
 
         if (commerceHosts.includes(host)) {
             method = "enableSiteTranslator";
-            translatorName = "browser.commerce";
-            currentSiteTranslator = translatorName;
+            schemaName = "browser.commerce";
+            currentSiteTranslator = schemaName;
         }
 
         // Instacart site handling
         if (host === "instacart.com" || host === "www.instacart.com") {
             method = "enableSiteTranslator";
-            translatorName = "browser.instacart";
-            currentSiteTranslator = translatorName;
+            schemaName = "browser.instacart";
+            currentSiteTranslator = schemaName;
         }
 
         // Default to actionDiscovery if no specific translator is identified
-        if (translatorName === "") {
+        if (schemaName === "") {
             method = "enableSiteTranslator";
-            translatorName = "browser.actionDiscovery";
-            currentSiteTranslator = translatorName;
+            schemaName = "browser.actionDiscovery";
+            currentSiteTranslator = schemaName;
         }
 
         // Trigger translator change if WebSocket is open
@@ -79,12 +79,12 @@ export async function toggleSiteTranslator(
         if (
             webSocket &&
             webSocket.readyState === WebSocket.OPEN &&
-            translatorName
+            schemaName
         ) {
             webSocket.send(
                 JSON.stringify({
                     method: method,
-                    params: { translator: translatorName },
+                    params: { translator: schemaName },
                 }),
             );
         }
