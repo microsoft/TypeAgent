@@ -104,6 +104,20 @@ export class ChalkWriter extends ConsoleWriter {
         }
     }
 
+    public writeJsonInColor(
+        color: ChalkInstance,
+        obj: any,
+        indented?: boolean,
+    ): ChalkWriter {
+        const prevColor = this.setForeColor(color);
+        try {
+            super.writeJson(obj, indented);
+        } finally {
+            this.setForeColor(prevColor);
+        }
+        return this;
+    }
+
     public writeHeading(text: string): ChalkWriter {
         this.writeLine(chalk.underline(chalk.bold(text)));
         return this;

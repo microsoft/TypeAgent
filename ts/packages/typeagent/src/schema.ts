@@ -30,6 +30,18 @@ export type TypeSchema = {
  */
 export function loadSchema(filePaths: string[], basePath?: string): string {
     let schemaText = "";
+    for (const fileText of loadSchemaFiles(filePaths, basePath)) {
+        schemaText += fileText;
+        schemaText += "\n";
+    }
+    return schemaText;
+}
+
+export function loadSchemaFiles(
+    filePaths: string[],
+    basePath?: string,
+): string[] {
+    const schemaText: string[] = [];
     for (const file of filePaths) {
         let filePath = file;
         if (basePath) {
@@ -38,8 +50,7 @@ export function loadSchema(filePaths: string[], basePath?: string): string {
         const rawText: string = fs.readFileSync(filePath, "utf-8");
         let fileText = stripImports(filePath, rawText);
         fileText = stripCopyright(fileText);
-        schemaText += fileText;
-        schemaText += "\n";
+        schemaText.push(fileText);
     }
     return schemaText;
 }
