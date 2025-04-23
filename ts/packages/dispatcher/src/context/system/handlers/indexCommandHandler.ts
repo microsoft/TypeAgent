@@ -28,7 +28,7 @@ class IndexListCommandHandler implements CommandHandler {
         const indexes = systemContext.indexManager.indexes;
         const iiPrint: string[][] = [];
         if (indexes.length > 0) {
-            iiPrint.push(["Name", "Type", "Status", "Location", "Size"]);
+            iiPrint.push(["Name", "Type", "Status", "Location", "Image Count"]);
             systemContext.indexManager.indexes.forEach((index: IndexData) => {
                 iiPrint.push([
                     index.name,

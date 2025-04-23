@@ -551,23 +551,26 @@ export async function importImages(
     // create a model used to extract data from the images
     const chatModel = createKnowledgeModel();
 
-    let images: Image[] = [];
+    // the image collection we are accumulating in
+    const imgcol = new ImageCollection(path.dirname(imagePath), []);
+
     if (isDir) {
-        images = await indexImages(
+        await indexImages(
             imagePath,
             cachePath,
             recursive,
             chatModel,
+            imgcol,
             callback,
         );
     } else {
         const img = await indexImage(imagePath, cachePath, chatModel);
         if (img !== undefined) {
-            images.push(img);
+            imgcol.messages.push(img);
         }
     }
 
-    return new ImageCollection(path.dirname(imagePath), images);
+    return imgcol;
 }
 
 /**
@@ -576,6 +579,7 @@ export async function importImages(
  * @param sourcePath - The folder to import.
  * @param cachePath - The folder to cache the knowledge responses in
  * @param recursive - A flag indicating whether or not subfolders are imported.
+ * @param imageCollection - The image collection to add images to. 
  * @param chatModel - The model used to extract data from the image.
  * @returns - The imported images from the supplied folder.
  */
@@ -584,9 +588,9 @@ async function indexImages(
     cachePath: string,
     recursive: boolean,
     chatModel: ChatModel,
-    callback?: (text: string, count: number, max: number) => void,
+    imageCollection: ImageCollection,
+    callback?: (text: string, count: number, max: number, imgcol: ImageCollection) => void,    
 ): Promise<Image[]> {
-    const retVal: Image[] = [];
 
     // load files from the supplied directory
     try {
@@ -610,12 +614,13 @@ async function indexImages(
             const fullFilePath: string = path.join(sourcePath, fileNames[i]);
 
             if (isDirectoryPath(fullFilePath)) {
-                retVal.push(
+                imageCollection.messages.push(
                     ...(await indexImages(
                         fullFilePath,
                         path.join(cachePath, fileNames[i]),
                         true,
                         chatModel,
+                        imageCollection,
                         callback,
                     )),
                 );
@@ -627,12 +632,12 @@ async function indexImages(
                     chatModel,
                 );
 
-                if (callback && img) {
-                    callback(fileNames[i], i, fileNames.length);
-                }
-
                 if (img !== undefined) {
-                    retVal.push(img);
+                    imageCollection.messages.push(img);
+                }                
+
+                if (callback && img) {
+                    callback(fileNames[i], i, fileNames.length, imageCollection);
                 }
             }
         }
@@ -640,7 +645,7 @@ async function indexImages(
         debug(error);
     }
 
-    return retVal;
+    return imageCollection.messages;
 }
 
 /**

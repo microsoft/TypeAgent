@@ -42,6 +42,14 @@ export type Models = {
 
 let index: IndexData | undefined = undefined;
 let images: ImageCollection | undefined = undefined;
+let buildIndexPromise: Promise<IndexingResults> | undefined = undefined;
+const incrementalBuildCheckPoint = {
+    imageCount: 0,  // the # of images in the index last time we did an incremental build
+    minIncrementalBuildCount: 10, // the minimum number of images between incremental builds
+    minPercentageDiff: 1, // the # of percentage ponts between incremental builds
+    lastBuildTimestamp: performance.now(),
+    timeout: 15 * 60 * 1000 // 15 minutes
+};
 
 // only run the service if it was requested as part of the process startup
 // i.e. if it's referenced by a module we don't wan't to run it, this action should be explicitly requested
@@ -90,13 +98,26 @@ if (
      * @param text - The name of the item that just got indexed
      * @param count - The index of the item that just got indexed (of the total items in the same folder)
      * @param max - The number of items in the current folder being indexed
+     * @param imgcol - The image collection that's being accumulated
      */
-    function indexingProgress(text: string, count: number, max: number) {
+    function indexingProgress(text: string, count: number, max: number, imgcol?: ImageCollection) {
         index!.progress++;
         index!.size++;
         index!.state = "indexing";
 
-        // TODO: incremental index rebuilding
+        // incrementally rebuild the index at every percentage change of completeness but only do so non-aggresively
+        // only increment at least every X images or based on time passed
+        if ((index!.size > incrementalBuildCheckPoint.imageCount + incrementalBuildCheckPoint.minIncrementalBuildCount 
+            && incrementalBuildCheckPoint.imageCount * 1.01 < index!.size) 
+            || incrementalBuildCheckPoint.lastBuildTimestamp - performance.now() > incrementalBuildCheckPoint.timeout) {
+                buildIndex(imgcol!);
+
+                // update incremental build checkpoint
+                incrementalBuildCheckPoint.imageCount = index!.size;
+
+                // save timestamp
+                incrementalBuildCheckPoint.lastBuildTimestamp = performance.now();
+        }
 
         // TODO: make this less chatty - maybe percentage based or something?
         // only report when we get to the end of a folder
@@ -135,21 +156,39 @@ if (
         );
 
         // build the index
-        images.buildIndex().then(async (value: IndexingResults) => {
-            debug(`Found ${images!.messages.entries} images`);
+        buildIndex(images, true);
+    }
 
-            await images?.writeToFile(index!.path, "index");
+    async function buildIndex(images: ImageCollection, waitforPending: boolean = true) {
 
-            debug(`Index saved to ${index!.path}`);
+        // wait for pending index building before rebuilding
+        if (waitforPending && buildIndexPromise) {
+            await Promise.resolve(buildIndexPromise);
+        }
 
-            index!.state = "finished";
+        // if there's an index build in progress just ignore the incoming request
+        if (buildIndexPromise === undefined) {
+            buildIndexPromise = images.buildIndex();
 
-            index!.sizeOnDisk = (
-                await getFolderSize(index!.path as string)
-            ).size;
+            buildIndexPromise.then(async (value: IndexingResults) => {
+                debug(`Found ${images!.messages.entries} images`);
+    
+                await images?.writeToFile(index!.path, "index");
+    
+                debug(`Index saved to ${index!.path}`);
+    
+                index!.state = "finished";
+    
+                index!.sizeOnDisk = (
+                    await getFolderSize(index!.path as string)
+                ).size;
+    
+                sendIndexStatus();
 
-            sendIndexStatus();
-        });
+                // reset indexing building promise
+                buildIndexPromise = undefined;
+            });
+        }
     }
 
     debug("Indexing service started successfully.");
