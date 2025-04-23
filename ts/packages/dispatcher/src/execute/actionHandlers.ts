@@ -62,11 +62,11 @@ import { validateAction } from "action-schema";
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
 export function getSchemaNamePrefix(
-    translatorName: string,
+    schemaName: string,
     systemContext: CommandHandlerContext,
 ) {
-    const config = systemContext.agents.getActionConfig(translatorName);
-    return `[${config.emojiChar} ${translatorName}] `;
+    const config = systemContext.agents.getActionConfig(schemaName);
+    return `[${config.emojiChar} ${schemaName}] `;
 }
 
 export type ActionContextWithClose = {
@@ -831,11 +831,11 @@ export async function validateWildcardMatch(
 ) {
     const actions = match.match.actions;
     for (const { action } of actions) {
-        const translatorName = action.translatorName;
-        if (translatorName === undefined) {
+        const schemaName = action.translatorName;
+        if (schemaName === undefined) {
             continue;
         }
-        const appAgentName = getAppAgentName(translatorName);
+        const appAgentName = getAppAgentName(schemaName);
         if (!context.agents.isActionActive(appAgentName)) {
             // Assume validateWildcardMatch is true.
             continue;

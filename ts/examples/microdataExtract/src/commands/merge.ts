@@ -41,8 +41,9 @@ export default class Merge extends Command {
         return urls.map((rawUrl) => {
             try {
                 const url = new URL(rawUrl);
+                let allowedHosts = ["tripadvisor.com", "www.tripadvisor.com"];
 
-                if (url.hostname.includes("tripadvisor.com")) {
+                if (allowedHosts.includes(url.hostname)) {
                     return `https://www.tripadvisor.com${url.pathname}${url.search}`;
                 }
 
@@ -134,8 +135,8 @@ export default class Merge extends Command {
 
         // Extract tripadvisor.com URLs from unmatched parsed entries
         const missingCrawlTripadvisorUrls: string[] = onlyParsed.flatMap((p) =>
-            this.normalizeSameAs(p.sameAs).filter((url) =>
-                url.includes("www.tripadvisor.com"),
+            this.normalizeSameAs(p.sameAs).filter(
+                (url) => new URL(url).hostname === "www.tripadvisor.com",
             ),
         );
 

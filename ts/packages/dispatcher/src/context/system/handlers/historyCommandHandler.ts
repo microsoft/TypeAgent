@@ -85,6 +85,7 @@ type ChatHistoryInputAssistant = {
     text: string;
     source: string;
     entities?: Entity[];
+    additionalInstructions?: string[];
 };
 export type ChatHistoryInput = {
     user: string;
@@ -100,6 +101,7 @@ function convertAssistantMessage(
         text: message.text,
         sourceAppAgentName: message.source,
         entities: message.entities,
+        additionalInstructions: message.additionalInstructions,
     });
 }
 
@@ -143,6 +145,7 @@ const assistantInputSchema = sc.obj({
             }),
         ),
     ),
+    additionalInstructions: sc.optional(sc.array(sc.string())),
 });
 
 const messageInputSchema = sc.obj({

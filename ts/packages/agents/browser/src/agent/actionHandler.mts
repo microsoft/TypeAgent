@@ -128,6 +128,7 @@ async function updateBrowserContext(
                                 );
                                 context.agentContext.crossWordState =
                                     await getBoardSchema(context);
+
                                 sendSiteTranslatorStatus(
                                     targetTranslator,
                                     "initialized",
@@ -282,7 +283,7 @@ async function executeBrowserAction(
 }
 
 function sendSiteTranslatorStatus(
-    translatorName: string,
+    schemaName: string,
     status: string,
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -295,7 +296,7 @@ function sendSiteTranslatorStatus(
                 method: "browser/siteTranslatorStatus",
                 id: callId,
                 params: {
-                    translator: translatorName,
+                    translator: schemaName,
                     status: status,
                 },
             }),

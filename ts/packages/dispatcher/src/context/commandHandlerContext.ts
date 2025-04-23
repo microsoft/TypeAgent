@@ -358,15 +358,6 @@ export async function initializeCommandHandlerContext(
         }
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
-        const conversationManager = sessionDirPath
-            ? await Conversation.createConversationManager(
-                  {},
-                  "conversation",
-                  sessionDirPath,
-                  false,
-              )
-            : undefined;
-
         const clientIO = options?.clientIO ?? nullClientIO;
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
@@ -398,7 +389,8 @@ export async function initializeCommandHandlerContext(
             persistDir,
             cacheDir,
             embeddingCacheDir,
-            conversationManager,
+            conversationManager:
+                await createConversationManager(sessionDirPath),
             explanationAsynchronousMode,
             dblogging: options?.dblogging ?? false,
             clientIO,
@@ -506,17 +498,17 @@ function processSetAppAgentStateResult(
     let hasFailed = false;
     const rollback = { schemas: {}, actions: {}, commands: {} };
     for (const [stateName, failed] of Object.entries(result.failed)) {
-        for (const [translatorName, enable, e] of failed) {
+        for (const [schemaName, enable, e] of failed) {
             hasFailed = true;
             const prefix =
                 stateName === "commands"
-                    ? systemContext.agents.getEmojis()[translatorName]
-                    : getSchemaNamePrefix(translatorName, systemContext);
+                    ? systemContext.agents.getEmojis()[schemaName]
+                    : getSchemaNamePrefix(schemaName, systemContext);
             debugError(e);
             cbError(
                 `${prefix}: Failed to ${enable ? "enable" : "disable"} ${stateName}: ${e.message}`,
             );
-            (rollback as any)[stateName][translatorName] = !enable;
+            (rollback as any)[stateName][schemaName] = !enable;
         }
     }
 
@@ -535,12 +527,28 @@ export async function closeCommandHandlerContext(
     }
 }
 
+async function createConversationManager(
+    sessionDirPath: string | undefined,
+): Promise<Conversation.ConversationManager | undefined> {
+    return sessionDirPath
+        ? await Conversation.createConversationManager(
+              {},
+              "conversation",
+              sessionDirPath,
+              false,
+          )
+        : undefined;
+}
 export async function setSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     session: Session,
 ) {
     context.session = session;
     await context.agents.close();
+
+    context.conversationManager = await createConversationManager(
+        session.getSessionDirPath(),
+    );
     context.agentCache = await getAgentCache(
         context.session,
         context.agents,

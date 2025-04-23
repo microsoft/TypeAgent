@@ -75,5 +75,29 @@
       "dispatcher.lookup.lookupAndAnswer",
       "dispatcher.pendingRequestAction"
     ]
-  }
+  },
+  [
+    {
+      "request": "add ham to the list",
+      "action": "dispatcher.clarify.clarifyMissingParameter",
+      "history": {
+        "text": "Which list would you like to add ham to?",
+        "source": "list",
+        "additionalInstructions": [
+          "Asked the user to clarify the request 'add ham to the list'"
+        ]
+      }
+    },
+    {
+      "request": "grocery",
+      "action": {
+        "translatorName": "list",
+        "actionName": "addItems",
+        "parameters": {
+          "items": ["ham"],
+          "listName": "grocery"
+        }
+      }
+    }
+  ]
 ]
