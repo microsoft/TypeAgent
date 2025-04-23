@@ -5,15 +5,14 @@ import {
     PropertySearchTerm,
     ScoredMessageOrdinal,
     SearchSelectExpr,
-    SearchTermGroup,
-    WhenFilter,
 } from "../interfaces.js";
 import * as querySchema from "../searchQuerySchema.js";
-import { DataFrameCollection, IConversationHybrid } from "./dataFrame.js";
+import { DataFrameCollection } from "./dataFrame.js";
 import {
-    DataFrameCompiler,
-    getDataFrameAndColumnName,
-} from "./dataFrameQuery.js";
+    IConversationHybrid,
+    searchConversationWithScope,
+} from "./hybridConversation.js";
+import { getDataFrameAndColumnName } from "./dataFrameQuery.js";
 import * as search from "../search.js";
 import { loadSchemaFiles } from "typeagent";
 import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
@@ -55,45 +54,12 @@ async function searchConversationWithFilter(
     rawQuery?: string,
 ): Promise<search.ConversationSearchResult | undefined> {
     const selectExpr = compileHybridSearchFilter(conversation, searchFilter);
-    return searchConversationWithHybridScope(
+    return searchConversationWithScope(
         conversation,
         selectExpr.searchTermGroup,
         selectExpr.when,
         options,
         rawQuery,
-    );
-}
-
-/**
- * Search the hybrid conversation using dataFrames to determine additional
- * 'outer' scope
- * @param hybridConversation
- * @param searchTermGroup
- * @param when
- * @param options
- */
-async function searchConversationWithHybridScope(
-    hybridConversation: IConversationHybrid,
-    searchTermGroup: SearchTermGroup,
-    when?: WhenFilter | undefined,
-    options?: search.SearchOptions | undefined,
-    rawSearchQuery?: string,
-): Promise<search.ConversationSearchResult | undefined> {
-    const dfCompiler = new DataFrameCompiler(hybridConversation.dataFrames);
-    const dfScopeExpr = dfCompiler.compileScope(searchTermGroup);
-    if (dfScopeExpr) {
-        const scopeRanges = dfScopeExpr.eval();
-        if (scopeRanges) {
-            when ??= {};
-            when.textRangesInScope = scopeRanges.getRanges();
-        }
-    }
-    return search.searchConversation(
-        hybridConversation.conversation,
-        searchTermGroup,
-        when,
-        options,
-        rawSearchQuery,
     );
 }
 

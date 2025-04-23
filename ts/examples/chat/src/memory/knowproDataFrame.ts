@@ -123,7 +123,7 @@ export async function createKnowproDataFrameCommands(
             kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
             kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
         );
-        const hybridMatches = await kp.hybrid.searchConversationHybrid(
+        const hybridMatches = await kp.hybrid.searchConversationWithJoin(
             restaurantIndex,
             termGroup,
         );

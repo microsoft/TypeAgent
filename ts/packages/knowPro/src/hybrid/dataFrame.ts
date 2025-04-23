@@ -1,29 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    intersectScoredMessageOrdinals,
-    MatchAccumulator,
-    setIntersect,
-    setUnion,
-} from "../collections.js";
+import { MatchAccumulator, setIntersect, setUnion } from "../collections.js";
 import { DataFrameCompiler } from "./dataFrameQuery.js";
 import {
-    IConversation,
-    IMessage,
     ScoredMessageOrdinal,
     SearchTerm,
     SearchTermGroup,
     TextRange,
-    WhenFilter,
 } from "../interfaces.js";
 import { ComparisonOp } from "../queryCmp.js";
-import {
-    ConversationSearchResult,
-    createDefaultSearchOptions,
-    searchConversation,
-    SearchOptions,
-} from "../search.js";
+import { createDefaultSearchOptions, SearchOptions } from "../search.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -293,54 +280,6 @@ export function isDataFrameGroup(
     term: DataFrameTermGroup | DataFrameSearchTerm,
 ): term is DataFrameTermGroup {
     return term.hasOwnProperty("booleanOp");
-}
-
-/**
- * TODO: need better naming for everything here.
- */
-export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
-    get conversation(): IConversation<TMessage>;
-    get dataFrames(): DataFrameCollection;
-}
-
-export type HybridSearchResults = {
-    conversationMatches?: ConversationSearchResult | undefined;
-    dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
-    joinedMatches?: ScoredMessageOrdinal[] | undefined;
-};
-
-export async function searchConversationHybrid(
-    hybridConversation: IConversationHybrid,
-    searchTermGroup: SearchTermGroup,
-    filter?: WhenFilter,
-    options?: SearchOptions,
-    rawQuery?: string,
-): Promise<HybridSearchResults> {
-    options ??= createDefaultSearchOptions();
-
-    const conversationMatches = await searchConversation(
-        hybridConversation.conversation,
-        searchTermGroup,
-        filter,
-        options,
-        rawQuery,
-    );
-    // Also match any messages with matching data frame columns
-    let dataFrameMatches = searchDataFrames(
-        hybridConversation.dataFrames,
-        searchTermGroup,
-        options,
-    );
-
-    let joinedMatches = intersectScoredMessageOrdinals(
-        conversationMatches?.messageMatches,
-        dataFrameMatches,
-    );
-    return {
-        conversationMatches,
-        dataFrameMatches,
-        joinedMatches,
-    };
 }
 
 export function searchDataFrames(
