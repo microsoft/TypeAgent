@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "path";
-import { collections } from "..";
+import { collections } from "../index.js";
 import {
     FileSystem,
     fsDefault,
@@ -10,7 +10,7 @@ import {
     ObjectSerializer,
     readObjectFromFile,
     writeObjectToFile,
-} from "./objectFolder";
+} from "./objectFolder.js";
 
 export interface ObjectPage<T = any> {
     readonly size: number;

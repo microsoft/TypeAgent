@@ -7,8 +7,8 @@ import {
     getContextFromHistory,
     getTotalPromptLength,
     PromptSections,
-} from "../src/prompt";
-import { MessageSourceRole } from "../src/message";
+} from "../src/prompt.js";
+import { MessageSourceRole } from "../src/message.js";
 
 describe("Prompts", () => {
     test("ChatHistory", () => {

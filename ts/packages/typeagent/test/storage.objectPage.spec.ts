@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHashObjectFolder } from "../src/storage/objectPage";
-import { testDirectoryPath } from "./common";
+import { createHashObjectFolder } from "../src/storage/objectPage.js";
+import { testDirectoryPath } from "./common.js";
 
 describe("storage.objectHashFolder", () => {
     const timeoutMs = 30000;

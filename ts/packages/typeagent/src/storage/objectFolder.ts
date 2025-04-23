@@ -3,9 +3,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { Path, removeFile, renameFileSync } from "../objStream";
-import { NameValue } from "../memory";
-import { createLazy, insertIntoSorted } from "../lib";
+import { Path, removeFile, renameFileSync } from "../objStream.js";
+import { NameValue } from "../memory.js";
+import { createLazy, insertIntoSorted } from "../lib/index.js";
 import registerDebug from "debug";
 
 const storageError = registerDebug("typeagent:storage:error");

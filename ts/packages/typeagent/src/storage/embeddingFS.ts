@@ -1,22 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ScoredItem } from "../memory";
+import { ScoredItem } from "../memory.js";
 import {
     Embedding,
     SimilarityType,
     indexOfNearest,
     indexesOfNearest,
-} from "../vector/embeddings";
-import { Path } from "../objStream";
+} from "../vector/embeddings.js";
+import { Path } from "../objStream.js";
 import {
     FileSystem,
     ObjectFolder,
     ObjectFolderSettings,
     createObjectFolder,
-} from "./objectFolder";
-import { VectorIndex } from "../vector/vectorIndex";
-import { asyncArray } from "..";
+} from "./objectFolder.js";
+import { VectorIndex } from "../vector/vectorIndex.js";
+import { asyncArray } from "../index.js";
 
 /**
  * EmbeddingFolder stores embeddings in folder, one per file.

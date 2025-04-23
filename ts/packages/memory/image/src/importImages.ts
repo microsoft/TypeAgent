@@ -32,6 +32,9 @@ import { isImageFileType } from "common-utils";
 import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:image-memory");
 
 export interface ImageCollectionData
     extends IConversationDataWithIndexes<Image> {}
@@ -548,23 +551,26 @@ export async function importImages(
     // create a model used to extract data from the images
     const chatModel = createKnowledgeModel();
 
-    let images: Image[] = [];
+    // the image collection we are accumulating in
+    const imgcol = new ImageCollection(path.dirname(imagePath), []);
+
     if (isDir) {
-        images = await indexImages(
+        await indexImages(
             imagePath,
             cachePath,
             recursive,
             chatModel,
+            imgcol,
             callback,
         );
     } else {
         const img = await indexImage(imagePath, cachePath, chatModel);
         if (img !== undefined) {
-            images.push(img);
+            imgcol.messages.push(img);
         }
     }
 
-    return new ImageCollection(path.dirname(imagePath), images);
+    return imgcol;
 }
 
 /**
@@ -573,6 +579,7 @@ export async function importImages(
  * @param sourcePath - The folder to import.
  * @param cachePath - The folder to cache the knowledge responses in
  * @param recursive - A flag indicating whether or not subfolders are imported.
+ * @param imageCollection - The image collection to add images to.
  * @param chatModel - The model used to extract data from the image.
  * @returns - The imported images from the supplied folder.
  */
@@ -581,54 +588,73 @@ async function indexImages(
     cachePath: string,
     recursive: boolean,
     chatModel: ChatModel,
-    callback?: (text: string, count: number, max: number) => void,
+    imageCollection: ImageCollection,
+    callback?: (
+        text: string,
+        count: number,
+        max: number,
+        imgcol: ImageCollection,
+    ) => void,
 ): Promise<Image[]> {
     // load files from the supplied directory
-    const fileNames = await fs.promises.readdir(sourcePath, {
-        recursive: true,
-    });
+    try {
+        const fileNames = await fs.promises.readdir(sourcePath, {
+            recursive: true,
+        });
 
-    // create the cache path if it doesn't exist
-    if (!fs.existsSync(cachePath)) {
-        fs.mkdirSync(cachePath);
-    }
-
-    // index each image
-    const retVal: Image[] = [];
-    for (let i = 0; i < fileNames.length; i++) {
-        // ignore thumbnail images
-        if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
-            console.log(`ignoring '${fileNames[i]}'`);
-            continue;
+        // create the cache path if it doesn't exist
+        if (!fs.existsSync(cachePath)) {
+            fs.mkdirSync(cachePath);
         }
 
-        const fullFilePath: string = path.join(sourcePath, fileNames[i]);
+        // index each image
+        for (let i = 0; i < fileNames.length; i++) {
+            // ignore thumbnail images
+            if (fileNames[i].toLocaleLowerCase().endsWith(".thumbnail.jpg")) {
+                console.log(`ignoring '${fileNames[i]}'`);
+                continue;
+            }
 
-        if (isDirectoryPath(fullFilePath)) {
-            retVal.push(
-                ...(await indexImages(
+            const fullFilePath: string = path.join(sourcePath, fileNames[i]);
+
+            if (isDirectoryPath(fullFilePath)) {
+                imageCollection.messages.push(
+                    ...(await indexImages(
+                        fullFilePath,
+                        path.join(cachePath, fileNames[i]),
+                        true,
+                        chatModel,
+                        imageCollection,
+                        callback,
+                    )),
+                );
+            } else {
+                // index the image
+                const img = await indexImage(
                     fullFilePath,
-                    path.join(cachePath, fileNames[i]),
-                    true,
+                    cachePath,
                     chatModel,
-                    callback,
-                )),
-            );
-        } else {
-            // index the image
-            const img = await indexImage(fullFilePath, cachePath, chatModel);
+                );
 
-            if (callback) {
-                callback(fileNames[i], i, fileNames.length);
-            }
+                if (img !== undefined) {
+                    imageCollection.messages.push(img);
+                }
 
-            if (img !== undefined) {
-                retVal.push(img);
+                if (callback && img) {
+                    callback(
+                        fileNames[i],
+                        i,
+                        fileNames.length,
+                        imageCollection,
+                    );
+                }
             }
         }
+    } catch (error) {
+        debug(error);
     }
 
-    return retVal;
+    return imageCollection.messages;
 }
 
 /**

@@ -15,8 +15,9 @@ const debug = registerDebug("typeagent:agent:montage:route");
 const app: Express = express();
 const port = process.env.PORT || 9012;
 
-// TODO: make this configurable based on user setup/input
-const allowedFolders: string[] = ["f:\\pictures", "c:\\temp\\pictures"];
+// configurable folders for securing folder access. Is populated based on available indexes
+// but can be customized further here
+let allowedFolders: string[] = ["f:\\pictures", "c:\\temp\\pictures"];
 
 // limit request rage
 const limiter = rateLimit({
@@ -62,12 +63,13 @@ app.get("/image", (req: Request, res: Response) => {
 
     // File isn't in an allowed folder
     if (!served) {
-        res.status(403).send("Forbidden");
+        res.status(403).send();
     }
 });
 
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
+// TODO: write thumbnails to image cache folder instead of in place
 app.get("/thumbnail", async (req: Request, res: Response) => {
     const file = req.query.path as string | undefined;
     let served: boolean = false;
@@ -114,7 +116,7 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
 
     // File isn't in an allowed folder
     if (!served) {
-        res.status(403).send("Forbidden");
+        res.status(403).send();
     }
 
     // TOOD: figure out why this fails for most images
@@ -173,7 +175,7 @@ app.get("/knowlegeResponse", (req: Request, res: Response) => {
 
     // File isn't in an allowed folder
     if (!served) {
-        res.status(403).send("Forbidden");
+        res.status(403).send();
     }
 });
 
@@ -238,8 +240,12 @@ process.send?.("Success");
  * Processes messages received from the host/parent process
  */
 process.on("message", (message: any) => {
-    // forward the message to any clients
-    sendDataToClients(message);
+    if (message.allowedFolders) {
+        allowedFolders = [...allowedFolders, ...message.allowedFolders];
+    } else {
+        // forward the message to any clients
+        sendDataToClients(message);
+    }
 });
 
 /**

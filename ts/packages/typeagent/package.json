@@ -10,6 +10,7 @@
   },
   "license": "MIT",
   "author": "Microsoft",
+  "type": "module",
   "exports": {
     ".": "./dist/index.js"
   },

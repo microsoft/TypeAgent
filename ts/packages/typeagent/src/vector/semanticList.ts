@@ -2,21 +2,21 @@
 // Licensed under the MIT License.
 
 import { TextEmbeddingModel } from "aiclient";
-import { ScoredItem } from "../memory";
+import { ScoredItem } from "../memory.js";
 import {
     NormalizedEmbedding,
     similarity,
     SimilarityType,
     TopNCollection,
-} from "./embeddings";
+} from "./embeddings.js";
 import {
     EmbeddedValue,
     generateEmbedding,
     generateTextEmbeddings,
     VectorIndex,
-} from "./vectorIndex";
+} from "./vectorIndex.js";
 import assert from "assert";
-import { callWithRetry } from "../async";
+import { callWithRetry } from "../async.js";
 
 /**
  * An in-memory list of T, {stringValue of T} items that also maintains embeddings of stringValue

@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import { Result, success, error } from "typechat";
-import { getJson } from "./restClient";
-import { getEnvSetting } from "./common";
+import { getJson } from "./restClient.js";
+import { getEnvSetting } from "./common.js";
 
 export type ApiSettings = {
     apiKey: string;

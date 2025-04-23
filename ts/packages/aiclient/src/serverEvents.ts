@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readResponseStream } from "./restClient";
+import { readResponseStream } from "./restClient.js";
 
 export type ServerEvent = {
     id?: string;

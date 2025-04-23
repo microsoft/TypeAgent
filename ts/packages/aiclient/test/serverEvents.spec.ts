@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readMessages } from "../src/serverEvents";
+import { readMessages } from "../src/serverEvents.js";
 
 const messages = ["data: hello", "data: world", "data: foo", "data: bar"];
 
