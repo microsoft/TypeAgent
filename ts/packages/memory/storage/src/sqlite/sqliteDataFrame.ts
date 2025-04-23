@@ -4,12 +4,18 @@
 import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
 
-export class SqliteDataFrame implements kp.hybrid.IDataFrame {
+export class SqliteDataFrame<TRow extends SqliteDataFrameRow>
+    implements kp.hybrid.IDataFrame
+{
+    private sql_getAll: sqlite.Statement;
+
     constructor(
         public db: sqlite.Database,
         public name: string,
         public columns: kp.hybrid.DataFrameColumns,
-    ) {}
+    ) {
+        this.sql_getAll = this.sqlGetAll();
+    }
 
     public addRows(...rows: kp.hybrid.DataFrameRow[]): void {
         throw new Error("Method not implemented.");
@@ -20,35 +26,76 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         columnValue: kp.hybrid.DataFrameValue,
         op: kp.ComparisonOp,
     ): kp.hybrid.DataFrameRow[] | undefined {
-        throw new Error("Method not implemented.");
+        let sql = `SELECT * from ${this.name} WHERE ${columnName} ${comparisonOpToSql(op)} ?`;
+        let stmt = this.db.prepare(sql);
+        let row = stmt.get(valueToSql(columnValue));
+        if (row === undefined) {
+            return undefined;
+        }
+        return [this.toDataFrameRow(row)];
     }
 
     public findRows(
         searchTerms: kp.hybrid.DataFrameTermGroup,
     ): kp.hybrid.DataFrameRow[] | undefined {
-        throw new Error("Method not implemented.");
+        const dfRows: kp.hybrid.DataFrameRow[] = [];
+        const stmt = this.queryRows(searchTerms);
+        for (const row of stmt.iterate()) {
+            dfRows.push(this.toDataFrameRow(row));
+        }
+        return dfRows;
     }
 
     public findSources(
         searchTerms: kp.hybrid.DataFrameTermGroup,
     ): kp.hybrid.RowSourceRef[] | undefined {
-        throw new Error("Method not implemented.");
+        const sources: kp.hybrid.RowSourceRef[] = [];
+        const stmt = this.queryRows(searchTerms);
+        for (const row of stmt.iterate()) {
+            sources.push(this.deserializeSourceRef(row as SqliteDataFrameRow));
+        }
+        return sources;
     }
 
-    [Symbol.iterator](): Iterator<kp.hybrid.DataFrameRow, any, any> {
-        throw new Error("Method not implemented.");
+    public *[Symbol.iterator](): Iterator<kp.hybrid.DataFrameRow> {
+        for (let row of this.sql_getAll.iterate()) {
+            const value = this.toDataFrameRow(row);
+            if (value !== undefined) {
+                yield value;
+            }
+        }
     }
 
-    protected *queryRows<TRow extends SqliteDataFrameRow>(
+    private queryRows(
         searchTerms: kp.hybrid.DataFrameTermGroup,
-    ): IterableIterator<TRow> {
+    ): sqlite.Statement {
         let sql = `SELECT sourceRef from ${this.name} WHERE `;
         const where = dataFrameTermGroupToSql(searchTerms, this.columns);
         sql += where;
-        const stmt = this.db.prepare(sql);
-        for (const row of stmt.iterate()) {
-            yield row as TRow;
-        }
+        return this.db.prepare(sql);
+    }
+
+    private toDataFrameRow(row: unknown): kp.hybrid.DataFrameRow {
+        return {
+            sourceRef: this.deserializeSourceRef(row as SqliteDataFrameRow),
+            record: row as kp.hybrid.DataFrameRecord,
+        };
+    }
+
+    private deserializeSourceRef(
+        row: SqliteDataFrameRow,
+    ): kp.hybrid.RowSourceRef {
+        return JSON.parse(row.sourceRef);
+    }
+
+    /*
+    private serializeSourceRef(sr: kp.hybrid.RowSourceRef) {
+        return JSON.stringify(sr);
+    }
+    */
+
+    private sqlGetAll() {
+        return this.db.prepare(`SELECT * FROM ${this.name}`);
     }
 }
 
