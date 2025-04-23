@@ -579,7 +579,7 @@ export async function importImages(
  * @param sourcePath - The folder to import.
  * @param cachePath - The folder to cache the knowledge responses in
  * @param recursive - A flag indicating whether or not subfolders are imported.
- * @param imageCollection - The image collection to add images to. 
+ * @param imageCollection - The image collection to add images to.
  * @param chatModel - The model used to extract data from the image.
  * @returns - The imported images from the supplied folder.
  */
@@ -589,9 +589,13 @@ async function indexImages(
     recursive: boolean,
     chatModel: ChatModel,
     imageCollection: ImageCollection,
-    callback?: (text: string, count: number, max: number, imgcol: ImageCollection) => void,    
+    callback?: (
+        text: string,
+        count: number,
+        max: number,
+        imgcol: ImageCollection,
+    ) => void,
 ): Promise<Image[]> {
-
     // load files from the supplied directory
     try {
         const fileNames = await fs.promises.readdir(sourcePath, {
@@ -634,10 +638,15 @@ async function indexImages(
 
                 if (img !== undefined) {
                     imageCollection.messages.push(img);
-                }                
+                }
 
                 if (callback && img) {
-                    callback(fileNames[i], i, fileNames.length, imageCollection);
+                    callback(
+                        fileNames[i],
+                        i,
+                        fileNames.length,
+                        imageCollection,
+                    );
                 }
             }
         }
