@@ -6,10 +6,7 @@ import { XMLParser } from "fast-xml-parser";
 import { fetchWithRetry } from "aiclient";
 import path from "path";
 import fs from "fs";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { OUTPUT_DIR } from "./common.js";
 
 interface ArxivPaperAuthor {
     name: string;
@@ -29,11 +26,17 @@ interface ArxivPaper {
     journal_ref?: string;
 }
 
+const PAPER_DOWNLOAD_DIR = path.join(
+    OUTPUT_DIR,
+    "papers/downloads",
+);
+
 const PAPER_CATALOG_PATH = path.join(
-    __dirname,
+    OUTPUT_DIR,
     "papers/downloads",
     "downloaded_papers.json",
 );
+
 function loadDownloadedPapers(): Set<string> {
     try {
         if (fs.existsSync(PAPER_CATALOG_PATH)) {
@@ -197,14 +200,17 @@ export async function downloadArxivPaper(
 ): Promise<string | undefined> {
     const arxivInfo = getPdfUrlFromId(paper.id);
 
-    const outputDir = path.join(__dirname, "papers/downloads");
+    if(!fs.existsSync(PAPER_DOWNLOAD_DIR)) {
+        fs.mkdirSync(PAPER_DOWNLOAD_DIR, { recursive: true });
+    }
+    
     const filePath = path.join(
-        outputDir,
+        PAPER_DOWNLOAD_DIR,
         `${getValidFilename(arxivInfo.paperId)}.pdf`,
     );
 
     try {
-        createFolderIfNotExists(outputDir);
+        createFolderIfNotExists(PAPER_DOWNLOAD_DIR);
         const options: RequestInit = {
             method: "GET",
             headers: {
