@@ -36,6 +36,9 @@ import { KnowledgeExtractor } from "../conversation/knowledge.js";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import sharp from "sharp";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:knowledgeProcessor:image");
 
 /**
  * Creates an image memory
@@ -669,6 +672,7 @@ export async function loadImageWithKnowledge(
         }
     } catch (error) {
         // continue
+        debug(error);
     }
     const mimeType = getMimeType(path.extname(fileName));
     const loadedImage: CachedImageWithDetails = new CachedImageWithDetails(

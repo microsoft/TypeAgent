@@ -68,6 +68,7 @@ import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "../dispatcher.js";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import lockfile from "proper-lockfile";
+import { IndexManager } from "./indexManager.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -103,6 +104,8 @@ export type CommandHandlerContext = {
     readonly cacheDir: string | undefined;
     readonly embeddingCacheDir: string | undefined;
 
+    readonly indexManager: IndexManager;
+
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
     // Per activation configs
@@ -126,9 +129,7 @@ export type CommandHandlerContext = {
     constructionProvider?: ConstructionProvider | undefined;
 
     batchMode: boolean;
-
     streamingActionContext?: ActionContextWithClose | undefined;
-
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
 
@@ -416,6 +417,7 @@ export async function initializeCommandHandlerContext(
             instanceDirLock,
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,
+            indexManager: IndexManager.getInstance(),
         };
 
         await addAppAgentProviders(context, options?.appAgentProviders);

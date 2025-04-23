@@ -28,8 +28,10 @@
     "aiclient": "workspace:*",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
+    "get-folder-size": "^5.0.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
+    "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
