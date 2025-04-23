@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readJsonFile, writeJsonFile } from "..";
-import { MultiMap } from "./multimap";
+import { readJsonFile, writeJsonFile } from "../objStream.js";
+import { MultiMap } from "./multimap.js";
 
 /**
  * An in-memory Graph

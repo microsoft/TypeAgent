@@ -14,20 +14,20 @@ import {
     hasEmbeddingModel,
     testDirectoryPath,
     testIf,
-} from "./common";
-import { generateTextEmbeddings } from "../src/vector/vectorIndex";
+} from "./common.js";
+import { generateTextEmbeddings } from "../src/vector/vectorIndex.js";
 import {
     cosineSimilarity,
     cosineSimilarityLoop,
     dotProduct,
     dotProductSimple,
     euclideanLength,
-} from "../src/vector/vector";
-import { createSemanticList } from "../src/vector/semanticList";
-import { createSemanticMap } from "../src/vector/semanticMap";
-import { createSemanticIndex } from "../src/vector/semanticIndex";
-import { createEmbeddingFolder } from "../src/storage/embeddingFS";
-import { removeDir } from "../src/objStream";
+} from "../src/vector/vector.js";
+import { createSemanticList } from "../src/vector/semanticList.js";
+import { createSemanticMap } from "../src/vector/semanticMap.js";
+import { createSemanticIndex } from "../src/vector/semanticIndex.js";
+import { createEmbeddingFolder } from "../src/storage/embeddingFS.js";
+import { removeDir } from "../src/objStream.js";
 
 describe("vector.vectorIndex", () => {
     const timeoutMs = 5 * 1000 * 60;

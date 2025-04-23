@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { randomIntInRange } from "./lib/mathLib";
+import { randomIntInRange } from "./lib/mathLib.js";
 
 export type Timestamped<T = any> = {
     timestamp: Date;

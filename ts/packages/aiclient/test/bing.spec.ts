@@ -3,7 +3,7 @@
 
 import dotenv from "dotenv";
 import path from "path";
-import { testIf } from "./testCore";
+import { testIf } from "./testCore.js";
 import * as bing from "../src/bing.js";
 
 dotenv.config({

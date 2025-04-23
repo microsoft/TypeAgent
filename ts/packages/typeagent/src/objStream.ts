@@ -5,7 +5,7 @@ import fs from "fs";
 import * as readline from "readline";
 import { Readable, Writable } from "stream";
 import { fileURLToPath } from "url";
-import { FileSystem } from ".";
+import { FileSystem } from "./index.js";
 import path from "path";
 
 export type Path = string;

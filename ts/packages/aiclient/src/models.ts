@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
-import { CompletionUsageStats } from "./openai";
+import { CompletionUsageStats } from "./openai.js";
 
 /**
  * Translation settings for Chat models
