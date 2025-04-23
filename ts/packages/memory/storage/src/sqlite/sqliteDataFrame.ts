@@ -10,6 +10,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
 
     private sql_add: sqlite.Statement;
     private sql_getAll: sqlite.Statement;
+    private recordColumnNames: string[];
 
     constructor(
         public db: sqlite.Database,
@@ -30,6 +31,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         if (ensureDb) {
             this.ensureDb();
         }
+        this.recordColumnNames = this.prepareColumnNames(this.columns.keys());
         this.sql_add = this.sqlAdd();
         this.sql_getAll = this.sqlGetAll();
     }
@@ -37,7 +39,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
     public addRows(...rows: kp.hybrid.DataFrameRow[]): void {
         for (const row of rows) {
             const rowValues = this.getAddValues(row);
-            this.sql_add.run(...rowValues);
+            this.sql_add.run(rowValues);
         }
     }
 
@@ -110,16 +112,10 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
     private getAddValues(row: kp.hybrid.DataFrameRow) {
         let values: any[] = [];
         values.push(this.serializeSourceRef(row.sourceRef));
-        const colNames = this.prepareColumnNames(Object.keys(row.record));
-        for (const colName of colNames) {
+        for (const colName of this.recordColumnNames) {
             values.push(row.record[colName]);
         }
         return values;
-    }
-
-    private getColumnNames() {
-        const colNames = this.prepareColumnNames(this.columns.keys());
-        return ["sourceRef", ...colNames];
     }
 
     private prepareColumnNames(names: IterableIterator<string> | string[]) {
@@ -141,7 +137,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
     }
 
     private sqlAdd() {
-        const columnNames = this.getColumnNames();
+        const columnNames = ["sourceRef", ...this.recordColumnNames];
         const sql = `INSERT INTO ${this.name} (${columnNames.join(", ")}) VALUES (${sql_makeInPlaceholders(columnNames.length)})`;
         return this.db.prepare(sql);
     }

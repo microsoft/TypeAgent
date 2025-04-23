@@ -21,16 +21,16 @@ export async function createKnowproDataFrameCommands(
     commands.kpDataFrameSearch = searchDataFrame;
 
     await ensureDir("/data/testChat/knowpro/restaurants");
-    const db = new RestaurantDb(
-        "/data/testChat/knowpro/restaurants/restaurants.db",
-    );
-    const restaurantIndex: RestaurantIndex = new RestaurantIndex(db);
+    let db: RestaurantDb | undefined;
+    let restaurantIndex: RestaurantIndex | undefined;
+
     const filePath =
         "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
 
     async function indexDataFrame(args: string[]) {
         try {
+            ensureIndex();
             //
             // Load some restaurants into a collection
             //
@@ -38,25 +38,25 @@ export async function createKnowproDataFrameCommands(
             const restaurantData: Restaurant[] =
                 await loadThings<Restaurant>(filePath);
 
-            importRestaurants(restaurantIndex, restaurantData, numRestaurants);
+            importRestaurants(restaurantIndex!, restaurantData, numRestaurants);
             //
             // Build index
             //
             printer.writeHeading("Building index");
-            await buildIndex(restaurantIndex);
+            await buildIndex(restaurantIndex!);
             await testHybridQuery();
         } catch (ex) {
             printer.writeError(`${ex}`);
-        } finally {
-            db.close();
         }
     }
 
     async function searchDataFrame(args: string[]) {
+        ensureIndex();
+
         const nlpQuery = args[0] ?? query;
         // NLP querying
         printer.writeInColor(chalk.cyan, nlpQuery);
-        const matchResult = await restaurantIndex.findWithLanguage(
+        const matchResult = await restaurantIndex!.findWithLanguage(
             nlpQuery,
             (q) => {
                 printer.writeJson(q);
@@ -75,6 +75,16 @@ export async function createKnowproDataFrameCommands(
                 writeRestaurantMatch(restaurant),
             );
         }
+    }
+
+    function ensureIndex() {
+        if (db !== undefined) {
+            db.close();
+        }
+        db = new RestaurantDb(
+            "/data/testChat/knowpro/restaurants/restaurants.db",
+        );
+        restaurantIndex = new RestaurantIndex(db);
     }
 
     function importRestaurants(
@@ -115,25 +125,27 @@ export async function createKnowproDataFrameCommands(
     }
 
     async function testHybridQuery() {
-        printer.writeInColor(
-            chalk.cyan,
-            "Searching for 50.804436 (nl), 5.8997846 (nl)",
-        );
-        // Hybrid querying
-        let termGroup = kp.createAndTermGroup(
-            kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
-            kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
-        );
-        const hybridMatches = await kp.hybrid.searchConversationWithJoin(
-            restaurantIndex,
-            termGroup,
-        );
-        if (hybridMatches && hybridMatches.dataFrameMatches) {
-            printer.writeScoredMessages(
-                hybridMatches.dataFrameMatches,
-                restaurantIndex.conversation.messages,
-                25,
+        if (restaurantIndex) {
+            printer.writeInColor(
+                chalk.cyan,
+                "Searching for 50.804436 (nl), 5.8997846 (nl)",
             );
+            // Hybrid querying
+            let termGroup = kp.createAndTermGroup(
+                kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
+                kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
+            );
+            const hybridMatches = await kp.hybrid.searchConversationWithJoin(
+                restaurantIndex,
+                termGroup,
+            );
+            if (hybridMatches && hybridMatches.dataFrameMatches) {
+                printer.writeScoredMessages(
+                    hybridMatches.dataFrameMatches,
+                    restaurantIndex.conversation.messages,
+                    25,
+                );
+            }
         }
     }
     /*
@@ -325,11 +337,14 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
+        /*
         this.restaurantFacets = new kp.hybrid.DataFrame("restaurant", [
             ["rating", { type: "number" }],
             ["city", { type: "string" }],
             ["country", { type: "string" }],
         ]);
+        */
+        this.restaurantFacets = restaurantDb.restaurants;
         this.dataFrames = new Map<string, kp.hybrid.IDataFrame>([
             [this.locations.name, this.locations],
             [this.restaurantFacets.name, this.restaurantFacets],
