@@ -174,6 +174,7 @@ export class IndexManager {
                         index.state = "error";
                         resolve(undefined);
                     } else {
+                        // TODO: get notification of when the index is rebuilt so that we can notify users that they could/should reload their index instances
                         const idx: IndexData | undefined = message as IndexData;
                         IndexManager.getInstance().indexingServices.forEach(
                             (childProc, index) => {

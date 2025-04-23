@@ -159,7 +159,7 @@ if (
         buildIndex(images, true);
     }
 
-    async function buildIndex(images: ImageCollection, waitforPending: boolean = true) {
+    async function buildIndex(images: ImageCollection, waitforPending: boolean = false) {
 
         // wait for pending index building before rebuilding
         if (waitforPending && buildIndexPromise) {
