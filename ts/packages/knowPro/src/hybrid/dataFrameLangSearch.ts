@@ -120,7 +120,7 @@ export function createSearchQueryTranslator(
     );
 }
 
-export function compileHybridSearchFilter(
+function compileHybridSearchFilter(
     hybridConversation: IConversationHybrid,
     searchFilter: SearchFilter,
 ): SearchSelectExpr {
@@ -164,7 +164,7 @@ function extractDataFrameFacetTermsFromFilter(
     return dfFacets;
 }
 
-export function facetTermsToSearchTerms(
+function facetTermsToSearchTerms(
     facetTerms: FacetTerm[],
 ): PropertySearchTerm[] {
     return facetTerms.map((f) => {
