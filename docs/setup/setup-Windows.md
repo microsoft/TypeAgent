@@ -11,7 +11,7 @@ This is a list of step-by-step instructions to set up a Windows environment from
   - `corepack enable`
 - Clone and build:
   - Open command prompt
-  - `git clone https://github.com/microsoft/TypeAgent C:\src\TypeAgent`
+  - `git clone https://github.com/microsoft/TypeAgent C:\src\TypeAgent` (Note: you can clone this to any location and does not have to be C:\src)
   - `cd /d C:\src\TypeAgent\ts`
   - `pnpm setup`
   - `pnpm i`
