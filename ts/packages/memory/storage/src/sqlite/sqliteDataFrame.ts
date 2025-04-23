@@ -1,7 +1,60 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
+
+export class SqliteDataFrame implements kp.hybrid.IDataFrame {
+    constructor(
+        public db: sqlite.Database,
+        public name: string,
+        public columns: kp.hybrid.DataFrameColumns,
+    ) {}
+
+    public addRows(...rows: kp.hybrid.DataFrameRow[]): void {
+        throw new Error("Method not implemented.");
+    }
+
+    public getRow(
+        columnName: string,
+        columnValue: kp.hybrid.DataFrameValue,
+        op: kp.ComparisonOp,
+    ): kp.hybrid.DataFrameRow[] | undefined {
+        throw new Error("Method not implemented.");
+    }
+
+    public findRows(
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): kp.hybrid.DataFrameRow[] | undefined {
+        throw new Error("Method not implemented.");
+    }
+
+    public findSources(
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): kp.hybrid.RowSourceRef[] | undefined {
+        throw new Error("Method not implemented.");
+    }
+
+    [Symbol.iterator](): Iterator<kp.hybrid.DataFrameRow, any, any> {
+        throw new Error("Method not implemented.");
+    }
+
+    protected *queryRows<TRow extends SqliteDataFrameRow>(
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): IterableIterator<TRow> {
+        let sql = `SELECT sourceRef from ${this.name} WHERE `;
+        const where = dataFrameTermGroupToSql(searchTerms, this.columns);
+        sql += where;
+        const stmt = this.db.prepare(sql);
+        for (const row of stmt.iterate()) {
+            yield row as TRow;
+        }
+    }
+}
+
+export interface SqliteDataFrameRow {
+    sourceRef: string;
+}
 
 export function dataFrameTermGroupToSql(
     group: kp.hybrid.DataFrameTermGroup,
