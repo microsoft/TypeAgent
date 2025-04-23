@@ -26,9 +26,9 @@ export {
     mergeTopics,
 } from "./knowledge.js";
 
-export * as querySchema from "./searchQuerySchema.js";
 export * from "./dateTimeSchema.js";
+export * as querySchema from "./searchQuerySchema.js";
 export * from "./searchQueryTranslator.js";
 
 export * from "./storage.js";
-export * from "./dataFrame.js";
+export * as hybrid from "./hybrid/index.js";
