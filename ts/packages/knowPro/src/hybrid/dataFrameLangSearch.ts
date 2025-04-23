@@ -8,7 +8,7 @@ import {
     SearchTermGroup,
     WhenFilter,
 } from "../interfaces.js";
-import { FacetTerm, SearchExpr, SearchFilter } from "../searchQuerySchema.js";
+import * as querySchema from "../searchQuerySchema.js";
 import { DataFrameCollection, IConversationHybrid } from "./dataFrame.js";
 import {
     DataFrameCompiler,
@@ -18,7 +18,6 @@ import * as search from "../search.js";
 import { loadSchemaFiles } from "typeagent";
 import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import * as querySchema from "../searchQuerySchema.js";
 import {
     compileSearchFilter,
     SearchQueryTranslator,
@@ -31,7 +30,7 @@ import { createPropertySearchTerm } from "../searchLib.js";
 
 export async function searchConversationMessages(
     conversation: IConversationHybrid,
-    searchExpr: SearchExpr,
+    searchExpr: querySchema.SearchExpr,
     options?: search.SearchOptions | undefined,
 ): Promise<ScoredMessageOrdinal[][]> {
     const messageMatches: ScoredMessageOrdinal[][] = [];
@@ -49,9 +48,9 @@ export async function searchConversationMessages(
     return messageMatches;
 }
 
-export async function searchConversationWithFilter(
+async function searchConversationWithFilter(
     conversation: IConversationHybrid,
-    searchFilter: SearchFilter,
+    searchFilter: querySchema.SearchFilter,
     options?: search.SearchOptions | undefined,
     rawQuery?: string,
 ): Promise<search.ConversationSearchResult | undefined> {
@@ -125,7 +124,7 @@ export function createSearchQueryTranslator(
 
 function compileHybridSearchFilter(
     hybridConversation: IConversationHybrid,
-    searchFilter: SearchFilter,
+    searchFilter: querySchema.SearchFilter,
 ): SearchSelectExpr {
     const dfTerms = extractDataFrameFacetTermsFromFilter(
         hybridConversation.dataFrames,
@@ -142,9 +141,9 @@ function compileHybridSearchFilter(
 
 function extractDataFrameFacetTermsFromFilter(
     dataFrames: DataFrameCollection,
-    searchFilter: SearchFilter,
-    dfFacets?: FacetTerm[],
-): FacetTerm[] {
+    searchFilter: querySchema.SearchFilter,
+    dfFacets?: querySchema.FacetTerm[],
+): querySchema.FacetTerm[] {
     dfFacets ??= [];
     if (searchFilter.entitySearchTerms) {
         for (const entityTerm of searchFilter.entitySearchTerms) {
@@ -168,7 +167,7 @@ function extractDataFrameFacetTermsFromFilter(
 }
 
 function facetTermsToSearchTerms(
-    facetTerms: FacetTerm[],
+    facetTerms: querySchema.FacetTerm[],
 ): PropertySearchTerm[] {
     return facetTerms.map((f) => {
         return createPropertySearchTerm(f.facetName, f.facetValue);
