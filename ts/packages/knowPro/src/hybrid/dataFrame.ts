@@ -7,16 +7,11 @@ import {
     setIntersect,
     setUnion,
 } from "../collections.js";
-import {
-    DataFrameCompiler,
-    getDataFrameAndColumnName,
-} from "./dataFrameQuery.js";
+import { DataFrameCompiler } from "./dataFrameQuery.js";
 import {
     IConversation,
     IMessage,
-    PropertySearchTerm,
     ScoredMessageOrdinal,
-    SearchSelectExpr,
     SearchTerm,
     SearchTermGroup,
     TextRange,
@@ -29,9 +24,6 @@ import {
     searchConversation,
     SearchOptions,
 } from "../search.js";
-import { createPropertySearchTerm } from "../searchLib.js";
-import { FacetTerm, SearchFilter, SearchQuery } from "../searchQuerySchema.js";
-import { compileSearchFilter } from "../searchQueryTranslator.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -311,23 +303,6 @@ export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
     get dataFrames(): DataFrameCollection;
 }
 
-export function compileHybridSearchFilter(
-    hybridConversation: IConversationHybrid,
-    searchFilter: SearchFilter,
-): SearchSelectExpr {
-    const dfTerms = extractDataFrameFacetTermsFromFilter(
-        hybridConversation.dataFrames,
-        searchFilter,
-    );
-    const selectExpr = compileSearchFilter(
-        hybridConversation.conversation,
-        searchFilter,
-    );
-    selectExpr.searchTermGroup.terms.push(...facetTermsToSearchTerms(dfTerms));
-    selectExpr.when ??= {};
-    return selectExpr;
-}
-
 export type HybridSearchResults = {
     conversationMatches?: ConversationSearchResult | undefined;
     dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
@@ -390,68 +365,4 @@ export function searchDataFrames(
         }
     }
     return dataFrameMatches;
-}
-
-function extractDataFrameFacetTermsFromFilter(
-    dataFrames: DataFrameCollection,
-    searchFilter: SearchFilter,
-    dfFacets?: FacetTerm[],
-): FacetTerm[] {
-    dfFacets ??= [];
-    if (searchFilter.entitySearchTerms) {
-        for (const entityTerm of searchFilter.entitySearchTerms) {
-            if (entityTerm.facets) {
-                const facets = entityTerm.facets;
-                entityTerm.facets = [];
-                for (const ff of facets) {
-                    const [dfName, colName] = getDataFrameAndColumnName(
-                        ff.facetName,
-                    );
-                    if (!dfName || !dataFrames.has(dfName) || !colName) {
-                        entityTerm.facets.push(ff);
-                    } else {
-                        dfFacets.push(ff);
-                    }
-                }
-            }
-        }
-    }
-    return dfFacets;
-}
-
-export function extractDataFrameFacetTerms(
-    dataFrames: DataFrameCollection,
-    searchFilters: SearchFilter[],
-    dfFacets?: FacetTerm[],
-): FacetTerm[] {
-    dfFacets ??= [];
-    for (const searchFilter of searchFilters) {
-        extractDataFrameFacetTermsFromFilter(
-            dataFrames,
-            searchFilter,
-            dfFacets,
-        );
-    }
-    return dfFacets;
-}
-
-export function extractDataFrameTerms(
-    dataFrames: DataFrameCollection,
-    query: SearchQuery,
-): FacetTerm[][] {
-    const allDfTerms: FacetTerm[][] = [];
-    for (const expr of query.searchExpressions) {
-        const dfTerms: FacetTerm[] = [];
-        extractDataFrameFacetTerms(dataFrames, expr.filters, dfTerms);
-        allDfTerms.push(dfTerms);
-    }
-    return allDfTerms;
-}
-
-export function facetTermsToSearchTerms(
-    facetTerms: FacetTerm[],
-): PropertySearchTerm[] {
-    return facetTerms.map((f) => {
-        return createPropertySearchTerm(f.facetName, f.facetValue);
-    });
 }

@@ -2,19 +2,28 @@
 // Licensed under the MIT License.
 
 import {
+    PropertySearchTerm,
     ScoredMessageOrdinal,
+    SearchSelectExpr,
     SearchTermGroup,
     WhenFilter,
 } from "../interfaces.js";
-import { SearchExpr, SearchFilter } from "../searchQuerySchema.js";
-import { compileHybridSearchFilter, IConversationHybrid } from "./dataFrame.js";
-import { DataFrameCompiler } from "./dataFrameQuery.js";
+import { FacetTerm, SearchExpr, SearchFilter } from "../searchQuerySchema.js";
+import { DataFrameCollection, IConversationHybrid } from "./dataFrame.js";
+import {
+    DataFrameCompiler,
+    getDataFrameAndColumnName,
+} from "./dataFrameQuery.js";
 import * as search from "../search.js";
 import { loadSchema } from "typeagent";
 import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import * as querySchema from "../searchQuerySchema.js";
-import { SearchQueryTranslator } from "../searchQueryTranslator.js";
+import {
+    compileSearchFilter,
+    SearchQueryTranslator,
+} from "../searchQueryTranslator.js";
+import { createPropertySearchTerm } from "../searchLib.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -109,4 +118,56 @@ export function createSearchQueryTranslator(
             typeName,
         ),
     );
+}
+
+export function compileHybridSearchFilter(
+    hybridConversation: IConversationHybrid,
+    searchFilter: SearchFilter,
+): SearchSelectExpr {
+    const dfTerms = extractDataFrameFacetTermsFromFilter(
+        hybridConversation.dataFrames,
+        searchFilter,
+    );
+    const selectExpr = compileSearchFilter(
+        hybridConversation.conversation,
+        searchFilter,
+    );
+    selectExpr.searchTermGroup.terms.push(...facetTermsToSearchTerms(dfTerms));
+    selectExpr.when ??= {};
+    return selectExpr;
+}
+
+function extractDataFrameFacetTermsFromFilter(
+    dataFrames: DataFrameCollection,
+    searchFilter: SearchFilter,
+    dfFacets?: FacetTerm[],
+): FacetTerm[] {
+    dfFacets ??= [];
+    if (searchFilter.entitySearchTerms) {
+        for (const entityTerm of searchFilter.entitySearchTerms) {
+            if (entityTerm.facets) {
+                const facets = entityTerm.facets;
+                entityTerm.facets = [];
+                for (const ff of facets) {
+                    const [dfName, colName] = getDataFrameAndColumnName(
+                        ff.facetName,
+                    );
+                    if (!dfName || !dataFrames.has(dfName) || !colName) {
+                        entityTerm.facets.push(ff);
+                    } else {
+                        dfFacets.push(ff);
+                    }
+                }
+            }
+        }
+    }
+    return dfFacets;
+}
+
+export function facetTermsToSearchTerms(
+    facetTerms: FacetTerm[],
+): PropertySearchTerm[] {
+    return facetTerms.map((f) => {
+        return createPropertySearchTerm(f.facetName, f.facetValue);
+    });
 }
