@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { removeDir } from "../src/objStream";
-import { createWorkQueueFolder } from "../src/storage/workQueue";
-import { testDirectoryPath } from "./common";
+import { removeDir } from "../src/objStream.js";
+import { createWorkQueueFolder } from "../src/storage/workQueue.js";
+import { testDirectoryPath } from "./common.js";
 
 describe("storage.workQueue", () => {
     const timeoutMs = 1000 * 60 * 5;

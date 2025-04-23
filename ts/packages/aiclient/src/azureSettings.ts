@@ -5,9 +5,9 @@ import {
     AuthTokenProvider,
     AzureTokenScopes,
     createAzureTokenProvider,
-} from "./auth";
-import { getEnvSetting, getIntFromEnv } from "./common";
-import { CommonApiSettings, EnvVars, ModelType } from "./openai";
+} from "./auth.js";
+import { getEnvSetting, getIntFromEnv } from "./common.js";
+import { CommonApiSettings, EnvVars, ModelType } from "./openai.js";
 
 export type AzureApiSettings = CommonApiSettings & {
     provider: "azure";

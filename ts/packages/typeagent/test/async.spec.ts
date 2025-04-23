@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { callWithRetry } from "../src/async";
+import { callWithRetry } from "../src/async.js";
 
 describe("async", () => {
     const timeoutMs = 1000 * 5 * 60;

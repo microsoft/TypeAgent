@@ -9,14 +9,14 @@ import {
     readJsonFile,
     removeFile,
     writeJsonFile,
-} from "../objStream";
-import { asyncArray } from "..";
+} from "../objStream.js";
+import { asyncArray } from "../index.js";
 import {
     createFileNameGenerator,
     generateTimestampString,
-} from "./objectFolder";
-import { slices } from "../lib/array";
-import { pause } from "../async";
+} from "./objectFolder.js";
+import { slices } from "../lib/array.js";
+import { pause } from "../async.js";
 
 export interface WorkQueue {
     onError?: (err: any) => void;

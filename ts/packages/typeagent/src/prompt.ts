@@ -4,9 +4,9 @@
 // Module for working with Prompts and Prompt Sections
 
 import { PromptSection } from "typechat";
-import { MessageSourceRole } from "./message";
-import { toJsonLine } from "./objStream";
-import { CircularArray } from "./lib/array";
+import { MessageSourceRole } from "./message.js";
+import { toJsonLine } from "./objStream.js";
+import { CircularArray } from "./lib/array.js";
 
 /**
  * Create Prompt Sections from given strings

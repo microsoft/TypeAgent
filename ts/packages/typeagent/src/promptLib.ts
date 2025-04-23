@@ -6,8 +6,8 @@
  */
 
 import { PromptSection } from "typechat";
-import { MessageSourceRole } from "./message";
-import { dateTime } from ".";
+import { MessageSourceRole } from "./message.js";
+import { dateTime } from "./index.js";
 
 /**
  * Prompt that tells the model about the current date and time.

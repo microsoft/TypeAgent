@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { collections } from ".";
-import { Slice, slices } from "./lib";
+import { collections } from "./index.js";
+import { Slice, slices } from "./lib/array.js";
 
 export type ProcessAsync<T, TResult> = (
     item: T,
