@@ -17,8 +17,11 @@ export async function createKnowproDataFrameCommands(
     printer: KnowProPrinter,
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
+    commands.kpDataFrameImport = importDataFrame;
     commands.kpDataFrameIndex = indexDataFrame;
     commands.kpDataFrameSearch = searchDataFrame;
+    commands.kpDataFrameList = listFrames;
+    //commands.kpDataFrameTest = testDb;
 
     await ensureDir("/data/testChat/knowpro/restaurants");
     let db: RestaurantDb | undefined;
@@ -28,9 +31,9 @@ export async function createKnowproDataFrameCommands(
         "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
 
-    async function indexDataFrame(args: string[]) {
+    async function importDataFrame(args: string[]) {
         try {
-            ensureIndex();
+            ensureIndex(true);
             //
             // Load some restaurants into a collection
             //
@@ -39,19 +42,36 @@ export async function createKnowproDataFrameCommands(
                 await loadThings<Restaurant>(filePath);
 
             importRestaurants(restaurantIndex!, restaurantData, numRestaurants);
-            //
-            // Build index
-            //
-            printer.writeHeading("Building index");
-            await buildIndex(restaurantIndex!);
-            await testHybridQuery();
         } catch (ex) {
             printer.writeError(`${ex}`);
         }
     }
 
+    async function indexDataFrame(args: string[]) {
+        try {
+            await importDataFrame(args);
+            //
+            // Build index
+            //
+            printer.writeHeading("Building index");
+            await buildIndex(restaurantIndex!);
+        } catch (ex) {
+            printer.writeError(`${ex}`);
+        }
+    }
+
+    async function listFrames(args: string[]) {
+        if (restaurantIndex) {
+            for (const r of restaurantIndex.restaurantFacets) {
+                printer.writeJson(r.record);
+            }
+        }
+    }
+
     async function searchDataFrame(args: string[]) {
-        ensureIndex();
+        if (!restaurantIndex) {
+            ensureIndex(false);
+        }
 
         const nlpQuery = args[0] ?? query;
         // NLP querying
@@ -77,13 +97,14 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
-    function ensureIndex() {
-        if (db !== undefined) {
-            db.close();
+    function ensureIndex(newDb: boolean) {
+        let filePath = "/data/testChat/knowpro/restaurants/restaurants.db";
+        if (newDb) {
+            db?.close();
+            db = new RestaurantDb(filePath);
+        } else if (!db) {
+            db = new RestaurantDb(filePath);
         }
-        db = new RestaurantDb(
-            "/data/testChat/knowpro/restaurants/restaurants.db",
-        );
         restaurantIndex = new RestaurantIndex(db);
     }
 
@@ -124,6 +145,36 @@ export async function createKnowproDataFrameCommands(
         printer.writeJsonInColor(chalk.gray, restaurant.facets);
     }
 
+    /*
+    async function testDb() {
+        if (db) {
+            let rows = db.restaurants.getRow(
+                "city",
+                "amsterdam",
+                kp.ComparisonOp.Eq,
+            );
+            if (rows) {
+                printer.writeJson(rows);
+            }
+            let sources = db.restaurants.findSources({
+                booleanOp: "and",
+                dataFrame: db.restaurants,
+                terms: [
+                    {
+                        columnName: "city",
+                        columnValue: { term: { text: "amsterdam" } },
+                    },
+                    {
+                        columnName: "country",
+                        columnValue: { term: { text: "nl" } },
+                    },
+                ],
+            });
+            if (sources) {
+                printer.writeJson(sources);
+            }
+        }
+    }
     async function testHybridQuery() {
         if (restaurantIndex) {
             printer.writeInColor(
@@ -146,18 +197,6 @@ export async function createKnowproDataFrameCommands(
                     25,
                 );
             }
-        }
-    }
-    /*
-    function writeRows(
-        rows: kp.DataFrameRow[],
-        restaurantCollection: HybridRestaurantCollection,
-    ) {
-        printer.writeJson(rows);
-        const descriptions = restaurantCollection.getDescriptionsFromRows(rows);
-        if (descriptions.length > 0) {
-            printer.writeLine("Descriptions");
-            printer.writeLines(descriptions);
         }
     }
 

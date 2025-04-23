@@ -67,7 +67,7 @@ export class GeoTable implements kp.hybrid.IDataFrame {
     ): kp.hybrid.DataFrameRow[] | undefined {
         let sql = `SELECT * from ${this.name} WHERE ${columnName} ${ms.sqlite.comparisonOpToSql(op)} ?`;
         let stmt = this.db.prepare(sql);
-        let row = stmt.get(ms.sqlite.valueToSql(columnValue));
+        let row = stmt.get(columnValue);
         if (row === undefined) {
             return undefined;
         }

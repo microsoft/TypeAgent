@@ -48,12 +48,12 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         columnValue: kp.hybrid.DataFrameValue,
         op: kp.ComparisonOp,
     ): kp.hybrid.DataFrameRow[] | undefined {
-        let stmt = this.sqlGet(columnName, op);
-        let row = stmt.get(valueToSql(columnValue));
-        if (row === undefined) {
-            return undefined;
+        const stmt = this.sqlGet(columnName, op);
+        let rows: kp.hybrid.DataFrameRow[] = [];
+        for (const row of stmt.iterate(columnValue)) {
+            rows.push(this.toDataFrameRow(row));
         }
-        return [this.toDataFrameRow(row)];
+        return rows;
     }
 
     public findRows(
@@ -188,10 +188,6 @@ export function searchTermToSql(
         return valueText;
     }
     return `'${valueText}'`;
-}
-
-export function valueToSql(value: kp.hybrid.DataFrameValue) {
-    return typeof value === "number" ? value : `${value}`;
 }
 
 export function boolOpToSql(group: kp.hybrid.DataFrameTermGroup): string {
