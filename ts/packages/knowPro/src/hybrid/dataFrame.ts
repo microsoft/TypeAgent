@@ -24,6 +24,7 @@ export type DataFrameValueType = "number" | "string";
 export type DataFrameColumnDef = {
     type: DataFrameValueType;
     optional?: boolean | undefined;
+    index?: boolean | undefined;
 };
 
 export type DataFrameColumns = ReadonlyMap<string, DataFrameColumnDef>;

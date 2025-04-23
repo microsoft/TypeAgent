@@ -143,8 +143,15 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
     }
 
     private ensureDb() {
-        let schemaSql = dataFrameToSqlSchema(this.name, this.columns);
+        let schemaSql = dataFrameToSchemaSql(this.name, this.columns);
+        if (!schemaSql) {
+            throw new Error(`No schema for Sqlite data frame ${this.name}`);
+        }
         this.db.exec(schemaSql);
+        let indexSql = dataFrameToIndexSql(this.name, this.columns);
+        if (indexSql) {
+            this.db.exec(indexSql);
+        }
     }
 }
 
@@ -217,7 +224,7 @@ export function comparisonOpToSql(op: kp.ComparisonOp): string {
     }
 }
 
-export function dataFrameToSqlSchema(
+export function dataFrameToSchemaSql(
     dfName: string,
     colDefs: kp.hybrid.DataFrameColumns,
 ): string {
@@ -228,13 +235,29 @@ export function dataFrameToSqlSchema(
     columns.push("rowId INTEGER PRIMARY KEY AUTOINCREMENT");
     columns.push("sourceRef TEXT NOT NULL");
     for (const [columnName, columnDef] of colDefs) {
-        columns.push(columnDefToSqlSchema(columnName, columnDef));
+        columns.push(columnDefToSchemaSql(columnName, columnDef));
     }
     let schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (\n${columns.join(", \n")}\n)`;
     return schemaSql;
 }
 
-function columnDefToSqlSchema(
+export function dataFrameToIndexSql(
+    dfName: string,
+    colDefs: kp.hybrid.DataFrameColumns,
+): string {
+    if (colDefs.size === 0) {
+        return "";
+    }
+    let indexes: string[] = [];
+    for (const [columnName, columnDef] of colDefs) {
+        if (columnDef.index) {
+            indexes.push(columnDefToIndexSql(dfName, columnName, columnDef));
+        }
+    }
+    return indexes.join("\n");
+}
+
+function columnDefToSchemaSql(
     columnName: string,
     columnDef: kp.hybrid.DataFrameColumnDef,
 ): string {
@@ -248,5 +271,14 @@ function columnDefToSqlSchema(
         sql += " NOT NULL";
     }
 
+    return sql;
+}
+
+function columnDefToIndexSql(
+    dfName: string,
+    columnName: string,
+    columnDef: kp.hybrid.DataFrameColumnDef,
+) {
+    let sql = `CREATE INDEX IF NOT EXISTS idx_${columnName} ON ${dfName} (${columnName});`;
     return sql;
 }

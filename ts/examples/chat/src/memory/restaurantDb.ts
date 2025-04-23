@@ -155,8 +155,8 @@ export class RestaurantsTable extends ms.sqlite.SqliteDataFrame {
     constructor(db: sqlite.Database) {
         super(db, "restaurant", [
             ["rating", { type: "number" }],
-            ["city", { type: "string" }],
-            ["country", { type: "string" }],
+            ["city", { type: "string", index: true }],
+            ["country", { type: "string", index: true }],
         ]);
     }
 }
