@@ -3,22 +3,32 @@
 
 import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
+import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
 export class SqliteDataFrame<TRow extends SqliteDataFrameRow>
     implements kp.hybrid.IDataFrame
 {
+    private sql_add: sqlite.Statement;
     private sql_getAll: sqlite.Statement;
 
     constructor(
         public db: sqlite.Database,
         public name: string,
         public columns: kp.hybrid.DataFrameColumns,
+        ensureDb: boolean = true,
     ) {
+        if (ensureDb) {
+            this.ensureDb();
+        }
+        this.sql_add = this.sqlAdd();
         this.sql_getAll = this.sqlGetAll();
     }
 
     public addRows(...rows: kp.hybrid.DataFrameRow[]): void {
-        throw new Error("Method not implemented.");
+        for (const row of rows) {
+            const rowValues = this.getAddValues(row);
+            this.sql_add.run(...rowValues);
+        }
     }
 
     public getRow(
@@ -26,8 +36,7 @@ export class SqliteDataFrame<TRow extends SqliteDataFrameRow>
         columnValue: kp.hybrid.DataFrameValue,
         op: kp.ComparisonOp,
     ): kp.hybrid.DataFrameRow[] | undefined {
-        let sql = `SELECT * from ${this.name} WHERE ${columnName} ${comparisonOpToSql(op)} ?`;
-        let stmt = this.db.prepare(sql);
+        let stmt = this.sqlGet(columnName, op);
         let row = stmt.get(valueToSql(columnValue));
         if (row === undefined) {
             return undefined;
@@ -88,14 +97,48 @@ export class SqliteDataFrame<TRow extends SqliteDataFrameRow>
         return JSON.parse(row.sourceRef);
     }
 
-    /*
+    private getAddValues(row: kp.hybrid.DataFrameRow) {
+        let values: any[] = [];
+        values.push(this.serializeSourceRef(row.sourceRef));
+        const colNames = this.prepareColumnNames(Object.keys(row.record));
+        for (const colName of colNames) {
+            values.push(row.record[colName]);
+        }
+        return values;
+    }
+
+    private getColumnNames() {
+        const colNames = this.prepareColumnNames(this.columns.keys());
+        return ["sourceRef", ...colNames];
+    }
+
+    private prepareColumnNames(names: IterableIterator<string> | string[]) {
+        const colNames = [...names].sort();
+        return colNames;
+    }
+
     private serializeSourceRef(sr: kp.hybrid.RowSourceRef) {
         return JSON.stringify(sr);
     }
-    */
+
+    private sqlGet(columnName: string, op: kp.ComparisonOp) {
+        let sql = `SELECT * from ${this.name} WHERE ${columnName} ${comparisonOpToSql(op)} ?`;
+        return this.db.prepare(sql);
+    }
 
     private sqlGetAll() {
         return this.db.prepare(`SELECT * FROM ${this.name}`);
+    }
+
+    private sqlAdd() {
+        const columnNames = this.getColumnNames();
+        const sql = `INSERT INTO ${this.name} (${columnNames.join(", ")}) VALUES ${sql_makeInPlaceholders(columnNames.length)}`;
+        return this.db.prepare(sql);
+    }
+
+    private ensureDb() {
+        let schemaSql = dataFrameToSqlSchema(this.name, this.columns);
+        this.db.exec(schemaSql);
     }
 }
 
@@ -170,4 +213,37 @@ export function comparisonOpToSql(op: kp.ComparisonOp): string {
         case kp.ComparisonOp.Neq:
             return "!=";
     }
+}
+
+export function dataFrameToSqlSchema(
+    dfName: string,
+    colDefs: kp.hybrid.DataFrameColumns,
+) {
+    let schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (
+        rowId INTEGER PRIMARY KEY AUTOINCREMENT,
+        sourceRef TEXT NOT NULL
+    `;
+    for (const [columnName, columnDef] of colDefs) {
+        schemaSql += ",\n";
+        schemaSql += columnDefToSqlSchema(columnName, columnDef);
+    }
+    schemaSql += `\n)`;
+    return schemaSql;
+}
+
+function columnDefToSqlSchema(
+    columnName: string,
+    columnDef: kp.hybrid.DataFrameColumnDef,
+): string {
+    let sql = columnName;
+    if (columnDef.type === "string") {
+        sql += " TEXT";
+    } else {
+        sql += " REAL";
+    }
+    if (columnDef.optional !== undefined && columnDef.optional === false) {
+        sql += " NOT NULL";
+    }
+
+    return sql.toUpperCase();
 }
