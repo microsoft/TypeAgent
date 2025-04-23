@@ -200,19 +200,6 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
-    function testGeo(restaurantCollection: HybridRestaurantCollection) {
-        let latitude = "50.804436 (nl)";
-        let rows = restaurantCollection.locations.getRow(
-            "latitude",
-            latitude,
-            kp.ComparisonOp.Eq,
-        );
-        if (rows) {
-            printer.writeLine("Geo matches");
-            writeRows(rows, restaurantCollection);
-        }
-    }
-
     function testDb(
         db: RestaurantDb,
         restaurantCollection: HybridRestaurantCollection,
@@ -238,7 +225,22 @@ export async function createKnowproDataFrameCommands(
             );
         }
     }
+    function testGeo() {
+        if (restaurantIndex) {
+            let latitude = "50.804436 (nl)";
+            let rows = restaurantIndex.locations.getRow(
+                "latitude",
+                latitude,
+                kp.ComparisonOp.Eq,
+            );
+            if (rows) {
+                printer.writeLine("Geo matches");
+                printer.writeJson(rows);
+            }
+        }
+    }
         */
+
     return;
 }
 
@@ -372,17 +374,18 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
 
     constructor(public restaurantDb: RestaurantDb) {
         this.textIndex = new RestaurantStructuredRagIndex();
+        /*
         this.locations = new kp.hybrid.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
-        /*
         this.restaurantFacets = new kp.hybrid.DataFrame("restaurant", [
             ["rating", { type: "number" }],
             ["city", { type: "string" }],
             ["country", { type: "string" }],
         ]);
         */
+        this.locations = restaurantDb.geo;
         this.restaurantFacets = restaurantDb.restaurants;
         this.dataFrames = new Map<string, kp.hybrid.IDataFrame>([
             [this.locations.name, this.locations],
