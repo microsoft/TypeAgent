@@ -5,7 +5,7 @@ import { fetchWithRetry, openai } from "aiclient";
 import { CommandHandler, ProgressBar } from "interactive-app";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { Result, success } from "typechat";
-import { readAllText } from "typeagent";
+import { ensureDir, readAllText } from "typeagent";
 import * as kp from "knowpro";
 import { createIndexingEventHandler } from "./knowproCommon.js";
 import chalk from "chalk";
@@ -20,6 +20,7 @@ export async function createKnowproDataFrameCommands(
     commands.kpDataFrameIndex = indexDataFrame;
     commands.kpDataFrameSearch = searchDataFrame;
 
+    await ensureDir("/data/testChat/knowpro/restaurants");
     const db = new RestaurantDb(
         "/data/testChat/knowpro/restaurants/restaurants.db",
     );
@@ -316,7 +317,6 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
     public dataFrames: kp.hybrid.DataFrameCollection;
     public locations: kp.hybrid.IDataFrame;
     public restaurantFacets: kp.hybrid.IDataFrame;
-
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor(public restaurantDb: RestaurantDb) {

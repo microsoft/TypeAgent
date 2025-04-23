@@ -5,18 +5,28 @@ import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
-export class SqliteDataFrame<TRow extends SqliteDataFrameRow>
-    implements kp.hybrid.IDataFrame
-{
+export class SqliteDataFrame implements kp.hybrid.IDataFrame {
+    public columns: kp.hybrid.DataFrameColumns;
+
     private sql_add: sqlite.Statement;
     private sql_getAll: sqlite.Statement;
 
     constructor(
         public db: sqlite.Database,
         public name: string,
-        public columns: kp.hybrid.DataFrameColumns,
+        columns:
+            | kp.hybrid.DataFrameColumns
+            | [string, kp.hybrid.DataFrameColumnDef][],
         ensureDb: boolean = true,
     ) {
+        if (Array.isArray(columns)) {
+            this.columns = new Map<string, kp.hybrid.DataFrameColumnDef>(
+                columns,
+            );
+        } else {
+            this.columns = columns;
+        }
+
         if (ensureDb) {
             this.ensureDb();
         }
@@ -132,7 +142,7 @@ export class SqliteDataFrame<TRow extends SqliteDataFrameRow>
 
     private sqlAdd() {
         const columnNames = this.getColumnNames();
-        const sql = `INSERT INTO ${this.name} (${columnNames.join(", ")}) VALUES ${sql_makeInPlaceholders(columnNames.length)}`;
+        const sql = `INSERT INTO ${this.name} (${columnNames.join(", ")}) VALUES (${sql_makeInPlaceholders(columnNames.length)})`;
         return this.db.prepare(sql);
     }
 
@@ -218,16 +228,17 @@ export function comparisonOpToSql(op: kp.ComparisonOp): string {
 export function dataFrameToSqlSchema(
     dfName: string,
     colDefs: kp.hybrid.DataFrameColumns,
-) {
-    let schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (
-        rowId INTEGER PRIMARY KEY AUTOINCREMENT,
-        sourceRef TEXT NOT NULL
-    `;
-    for (const [columnName, columnDef] of colDefs) {
-        schemaSql += ",\n";
-        schemaSql += columnDefToSqlSchema(columnName, columnDef);
+): string {
+    if (colDefs.size === 0) {
+        return "";
     }
-    schemaSql += `\n)`;
+    let columns: string[] = [];
+    columns.push("rowId INTEGER PRIMARY KEY AUTOINCREMENT");
+    columns.push("sourceRef TEXT NOT NULL");
+    for (const [columnName, columnDef] of colDefs) {
+        columns.push(columnDefToSqlSchema(columnName, columnDef));
+    }
+    let schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (\n${columns.join(", \n")}\n)`;
     return schemaSql;
 }
 
@@ -245,5 +256,5 @@ function columnDefToSqlSchema(
         sql += " NOT NULL";
     }
 
-    return sql.toUpperCase();
+    return sql;
 }

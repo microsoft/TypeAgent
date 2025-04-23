@@ -8,10 +8,12 @@ import * as ms from "memory-storage";
 export class RestaurantDb {
     private db: sqlite.Database;
     public geo: GeoTable;
+    public restaurants: RestaurantsTable;
     public dataFrames: kp.hybrid.DataFrameCollection;
 
     constructor(dbPath: string) {
         this.db = ms.sqlite.createDatabase(dbPath, true);
+        this.restaurants = new RestaurantsTable(this.db);
         this.geo = new GeoTable(this.db);
         this.dataFrames = new Map<string, kp.hybrid.IDataFrame>([
             [this.geo.name, this.geo],
@@ -148,3 +150,13 @@ type GeoRow = {
     latitude?: string | undefined;
     longitude?: string | undefined;
 };
+
+export class RestaurantsTable extends ms.sqlite.SqliteDataFrame {
+    constructor(db: sqlite.Database) {
+        super(db, "restaurant", [
+            ["rating", { type: "number" }],
+            ["city", { type: "string" }],
+            ["country", { type: "string" }],
+        ]);
+    }
+}
