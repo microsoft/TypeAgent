@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
 import * as ms from "memory-storage";
@@ -7,12 +8,12 @@ import * as ms from "memory-storage";
 export class RestaurantDb {
     private db: sqlite.Database;
     public geo: GeoTable;
-    public dataFrames: kp.DataFrameCollection;
+    public dataFrames: kp.hybrid.DataFrameCollection;
 
     constructor(dbPath: string) {
         this.db = ms.sqlite.createDatabase(dbPath, true);
         this.geo = new GeoTable(this.db);
-        this.dataFrames = new Map<string, kp.IDataFrame>([
+        this.dataFrames = new Map<string, kp.hybrid.IDataFrame>([
             [this.geo.name, this.geo],
         ]);
     }
@@ -24,15 +25,15 @@ export class RestaurantDb {
     }
 }
 
-export class GeoTable implements kp.IDataFrame {
+export class GeoTable implements kp.hybrid.IDataFrame {
     public readonly name;
-    public readonly columns: kp.DataFrameColumns;
+    public readonly columns: kp.hybrid.DataFrameColumns;
     private sql_getAll: sqlite.Statement;
     private sql_add: sqlite.Statement;
 
     constructor(public db: sqlite.Database) {
         this.name = "geo";
-        this.columns = new Map<string, kp.DataFrameColumnDef>([
+        this.columns = new Map<string, kp.hybrid.DataFrameColumnDef>([
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
@@ -41,7 +42,7 @@ export class GeoTable implements kp.IDataFrame {
         this.sql_add = this.sqlAdd();
     }
 
-    public addRows(...rows: kp.DataFrameRow[]): void {
+    public addRows(...rows: kp.hybrid.DataFrameRow[]): void {
         for (const row of rows) {
             const geoRow: GeoRow = {
                 geoId: 0,
@@ -59,9 +60,9 @@ export class GeoTable implements kp.IDataFrame {
 
     public getRow(
         columnName: string,
-        columnValue: kp.DataFrameValue,
+        columnValue: kp.hybrid.DataFrameValue,
         op: kp.ComparisonOp,
-    ): kp.DataFrameRow[] | undefined {
+    ): kp.hybrid.DataFrameRow[] | undefined {
         let sql = `SELECT * from ${this.name} WHERE ${columnName} ${ms.sqlite.comparisonOpToSql(op)} ?`;
         let stmt = this.db.prepare(sql);
         let row = stmt.get(ms.sqlite.valueToSql(columnValue));
@@ -72,16 +73,16 @@ export class GeoTable implements kp.IDataFrame {
     }
 
     findRows(
-        searchTerms: kp.DataFrameTermGroup,
-    ): kp.DataFrameRow[] | undefined {
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): kp.hybrid.DataFrameRow[] | undefined {
         throw new Error("Method not implemented.");
     }
 
     public findSources(
-        searchTerms: kp.DataFrameTermGroup,
-    ): kp.RowSourceRef[] | undefined {
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): kp.hybrid.RowSourceRef[] | undefined {
         //throw new Error("Method not implemented.");
-        const sources: kp.RowSourceRef[] = [];
+        const sources: kp.hybrid.RowSourceRef[] = [];
         const rows = this.queryRows(searchTerms);
         for (const geoRow of rows) {
             sources.push(JSON.parse(geoRow.sourceRef));
@@ -89,7 +90,7 @@ export class GeoTable implements kp.IDataFrame {
         return sources;
     }
 
-    public *[Symbol.iterator](): Iterator<kp.DataFrameRow, any, any> {
+    public *[Symbol.iterator](): Iterator<kp.hybrid.DataFrameRow, any, any> {
         for (let row of this.sql_getAll.iterate()) {
             const value = this.toDataFrameRow(row as GeoRow);
             if (value !== undefined) {
@@ -98,7 +99,7 @@ export class GeoTable implements kp.IDataFrame {
         }
     }
 
-    private toDataFrameRow(row: GeoRow): kp.DataFrameRow {
+    private toDataFrameRow(row: GeoRow): kp.hybrid.DataFrameRow {
         return {
             sourceRef: JSON.parse(row.sourceRef),
             record: row,
@@ -106,7 +107,7 @@ export class GeoTable implements kp.IDataFrame {
     }
 
     private *queryRows(
-        searchTerms: kp.DataFrameTermGroup,
+        searchTerms: kp.hybrid.DataFrameTermGroup,
     ): IterableIterator<GeoRow> {
         let sql = `SELECT sourceRef from ${this.name} WHERE `;
         const where = ms.sqlite.dataFrameTermGroupToSql(
@@ -147,25 +148,3 @@ type GeoRow = {
     latitude?: string | undefined;
     longitude?: string | undefined;
 };
-
-/*
-type AddressRow = {
-    addressId: number;
-    sourceRef: string;
-    streetAddress?: string;
-    postalCode?: string;
-    addressLocality?: string;
-};
-*/
-
-export type NumberAndText = {
-    number: number;
-    text: string;
-};
-
-export function parseNumberAndText(str: string): NumberAndText {
-    const match = str.match(/^([\d.]+)\s*(.*)$/);
-    return match
-        ? { number: parseFloat(match[1]), text: match[2].trim() }
-        : { number: NaN, text: str };
-}

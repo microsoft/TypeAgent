@@ -1,10 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MessageAccumulator, TextRangeCollection } from "./collections.js";
-import { isPropertyTerm } from "./compileLib.js";
+import { MessageAccumulator, TextRangeCollection } from "../collections.js";
+import { BooleanOp, isPropertyTerm } from "../compileLib.js";
 import {
     DataFrameCollection,
+    DataFrameSearchTerm,
     DataFrameTermGroup,
     IDataFrame,
 } from "./dataFrame.js";
@@ -12,13 +13,17 @@ import {
     PropertySearchTerm,
     SearchTerm,
     SearchTermGroup,
-} from "./interfaces.js";
-import * as q from "./query.js";
+    Term,
+} from "../interfaces.js";
+import * as q from "../query.js";
 
 export class TextRangeFromDataFrameExpr implements q.IQueryTextRangeSelector {
     constructor(public termGroups: DataFrameTermGroup[]) {}
 
     public eval(context?: q.QueryEvalContext): TextRangeCollection | undefined {
+        if (this.termGroups.length === 0) {
+            return undefined;
+        }
         const rangeCollection = new TextRangeCollection();
         for (const termGroup of this.termGroups) {
             const matches = termGroup.dataFrame.findSources(termGroup);
@@ -28,7 +33,7 @@ export class TextRangeFromDataFrameExpr implements q.IQueryTextRangeSelector {
                 }
             }
         }
-        return rangeCollection.size > 0 ? rangeCollection : undefined;
+        return rangeCollection;
     }
 }
 
@@ -81,6 +86,7 @@ export class DataFrameCompiler {
         if (dfTermGroups === undefined || dfTermGroups.length === 0) {
             return undefined;
         }
+        this.validateAndPrepareGroups(dfTermGroups);
         let termExpressions: MatchDataFrameTermsExpr[] = [];
         for (const dfTermGroup of dfTermGroups) {
             termExpressions.push(new MatchDataFrameTermsExpr(dfTermGroup));
@@ -89,8 +95,41 @@ export class DataFrameCompiler {
     }
 
     public compileScope(termGroup: SearchTermGroup) {
-        const dfTermGroups = getDataFrameTermGroups(this.dataFrames, termGroup);
+        const dfTermGroups = getDataFrameTermGroups(
+            this.dataFrames,
+            termGroup,
+            "and",
+        );
+        if (dfTermGroups === undefined || dfTermGroups.length === 0) {
+            return undefined;
+        }
+        this.validateAndPrepareGroups(dfTermGroups);
         return new TextRangeFromDataFrameExpr(dfTermGroups);
+    }
+
+    private validateAndPrepareGroups(dfGroups: DataFrameTermGroup[]): boolean {
+        for (const dfGroup of dfGroups) {
+            if (!this.validateAndPrepareTerms(dfGroup.terms)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private validateAndPrepareTerms(dfTerms: DataFrameSearchTerm[]): boolean {
+        for (const dfTerm of dfTerms) {
+            if (!this.validateAndPrepareTerm(dfTerm.columnValue.term)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private validateAndPrepareTerm(term: Term | undefined): boolean {
+        if (term) {
+            term.text = term.text.toLowerCase();
+        }
+        return true;
     }
 }
 
@@ -101,6 +140,7 @@ export class DataFrameCompiler {
 export function getDataFrameTermGroups(
     dataFrames: DataFrameCollection,
     termGroup: SearchTermGroup,
+    booleanOp?: BooleanOp,
 ): DataFrameTermGroup[] {
     const dfTermGroups = new Map<string, DataFrameTermGroup>();
     for (const term of termGroup.terms) {
@@ -114,7 +154,7 @@ export function getDataFrameTermGroups(
             );
             columnValue = term.propertyValue;
         } else {
-            // Nested or straight search terms not supported
+            // Nested or straight search terms not yet supported
             continue;
         }
         if (qualifiedColumn !== undefined && columnValue) {
@@ -122,7 +162,7 @@ export function getDataFrameTermGroups(
             let dfGroup = dfTermGroups.get(dataFrame.name);
             if (dfGroup === undefined) {
                 dfGroup = {
-                    booleanOp: termGroup.booleanOp,
+                    booleanOp: booleanOp ?? termGroup.booleanOp,
                     dataFrame,
                     terms: [],
                 };
@@ -162,7 +202,9 @@ export function resolveDataFrameColumn(
     return undefined;
 }
 
-function getDataFrameAndColumnName(text: string): [string | undefined, string] {
+export function getDataFrameAndColumnName(
+    text: string,
+): [string | undefined, string] {
     const frameNameStartAt = text.indexOf(".");
     if (frameNameStartAt >= 0) {
         return [

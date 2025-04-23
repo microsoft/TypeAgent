@@ -137,12 +137,25 @@ export class MatchAccumulator<T = any> {
 
     public intersect(
         other: MatchAccumulator,
-        intersection?: MatchAccumulator,
+        intersection: MatchAccumulator,
     ): MatchAccumulator {
-        intersection ??= new MatchAccumulator();
         for (const thisMatch of this.getMatches()) {
             const otherMatch = other.getMatch(thisMatch.value);
             if (otherMatch) {
+                this.combineMatches(thisMatch, otherMatch);
+                intersection.setMatch(thisMatch);
+            }
+        }
+        return intersection;
+    }
+
+    public intersectIter(
+        other: IterableIterator<Match<T>> | Array<Match<T>>,
+        intersection: MatchAccumulator,
+    ): MatchAccumulator {
+        for (const otherMatch of other) {
+            const thisMatch = this.getMatch(otherMatch.value);
+            if (thisMatch) {
                 this.combineMatches(thisMatch, otherMatch);
                 intersection.setMatch(thisMatch);
             }
@@ -542,6 +555,12 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
+    public addScoredMatches(matches: ScoredMessageOrdinal[]): void {
+        for (const match of matches) {
+            this.add(match.messageOrdinal, match.score);
+        }
+    }
+
     public override intersect(other: MessageAccumulator): MessageAccumulator {
         const intersection = new MessageAccumulator();
         super.intersect(other, intersection);
@@ -581,6 +600,41 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
             this.setMatches(scoredMatches);
         }
     }
+
+    public static fromScoredOrdinals(
+        ordinals: ScoredMessageOrdinal[] | undefined,
+    ): MessageAccumulator {
+        let accumulator = new MessageAccumulator();
+        if (ordinals && ordinals.length > 0) {
+            accumulator.addScoredMatches(ordinals);
+        }
+        return accumulator;
+    }
+}
+
+export function intersectScoredMessageOrdinals(
+    x: ScoredMessageOrdinal[] | undefined,
+    y: ScoredMessageOrdinal[] | undefined,
+) {
+    let xSet =
+        x !== undefined && x.length > 0
+            ? MessageAccumulator.fromScoredOrdinals(x)
+            : undefined;
+    let ySet =
+        y !== undefined && y?.length > 0
+            ? MessageAccumulator.fromScoredOrdinals(y)
+            : undefined;
+    let intersection: MessageAccumulator | undefined;
+    if (xSet === undefined || xSet.size === 0) {
+        intersection = ySet;
+    } else if (ySet === undefined || ySet.size === 0) {
+        intersection = xSet;
+    } else {
+        intersection = xSet!.intersect(ySet!);
+    }
+    return intersection === undefined || intersection.size === 0
+        ? []
+        : intersection.toScoredMessageOrdinals();
 }
 
 export class TextRangeCollection implements Iterable<TextRange> {
@@ -862,11 +916,13 @@ export function setIntersect<T = any>(
     if (set === undefined) {
         set = new Set<T>(values);
     } else {
+        let intersect = new Set<T>();
         for (const value of values) {
-            if (!set.has(value)) {
-                set.delete(value);
+            if (set.has(value)) {
+                intersect.add(value);
             }
         }
+        set = intersect;
     }
     return set;
 }
