@@ -9,9 +9,7 @@ import { fileURLToPath } from "url";
 
 // Local imports
 import { importAllFiles } from "./pdfImporter.js";
-import {
-    interactiveAppLoop,
-} from "./pdfQNAInteractiveApp.js";
+import { interactiveAppLoop } from "./pdfQNAInteractiveApp.js";
 import { ChunkyIndex } from "./pdfChunkyIndex.js";
 
 // Set __dirname to emulate old JS behavior
@@ -101,13 +99,10 @@ function parseCommandLine() {
 
     let mode = undefined;
 
-    if(isRagImport)
-        mode = AppFlags.RagImport;
-    else if(isSRagImport)
-        mode = AppFlags.SRagImport;
-    else
-        mode = AppFlags.App;
-    
+    if (isRagImport) mode = AppFlags.RagImport;
+    else if (isSRagImport) mode = AppFlags.SRagImport;
+    else mode = AppFlags.App;
+
     if (fileFlagIndex !== -1 && args[fileFlagIndex + 1]) {
         const fileListPath = args[fileFlagIndex + 1];
         try {
@@ -132,7 +127,7 @@ function parseCommandLine() {
         } catch (err) {
             console.error("Error reading data folder:", err);
         }
-    } 
+    }
     return { mode, files };
 }
 

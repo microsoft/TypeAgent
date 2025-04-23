@@ -634,7 +634,6 @@ export async function interactiveAppLoop(
         prompt: "\n🤖> ",
     });
 
-
     // Handle @import command.
     function kpimportDef(): iapp.CommandMetadata {
         return {
@@ -673,8 +672,7 @@ export async function interactiveAppLoop(
         args: string[] | iapp.NamedArgs,
         io: iapp.InteractiveIo,
     ): Promise<void> {
-        const namedArgs = 
-        iapp.parseNamedArguments(args, importDef());
+        const namedArgs = iapp.parseNamedArguments(args, importDef());
         const files = namedArgs.fileName
             ? (namedArgs.fileName as string).trim().split(",")
             : namedArgs.files

@@ -5,13 +5,17 @@ import {
     //PdfChunkMessageMeta
 } from "./pdfDocument.js";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import chalk, { ChalkInstance } from "chalk";
 import * as iapp from "interactive-app";
 import { ChunkedFile, ErrorItem } from "./pdfDocSchema.js";
 import { promisify } from "node:util";
 import { exec } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import {
+    OUTPUT_DIR,
+    CHUNKED_DOCS_DIR,
+    resolveFilePath,
+    resolveAndValidateFiles,
+} from "../common.js";
 
 const execPromise = promisify(exec);
 
@@ -28,15 +32,6 @@ function log(
     }
 }
 
-function resolveFilePath(filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-        return filePath;
-    }
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
-    return path.join(__dirname, filePath);
-}
-
 export async function chunkifyPdfFiles(
     outputDir: string,
     filenames: string[],
@@ -45,13 +40,15 @@ export async function chunkifyPdfFiles(
         errors,
         success = false;
     try {
-        const absChunkerPath = resolveFilePath("pdfChunkerV2.py");
-        const absFilenames = filenames.map(
-            (f) => `"${resolveFilePath(f)}"`,
-        );
-       
+        const absChunkerPath = resolveFilePath("srag/pdfChunkerV2.py");
+        const absFilenames = resolveAndValidateFiles(filenames);
+
+        if (!fs.existsSync(CHUNKED_DOCS_DIR)) {
+            fs.mkdirSync(CHUNKED_DOCS_DIR, { recursive: true });
+        }
+
         let { stdout, stderr } = await execPromise(
-            `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${outputDir}`,
+            `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${CHUNKED_DOCS_DIR}`,
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
         );
         output = stdout;
@@ -90,17 +87,13 @@ export async function importPdf(
     fChunkPdfFiles: boolean = true,
     maxPagesToProcess: number = -1,
 ): Promise<PdfDocument | undefined> {
-
     if (!pdfFilePath) {
         log(io, "No PDF file path provided.", chalk.red);
         return undefined;
     }
 
     if (outputDir === undefined) {
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        const distRoot = path.dirname(__dirname);
-        outputDir = path.join(distRoot, "output-data", "chunked-docs");
+        outputDir = OUTPUT_DIR;
     }
 
     if (!fs.existsSync(outputDir)) {
@@ -115,7 +108,9 @@ export async function importPdf(
     if (fChunkPdfFiles) {
         results = await chunkifyPdfFiles(outputDir, [pdfFilePath]);
         if (Array.isArray(results) && results.some((item) => "error" in item)) {
-            const errorItem = results.find((item) => "error" in item) as ErrorItem;
+            const errorItem = results.find(
+                (item) => "error" in item,
+            ) as ErrorItem;
             log(io, `Error chunking PDF: ${errorItem.error}`, chalk.red);
         }
         t1 = Date.now();

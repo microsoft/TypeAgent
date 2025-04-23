@@ -32,7 +32,6 @@ import { openai } from "aiclient";
 import registerDebug from "debug";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");
 
-
 export class PdfChunkMessageMeta implements IKnowledgeSource {
     public docChunkId: string = "";
     public pageNumber: string = "";
