@@ -15,7 +15,7 @@ import {
     getDataFrameAndColumnName,
 } from "./dataFrameQuery.js";
 import * as search from "../search.js";
-import { loadSchema } from "typeagent";
+import { loadSchemaFiles } from "typeagent";
 import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import * as querySchema from "../searchQuerySchema.js";
@@ -99,22 +99,25 @@ async function searchConversationWithHybridScope(
 }
 
 export function createSearchQueryTranslator(
+    dataFrames: DataFrameCollection,
     model: TypeChatLanguageModel,
 ): SearchQueryTranslator {
     const typeName = "SearchQuery";
-    const searchActionSchema = loadSchema(
+    const knownTypes = typeDefForDataFrames(dataFrames);
+    const schemaTexts = loadSchemaFiles(
         [
             "../dateTimeSchema.ts",
-            "knownFacetsSchema.ts",
+            //"knownFacetsSchema.ts",
             "searchQuerySchema2.ts",
         ],
         import.meta.url,
     );
-
+    schemaTexts.splice(1, 0, knownTypes);
+    const schema = schemaTexts.join("\n");
     return createJsonTranslator<querySchema.SearchQuery>(
         model,
         createTypeScriptJsonValidator<querySchema.SearchQuery>(
-            searchActionSchema,
+            schema,
             typeName,
         ),
     );
@@ -170,4 +173,19 @@ function facetTermsToSearchTerms(
     return facetTerms.map((f) => {
         return createPropertySearchTerm(f.facetName, f.facetValue);
     });
+}
+
+function typeDefForDataFrames(dataFrames: DataFrameCollection): string {
+    let text = "export type KnownFacet = ";
+    let types: string[] = [];
+    for (let [dfName, df] of dataFrames) {
+        for (const colName of df.columns.keys()) {
+            types.push(`"${dfName}.${colName}"`);
+        }
+    }
+    if (types.length > 0) {
+        text += types.join(" | ");
+    }
+    text += ";";
+    return text;
 }

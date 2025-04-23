@@ -336,6 +336,7 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         ]);
 
         this.queryTranslator = kp.hybrid.lang.createSearchQueryTranslator(
+            this.dataFrames,
             openai.createChatModelDefault("knowpro_test"),
         );
     }
