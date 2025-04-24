@@ -23,7 +23,7 @@ import {
     mergedToConcreteEntity,
     mergeScoredConcreteEntities,
 } from "./knowledgeMerge.js";
-import { getScoredSemanticRefsFromOrdinals } from "./common.js";
+import { getScoredSemanticRefsFromOrdinals } from "./knowledgeLib.js";
 import { getEnclosingDateRangeForMessages } from "./message.js";
 
 export type AnswerTranslator =

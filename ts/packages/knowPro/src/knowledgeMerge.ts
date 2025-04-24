@@ -10,8 +10,71 @@ import { conversation as kpLib } from "knowledge-processor";
 import { collections } from "typeagent";
 import { unionArrays } from "./collections.js";
 import { Scored } from "./common.js";
-import { MessageOrdinal, SemanticRef } from "./interfaces.js";
-import { facetValueToString } from "./common.js";
+import {
+    MessageOrdinal,
+    ScoredKnowledge,
+    ScoredSemanticRefOrdinal,
+    SemanticRef,
+    Topic,
+} from "./interfaces.js";
+import {
+    facetValueToString,
+    getScoredSemanticRefsFromOrdinals,
+    getTopKnowledge,
+} from "./knowledgeLib.js";
+
+export function getDistinctSemanticRefTopics(
+    semanticRefs: SemanticRef[],
+    semanticRefMatches: ScoredSemanticRefOrdinal[],
+    topK?: number,
+): ScoredKnowledge[] {
+    let mergedTopics = new Map<string, Scored<Topic>>();
+    for (let semanticRefMatch of semanticRefMatches) {
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
+        if (semanticRef.knowledgeType !== "topic") {
+            continue;
+        }
+        const topic = semanticRef.knowledge as Topic;
+        const existing = mergedTopics.get(topic.text);
+        if (existing) {
+            if (existing.score < semanticRefMatch.score) {
+                existing.score = semanticRefMatch.score;
+            }
+        } else {
+            mergedTopics.set(topic.text, {
+                item: topic,
+                score: semanticRefMatch.score,
+            });
+        }
+    }
+    const mergedKnowledge = getTopKnowledge<Topic>(
+        mergedTopics.values(),
+        "topic",
+        (t) => t,
+        topK,
+    );
+    return mergedKnowledge;
+}
+
+export function getDistinctSemanticRefEntities(
+    semanticRefs: SemanticRef[],
+    semanticRefMatches: ScoredSemanticRefOrdinal[],
+    topK?: number,
+): ScoredKnowledge[] {
+    const scoredEntities = getScoredSemanticRefsFromOrdinals(
+        semanticRefs,
+        semanticRefMatches,
+        "entity",
+    );
+    let mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
+    const mergedKnowledge: ScoredKnowledge[] = getTopKnowledge<MergedEntity>(
+        mergedEntities.values(),
+        "entity",
+        (m) => mergedToConcreteEntity(m),
+        topK,
+    );
+    return mergedKnowledge;
+}
 
 export type MergedEntity = {
     name: string;
