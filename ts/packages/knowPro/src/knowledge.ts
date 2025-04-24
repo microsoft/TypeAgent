@@ -196,7 +196,7 @@ export function getTopKnowledge<T>(
     return mergedKnowledge;
 }
 
-type MergedEntity = {
+export type MergedEntity = {
     name: string;
     type: string[];
     facets?: MergedFacets | undefined;
@@ -283,7 +283,7 @@ function concreteToMergedEntity(entity: kpLib.ConcreteEntity): MergedEntity {
     };
 }
 
-function mergedToConcreteEntity(
+export function mergedToConcreteEntity(
     mergedEntity: MergedEntity,
 ): kpLib.ConcreteEntity {
     const entity: kpLib.ConcreteEntity = {

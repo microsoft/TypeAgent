@@ -154,3 +154,17 @@ export function* getMessageChunkBatch(
         yield batch;
     }
 }
+
+export function getMessageTimestamps(
+    messages: IMessage[],
+    messageOrdinals: MessageOrdinal[] | Set<MessageOrdinal>,
+): string[] {
+    const timestamps: string[] = [];
+    for (const ordinal of messageOrdinals) {
+        const timestamp = messages[ordinal].timestamp;
+        if (timestamp) {
+            timestamps.push(timestamp);
+        }
+    }
+    return timestamps;
+}

@@ -13,8 +13,17 @@ import {
 import * as answerSchema from "./answerSchema.js";
 import { loadSchema } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { IConversation, SemanticRefSearchResult } from "./interfaces.js";
-import { getScoredEntities, mergeScoredConcreteEntities } from "./knowledge.js";
+import {
+    IConversation,
+    Knowledge,
+    SemanticRefSearchResult,
+} from "./interfaces.js";
+import {
+    getScoredEntities,
+    mergedToConcreteEntity,
+    mergeScoredConcreteEntities,
+} from "./knowledge.js";
+import { getMessageTimestamps } from "./message.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -77,18 +86,33 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
 
 export type AnswerContext = {};
 
-export type AnswerContextItem<T> = {
-    value: T;
-    timestamp: string | string[];
+export type AnswerContextItem = {
+    knowledge: Knowledge;
+    timestamp: string | string[] | undefined;
 };
 
 export function getDistinctEntities(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
+    topK: number,
 ) {
     const scoredEntities = getScoredEntities(
         conversation.semanticRefs!,
         searchResult.semanticRefMatches,
     );
-    mergeScoredConcreteEntities(scoredEntities, true);
+    const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
+    const contextItems: AnswerContextItem[] = [];
+    for (const mergedEntity of mergedEntities.values()) {
+        let ordinals = mergedEntity.item.messageOrdinals;
+        let timestamp =
+            ordinals !== undefined
+                ? getMessageTimestamps(conversation.messages, ordinals)
+                : undefined;
+        const item: AnswerContextItem = {
+            knowledge: mergedToConcreteEntity(mergedEntity.item),
+            timestamp,
+        };
+        contextItems.push(item);
+    }
+    return contextItems;
 }
