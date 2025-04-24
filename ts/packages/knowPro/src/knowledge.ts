@@ -70,16 +70,7 @@ export function extractKnowledgeFromTextBatch(
 export function mergeConcreteEntities(
     entities: kpLib.ConcreteEntity[],
 ): kpLib.ConcreteEntity[] {
-    let mergedEntities = new Map<string, MergedEntity>();
-    for (let entity of entities) {
-        const mergedEntity = concreteToMergedEntity(entity);
-        const existing = mergedEntities.get(mergedEntity.name);
-        if (existing) {
-            unionEntities(existing, mergedEntity);
-        } else {
-            mergedEntities.set(mergedEntity.name, mergedEntity);
-        }
-    }
+    let mergedEntities = concreteToMergedEntities(entities);
 
     const mergedConcreteEntities: kpLib.ConcreteEntity[] = [];
     for (const mergedEntity of mergedEntities.values()) {
@@ -240,6 +231,22 @@ function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
     to.type = unionArrays(to.type, other.type)!;
     to.facets = unionFacets(to.facets, other.facets);
     return true;
+}
+
+export function concreteToMergedEntities(
+    entities: kpLib.ConcreteEntity[],
+): Map<string, MergedEntity> {
+    let mergedEntities = new Map<string, MergedEntity>();
+    for (let entity of entities) {
+        const mergedEntity = concreteToMergedEntity(entity);
+        const existing = mergedEntities.get(mergedEntity.name);
+        if (existing) {
+            unionEntities(existing, mergedEntity);
+        } else {
+            mergedEntities.set(mergedEntity.name, mergedEntity);
+        }
+    }
+    return mergedEntities;
 }
 
 function concreteToMergedEntity(entity: kpLib.ConcreteEntity): MergedEntity {
