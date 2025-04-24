@@ -23,6 +23,11 @@ export * from "./knowledge.js";
 export * from "./dateTimeSchema.js";
 export * as querySchema from "./searchQuerySchema.js";
 export * from "./searchQueryTranslator.js";
+export * from "./searchLang.js";
+
+export * from "./answerGenerator.js";
+export * from "./answerResponseSchema.js";
+export * from "./answerContextSchema.js";
 
 export * from "./storage.js";
 export * as hybrid from "./hybrid/index.js";

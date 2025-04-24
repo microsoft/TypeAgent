@@ -3,10 +3,7 @@
 
 import { describeIf, hasTestKeys, parseCommandArgs } from "test-lib";
 import { IConversation } from "../src/interfaces.js";
-import {
-    createSearchQueryTranslator,
-    searchQueryExprFromLanguage,
-} from "../src/searchQueryTranslator.js";
+import { createSearchQueryTranslator } from "../src/searchQueryTranslator.js";
 import {
     emptyConversation,
     getTestChatModel,
@@ -15,6 +12,7 @@ import {
     runSearchConversation,
 } from "./testCommon.js";
 import { resolveAndVerifyKnowledgeMatches } from "./verify.js";
+import { searchQueryExprFromLanguage } from "../src/searchLang.js";
 
 describeIf(
     "searchQueryTranslator.online",

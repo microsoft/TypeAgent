@@ -25,6 +25,7 @@ import {
 import { getScoredSemanticRefsFromOrdinals } from "./knowledgeLib.js";
 import { getEnclosingDateRangeForMessages } from "./message.js";
 import { AnswerContext, RelevantKnowledge } from "./answerContextSchema.js";
+import { ConversationSearchResult } from "./search.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -94,6 +95,32 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
     return {
         languageModel: openai.createChatModelDefault("answerGenerator"),
     };
+}
+
+export function answerContextFromSearchResult(
+    conversation: IConversation,
+    result: ConversationSearchResult,
+) {
+    let context: AnswerContext = {};
+    for (const knowledgeType of result.knowledgeMatches.keys()) {
+        switch (knowledgeType) {
+            default:
+                break;
+            case "entity":
+                context.entities = getRelevantEntitiesForAnswer(
+                    conversation,
+                    result.knowledgeMatches.get(knowledgeType)!,
+                );
+                break;
+            case "topic":
+                context.topics = getRelevantTopicsForAnswer(
+                    conversation,
+                    result.knowledgeMatches.get(knowledgeType)!,
+                );
+                break;
+        }
+    }
+    return context;
 }
 
 export function getRelevantTopicsForAnswer(

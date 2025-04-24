@@ -17,10 +17,8 @@ import * as search from "../search.js";
 import { loadSchemaFiles } from "typeagent";
 import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import {
-    compileSearchFilter,
-    SearchQueryTranslator,
-} from "../searchQueryTranslator.js";
+import { SearchQueryTranslator } from "../searchQueryTranslator.js";
+import { compileSearchFilter } from "../searchLang.js";
 import { createPropertySearchTerm } from "../searchLib.js";
 
 /**
