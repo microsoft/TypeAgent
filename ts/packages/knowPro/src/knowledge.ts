@@ -13,16 +13,6 @@ import {
 import { BatchTask, runInBatches } from "./taskQueue.js";
 
 /**
- * Contains a mix of public methods exposed via index.ts and internal only
- * TODO: Refactor into separate files
- */
-
-//----------------
-// PUBLIC FUNCTIONS
-// Exposed directly via index.ts
-//---------------
-
-/**
  * Create a knowledge extractor using the given Chat Model
  * @param chatModel
  * @returns
