@@ -14,6 +14,9 @@ import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
     IConversation,
+    KnowledgeType,
+    ScoredSemanticRefOrdinal,
+    SemanticRef,
     TextLocation,
     TextRange,
 } from "./interfaces.js";
@@ -107,6 +110,22 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
 
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
+}
+
+export function* getScoredSemanticRefsFromOrdinals(
+    semanticRefs: SemanticRef[],
+    semanticRefMatches: ScoredSemanticRefOrdinal[],
+    knowledgeType: KnowledgeType,
+): IterableIterator<Scored<SemanticRef>> {
+    for (let semanticRefMatch of semanticRefMatches) {
+        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
+        if (semanticRef.knowledgeType === knowledgeType) {
+            yield {
+                score: semanticRefMatch.score,
+                item: semanticRef,
+            };
+        }
+    }
 }
 
 export async function createConversationFromData(

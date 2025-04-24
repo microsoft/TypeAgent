@@ -13,7 +13,7 @@ import {
     SemanticRef,
     Topic,
 } from "./interfaces.js";
-import { Scored } from "./common.js";
+import { getScoredSemanticRefsFromOrdinals, Scored } from "./common.js";
 import { error, Result } from "typechat";
 import { BatchTask, runInBatches } from "./taskQueue.js";
 import { ChatModel } from "aiclient";
@@ -165,7 +165,11 @@ export function getDistinctSemanticRefEntities(
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    const scoredEntities = getScoredEntities(semanticRefs, semanticRefMatches);
+    const scoredEntities = getScoredSemanticRefsFromOrdinals(
+        semanticRefs,
+        semanticRefMatches,
+        "entity",
+    );
     let mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
     const mergedKnowledge: ScoredKnowledge[] = getTopKnowledge<MergedEntity>(
         mergedEntities.values(),
@@ -346,19 +350,4 @@ function unionFacets(
         }
     }
     return to;
-}
-
-export function* getScoredEntities(
-    semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRefOrdinal[],
-): IterableIterator<Scored<SemanticRef>> {
-    for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
-        if (semanticRef.knowledgeType === "entity") {
-            yield {
-                score: semanticRefMatch.score,
-                item: semanticRef,
-            };
-        }
-    }
 }

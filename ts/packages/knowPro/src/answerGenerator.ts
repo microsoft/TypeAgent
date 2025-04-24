@@ -20,10 +20,10 @@ import {
     SemanticRefSearchResult,
 } from "./interfaces.js";
 import {
-    getScoredEntities,
     mergedToConcreteEntity,
     mergeScoredConcreteEntities,
 } from "./knowledge.js";
+import { getScoredSemanticRefsFromOrdinals } from "./common.js";
 import { getEnclosingDateRangeForMessages } from "./message.js";
 
 export type AnswerTranslator =
@@ -97,9 +97,10 @@ export function getDistinctEntities(
     searchResult: SemanticRefSearchResult,
     topK: number,
 ) {
-    const scoredEntities = getScoredEntities(
+    const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
         searchResult.semanticRefMatches,
+        "entity",
     );
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
     const contextItems: AnswerContextItem[] = [];
