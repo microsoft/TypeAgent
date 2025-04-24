@@ -11,7 +11,8 @@ import {
     WebContentsView,
     shell,
 } from "electron";
-import path, { join } from "node:path";
+import path from "node:path";
+import fs from "node:fs";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
 import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
@@ -46,8 +47,25 @@ import { ShellWindow } from "./shellWindow.js";
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
 
-const envPath = join(__dirname, "../../../../.env");
-dotenv.config({ path: envPath });
+function getDotEnvPath() {
+    const appDotEnv = path.join(app.getAppPath(), ".env");
+    if (fs.existsSync(appDotEnv)) {
+        return appDotEnv;
+    }
+    if (import.meta.env.MODE === "development") {
+        const devDotEnv = path.join(app.getAppPath(), "../../.env");
+        if (fs.existsSync(devDotEnv)) {
+            return devDotEnv;
+        }
+    }
+    return undefined;
+}
+
+const envPath = getDotEnvPath();
+if (envPath) {
+    debugShell("Loading environment variables from", envPath);
+    dotenv.config({ path: envPath });
+}
 
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
@@ -338,9 +356,9 @@ async function initialize() {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const browserExtensionPath = join(
+    const browserExtensionPath = path.join(
         app.getAppPath(),
-        "../agents/browser/dist/electron",
+        "node_modules/browser-typeagent/dist/electron",
     );
     await session.defaultSession.loadExtension(browserExtensionPath, {
         allowFileAccess: true,
