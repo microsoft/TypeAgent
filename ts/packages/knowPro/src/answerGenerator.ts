@@ -13,6 +13,8 @@ import {
 import * as answerSchema from "./answerSchema.js";
 import { loadSchema } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
+import { IConversation, SemanticRefSearchResult } from "./interfaces.js";
+import { getScoredEntities, mergeScoredConcreteEntities } from "./knowledge.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -71,4 +73,22 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
     return {
         languageModel: openai.createChatModelDefault("answerGenerator"),
     };
+}
+
+export type AnswerContext = {};
+
+export type AnswerContextItem<T> = {
+    value: T;
+    timestamp: string | string[];
+};
+
+export function getDistinctEntities(
+    conversation: IConversation,
+    searchResult: SemanticRefSearchResult,
+) {
+    const scoredEntities = getScoredEntities(
+        conversation.semanticRefs!,
+        searchResult.semanticRefMatches,
+    );
+    mergeScoredConcreteEntities(scoredEntities, true);
 }

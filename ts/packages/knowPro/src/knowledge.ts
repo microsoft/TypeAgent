@@ -5,6 +5,8 @@ import { conversation as kpLib } from "knowledge-processor";
 import { async, asyncArray, collections, getTopK } from "typeagent";
 import { unionArrays } from "./collections.js";
 import {
+    Knowledge,
+    KnowledgeType,
     MessageOrdinal,
     ScoredKnowledge,
     ScoredSemanticRefOrdinal,
@@ -125,7 +127,7 @@ export function facetValueToString(facet: kpLib.Facet): string {
     return value.toString();
 }
 
-export function mergeSemanticRefTopics(
+export function getDistinctSemanticRefTopics(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
@@ -149,31 +151,49 @@ export function mergeSemanticRefTopics(
             });
         }
     }
-    let topKTopics =
-        topK !== undefined && topK > 0
-            ? getTopK(mergedTopics.values(), topK)
-            : mergedTopics.values();
-
-    const mergedKnowledge: ScoredKnowledge[] = [];
-    for (const scoredTopic of topKTopics) {
-        mergedKnowledge.push({
-            knowledgeType: "topic",
-            knowledge: scoredTopic.item,
-            score: scoredTopic.score,
-        });
-    }
+    const mergedKnowledge = getTopKnowledge<Topic>(
+        mergedTopics.values(),
+        "topic",
+        (t) => t,
+        topK,
+    );
     return mergedKnowledge;
 }
 
-export function mergeSemanticRefEntities(
+export function getDistinctSemanticRefEntities(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return getTopKMergedConcreteEntities(
-        getScoredEntities(semanticRefs, semanticRefMatches),
+    const scoredEntities = getScoredEntities(semanticRefs, semanticRefMatches);
+    let mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
+    const mergedKnowledge: ScoredKnowledge[] = getTopKnowledge<MergedEntity>(
+        mergedEntities.values(),
+        "entity",
+        (m) => mergedToConcreteEntity(m),
         topK,
     );
+    return mergedKnowledge;
+}
+
+export function getTopKnowledge<T>(
+    values: IterableIterator<Scored<T>>,
+    type: KnowledgeType,
+    toKnowledge: (item: T) => Knowledge,
+    topK?: number,
+) {
+    let topKValues =
+        topK !== undefined && topK > 0 ? getTopK(values, topK) : values;
+
+    const mergedKnowledge: ScoredKnowledge[] = [];
+    for (const scoredValue of topKValues) {
+        mergedKnowledge.push({
+            knowledgeType: type,
+            knowledge: toKnowledge(scoredValue.item),
+            score: scoredValue.score,
+        });
+    }
+    return mergedKnowledge;
 }
 
 type MergedEntity = {
@@ -187,28 +207,6 @@ type MergedEntity = {
 };
 
 type MergedFacets = collections.MultiMap<string, string>;
-
-function getTopKMergedConcreteEntities(
-    scoredEntities: IterableIterator<Scored<SemanticRef>>,
-    topK?: number,
-): ScoredKnowledge[] {
-    let mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
-
-    let topKEntities =
-        topK !== undefined && topK > 0
-            ? getTopK(mergedEntities.values(), topK)
-            : mergedEntities.values();
-
-    const mergedKnowledge: ScoredKnowledge[] = [];
-    for (const scoredEntity of topKEntities) {
-        mergedKnowledge.push({
-            knowledgeType: "entity",
-            knowledge: mergedToConcreteEntity(scoredEntity.item),
-            score: scoredEntity.score,
-        });
-    }
-    return mergedKnowledge;
-}
 
 /**
  * In place union
@@ -350,7 +348,7 @@ function unionFacets(
     return to;
 }
 
-function* getScoredEntities(
+export function* getScoredEntities(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
 ): IterableIterator<Scored<SemanticRef>> {
