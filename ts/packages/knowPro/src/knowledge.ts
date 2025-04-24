@@ -2,26 +2,15 @@
 // Licensed under the MIT License.
 
 import { conversation as kpLib } from "knowledge-processor";
-import { async, asyncArray, getTopK } from "typeagent";
-import {
-    Knowledge,
-    KnowledgeType,
-    ScoredKnowledge,
-    ScoredSemanticRefOrdinal,
-    SemanticRef,
-    Topic,
-} from "./interfaces.js";
-import { getScoredSemanticRefsFromOrdinals, Scored } from "./common.js";
+import { async, asyncArray } from "typeagent";
 import { error, Result } from "typechat";
-import { BatchTask, runInBatches } from "./taskQueue.js";
 import { ChatModel } from "aiclient";
 import { createKnowledgeModel } from "./conversationIndex.js";
 import {
     concreteToMergedEntities,
     mergedToConcreteEntity,
-    mergeScoredConcreteEntities,
-    MergedEntity,
 } from "./knowledgeMerge.js";
+import { BatchTask, runInBatches } from "./taskQueue.js";
 
 /**
  * Contains a mix of public methods exposed via index.ts and internal only
@@ -94,10 +83,6 @@ export function mergeTopics(topics: string[]): string[] {
     return [...mergedTopics.values()];
 }
 
-//-----------------------
-// INTERNAL FUNCTIONS
-//-----------------------
-
 export async function extractKnowledgeForTextBatchQ(
     knowledgeExtractor: kpLib.KnowledgeExtractor,
     textBatch: string[],
@@ -121,77 +106,4 @@ export async function extractKnowledgeForTextBatchQ(
         results.push(task.result ? task.result : error("No result"));
     }
     return results;
-}
-
-export function getDistinctSemanticRefTopics(
-    semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRefOrdinal[],
-    topK?: number,
-): ScoredKnowledge[] {
-    let mergedTopics = new Map<string, Scored<Topic>>();
-    for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
-        if (semanticRef.knowledgeType !== "topic") {
-            continue;
-        }
-        const topic = semanticRef.knowledge as Topic;
-        const existing = mergedTopics.get(topic.text);
-        if (existing) {
-            if (existing.score < semanticRefMatch.score) {
-                existing.score = semanticRefMatch.score;
-            }
-        } else {
-            mergedTopics.set(topic.text, {
-                item: topic,
-                score: semanticRefMatch.score,
-            });
-        }
-    }
-    const mergedKnowledge = getTopKnowledge<Topic>(
-        mergedTopics.values(),
-        "topic",
-        (t) => t,
-        topK,
-    );
-    return mergedKnowledge;
-}
-
-export function getDistinctSemanticRefEntities(
-    semanticRefs: SemanticRef[],
-    semanticRefMatches: ScoredSemanticRefOrdinal[],
-    topK?: number,
-): ScoredKnowledge[] {
-    const scoredEntities = getScoredSemanticRefsFromOrdinals(
-        semanticRefs,
-        semanticRefMatches,
-        "entity",
-    );
-    let mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
-    const mergedKnowledge: ScoredKnowledge[] = getTopKnowledge<MergedEntity>(
-        mergedEntities.values(),
-        "entity",
-        (m) => mergedToConcreteEntity(m),
-        topK,
-    );
-    return mergedKnowledge;
-}
-
-function getTopKnowledge<T>(
-    values: IterableIterator<Scored<T>>,
-    type: KnowledgeType,
-    toKnowledge: (item: T) => Knowledge,
-    topK?: number,
-) {
-    let topKValues =
-        topK !== undefined && topK > 0 ? getTopK(values, topK) : values;
-
-    const mergedKnowledge: ScoredKnowledge[] = [];
-    for (const scoredValue of topKValues) {
-        mergedKnowledge.push({
-            knowledgeType: type,
-            knowledge: toKnowledge(scoredValue.item),
-            score: scoredValue.score,
-        });
-    }
-    return mergedKnowledge;
 }

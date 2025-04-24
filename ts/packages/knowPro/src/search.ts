@@ -22,7 +22,7 @@ import {
 import {
     getDistinctSemanticRefEntities,
     getDistinctSemanticRefTopics,
-} from "./knowledge.js";
+} from "./knowledgeLib.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";

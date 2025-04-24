@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * INTERNAL TO LIBRARY
+ * INTERNAL LIBRARY
  * Query operators and processing is INTERNAL to the library.
  * These should not be exposed via index.ts
  */

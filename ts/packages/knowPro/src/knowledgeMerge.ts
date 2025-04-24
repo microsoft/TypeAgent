@@ -1,5 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
+/**
+ * INTERNAL LIBRARY
+ * Functions to merge/combine more granular knowledge
+ */
+
 import { conversation as kpLib } from "knowledge-processor";
 import { collections } from "typeagent";
 import { unionArrays } from "./collections.js";
@@ -16,7 +22,9 @@ export type MergedEntity = {
      */
     messageOrdinals?: Set<MessageOrdinal> | undefined;
 };
+
 type MergedFacets = collections.MultiMap<string, string>;
+
 /**
  * In place union
  */
@@ -60,6 +68,7 @@ export function mergeScoredConcreteEntities(
     }
     return mergedEntities;
 }
+
 function mergeMessageOrdinals(mergedEntity: MergedEntity, sr: SemanticRef) {
     mergedEntity.messageOrdinals ??= new Set<MessageOrdinal>();
     mergedEntity.messageOrdinals.add(sr.range.start.messageOrdinal);
@@ -80,6 +89,7 @@ export function concreteToMergedEntities(
     }
     return mergedEntities;
 }
+
 function concreteToMergedEntity(entity: kpLib.ConcreteEntity): MergedEntity {
     let type = [...entity.type];
     collections.lowerAndSort(type);
@@ -102,6 +112,7 @@ export function mergedToConcreteEntity(
     }
     return entity;
 }
+
 function facetsToMergedFacets(facets: kpLib.Facet[]): MergedFacets {
     const mergedFacets: MergedFacets = new collections.MultiMap<
         string,
@@ -114,6 +125,7 @@ function facetsToMergedFacets(facets: kpLib.Facet[]): MergedFacets {
     }
     return mergedFacets;
 }
+
 function mergedFacetsToFacets(mergedFacets: MergedFacets): kpLib.Facet[] {
     const facets: kpLib.Facet[] = [];
     for (const facetName of mergedFacets.keys()) {
@@ -128,6 +140,7 @@ function mergedFacetsToFacets(mergedFacets: MergedFacets): kpLib.Facet[] {
     }
     return facets;
 }
+
 /**
  * In place union
  */

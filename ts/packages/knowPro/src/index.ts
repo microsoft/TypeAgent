@@ -18,13 +18,7 @@ export * from "./search.js";
 export * from "./serialization.js";
 export * from "./queryCmp.js";
 
-export {
-    createKnowledgeExtractor,
-    extractKnowledgeFromText,
-    extractKnowledgeFromTextBatch,
-    mergeConcreteEntities,
-    mergeTopics,
-} from "./knowledge.js";
+export * from "./knowledge.js";
 
 export * from "./dateTimeSchema.js";
 export * as querySchema from "./searchQuerySchema.js";

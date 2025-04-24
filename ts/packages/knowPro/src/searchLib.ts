@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 /**
+ * INTERNAL LIBRARY
  * Functions that help with creating search and property terms
  */
 
