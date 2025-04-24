@@ -170,7 +170,7 @@ export function mergeSemanticRefEntities(
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return mergeScoredConcreteEntities(
+    return getTopKMergedConcreteEntities(
         getScoredEntities(semanticRefs, semanticRefMatches),
         topK,
     );
@@ -188,11 +188,11 @@ type MergedEntity = {
 
 type MergedFacets = collections.MultiMap<string, string>;
 
-function mergeScoredConcreteEntities(
+function getTopKMergedConcreteEntities(
     scoredEntities: IterableIterator<Scored<SemanticRef>>,
     topK?: number,
 ): ScoredKnowledge[] {
-    let mergedEntities = scoredConcreteToMergedEntities(scoredEntities, false);
+    let mergedEntities = mergeScoredConcreteEntities(scoredEntities, false);
 
     let topKEntities =
         topK !== undefined && topK > 0
@@ -222,7 +222,7 @@ function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
     return true;
 }
 
-export function scoredConcreteToMergedEntities(
+export function mergeScoredConcreteEntities(
     scoredEntities: IterableIterator<Scored<SemanticRef>>,
     mergeOrdinals: boolean,
 ): Map<string, Scored<MergedEntity>> {
