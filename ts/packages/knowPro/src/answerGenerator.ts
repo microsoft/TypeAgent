@@ -22,7 +22,7 @@ import {
 import {
     mergedToConcreteEntity,
     mergeScoredConcreteEntities,
-} from "./knowledge.js";
+} from "./knowledgeMerge.js";
 import { getScoredSemanticRefsFromOrdinals } from "./common.js";
 import { getEnclosingDateRangeForMessages } from "./message.js";
 

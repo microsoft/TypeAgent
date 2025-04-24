@@ -112,6 +112,14 @@ export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
 }
 
+export function facetValueToString(facet: kpLib.Facet): string {
+    const value = facet.value;
+    if (typeof value === "object") {
+        return `${value.amount} ${value.units}`;
+    }
+    return value.toString();
+}
+
 export function* getScoredSemanticRefsFromOrdinals(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],

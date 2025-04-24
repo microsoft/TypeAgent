@@ -45,7 +45,7 @@ import {
 } from "./propertyIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections, NormalizedEmbedding } from "typeagent";
-import { facetValueToString } from "./knowledge.js";
+import { facetValueToString } from "./common.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import { textRangesFromMessageOrdinals } from "./message.js";
