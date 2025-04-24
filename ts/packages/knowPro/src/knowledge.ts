@@ -5,6 +5,7 @@ import { conversation as kpLib } from "knowledge-processor";
 import { async, asyncArray, collections, getTopK } from "typeagent";
 import { unionArrays } from "./collections.js";
 import {
+    MessageOrdinal,
     ScoredKnowledge,
     ScoredSemanticRefOrdinal,
     SemanticRef,
@@ -179,31 +180,23 @@ type MergedEntity = {
     name: string;
     type: string[];
     facets?: MergedFacets | undefined;
+    /**
+     * Message ordinals from which the entity was collected
+     */
+    messageOrdinals?: Set<MessageOrdinal> | undefined;
 };
 
 type MergedFacets = collections.MultiMap<string, string>;
 
 function mergeScoredEntities(
-    scoredEntities: IterableIterator<Scored<kpLib.ConcreteEntity>>,
+    scoredEntities: IterableIterator<Scored<SemanticRef>>,
     topK?: number,
+    mergeOrdinals: boolean = false,
 ): ScoredKnowledge[] {
-    let mergedEntities = new Map<string, Scored<MergedEntity>>();
-    for (let scoredEntity of scoredEntities) {
-        const mergedEntity = concreteToMergedEntity(scoredEntity.item);
-        const existing = mergedEntities.get(mergedEntity.name);
-        if (existing) {
-            if (unionEntities(existing.item, mergedEntity)) {
-                if (existing.score < scoredEntity.score) {
-                    existing.score = scoredEntity.score;
-                }
-            }
-        } else {
-            mergedEntities.set(mergedEntity.name, {
-                item: mergedEntity,
-                score: scoredEntity.score,
-            });
-        }
-    }
+    let mergedEntities = scoredConcreteToMergedEntities(
+        scoredEntities,
+        mergeOrdinals,
+    );
 
     let topKEntities =
         topK !== undefined && topK > 0
@@ -231,6 +224,43 @@ function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
     to.type = unionArrays(to.type, other.type)!;
     to.facets = unionFacets(to.facets, other.facets);
     return true;
+}
+
+function scoredConcreteToMergedEntities(
+    scoredEntities: IterableIterator<Scored<SemanticRef>>,
+    mergeOrdinals: boolean,
+) {
+    let mergedEntities = new Map<string, Scored<MergedEntity>>();
+    for (let scoredEntity of scoredEntities) {
+        const mergedEntity = concreteToMergedEntity(
+            scoredEntity.item.knowledge as kpLib.ConcreteEntity,
+        );
+        let existing = mergedEntities.get(mergedEntity.name);
+        if (existing) {
+            if (unionEntities(existing.item, mergedEntity)) {
+                if (existing.score < scoredEntity.score) {
+                    existing.score = scoredEntity.score;
+                }
+            } else {
+                existing = undefined;
+            }
+        } else {
+            existing = {
+                item: mergedEntity,
+                score: scoredEntity.score,
+            };
+            mergedEntities.set(mergedEntity.name, existing);
+        }
+        if (existing && mergeOrdinals) {
+            mergeMessageOrdinals(existing.item, scoredEntity.item);
+        }
+    }
+    return mergedEntities;
+}
+
+function mergeMessageOrdinals(mergedEntity: MergedEntity, sr: SemanticRef) {
+    mergedEntity.messageOrdinals ??= new Set<MessageOrdinal>();
+    mergedEntity.messageOrdinals.add(sr.range.start.messageOrdinal);
 }
 
 export function concreteToMergedEntities(
@@ -327,13 +357,13 @@ function unionFacets(
 function* getScoredEntities(
     semanticRefs: SemanticRef[],
     semanticRefMatches: ScoredSemanticRefOrdinal[],
-): IterableIterator<Scored<kpLib.ConcreteEntity>> {
+): IterableIterator<Scored<SemanticRef>> {
     for (let semanticRefMatch of semanticRefMatches) {
         const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
         if (semanticRef.knowledgeType === "entity") {
             yield {
                 score: semanticRefMatch.score,
-                item: semanticRef.knowledge as kpLib.ConcreteEntity,
+                item: semanticRef,
             };
         }
     }
