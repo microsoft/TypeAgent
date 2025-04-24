@@ -5,9 +5,13 @@ import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { XMLParser } from "fast-xml-parser";
 import { fetchWithRetry } from "aiclient";
 import path from "path";
-import fs from "fs";
-import { OUTPUT_DIR } from "./common.js";
-
+import * as fs from "fs";
+import * as fsp from "fs/promises";
+import {
+    PAPER_DOWNLOAD_DIR,
+    PAPER_CATALOG_PATH,
+    withFileLock,
+} from "./common.js";
 interface ArxivPaperAuthor {
     name: string;
     affiliation?: string;
@@ -25,17 +29,13 @@ interface ArxivPaper {
     published: string;
     journal_ref?: string;
 }
-
-const PAPER_DOWNLOAD_DIR = path.join(
-    OUTPUT_DIR,
-    "papers/downloads",
-);
-
-const PAPER_CATALOG_PATH = path.join(
-    OUTPUT_DIR,
-    "papers/downloads",
-    "downloaded_papers.json",
-);
+export interface CatalogEntry {
+    id: string; // arXiv ID
+    filePath: string;
+    metaPath: string;
+    downloadedAt: string;
+    tags: string[];
+}
 
 function loadDownloadedPapers(): Set<string> {
     try {
@@ -58,6 +58,49 @@ function saveDownloadedPapersCatalog(downloadedPapers: Set<string>) {
         );
     } catch (error) {
         console.error("Error saving downloaded papers catalog:", error);
+    }
+}
+
+export async function downloadArxivPaper(
+    paper: ArxivPaper,
+): Promise<string | undefined> {
+    const { downloadUrl, paperId } = getPdfUrlFromId(paper.id);
+
+    const filePath = path.join(
+        PAPER_DOWNLOAD_DIR,
+        `${getValidFilename(paperId)}.pdf`,
+    );
+    const tmpPath = `${filePath}.tmp`;
+
+    try {
+        return await withFileLock(filePath, async () => {
+            if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+                return filePath;
+            }
+
+            const options: RequestInit = {
+                method: "GET",
+                headers: { Accept: "application/pdf" },
+            };
+            const response = await fetchWithRetry(downloadUrl, options);
+            if (!response.success) {
+                throw new Error(
+                    `Failed to download paper: ${response.message}`,
+                );
+            }
+
+            const buffer = Buffer.from(
+                await (await response.data.blob()).arrayBuffer(),
+            );
+            await fsp.writeFile(tmpPath, buffer);
+            await fsp.rename(tmpPath, filePath);
+
+            console.log(`Downloaded paper: ${filePath}`);
+            return filePath;
+        });
+    } catch (err) {
+        console.error("Error downloading paper:", err);
+        return undefined;
     }
 }
 
@@ -182,6 +225,13 @@ export async function createFolderIfNotExists(
     }
 }
 
+export async function writeJsonPretty(
+    file: string,
+    data: unknown,
+): Promise<void> {
+    await fs.promises.writeFile(file, JSON.stringify(data, null, 2), "utf8");
+}
+
 export function getValidFilename(paperId: string): string {
     return paperId.replace(/\//g, "__");
 }
@@ -195,42 +245,17 @@ function getPdfUrlFromId(id: string): { paperId: string; downloadUrl: string } {
     return { paperId: `${pid}`, downloadUrl: `https://arxiv.org/pdf/${pid}` };
 }
 
-export async function downloadArxivPaper(
-    paper: ArxivPaper,
-): Promise<string | undefined> {
-    const arxivInfo = getPdfUrlFromId(paper.id);
-
-    if(!fs.existsSync(PAPER_DOWNLOAD_DIR)) {
-        fs.mkdirSync(PAPER_DOWNLOAD_DIR, { recursive: true });
-    }
-    
-    const filePath = path.join(
-        PAPER_DOWNLOAD_DIR,
-        `${getValidFilename(arxivInfo.paperId)}.pdf`,
-    );
-
+export async function loadCatalog(): Promise<Record<string, CatalogEntry>> {
     try {
-        createFolderIfNotExists(PAPER_DOWNLOAD_DIR);
-        const options: RequestInit = {
-            method: "GET",
-            headers: {
-                Accept: "application/pdf",
-            },
-        };
-
-        const response = await fetchWithRetry(arxivInfo.downloadUrl, options);
-        if (!response.success) {
-            throw new Error(`Failed to download paper: ${response.message}`);
-        }
-
-        const pdfBlob = await response.data.blob();
-        const buffer = Buffer.from(await pdfBlob.arrayBuffer());
-        fs.writeFileSync(filePath, buffer, { flag: "w" });
-
-        console.log(`Downloaded paper: ${filePath}`);
-        return filePath;
-    } catch (error) {
-        console.error("Error downloading paper:", error);
-        return undefined;
+        const raw = await fs.promises.readFile(PAPER_CATALOG_PATH, "utf8");
+        return JSON.parse(raw) as Record<string, CatalogEntry>;
+    } catch {
+        return {};
     }
+}
+
+export async function saveCatalog(
+    catalog: Record<string, CatalogEntry>,
+): Promise<void> {
+    await writeJsonPretty(PAPER_CATALOG_PATH, catalog);
 }

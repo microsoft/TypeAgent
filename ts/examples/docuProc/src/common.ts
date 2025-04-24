@@ -1,6 +1,8 @@
 import path from "path";
 import { fileURLToPath } from "url";
-import fs from "fs";
+import * as fsp from "fs/promises";
+import * as fs from "fs";
+import { lock } from "proper-lockfile";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +14,14 @@ export const DIST_ROOT = distRoot;
 export const OUTPUT_DIR = path.join(distRoot, "output-data");
 export const CHUNKED_DOCS_DIR = path.join(OUTPUT_DIR, "chunked-docs");
 export const LOGS_DIR = path.join(OUTPUT_DIR, "logs");
+
+export const PAPER_DOWNLOAD_DIR = path.join(OUTPUT_DIR, "papers/downloads");
+
+export const PAPER_CATALOG_PATH = path.join(
+    OUTPUT_DIR,
+    "papers",
+    "downloaded_papers.json",
+);
 
 export function resolveFilePath(filePath: string): string {
     return path.isAbsolute(filePath)
@@ -37,4 +47,23 @@ export function resolveAndValidateFiles(filenames: string[]): string[] {
     }
 
     return absFilenames;
+}
+
+export async function withFileLock<T>(
+    file: string,
+    fn: () => Promise<T>,
+): Promise<T> {
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(file, "", { flag: "a" }); // touch – ensures file exists
+
+    const release = await lock(file, {
+        retries: { retries: 5, factor: 2, minTimeout: 50, maxTimeout: 200 },
+        realpath: false,
+    });
+
+    try {
+        return await fn();
+    } finally {
+        await release();
+    }
 }
