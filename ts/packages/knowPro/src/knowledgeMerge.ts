@@ -33,7 +33,7 @@ export function getDistinctSemanticRefTopics(
         semanticRefMatches,
         "topic",
     );
-    let mergedTopics = mergeScoredTopics(scoredTopics);
+    let mergedTopics = mergeScoredTopics(scoredTopics, false);
     const mergedKnowledge = getTopKnowledge<MergedTopic>(
         mergedTopics.values(),
         "topic",
@@ -84,6 +84,7 @@ type MergedFacets = collections.MultiMap<string, string>;
 
 export function mergeScoredTopics(
     scoredTopics: Iterable<Scored<SemanticRef>>,
+    mergeOrdinals: boolean,
 ): Map<string, Scored<MergedTopic>> {
     let mergedTopics = new Map<string, Scored<MergedTopic>>();
     for (let scoredTopic of scoredTopics) {
@@ -100,7 +101,9 @@ export function mergeScoredTopics(
             };
             mergedTopics.set(topic.text, existing);
         }
-        mergeMessageOrdinals(existing.item, scoredTopic.item);
+        if (mergeOrdinals) {
+            mergeMessageOrdinals(existing.item, scoredTopic.item);
+        }
     }
     return mergedTopics;
 }

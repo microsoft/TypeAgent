@@ -12,10 +12,15 @@ import {
 import * as answerSchema from "./answerResponseSchema.js";
 import { loadSchema } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import { IConversation, SemanticRefSearchResult } from "./interfaces.js";
+import {
+    IConversation,
+    MessageOrdinal,
+    SemanticRefSearchResult,
+} from "./interfaces.js";
 import {
     mergedToConcreteEntity,
     mergeScoredConcreteEntities,
+    mergeScoredTopics,
 } from "./knowledgeMerge.js";
 import { getScoredSemanticRefsFromOrdinals } from "./knowledgeLib.js";
 import { getEnclosingDateRangeForMessages } from "./message.js";
@@ -91,9 +96,41 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
     };
 }
 
+export function getRelevantTopicsForAnswer(
+    conversation: IConversation,
+    searchResult: SemanticRefSearchResult,
+    callback?: (
+        relevantKnowledge: RelevantKnowledge,
+        sourceMessageOrdinals?: Set<MessageOrdinal> | undefined,
+    ) => void,
+): RelevantKnowledge[] {
+    const scoredEntities = getScoredSemanticRefsFromOrdinals(
+        conversation.semanticRefs!,
+        searchResult.semanticRefMatches,
+        "topic",
+    );
+    const mergedTopics = mergeScoredTopics(scoredEntities, true);
+    const relevantTopics: RelevantKnowledge[] = [];
+    for (const scoredValue of mergedTopics.values()) {
+        let mergedTopic = scoredValue.item;
+        const relevantTopic = createRelevantKnowledge(
+            conversation,
+            mergedTopic.topic,
+            mergedTopic.sourceMessageOrdinals,
+            callback,
+        );
+        relevantTopics.push(relevantTopic);
+    }
+    return relevantTopics;
+}
+
 export function getRelevantEntitiesForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
+    callback?: (
+        relevantKnowledge: RelevantKnowledge,
+        sourceMessageOrdinals?: Set<MessageOrdinal> | undefined,
+    ) => void,
 ): RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
@@ -101,21 +138,42 @@ export function getRelevantEntitiesForAnswer(
         "entity",
     );
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
-    const contextItems: RelevantKnowledge[] = [];
+    const relevantEntities: RelevantKnowledge[] = [];
     for (const scoredValue of mergedEntities.values()) {
         let mergedEntity = scoredValue.item;
-        const item: RelevantKnowledge = {
-            knowledge: mergedToConcreteEntity(mergedEntity),
-            timeRange: mergedEntity.sourceMessageOrdinals
-                ? getEnclosingDateRangeForMessages(
-                      conversation.messages,
-                      mergedEntity.sourceMessageOrdinals,
-                  )
-                : undefined,
-        };
-        contextItems.push(item);
+        const relevantEntity = createRelevantKnowledge(
+            conversation,
+            mergedToConcreteEntity(mergedEntity),
+            mergedEntity.sourceMessageOrdinals,
+            callback,
+        );
+        relevantEntities.push(relevantEntity);
     }
-    return contextItems;
+    return relevantEntities;
+}
+
+function createRelevantKnowledge(
+    conversation: IConversation,
+    knowledge: any,
+    sourceMessageOrdinals?: Set<MessageOrdinal>,
+    callback?: (
+        relevantKnowledge: RelevantKnowledge,
+        sourceMessageOrdinals?: Set<MessageOrdinal>,
+    ) => void,
+): RelevantKnowledge {
+    const relevantKnowledge: RelevantKnowledge = {
+        knowledge,
+        timeRange: sourceMessageOrdinals
+            ? getEnclosingDateRangeForMessages(
+                  conversation.messages,
+                  sourceMessageOrdinals,
+              )
+            : undefined,
+    };
+    if (callback) {
+        callback(relevantKnowledge, sourceMessageOrdinals);
+    }
+    return relevantKnowledge;
 }
 
 function createQuestionPrompt(question: string): string {
