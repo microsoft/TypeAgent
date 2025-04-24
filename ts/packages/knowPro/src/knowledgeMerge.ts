@@ -76,15 +76,18 @@ export function getDistinctSemanticRefEntities(
     return mergedKnowledge;
 }
 
-export type MergedEntity = {
-    name: string;
-    type: string[];
-    facets?: MergedFacets | undefined;
+export interface MergedKnowledge {
     /**
      * Message ordinals from which the entity was collected
      */
-    messageOrdinals?: Set<MessageOrdinal> | undefined;
-};
+    sourceMessageOrdinals?: Set<MessageOrdinal> | undefined;
+}
+
+export interface MergedEntity extends MergedKnowledge {
+    name: string;
+    type: string[];
+    facets?: MergedFacets | undefined;
+}
 
 type MergedFacets = collections.MultiMap<string, string>;
 
@@ -133,8 +136,8 @@ export function mergeScoredConcreteEntities(
 }
 
 function mergeMessageOrdinals(mergedEntity: MergedEntity, sr: SemanticRef) {
-    mergedEntity.messageOrdinals ??= new Set<MessageOrdinal>();
-    mergedEntity.messageOrdinals.add(sr.range.start.messageOrdinal);
+    mergedEntity.sourceMessageOrdinals ??= new Set<MessageOrdinal>();
+    mergedEntity.sourceMessageOrdinals.add(sr.range.start.messageOrdinal);
 }
 
 export function concreteToMergedEntities(
