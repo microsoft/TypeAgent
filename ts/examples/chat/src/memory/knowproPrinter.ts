@@ -510,6 +510,16 @@ export class KnowProPrinter extends ChatPrinter {
         this.writeJson(action.parameters.filters);
         return this;
     }
+
+    public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
+        if (answerResponse) {
+            if (answerResponse.answer) {
+                this.writeInColor(chalk.green, answerResponse.answer);
+            } else if (answerResponse.whyNoAnswer) {
+                this.writeError(answerResponse.whyNoAnswer);
+            }
+        }
+    }
 }
 
 function getPodcastParticipants(podcast: cm.Podcast) {

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    DateRange,
     IMessage,
     MessageOrdinal,
     TextLocation,
@@ -153,4 +154,51 @@ export function* getMessageChunkBatch(
     if (batch.length > 0) {
         yield batch;
     }
+}
+
+export function getEnclosingTextRange(
+    messageOrdinals: Iterable<MessageOrdinal>,
+): TextRange | undefined {
+    let start: MessageOrdinal | undefined;
+    let end = start;
+    for (const ordinal of messageOrdinals) {
+        if (start === undefined || ordinal < start) {
+            start = ordinal;
+        }
+        if (end === undefined || end < ordinal) {
+            end = ordinal;
+        }
+    }
+    if (start === undefined || end === undefined) {
+        return undefined;
+    }
+    return textRangeFromMessageRange(start, end);
+}
+
+export function getEnclosingDateRangeForMessages(
+    messages: IMessage[],
+    messageOrdinals: Iterable<MessageOrdinal>,
+): DateRange | undefined {
+    const textRange = getEnclosingTextRange(messageOrdinals);
+    if (!textRange) {
+        return undefined;
+    }
+    return getEnclosingDateRangeForTextRange(messages, textRange);
+}
+
+export function getEnclosingDateRangeForTextRange(
+    messages: IMessage[],
+    range: TextRange,
+): DateRange | undefined {
+    const startTimestamp = messages[range.start.messageOrdinal].timestamp;
+    if (!startTimestamp) {
+        return undefined;
+    }
+    const endTimestamp = range.end
+        ? messages[range.end.messageOrdinal].timestamp
+        : undefined;
+    return {
+        start: new Date(startTimestamp),
+        end: endTimestamp ? new Date(endTimestamp) : undefined,
+    };
 }

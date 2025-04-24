@@ -20,10 +20,8 @@ import {
 import { IndexingEventHandlers } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { openai } from "aiclient";
-import {
-    extractKnowledgeFromTextBatch,
-    facetValueToString,
-} from "./knowledge.js";
+import { extractKnowledgeFromTextBatch } from "./knowledge.js";
+import { facetValueToString } from "./knowledgeLib.js";
 import { createKnowledgeExtractor } from "./knowledge.js";
 import {
     addToSecondaryIndexes,

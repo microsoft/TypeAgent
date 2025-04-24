@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 /**
- * INTERNAL COLLECTIONS USED BY QUERY PROCESSOR
- * These should not be exposed in the public APIs
+ * INTERNAL LIBRARY
+ * COLLECTIONS USED BY QUERY PROCESSOR
  */
 
 import { collections, createTopNList } from "typeagent";
