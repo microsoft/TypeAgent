@@ -251,21 +251,11 @@ export class ConversationMemory
         if (!queryTranslator) {
             return error(`No query translator provided for ${this.nameTag}`);
         }
-        const result = await kp.searchQueryExprFromLanguage(
+        return kp.searchConversationWithNaturalLanguage(
             this,
-            queryTranslator,
             searchText,
+            queryTranslator,
         );
-        if (!result.success) {
-            return result;
-        }
-        const queryExpressions = result.data;
-        const results: kp.ConversationSearchResult[] = [];
-        for (const searchQuery of queryExpressions) {
-            const queryResult = await kp.runSearchQuery(this, searchQuery);
-            results.push(...queryResult);
-        }
-        return success(results);
     }
 
     public async search(

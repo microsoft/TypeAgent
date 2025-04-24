@@ -211,7 +211,7 @@ function createQuestionPrompt(question: string): string {
         "Use the name and type of the provided entities to select those highly relevant to answering the question.",
         "Don't answer if the topics and entity names/types in the question are not in the conversation history.",
         "List ALL entities if query intent implies that.",
-        "Your answer is readable and complete, with suitable formatting (line breaks, bullet points etc).",
+        "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
     ];
     return prompt.join("\n");
 }
