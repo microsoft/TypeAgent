@@ -29,7 +29,7 @@ describeIf(
                     "conversationMemory.online.endToEnd",
                 );
                 // Set up for auto-save
-                cm.fileSaveSettings = {
+                cm.settings.fileSaveSettings = {
                     dirPath,
                     baseFileName: "endToEnd",
                 };
@@ -39,8 +39,8 @@ describeIf(
                 }
                 verifyMemory(cm, messages.length);
                 const cm2 = await ConversationMemory.readFromFile(
-                    cm.fileSaveSettings.dirPath,
-                    cm.fileSaveSettings.baseFileName,
+                    cm.settings.fileSaveSettings.dirPath,
+                    cm.settings.fileSaveSettings.baseFileName,
                 );
                 expect(cm2).toBeDefined();
                 verifyMemory(cm2!, cm.messages.length, cm.semanticRefs.length);

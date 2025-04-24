@@ -11,7 +11,8 @@ import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 
 import registerDebug from "debug";
-import { error, Result, success } from "typechat";
+import { error, Result, success, TypeChatLanguageModel } from "typechat";
+import { openai } from "aiclient";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class ConversationMessageMeta implements kp.IKnowledgeSource {
@@ -141,14 +142,20 @@ export type FileSaveSettings = {
     baseFileName: string;
 };
 
+export type ConversationMemorySettings = {
+    conversationSettings: kp.ConversationSettings;
+    languageModel: TypeChatLanguageModel;
+    queryTranslator?: kp.SearchQueryTranslator | undefined;
+    fileSaveSettings?: FileSaveSettings | undefined;
+};
+
 export class ConversationMemory
     implements kp.IConversation<ConversationMessage>
 {
-    public settings: kp.ConversationSettings;
+    public settings: ConversationMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
-    public fileSaveSettings: FileSaveSettings | undefined;
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
     private embeddingSize: number | undefined;
@@ -158,23 +165,18 @@ export class ConversationMemory
         public nameTag: string = "",
         public messages: ConversationMessage[] = [],
         public tags: string[] = [],
-        settings?: kp.ConversationSettings,
+        settings?: ConversationMemorySettings,
     ) {
         this.semanticRefs = [];
         if (!settings) {
             settings = this.createSettings();
         }
         this.settings = settings;
-        //
-        // Messages can contain prior knowledge extracted during chat responses for example
-        // To avoid knowledge duplication, we manually extract message knowledge and merge it
-        // with any prior knowledge
-        //
-        this.settings.semanticRefIndexSettings.autoExtractKnowledge = false;
+        this.adjustSettings();
 
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
-            this.settings,
+            this.settings.conversationSettings,
         );
         this.updatesTaskQueue = this.createTaskQueue();
     }
@@ -191,7 +193,8 @@ export class ConversationMemory
         // - (d) configure the indexing engine not to automatically extract any other knowledge
         //
         const knowledgeResult = await kp.extractKnowledgeFromText(
-            this.settings.semanticRefIndexSettings.knowledgeExtractor!,
+            this.settings.conversationSettings.semanticRefIndexSettings
+                .knowledgeExtractor!,
             message.textChunks[0].trim(),
             3,
         );
@@ -208,7 +211,7 @@ export class ConversationMemory
         this.messages.push(message);
         kp.addToConversationIndex(
             this,
-            this.settings,
+            this.settings.conversationSettings,
             messageOrdinalStartAt,
             semanticRefOrdinalStartAt,
         );
@@ -234,19 +237,28 @@ export class ConversationMemory
         });
     }
 
-    public async search(
-        text: string,
-        translator: kp.SearchQueryTranslator,
+    /**
+     * Run a natural language query against this memory
+     * @param searchText
+     * @param translator
+     * @returns
+     */
+    public async searchWithNaturalLanguage(
+        searchText: string,
+        queryTranslator?: kp.SearchQueryTranslator,
     ): Promise<Result<kp.ConversationSearchResult[]>> {
+        queryTranslator ??= this.settings.queryTranslator;
+        if (!queryTranslator) {
+            return error(`No query translator provided for ${this.nameTag}`);
+        }
         const result = await kp.searchQueryExprFromLanguage(
             this,
-            translator,
-            text,
+            queryTranslator,
+            searchText,
         );
         if (!result.success) {
             return result;
         }
-        // TODO: combine results from sub-expressions
         const queryExpressions = result.data;
         const results: kp.ConversationSearchResult[] = [];
         for (const searchQuery of queryExpressions) {
@@ -254,6 +266,16 @@ export class ConversationMemory
             results.push(...queryResult);
         }
         return success(results);
+    }
+
+    public async search(
+        selectExpr: kp.SearchSelectExpr,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        return kp.searchConversation(
+            this,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+        );
     }
 
     public async waitForPendingTasks(): Promise<void> {
@@ -293,7 +315,7 @@ export class ConversationMemory
         }
         if (podcastData.messageIndexData) {
             this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
-                this.settings.messageTextIndexSettings,
+                this.settings.conversationSettings.messageTextIndexSettings,
             );
             this.secondaryIndexes.messageIndex.deserialize(
                 podcastData.messageIndexData,
@@ -313,26 +335,27 @@ export class ConversationMemory
         dirPath: string,
         baseFileName: string,
     ): Promise<ConversationMemory | undefined> {
-        const podcast = new ConversationMemory();
+        const memory = new ConversationMemory();
         const data = await kp.readConversationDataFromFile(
             dirPath,
             baseFileName,
-            podcast.settings.relatedTermIndexSettings.embeddingIndexSettings
-                ?.embeddingSize,
+            memory.settings.conversationSettings.relatedTermIndexSettings
+                .embeddingIndexSettings?.embeddingSize,
         );
         if (data) {
-            podcast.deserialize(data);
+            memory.deserialize(data);
         }
-        return podcast;
+        return memory;
     }
 
     private async autoSaveFile(): Promise<Result<boolean>> {
         try {
-            if (this.fileSaveSettings) {
+            const fileSaveSettings = this.settings.fileSaveSettings;
+            if (fileSaveSettings) {
                 // TODO: Optionally, back up previous file and do a safe read write
                 await this.writeToFile(
-                    this.fileSaveSettings.dirPath,
-                    this.fileSaveSettings.baseFileName,
+                    fileSaveSettings.dirPath,
+                    fileSaveSettings.baseFileName,
                 );
             }
             return success(true);
@@ -392,7 +415,22 @@ export class ConversationMemory
         }
     }
 
-    private createSettings() {
+    private adjustSettings(): void {
+        this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
+            this.settings.languageModel,
+        );
+        //
+        // Messages can contain prior knowledge extracted during chat responses for example
+        // To avoid knowledge duplication, we manually extract message knowledge and merge it
+        // with any prior knowledge
+        //
+        this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
+            false;
+    }
+
+    private createSettings(): ConversationMemorySettings {
+        const languageModel =
+            openai.createChatModelDefault("conversationMemory");
         /**
          * Our index already has embeddings for every term in the podcast
          * Create a caching embedding model that can just leverage those embeddings
@@ -404,13 +442,17 @@ export class ConversationMemory
         );
         this.embeddingModel = model;
         this.embeddingSize = size;
-        const settings = kp.createConversationSettings(
+        const conversationSettings = kp.createConversationSettings(
             this.embeddingModel,
             this.embeddingSize,
         );
-        settings.semanticRefIndexSettings.knowledgeExtractor =
-            kp.createKnowledgeExtractor();
-        return settings;
+        conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
+            kp.createKnowledgeExtractor(languageModel);
+        const memorySettings: ConversationMemorySettings = {
+            conversationSettings,
+            languageModel,
+        };
+        return memorySettings;
     }
 }
 

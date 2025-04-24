@@ -17,7 +17,7 @@ import { SearchSelectExpr } from "./interfaces.js";
 import { dateRangeFromDateTimeRange } from "./common.js";
 import { createPropertySearchTerm, createSearchTerm } from "./searchLib.js";
 import { SearchTermGroup } from "./interfaces.js";
-import { /*isKnownProperty,*/ PropertyNames } from "./propertyIndex.js";
+import { PropertyNames } from "./propertyIndex.js";
 import { PropertyTermSet } from "./collections.js";
 import { IConversation } from "./interfaces.js";
 import { getTimeRangePromptSectionForConversation } from "./conversation.js";

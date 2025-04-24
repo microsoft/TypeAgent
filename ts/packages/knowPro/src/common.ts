@@ -24,10 +24,10 @@ import {
     buildTransientSecondaryIndexes,
 } from "./secondaryIndexes.js";
 
-export interface Scored<T = any> {
+export type Scored<T = any> = {
     item: T;
     score: number;
-}
+};
 
 /**
  * Returns:
@@ -82,6 +82,10 @@ export function isInTextRange(
     );
     return cmpStart <= 0 && cmpEnd < 0;
 }
+
+export type Timestamped<T> = {
+    timestamp: string;
+};
 
 export function dateRangeFromDateTimeRange(
     dateTimeRange: DateTimeRange,
