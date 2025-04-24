@@ -12,6 +12,9 @@
   "author": "Microsoft",
   "type": "module",
   "main": "./out/main/index.js",
+  "files": [
+    "out"
+  ],
   "scripts": {
     "build": "concurrently npm:typecheck npm:build:electron",
     "build:electron": "concurrently npm:build:electron:esm npm:build:electron:cjs",
@@ -42,11 +45,13 @@
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "ansi_up": "^6.0.2",
+    "browser-typeagent": "workspace:*",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",
     "dompurify": "^3.2.4",
     "dotenv": "^16.3.1",
+    "electron": "^30.0.1",
     "electron-updater": "^6.3.2",
     "jose": "^5.9.6",
     "markdown-it": "^14.1.0",
@@ -61,7 +66,6 @@
     "@types/dompurify": "^3.0.5",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "electron": "^30.0.1",
     "electron-builder": "^24.13.2",
     "electron-vite": "^3.1.0",
     "less": "^4.2.0",
