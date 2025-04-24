@@ -91,7 +91,7 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
     };
 }
 
-export function getRelevantEntities(
+export function getRelevantEntitiesForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
 ): RelevantKnowledge[] {

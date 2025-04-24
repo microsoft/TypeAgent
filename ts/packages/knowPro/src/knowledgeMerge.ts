@@ -28,29 +28,16 @@ export function getDistinctSemanticRefTopics(
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    let mergedTopics = new Map<string, Scored<Topic>>();
-    for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
-        if (semanticRef.knowledgeType !== "topic") {
-            continue;
-        }
-        const topic = semanticRef.knowledge as Topic;
-        const existing = mergedTopics.get(topic.text);
-        if (existing) {
-            if (existing.score < semanticRefMatch.score) {
-                existing.score = semanticRefMatch.score;
-            }
-        } else {
-            mergedTopics.set(topic.text, {
-                item: topic,
-                score: semanticRefMatch.score,
-            });
-        }
-    }
-    const mergedKnowledge = getTopKnowledge<Topic>(
+    const scoredTopics = getScoredSemanticRefsFromOrdinals(
+        semanticRefs,
+        semanticRefMatches,
+        "topic",
+    );
+    let mergedTopics = mergeScoredTopics(scoredTopics);
+    const mergedKnowledge = getTopKnowledge<MergedTopic>(
         mergedTopics.values(),
         "topic",
-        (t) => t,
+        (t) => t.topic,
         topK,
     );
     return mergedKnowledge;
@@ -83,6 +70,10 @@ export interface MergedKnowledge {
     sourceMessageOrdinals?: Set<MessageOrdinal> | undefined;
 }
 
+export interface MergedTopic extends MergedKnowledge {
+    topic: Topic;
+}
+
 export interface MergedEntity extends MergedKnowledge {
     name: string;
     type: string[];
@@ -91,20 +82,31 @@ export interface MergedEntity extends MergedKnowledge {
 
 type MergedFacets = collections.MultiMap<string, string>;
 
-/**
- * In place union
- */
-function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
-    if (to.name !== other.name) {
-        return false;
+export function mergeScoredTopics(
+    scoredTopics: Iterable<Scored<SemanticRef>>,
+): Map<string, Scored<MergedTopic>> {
+    let mergedTopics = new Map<string, Scored<MergedTopic>>();
+    for (let scoredTopic of scoredTopics) {
+        const topic = scoredTopic.item.knowledge as Topic;
+        let existing = mergedTopics.get(topic.text);
+        if (existing) {
+            if (existing.score < scoredTopic.score) {
+                existing.score = scoredTopic.score;
+            }
+        } else {
+            existing = {
+                item: { topic },
+                score: scoredTopic.score,
+            };
+            mergedTopics.set(topic.text, existing);
+        }
+        mergeMessageOrdinals(existing.item, scoredTopic.item);
     }
-    to.type = unionArrays(to.type, other.type)!;
-    to.facets = unionFacets(to.facets, other.facets);
-    return true;
+    return mergedTopics;
 }
 
 export function mergeScoredConcreteEntities(
-    scoredEntities: IterableIterator<Scored<SemanticRef>>,
+    scoredEntities: Iterable<Scored<SemanticRef>>,
     mergeOrdinals: boolean,
 ): Map<string, Scored<MergedEntity>> {
     let mergedEntities = new Map<string, Scored<MergedEntity>>();
@@ -135,7 +137,7 @@ export function mergeScoredConcreteEntities(
     return mergedEntities;
 }
 
-function mergeMessageOrdinals(mergedEntity: MergedEntity, sr: SemanticRef) {
+function mergeMessageOrdinals(mergedEntity: MergedKnowledge, sr: SemanticRef) {
     mergedEntity.sourceMessageOrdinals ??= new Set<MessageOrdinal>();
     mergedEntity.sourceMessageOrdinals.add(sr.range.start.messageOrdinal);
 }
@@ -205,6 +207,18 @@ function mergedFacetsToFacets(mergedFacets: MergedFacets): kpLib.Facet[] {
         }
     }
     return facets;
+}
+
+/**
+ * In place union
+ */
+function unionEntities(to: MergedEntity, other: MergedEntity): boolean {
+    if (to.name !== other.name) {
+        return false;
+    }
+    to.type = unionArrays(to.type, other.type)!;
+    to.facets = unionFacets(to.facets, other.facets);
+    return true;
 }
 
 /**
