@@ -14,6 +14,7 @@ import * as answerSchema from "./answerSchema.js";
 import { loadSchema } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
+    DateRange,
     IConversation,
     Knowledge,
     SemanticRefSearchResult,
@@ -23,7 +24,7 @@ import {
     mergedToConcreteEntity,
     mergeScoredConcreteEntities,
 } from "./knowledge.js";
-import { getMessageTimestamps } from "./message.js";
+import { getEnclosingDateRangeForMessages } from "./message.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -88,7 +89,7 @@ export type AnswerContext = {};
 
 export type AnswerContextItem = {
     knowledge: Knowledge;
-    timestamp: string | string[] | undefined;
+    timeRange?: DateRange | undefined;
 };
 
 export function getDistinctEntities(
@@ -102,15 +103,16 @@ export function getDistinctEntities(
     );
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
     const contextItems: AnswerContextItem[] = [];
-    for (const mergedEntity of mergedEntities.values()) {
-        let ordinals = mergedEntity.item.messageOrdinals;
-        let timestamp =
-            ordinals !== undefined
-                ? getMessageTimestamps(conversation.messages, ordinals)
-                : undefined;
+    for (const scoredValue of mergedEntities.values()) {
+        let mergedEntity = scoredValue.item;
         const item: AnswerContextItem = {
-            knowledge: mergedToConcreteEntity(mergedEntity.item),
-            timestamp,
+            knowledge: mergedToConcreteEntity(mergedEntity),
+            timeRange: mergedEntity.messageOrdinals
+                ? getEnclosingDateRangeForMessages(
+                      conversation.messages,
+                      mergedEntity.messageOrdinals,
+                  )
+                : undefined,
         };
         contextItems.push(item);
     }

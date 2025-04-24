@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    DateRange,
     IMessage,
     MessageOrdinal,
     TextLocation,
@@ -155,16 +156,49 @@ export function* getMessageChunkBatch(
     }
 }
 
-export function getMessageTimestamps(
-    messages: IMessage[],
-    messageOrdinals: MessageOrdinal[] | Set<MessageOrdinal>,
-): string[] {
-    const timestamps: string[] = [];
+export function getEnclosingTextRange(
+    messageOrdinals: Iterable<MessageOrdinal>,
+): TextRange | undefined {
+    let start: MessageOrdinal | undefined;
+    let end = start;
     for (const ordinal of messageOrdinals) {
-        const timestamp = messages[ordinal].timestamp;
-        if (timestamp) {
-            timestamps.push(timestamp);
+        if (start === undefined || ordinal < start) {
+            start = ordinal;
+        }
+        if (end === undefined || end < ordinal) {
+            end = ordinal;
         }
     }
-    return timestamps;
+    if (start === undefined || end === undefined) {
+        return undefined;
+    }
+    return textRangeFromMessageRange(start, end);
+}
+
+export function getEnclosingDateRangeForMessages(
+    messages: IMessage[],
+    messageOrdinals: Iterable<MessageOrdinal>,
+): DateRange | undefined {
+    const textRange = getEnclosingTextRange(messageOrdinals);
+    if (!textRange) {
+        return undefined;
+    }
+    return getEnclosingDateRangeForTextRange(messages, textRange);
+}
+
+export function getEnclosingDateRangeForTextRange(
+    messages: IMessage[],
+    range: TextRange,
+): DateRange | undefined {
+    const startTimestamp = messages[range.start.messageOrdinal].timestamp;
+    if (!startTimestamp) {
+        return undefined;
+    }
+    const endTimestamp = range.end
+        ? messages[range.end.messageOrdinal].timestamp
+        : undefined;
+    return {
+        start: new Date(startTimestamp),
+        end: endTimestamp ? new Date(endTimestamp) : undefined,
+    };
 }

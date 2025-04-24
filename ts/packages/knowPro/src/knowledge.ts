@@ -21,7 +21,7 @@ import { createKnowledgeModel } from "./conversationIndex.js";
 
 /**
  * Contains a mix of public methods exposed via index.ts and internal only
- * May need to refactor
+ * TODO: Refactor into separate files
  */
 
 //----------------
@@ -176,7 +176,7 @@ export function getDistinctSemanticRefEntities(
     return mergedKnowledge;
 }
 
-export function getTopKnowledge<T>(
+function getTopKnowledge<T>(
     values: IterableIterator<Scored<T>>,
     type: KnowledgeType,
     toKnowledge: (item: T) => Knowledge,
