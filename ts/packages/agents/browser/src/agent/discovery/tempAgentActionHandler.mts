@@ -28,7 +28,7 @@ export function createTempAgentForSchema(
                 case "getLocationInStore":
                 case "searchForProduct":
                 case "selectSearchResult":
-                    handleCommerceAction(action, context);
+                    handleCommerceAction(action, tempContext);
                     break;
                 case "browseProductCategories":
                     handleBrowseProductCategory(action);
