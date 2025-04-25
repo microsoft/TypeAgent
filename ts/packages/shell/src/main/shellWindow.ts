@@ -129,13 +129,14 @@ export class ShellWindow {
         mainWindow.webContents.zoomFactor = 1;
 
         const states = this.settings.window;
+        const user = this.settings.user;
         if (states.devTools) {
             this.chatView.webContents.openDevTools();
         }
 
         // open the canvas if it was previously open
-        if (states.canvas) {
-            this.openInlineBrowser(new URL(states.canvas));
+        if (user.canvas) {
+            this.openInlineBrowser(new URL(user.canvas));
         }
 
         globalShortcut.register("Alt+Right", () => {
@@ -204,7 +205,6 @@ export class ShellWindow {
             inlineWidth: this.inlineWidth,
             zoomLevel: this.chatView.webContents.zoomFactor,
             devTools: this.chatView.webContents.isDevToolsOpened(),
-            canvas: this.targetUrl,
         };
     }
 
@@ -301,7 +301,7 @@ export class ShellWindow {
                 });
 
             // indicate in the settings which canvas is open
-            this.targetUrl = targetUrl.toString();
+            this.settings.setUserSettingValue("canvas", targetUrl.toString());
         }
     }
 
