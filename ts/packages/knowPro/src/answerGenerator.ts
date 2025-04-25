@@ -202,6 +202,9 @@ export function getRelevantMessagesForAnswer(
             relevantMessage.from = meta.source;
             relevantMessage.to = meta.dest;
         }
+        if (message.timestamp) {
+            relevantMessage.timestamp = new Date(message.timestamp);
+        }
         relevantMessages.push(relevantMessage);
     }
     return relevantMessages;

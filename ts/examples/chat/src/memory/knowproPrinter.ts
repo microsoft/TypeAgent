@@ -511,8 +511,22 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeAnswerContext(answerContext: kp.AnswerContext): void {
+    public writeNaturalLanguageContext(
+        context: kp.NaturalLanguageSearchContext,
+    ) {
+        if (context.searchQuery) {
+            this.writeHeading("Search Query");
+            this.writeJson(context.searchQuery);
+        }
+        if (context.searchQueryExpr) {
+            this.writeHeading("Search QueryExpr");
+            this.writeJson(context.searchQueryExpr);
+        }
+    }
+
+    public writeAnswerContext(answerContext: kp.AnswerContext) {
         if (answerContext.entities) {
+            this.writeHeading("Entities");
             const entities = answerContext.entities;
             for (let i = 0; i < entities.length; ++i) {
                 this.writeProgress(i + 1, entities.length);
@@ -522,6 +536,7 @@ export class KnowProPrinter extends ChatPrinter {
             }
         }
         if (answerContext.topics) {
+            this.writeHeading("Topics");
             const topics = answerContext.topics;
             for (let i = 0; i < topics.length; ++i) {
                 this.writeProgress(i + 1, topics.length);
@@ -530,12 +545,14 @@ export class KnowProPrinter extends ChatPrinter {
                 this.writeTopic(topic.knowledge);
             }
         }
+        return this;
     }
 
     private writeRelevantKnowledge(knowledge: kp.RelevantKnowledge) {
         if (knowledge.timeRange) {
             this.writeDateRange(knowledge.timeRange);
         }
+        return this;
     }
 
     public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
@@ -549,6 +566,7 @@ export class KnowProPrinter extends ChatPrinter {
                 this.writeError(answerResponse.whyNoAnswer);
             }
         }
+        return this;
     }
 }
 

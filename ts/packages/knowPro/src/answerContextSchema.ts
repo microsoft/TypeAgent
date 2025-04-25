@@ -30,4 +30,5 @@ export type RelevantMessage = {
     message: string;
     from?: EntityNames | undefined;
     to?: EntityNames | undefined;
+    timestamp?: Date | undefined;
 };

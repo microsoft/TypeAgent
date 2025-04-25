@@ -618,12 +618,14 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, answerDefNew());
         const searchText = namedArgs.query;
         const options = kp.createDefaultSearchOptions();
+        const debugContext: kp.NaturalLanguageSearchContext = {};
         options.exactMatch = namedArgs.exact;
         const searchResults = await kp.searchConversationWithNaturalLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
             options,
+            debugContext,
         );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
@@ -638,10 +640,11 @@ export async function createKnowproCommands(
                 answerContext.messages = undefined;
             }
             if (namedArgs.debug) {
-                context.printer.writeLine();
-                context.printer.writeHeading("==DEBUG==");
-                context.printer.writeAnswerContext(answerContext);
-                context.printer.writeHeading("==DEBUG==");
+                context.printer.writeInColor(chalk.gray, () => {
+                    context.printer.writeLine();
+                    context.printer.writeNaturalLanguageContext(debugContext);
+                    context.printer.writeAnswerContext(answerContext);
+                });
             }
             const answerResult = await context.answerGenerator.generateAnswer(
                 searchText,

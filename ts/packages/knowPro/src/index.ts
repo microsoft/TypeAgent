@@ -15,6 +15,7 @@ export * from "./textLocationIndex.js";
 export * from "./messageIndex.js";
 export * from "./searchLib.js";
 export * from "./search.js";
+export * from "./searchLang.js";
 export * from "./serialization.js";
 export * from "./queryCmp.js";
 
