@@ -204,7 +204,7 @@ export class ShellWindow {
             height: size[1],
             inlineWidth: this.inlineWidth,
             zoomLevel: this.chatView.webContents.zoomFactor,
-            devTools: this.chatView.webContents.isDevToolsOpened(),            
+            devTools: this.chatView.webContents.isDevToolsOpened(),
         };
     }
 

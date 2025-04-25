@@ -109,7 +109,7 @@ async function initializeMontageContext() {
     return {
         // default search settings
         searchSettings: {
-            minScore: 5,    // TODO: tune?
+            minScore: 5, // TODO: tune?
             exactMatch: false,
         },
     };
@@ -886,9 +886,11 @@ export async function createViewServiceHost(
 async function saveMontages(context: SessionContext<MontageActionContext>) {
     // merge the "working montage" into the saved montages
     if (context.agentContext.montage !== undefined) {
-        const index: number = context.agentContext.montages.findIndex((value, index) => {
-            return value.id === context.agentContext.montage?.id;
-        });
+        const index: number = context.agentContext.montages.findIndex(
+            (value, index) => {
+                return value.id === context.agentContext.montage?.id;
+            },
+        );
 
         // if we didn't find the montage in the listed montages we add the working montage to the list
         // or update it if we did find it

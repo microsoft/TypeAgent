@@ -236,7 +236,15 @@ class ShellOpenWebContentView implements CommandHandler {
                 } catch (e) {
                     // if the URL is invalid let's try to open the last used canvas item if we have one
                     // if we don't, then we've tried our best
-                    return this.run(context, { args: { site: { description: "", value: context.sessionContext.agentContext.shellWindow.getUserSettings().canvas }}} as any);
+                    return this.run(context, {
+                        args: {
+                            site: {
+                                description: "",
+                                value: context.sessionContext.agentContext.shellWindow.getUserSettings()
+                                    .canvas,
+                            },
+                        },
+                    } as any);
                 }
 
                 break;
