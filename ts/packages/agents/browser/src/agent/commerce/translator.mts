@@ -96,35 +96,24 @@ function getScreenshotPromptSection(
     return screenshotSection;
 }
 
+async function getSchemaFileContents(fileName: string): Promise<string> {
+    const packageRoot = path.join("..", "..", "..");
+    return await fs.promises.readFile(
+        fileURLToPath(
+            new URL(
+                path.join(packageRoot, "./src/agent/commerce/schema", fileName),
+                import.meta.url,
+            ),
+        ),
+        "utf8",
+    );
+}
+
 export async function createCommercePageTranslator(
     model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
 ) {
-    const packageRoot = path.join("..", "..", "..");
-    const actionSchema = await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/commerce/schema/userActions.mts",
-                ),
-                import.meta.url,
-            ),
-        ),
-        "utf8",
-    );
-
-    const pageSchema = await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/commerce/schema/pageComponents.mts",
-                ),
-                import.meta.url,
-            ),
-        ),
-        "utf8",
-    );
+    const actionSchema = await getSchemaFileContents("userActions.mts");
+    const pageSchema = await getSchemaFileContents("pageComponents.mts");
 
     const agent = new ECommerceSiteAgent<ShoppingActions>(
         pageSchema,
@@ -258,18 +247,8 @@ export class ECommerceSiteAgent<T extends object> {
     }
 
     async getFriendlyPurchaseSummary(rawResults: PurchaseResults) {
-        const packageRoot = path.join("..", "..", "..");
-        const resultsSchema = await fs.promises.readFile(
-            fileURLToPath(
-                new URL(
-                    path.join(
-                        packageRoot,
-                        "./src/agent/commerce/schema/shoppingResults.mts",
-                    ),
-                    import.meta.url,
-                ),
-            ),
-            "utf8",
+        const resultsSchema = await getSchemaFileContents(
+            "shoppingResults.mts",
         );
 
         const bootstrapTranslator = this.getBootstrapTranslator(
@@ -304,6 +283,118 @@ export class ECommerceSiteAgent<T extends object> {
                 text: `
         The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
         `,
+            },
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response;
+    }
+
+    async getNextPageAction(
+        userRequest?: string,
+        fragments?: HtmlFragments[],
+        screenshot?: string,
+        pastActions?: string,
+        lastAction?: any,
+    ) {
+        const resultsSchema = await getSchemaFileContents("planActions.mts");
+
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "ShoppingPlanActions",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshot,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+
+        let requestSection = [];
+        requestSection.push({
+            type: "text",
+            text: `
+            # User Request
+            ${userRequest}
+        `,
+        });
+        if (pastActions !== undefined && pastActions.length > 0) {
+            requestSection.push({
+                type: "text",
+                text: `
+               
+            # Execution History
+            '''
+            ${JSON.stringify(pastActions)}
+            '''
+            `,
+            });
+        }
+
+        if (lastAction !== undefined) {
+            requestSection.push({
+                type: "text",
+                text: `
+               
+            Last Action: ${lastAction.actionName})
+            `,
+            });
+        }
+
+        const promptSections = [
+            {
+                type: "text",
+                text: `
+"You are a browser automation planning assistant for an e-commerce website. Your task is to determine the next best action to execute based on the user's request and the current state of the browser."
+`,
+            },
+            ...screenshotSection,
+            ...htmlSection,
+            ...requestSection,
+            {
+                type: "text",
+                text: `
+Use the user request below to generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+'''
+${bootstrapTranslator.validator.getSchemaText()}
+'''
+`,
+            },
+            {
+                type: "text",
+                text: `
+       
+    # Special Actions
+  1. If you believe the user's request has been FULLY completed, you can respond with actionName: "PlanCompleted" and no parameters.
+  
+  
+  # Instructions
+  1. Analyze the user's request and the current browser state
+  2. Determine the most appropriate next action to take
+  3. Select the action from the available actions list
+  4. Provide the necessary parameters for the selected action
+  5. Respond with ONLY a JSON object containing the actionName and parameters
+  
+  Always ensure that:
+- The actionName corresponds to one of the available actions or "PlanCompleted"
+- All required parameters for the action are provided
+- Parameter types match what's expected (string, number, boolean)
+- Your reasoning is deliberate and goal-oriented towards completing the user's request
+- You select "PlanCompleted" only when you are certain the user's request has been fully completed
+
+  Think step-by-step before making your decision. Consider what has been done so far and what remains to be done to fulfill the user's request.
+    `,
+            },
+            {
+                type: "text",
+                text: `
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+`,
             },
         ];
 

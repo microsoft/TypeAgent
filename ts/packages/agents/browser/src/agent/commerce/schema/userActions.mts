@@ -1,13 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AddToCart = {
-    actionName: "addToCart";
-    parameters: {
-        productName: string;
-    };
-};
-
 // This allows you to view the shopping cart contents
 export type ViewShoppingCart = {
     actionName: "viewShoppingCart";
@@ -25,26 +18,15 @@ export type GetLocationInStore = {
     };
 };
 
-// IMPORTANT: Use this action when the user query involves search for products on an e-commerce store, such as "aaa batteries"
-export type SearchForProduct = {
-    actionName: "searchForProduct";
+export type BuyProduct = {
+    actionName: "buyProduct";
     parameters: {
-        productName: string;
-    };
-};
-
-export type SelectSearchResult = {
-    actionName: "selectSearchResult";
-    parameters: {
-        position: number;
-        productName?: string;
+        productQuery: string;
     };
 };
 
 export type ShoppingActions =
-    | AddToCart
     | ViewShoppingCart
     | FindNearbyStore
     | GetLocationInStore
-    | SearchForProduct
-    | SelectSearchResult;
+    | BuyProduct;

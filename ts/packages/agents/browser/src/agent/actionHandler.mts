@@ -241,7 +241,7 @@ async function executeBrowserAction(
             } else if (action.translatorName === "browser.commerce") {
                 const commerceResult = await handleCommerceAction(
                     action,
-                    context.sessionContext,
+                    context,
                 );
                 return createActionResult(commerceResult);
             } else if (action.translatorName === "browser.instacart") {
