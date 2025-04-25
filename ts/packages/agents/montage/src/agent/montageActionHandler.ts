@@ -886,17 +886,15 @@ export async function createViewServiceHost(
 async function saveMontages(context: SessionContext<MontageActionContext>) {
     // merge the "working montage" into the saved montages
     if (context.agentContext.montage !== undefined) {
-        let found: boolean = false;
-        context.agentContext.montages.findIndex((value, index) => {
-            if (value.id === context.agentContext.montage?.id) {
-                context.agentContext.montages[index] =
-                    context.agentContext.montage!;
-                found = true;
-            }
+        const index: number = context.agentContext.montages.findIndex((value, index) => {
+            return value.id === context.agentContext.montage?.id;
         });
 
         // if we didn't find the montage in the listed montages we add the working montage to the list
-        if (!found) {
+        // or update it if we did find it
+        if (index > -1) {
+            context.agentContext.montages[index] = context.agentContext.montage;
+        } else {
             context.agentContext.montages.push(context.agentContext.montage);
         }
     }
