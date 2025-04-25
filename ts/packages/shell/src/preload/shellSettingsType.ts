@@ -19,6 +19,7 @@ export type ShellUserSettings = {
     chatHistory: boolean; // should the shell load the chat history?
     notifyFilter: string;
     disallowedDisplayType: string; // semicolon separated list of display types that should not be used
+    canvas: string | undefined; // the last item shown in the canvas
 };
 
 export const defaultUserSettings: ShellUserSettings = {
@@ -37,4 +38,5 @@ export const defaultUserSettings: ShellUserSettings = {
     disallowedDisplayType: "",
     darkMode: false,
     chatHistory: true,
+    canvas: undefined,
 };
