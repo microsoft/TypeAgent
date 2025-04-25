@@ -14,7 +14,9 @@ import { loadSchema } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
     IConversation,
+    Knowledge,
     MessageOrdinal,
+    ScoredMessageOrdinal,
     SemanticRefSearchResult,
 } from "./interfaces.js";
 import {
@@ -26,8 +28,13 @@ import { getScoredSemanticRefsFromOrdinals } from "./knowledgeLib.js";
 import {
     getEnclosingDateRangeForMessages,
     getEnclosingMetadataForMessages,
+    getMessagesFromScoredOrdinals,
 } from "./message.js";
-import { AnswerContext, RelevantKnowledge } from "./answerContextSchema.js";
+import {
+    AnswerContext,
+    RelevantKnowledge,
+    RelevantMessage,
+} from "./answerContextSchema.js";
 import { ConversationSearchResult } from "./search.js";
 
 export type AnswerTranslator =
@@ -102,26 +109,32 @@ export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
 
 export function answerContextFromSearchResult(
     conversation: IConversation,
-    result: ConversationSearchResult,
+    searchResult: ConversationSearchResult,
 ) {
     let context: AnswerContext = {};
-    for (const knowledgeType of result.knowledgeMatches.keys()) {
+    for (const knowledgeType of searchResult.knowledgeMatches.keys()) {
         switch (knowledgeType) {
             default:
                 break;
             case "entity":
                 context.entities = getRelevantEntitiesForAnswer(
                     conversation,
-                    result.knowledgeMatches.get(knowledgeType)!,
+                    searchResult.knowledgeMatches.get(knowledgeType)!,
                 );
                 break;
             case "topic":
                 context.topics = getRelevantTopicsForAnswer(
                     conversation,
-                    result.knowledgeMatches.get(knowledgeType)!,
+                    searchResult.knowledgeMatches.get(knowledgeType)!,
                 );
                 break;
         }
+    }
+    if (searchResult.messageMatches && searchResult.messageMatches.length > 0) {
+        context.messages = getRelevantMessagesForAnswer(
+            conversation,
+            searchResult.messageMatches,
+        );
     }
     return context;
 }
@@ -172,10 +185,32 @@ export function getRelevantEntitiesForAnswer(
     return relevantEntities;
 }
 
+export function getRelevantMessagesForAnswer(
+    conversation: IConversation,
+    messageOrdinals: ScoredMessageOrdinal[],
+): RelevantMessage[] {
+    const relevantMessages: RelevantMessage[] = [];
+    for (const message of getMessagesFromScoredOrdinals(
+        conversation.messages,
+        messageOrdinals,
+    )) {
+        const relevantMessage: RelevantMessage = {
+            message: message.textChunks.join("\n"),
+        };
+        const meta = message.metadata;
+        if (meta) {
+            relevantMessage.from = meta.source;
+            relevantMessage.to = meta.dest;
+        }
+        relevantMessages.push(relevantMessage);
+    }
+    return relevantMessages;
+}
+
 function createRelevantKnowledge(
     conversation: IConversation,
-    knowledge: any,
-    sourceMessageOrdinals?: Set<MessageOrdinal>,
+    knowledge: Knowledge,
+    sourceMessageOrdinals?: Iterable<MessageOrdinal>,
 ): RelevantKnowledge {
     let relevantKnowledge: RelevantKnowledge = {
         knowledge,
@@ -230,11 +265,14 @@ function createContextPrompt(
 function answerContextToString(context: AnswerContext): string {
     let json = "{\n";
     let propertyCount = 0;
-    if (context.entities) {
+    if (context.entities && context.entities.length > 0) {
         json += add("entities", context.entities);
     }
-    if (context.topics) {
+    if (context.topics && context.topics.length > 0) {
         json += add("topics", context.topics);
+    }
+    if (context.messages && context.messages.length > 0) {
+        json += add("messages", context.messages);
     }
     json += "\n}";
     return json;

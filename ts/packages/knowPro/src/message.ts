@@ -1,19 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * INTERNAL LIBRARY
+ */
+
 import { addToSet } from "./collections.js";
 import {
     DateRange,
     IMessage,
     IMessageMetadata,
     MessageOrdinal,
+    ScoredMessageOrdinal,
     TextLocation,
     TextRange,
 } from "./interfaces.js";
-
-/**
- * INTERNAL LIBRARY
- */
 
 /**
  * Returns the text range represented by a message (and an optional chunk ordinal)
@@ -155,6 +156,24 @@ export function* getMessageChunkBatch(
     }
     if (batch.length > 0) {
         yield batch;
+    }
+}
+
+export function* getMessagesFromOrdinals(
+    messages: IMessage[],
+    ordinals: Iterable<MessageOrdinal>,
+) {
+    for (const ordinal of ordinals) {
+        yield messages[ordinal];
+    }
+}
+
+export function* getMessagesFromScoredOrdinals(
+    messages: IMessage[],
+    ordinals: Iterable<ScoredMessageOrdinal>,
+) {
+    for (const scordOrdinal of ordinals) {
+        yield messages[scordOrdinal.messageOrdinal];
     }
 }
 
