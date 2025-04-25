@@ -2,12 +2,11 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import path from "path";
-import { testIf } from "./testCore";
+import { testIf } from "./testCore.js";
 import * as bing from "../src/bing.js";
 
 dotenv.config({
-    path: path.join(__dirname, "../../../../.env"),
+    path: new URL("../../../../.env", import.meta.url),
 });
 
 function hasBingApiKey() {

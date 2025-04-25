@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getRetryAfterMs } from "../src/restClient";
+import { getRetryAfterMs } from "../src/restClient.js";
 
 describe("restClient", () => {
     test("retryPauseHeader", () => {

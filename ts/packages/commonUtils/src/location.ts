@@ -6,9 +6,9 @@ import {
     AzureTokenScopes,
     createAzureTokenProvider,
     getEnvSetting,
+    openai,
 } from "aiclient";
 import { StringArrayTag, TypedTag, XmpTag } from "exifreader";
-import { openai } from "aiclient";
 import { env } from "process";
 import { AddressOutput } from "@azure-rest/maps-search";
 

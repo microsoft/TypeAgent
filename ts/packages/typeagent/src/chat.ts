@@ -14,9 +14,9 @@ import {
     createPromptBuilder,
     getContextFromHistory,
     getPreambleLength,
-} from "./prompt";
-import { MessageSourceRole } from "./message";
-import { loadSchema } from "./schema";
+} from "./prompt.js";
+import { MessageSourceRole } from "./message.js";
+import { loadSchema } from "./schema.js";
 
 /**
  * Simplest possible TypeChat with RAG.

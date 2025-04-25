@@ -1,15 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { asyncArray, collections } from "..";
-import { callWithRetry } from "../async";
-import { ScoredItem } from "../memory";
+import { asyncArray, collections } from "../index.js";
+import { callWithRetry } from "../async.js";
+import { ScoredItem } from "../memory.js";
 import {
     createNormalized,
     SimilarityType,
     NormalizedEmbedding,
     Embedding,
-} from "./embeddings";
+} from "./embeddings.js";
 import { EmbeddingModel, TextEmbeddingModel } from "aiclient";
 import { getData } from "typechat";
 

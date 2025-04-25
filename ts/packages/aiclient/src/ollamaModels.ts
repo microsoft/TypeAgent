@@ -8,22 +8,22 @@ import {
     Result,
     success,
 } from "typechat";
-import { getEnvSetting } from "./common";
-import { ChatModelWithStreaming, CompletionSettings } from "./models";
+import { getEnvSetting } from "./common.js";
+import { ChatModelWithStreaming, CompletionSettings } from "./models.js";
 import {
     CommonApiSettings,
     CompletionUsageStats,
     EnvVars,
     ModelType,
-} from "./openai";
+} from "./openai.js";
 import {
     callApi,
     callJsonApi,
     getJson,
     readResponseStream,
-} from "./restClient";
-import { TokenCounter } from "./tokenCounter";
-import { OpenAIApiSettings } from "./openaiSettings";
+} from "./restClient.js";
+import { TokenCounter } from "./tokenCounter.js";
+import { OpenAIApiSettings } from "./openaiSettings.js";
 
 export type OllamaApiSettings = CommonApiSettings & {
     provider: "ollama";

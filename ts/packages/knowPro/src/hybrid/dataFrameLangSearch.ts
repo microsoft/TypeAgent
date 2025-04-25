@@ -5,24 +5,20 @@ import {
     PropertySearchTerm,
     ScoredMessageOrdinal,
     SearchSelectExpr,
-    SearchTermGroup,
-    WhenFilter,
 } from "../interfaces.js";
-import { FacetTerm, SearchExpr, SearchFilter } from "../searchQuerySchema.js";
-import { DataFrameCollection, IConversationHybrid } from "./dataFrame.js";
+import * as querySchema from "../searchQuerySchema.js";
+import { DataFrameCollection } from "./dataFrame.js";
 import {
-    DataFrameCompiler,
-    getDataFrameAndColumnName,
-} from "./dataFrameQuery.js";
+    IConversationHybrid,
+    searchConversationWithScope,
+} from "./hybridConversation.js";
+import { getDataFrameAndColumnName } from "./dataFrameQuery.js";
 import * as search from "../search.js";
 import { loadSchemaFiles } from "typeagent";
 import { TypeChatLanguageModel, createJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
-import * as querySchema from "../searchQuerySchema.js";
-import {
-    compileSearchFilter,
-    SearchQueryTranslator,
-} from "../searchQueryTranslator.js";
+import { SearchQueryTranslator } from "../searchQueryTranslator.js";
+import { compileSearchFilter } from "../searchLang.js";
 import { createPropertySearchTerm } from "../searchLib.js";
 
 /**
@@ -31,7 +27,7 @@ import { createPropertySearchTerm } from "../searchLib.js";
 
 export async function searchConversationMessages(
     conversation: IConversationHybrid,
-    searchExpr: SearchExpr,
+    searchExpr: querySchema.SearchExpr,
     options?: search.SearchOptions | undefined,
 ): Promise<ScoredMessageOrdinal[][]> {
     const messageMatches: ScoredMessageOrdinal[][] = [];
@@ -49,52 +45,19 @@ export async function searchConversationMessages(
     return messageMatches;
 }
 
-export async function searchConversationWithFilter(
+async function searchConversationWithFilter(
     conversation: IConversationHybrid,
-    searchFilter: SearchFilter,
+    searchFilter: querySchema.SearchFilter,
     options?: search.SearchOptions | undefined,
     rawQuery?: string,
 ): Promise<search.ConversationSearchResult | undefined> {
     const selectExpr = compileHybridSearchFilter(conversation, searchFilter);
-    return searchConversationWithHybridScope(
+    return searchConversationWithScope(
         conversation,
         selectExpr.searchTermGroup,
         selectExpr.when,
         options,
         rawQuery,
-    );
-}
-
-/**
- * Search the hybrid conversation using dataFrames to determine additional
- * 'outer' scope
- * @param hybridConversation
- * @param searchTermGroup
- * @param when
- * @param options
- */
-async function searchConversationWithHybridScope(
-    hybridConversation: IConversationHybrid,
-    searchTermGroup: SearchTermGroup,
-    when?: WhenFilter | undefined,
-    options?: search.SearchOptions | undefined,
-    rawSearchQuery?: string,
-): Promise<search.ConversationSearchResult | undefined> {
-    const dfCompiler = new DataFrameCompiler(hybridConversation.dataFrames);
-    const dfScopeExpr = dfCompiler.compileScope(searchTermGroup);
-    if (dfScopeExpr) {
-        const scopeRanges = dfScopeExpr.eval();
-        if (scopeRanges) {
-            when ??= {};
-            when.textRangesInScope = scopeRanges.getRanges();
-        }
-    }
-    return search.searchConversation(
-        hybridConversation.conversation,
-        searchTermGroup,
-        when,
-        options,
-        rawSearchQuery,
     );
 }
 
@@ -125,7 +88,7 @@ export function createSearchQueryTranslator(
 
 function compileHybridSearchFilter(
     hybridConversation: IConversationHybrid,
-    searchFilter: SearchFilter,
+    searchFilter: querySchema.SearchFilter,
 ): SearchSelectExpr {
     const dfTerms = extractDataFrameFacetTermsFromFilter(
         hybridConversation.dataFrames,
@@ -142,9 +105,9 @@ function compileHybridSearchFilter(
 
 function extractDataFrameFacetTermsFromFilter(
     dataFrames: DataFrameCollection,
-    searchFilter: SearchFilter,
-    dfFacets?: FacetTerm[],
-): FacetTerm[] {
+    searchFilter: querySchema.SearchFilter,
+    dfFacets?: querySchema.FacetTerm[],
+): querySchema.FacetTerm[] {
     dfFacets ??= [];
     if (searchFilter.entitySearchTerms) {
         for (const entityTerm of searchFilter.entitySearchTerms) {
@@ -168,7 +131,7 @@ function extractDataFrameFacetTermsFromFilter(
 }
 
 function facetTermsToSearchTerms(
-    facetTerms: FacetTerm[],
+    facetTerms: querySchema.FacetTerm[],
 ): PropertySearchTerm[] {
     return facetTerms.map((f) => {
         return createPropertySearchTerm(f.facetName, f.facetValue);

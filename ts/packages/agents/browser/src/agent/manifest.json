@@ -22,6 +22,7 @@
       "transient": true,
       "schema": {
         "description": "This allows users to interact with e-commerce websites to find, compare and purchase various products.",
+        "cached": false,
         "schemaFile": "./commerce/schema/userActions.mts",
         "schemaType": "ShoppingActions"
       }

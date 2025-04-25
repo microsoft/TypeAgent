@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommonApiSettings, EnvVars } from "./openai";
-import { getEnvSetting, getIntFromEnv } from "./common";
-import { ModelType } from "./openai";
+import { CommonApiSettings, EnvVars } from "./openai.js";
+import { getEnvSetting, getIntFromEnv } from "./common.js";
+import { ModelType } from "./openai.js";
 
 export type OpenAIApiSettings = CommonApiSettings & {
     provider: "openai";

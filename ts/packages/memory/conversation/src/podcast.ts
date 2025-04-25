@@ -22,6 +22,7 @@ import {
     Term,
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
+    IMessageMetadata,
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -35,10 +36,18 @@ const debugLogger = registerDebug("conversation-memory.podcast");
 
 // metadata for podcast messages
 
-export class PodcastMessageMeta implements IKnowledgeSource {
+export class PodcastMessageMeta implements IKnowledgeSource, IMessageMetadata {
     public listeners: string[] = [];
 
     constructor(public speaker?: string | undefined) {}
+
+    public get source() {
+        return this.speaker;
+    }
+
+    public get dest() {
+        return this.listeners;
+    }
 
     getKnowledge() {
         if (this.speaker === undefined) {

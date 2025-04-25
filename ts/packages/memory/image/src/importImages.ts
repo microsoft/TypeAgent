@@ -20,6 +20,7 @@ import {
     readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     readConversationDataFromBuffer,
+    IMessageMetadata,
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -54,11 +55,18 @@ export class Image implements IMessage {
 }
 
 // metadata for images
-export class ImageMeta implements IKnowledgeSource {
+export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
     constructor(
         public fileName: string,
         public img: image.Image,
     ) {}
+
+    public get source() {
+        return undefined;
+    }
+    public get dest() {
+        return undefined;
+    }
 
     getKnowledge() {
         const imageEntity: kpLib.ConcreteEntity = {

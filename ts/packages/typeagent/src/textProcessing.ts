@@ -18,14 +18,14 @@ import {
 } from "typechat";
 import * as cheerio from "cheerio";
 import { getHtml, bing, ChatModel, TextEmbeddingModel } from "aiclient";
-import { createChatTranslator } from "./chat";
-import { MessageSourceRole } from "./message";
-import { TypeSchema } from "./schema";
-import { readAllLines, readAllText, writeAllLines } from "./objStream";
+import { createChatTranslator } from "./chat.js";
+import { MessageSourceRole } from "./message.js";
+import { TypeSchema } from "./schema.js";
+import { readAllLines, readAllText, writeAllLines } from "./objStream.js";
 import fs from "fs";
-import { textToProcessSection } from "./promptLib";
-import { ProcessProgress, mapAsync } from "./arrayAsync";
-import { generateTextEmbeddings, similarity, SimilarityType } from ".";
+import { textToProcessSection } from "./promptLib.js";
+import { ProcessProgress, mapAsync } from "./arrayAsync.js";
+import { generateTextEmbeddings, similarity, SimilarityType } from "./index.js";
 
 function splitIntoSentences(text: string): string[] {
     return text.split(/(?<=[.!?;\r\n])\s+/);

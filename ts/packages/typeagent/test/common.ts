@@ -3,7 +3,7 @@
 import path from "path";
 import os from "os";
 import { hasEnvSettings, openai } from "aiclient";
-import { Embedding } from "../src/vector/embeddings";
+import { Embedding } from "../src/vector/embeddings.js";
 
 export function hasEmbeddingModel(endpoint?: string | undefined) {
     return hasEnvSettings(

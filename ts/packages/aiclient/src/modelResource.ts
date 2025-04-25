@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { openai as ai } from "aiclient";
-import { getOllamaModelNames } from "./ollamaModels";
+import { getOllamaModelNames } from "./ollamaModels.js";
 
 export function getChatModelMaxConcurrency(
     userMaxConcurrency?: number,
