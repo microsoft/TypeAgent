@@ -109,7 +109,7 @@ async function initializeMontageContext() {
     return {
         // default search settings
         searchSettings: {
-            minScore: 0,
+            minScore: 5,    // TODO: tune?
             exactMatch: false,
         },
     };
@@ -140,7 +140,7 @@ async function updateMontageContext(
             );
             if (data) {
                 const d = JSON.parse(data);
-                context.agentContext.montageIdSeed = d.montageIDSeed
+                context.agentContext.montageIdSeed = d.montageIdSeed
                     ? d.montageIdSeed
                     : 0;
                 context.agentContext.montages = d.montages;
@@ -221,8 +221,6 @@ async function handleMontageAction(
     actionContext: ActionContext<MontageActionContext>,
 ) {
     let result: ActionResult | undefined = undefined;
-    //const agent = await createMarkdownAgent("GPT_4o");
-    //const storage = actionContext.sessionContext.sessionStorage;
 
     if (!actionContext.sessionContext.agentContext.viewProcess) {
         return createActionResultFromError(
