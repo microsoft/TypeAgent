@@ -617,9 +617,11 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, answerDefNew());
         const searchText = namedArgs.query;
-        const options = kp.createDefaultSearchOptions();
         const debugContext: kp.NaturalLanguageSearchContext = {};
+
+        const options = kp.createDefaultSearchOptions();
         options.exactMatch = namedArgs.exact;
+
         const searchResults = await kp.searchConversationWithNaturalLanguage(
             context.conversation!,
             searchText,

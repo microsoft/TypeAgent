@@ -265,7 +265,10 @@ function createContextPrompt(
     return prompt;
 }
 
-function answerContextToString(context: AnswerContext): string {
+export function answerContextToString(
+    context: AnswerContext,
+    spaces?: number,
+): string {
     let json = "{\n";
     let propertyCount = 0;
     if (context.entities && context.entities.length > 0) {
@@ -285,7 +288,13 @@ function answerContextToString(context: AnswerContext): string {
         if (propertyCount > 0) {
             text += ",\n";
         }
-        text += `"${name}": ${JSON.stringify(value)}`;
+        const json = JSON.stringify(
+            value,
+            (key, value) =>
+                value instanceof Date ? value.toISOString() : value,
+            spaces,
+        );
+        text += `"${name}": ${json}`;
         propertyCount++;
         return text;
     }
