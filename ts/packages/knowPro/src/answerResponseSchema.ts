@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type AnswerRelevance =
-    | "NoAnswer" // Query was NOT answered
+export type AnswerType =
+    | "NoAnswer" // If question cannot be accurately answered from [ANSWER CONTEXT]
     | "Answered"; // Fully answer question
 
 export type AnswerResponse = {
-    // use "NoAnswer" if no highly relevant answer found in the conversation history OR if the provided information is insufficient or ambiguous
-    type: AnswerRelevance;
-    // the answer to display if the conversation history is highly relevant and can be used to answer the user's question
+    // use "NoAnswer" if no highly relevant answer found in the [ANSWER CONTEXT]
+    type: AnswerType;
+    // the answer to display if [ANSWER CONTEXT] is highly relevant and can be used to answer the user's question
     answer?: string | undefined;
     // If NoAnswer, explain why..
     // particularly explain why you didn't use any supplied entities

@@ -23,7 +23,10 @@ import {
     mergeScoredTopics,
 } from "./knowledgeMerge.js";
 import { getScoredSemanticRefsFromOrdinals } from "./knowledgeLib.js";
-import { getEnclosingDateRangeForMessages } from "./message.js";
+import {
+    getEnclosingDateRangeForMessages,
+    getEnclosingMetadataForMessages,
+} from "./message.js";
 import { AnswerContext, RelevantKnowledge } from "./answerContextSchema.js";
 import { ConversationSearchResult } from "./search.js";
 
@@ -126,10 +129,6 @@ export function answerContextFromSearchResult(
 export function getRelevantTopicsForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
-    callback?: (
-        relevantKnowledge: RelevantKnowledge,
-        sourceMessageOrdinals?: Set<MessageOrdinal> | undefined,
-    ) => void,
 ): RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
@@ -144,7 +143,6 @@ export function getRelevantTopicsForAnswer(
             conversation,
             mergedTopic.topic,
             mergedTopic.sourceMessageOrdinals,
-            callback,
         );
         relevantTopics.push(relevantTopic);
     }
@@ -154,10 +152,6 @@ export function getRelevantTopicsForAnswer(
 export function getRelevantEntitiesForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
-    callback?: (
-        relevantKnowledge: RelevantKnowledge,
-        sourceMessageOrdinals?: Set<MessageOrdinal> | undefined,
-    ) => void,
 ): RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
@@ -172,7 +166,6 @@ export function getRelevantEntitiesForAnswer(
             conversation,
             mergedToConcreteEntity(mergedEntity),
             mergedEntity.sourceMessageOrdinals,
-            callback,
         );
         relevantEntities.push(relevantEntity);
     }
@@ -183,33 +176,37 @@ function createRelevantKnowledge(
     conversation: IConversation,
     knowledge: any,
     sourceMessageOrdinals?: Set<MessageOrdinal>,
-    callback?: (
-        relevantKnowledge: RelevantKnowledge,
-        sourceMessageOrdinals?: Set<MessageOrdinal>,
-    ) => void,
 ): RelevantKnowledge {
-    const relevantKnowledge: RelevantKnowledge = {
+    let relevantKnowledge: RelevantKnowledge = {
         knowledge,
-        timeRange: sourceMessageOrdinals
-            ? getEnclosingDateRangeForMessages(
-                  conversation.messages,
-                  sourceMessageOrdinals,
-              )
-            : undefined,
     };
-    if (callback) {
-        callback(relevantKnowledge, sourceMessageOrdinals);
+    if (sourceMessageOrdinals) {
+        relevantKnowledge.timeRange = getEnclosingDateRangeForMessages(
+            conversation.messages,
+            sourceMessageOrdinals,
+        );
+        const meta = getEnclosingMetadataForMessages(
+            conversation.messages,
+            sourceMessageOrdinals,
+        );
+        if (meta.source) {
+            relevantKnowledge.origin = meta.source;
+        }
+        if (meta.dest) {
+            relevantKnowledge.audience = meta.dest;
+        }
     }
+
     return relevantKnowledge;
 }
 
 function createQuestionPrompt(question: string): string {
     let prompt: string[] = [
-        `The following is a user question about a conversation:\n===\n${question}\n===\n`, // Leave the '/n' here
+        `The following is a user question:\n===\n${question}\n===\n`, // Leave the '/n' here
         "The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
-        "Answer the question using only relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
+        "Answer the question using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
+        "Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in the conversation history.",
         "Use the name and type of the provided entities to select those highly relevant to answering the question.",
-        "Don't answer if the topics and entity names/types in the question are not in the conversation history.",
         "List ALL entities if query intent implies that.",
         "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
     ];

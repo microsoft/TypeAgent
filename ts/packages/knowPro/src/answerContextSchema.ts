@@ -13,7 +13,7 @@ export type AnswerContext = {
 export type RelevantKnowledge = {
     // The actual knowledge
     knowledge: any;
-    // Entity or entities where the knowledge originated
+    // Entity or entities who mentioned the knowledge
     origin?: string | string[] | undefined;
     // Entity or entities who received or consumed this knowledge
     audience?: string | string[] | undefined;

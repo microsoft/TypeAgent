@@ -513,6 +513,10 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
         if (answerResponse) {
+            if (answerResponse.type === "NoAnswer") {
+                this.writeLine("No answer");
+                return;
+            }
             if (answerResponse.answer) {
                 this.writeInColor(chalk.green, answerResponse.answer);
             } else if (answerResponse.whyNoAnswer) {

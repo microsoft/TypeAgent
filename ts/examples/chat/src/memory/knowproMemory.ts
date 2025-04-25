@@ -629,6 +629,12 @@ export async function createKnowproCommands(
                 context.conversation!,
                 result,
             );
+            context.printer.writeLine();
+            if (answerContext.entities) {
+                for (const entity of answerContext.entities) {
+                    context.printer.writeEntity(entity.knowledge);
+                }
+            }
             const answerResult = await context.answerGenerator.generateAnswer(
                 searchText,
                 answerContext,

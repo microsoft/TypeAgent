@@ -16,6 +16,11 @@ export interface IKnowledgeSource {
  */
 export type MessageOrdinal = number;
 
+export interface IMessageMetadata {
+    readonly source?: string | string[] | undefined;
+    readonly dest?: string | string[] | undefined;
+}
+
 /**
  * A message in a conversation
  * A Message contains one or more text chunks
@@ -26,6 +31,8 @@ export interface IMessage extends IKnowledgeSource {
     timestamp?: string | undefined;
     tags: string[];
     deletionInfo?: DeletionInfo | undefined;
+
+    metadata?: IMessageMetadata | undefined;
 }
 
 export type ScoredMessageOrdinal = {
