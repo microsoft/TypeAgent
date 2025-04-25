@@ -10,6 +10,7 @@ import {
 import {
     ConversationSearchResult,
     runSearchQuery,
+    SearchOptions,
     SearchQueryExpr,
 } from "./search.js";
 import {
@@ -32,6 +33,7 @@ export async function searchConversationWithNaturalLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
+    options?: SearchOptions,
 ): Promise<Result<ConversationSearchResult[]>> {
     const result = await searchQueryExprFromLanguage(
         conversation,
@@ -44,7 +46,11 @@ export async function searchConversationWithNaturalLanguage(
     const queryExpressions = result.data;
     const results: ConversationSearchResult[] = [];
     for (const searchQuery of queryExpressions) {
-        const queryResult = await runSearchQuery(conversation, searchQuery);
+        const queryResult = await runSearchQuery(
+            conversation,
+            searchQuery,
+            options,
+        );
         results.push(...queryResult);
     }
     return success(results);

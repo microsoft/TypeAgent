@@ -616,10 +616,13 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const searchText = namedArgs.query;
+        const options = kp.createDefaultSearchOptions();
+        options.exactMatch = namedArgs.exact;
         const searchResults = await kp.searchConversationWithNaturalLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
+            options,
         );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
