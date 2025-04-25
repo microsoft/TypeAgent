@@ -607,6 +607,7 @@ export async function createKnowproCommands(
     function answerDefNew(): CommandMetadata {
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
+        def.options!.messages = argBool("Include messages", false);
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -614,30 +615,38 @@ export async function createKnowproCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, searchDefNew());
+        const namedArgs = parseNamedArguments(args, answerDefNew());
         const searchText = namedArgs.query;
+        const debugContext: kp.NaturalLanguageSearchContext = {};
+
         const options = kp.createDefaultSearchOptions();
         options.exactMatch = namedArgs.exact;
+
         const searchResults = await kp.searchConversationWithNaturalLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
             options,
+            debugContext,
         );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
         }
-        for (const result of searchResults.data) {
+        for (const searchResult of searchResults.data) {
             const answerContext = kp.answerContextFromSearchResult(
                 context.conversation!,
-                result,
+                searchResult,
             );
+            if (!namedArgs.messages) {
+                answerContext.messages = undefined;
+            }
             if (namedArgs.debug) {
-                context.printer.writeLine();
-                context.printer.writeHeading("==DEBUG==");
-                context.printer.writeAnswerContext(answerContext);
-                context.printer.writeHeading("==DEBUG==");
+                context.printer.writeInColor(chalk.gray, () => {
+                    context.printer.writeLine();
+                    context.printer.writeNaturalLanguageContext(debugContext);
+                    context.printer.writeAnswerContext(answerContext);
+                });
             }
             const answerResult = await context.answerGenerator.generateAnswer(
                 searchText,
