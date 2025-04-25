@@ -543,6 +543,7 @@ export async function createKnowproCommands(
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
         def.options.exactScope = argBool("(Future) Exact scope", false);
+        def.options.debug = argBool("Show debug info", false);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -615,10 +616,13 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const searchText = namedArgs.query;
+        const options = kp.createDefaultSearchOptions();
+        options.exactMatch = namedArgs.exact;
         const searchResults = await kp.searchConversationWithNaturalLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
+            options,
         );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
@@ -629,6 +633,12 @@ export async function createKnowproCommands(
                 context.conversation!,
                 result,
             );
+            if (namedArgs.debug) {
+                context.printer.writeLine();
+                context.printer.writeHeading("==DEBUG==");
+                context.printer.writeAnswerContext(answerContext);
+                context.printer.writeHeading("==DEBUG==");
+            }
             const answerResult = await context.answerGenerator.generateAnswer(
                 searchText,
                 answerContext,

@@ -15,11 +15,20 @@ import { error, Result, success, TypeChatLanguageModel } from "typechat";
 import { openai } from "aiclient";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
-export class ConversationMessageMeta implements kp.IKnowledgeSource {
+export class ConversationMessageMeta
+    implements kp.IKnowledgeSource, kp.IMessageMetadata
+{
     constructor(
         public sender?: string | undefined,
         public recipients?: string[] | undefined,
     ) {}
+
+    public get source() {
+        return this.sender;
+    }
+    public get dest() {
+        return this.recipients;
+    }
 
     getKnowledge(): kpLib.KnowledgeResponse | undefined {
         if (this.sender) {

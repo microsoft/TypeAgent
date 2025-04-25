@@ -511,8 +511,38 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
+    public writeAnswerContext(answerContext: kp.AnswerContext): void {
+        if (answerContext.entities) {
+            const entities = answerContext.entities;
+            for (let i = 0; i < entities.length; ++i) {
+                this.writeProgress(i + 1, entities.length);
+                const entity = entities[i];
+                this.writeRelevantKnowledge(entity);
+                this.writeEntity(entity.knowledge);
+            }
+        }
+        if (answerContext.topics) {
+            const topics = answerContext.topics;
+            for (let i = 0; i < topics.length; ++i) {
+                this.writeProgress(i + 1, topics.length);
+                const topic = topics[i];
+                this.writeRelevantKnowledge(topic);
+                this.writeTopic(topic.knowledge);
+            }
+        }
+    }
+
+    private writeRelevantKnowledge(knowledge: kp.RelevantKnowledge) {
+        if (knowledge.timeRange) {
+            this.writeDateRange(knowledge.timeRange);
+        }
+    }
+
     public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
         if (answerResponse) {
+            if (answerResponse.type === "NoAnswer") {
+                this.writeError("No answer");
+            }
             if (answerResponse.answer) {
                 this.writeInColor(chalk.green, answerResponse.answer);
             } else if (answerResponse.whyNoAnswer) {
