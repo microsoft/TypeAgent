@@ -1,6 +1,6 @@
 {
   "name": "interactive-app",
-  "version": "0.0.10",
+  "version": "0.0.1",
   "description": "interactiveApp is a no-external dependencies library for writing console apps. ",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

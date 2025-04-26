@@ -1,6 +1,6 @@
 {
   "name": "action-schema",
-  "version": "0.0.10",
+  "version": "0.0.1",
   "description": "Parser for action schema from typescript.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {

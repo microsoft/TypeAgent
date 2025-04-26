@@ -1,6 +1,6 @@
 {
   "name": "agent-shell",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "TypeAgent Shell",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -13,17 +13,19 @@
   "type": "module",
   "main": "./out/main/index.js",
   "files": [
-    "out"
+    "out",
+    "package.json"
   ],
   "scripts": {
     "build": "concurrently npm:typecheck npm:build:electron",
     "build:electron": "concurrently npm:build:electron:esm npm:build:electron:cjs",
     "build:electron:cjs": "electron-vite build src/preload --config electron.vite.preload-cjs.config.mts --logLevel error",
     "build:electron:esm": "electron-vite build . --config electron.vite.config.mts",
-    "build:linux": "npm run build && electron-builder --linux --config",
-    "build:mac": "npm run build && electron-builder --mac --config",
-    "build:win": "npm run build && electron-builder --win --config",
-    "clean": "rimraf --glob out *.tsbuildinfo *.done.build.log",
+    "build:linux": "npm run deploy && electron-builder --linux --config electron-builder.config.js",
+    "build:mac": "npm run deploy && electron-builder --mac --config electron-builder.config.js",
+    "build:win": "npm run deploy && electron-builder --win --config electron-builder.config.js",
+    "clean": "rimraf --glob out dist deploy *.tsbuildinfo *.done.build.log",
+    "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --shamefully-hoist --config.node-linker=hoisted --legacy",
     "dev": "npm run build:electron && electron-vite dev",
     "postinstall": "cross-env \"npm_execpath=\" electron-builder install-app-deps",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
@@ -51,7 +53,6 @@
     "default-agent-provider": "workspace:*",
     "dompurify": "^3.2.4",
     "dotenv": "^16.3.1",
-    "electron": "^30.0.1",
     "electron-updater": "^6.3.2",
     "jose": "^5.9.6",
     "markdown-it": "^14.1.0",
@@ -66,7 +67,8 @@
     "@types/dompurify": "^3.0.5",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "electron-builder": "^24.13.2",
+    "electron-builder": "^26.0.12",
+    "electron": "^30.0.1",
     "electron-vite": "^3.1.0",
     "less": "^4.2.0",
     "rimraf": "^6.0.1",
