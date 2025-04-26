@@ -10,7 +10,7 @@ Instructions tested with Ubuntu 24.04.1 LTS and Debian 12.8.0
   - `sudo apt update`
   - `sudo apt install git curl`
 - Setup node
-  - Setup [NVM](https://github.com/nvm-sh/nvm)
+  - Setup [NVM](https://github.com/nvm-sh/nvm){:target="_blank"}
     - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash`
     - `source ~/.bashrc`
   - Install Node
@@ -25,16 +25,16 @@ Instructions tested with Ubuntu 24.04.1 LTS and Debian 12.8.0
 
 ## Configure Services
 
-- Setup Service Keys (See instructions [here](./../../ts/README.md#service-keys))
+- Setup Service Keys (See instructions [here](./../../ts/README.md#service-keys){:target="_blank"})
 
 ## Run
 
 - Run the TypeAgent shell:
-  - (Ubuntu 24.04) `pnpm run shell --noSandbox` (see [issue](https://github.com/electron/electron/issues/18265))
+  - (Ubuntu 24.04) `pnpm run shell --noSandbox` (see [issue](https://github.com/electron/electron/issues/18265){:target="_blank"})
   - Other: `pnpm run shell`
 
 ## Development
 
-- Install VSCode ([download](https://code.visualstudio.com/download))
+- Install VSCode ([download](https://code.visualstudio.com/download){:target="_blank"})
 - Start VSCode
   - `code ~/src/TypeAgent/ts`
