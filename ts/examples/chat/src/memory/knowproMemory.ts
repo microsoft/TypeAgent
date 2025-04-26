@@ -48,6 +48,7 @@ export type KnowProContext = {
     images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
     queryTranslator: kp.SearchQueryTranslator;
+    answerGenerator: kp.AnswerGenerator;
 };
 
 export async function createKnowproCommands(
@@ -62,6 +63,9 @@ export async function createKnowproCommands(
                 knowledgeModel,
             ),
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
+        answerGenerator: new kp.AnswerGenerator({
+            languageModel: knowledgeModel,
+        }),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
@@ -75,6 +79,7 @@ export async function createKnowproCommands(
     commands.kpSearchTerms = searchTerms;
     commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
+    commands.kpAnswer = answer;
     commands.kpPodcastRag = podcastRag;
     commands.kpEntities = entities;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
@@ -527,8 +532,7 @@ export async function createKnowproCommands(
 
     function searchDefNew(): CommandMetadata {
         const def = searchDef();
-        def.description =
-            "Search using natural language and new knowpro filter";
+        def.description = "Search using natural language";
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
@@ -539,6 +543,7 @@ export async function createKnowproCommands(
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
         def.options.exactScope = argBool("(Future) Exact scope", false);
+        def.options.debug = argBool("Show debug info", false);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -595,6 +600,54 @@ export async function createKnowproCommands(
                 exactScope = false;
             } else {
                 break;
+            }
+        }
+    }
+
+    function answerDefNew(): CommandMetadata {
+        const def = searchDefNew();
+        def.description = "Get answers to natural language questions";
+        return def;
+    }
+    commands.kpAnswer.metadata = answerDefNew();
+    async function answer(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, searchDefNew());
+        const searchText = namedArgs.query;
+        const options = kp.createDefaultSearchOptions();
+        options.exactMatch = namedArgs.exact;
+        const searchResults = await kp.searchConversationWithNaturalLanguage(
+            context.conversation!,
+            searchText,
+            context.queryTranslator,
+            options,
+        );
+        if (!searchResults.success) {
+            context.printer.writeError(searchResults.message);
+            return;
+        }
+        for (const result of searchResults.data) {
+            const answerContext = kp.answerContextFromSearchResult(
+                context.conversation!,
+                result,
+            );
+            if (namedArgs.debug) {
+                context.printer.writeLine();
+                context.printer.writeHeading("==DEBUG==");
+                context.printer.writeAnswerContext(answerContext);
+                context.printer.writeHeading("==DEBUG==");
+            }
+            const answerResult = await context.answerGenerator.generateAnswer(
+                searchText,
+                answerContext,
+            );
+            context.printer.writeLine();
+            if (answerResult.success) {
+                context.printer.writeAnswer(answerResult.data);
+            } else {
+                context.printer.writeError(answerResult.message);
             }
         }
     }

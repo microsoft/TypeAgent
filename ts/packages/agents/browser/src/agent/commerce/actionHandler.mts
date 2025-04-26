@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SessionContext } from "@typeagent/agent-sdk";
+import { ActionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
@@ -14,33 +14,23 @@ import {
     StoreLocation,
 } from "./schema/pageComponents.mjs";
 import { ShoppingActions } from "./schema/userActions.mjs";
+import { ShoppingPlanActions } from "./schema/planActions.mjs";
 
 export async function handleCommerceAction(
     action: ShoppingActions,
-    context: SessionContext<BrowserActionContext>,
+    context: ActionContext<BrowserActionContext>,
 ) {
     let message = "OK";
-    if (!context.agentContext.browserConnector) {
+    if (!context.sessionContext.agentContext.browserConnector) {
         throw new Error("No connection to browser session.");
     }
 
-    const browser: BrowserConnector = context.agentContext.browserConnector;
+    const browser: BrowserConnector =
+        context.sessionContext.agentContext.browserConnector;
 
     const agent = await createCommercePageTranslator("GPT_4_O_MINI");
 
     switch (action.actionName) {
-        case "searchForProduct":
-            await searchForProduct(action.parameters.productName);
-            break;
-        case "selectSearchResult":
-            if (action.parameters.productName === undefined) {
-                throw new Error("Missing product name");
-            }
-            await selectSearchResult(action.parameters.productName);
-            break;
-        case "addToCart":
-            await handleAddToCart(action);
-            break;
         case "getLocationInStore":
             await handleFindInStore(action);
             break;
@@ -49,6 +39,9 @@ export async function handleCommerceAction(
             break;
         case "viewShoppingCart":
             await handleViewShoppingCart(action);
+            break;
+        case "buyProduct":
+            await handleShoppingRequest(action);
             break;
     }
 
@@ -98,8 +91,11 @@ export async function handleCommerceAction(
         await browser.awaitPageLoad();
     }
 
-    async function selectSearchResult(productName: string) {
-        const request = `Search result: ${productName}`;
+    async function selectSearchResult(position?: number, productName?: string) {
+        let request =
+            position === undefined
+                ? `Search result: ${productName}`
+                : `Search result: position ${position}`;
         const targetProduct = (await getComponentFromPage(
             "ProductTile",
             request,
@@ -122,7 +118,10 @@ export async function handleCommerceAction(
 
     async function handleFindInStore(action: any) {
         await searchForProduct(action.parameters.productName);
-        await selectSearchResult(action.parameters.productName);
+        await selectSearchResult(
+            action.parameters.position,
+            action.parameters.productName,
+        );
 
         // wait for delay-loaded items to settle even after pageLoad is declared
         await new Promise((r) => setTimeout(r, 1000));
@@ -164,6 +163,96 @@ export async function handleCommerceAction(
             "ShoppingCartDetails",
         )) as ShoppingCartDetails;
         console.log(cartDetails);
+    }
+
+    async function runUserAction(action: any) {
+        console.log(
+            `Running: ${action.actionName} with parameters ${JSON.stringify(action.parameters)}`,
+        );
+        switch (action.actionName) {
+            case "searchForProduct":
+                await searchForProduct(action.parameters.productName);
+                break;
+            case "goToProductPage":
+            case "selectSearchResult":
+                if (action.parameters.productName === undefined) {
+                    throw new Error("Missing product name");
+                }
+                await selectSearchResult(
+                    action.parameters.position,
+                    action.parameters.productName,
+                );
+                break;
+            case "addToCart":
+                await handleAddToCart(action);
+                break;
+            case "getLocationInStore":
+                await handleFindInStore(action);
+                break;
+            case "findNearbyStore":
+                await handleFindNearbyStore(action);
+                break;
+            case "viewShoppingCart":
+                await handleViewShoppingCart(action);
+                break;
+        }
+
+        return true;
+    }
+
+    async function handleShoppingRequest(action: any) {
+        let executionHistory: any[] = [];
+        let lastAction: any;
+
+        context.actionIO.appendDisplay({
+            type: "text",
+            speak: true,
+            content: "Working on it ...",
+        });
+
+        while (true) {
+            const htmlFragments = await browser.getHtmlFragments();
+
+            const executionHistoryText =
+                executionHistory.length > 0
+                    ? executionHistory
+                          .map((entry, index) => {
+                              return `Action ${index + 1}: ${entry.actionName}
+Parameters: ${JSON.stringify(entry.parameters)}`;
+                          })
+                          .join("\n\n")
+                    : "No actions executed yet.";
+
+            const response = await agent.getNextPageAction(
+                action.parameters.productQuery,
+                htmlFragments,
+                undefined,
+                executionHistoryText,
+                lastAction,
+            );
+
+            if (!response.success) {
+                console.error(`Attempt to get next action failed`);
+                console.error(response.message);
+                break;
+            }
+
+            const nextAction = response.data as ShoppingPlanActions;
+
+            if (nextAction.actionName === "PlanCompleted") {
+                context.actionIO.appendDisplay({
+                    type: "text",
+                    speak: true,
+                    content: "Completed ",
+                });
+                break;
+            }
+
+            let actionSucceeded = await runUserAction(nextAction);
+            console.log(`Succeeded?: ${actionSucceeded}`);
+            executionHistory.push(nextAction);
+            lastAction = nextAction;
+        }
     }
 
     return message;

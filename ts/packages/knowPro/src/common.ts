@@ -24,10 +24,10 @@ import {
     buildTransientSecondaryIndexes,
 } from "./secondaryIndexes.js";
 
-export interface Scored<T = any> {
+export type Scored<T = any> = {
     item: T;
     score: number;
-}
+};
 
 /**
  * Returns:

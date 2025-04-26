@@ -2,8 +2,15 @@
 
 This sample app is used to interactively test the following packages:
 
-- [Code Processor](../../packages/codeProcessor/)
-- [Knowledge Processor](../../packages/knowledgeProcessor/)
+- [code-processor](../../packages/codeProcessor/)
+- [knowledge-processor](../../packages/knowledgeProcessor/)
+- [knowpro](../../packages/knowPro/)
+- [memory](../../packages/memory/)
+
+### Notes
+
+- This test app creates test directories.
+- This may require **_admin (sudo)_** rights. On Linux/WSL, you may need to launch node with sudo.
 
 ## Trademarks
 
