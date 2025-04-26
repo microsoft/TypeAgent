@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import { TextEmbeddingModel, openai } from "aiclient";
-import { ScoredItem } from "../memory";
+import { ScoredItem } from "../memory.js";
 import {
     VectorStore,
     generateEmbedding,
     generateEmbeddingWithRetry,
     generateTextEmbeddingsWithRetry,
-} from "./vectorIndex";
-import { NormalizedEmbedding, SimilarityType } from "./embeddings";
+} from "./vectorIndex.js";
+import { NormalizedEmbedding, SimilarityType } from "./embeddings.js";
 
 export interface SemanticIndex<ID = string> {
     readonly store: VectorStore<ID>;

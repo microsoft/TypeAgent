@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as vector from "./vector";
-import { ScoredItem } from "../memory";
+import * as vector from "./vector.js";
+import { ScoredItem } from "../memory.js";
 
 export type Embedding = Float32Array;
 /**

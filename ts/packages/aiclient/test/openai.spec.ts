@@ -2,10 +2,9 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import path from "path";
 
 dotenv.config({
-    path: path.join(__dirname, "../../../../.env"),
+    path: new URL("../../../../.env", import.meta.url),
 });
 
 import { getData } from "typechat";

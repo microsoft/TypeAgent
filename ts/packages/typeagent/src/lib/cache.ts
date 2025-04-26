@@ -1,8 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { NameValue } from "../memory";
-import { LinkedList, ListNode, allNodes, createLinkedList } from "./linkedList";
+import { NameValue } from "../memory.js";
+import {
+    LinkedList,
+    ListNode,
+    allNodes,
+    createLinkedList,
+} from "./linkedList.js";
 
 /**
  * A Cache of V, where N is the key for V
@@ -97,7 +102,7 @@ export function createLRUCache<N, V>(
                     onPurged(lru.name, lru.value);
                 }
                 return lru.value;
-            }    
+            }
         }
         return undefined;
     }
@@ -136,16 +141,20 @@ export interface Lazy<T> {
     get(): Promise<T>;
 }
 
-export function createLazy<T extends object>(initializer: () => Promise<T>, cache: boolean, useWeakRef: boolean): Lazy<T> {
+export function createLazy<T extends object>(
+    initializer: () => Promise<T>,
+    cache: boolean,
+    useWeakRef: boolean,
+): Lazy<T> {
     let lazyValue: Value | WeakValue | undefined;
     let pendingInit: Promise<T> | undefined;
 
     return {
         get value() {
             return getSync();
-        }, 
+        },
         get,
-    }
+    };
 
     function getSync(): T | undefined {
         if (lazyValue !== undefined) {
@@ -153,7 +162,7 @@ export function createLazy<T extends object>(initializer: () => Promise<T>, cach
         }
         return undefined;
     }
-    
+
     function get(): Promise<T> {
         const value = getSync();
         if (value !== undefined) {
@@ -161,15 +170,16 @@ export function createLazy<T extends object>(initializer: () => Promise<T>, cach
         }
 
         if (pendingInit === undefined) {
-            // Wrapper promise to prevent 'herding cats' 
+            // Wrapper promise to prevent 'herding cats'
             pendingInit = new Promise<T>((resolve, reject) => {
                 try {
-                    initializer().then((v) => {
-                        setValue(v);
-                        resolve(v);
-                    }).catch((e) => reject(e));
-                }
-                catch(e) {
+                    initializer()
+                        .then((v) => {
+                            setValue(v);
+                            resolve(v);
+                        })
+                        .catch((e) => reject(e));
+                } catch (e) {
                     reject(e);
                 }
             }).finally(() => {
@@ -181,17 +191,19 @@ export function createLazy<T extends object>(initializer: () => Promise<T>, cach
 
     function setValue(v: T): T {
         if (cache) {
-            lazyValue = useWeakRef ? {isWeak: true, value: new WeakRef(v)} : {isWeak: false, value: v};
+            lazyValue = useWeakRef
+                ? { isWeak: true, value: new WeakRef(v) }
+                : { isWeak: false, value: v };
         }
-        return v; 
+        return v;
     }
 
     type Value = {
-        isWeak: false,
+        isWeak: false;
         value: T;
-    }
+    };
     type WeakValue = {
         isWeak: true;
         value: WeakRef<T>;
-    }
+    };
 }
