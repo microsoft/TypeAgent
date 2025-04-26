@@ -9,16 +9,17 @@ export type TTSSettings = {
 export type ShellUserSettings = {
     microphoneId: string | undefined;
     microphoneName: string | undefined;
-    notifyFilter: string;
     tts: boolean;
     ttsSettings: TTSSettings;
     agentGreeting: boolean;
     multiModalContent: boolean;
     devUI: boolean;
     partialCompletion: boolean;
-    disallowedDisplayType: { [key: string]: boolean };
     darkMode: boolean;
     chatHistory: boolean; // should the shell load the chat history?
+    notifyFilter: string;
+    disallowedDisplayType: string; // semicolon separated list of display types that should not be used
+    canvas: string | undefined; // the last item shown in the canvas
 };
 
 export const defaultUserSettings: ShellUserSettings = {
@@ -34,7 +35,8 @@ export const defaultUserSettings: ShellUserSettings = {
     multiModalContent: true,
     devUI: false,
     partialCompletion: true,
-    disallowedDisplayType: {},
+    disallowedDisplayType: "",
     darkMode: false,
     chatHistory: true,
+    canvas: undefined,
 };

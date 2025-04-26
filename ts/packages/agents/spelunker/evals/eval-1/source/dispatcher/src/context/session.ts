@@ -212,6 +212,7 @@ type SessionData = {
     config: SessionConfig;
     cacheData: SessionCacheData;
     tokens?: TokenCounterData;
+    indicies?: IndexData;
 };
 
 // Fill in missing fields when loading sessions from disk

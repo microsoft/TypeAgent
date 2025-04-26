@@ -654,7 +654,7 @@ async function finalizeAction(
 async function finalizeMultipleActions(
     action: MultipleAction,
     translator: TypeAgentTranslator,
-    translatorName: string,
+    schemaName: string,
     history: HistoryContext | undefined,
     attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
@@ -675,7 +675,7 @@ async function finalizeMultipleActions(
         const finalizedActions = await finalizeAction(
             request.action,
             translator,
-            translatorName,
+            schemaName,
             history,
             undefined, // TODO: What to do with attachments with multiple actions?
             context,

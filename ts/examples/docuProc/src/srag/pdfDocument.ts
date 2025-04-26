@@ -20,6 +20,7 @@ import {
     buildTransientSecondaryIndexes,
     //Term,
     IConversationDataWithIndexes,
+    IMessageMetadata
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -32,12 +33,20 @@ import { openai } from "aiclient";
 import registerDebug from "debug";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");
 
-export class PdfChunkMessageMeta implements IKnowledgeSource {
+export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
     public docChunkId: string = "";
     public pageNumber: string = "";
     public topics: string[] | undefined;
 
     constructor() {}
+
+    public get source() {
+        return undefined;
+    }
+
+    public get dest() {
+        return undefined;
+    }
 
     getKnowledge() {
         const entities: kpLib.ConcreteEntity[] = [];

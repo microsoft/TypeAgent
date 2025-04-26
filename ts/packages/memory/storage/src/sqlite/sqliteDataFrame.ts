@@ -3,91 +3,165 @@
 
 import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
+import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
-export class SqliteDataFrame implements kp.IDataFrame {
+export class SqliteDataFrame implements kp.hybrid.IDataFrame {
+    public columns: kp.hybrid.DataFrameColumns;
+
+    private sql_add: sqlite.Statement;
+    private sql_getAll: sqlite.Statement;
+    private recordColumnNames: string[];
+
     constructor(
         public db: sqlite.Database,
         public name: string,
-        public columns: kp.DataFrameColumns,
-        ensureExists: boolean = true,
+        columns:
+            | kp.hybrid.DataFrameColumns
+            | [string, kp.hybrid.DataFrameColumnDef][],
+        ensureDb: boolean = true,
     ) {
-        if (ensureExists) {
+        if (Array.isArray(columns)) {
+            this.columns = new Map<string, kp.hybrid.DataFrameColumnDef>(
+                columns,
+            );
+        } else {
+            this.columns = columns;
+        }
+
+        if (ensureDb) {
             this.ensureDb();
         }
+        this.recordColumnNames = this.prepareColumnNames(this.columns.keys());
+        this.sql_add = this.sqlAdd();
+        this.sql_getAll = this.sqlGetAll();
     }
 
-    public addRows(...rows: kp.DataFrameRow[]): void {
-        throw new Error("Method not implemented.");
+    public addRows(...rows: kp.hybrid.DataFrameRow[]): void {
+        for (const row of rows) {
+            const rowValues = this.getAddValues(row);
+            this.sql_add.run(rowValues);
+        }
     }
 
     public getRow(
         columnName: string,
-        columnValue: kp.DataFrameValue,
+        columnValue: kp.hybrid.DataFrameValue,
         op: kp.ComparisonOp,
-    ): kp.DataFrameRow[] | undefined {
-        throw new Error("Method not implemented.");
-    }
-
-    findRows(
-        searchTerms: kp.DataFrameTermGroup,
-    ): kp.DataFrameRow[] | undefined {
-        throw new Error("Method not implemented.");
-    }
-
-    findSources(
-        searchTerms: kp.DataFrameTermGroup,
-    ): kp.RowSourceRef[] | undefined {
-        throw new Error("Method not implemented.");
-    }
-
-    [Symbol.iterator](): Iterator<kp.DataFrameRow, any, any> {
-        throw new Error("Method not implemented.");
-    }
-
-    private ensureDb(): void {
-        if (this.columns.size === 0) {
-            return;
+    ): kp.hybrid.DataFrameRow[] | undefined {
+        const stmt = this.sqlGet(columnName, op);
+        let rows: kp.hybrid.DataFrameRow[] = [];
+        for (const row of stmt.iterate(columnValue)) {
+            rows.push(this.toDataFrameRow(row));
         }
-        let schemaSql = `CREATE TABLE IF NOT EXISTS ${this.name} (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sourceRef TEXT NOT NULL
-        `;
-        for (const [columnName, columnDef] of this.columns) {
-            schemaSql += ",\n";
-            schemaSql += this.columnDefToSql(columnName, columnDef);
+        return rows;
+    }
+
+    public findRows(
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): kp.hybrid.DataFrameRow[] | undefined {
+        const dfRows: kp.hybrid.DataFrameRow[] = [];
+        const stmt = this.queryRows(searchTerms);
+        for (const row of stmt.iterate()) {
+            dfRows.push(this.toDataFrameRow(row));
         }
-        schemaSql += `\n)`;
+        return dfRows;
+    }
+
+    public findSources(
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): kp.hybrid.RowSourceRef[] | undefined {
+        const sources: kp.hybrid.RowSourceRef[] = [];
+        const stmt = this.queryRows(searchTerms);
+        for (const row of stmt.iterate()) {
+            sources.push(this.deserializeSourceRef(row as SqliteDataFrameRow));
+        }
+        return sources;
+    }
+
+    public *[Symbol.iterator](): Iterator<kp.hybrid.DataFrameRow> {
+        for (let row of this.sql_getAll.iterate()) {
+            const value = this.toDataFrameRow(row);
+            if (value !== undefined) {
+                yield value;
+            }
+        }
+    }
+
+    private queryRows(
+        searchTerms: kp.hybrid.DataFrameTermGroup,
+    ): sqlite.Statement {
+        let sql = `SELECT sourceRef from ${this.name} WHERE `;
+        const where = dataFrameTermGroupToSql(searchTerms, this.columns);
+        sql += where;
+        return this.db.prepare(sql);
+    }
+
+    private toDataFrameRow(row: unknown): kp.hybrid.DataFrameRow {
+        return {
+            sourceRef: this.deserializeSourceRef(row as SqliteDataFrameRow),
+            record: row as kp.hybrid.DataFrameRecord,
+        };
+    }
+
+    private deserializeSourceRef(
+        row: SqliteDataFrameRow,
+    ): kp.hybrid.RowSourceRef {
+        return JSON.parse(row.sourceRef);
+    }
+
+    private getAddValues(row: kp.hybrid.DataFrameRow) {
+        let values: any[] = [];
+        values.push(this.serializeSourceRef(row.sourceRef));
+        for (const colName of this.recordColumnNames) {
+            values.push(row.record[colName]);
+        }
+        return values;
+    }
+
+    private prepareColumnNames(names: IterableIterator<string> | string[]) {
+        const colNames = [...names].sort();
+        return colNames;
+    }
+
+    private serializeSourceRef(sr: kp.hybrid.RowSourceRef) {
+        return JSON.stringify(sr);
+    }
+
+    private sqlGet(columnName: string, op: kp.ComparisonOp) {
+        let sql = `SELECT * from ${this.name} WHERE ${columnName} ${comparisonOpToSql(op)} ?`;
+        return this.db.prepare(sql);
+    }
+
+    private sqlGetAll() {
+        return this.db.prepare(`SELECT * FROM ${this.name}`);
+    }
+
+    private sqlAdd() {
+        const columnNames = ["sourceRef", ...this.recordColumnNames];
+        const sql = `INSERT INTO ${this.name} (${columnNames.join(", ")}) VALUES (${sql_makeInPlaceholders(columnNames.length)})`;
+        return this.db.prepare(sql);
+    }
+
+    private ensureDb() {
+        let schemaSql = dataFrameToSchemaSql(this.name, this.columns);
+        if (!schemaSql) {
+            throw new Error(`No schema for Sqlite data frame ${this.name}`);
+        }
         this.db.exec(schemaSql);
-    }
-
-    private columnDefToSql(
-        columnName: string,
-        columnDef: kp.DataFrameColumnDef,
-    ): string {
-        let sql = columnName;
-        if (columnDef.type === "string") {
-            sql += " TEXT";
-        } else {
-            sql += " REAL";
+        let indexSql = dataFrameToIndexSql(this.name, this.columns);
+        if (indexSql) {
+            this.db.exec(indexSql);
         }
-        if (columnDef.optional !== undefined && columnDef.optional === false) {
-            sql += " NOT NULL";
-        }
+    }
+}
 
-        return sql.toUpperCase();
-    }
-    /*
-    private sqlFindRows(termGroup: kp.DataFrameTermGroup) {
-        const where = dataFrameTermGroupToSql(termGroup, this.columns);
-        let sql = `SELECT * from ${this.name}\n WHERE ${where}`;
-        return sql;
-    }
-        */
+export interface SqliteDataFrameRow {
+    sourceRef: string;
 }
 
 export function dataFrameTermGroupToSql(
-    group: kp.DataFrameTermGroup,
-    colDefs: kp.DataFrameColumns,
+    group: kp.hybrid.DataFrameTermGroup,
+    colDefs: kp.hybrid.DataFrameColumns,
 ): string {
     let clauses: string[] = [];
     for (let searchTerm of group.terms) {
@@ -104,8 +178,8 @@ export function dataFrameTermGroupToSql(
 }
 
 export function dataFrameSearchTermToSql(
-    term: kp.DataFrameSearchTerm,
-    colDef: kp.DataFrameColumnDef,
+    term: kp.hybrid.DataFrameSearchTerm,
+    colDef: kp.hybrid.DataFrameColumnDef,
 ): string {
     const op = comparisonOpToSql(term.compareOp ?? kp.ComparisonOp.Eq);
     const val = searchTermToSql(term.columnValue, colDef);
@@ -114,7 +188,7 @@ export function dataFrameSearchTermToSql(
 
 export function searchTermToSql(
     valueTerm: kp.SearchTerm,
-    columnDef: kp.DataFrameColumnDef,
+    columnDef: kp.hybrid.DataFrameColumnDef,
 ): string {
     const valueText = valueTerm.term.text;
     if (columnDef.type === "number") {
@@ -123,11 +197,7 @@ export function searchTermToSql(
     return `'${valueText}'`;
 }
 
-export function valueToSql(value: kp.DataFrameValue) {
-    return typeof value === "number" ? value : `${value}`;
-}
-
-export function boolOpToSql(group: kp.DataFrameTermGroup): string {
+export function boolOpToSql(group: kp.hybrid.DataFrameTermGroup): string {
     switch (group.booleanOp) {
         case "and":
             return " AND ";
@@ -152,4 +222,63 @@ export function comparisonOpToSql(op: kp.ComparisonOp): string {
         case kp.ComparisonOp.Neq:
             return "!=";
     }
+}
+
+export function dataFrameToSchemaSql(
+    dfName: string,
+    colDefs: kp.hybrid.DataFrameColumns,
+): string {
+    if (colDefs.size === 0) {
+        return "";
+    }
+    let columns: string[] = [];
+    columns.push("rowId INTEGER PRIMARY KEY AUTOINCREMENT");
+    columns.push("sourceRef TEXT NOT NULL");
+    for (const [columnName, columnDef] of colDefs) {
+        columns.push(columnDefToSchemaSql(columnName, columnDef));
+    }
+    let schemaSql = `CREATE TABLE IF NOT EXISTS ${dfName} (\n${columns.join(", \n")}\n)`;
+    return schemaSql;
+}
+
+export function dataFrameToIndexSql(
+    dfName: string,
+    colDefs: kp.hybrid.DataFrameColumns,
+): string {
+    if (colDefs.size === 0) {
+        return "";
+    }
+    let indexes: string[] = [];
+    for (const [columnName, columnDef] of colDefs) {
+        if (columnDef.index) {
+            indexes.push(columnDefToIndexSql(dfName, columnName, columnDef));
+        }
+    }
+    return indexes.join("\n");
+}
+
+function columnDefToSchemaSql(
+    columnName: string,
+    columnDef: kp.hybrid.DataFrameColumnDef,
+): string {
+    let sql = columnName;
+    if (columnDef.type === "string") {
+        sql += " TEXT";
+    } else {
+        sql += " REAL";
+    }
+    if (columnDef.optional !== undefined && columnDef.optional === false) {
+        sql += " NOT NULL";
+    }
+
+    return sql;
+}
+
+function columnDefToIndexSql(
+    dfName: string,
+    columnName: string,
+    columnDef: kp.hybrid.DataFrameColumnDef,
+) {
+    let sql = `CREATE INDEX IF NOT EXISTS idx_${columnName} ON ${dfName} (${columnName});`;
+    return sql;
 }

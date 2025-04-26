@@ -12,7 +12,7 @@ import {
 import { conversation as kpLib } from "knowledge-processor";
 import { IPropertyToSemanticRefIndex } from "./interfaces.js";
 import { TextRangesInScope } from "./collections.js";
-import { facetValueToString } from "./knowledge.js";
+import { facetValueToString } from "./knowledgeLib.js";
 
 export enum PropertyNames {
     EntityName = "name",

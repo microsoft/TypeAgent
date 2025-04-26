@@ -354,10 +354,16 @@ importers:
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@20.17.28)(typescript@5.4.5)
+      xml2js:
+        specifier: ^0.6.2
+        version: 0.6.2
     devDependencies:
       '@types/fs-extra':
         specifier: ^11.0.4
         version: 11.0.4
+      '@types/xml2js':
+        specifier: ^0.4.14
+        version: 0.4.14
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -2227,9 +2233,15 @@ importers:
       glob:
         specifier: ^10.3.12
         version: 10.3.12
+      image-memory:
+        specifier: workspace:*
+        version: link:../memory/image
       knowledge-processor:
         specifier: workspace:*
         version: link:../knowledgeProcessor
+      knowpro:
+        specifier: workspace:*
+        version: link:../knowPro
       open:
         specifier: ^10.1.0
         version: 10.1.0
@@ -2526,12 +2538,18 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
+      get-folder-size:
+        specifier: ^5.0.0
+        version: 5.0.0
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
+      telemetry:
+        specifier: workspace:*
+        version: link:../../telemetry
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -2658,6 +2676,9 @@ importers:
       ansi_up:
         specifier: ^6.0.2
         version: 6.0.2
+      browser-typeagent:
+        specifier: workspace:*
+        version: link:../agents/browser
       common-utils:
         specifier: workspace:*
         version: link:../commonUtils
@@ -2673,6 +2694,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      electron:
+        specifier: ^30.0.1
+        version: 30.0.1
       electron-updater:
         specifier: ^6.3.2
         version: 6.3.2
@@ -2710,9 +2734,6 @@ importers:
       cross-env:
         specifier: ^7.0.3
         version: 7.0.3
-      electron:
-        specifier: ^30.0.1
-        version: 30.0.1
       electron-builder:
         specifier: ^24.13.2
         version: 24.13.3(electron-builder-squirrel-windows@24.13.3(dmg-builder@24.13.3))
@@ -4924,6 +4945,9 @@ packages:
   '@types/ws@8.5.10':
     resolution: {integrity: sha512-vmQSUcfalpIq0R9q7uTo2lXs6eGIpt9wtnLdMv9LVpIjCA/+ufZRozlVoVelIYixx1ugCBKDhn89vnsEGOCx9A==}
 
+  '@types/xml2js@0.4.14':
+    resolution: {integrity: sha512-4YnrRemBShWRO2QjvUin8ESA41rH+9nQGLUGZV/1IDhi3SL9OhdpNC/MrulTWuptXKwhx/aDxE7toV0f/ypIXQ==}
+
   '@types/yargs-parser@21.0.2':
     resolution: {integrity: sha512-5qcvofLPbfjmBfKaLfj/+f+Sbd6pN4zl7w7VSVI5uz7m9QZTuB2aZAa2uo1wHFBNN2x6g/SoTkXmd8mQnQF2Cw==}
 
@@ -6825,6 +6849,11 @@ packages:
   get-east-asian-width@1.3.0:
     resolution: {integrity: sha512-vpeMIQKxczTD/0s2CdEWHcb0eeJe6TFjxb+J5xgX7hScxqrGuyjmv4c1D4A/gelKfyox0gJJwIHF+fLjeaM8kQ==}
     engines: {node: '>=18'}
+
+  get-folder-size@5.0.0:
+    resolution: {integrity: sha512-+fgtvbL83tSDypEK+T411GDBQVQtxv+qtQgbV+HVa/TYubqDhNd5ghH/D6cOHY9iC5/88GtOZB7WI8PXy2A3bg==}
+    engines: {node: '>=18.11.0'}
+    hasBin: true
 
   get-intrinsic@1.2.4:
     resolution: {integrity: sha512-5uYhsJH8VJBTv7oslg4BznJYhDoRI6waYCxMmCdnTrcCrHA/fCFKoTFz2JKKE0HdDFUF7/oQuhzumXJK7paBRQ==}
@@ -9904,6 +9933,10 @@ packages:
     resolution: {integrity: sha512-drPFnkQJik/O+uPKpqSgr22mpuFHqKdbS835iAQrUC73L2F5WkboIRd63ai/2Yg6I1jzifPFKH2NTK+cfglkIA==}
     engines: {node: '>=4.0.0'}
 
+  xml2js@0.6.2:
+    resolution: {integrity: sha512-T4rieHaC1EXcES0Kxxj4JWgaUQHDk+qwHcYOCFHfiwKz7tOVPLq7Hjq9dM1WCMhylqMEfP7hMcOIChvotiZegA==}
+    engines: {node: '>=4.0.0'}
+
   xmlbuilder2@3.1.1:
     resolution: {integrity: sha512-WCSfbfZnQDdLQLiMdGUQpMxxckeQ4oZNMNhLVkcekTu7xhD4tuUDyAPoY8CwXvBYE6LwBHd6QW2WZXlOWr1vCw==}
     engines: {node: '>=12.0'}
@@ -12767,6 +12800,10 @@ snapshots:
     dependencies:
       '@types/node': 20.17.28
 
+  '@types/xml2js@0.4.14':
+    dependencies:
+      '@types/node': 20.17.28
+
   '@types/yargs-parser@21.0.2': {}
 
   '@types/yargs@17.0.29':
@@ -15088,6 +15125,8 @@ snapshots:
   get-caller-file@2.0.5: {}
 
   get-east-asian-width@1.3.0: {}
+
+  get-folder-size@5.0.0: {}
 
   get-intrinsic@1.2.4:
     dependencies:
@@ -18663,6 +18702,11 @@ snapshots:
   ws@8.18.0: {}
 
   xml2js@0.5.0:
+    dependencies:
+      sax: 1.3.0
+      xmlbuilder: 11.0.1
+
+  xml2js@0.6.2:
     dependencies:
       sax: 1.3.0
       xmlbuilder: 11.0.1

@@ -383,6 +383,7 @@ export class SettingsView {
     }
 
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
-        return this.shellSettings.disallowedDisplayType[displayType] !== true;
+        const disallowed = this.shellSettings.disallowedDisplayType.split(";");
+        return !disallowed.includes(displayType);
     }
 }

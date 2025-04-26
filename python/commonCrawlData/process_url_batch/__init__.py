@@ -277,7 +277,8 @@ def extract_schema_data(html, url):
                 restaurant_data = item
                 break
 
-    if restaurant_data and url.startswith("https://www.opentable.com"):
+    host = urlparse(url).hostname
+    if restaurant_data and host.endswith(".opentable.com"):
         # fix bug in opentable address data
         address = restaurant_data.get("address", {})
         restaurant_data["address"] = correct_swapped_address_fields(address)

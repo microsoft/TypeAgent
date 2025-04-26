@@ -15,20 +15,20 @@ export * from "./textLocationIndex.js";
 export * from "./messageIndex.js";
 export * from "./searchLib.js";
 export * from "./search.js";
+export * from "./searchLang.js";
 export * from "./serialization.js";
 export * from "./queryCmp.js";
 
-export {
-    createKnowledgeExtractor,
-    extractKnowledgeFromText,
-    extractKnowledgeFromTextBatch,
-    mergeConcreteEntities,
-    mergeTopics,
-} from "./knowledge.js";
+export * from "./knowledge.js";
 
-export * as querySchema from "./searchQuerySchema.js";
 export * from "./dateTimeSchema.js";
+export * as querySchema from "./searchQuerySchema.js";
 export * from "./searchQueryTranslator.js";
+export * from "./searchLang.js";
+
+export * from "./answerGenerator.js";
+export * from "./answerResponseSchema.js";
+export * from "./answerContextSchema.js";
 
 export * from "./storage.js";
-export * from "./dataFrame.js";
+export * as hybrid from "./hybrid/index.js";

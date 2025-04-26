@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getStringChunks } from "../src/lib";
+import { getStringChunks } from "../src/lib/index.js";
 
 describe("collections.strings", () => {
     test("chunks", () => {

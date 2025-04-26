@@ -10,9 +10,9 @@ import {
     ImageGeneration,
     CompletionJsonSchema,
     CompleteUsageStatsCallback,
-} from "./models";
-import { callApi, callJsonApi, FetchThrottler } from "./restClient";
-import { getEnvSetting } from "./common";
+} from "./models.js";
+import { callApi, callJsonApi, FetchThrottler } from "./restClient.js";
+import { getEnvSetting } from "./common.js";
 import {
     PromptSection,
     Result,
@@ -22,18 +22,21 @@ import {
     MultimodalPromptContent,
     ImagePromptContent,
 } from "typechat";
-import { readServerEventStream } from "./serverEvents";
+import { readServerEventStream } from "./serverEvents.js";
 import { priorityQueue } from "async";
 import registerDebug from "debug";
-import { TokenCounter } from "./tokenCounter";
-import { PromptLogger } from "./promptLogger";
+import { TokenCounter } from "./tokenCounter.js";
+import { PromptLogger } from "./promptLogger.js";
 import {
     createOllamaChatModel,
     OllamaApiSettings,
     ollamaApiSettingsFromEnv,
-} from "./ollamaModels";
-import { OpenAIApiSettings, openAIApiSettingsFromEnv } from "./openaiSettings";
-import { AzureApiSettings, azureApiSettingsFromEnv } from "./azureSettings";
+} from "./ollamaModels.js";
+import {
+    OpenAIApiSettings,
+    openAIApiSettingsFromEnv,
+} from "./openaiSettings.js";
+import { AzureApiSettings, azureApiSettingsFromEnv } from "./azureSettings.js";
 
 export { azureApiSettingsFromEnv };
 

@@ -1,24 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { setIntersect, setUnion } from "./collections.js";
+import { MatchAccumulator, setIntersect, setUnion } from "../collections.js";
 import { DataFrameCompiler } from "./dataFrameQuery.js";
 import {
-    IConversation,
-    IMessage,
     ScoredMessageOrdinal,
     SearchTerm,
     SearchTermGroup,
     TextRange,
-    WhenFilter,
-} from "./interfaces.js";
-import { ComparisonOp } from "./queryCmp.js";
-import {
-    ConversationSearchResult,
-    createDefaultSearchOptions,
-    searchConversation,
-    SearchOptions,
-} from "./search.js";
+} from "../interfaces.js";
+import { ComparisonOp } from "../queryCmp.js";
+import { createDefaultSearchOptions, SearchOptions } from "../search.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -32,6 +24,7 @@ export type DataFrameValueType = "number" | "string";
 export type DataFrameColumnDef = {
     type: DataFrameValueType;
     optional?: boolean | undefined;
+    index?: boolean | undefined;
 };
 
 export type DataFrameColumns = ReadonlyMap<string, DataFrameColumnDef>;
@@ -187,6 +180,9 @@ export class DataFrame implements IDataFrame {
             default:
                 ordinalSet = this.searchOr(searchTerms);
                 break;
+            case "or_max":
+                ordinalSet = this.searchOrMax(searchTerms);
+                break;
             case "and":
                 ordinalSet = this.searchAnd(searchTerms);
                 break;
@@ -229,6 +225,29 @@ export class DataFrame implements IDataFrame {
         return orSet;
     }
 
+    private searchOrMax(
+        searchTerms: DataFrameTermGroup,
+    ): Set<number> | undefined {
+        let matches: MatchAccumulator<number> = new MatchAccumulator();
+        for (const term of searchTerms.terms) {
+            for (const ordinal of this.findRowOrdinals(
+                term.columnName,
+                term.columnValue.term.text,
+                term.compareOp,
+            )) {
+                matches.add(ordinal, 1.0, true);
+            }
+        }
+        if (matches.size === 0) {
+            return undefined;
+        }
+        const maxHitCount = matches.getMaxHitCount();
+        if (maxHitCount > 1) {
+            matches.selectWithHitCount(maxHitCount);
+        }
+        return new Set<number>(matches.getMatchedValues());
+    }
+
     private matchRecord(
         rowData: DataFrameRecord,
         name: string,
@@ -243,7 +262,7 @@ export class DataFrame implements IDataFrame {
             default:
                 return false;
             case ComparisonOp.Eq:
-                return value === propertyValue;
+                return value == propertyValue;
             case ComparisonOp.Lt:
                 return value < propertyValue;
             case ComparisonOp.Lte:
@@ -253,7 +272,7 @@ export class DataFrame implements IDataFrame {
             case ComparisonOp.Gte:
                 return value >= propertyValue;
             case ComparisonOp.Neq:
-                return value !== propertyValue;
+                return value != propertyValue;
         }
     }
 }
@@ -262,79 +281,6 @@ export function isDataFrameGroup(
     term: DataFrameTermGroup | DataFrameSearchTerm,
 ): term is DataFrameTermGroup {
     return term.hasOwnProperty("booleanOp");
-}
-
-/**
- * TODO: need better naming for everything here.
- */
-export interface IConversationHybrid<TMessage extends IMessage = IMessage> {
-    get conversation(): IConversation<TMessage>;
-    get dataFrames(): DataFrameCollection;
-}
-
-export type HybridSearchResults = {
-    conversationMatches?: ConversationSearchResult | undefined;
-    dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
-};
-
-/**
- * Search the hybrid conversation using dataFrames to determine additional
- * 'outer' scope
- * @param hybridConversation
- * @param searchTermGroup
- * @param filter
- * @param options
- */
-export async function searchConversationWithHybridScope(
-    hybridConversation: IConversationHybrid,
-    searchTermGroup: SearchTermGroup,
-    filter: WhenFilter,
-    options?: SearchOptions,
-    rawSearchQuery?: string,
-) {
-    const dfCompiler = new DataFrameCompiler(hybridConversation.dataFrames);
-    const dfScopeExpr = dfCompiler.compileScope(searchTermGroup);
-    if (dfScopeExpr) {
-        const scopeRanges = dfScopeExpr.eval();
-        if (scopeRanges) {
-            filter ??= {};
-            filter.textRangesInScope = scopeRanges.getRanges();
-        }
-    }
-    return searchConversation(
-        hybridConversation.conversation,
-        searchTermGroup,
-        filter,
-        options,
-        rawSearchQuery,
-    );
-}
-
-export async function searchConversationHybrid(
-    hybridConversation: IConversationHybrid,
-    searchTermGroup: SearchTermGroup,
-    filter?: WhenFilter,
-    options?: SearchOptions,
-    rawQuery?: string,
-): Promise<HybridSearchResults> {
-    options ??= createDefaultSearchOptions();
-    const conversationMatches = await searchConversation(
-        hybridConversation.conversation,
-        searchTermGroup,
-        filter,
-        options,
-        rawQuery,
-    );
-    // Also match any messages with matching data frame columns
-    let dataFrameMatches = searchDataFrames(
-        hybridConversation.dataFrames,
-        searchTermGroup,
-        options,
-    );
-    return {
-        conversationMatches,
-        dataFrameMatches,
-    };
 }
 
 export function searchDataFrames(

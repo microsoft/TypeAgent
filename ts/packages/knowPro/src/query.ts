@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * INTERNAL TO LIBRARY
+ * INTERNAL LIBRARY
  * Query operators and processing is INTERNAL to the library.
  * These should not be exposed via index.ts
  */
@@ -45,7 +45,7 @@ import {
 } from "./propertyIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
 import { collections, NormalizedEmbedding } from "typeagent";
-import { facetValueToString } from "./knowledge.js";
+import { facetValueToString } from "./knowledgeLib.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import { textRangesFromMessageOrdinals } from "./message.js";

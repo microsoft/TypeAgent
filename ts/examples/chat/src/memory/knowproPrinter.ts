@@ -510,6 +510,38 @@ export class KnowProPrinter extends ChatPrinter {
         this.writeJson(action.parameters.filters);
         return this;
     }
+
+    public writeNaturalLanguageContext(
+        context: kp.NaturalLanguageSearchContext,
+    ) {
+        if (context.searchQuery) {
+            this.writeHeading("Search Query");
+            this.writeJson(context.searchQuery);
+        }
+        if (context.searchQueryExpr) {
+            this.writeHeading("Search QueryExpr");
+            this.writeJson(context.searchQueryExpr);
+        }
+    }
+
+    public writeAnswerContext(answerContext: kp.AnswerContext) {
+        this.writeLine(kp.answerContextToString(answerContext, 2));
+        return this;
+    }
+
+    public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
+        if (answerResponse) {
+            if (answerResponse.type === "NoAnswer") {
+                this.writeError("No answer");
+            }
+            if (answerResponse.answer) {
+                this.writeInColor(chalk.green, answerResponse.answer);
+            } else if (answerResponse.whyNoAnswer) {
+                this.writeError(answerResponse.whyNoAnswer);
+            }
+        }
+        return this;
+    }
 }
 
 function getPodcastParticipants(podcast: cm.Podcast) {

@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import { TextEmbeddingModel, openai } from "aiclient";
-import { EmbeddedValue } from "./vectorIndex";
-import { NormalizedEmbedding } from "./embeddings";
-import { ScoredItem } from "../memory";
-import { createSemanticList } from "./semanticList";
+import { EmbeddedValue } from "./vectorIndex.js";
+import { NormalizedEmbedding } from "./embeddings.js";
+import { ScoredItem } from "../memory.js";
+import { createSemanticList } from "./semanticList.js";
 
 export interface SemanticMap<T> {
     readonly size: number;

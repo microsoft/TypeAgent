@@ -7,6 +7,8 @@ import {
     AppAgent,
     AppAgentManifest,
     ParsedCommandParams,
+    PartialParsedCommandParams,
+    SessionContext,
 } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
@@ -22,6 +24,7 @@ import {
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
 import { ShellAction } from "./shellActionSchema.js";
 import { ShellWindow } from "./shellWindow.js";
+import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 
 const port = process.env.PORT || 9001;
 
@@ -111,6 +114,36 @@ class ShellSetSettingCommandHandler implements CommandHandler {
             displayWarn(`${name} is unchanged from ${value}`, context);
         }
     }
+    public async getCompletion(
+        context: SessionContext<ShellContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ): Promise<string[]> {
+        const completions: string[] = [];
+        for (const name of names) {
+            if (name === "name") {
+                completions.push(
+                    ...getObjectPropertyNames(
+                        context.agentContext.shellWindow.getUserSettings(),
+                    ),
+                );
+            }
+
+            if (name === "value") {
+                const settingName = params.args?.name;
+                if (settingName) {
+                    const settings =
+                        context.agentContext.shellWindow.getUserSettings();
+                    const value = getObjectProperty(settings, settingName);
+                    if (typeof value === "boolean") {
+                        completions.push("true");
+                        completions.push("false");
+                    }
+                }
+            }
+        }
+        return completions;
+    }
 }
 
 class ShellRunDemoCommandHandler implements CommandHandlerNoParams {
@@ -198,7 +231,21 @@ class ShellOpenWebContentView implements CommandHandler {
 
                 break;
             default:
-                targetUrl = new URL(params.args.site);
+                try {
+                    targetUrl = new URL(params.args.site);
+                } catch (e) {
+                    // if the URL is invalid let's try to open the last used canvas item if we have one
+                    // if we don't, then we've tried our best
+                    return this.run(context, {
+                        args: {
+                            site: {
+                                description: "",
+                                value: context.sessionContext.agentContext.shellWindow.getUserSettings()
+                                    .canvas,
+                            },
+                        },
+                    } as any);
+                }
 
                 break;
         }

@@ -205,7 +205,7 @@ export function defineRoundtripTest(merge: boolean, testFileName: string) {
             it.each(testInputPart)(
                 "[%s %s] '%s'",
                 async (
-                    translatorName,
+                    schemaName,
                     explainerName,
                     requestAction,
                     explanation,

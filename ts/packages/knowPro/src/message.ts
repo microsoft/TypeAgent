@@ -1,16 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    IMessage,
-    MessageOrdinal,
-    TextLocation,
-    TextRange,
-} from "./interfaces.js";
-
 /**
  * INTERNAL LIBRARY
  */
+
+import { addToSet } from "./collections.js";
+import {
+    DateRange,
+    IMessage,
+    IMessageMetadata,
+    MessageOrdinal,
+    ScoredMessageOrdinal,
+    TextLocation,
+    TextRange,
+} from "./interfaces.js";
 
 /**
  * Returns the text range represented by a message (and an optional chunk ordinal)
@@ -152,5 +156,112 @@ export function* getMessageChunkBatch(
     }
     if (batch.length > 0) {
         yield batch;
+    }
+}
+
+export function* getMessagesFromOrdinals(
+    messages: IMessage[],
+    ordinals: Iterable<MessageOrdinal>,
+) {
+    for (const ordinal of ordinals) {
+        yield messages[ordinal];
+    }
+}
+
+export function* getMessagesFromScoredOrdinals(
+    messages: IMessage[],
+    ordinals: Iterable<ScoredMessageOrdinal>,
+) {
+    for (const scordOrdinal of ordinals) {
+        yield messages[scordOrdinal.messageOrdinal];
+    }
+}
+
+export function getEnclosingTextRange(
+    messageOrdinals: Iterable<MessageOrdinal>,
+): TextRange | undefined {
+    let start: MessageOrdinal | undefined;
+    let end = start;
+    for (const ordinal of messageOrdinals) {
+        if (start === undefined || ordinal < start) {
+            start = ordinal;
+        }
+        if (end === undefined || end < ordinal) {
+            end = ordinal;
+        }
+    }
+    if (start === undefined || end === undefined) {
+        return undefined;
+    }
+    return textRangeFromMessageRange(start, end);
+}
+
+export function getEnclosingDateRangeForMessages(
+    messages: IMessage[],
+    messageOrdinals: Iterable<MessageOrdinal>,
+): DateRange | undefined {
+    const textRange = getEnclosingTextRange(messageOrdinals);
+    if (!textRange) {
+        return undefined;
+    }
+    return getEnclosingDateRangeForTextRange(messages, textRange);
+}
+
+export function getEnclosingDateRangeForTextRange(
+    messages: IMessage[],
+    range: TextRange,
+): DateRange | undefined {
+    const startTimestamp = messages[range.start.messageOrdinal].timestamp;
+    if (!startTimestamp) {
+        return undefined;
+    }
+    const endTimestamp = range.end
+        ? messages[range.end.messageOrdinal].timestamp
+        : undefined;
+    return {
+        start: new Date(startTimestamp),
+        end: endTimestamp ? new Date(endTimestamp) : undefined,
+    };
+}
+
+export function getEnclosingMetadataForMessages(
+    messages: IMessage[],
+    messageOrdinals: Iterable<MessageOrdinal>,
+): IMessageMetadata {
+    let source: Set<string> | undefined;
+    let dest: Set<string> | undefined;
+
+    for (const ordinal of messageOrdinals) {
+        const metadata = messages[ordinal].metadata;
+        if (!metadata) {
+            continue;
+        }
+        if (metadata.source) {
+            source = collect(source, metadata.source);
+        }
+        if (metadata.dest) {
+            dest = collect(dest, metadata.dest);
+        }
+    }
+
+    return {
+        source: source && source.size > 0 ? [...source.values()] : undefined,
+        dest: dest && dest.size > 0 ? [...dest.values()] : undefined,
+    };
+
+    function collect(
+        set: Set<string> | undefined,
+        values: string[] | string | undefined,
+    ): Set<string> | undefined {
+        if (values === undefined) {
+            return set;
+        }
+        set ??= new Set<string>();
+        if (Array.isArray(values)) {
+            addToSet(set, values);
+        } else {
+            set.add(values);
+        }
+        return set;
     }
 }

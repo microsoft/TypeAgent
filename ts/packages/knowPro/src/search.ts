@@ -20,9 +20,9 @@ import {
     WhenFilter,
 } from "./interfaces.js";
 import {
-    mergeSemanticRefEntities,
-    mergeSemanticRefTopics,
-} from "./knowledge.js";
+    getDistinctSemanticRefEntities,
+    getDistinctSemanticRefTopics,
+} from "./knowledgeMerge.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
 import * as q from "./query.js";
 import { IQueryOpExpr } from "./query.js";
@@ -187,7 +187,7 @@ export function getDistinctEntityMatches(
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return mergeSemanticRefEntities(semanticRefs, searchResults, topK);
+    return getDistinctSemanticRefEntities(semanticRefs, searchResults, topK);
 }
 
 /**
@@ -202,7 +202,7 @@ export function getDistinctTopicMatches(
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
-    return mergeSemanticRefTopics(semanticRefs, searchResults, topK);
+    return getDistinctSemanticRefTopics(semanticRefs, searchResults, topK);
 }
 
 function runQuery<T = any>(

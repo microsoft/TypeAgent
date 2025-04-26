@@ -68,6 +68,24 @@ pnpm start scrape --mode=direct --input=path/to/urls.json
 pnpm start scrape --mode=direct --input=path/to/urls.json --output=path/to/results.json
 ```
 
+### Process Sitemaps
+
+Extract restaurant URLs from sitemaps:
+
+```bash
+# Process TripAdvisor sitemaps
+restaurant-data-cli sitemap --source=tripadvisor
+
+# Process OpenTable sitemaps
+restaurant-data-cli sitemap --source=opentable --output=./urls
+
+# Process a custom sitemap
+restaurant-data-cli sitemap --source=custom --url=https://example.com/sitemap.xml
+
+# Without timestamp in filename
+restaurant-data-cli sitemap --source=tripadvisor --timestamp=false
+```
+
 ## Commands Reference
 
 ```bash

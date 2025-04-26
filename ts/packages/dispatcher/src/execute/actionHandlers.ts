@@ -58,15 +58,17 @@ import {
 } from "../translation/translateRequest.js";
 import { getActionSchema } from "../internal.js";
 import { validateAction } from "action-schema";
+import { IndexManager } from "../context/indexManager.js";
+import { IndexData } from "image-memory";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
 export function getSchemaNamePrefix(
-    translatorName: string,
+    schemaName: string,
     systemContext: CommandHandlerContext,
 ) {
-    const config = systemContext.agents.getActionConfig(translatorName);
-    return `[${config.emojiChar} ${translatorName}] `;
+    const config = systemContext.agents.getActionConfig(schemaName);
+    return `[${config.emojiChar} ${schemaName}] `;
 }
 
 export type ActionContextWithClose = {
@@ -250,6 +252,16 @@ export function createSessionContext<T = unknown>(
         },
         addDynamicAgent,
         removeDynamicAgent,
+        indexes(type: string): Promise<any[]> {
+            return new Promise<IndexData[]>((resolve, reject) => {
+                const iidx: IndexData[] =
+                    IndexManager.getInstance().indexes.filter((value) => {
+                        return type === "all" || value.source === type;
+                    });
+
+                resolve(iidx);
+            });
+        },
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;
@@ -831,11 +843,11 @@ export async function validateWildcardMatch(
 ) {
     const actions = match.match.actions;
     for (const { action } of actions) {
-        const translatorName = action.translatorName;
-        if (translatorName === undefined) {
+        const schemaName = action.translatorName;
+        if (schemaName === undefined) {
             continue;
         }
-        const appAgentName = getAppAgentName(translatorName);
+        const appAgentName = getAppAgentName(schemaName);
         if (!context.agents.isActionActive(appAgentName)) {
             // Assume validateWildcardMatch is true.
             continue;

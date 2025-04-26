@@ -5,6 +5,7 @@ import { createWebSocket } from "common-utils/ws";
 import { WebSocket } from "ws";
 import {
     ActionContext,
+    ActionResult,
     AppAgent,
     AppAgentEvent,
     SessionContext,
@@ -241,9 +242,17 @@ async function executeBrowserAction(
             } else if (action.translatorName === "browser.commerce") {
                 const commerceResult = await handleCommerceAction(
                     action,
-                    context.sessionContext,
+                    context,
                 );
-                return createActionResult(commerceResult);
+                if (commerceResult !== undefined) {
+                    if (commerceResult instanceof String) {
+                        return createActionResult(
+                            commerceResult as unknown as string,
+                        );
+                    } else {
+                        return commerceResult as ActionResult;
+                    }
+                }
             } else if (action.translatorName === "browser.instacart") {
                 const instacartResult = await handleInstacartAction(
                     action,
@@ -283,7 +292,7 @@ async function executeBrowserAction(
 }
 
 function sendSiteTranslatorStatus(
-    translatorName: string,
+    schemaName: string,
     status: string,
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -296,7 +305,7 @@ function sendSiteTranslatorStatus(
                 method: "browser/siteTranslatorStatus",
                 id: callId,
                 params: {
-                    translator: translatorName,
+                    translator: schemaName,
                     status: status,
                 },
             }),

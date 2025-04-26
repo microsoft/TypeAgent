@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ListEntry, createLinkedList, createListEntry } from "./linkedList";
+import { ListEntry, createLinkedList, createListEntry } from "./linkedList.js";
 import { queue, QueueObject } from "async";
 
 /**
@@ -50,13 +50,17 @@ export interface TaskQueue<T = any> {
     drain(): Promise<void>;
 }
 
-export function createTaskQueue<T = any>(worker: (item: T) => Promise<void>, maxLength: number, concurrency: number = 1): TaskQueue<T> {
+export function createTaskQueue<T = any>(
+    worker: (item: T) => Promise<void>,
+    maxLength: number,
+    concurrency: number = 1,
+): TaskQueue<T> {
     let taskQueue: QueueObject<T> | undefined;
     return {
         length,
         push,
-        drain
-    }
+        drain,
+    };
 
     function ensureQueue() {
         if (!taskQueue) {
@@ -66,13 +70,12 @@ export function createTaskQueue<T = any>(worker: (item: T) => Promise<void>, max
                     if (callback) {
                         callback();
                     }
-                }
-                catch(error: any) {
+                } catch (error: any) {
                     if (callback) {
                         callback(error);
                     }
                 }
-            }, concurrency);        
+            }, concurrency);
         }
         return taskQueue;
     }
@@ -90,6 +93,6 @@ export function createTaskQueue<T = any>(worker: (item: T) => Promise<void>, max
     }
 
     async function drain(): Promise<void> {
-        return taskQueue ? taskQueue.drain() : Promise.resolve();  
-    }  
+        return taskQueue ? taskQueue.drain() : Promise.resolve();
+    }
 }
