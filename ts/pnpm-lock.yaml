@@ -229,6 +229,9 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
+      cheerio:
+        specifier: 1.0.0-rc.12
+        version: 1.0.0-rc.12
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)

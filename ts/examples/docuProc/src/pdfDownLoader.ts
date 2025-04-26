@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { load } from "cheerio";
 import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { XMLParser } from "fast-xml-parser";
 import { fetchWithRetry } from "aiclient";
@@ -284,7 +285,6 @@ export async function downloadArxivPapers(
 ): Promise<ArxivPaper[]> {
     const apiUrl = "https://export.arxiv.org/api/query";
 
-    // ----- build query string ------------------------------------------------
     const field = query.searchField ?? "title"; // sensible default
     const prefix =
         field === "author" ? "au:" : field === "all" ? "all:" : "ti:";
@@ -292,7 +292,7 @@ export async function downloadArxivPapers(
     const qs = new URLSearchParams({
         search_query: `${prefix}${query.searchTerm}`,
         start: String(query.start ?? 0),
-        max_results: String(query.maxResults ?? 25),
+        max_results: String(query.maxResults ?? 3),
         sortBy: query.sortBy ?? "relevance",
         sortOrder: query.sortOrder ?? "descending",
     });
@@ -315,21 +315,27 @@ export async function downloadArxivPapers(
 
     // ----- determine which papers are new ----------------------
     const catalog = await loadCatalog();
-    const fresh = papers.filter((p) => !catalog[arxivIdFromLink(p.id)]);
+    const newPapers = papers.filter((p) => !catalog[arxivIdFromLink(p.id)]);
+
+    if (newPapers.length === 0) {
+        console.log("No new papers to download.");
+        return papers;
+    }
+    console.log(`Found ${newPapers.length} new papers to download.`);
 
     // ----- download PDFs + metadata --------------------------------
     const newEntries = await Promise.all(
-        fresh.map((p) => downloadArxivPaper(p)),
+        newPapers.map((p) => downloadArxivPaper(p)),
     );
 
     // ----- merge new entries back into the catalog atomically ----------------
     await updateCatalog((cat) => {
         for (const entry of newEntries) {
-            if (entry) cat[entry.id] = entry; // entry is CatalogEntry
+            if (entry) cat[entry.id] = entry;
         }
     });
 
-    return papers; // public contract
+    return papers;
 }
 
 export function printArxivPaperParsedData(papers: ArxivPaper[]) {
@@ -411,4 +417,46 @@ export async function updateCatalog(
         updateEntry(catalog);
         await writeJsonPretty(PAPER_CATALOG_PATH, catalog);
     });
+}
+
+export async function fetchArxivCategories(): Promise<
+    Record<string, string> | undefined
+> {
+    const url = "https://arxiv.org/category_taxonomy";
+    try {
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            console.error(
+                `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
+            );
+            return undefined;
+        }
+
+        const html = await response.text();
+        const $ = load(html);
+
+        const categoryMap: Record<string, string> = {};
+
+        $("#category_taxonomy_list h4").each((_, elem) => {
+            const codeWithName = $(elem).text().trim(); // Example: "cs.CL (Computation and Language)"
+            const code = codeWithName.split(" ")[0].trim(); // "cs.CL"
+            const name = $(elem)
+                .find("span")
+                .text()
+                .replace(/[()]/g, "")
+                .trim(); // "Computation and Language"
+
+            if (code && name) {
+                categoryMap[code] = name;
+            }
+        });
+
+        return categoryMap;
+    } catch (error: any) {
+        console.error(
+            `Error fetching or parsing arXiv categories: ${error.message}`,
+        );
+        return undefined;
+    }
 }

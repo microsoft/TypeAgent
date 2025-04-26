@@ -114,7 +114,7 @@ export async function interactiveAppLoop(
         return translator;
     }
 
-    // Handle @download command.// Handle @download command.
+    // Handle @download command.
     function downloadDef(): iapp.CommandMetadata {
         return {
             description: "Download a PDF file with the query string.",
