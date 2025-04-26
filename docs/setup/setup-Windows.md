@@ -4,8 +4,8 @@ This is a list of step-by-step instructions to set up a Windows environment from
 
 ## Build
 
-- Install Git ([download](https://git-scm.com/downloads/win){:target="_blank"})
-- Install Node ([download](https://nodejs.org/en/download){:target="_blank"})
+- Install Git ([download](https://git-scm.com/downloads/win))
+- Install Node ([download](https://nodejs.org/en/download))
 - Enable corepack
   - Open Command Prompt as Administrator
   - `corepack enable`
@@ -19,7 +19,7 @@ This is a list of step-by-step instructions to set up a Windows environment from
 
 ## Configure Services
 
-- Setup Service Keys (See instructions [here](./../../ts/README.md#service-keys){:target="_blank"})
+- Setup Service Keys (See instructions [here](./../../ts/README.md#service-keys))
 
 ## Run
 
@@ -28,7 +28,7 @@ This is a list of step-by-step instructions to set up a Windows environment from
 
 ## Development
 
-- Install VSCode ([download](https://code.visualstudio.com/download){:target="_blank"})
+- Install VSCode ([download](https://code.visualstudio.com/download))
 - Start VSCode
   - Open command prompt
   - `code C:\src\TypeAgent\ts`
