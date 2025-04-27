@@ -15,6 +15,7 @@ import {
 } from "./schema/pageComponents.mjs";
 import { ShoppingActions } from "./schema/userActions.mjs";
 import { ShoppingPlanActions } from "./schema/planActions.mjs";
+import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 
 export async function handleCommerceAction(
     action: ShoppingActions,
@@ -41,7 +42,7 @@ export async function handleCommerceAction(
             await handleViewShoppingCart(action);
             break;
         case "buyProduct":
-            await handleShoppingRequest(action);
+            return await handleShoppingRequest(action);
             break;
     }
 
@@ -246,6 +247,23 @@ Parameters: ${JSON.stringify(entry.parameters)}`;
                     content: "Completed ",
                 });
                 break;
+            }
+
+            if (nextAction.actionName === "clarifyBuyAction") {
+                context.actionIO.appendDisplay({
+                    type: "text",
+                    speak: true,
+                    content: nextAction.parameters.question,
+                });
+
+                const result = createActionResultNoDisplay(
+                    nextAction.parameters.question,
+                );
+                result.additionalInstructions = [
+                    `The assistant asked the user: ${nextAction.parameters.question}`,
+                ];
+
+                return result;
             }
 
             let actionSucceeded = await runUserAction(nextAction);

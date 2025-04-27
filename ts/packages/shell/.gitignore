@@ -2,6 +2,7 @@ node_modules
 dist
 out
 *.log*
+deploy
 
 # Playwright
 /test-results/

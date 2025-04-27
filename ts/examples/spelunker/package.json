@@ -1,6 +1,6 @@
 {
   "name": "spelunker-example",
-  "version": "0.1",
+  "version": "0.0.1",
   "private": true,
   "description": "Spelunker Example",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
@@ -43,7 +43,6 @@
     "rimraf": "^6.0.1"
   },
   "engines": {
-    "node": ">=18",
-    "pnpm": ">=8"
+    "node": ">=20"
   }
 }

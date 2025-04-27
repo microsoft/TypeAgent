@@ -34,6 +34,7 @@ export type FindNearbyStore = {
 };
 
 // Use this action for user queries such as "where is product X in the store"
+// This action is available when on the Product Details Page
 export type GetLocationInStore = {
     actionName: "getLocationInStore";
     parameters: {
@@ -41,9 +42,26 @@ export type GetLocationInStore = {
     };
 };
 
+// Ask the user a yes/no question to clarify shopping operations
+export type ClarifyBuyAction = {
+    actionName: "clarifyBuyAction";
+    parameters: {
+        question: string;
+    };
+};
+
 // IMPORTANT: Mark the plan as completed only after you are sure that the user objective has been FULLY met.
 export type PlanCompleted = {
     actionName: "PlanCompleted";
+};
+
+// Ask the user a yes/no question
+export type AskForClarification = {
+    actionName: "askForClarification";
+    parameters: {
+        // The question to ask the user
+        question: string;
+    };
 };
 
 export type ShoppingPlanActions =
@@ -53,4 +71,5 @@ export type ShoppingPlanActions =
     | GoToProductPage
     | GetLocationInStore
     | FindNearbyStore
+    | ClarifyBuyAction
     | PlanCompleted;

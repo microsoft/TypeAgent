@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+
 import { Result, success } from "typechat";
 import {
     IConversation,
@@ -29,31 +30,39 @@ import {
     createPropertySearchTerm,
 } from "./searchLib.js";
 
+/*
+    APIs for searching with Natural Language
+*/
+
 export async function searchConversationWithNaturalLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
     options?: SearchOptions,
+    context?: NaturalLanguageSearchContext,
 ): Promise<Result<ConversationSearchResult[]>> {
-    const result = await searchQueryExprFromLanguage(
+    const searchQueryExprResult = await searchQueryExprFromLanguage(
         conversation,
         queryTranslator,
         searchText,
+        context,
     );
-    if (!result.success) {
-        return result;
+    if (!searchQueryExprResult.success) {
+        return searchQueryExprResult;
     }
-    const queryExpressions = result.data;
-    const results: ConversationSearchResult[] = [];
-    for (const searchQuery of queryExpressions) {
+    if (context) {
+        context.searchQueryExpr = searchQueryExprResult.data;
+    }
+    const searchResults: ConversationSearchResult[] = [];
+    for (const searchQuery of searchQueryExprResult.data) {
         const queryResult = await runSearchQuery(
             conversation,
             searchQuery,
             options,
         );
-        results.push(...queryResult);
+        searchResults.push(...queryResult);
     }
-    return success(results);
+    return success(searchResults);
 }
 
 /**
@@ -64,19 +73,28 @@ export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
     queryText: string,
+    context?: NaturalLanguageSearchContext,
 ): Promise<Result<SearchQueryExpr[]>> {
-    const result = await searchQueryFromLanguage(
+    const queryResult = await searchQueryFromLanguage(
         conversation,
         translator,
         queryText,
     );
-    if (result.success) {
-        const searchQuery = result.data;
+    if (queryResult.success) {
+        const searchQuery = queryResult.data;
+        if (context) {
+            context.searchQuery = searchQuery;
+        }
         const searchExpr = compileSearchQuery(conversation, searchQuery);
         return success(searchExpr);
     }
-    return result;
+    return queryResult;
 }
+
+export type NaturalLanguageSearchContext = {
+    searchQuery?: querySchema.SearchQuery | undefined;
+    searchQueryExpr?: SearchQueryExpr[] | undefined;
+};
 
 export function compileSearchQuery(
     conversation: IConversation,

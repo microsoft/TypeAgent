@@ -48,6 +48,10 @@ const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
 
 function getDotEnvPath() {
+    const userDotEnv = path.join(app.getPath("userData"), ".env");
+    if (fs.existsSync(userDotEnv)) {
+        return userDotEnv;
+    }
     const appDotEnv = path.join(app.getAppPath(), ".env");
     if (fs.existsSync(appDotEnv)) {
         return appDotEnv;
@@ -269,10 +273,7 @@ async function initializeDispatcher(
 
         return dispatcher;
     } catch (e: any) {
-        dialog.showErrorBox(
-            "Exception initializing dispatcher",
-            `${e.message}\n${e.stack}`,
-        );
+        dialog.showErrorBox("Exception initializing dispatcher", e.stack);
         return undefined;
     }
 }
@@ -356,8 +357,13 @@ async function initialize() {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
+    const appPath = app.getAppPath();
     const browserExtensionPath = path.join(
-        app.getAppPath(),
+        // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
+        // Assume we can just replace app.asar with app.asar.unpacked in all cases.
+        path.basename(appPath) === "app.asar"
+            ? path.join(path.dirname(appPath), "app.asar.unpacked")
+            : appPath,
         "node_modules/browser-typeagent/dist/electron",
     );
     await session.defaultSession.loadExtension(browserExtensionPath, {
@@ -454,9 +460,8 @@ async function initialize() {
 
 app.whenReady()
     .then(initialize)
-    .catch((error) => {
-        debugShellError(error);
-        console.error(`Error starting shell: ${error.message}\n${error.stack}`);
+    .catch((e) => {
+        dialog.showErrorBox("Error starting shell", e.stack);
         app.quit();
     });
 

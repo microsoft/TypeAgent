@@ -8,15 +8,27 @@ export type AnswerContext = {
     entities?: RelevantKnowledge[] | undefined;
     // Relevant topics
     topics?: RelevantKnowledge[] | undefined;
+    // Relevant messages
+    messages?: RelevantMessage[] | undefined;
 };
+
+export type EntityNames = string | string[];
 
 export type RelevantKnowledge = {
     // The actual knowledge
     knowledge: any;
     // Entity or entities who mentioned the knowledge
-    origin?: string | string[] | undefined;
+    origin?: EntityNames | undefined;
     // Entity or entities who received or consumed this knowledge
-    audience?: string | string[] | undefined;
+    audience?: EntityNames | undefined;
     // Time period during which this knowledge was gathered
     timeRange?: DateRange | undefined;
+};
+
+export type RelevantMessage = {
+    // Message text
+    message: string;
+    from?: EntityNames | undefined;
+    to?: EntityNames | undefined;
+    timestamp?: Date | undefined;
 };

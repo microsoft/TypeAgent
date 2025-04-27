@@ -24,7 +24,7 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
-    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx cp build/Release/better_sqlite3.node build/Release/better_sqlite3.n.node",
+    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx mkdir -p build/Release-Node && shx cp build/Release/better_sqlite3.node build/Release-Node",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
@@ -50,8 +50,8 @@
   },
   "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f",
   "engines": {
-    "node": ">=18",
-    "pnpm": ">=9"
+    "node": ">=20",
+    "pnpm": ">=10"
   },
   "peerDependencyRules": {
     "ignoreMissing": [
