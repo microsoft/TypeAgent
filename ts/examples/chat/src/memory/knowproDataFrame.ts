@@ -28,7 +28,8 @@ export async function createKnowproDataFrameCommands(
     let restaurantIndex: RestaurantIndex | undefined;
 
     const filePath =
-        "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
+        // "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
+        "/data/testChat/knowpro/restaurants/opentable/sitemap-4.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
 
     async function importDataFrame(args: string[]) {
@@ -548,11 +549,8 @@ function parseRestaurantFacets(
 
 function parseAddressFacets(address: Address, facets: RestaurantFacets) {
     if (address.addressLocality) {
-        const location = parseLocation(address.addressLocality);
-        if (location) {
-            facets.city = location.city?.toLowerCase();
-            facets.country = location.country?.toLowerCase();
-        }
+        facets.city = address.addressLocality;
+        facets.country = address.postalCode;
     }
 }
 
@@ -561,12 +559,15 @@ export async function loadThings<T extends Thing>(
     maxCount?: number,
 ): Promise<T[]> {
     const json = await readAllText(filePath);
+    console.log(`Length read: ${json.length}`)
+
     const containers: Container<T>[] = JSON.parse(json);
     const items: T[] = [];
     maxCount ??= containers.length;
+    console.log(`Items read: ${containers.length}`)
     maxCount = Math.min(containers.length, maxCount);
     for (let i = 0; i < maxCount; ++i) {
-        const item = containers[i].item;
+        const item = containers[i] as T;
         if (item !== undefined) {
             items.push(item);
         }
@@ -601,18 +602,6 @@ function parseNumber(str: string | undefined): number | undefined {
     return undefined;
 }
 
-function parseLocation(location: string): Location | undefined {
-    try {
-        const match = location.match(/^(.+?)\s*\((.+?)\)$/);
-        if (match && match.length > 1) {
-            return {
-                city: match[1].trim(),
-                country: match[2].trim(),
-            };
-        }
-    } catch {}
-    return undefined;
-}
 
 /**
  * 
