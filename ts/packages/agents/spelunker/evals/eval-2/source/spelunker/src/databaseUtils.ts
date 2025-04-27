@@ -51,7 +51,7 @@ function getDbOptions() {
     const betterSqlitePath = r.resolve("better-sqlite3/package.json");
     const nativeBinding = path.join(
         betterSqlitePath,
-        "../build/Release/better_sqlite3.n.node",
+        "../build/Release-Node/better_sqlite3.node",
     );
     return { nativeBinding };
 }

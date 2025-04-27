@@ -24,7 +24,7 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
-    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx cp build/Release/better_sqlite3.node build/Release/better_sqlite3.n.node",
+    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx mkdir -p build/Release-Node && shx cp build/Release/better_sqlite3.node build/Release-Node",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
