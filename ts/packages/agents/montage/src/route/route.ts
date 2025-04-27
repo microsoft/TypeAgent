@@ -76,67 +76,58 @@ app.get("/image", (req: Request, res: Response) => {
 
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
-// TODO: write thumbnails to image cache folder instead of in place
 app.get("/thumbnail", async (req: Request, res: Response) => {
-    const file = req.query.path as string | undefined;
-    let served: boolean = false;
 
-    if (file === undefined) {
+    // return if we don't get a path query parameter
+    if (req.query.path === undefined) {
         res.status(400).send("Bad Request");
         return;
-    } else {
-        const normalizedPath = path.resolve(file);
-        allowedFolders.forEach(async (folder) => {
-            if (normalizedPath.startsWith(path.resolve(folder))) {
-                // get the thumbnail of the supplied image or make it if it doesn't exist
-                const thumbnail = `${normalizedPath}.thumbnail.jpg`;
-                if (
-                    !fs.existsSync(thumbnail) ||
-                    fs.statSync(thumbnail).size === 0
-                ) {
-                    const img = sharp(normalizedPath, { failOn: "error" })
-                        .resize(800, 800, { fit: "inside" })
-                        .withMetadata();
-                    try {
-                        img.toFile(thumbnail).then((value) => {
-                            sendThumbnailorOriginalImage(
-                                res,
-                                thumbnail,
-                                normalizedPath,
-                            );
-                        });
-                    } catch (e) {
-                        console.log(e);
-                    }
-                } else {
-                    sendThumbnailorOriginalImage(
-                        res,
-                        thumbnail,
-                        normalizedPath,
-                    );
-                }
-
-                served = true;
-            }
-        });
     }
 
-    // File isn't in an allowed folder
-    if (!served) {
+    // get the image file
+    const imageFile = path.resolve(req.query.path.toString());
+
+    // try to serve the thumbnail for this image
+    // TODO: this will break on windows when the path exceeds 255 characters...
+    const thumbnail = `${imageFile.replace(rootImageFolder, indexCachePath)}.thumbnail.jpg`;
+
+    // security check
+    if (!thumbnail.startsWith(indexCachePath)) {
         res.status(403).send();
+        return;
     }
 
-    // TOOD: figure out why this fails for most images
-    // const img = sharp(file, { failOn: "error"}).resize(800, 800, { fit: "inside" }).withMetadata();
-    //  const buffer = await img.toBuffer();
+    // create the thumbnail and send it
+    if (
+        !fs.existsSync(thumbnail) ||
+        fs.statSync(thumbnail).size === 0
+    ) {
+        const img = sharp(imageFile, { failOn: "error" })
+            .resize(800, 800, { fit: "inside" })
+            .withMetadata();
 
-    // res.setHeader("Content-Type", getMimeType(path.extname(file)));
-    // res.setHeader("Cache-Control", "no-cache");
-    // res.setHeader("Connection", "keep-alive");
-    // res.setHeader("Content-Length", buffer.byteLength);
-    // res.flushHeaders();
-
-    // res.write(buffer);
+        try {
+            img.toFile(thumbnail).then((value) => {
+                sendThumbnailorOriginalImage(
+                    res,
+                    thumbnail,
+                    imageFile,
+                );
+            });
+        } catch (e) {
+            sendThumbnailorOriginalImage(
+                res,
+                thumbnail,
+                imageFile,
+            );    
+        }
+    } else {
+        sendThumbnailorOriginalImage(
+            res,
+            thumbnail,
+            imageFile,
+        );
+    }
 });
 
 function sendThumbnailorOriginalImage(
@@ -166,7 +157,7 @@ app.get("/knowlegeResponse", (req: Request, res: Response) => {
     const imageFile = `${req.query.path}`;
 
     // replace the image path root with the index cache root since KR files are stored in the index cache
-    // TODO: this will probably break on windows when the path exceeds 255 characters...
+    // TODO: this will break on windows when the path exceeds 255 characters...
     const krFile = `${imageFile.replace(rootImageFolder, indexCachePath)}.kr.json`;
 
     const normalizedPath = path.resolve(krFile);
@@ -253,6 +244,7 @@ process.send?.("Success");
  */
 process.on("message", (message: any) => {
     if (message.folders) {
+        // allowed folders already contains index cache path and indexed location
         if (message.folders.allowedFolders) {
             allowedFolders = [...allowedFolders, ...message.folders.allowedFolders];
         }
