@@ -21,6 +21,7 @@ import {
     buildTransientSecondaryIndexes,
     readConversationDataFromBuffer,
     IMessageMetadata,
+    hybrid
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -34,6 +35,8 @@ import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { AddressOutput } from "@azure-rest/maps-search";
 import { isDirectoryPath } from "typeagent";
 import registerDebug from "debug";
+import sqlite from "better-sqlite3";
+import * as ms from "memory-storage";
 
 const debug = registerDebug("typeagent:image-memory");
 
@@ -56,6 +59,7 @@ export class Image implements IMessage {
 
 // metadata for images
 export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
+
     constructor(
         public fileName: string,
         public img: image.Image,
@@ -365,20 +369,51 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
     }
 }
 
-export class ImageCollection implements IConversation {
+export class GeoTable extends ms.sqlite.SqliteDataFrame {
+    constructor(public db: sqlite.Database) {
+        super(db, "geo", [
+            ["latitude", { type: "string" }],
+            ["longitude", { type: "string" }],
+        ]);
+    }
+}
+
+export class ImageCollection implements IConversation, hybrid.IConversationHybrid {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
+
+    // Data frames for typed image meta data
+    public dataFrames: hybrid.DataFrameCollection;
+    public locations: hybrid.IDataFrame;
+
     constructor(
         public nameTag: string = "",
         public messages: Image[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
+        public dbPath: string = "",
+        private db: sqlite.Database | undefined = undefined,
     ) {
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
         this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
+
+        // create dataFrames (tables)
+        // TODO: implement
+        this.db = ms.sqlite.createDatabase(dbPath, true);
+        this.locations = new GeoTable(this.db);
+
+        // create dataFrames collection
+        // TODO: add locations do dataframes as we add images
+        this.dataFrames = new Map<string, hybrid.IDataFrame>([
+            [this.locations.name, this.locations]
+        ]);
+    }
+
+    get conversation(): IConversation<IMessage> {
+        return this;
     }
 
     public addMetadataToIndex() {

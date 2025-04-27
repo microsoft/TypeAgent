@@ -2511,6 +2511,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      better-sqlite3:
+        specifier: 11.9.1
+        version: 11.9.1
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
@@ -2526,6 +2529,9 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
+      memory-storage:
+        specifier: workspace:*
+        version: link:../storage
       telemetry:
         specifier: workspace:*
         version: link:../../telemetry
@@ -2536,6 +2542,9 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
