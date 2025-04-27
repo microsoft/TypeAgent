@@ -42,6 +42,8 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 import { spawnSync } from "node:child_process";
+import { createSemanticMap } from "../../../../typeagent/dist/vector/semanticMap.js";
+import { openai, TextEmbeddingModel } from "aiclient";
 
 const debug = registerDebug("typeagent:agent:montage");
 
@@ -68,6 +70,7 @@ type MontageActionContext = {
         exactMatch: boolean;
     };
     indexes: im.IndexData[];
+    fuzzyMatchingModel: TextEmbeddingModel | undefined;
 };
 
 // Montage definition
@@ -199,14 +202,31 @@ async function updateMontageContext(
                     folders.push(idx.location);
                 });
 
+                // send the folder info
+                const indexPath = path.join(
+                    context.agentContext.indexes[0].path,
+                    "cache",
+                );
+                folders.push(indexPath);
                 context.agentContext.viewProcess?.send({
-                    allowedFolders: folders,
+                    folders: {
+                        allowedFolders: folders,
+                        indexCachePath: indexPath,
+                        indexedLocation:
+                            context.agentContext.indexes[0].location,
+                    },
                 });
 
                 context.agentContext.viewProcess?.send(
                     context.agentContext.montage,
                 );
             }
+        }
+
+        // create the embedding model
+        if (!context.agentContext.fuzzyMatchingModel) {
+            context.agentContext.fuzzyMatchingModel =
+                openai.createEmbeddingModel();
         }
     } else {
         // shut down service
@@ -567,15 +587,25 @@ async function handleMontageAction(
                     result = createActionResult(`Switch montage to ${m.title}`);
                 } else {
                     result = createActionResultFromError(
-                        `Unable to switch montage, requested montage does not exist.`,
+                        `Unable to switch montage, requested montage (id = ${switchMontageAction.parameters.id}) does not exist.`,
                     );
                 }
             } else {
-                const m: PhotoMontage | undefined =
+                let m: PhotoMontage | undefined =
                     actionContext.sessionContext.agentContext.montages.find(
                         (value) =>
                             value.title == switchMontageAction.parameters.title,
                     );
+
+                if (!m) {
+                    // try fuzzy matching
+                    m = await getMontageByFuzzyMatching(
+                        switchMontageAction.parameters.title,
+                        actionContext.sessionContext.agentContext.montages,
+                        actionContext.sessionContext.agentContext
+                            .fuzzyMatchingModel,
+                    );
+                }
 
                 if (m) {
                     actionContext.sessionContext.agentContext.montage = m;
@@ -1035,4 +1065,25 @@ function createEncryptedPIDLFromPath(path: string) {
     }
 
     return undefined;
+}
+
+async function getMontageByFuzzyMatching(
+    fuzzyTitle: string | undefined,
+    montages: PhotoMontage[],
+    model: TextEmbeddingModel | undefined,
+): Promise<PhotoMontage | undefined> {
+    if (fuzzyTitle === undefined) {
+        return undefined;
+    }
+
+    const map = await createSemanticMap<PhotoMontage>(model);
+    await map.setMultiple(montages.map((pm) => [pm.title, pm]));
+
+    const scoredResults = await map.getNearest(fuzzyTitle);
+
+    if (scoredResults?.item && scoredResults.score > 0.5) {
+        return scoredResults?.item;
+    } else {
+        return undefined;
+    }
 }
