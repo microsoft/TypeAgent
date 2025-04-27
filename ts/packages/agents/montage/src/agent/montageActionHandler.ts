@@ -202,9 +202,16 @@ async function updateMontageContext(
                     folders.push(idx.location);
                 });
 
+                // send the folder info
+                const indexPath = path.join(context.agentContext.indexes[0].path, "cache");
+                folders.push(indexPath);
                 context.agentContext.viewProcess?.send({
-                    allowedFolders: folders,
-                });
+                    folders: {
+                        allowedFolders: folders,
+                        indexCachePath: indexPath,
+                        indexedLocation: context.agentContext.indexes[0].location,
+                    },
+                })
 
                 context.agentContext.viewProcess?.send(
                     context.agentContext.montage,

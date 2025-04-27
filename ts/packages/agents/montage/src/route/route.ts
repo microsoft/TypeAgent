@@ -17,7 +17,14 @@ const port = process.env.PORT || 9012;
 
 // configurable folders for securing folder access. Is populated based on available indexes
 // but can be customized further here
-let allowedFolders: string[] = ["f:\\pictures", "c:\\temp\\pictures"];
+let allowedFolders: string[] = [];
+
+// The folder where the knowledge response files are 
+// This is typically the image index cache and us used primarily for debugging
+let indexCachePath: string;
+
+// The root folder where the images are located
+let rootImageFolder: string;
 
 // limit request rage
 const limiter = rateLimit({
@@ -156,8 +163,13 @@ function sendThumbnailorOriginalImage(
  * Used for debugging purposes only.
  */
 app.get("/knowlegeResponse", (req: Request, res: Response) => {
-    const file = `${req.query.path}.kr.json`;
-    const normalizedPath = path.resolve(file);
+    const imageFile = `${req.query.path}`;
+
+    // replace the image path root with the index cache root since KR files are stored in the index cache
+    // TODO: this will probably break on windows when the path exceeds 255 characters...
+    const krFile = `${imageFile.replace(rootImageFolder, indexCachePath)}.kr.json`;
+
+    const normalizedPath = path.resolve(krFile);
     let served: boolean = false;
 
     // does the file exist and is it in an allowed folder
@@ -240,8 +252,19 @@ process.send?.("Success");
  * Processes messages received from the host/parent process
  */
 process.on("message", (message: any) => {
-    if (message.allowedFolders) {
-        allowedFolders = [...allowedFolders, ...message.allowedFolders];
+    if (message.folders) {
+        if (message.folders.allowedFolders) {
+            allowedFolders = [...allowedFolders, ...message.folders.allowedFolders];
+        }
+
+        if (message.folders.indexCachePath) {
+            indexCachePath = message.folders.indexCachePath;
+        }
+
+        if (message.folders.indexedLocation) {
+            rootImageFolder = message.folders.indexedLocation;
+        }
+        
     } else {
         // forward the message to any clients
         sendDataToClients(message);
