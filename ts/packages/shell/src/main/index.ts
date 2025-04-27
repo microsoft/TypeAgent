@@ -273,10 +273,7 @@ async function initializeDispatcher(
 
         return dispatcher;
     } catch (e: any) {
-        dialog.showErrorBox(
-            "Exception initializing dispatcher",
-            `${e.message}\n${e.stack}`,
-        );
+        dialog.showErrorBox("Exception initializing dispatcher", e.stack);
         return undefined;
     }
 }
