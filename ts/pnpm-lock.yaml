@@ -49,8 +49,8 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/agentSdk
       better-sqlite3:
-        specifier: 11.8.1
-        version: 11.8.1
+        specifier: 11.9.1
+        version: 11.9.1
       typeagent:
         specifier: workspace:*
         version: link:../../../packages/typeagent
@@ -77,8 +77,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/aiclient
       better-sqlite3:
-        specifier: 11.8.1
-        version: 11.8.1
+        specifier: 11.9.1
+        version: 11.9.1
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -273,8 +273,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/aiclient
       better-sqlite3:
-        specifier: 11.8.1
-        version: 11.8.1
+        specifier: 11.9.1
+        version: 11.9.1
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -1478,8 +1478,8 @@ importers:
         specifier: workspace:*
         version: link:../../aiclient
       better-sqlite3:
-        specifier: 11.8.1
-        version: 11.8.1
+        specifier: 11.9.1
+        version: 11.9.1
       code-processor:
         specifier: workspace:*
         version: link:../../codeProcessor
@@ -2558,8 +2558,8 @@ importers:
   packages/memory/storage:
     dependencies:
       better-sqlite3:
-        specifier: 11.8.1
-        version: 11.8.1
+        specifier: 11.9.1
+        version: 11.9.1
       debug:
         specifier: ^4.4.0
         version: 4.4.0(supports-color@8.1.1)
@@ -5451,8 +5451,8 @@ packages:
   bent@7.3.12:
     resolution: {integrity: sha512-T3yrKnVGB63zRuoco/7Ybl7BwwGZR0lceoVG5XmQyMIH9s19SV5m+a8qam4if0zQuAmOQTyPTPmsQBdAorGK3w==}
 
-  better-sqlite3@11.8.1:
-    resolution: {integrity: sha512-9BxNaBkblMjhJW8sMRZxnxVTRgbRmssZW0Oxc1MPBTfiR+WW21e2Mk4qu8CzrcZb1LwPCnFsfDEzq+SNcBU8eg==}
+  better-sqlite3@11.9.1:
+    resolution: {integrity: sha512-Ba0KR+Fzxh2jDRhdg6TSH0SJGzb8C0aBY4hR8w8madIdIzzC6Y1+kx5qR6eS1Z+Gy20h6ZU28aeyg0z1VIrShQ==}
 
   binary-extensions@2.2.0:
     resolution: {integrity: sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==}
@@ -13733,7 +13733,7 @@ snapshots:
       caseless: 0.12.0
       is-stream: 2.0.1
 
-  better-sqlite3@11.8.1:
+  better-sqlite3@11.9.1:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3
