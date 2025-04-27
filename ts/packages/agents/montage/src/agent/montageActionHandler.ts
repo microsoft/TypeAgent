@@ -203,15 +203,19 @@ async function updateMontageContext(
                 });
 
                 // send the folder info
-                const indexPath = path.join(context.agentContext.indexes[0].path, "cache");
+                const indexPath = path.join(
+                    context.agentContext.indexes[0].path,
+                    "cache",
+                );
                 folders.push(indexPath);
                 context.agentContext.viewProcess?.send({
                     folders: {
                         allowedFolders: folders,
                         indexCachePath: indexPath,
-                        indexedLocation: context.agentContext.indexes[0].location,
+                        indexedLocation:
+                            context.agentContext.indexes[0].location,
                     },
-                })
+                });
 
                 context.agentContext.viewProcess?.send(
                     context.agentContext.montage,
@@ -221,9 +225,9 @@ async function updateMontageContext(
 
         // create the embedding model
         if (!context.agentContext.fuzzyMatchingModel) {
-            context.agentContext.fuzzyMatchingModel = openai.createEmbeddingModel();            
+            context.agentContext.fuzzyMatchingModel =
+                openai.createEmbeddingModel();
         }
-
     } else {
         // shut down service
         if (context.agentContext.viewProcess) {
@@ -594,10 +598,15 @@ async function handleMontageAction(
                     );
 
                 if (!m) {
-                    // try fuzzy matching 
-                    m = await getMontageByFuzzyMatching(switchMontageAction.parameters.title, actionContext.sessionContext.agentContext.montages, actionContext.sessionContext.agentContext.fuzzyMatchingModel);
-                } 
-                
+                    // try fuzzy matching
+                    m = await getMontageByFuzzyMatching(
+                        switchMontageAction.parameters.title,
+                        actionContext.sessionContext.agentContext.montages,
+                        actionContext.sessionContext.agentContext
+                            .fuzzyMatchingModel,
+                    );
+                }
+
                 if (m) {
                     actionContext.sessionContext.agentContext.montage = m;
                     result = createActionResult(`Switch montage to ${m.title}`);
@@ -1058,8 +1067,11 @@ function createEncryptedPIDLFromPath(path: string) {
     return undefined;
 }
 
-async function getMontageByFuzzyMatching(fuzzyTitle: string | undefined, montages: PhotoMontage[], model: TextEmbeddingModel | undefined): Promise<PhotoMontage | undefined> {
-
+async function getMontageByFuzzyMatching(
+    fuzzyTitle: string | undefined,
+    montages: PhotoMontage[],
+    model: TextEmbeddingModel | undefined,
+): Promise<PhotoMontage | undefined> {
     if (fuzzyTitle === undefined) {
         return undefined;
     }

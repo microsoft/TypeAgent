@@ -19,7 +19,7 @@ const port = process.env.PORT || 9012;
 // but can be customized further here
 let allowedFolders: string[] = [];
 
-// The folder where the knowledge response files are 
+// The folder where the knowledge response files are
 // This is typically the image index cache and us used primarily for debugging
 let indexCachePath: string;
 
@@ -77,7 +77,6 @@ app.get("/image", (req: Request, res: Response) => {
 sharp.cache({ memory: 2048, files: 250, items: 1000 });
 
 app.get("/thumbnail", async (req: Request, res: Response) => {
-
     // return if we don't get a path query parameter
     if (req.query.path === undefined) {
         res.status(400).send("Bad Request");
@@ -98,35 +97,20 @@ app.get("/thumbnail", async (req: Request, res: Response) => {
     }
 
     // create the thumbnail and send it
-    if (
-        !fs.existsSync(thumbnail) ||
-        fs.statSync(thumbnail).size === 0
-    ) {
+    if (!fs.existsSync(thumbnail) || fs.statSync(thumbnail).size === 0) {
         const img = sharp(imageFile, { failOn: "error" })
             .resize(800, 800, { fit: "inside" })
             .withMetadata();
 
         try {
             img.toFile(thumbnail).then((value) => {
-                sendThumbnailorOriginalImage(
-                    res,
-                    thumbnail,
-                    imageFile,
-                );
+                sendThumbnailorOriginalImage(res, thumbnail, imageFile);
             });
         } catch (e) {
-            sendThumbnailorOriginalImage(
-                res,
-                thumbnail,
-                imageFile,
-            );    
+            sendThumbnailorOriginalImage(res, thumbnail, imageFile);
         }
     } else {
-        sendThumbnailorOriginalImage(
-            res,
-            thumbnail,
-            imageFile,
-        );
+        sendThumbnailorOriginalImage(res, thumbnail, imageFile);
     }
 });
 
@@ -246,7 +230,10 @@ process.on("message", (message: any) => {
     if (message.folders) {
         // allowed folders already contains index cache path and indexed location
         if (message.folders.allowedFolders) {
-            allowedFolders = [...allowedFolders, ...message.folders.allowedFolders];
+            allowedFolders = [
+                ...allowedFolders,
+                ...message.folders.allowedFolders,
+            ];
         }
 
         if (message.folders.indexCachePath) {
@@ -256,7 +243,6 @@ process.on("message", (message: any) => {
         if (message.folders.indexedLocation) {
             rootImageFolder = message.folders.indexedLocation;
         }
-        
     } else {
         // forward the message to any clients
         sendDataToClients(message);
