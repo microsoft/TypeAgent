@@ -14,7 +14,7 @@ The main entry point to explore TypeAgent is the [TypeAgent Shell](./packages/sh
 
 To build:
 
-- Install [Node 18+](https://nodejs.org/en/download)
+- Install [Node 20+](https://nodejs.org/en/download)
   - NOTE: HPC Tools conflict with node so be sure that the node.exe you are running is the correct one!
 - Install pnpm (`npm i -g pnpm && pnpm setup`)
 - **(Linux/WSL Only)** Read TypeAgent Shell's [README.md](./packages/shell/README.md) for additional requirements
