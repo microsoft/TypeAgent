@@ -1,6 +1,6 @@
 {
   "name": "spelunker-agent",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Spelunker dispatcher agent",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
