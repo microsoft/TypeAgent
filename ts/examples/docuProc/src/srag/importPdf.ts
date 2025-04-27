@@ -4,6 +4,7 @@ import {
     PdfDocument,
     //PdfChunkMessageMeta
 } from "./pdfDocument.js";
+import path from "node:path";
 import * as fs from "node:fs";
 import chalk, { ChalkInstance } from "chalk";
 import * as iapp from "interactive-app";
@@ -16,6 +17,10 @@ import {
     resolveFilePath,
     resolveAndValidateFiles,
 } from "../common.js";
+import {
+    getPaperIdFromFilename,
+    loadCatalogWithMeta,
+} from "../pdfDownLoader.js";
 
 const execPromise = promisify(exec);
 
@@ -79,6 +84,52 @@ export async function chunkifyPdfFiles(
     return results;
 }
 
+export async function loadPdfChunksFromJson(
+    rootDir: string,
+    filenames: string[],
+): Promise<(ChunkedFile | ErrorItem)[]> {
+    let results: (ChunkedFile | ErrorItem)[] = [];
+    try {
+        const chunkedDocsDir = path.join(rootDir, "chunked-docs");
+        for (const filename of filenames) {
+            const chunkedFilename = path.join(
+                chunkedDocsDir,
+                path.parse(filename).name,
+                path.basename(filename) + "-chunked.json",
+            );
+            try {
+                if (
+                    await fs.promises
+                        .access(chunkedFilename, fs.constants.F_OK)
+                        .then(() => true)
+                        .catch(() => false)
+                ) {
+                    const data = JSON.parse(
+                        await fs.promises.readFile(chunkedFilename, "utf-8"),
+                    );
+                    results.push(data);
+                } else {
+                    results.push({
+                        error: "File not found",
+                        filename: chunkedFilename,
+                    } as ErrorItem);
+                }
+            } catch (error: any) {
+                const errors =
+                    error?.stderr || error.message || "Unknown error";
+                results.push({
+                    error: errors,
+                    filename: chunkedFilename,
+                } as ErrorItem);
+            }
+        }
+    } catch (error: any) {
+        const errors = error?.stderr || error.message || "Unknown error";
+        results.push({ error: errors } as ErrorItem);
+    }
+    return results;
+}
+
 export async function importPdf(
     io: iapp.InteractiveIo | undefined,
     pdfFilePath: string,
@@ -107,24 +158,78 @@ export async function importPdf(
 
     if (fChunkPdfFiles) {
         results = await chunkifyPdfFiles(outputDir, [pdfFilePath]);
-        if (Array.isArray(results) && results.some((item) => "error" in item)) {
-            const errorItem = results.find(
-                (item) => "error" in item,
-            ) as ErrorItem;
-            log(io, `Error chunking PDF: ${errorItem.error}`, chalk.red);
-        }
         t1 = Date.now();
     } else {
-        //results = await loadPdfChunksFromJson(chunkyIndex.rootDir, filenames);
+        results = await loadPdfChunksFromJson(outputDir, [pdfFilePath]);
         t1 = Date.now();
     }
 
+    let numLines = 0;
+    let numBlobs = 0;
+    let numChunks = 0;
+    let numErrors = 0;
+    for (const result of results) {
+        if ("error" in result) {
+            numErrors++;
+        } else {
+            const chunkedFile = result;
+            numChunks += chunkedFile.chunks.length;
+            for (const chunk of chunkedFile.chunks) {
+                numBlobs += chunk.blobs.length;
+                //numLines += await getLinesInChunk(chunk);
+            }
+        }
+    }
     log(
         io,
-        `[chunked ${pdfFilePath} in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
-        chalk.grey,
+        `[Chunked ${results.length} files ` +
+            `(${numLines} lines, ${numBlobs} blobs, ${numChunks} chunks, ${numErrors} errors) ` +
+            `in ${((t1 - t0) * 0.001).toFixed(3)} seconds]`,
+        chalk.gray,
     );
 
-    // Index the chunks
+    const chunkingErrors = results.filter(
+        (result: any): result is ErrorItem => "error" in result,
+    );
+    for (const error of chunkingErrors) {
+        log(
+            io,
+            `[Error: ${error.error}; Output: ${error.output ?? ""}]`,
+            chalk.redBright,
+        );
+    }
+
+    if (chunkingErrors.length <= 0) {
+        indexPdfChunks(pdfFilePath, results);
+    }
     return undefined;
+}
+
+async function indexPdfChunks(
+    pdfFile: string,
+    chunks: any[] = [],
+): Promise<void> {
+    const rootDir = OUTPUT_DIR;
+    const paperId = getPaperIdFromFilename(pdfFile);
+    const pdfCatalog = await loadCatalogWithMeta();
+
+    if (pdfCatalog !== undefined) {
+        const pdfDoc = pdfCatalog[paperId];
+        if (pdfDoc) {
+            // You can safely use pdfDoc here
+            console.log(pdfDoc.meta.title);
+        }
+    }
+
+    const filenames = [
+        "chunked-docs/2023-09-01_10-00-00_0000.pdf-chunked.json",
+        "chunked-docs/2023-09-01_10-00-00_0001.pdf-chunked.json",
+    ];
+    const chunkedDocsDir = path.join(rootDir, "chunked-docs");
+    const chunkedFilename = path.join(
+        chunkedDocsDir,
+        path.parse(filenames[0]).name,
+        path.basename(filenames[0]) + "-chunked.json",
+    );
+    console.log(chunkedFilename);
 }

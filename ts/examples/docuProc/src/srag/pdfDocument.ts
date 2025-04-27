@@ -20,7 +20,7 @@ import {
     buildTransientSecondaryIndexes,
     //Term,
     IConversationDataWithIndexes,
-    IMessageMetadata
+    IMessageMetadata,
 } from "knowpro";
 import {
     conversation as kpLib,

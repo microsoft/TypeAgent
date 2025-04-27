@@ -37,6 +37,9 @@ export interface CatalogEntry {
     downloadedAt: string;
     tags: string[];
 }
+export interface CatalogEntryWithMeta extends CatalogEntry {
+    meta: ArxivPaper;
+}
 
 function loadDownloadedPapers(): Set<string> {
     try {
@@ -459,4 +462,38 @@ export async function fetchArxivCategories(): Promise<
         );
         return undefined;
     }
+}
+
+export async function loadCatalogWithMeta(): Promise<
+    Record<string, CatalogEntryWithMeta>
+> {
+    const catalog = await loadCatalog(); // Use your existing one!
+
+    const loadMetaPromises = Object.values(catalog).map(async (entry) => {
+        try {
+            const metaRaw = await fsp.readFile(entry.metaPath, "utf-8");
+            const metaJson = JSON.parse(metaRaw) as ArxivPaper;
+
+            return {
+                ...entry,
+                meta: metaJson,
+            };
+        } catch (error: any) {
+            console.error(
+                `Failed to load meta for id ${entry.id}:`,
+                error.message,
+            );
+            return undefined;
+        }
+    });
+
+    const entriesWithMeta = await Promise.all(loadMetaPromises);
+
+    const map: Record<string, CatalogEntryWithMeta> = {};
+    for (const result of entriesWithMeta) {
+        if (result) {
+            map[result.id] = result;
+        }
+    }
+    return map;
 }
