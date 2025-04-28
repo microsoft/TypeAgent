@@ -48,7 +48,7 @@ export default {
     },
     linux: {
         target: ["AppImage", "snap", "deb"],
-        maintainer: "electronjs.org",
+        maintainer: "Microsoft Corporation",
         category: "Utility",
     },
     appImage: {
