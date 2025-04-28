@@ -47,6 +47,13 @@ import { ShellWindow } from "./shellWindow.js";
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
 
+if (process.platform === "darwin") {
+    if (fs.existsSync("/opt/homebrew/bin/az")) {
+        // Set the PATH to include homebrew so it have access to Azure CLI
+        process.env.PATH = `/opt/homebrew/bin:${process.env.PATH}`;
+    }
+}
+
 const appPath = app.getAppPath();
 debugShell("App path", appPath);
 const isAsar = path.basename(appPath) === "app.asar"; // running with packaged, behaves like prod
