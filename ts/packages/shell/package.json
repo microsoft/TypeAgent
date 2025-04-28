@@ -65,7 +65,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "@playwright/test": "^1.49.1",
+    "@playwright/test": "^1.52.0",
     "@types/debug": "^4.1.12",
     "@types/dompurify": "^3.0.5",
     "concurrently": "^9.1.2",
