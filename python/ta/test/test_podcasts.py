@@ -2,10 +2,10 @@
 # Licensed under the MIT License.
 
 import asyncio
-import sys
+import json
 import os
 
-from fixtures import needs_auth
+from fixtures import needs_auth, temp_dir
 from typeagent.podcasts.podcast import Podcast
 from typeagent.knowpro import importing
 from typeagent.knowpro.interfaces import Datetime, IndexingEventHandlers
@@ -13,27 +13,7 @@ from typeagent.podcasts.podcast_import import import_podcast
 from typeagent.knowpro.serialization import DATA_FILE_SUFFIX, EMBEDDING_FILE_SUFFIX
 
 
-def on_knowledge_extracted(chunk, knowledge_result) -> bool:
-    print("Knowledge extracted:", chunk, "\n    ", knowledge_result)
-    return True
-
-
-def on_embeddings_created(source_texts, batch, batch_start_at) -> bool:
-    print("Embeddings extracted:", source_texts)
-    return True
-
-
-def on_text_indexed(text_and_locations, batch, batch_start_at) -> bool:
-    print("Text indexed:", text_and_locations)
-    return True
-
-
-def on_message_started(message_order) -> bool:
-    print("\nMESSAGE STARTED:", message_order)
-    return True
-
-
-def test_import_podcast(needs_auth):
+def test_import_podcast(needs_auth, temp_dir):
     # Import the podcast
     settings = importing.ConversationSettings()
     pod = import_podcast(
@@ -50,34 +30,42 @@ def test_import_podcast(needs_auth):
     assert len(pod.messages) > 0
 
     # Build the index
-    handler = IndexingEventHandlers(
-        on_knowledge_extracted,
-        on_embeddings_created,
-        on_text_indexed,
-        on_message_started,
-    )
-
-    indexing_result = asyncio.run(pod.build_index(handler))
+    indexing_result = asyncio.run(pod.build_index())
     assert indexing_result.semantic_refs is not None
     assert indexing_result.semantic_refs.error is None
 
-    # Serialize and verify
-    filename = "podcast"
+    # Write the podcast to files
+    filename = os.path.join(temp_dir, "podcast")
     pod.write_to_file(filename)
 
     # Verify the files were created
-    assert os.path.exists(f"{filename}{DATA_FILE_SUFFIX}")
-    assert os.path.exists(f"{filename}{EMBEDDING_FILE_SUFFIX}")
+    assert os.path.exists(filename + DATA_FILE_SUFFIX)
+    assert os.path.exists(filename + EMBEDDING_FILE_SUFFIX)
 
     # Load and verify the podcast
-    pod2 = Podcast(settings=pod.settings)
-    pod2.read_from_file(filename)
+    pod2 = Podcast.read_from_file(filename)
+    assert pod2 is not None
 
-    # Verify the loaded podcast matches the original
-    ser1 = pod.serialize()
-    ser2 = pod2.serialize()
-    assert ser1 == ser2, "Serialized data does not match original"
+    # Assertions for the loaded podcast
+    assert pod2.name_tag == pod.name_tag, "Name tags do not match"
+    assert pod2.tags == pod.tags, "Tags do not match"
+    assert len(pod2.messages) == len(pod.messages), "Number of messages do not match"
+    assert all(
+        m1.serialize() == m2.serialize() for m1, m2 in zip(pod.messages, pod2.messages)
+    ), "Messages do not match"
 
-    # Clean up test files
-    os.remove(f"{filename}{DATA_FILE_SUFFIX}")
-    os.remove(f"{filename}{EMBEDDING_FILE_SUFFIX}")
+    # Write to another pair of files and check they match
+    filename2 = os.path.join(temp_dir, "podcast2")
+    pod2.write_to_file(filename2)
+    assert os.path.exists(filename2 + DATA_FILE_SUFFIX)
+    assert os.path.exists(filename2 + EMBEDDING_FILE_SUFFIX)
+
+    # Check that the files at filename2 are identical to those at filename
+    with open(filename + DATA_FILE_SUFFIX, "r") as f1, open(
+        filename2 + DATA_FILE_SUFFIX, "r"
+    ) as f2:
+        assert f1.read() == f2.read(), "Data (json) files do not match"
+    with open(filename + EMBEDDING_FILE_SUFFIX, "rb") as f1, open(
+        filename2 + EMBEDDING_FILE_SUFFIX, "rb"
+    ) as f2:
+        assert f1.read() == f2.read(), "Embedding (binary) files do not match"
