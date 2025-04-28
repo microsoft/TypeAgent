@@ -16,7 +16,7 @@ check: venv
 
 .PHONY: test
 test: venv
-	venv/bin/python -m pytest -s
+	venv/bin/python -m pytest
 
 .PHONY: build
 build: venv
