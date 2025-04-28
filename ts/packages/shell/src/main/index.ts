@@ -47,22 +47,17 @@ import { ShellWindow } from "./shellWindow.js";
 const debugShell = registerDebug("typeagent:shell");
 const debugShellError = registerDebug("typeagent:shell:error");
 
+const appPath = app.getAppPath();
+debugShell("App path", appPath);
+const isAsar = path.basename(appPath) === "app.asar"; // running with packaged, behaves like prod
+debugShell("Is ASAR", isAsar);
+const instanceDir = getInstanceDir(isAsar);
 function getDotEnvPath() {
-    const userDotEnv = path.join(app.getPath("userData"), ".env");
-    if (fs.existsSync(userDotEnv)) {
-        return userDotEnv;
-    }
-    const appDotEnv = path.join(app.getAppPath(), ".env");
-    if (fs.existsSync(appDotEnv)) {
-        return appDotEnv;
-    }
-    if (import.meta.env.MODE === "development") {
-        const devDotEnv = path.join(app.getAppPath(), "../../.env");
-        if (fs.existsSync(devDotEnv)) {
-            return devDotEnv;
-        }
-    }
-    return undefined;
+    const dotEnvPath = isAsar
+        ? path.join(app.getPath("userData"), ".env")
+        : path.join(appPath, "../../.env"); // running with electron-vite in repo
+
+    return fs.existsSync(dotEnvPath) ? dotEnvPath : undefined;
 }
 
 const envPath = getDotEnvPath();
@@ -76,7 +71,7 @@ process.env.FORCE_COLOR = "true";
 
 // do we need to reset shell settings?
 process.argv.forEach((arg) => {
-    const settingsPath = getSettingsPath();
+    const settingsPath = getSettingsPath(instanceDir);
     if (arg.toLowerCase() == "--setup" && existsSync(settingsPath)) {
         unlinkSync(settingsPath);
     }
@@ -96,7 +91,7 @@ async function createWindow(shellSettings: ShellSettings) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(shellSettings);
+    const shellWindow = new ShellWindow(shellSettings, instanceDir);
 
     await initializeSpeech(shellWindow.chatView);
 
@@ -184,6 +179,7 @@ async function initializeSpeech(chatView: WebContentsView) {
 }
 
 async function initializeDispatcher(
+    instanceDir: string,
     shellWindow: ShellWindow,
     updateSummary: (dispatcher: Dispatcher) => void,
 ) {
@@ -202,8 +198,6 @@ async function initializeDispatcher(
                 app.quit();
             },
         };
-
-        const instanceDir = getInstanceDir();
 
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {
@@ -278,7 +272,10 @@ async function initializeDispatcher(
     }
 }
 
-async function initializeInstance(shellSettings: ShellSettings) {
+async function initializeInstance(
+    instanceDir: string,
+    shellSettings: ShellSettings,
+) {
     const shellWindow = await createWindow(shellSettings);
     const { mainWindow, chatView } = shellWindow;
     let title: string = "";
@@ -301,7 +298,11 @@ async function initializeInstance(shellSettings: ShellSettings) {
     }
 
     // Note: Make sure dom ready before using dispatcher.
-    const dispatcherP = initializeDispatcher(shellWindow, updateTitle);
+    const dispatcherP = initializeDispatcher(
+        instanceDir,
+        shellWindow,
+        updateTitle,
+    );
     ipcMain.on("dom ready", async () => {
         debugShell("Showing window", performance.now() - time);
 
@@ -357,11 +358,10 @@ async function initialize() {
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
-    const appPath = app.getAppPath();
     const browserExtensionPath = path.join(
         // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
         // Assume we can just replace app.asar with app.asar.unpacked in all cases.
-        path.basename(appPath) === "app.asar"
+        isAsar
             ? path.join(path.dirname(appPath), "app.asar.unpacked")
             : appPath,
         "node_modules/browser-typeagent/dist/electron",
@@ -370,17 +370,14 @@ async function initialize() {
         allowFileAccess: true,
     });
 
-    const shellSettings = loadShellSettings();
+    const shellSettings = loadShellSettings(instanceDir);
     const settings = shellSettings.user;
     ipcMain.handle("get-chat-history", async () => {
         // Load chat history if enabled
-        const chatHistory: string = path.join(
-            getInstanceDir(),
-            "chat_history.html",
-        );
+        const chatHistory: string = path.join(instanceDir, "chat_history.html");
         if (settings.chatHistory && existsSync(chatHistory)) {
             return readFileSync(
-                path.join(getInstanceDir(), "chat_history.html"),
+                path.join(instanceDir, "chat_history.html"),
                 "utf-8",
             );
         }
@@ -391,7 +388,7 @@ async function initialize() {
     // this let's us rehydrate the chat when reopening the shell
     ipcMain.on("save-chat-history", async (_, html) => {
         // store the modified DOM contents
-        const file: string = path.join(getInstanceDir(), "chat_history.html");
+        const file: string = path.join(instanceDir, "chat_history.html");
 
         debugShell(`Saving chat history to '${file}'.`, performance.now());
 
@@ -424,7 +421,7 @@ async function initialize() {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
         if (ShellWindow.getInstance() === undefined)
-            await initializeInstance(shellSettings);
+            await initializeInstance(instanceDir, shellSettings);
     });
 
     // On windows, we will spin up a local end point that listens
@@ -455,7 +452,7 @@ async function initialize() {
             debugShellError(`Error creating pipe at ${pipePath}`);
         }
     }
-    return initializeInstance(shellSettings);
+    return initializeInstance(instanceDir, shellSettings);
 }
 
 app.whenReady()

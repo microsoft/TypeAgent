@@ -90,6 +90,9 @@ function getInstancesDir() {
 }
 
 function ensureInstanceDirName(instanceName: string) {
+    if (instanceName === "prod") {
+        return "prod";
+    }
     const userConfig = ensureGlobalUserConfig();
     const profileName = userConfig.instances?.[instanceName];
     if (profileName) {
@@ -97,7 +100,7 @@ function ensureInstanceDirName(instanceName: string) {
     }
     const newProfileName = getUniqueFileName(
         getInstancesDir(),
-        process.env["INSTANCE_NAME"] ?? "dev",
+        process.env.INSTANCE_NAME ?? "dev",
     );
     if (userConfig.instances === undefined) {
         userConfig.instances = {};
@@ -120,18 +123,25 @@ function getInstanceDirName(instanceName: string) {
         return ensureInstanceDirName(instanceName);
     });
 }
-
-function getInstanceName() {
-    return process.env["INSTANCE_NAME"] ?? `dev:${getPackageFilePath(".")}`;
+function getInstanceName(prod: boolean) {
+    return (
+        process.env.INSTANCE_NAME ??
+        (prod ? "prod" : `dev:${getPackageFilePath(".")}`)
+    );
 }
 
 let instanceDir: string | undefined;
-export function getInstanceDir() {
+let instanceMode: boolean | undefined;
+export function getInstanceDir(prod: boolean = false) {
     if (instanceDir === undefined) {
+        instanceMode = prod;
         instanceDir = path.join(
             getInstancesDir(),
-            getInstanceDirName(getInstanceName()),
+            getInstanceDirName(getInstanceName(prod)),
         );
+    }
+    if (instanceMode !== prod) {
+        throw new Error("Instance mode cannot be changed");
     }
     return instanceDir;
 }
