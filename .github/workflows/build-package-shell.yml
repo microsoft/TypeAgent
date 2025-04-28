@@ -3,7 +3,7 @@
 
 # This workflow will build and package the TypeAgent TypeScript code
 
-name: build-package-ts
+name: build-package-shell
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build_ts:
+  build_package_shell:
     strategy:
       fail-fast: false
       matrix:
@@ -61,10 +61,11 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
-          pnpm run build
+          pnpm run build:shell
       - name: Package - shell
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
+        shell: bash
         run: |
           if [[ $RUNNER_OS == 'Linux' ]]; then
             pnpm run shell:package:linux
@@ -74,7 +75,7 @@ jobs:
             pnpm run shell:package:mac
           fi
       - uses: actions/upload-artifact@v4
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
         with:
           name: typeagent-shell-package-${{ github.run_id }}
           path: ts/package/shell/dist

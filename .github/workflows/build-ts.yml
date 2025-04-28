@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# This workflow will build the TypeAgent TypeScript code
+# This workflow will build and test the TypeAgent TypeScript code
 
 name: build-ts
 
