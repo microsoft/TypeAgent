@@ -27,9 +27,7 @@ export async function createKnowproDataFrameCommands(
     let db: RestaurantDb | undefined;
     let restaurantIndex: RestaurantIndex | undefined;
 
-    const filePath =
-        // "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
-        "/data/testChat/knowpro/restaurants/opentable/sitemap-4.json";
+    const filePath = "/data/testChat/knowpro/restaurants/all/split_011.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
 
     async function importDataFrame(args: string[]) {
@@ -244,6 +242,10 @@ export async function createKnowproDataFrameCommands(
 
     return;
 }
+interface Entity {
+    name: string;
+    type: string[];
+}
 
 export interface Thing {
     type: string;
@@ -252,10 +254,13 @@ export interface Thing {
 export interface Restaurant extends Thing {
     name: string;
     description?: string;
+    openingHours?: string;
+    servesCuisine?: string;
     geo?: Geo;
     address?: Address;
     aggregateRating?: AggregateRating;
     facets?: RestaurantFacets;
+    hasMenu?: Menu[];
 }
 
 export interface Geo extends Thing, kp.hybrid.DataFrameRecord {
@@ -267,6 +272,7 @@ export interface Address extends Thing, kp.hybrid.DataFrameRecord {
     streetAddress?: string;
     postalCode?: string;
     addressLocality?: string;
+    addressCountry?: string;
 }
 
 export interface AggregateRating extends Thing {
@@ -276,6 +282,22 @@ export interface AggregateRating extends Thing {
 export interface Location {
     city?: string | undefined;
     country?: string | undefined;
+}
+
+interface MenuItem extends Thing {
+    name: string;
+    description: string | null;
+}
+
+interface MenuSection extends Thing {
+    name: string;
+    description: string | null;
+    hasMenuItem: MenuItem[];
+}
+
+interface Menu extends Thing {
+    name: string;
+    hasMenuSection: MenuSection[];
 }
 
 export interface RestaurantFacets extends kp.hybrid.DataFrameRecord, Location {
@@ -299,12 +321,23 @@ export class RestaurantInfo implements kp.IMessage {
         if (restaurant.description) {
             text += `\n\n${restaurant.description}`;
         }
+        if (restaurant.openingHours) {
+            text += `Open Hours:  \n\n${restaurant.openingHours}`;
+        }
         this.textChunks = [text];
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
+        // cuisine
+        const cuisineEntities = parseCuisine(this.restaurant);
+        const menuItems = parseMenuItems(this.restaurant);
+
         return {
-            entities: [{ name: this.restaurant.name, type: ["restaurant"] }],
+            entities: [
+                { name: this.restaurant.name, type: ["restaurant"] },
+                ...cuisineEntities,
+                ...menuItems,
+            ],
             actions: [],
             inverseActions: [],
             topics: [],
@@ -550,8 +583,46 @@ function parseRestaurantFacets(
 function parseAddressFacets(address: Address, facets: RestaurantFacets) {
     if (address.addressLocality) {
         facets.city = address.addressLocality;
-        facets.country = address.postalCode;
+        facets.country = address.addressCountry;
     }
+}
+
+function parseCuisine(restaurant: Restaurant): Entity[] {
+    if (!restaurant.servesCuisine) {
+        return [];
+    }
+
+    // Split the input string by comma and trim whitespace
+    const entities = restaurant.servesCuisine
+        .split(",")
+        .map((item) => item.trim());
+
+    // Map each entity to an object with name and type properties
+    return entities.map((entity) => ({
+        name: entity,
+        type: ["cuisine"],
+    }));
+}
+
+function parseMenuItems(restaurant: Restaurant): Entity[] {
+    if (!restaurant.hasMenu || restaurant.hasMenu.length === 0) {
+        return [];
+    }
+
+    const menuItems: Entity[] = [];
+
+    for (const menu of restaurant.hasMenu) {
+        for (const section of menu.hasMenuSection) {
+            for (const item of section.hasMenuItem) {
+                menuItems.push({
+                    name: item.name,
+                    type: ["menuItem"],
+                });
+            }
+        }
+    }
+
+    return menuItems;
 }
 
 export async function loadThings<T extends Thing>(
@@ -559,12 +630,12 @@ export async function loadThings<T extends Thing>(
     maxCount?: number,
 ): Promise<T[]> {
     const json = await readAllText(filePath);
-    console.log(`Length read: ${json.length}`)
+    console.log(`Length read: ${json.length}`);
 
     const containers: Container<T>[] = JSON.parse(json);
     const items: T[] = [];
     maxCount ??= containers.length;
-    console.log(`Items read: ${containers.length}`)
+    console.log(`Items read: ${containers.length}`);
     maxCount = Math.min(containers.length, maxCount);
     for (let i = 0; i < maxCount; ++i) {
         const item = containers[i] as T;
@@ -601,7 +672,6 @@ function parseNumber(str: string | undefined): number | undefined {
     } catch {}
     return undefined;
 }
-
 
 /**
  * 
