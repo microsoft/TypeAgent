@@ -285,6 +285,8 @@ export type Container<T> = {
     item?: T | undefined;
 };
 
+// We will model a restaurant's information as messages for now
+// Pre-well known knowledge such as menus comes from here.
 export class RestaurantInfo implements kp.IMessage {
     public restaurant: Restaurant;
     public textChunks: string[];

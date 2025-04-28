@@ -5,13 +5,17 @@ import { ChatModel, openai } from "aiclient";
 import { conversation as kpLib } from "knowledge-processor";
 import {
     createJsonTranslator,
+    error,
     PromptSection,
     Result,
+    success,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
 import * as answerSchema from "./answerResponseSchema.js";
-import { loadSchema } from "typeagent";
+import * as contextSchema from "./answerContextSchema.js";
+
+import { asyncArray, loadSchema, rewriteText } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
     IConversation,
@@ -31,13 +35,12 @@ import {
     getEnclosingMetadataForMessages,
     getMessagesFromScoredOrdinals,
 } from "./message.js";
-import {
-    AnswerContext,
-    RelevantKnowledge,
-    RelevantMessage,
-} from "./answerContextSchema.js";
 import { ConversationSearchResult } from "./search.js";
-import { jsonStringifyForPrompt } from "./common.js";
+import {
+    answerContextToString,
+    splitContextIntoChunks,
+} from "./answerContext.js";
+import { flattenResultsArray, trimStringLength } from "./common.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -61,7 +64,7 @@ export function createAnswerTranslator(
 export interface IAnswerGenerator {
     generateAnswer(
         question: string,
-        context: AnswerContext | PromptSection[],
+        context: contextSchema.AnswerContext | PromptSection[],
     ): Promise<Result<answerSchema.AnswerResponse>>;
 }
 
@@ -90,7 +93,7 @@ export class AnswerGenerator implements IAnswerGenerator {
 
     public generateAnswer(
         question: string,
-        context: AnswerContext | PromptSection[],
+        context: contextSchema.AnswerContext | PromptSection[],
     ): Promise<Result<kpLib.AnswerResponse>> {
         let contextPrompt: PromptSection[];
         if (Array.isArray(context)) {
@@ -120,7 +123,7 @@ export function answerContextFromSearchResult(
     conversation: IConversation,
     searchResult: ConversationSearchResult,
 ) {
-    let context: AnswerContext = {};
+    let context: contextSchema.AnswerContext = {};
     for (const knowledgeType of searchResult.knowledgeMatches.keys()) {
         switch (knowledgeType) {
             default:
@@ -151,14 +154,14 @@ export function answerContextFromSearchResult(
 export function getRelevantTopicsForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
-): RelevantKnowledge[] {
+): contextSchema.RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
         searchResult.semanticRefMatches,
         "topic",
     );
     const mergedTopics = mergeScoredTopics(scoredEntities, true);
-    const relevantTopics: RelevantKnowledge[] = [];
+    const relevantTopics: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of mergedTopics.values()) {
         let mergedTopic = scoredValue.item;
         const relevantTopic = createRelevantKnowledge(
@@ -174,14 +177,14 @@ export function getRelevantTopicsForAnswer(
 export function getRelevantEntitiesForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
-): RelevantKnowledge[] {
+): contextSchema.RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
         searchResult.semanticRefMatches,
         "entity",
     );
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
-    const relevantEntities: RelevantKnowledge[] = [];
+    const relevantEntities: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of mergedEntities.values()) {
         let mergedEntity = scoredValue.item;
         const relevantEntity = createRelevantKnowledge(
@@ -197,14 +200,20 @@ export function getRelevantEntitiesForAnswer(
 export function getRelevantMessagesForAnswer(
     conversation: IConversation,
     messageOrdinals: ScoredMessageOrdinal[],
-): RelevantMessage[] {
-    const relevantMessages: RelevantMessage[] = [];
+): contextSchema.RelevantMessage[] {
+    const relevantMessages: contextSchema.RelevantMessage[] = [];
     for (const message of getMessagesFromScoredOrdinals(
         conversation.messages,
         messageOrdinals,
     )) {
-        const relevantMessage: RelevantMessage = {
-            message: message.textChunks.join("\n"),
+        if (message.textChunks.length === 0) {
+            continue;
+        }
+        const relevantMessage: contextSchema.RelevantMessage = {
+            messageText:
+                message.textChunks.length === 1
+                    ? message.textChunks[0]
+                    : message.textChunks,
         };
         const meta = message.metadata;
         if (meta) {
@@ -219,12 +228,135 @@ export function getRelevantMessagesForAnswer(
     return relevantMessages;
 }
 
+export async function getAnswerInChunks(
+    answerGenerator: IAnswerGenerator,
+    settings: AnswerGeneratorSettings,
+    question: string,
+    context: contextSchema.AnswerContext,
+    maxCharsPerChunk: number,
+    concurrency: number = 2,
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse> | undefined
+    >,
+): Promise<Result<answerSchema.AnswerResponse> | undefined> {
+    const chunks = splitContextIntoChunks(context, maxCharsPerChunk);
+    if (chunks.length === 0) {
+        return undefined;
+    }
+    if (chunks.length === 1) {
+        const response = await answerGenerator.generateAnswer(
+            question,
+            chunks[0],
+        );
+        if (progress) {
+            progress(chunks[0], 0, response);
+        }
+        return response;
+    }
+
+    const structuredChunks = chunks.filter(
+        (c) => c.messages === undefined || c.messages.length === 0,
+    );
+    let partialAnswers: answerSchema.AnswerResponse[] = [];
+    if (structuredChunks.length > 0) {
+        const structuredAnswers = flattenResultsArray(
+            await runGenerateAnswer(structuredChunks),
+        );
+        if (!structuredAnswers.success) {
+            return structuredAnswers;
+        }
+        partialAnswers.push(...structuredAnswers.data);
+    }
+
+    // Generate partial answers from each message chunk
+    const messageChunks = chunks.filter(
+        (c) => c.messages !== undefined && c.messages.length > 0,
+    );
+    if (messageChunks.length > 0) {
+        const messageAnswers = flattenResultsArray(
+            await runGenerateAnswer(messageChunks),
+        );
+        if (!messageAnswers.success) {
+            return messageAnswers;
+        }
+        partialAnswers.push(...messageAnswers.data);
+    }
+
+    return await combineAnswerResponses(
+        settings.languageModel,
+        question,
+        partialAnswers,
+        maxCharsPerChunk,
+    );
+
+    async function runGenerateAnswer(
+        chunks: contextSchema.AnswerContext[],
+    ): Promise<Result<answerSchema.AnswerResponse>[]> {
+        return await asyncArray.mapAsync(
+            chunks,
+            concurrency,
+            (chunk) => answerGenerator.generateAnswer(question, chunk),
+            (context, index, response) => {
+                if (progress) {
+                    progress(context, index, response);
+                }
+                if (!response.success) {
+                    return false;
+                }
+                // Return false if mapAsync should stop
+                return response && response.data.type !== "Answered";
+            },
+        );
+    }
+}
+
+export async function combineAnswerResponses(
+    model: ChatModel,
+    question: string,
+    partialAnswers: (answerSchema.AnswerResponse | undefined)[],
+    maxCharsInContext: number,
+): Promise<Result<answerSchema.AnswerResponse>> {
+    let answer = "";
+    let whyNoAnswer: string | undefined;
+    let answerCount = 0;
+    for (const partialAnswer of partialAnswers) {
+        if (partialAnswer) {
+            if (partialAnswer.type === "Answered") {
+                answerCount++;
+                answer += partialAnswer.answer + "\n";
+            } else {
+                whyNoAnswer ??= partialAnswer.whyNoAnswer;
+            }
+        }
+    }
+    if (answer.length > 0) {
+        if (answerCount > 1) {
+            answer = trimStringLength(answer, maxCharsInContext);
+            const rewrittenAnswer = await rewriteText(model, answer, question);
+            if (!rewrittenAnswer) {
+                return error("rewriteAnswer failed");
+            }
+            answer = rewrittenAnswer;
+        }
+        return success({
+            type: "Answered",
+            answer,
+        });
+    }
+    whyNoAnswer ??= "";
+    return success({
+        type: "NoAnswer",
+        whyNoAnswer,
+    });
+}
+
 function createRelevantKnowledge(
     conversation: IConversation,
     knowledge: Knowledge,
     sourceMessageOrdinals?: Iterable<MessageOrdinal>,
-): RelevantKnowledge {
-    let relevantKnowledge: RelevantKnowledge = {
+): contextSchema.RelevantKnowledge {
+    let relevantKnowledge: contextSchema.RelevantKnowledge = {
         knowledge,
     };
     if (sourceMessageOrdinals) {
@@ -275,34 +407,4 @@ function createContextPrompt(
         role: "user",
         content,
     };
-}
-
-export function answerContextToString(
-    context: AnswerContext,
-    spaces?: number,
-): string {
-    let json = "{\n";
-    let propertyCount = 0;
-    if (context.entities && context.entities.length > 0) {
-        json += add("entities", context.entities);
-    }
-    if (context.topics && context.topics.length > 0) {
-        json += add("topics", context.topics);
-    }
-    if (context.messages && context.messages.length > 0) {
-        json += add("messages", context.messages);
-    }
-    json += "\n}";
-    return json;
-
-    function add(name: string, value: any): string {
-        let text = "";
-        if (propertyCount > 0) {
-            text += ",\n";
-        }
-        const json = jsonStringifyForPrompt(value, spaces);
-        text += `"${name}": ${json}`;
-        propertyCount++;
-        return text;
-    }
 }

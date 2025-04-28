@@ -26,9 +26,9 @@ export type RelevantKnowledge = {
 };
 
 export type RelevantMessage = {
-    // Message text
-    message: string;
     from?: EntityNames | undefined;
     to?: EntityNames | undefined;
     timestamp?: Date | undefined;
+    // Text chunks in this message
+    messageText: string | string[];
 };
