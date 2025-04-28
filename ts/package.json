@@ -36,6 +36,8 @@
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run dev",
+    "shell:build:win": "pnpm -C packages/shell run build:win",
+    "shell:start:win": "pnpm -C packages/shell run start:win",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
     "test": "pnpm run test:local && pnpm run test:live",
     "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:live",

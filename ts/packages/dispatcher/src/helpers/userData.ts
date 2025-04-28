@@ -120,7 +120,10 @@ function getInstanceDirName(instanceName: string) {
         return ensureInstanceDirName(instanceName);
     });
 }
-
+console.log(process.env.NODE_ENV);
+console.log(process.env.MODE);
+console.log(process.env.PROD);
+console.log(process.env.DEV);
 function getInstanceName() {
     return process.env["INSTANCE_NAME"] ?? `dev:${getPackageFilePath(".")}`;
 }
