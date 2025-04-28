@@ -1,6 +1,12 @@
 :: Copyright (c) Microsoft Corporation.
 :: Licensed under the MIT License.
 
+:: This is a batch file to run common actions.
+:: It can format the code, check the code, run the tests,
+:: build the package, create a virtual environment, and clean up.
+:: To avoid having to type `./make` all the time,
+:: use `set-alias make ".\make.bat"` in PowerShell.
+
 @echo off
 if "%~1"=="" goto help
 
@@ -18,7 +24,7 @@ goto help
 :format
 if not exist "venv\" call make.bat venv
 echo Formatting code...
-venv\Scripts\black typeagent *.py
+venv\Scripts\black typeagent
 goto end
 
 :check
