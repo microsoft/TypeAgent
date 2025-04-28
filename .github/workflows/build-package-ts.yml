@@ -73,7 +73,7 @@ jobs:
           elif [[ $RUNNER_OS == 'macOS' ]]; then
             pnpm run shell:package:mac
           fi
-      - use: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         if: ${{ github.event_name != 'pull_request' }}
         with:
           name: typeagent-shell-package-${{ github.run_id }}
