@@ -23,6 +23,7 @@ import {
     ConversationSecondaryIndexes,
     buildTransientSecondaryIndexes,
 } from "./secondaryIndexes.js";
+import { PromptSection } from "typechat";
 
 export type Scored<T = any> = {
     item: T;
@@ -107,6 +108,26 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
 
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
+}
+
+export function isPromptSection(value: any): value is PromptSection {
+    const ps = value as PromptSection;
+    return ps.role && ps.content !== undefined;
+}
+
+/**
+ * Ensures that dates are serialized in ISO format, which is more compact
+ * @param value
+ * @param spaces
+ * @returns
+ */
+export function jsonStringifyForPrompt(value: any, spaces?: number): string {
+    const json = JSON.stringify(
+        value,
+        (key, value) => (value instanceof Date ? value.toISOString() : value),
+        spaces,
+    );
+    return json;
 }
 
 export async function createConversationFromData(

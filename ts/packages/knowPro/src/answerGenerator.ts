@@ -5,6 +5,7 @@ import { ChatModel, openai } from "aiclient";
 import { conversation as kpLib } from "knowledge-processor";
 import {
     createJsonTranslator,
+    PromptSection,
     Result,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
@@ -36,6 +37,7 @@ import {
     RelevantMessage,
 } from "./answerContextSchema.js";
 import { ConversationSearchResult } from "./search.js";
+import { jsonStringifyForPrompt } from "./common.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -59,7 +61,7 @@ export function createAnswerTranslator(
 export interface IAnswerGenerator {
     generateAnswer(
         question: string,
-        context: AnswerContext,
+        context: AnswerContext | PromptSection[],
     ): Promise<Result<answerSchema.AnswerResponse>>;
 }
 
@@ -88,14 +90,21 @@ export class AnswerGenerator implements IAnswerGenerator {
 
     public generateAnswer(
         question: string,
-        context: AnswerContext,
+        context: AnswerContext | PromptSection[],
     ): Promise<Result<kpLib.AnswerResponse>> {
-        const contextContent = answerContextToString(context);
-        const contextPrompt = createContextPrompt(
-            this.contextTypeName,
-            this.contextSchema,
-            contextContent,
-        );
+        let contextPrompt: PromptSection[];
+        if (Array.isArray(context)) {
+            contextPrompt = context;
+        } else {
+            const contextContent = answerContextToString(context);
+            contextPrompt = [
+                createContextPrompt(
+                    this.contextTypeName,
+                    this.contextSchema,
+                    contextContent,
+                ),
+            ];
+        }
         const questionPrompt = createQuestionPrompt(question);
         return this.answerTranslator.translate(questionPrompt, contextPrompt);
     }
@@ -255,14 +264,17 @@ function createContextPrompt(
     typeName: string,
     schema: string,
     context: string,
-): string {
-    let prompt =
+): PromptSection {
+    let content =
         `Context relevant for answering the question is a JSON objects of type ${typeName} according to the following TypeScript definitions :\n` +
         `\`\`\`\n${schema}\`\`\`\n` +
         `[ANSWER CONTEXT]\n` +
         `"""\n${context}\n"""\n`;
 
-    return prompt;
+    return {
+        role: "user",
+        content,
+    };
 }
 
 export function answerContextToString(
@@ -288,12 +300,7 @@ export function answerContextToString(
         if (propertyCount > 0) {
             text += ",\n";
         }
-        const json = JSON.stringify(
-            value,
-            (key, value) =>
-                value instanceof Date ? value.toISOString() : value,
-            spaces,
-        );
+        const json = jsonStringifyForPrompt(value, spaces);
         text += `"${name}": ${json}`;
         propertyCount++;
         return text;
