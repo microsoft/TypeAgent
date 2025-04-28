@@ -42,11 +42,11 @@ export class ShellWindow {
     private dispatcherReady: boolean = false;
     private retryCount: number = 0;
 
-    constructor(shellSettings: ShellSettings) {
+    constructor(shellSettings: ShellSettings, instanceDir: string) {
         if (ShellWindow.instance !== undefined) {
             throw new Error("ShellWindow already created");
         }
-        this.settings = new ShellSettingManager(shellSettings);
+        this.settings = new ShellSettingManager(shellSettings, instanceDir);
 
         this.inlineWidth = shellSettings.window.inlineWidth;
 
