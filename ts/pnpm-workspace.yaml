@@ -6,12 +6,14 @@ packages:
   - examples/*
   - examples/agentExamples/*
   - tools
+
 onlyBuiltDependencies:
   - "@azure/msal-node-extensions"
   - "@azure/msal-node-runtime"
   - "@vscode/vsce-sign"
   - better-sqlite3
   - electron
+  - electron-winstaller
   - esbuild
   - exifreader
   - keytar
