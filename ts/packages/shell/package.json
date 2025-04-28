@@ -33,6 +33,7 @@
     "shell:smoke": "npx playwright test simple.spec.ts",
     "shell:test": "npx playwright test",
     "start": "npm run build:electron && electron-vite preview",
+    "start:win": ".\\dist\\win-unpacked\\typeagent-shell.exe",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",
     "typecheck:web": "tsc -p tsconfig.web.json"

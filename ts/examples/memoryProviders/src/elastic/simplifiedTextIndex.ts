@@ -17,7 +17,6 @@ import { openai } from "aiclient";
 
 const { ModelType, createEmbeddingModel } = openai;
 
-import { openAIApiSettingsFromEnv } from "../../../../packages/aiclient/dist/openaiSettings.js";
 type HitTable<T = any> = sets.HitTable<T>;
 
 export async function createTextIndex<
@@ -31,7 +30,7 @@ export async function createTextIndex<
 ): Promise<TextIndex<TTexId, TSourceId>> {
     indexName = toValidIndexName(indexName);
 
-    const apiSettings = openAIApiSettingsFromEnv(ModelType.Embedding);
+    const apiSettings = openai.openAIApiSettingsFromEnv(ModelType.Embedding);
 
     const embeddingModel = createEmbeddingModel(apiSettings);
 
