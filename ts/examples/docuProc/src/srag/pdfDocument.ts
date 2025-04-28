@@ -80,15 +80,22 @@ export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
     }
 }
 export class PdfChunkMessage implements IMessage {
+    public timestamp: string | undefined = undefined;
     constructor(
         public textChunks: string[],
         public metadata: PdfChunkMessageMeta,
         public tags: string[] = [],
-        public timestamp: string | undefined = undefined,
     ) {}
 
     public getKnowledge(): kpLib.KnowledgeResponse {
-        return this.metadata.getKnowledge();
+        return (
+            this.metadata?.getKnowledge() ?? {
+                entities: [],
+                actions: [],
+                inverseActions: [],
+                topics: [],
+            }
+        );
     }
 
     public addContent(content: string | string[]) {
@@ -205,13 +212,9 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
     public async deserialize(pdfChunkData: PdfChunkData): Promise<void> {
         this.nameTag = pdfChunkData.nameTag;
         const pdfChunkMessages = pdfChunkData.messages.map((m) => {
+            // placeholder - fix this later
             const metadata = new PdfChunkMessageMeta();
-            return new PdfChunkMessage(
-                m.textChunks,
-                metadata,
-                m.tags,
-                m.timestamp,
-            );
+            return new PdfChunkMessage(m.textChunks, metadata, m.tags);
         });
         this.messages = pdfChunkMessages;
         this.semanticRefs = pdfChunkData.semanticRefs;
