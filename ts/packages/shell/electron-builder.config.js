@@ -17,7 +17,10 @@ export default {
         buildResources: "build",
         output: "dist",
     },
-    asarUnpack: ["node_modules/browser-typeagent/dist/electron/**/*"],
+    asarUnpack: [
+        // electron can't load the browser extension from the ASAR
+        "node_modules/browser-typeagent/dist/electron/**/*",
+    ],
     // Don't need to install
     npmRebuild: false,
     win: {
@@ -50,6 +53,8 @@ export default {
         target: ["AppImage", "snap", "deb"],
         maintainer: "Microsoft Corporation",
         category: "Utility",
+        // electron-builder missed the `.so.42` suffix as binary files.
+        asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
     },
     appImage: {
         artifactName: "${name}-${version}.${ext}",
