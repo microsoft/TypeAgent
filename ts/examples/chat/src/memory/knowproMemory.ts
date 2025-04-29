@@ -35,6 +35,7 @@ import * as cm from "conversation-memory";
 import * as im from "image-memory";
 import {
     createIndexingEventHandler,
+    hasConversationResults,
     matchFilterToConversation,
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
@@ -626,6 +627,7 @@ export async function createKnowproCommands(
             context.conversation!,
             searchText,
             context.queryTranslator,
+            namedArgs.exactScope,
             options,
             debugContext,
         );
@@ -633,15 +635,16 @@ export async function createKnowproCommands(
             context.printer.writeError(searchResults.message);
             return;
         }
-        if (searchResults.data.length === 0) {
-            context.printer.writeLine("No matches");
-            return;
-        }
         if (namedArgs.debug) {
             context.printer.writeInColor(chalk.gray, () => {
                 context.printer.writeLine();
                 context.printer.writeNaturalLanguageContext(debugContext);
             });
+        }
+        if (!hasConversationResults(searchResults.data)) {
+            context.printer.writeLine();
+            context.printer.writeLine("No matches");
+            return;
         }
         for (const searchResult of searchResults.data) {
             if (!namedArgs.messages) {

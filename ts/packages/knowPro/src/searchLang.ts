@@ -38,6 +38,7 @@ export async function searchConversationWithNaturalLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
+    exactScope: boolean = true,
     options?: SearchOptions,
     context?: NaturalLanguageSearchContext,
 ): Promise<Result<ConversationSearchResult[]>> {
@@ -45,6 +46,7 @@ export async function searchConversationWithNaturalLanguage(
         conversation,
         queryTranslator,
         searchText,
+        exactScope,
         context,
     );
     if (!searchQueryExprResult.success) {
@@ -73,6 +75,7 @@ export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
     queryText: string,
+    exactScope: boolean = true,
     context?: NaturalLanguageSearchContext,
 ): Promise<Result<SearchQueryExpr[]>> {
     const queryResult = await searchQueryFromLanguage(
@@ -85,7 +88,11 @@ export async function searchQueryExprFromLanguage(
         if (context) {
             context.searchQuery = searchQuery;
         }
-        const searchExpr = compileSearchQuery(conversation, searchQuery);
+        const searchExpr = compileSearchQuery(
+            conversation,
+            searchQuery,
+            exactScope,
+        );
         return success(searchExpr);
     }
     return queryResult;
