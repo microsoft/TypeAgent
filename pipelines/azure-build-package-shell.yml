@@ -1,14 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-resources:
-  repositories:
-    - repository: TypeAgent-GH
-      type: github
-      endpoint: AI_Systems
-      name: microsoft/typeagent
-      ref: refs/heads/main
-
 trigger:
   branches:
     include:
@@ -43,7 +35,7 @@ jobs:
         displayName: "Install libsecret-1-0"
         condition: eq(variables['Agent.OS'], 'Linux')
 
-      - checkout: TypeAgent-GH
+      - checkout: self
         displayName: "Checkout TypeAgent Repository"
         path: "typeagent"
 
