@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { Batch } from "./common.js";
 import {
     SemanticRef,
     SemanticRefOrdinal,
@@ -9,6 +10,7 @@ import {
     IStorageProvider,
     IMessageCollection,
     ISemanticRefCollection,
+    IReadonlyCollection,
 } from "./interfaces.js";
 
 export class Collection<T, TOrdinal extends number>
@@ -88,5 +90,21 @@ export class MemoryStorageProvider implements IStorageProvider {
 
     public createSemanticRefCollection(): ISemanticRefCollection {
         return new SemanticRefCollection();
+    }
+}
+
+export function* getBatchesFromCollection<T = any>(
+    collection: IReadonlyCollection<T>,
+    startAtOrdinal: number,
+    batchSize: number,
+): IterableIterator<Batch<T>> {
+    let startAt = startAtOrdinal;
+    while (true) {
+        let batch = collection.getSlice(startAt, startAt + batchSize);
+        if (batch.length === 0) {
+            break;
+        }
+        yield { startAt, value: batch };
+        startAt += batchSize;
     }
 }

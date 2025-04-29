@@ -430,7 +430,7 @@ export type ListIndexingResult = {
 //---------------------
 // Storage
 //---------------------
-export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
+export interface IReadonlyCollection<T, TOrdinal = number> extends Iterable<T> {
     readonly length: number;
     get(ordinal: TOrdinal): T;
     getMultiple(ordinals: TOrdinal[]): T[];
@@ -441,7 +441,7 @@ export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
 /**
  * ICollection is an APPEND ONLY collection
  */
-export interface ICollection<T, TOrdinal>
+export interface ICollection<T, TOrdinal = number>
     extends IReadonlyCollection<T, TOrdinal> {
     readonly isPersistent: boolean;
 

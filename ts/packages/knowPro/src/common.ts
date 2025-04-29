@@ -185,3 +185,8 @@ export async function createConversationFromData(
     await buildTransientSecondaryIndexes(conversation, conversationSettings);
     return conversation;
 }
+
+export type Batch<T = any> = {
+    startAt: number;
+    value: T[];
+};

@@ -19,7 +19,7 @@ import {
     Term,
     TextRange,
 } from "./interfaces.js";
-import { compareTextRange, isInTextRange } from "./common.js";
+import { Batch, compareTextRange, isInTextRange } from "./common.js";
 import { ScoredTextLocation } from "./textLocationIndex.js";
 import { getCountOfMessagesInCharBudget } from "./message.js";
 
@@ -926,11 +926,6 @@ export function setIntersect<T = any>(
     }
     return set;
 }
-
-export type Batch<T = any> = {
-    startAt: number;
-    value: T[];
-};
 
 export function* getBatches<T = any>(
     array: T[],
