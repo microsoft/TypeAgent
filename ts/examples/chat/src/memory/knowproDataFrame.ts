@@ -384,6 +384,7 @@ export async function createKnowproDataFrameCommands(
 
     return;
 }
+
 interface Entity {
     name: string;
     type: string[];
@@ -843,12 +844,10 @@ function parseCuisine(restaurant: Restaurant): Entity[] {
         return [];
     }
 
-    // Split the input string by comma and trim whitespace
     const entities = restaurant.servesCuisine
         .split(",")
         .map((item) => item.trim());
 
-    // Map each entity to an object with name and type properties
     return entities.map((entity) => ({
         name: entity,
         type: ["cuisine"],
@@ -861,7 +860,6 @@ function parseMenuItems(restaurant: Restaurant): Entity[] {
     }
 
     const menuItems: Entity[] = [];
-
     for (const menu of restaurant.hasMenu) {
         for (const section of menu.hasMenuSection) {
             for (const item of section.hasMenuItem) {
