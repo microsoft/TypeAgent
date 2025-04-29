@@ -63,9 +63,9 @@ export async function createKnowproCommands(
                 knowledgeModel,
             ),
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
-        answerGenerator: new kp.AnswerGenerator({
-            languageModel: knowledgeModel,
-        }),
+        answerGenerator: new kp.AnswerGenerator(
+            kp.createAnswerGeneratorSettings(knowledgeModel),
+        ),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };

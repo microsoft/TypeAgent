@@ -37,8 +37,8 @@ import {
 } from "./message.js";
 import { ConversationSearchResult } from "./search.js";
 import {
+    AnswerContextChunkBuilder,
     answerContextToString,
-    splitContextIntoChunks,
 } from "./answerContext.js";
 import { flattenResultsArray, trimStringLength } from "./common.js";
 
@@ -64,12 +64,57 @@ export function createAnswerTranslator(
 export interface IAnswerGenerator {
     generateAnswer(
         question: string,
-        context: contextSchema.AnswerContext | PromptSection[],
+        context: contextSchema.AnswerContext | string,
     ): Promise<Result<answerSchema.AnswerResponse>>;
+    combinePartialAnswers(
+        question: string,
+        responses: answerSchema.AnswerResponse[],
+    ): Promise<Result<answerSchema.AnswerResponse>>;
+}
+
+export async function generateAnswer(
+    conversation: IConversation,
+    settings: AnswerGeneratorSettings,
+    question: string,
+    searchResult: ConversationSearchResult,
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse> | undefined
+    >,
+): Promise<Result<answerSchema.AnswerResponse> | undefined> {
+    const context = answerContextFromSearchResult(conversation, searchResult);
+    const contextContent = answerContextToString(context);
+    const generator = new AnswerGenerator(settings);
+    if (contextContent.length <= settings.maxCharsInContext) {
+        // Context is small enough
+        return generator.generateAnswer(question, contextContent);
+    }
+    //
+    // Use chunks
+    //
+    const chunks = splitContextIntoChunks(context, settings.maxCharsInContext);
+    const chunkResponses = await generateAnswerInChunks(
+        generator,
+        question,
+        chunks,
+        settings.concurrency,
+        true,
+        progress,
+    );
+    if (!chunkResponses.success) {
+        return chunkResponses;
+    }
+    const answer = await generator.combinePartialAnswers(
+        question,
+        chunkResponses.data,
+    );
+    return answer;
 }
 
 export type AnswerGeneratorSettings = {
     languageModel: ChatModel;
+    maxCharsInContext: number;
+    concurrency: number;
 };
 
 export class AnswerGenerator implements IAnswerGenerator {
@@ -79,8 +124,7 @@ export class AnswerGenerator implements IAnswerGenerator {
     private contextTypeName: string;
 
     constructor(settings?: AnswerGeneratorSettings) {
-        settings ??= createAnswerGeneratorSettings();
-        this.settings = settings;
+        this.settings = settings ?? createAnswerGeneratorSettings();
         this.answerTranslator = createAnswerTranslator(
             this.settings.languageModel,
         );
@@ -93,29 +137,84 @@ export class AnswerGenerator implements IAnswerGenerator {
 
     public generateAnswer(
         question: string,
-        context: contextSchema.AnswerContext | PromptSection[],
+        context: contextSchema.AnswerContext | string,
     ): Promise<Result<kpLib.AnswerResponse>> {
-        let contextPrompt: PromptSection[];
-        if (Array.isArray(context)) {
-            contextPrompt = context;
-        } else {
-            const contextContent = answerContextToString(context);
-            contextPrompt = [
-                createContextPrompt(
-                    this.contextTypeName,
-                    this.contextSchema,
-                    contextContent,
-                ),
-            ];
+        let contextContent =
+            typeof context === "string"
+                ? context
+                : answerContextToString(context);
+        if (contextContent.length > this.settings.maxCharsInContext) {
+            contextContent = trimStringLength(
+                contextContent,
+                this.settings.maxCharsInContext,
+            );
         }
+
+        const contextPrompt = [
+            createContextPrompt(
+                this.contextTypeName,
+                this.contextSchema,
+                contextContent,
+            ),
+        ];
         const questionPrompt = createQuestionPrompt(question);
         return this.answerTranslator.translate(questionPrompt, contextPrompt);
     }
+
+    public async combinePartialAnswers(
+        question: string,
+        partialAnswers: (answerSchema.AnswerResponse | undefined)[],
+    ): Promise<Result<answerSchema.AnswerResponse>> {
+        let answer = "";
+        let whyNoAnswer: string | undefined;
+        let answerCount = 0;
+        for (const partialAnswer of partialAnswers) {
+            if (partialAnswer) {
+                if (partialAnswer.type === "Answered") {
+                    answerCount++;
+                    answer += partialAnswer.answer + "\n";
+                } else {
+                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
+                }
+            }
+        }
+        if (answer.length > 0) {
+            if (answerCount > 1) {
+                answer = trimStringLength(
+                    answer,
+                    this.settings.maxCharsInContext,
+                );
+                const rewrittenAnswer = await rewriteText(
+                    this.settings.languageModel,
+                    answer,
+                    question,
+                );
+                if (!rewrittenAnswer) {
+                    return error("rewriteAnswer failed");
+                }
+                answer = rewrittenAnswer;
+            }
+            return success({
+                type: "Answered",
+                answer,
+            });
+        }
+        whyNoAnswer ??= "";
+        return success({
+            type: "NoAnswer",
+            whyNoAnswer,
+        });
+    }
 }
 
-export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
+export function createAnswerGeneratorSettings(
+    model?: ChatModel,
+): AnswerGeneratorSettings {
     return {
-        languageModel: openai.createChatModelDefault("answerGenerator"),
+        languageModel:
+            model ?? openai.createChatModelDefault("answerGenerator"),
+        maxCharsInContext: 4096 * 4, // 4096 tokens * 4 chars per token,
+        concurrency: 2,
     };
 }
 
@@ -228,127 +327,114 @@ export function getRelevantMessagesForAnswer(
     return relevantMessages;
 }
 
-export async function getAnswerInChunks(
-    answerGenerator: IAnswerGenerator,
-    settings: AnswerGeneratorSettings,
-    question: string,
+export function splitContextIntoChunks(
     context: contextSchema.AnswerContext,
     maxCharsPerChunk: number,
+): contextSchema.AnswerContext[] {
+    const chunkBuilder = new AnswerContextChunkBuilder(
+        context,
+        maxCharsPerChunk,
+    );
+    return [...chunkBuilder.getChunks()];
+}
+
+export async function generateAnswerInChunks(
+    answerGenerator: IAnswerGenerator,
+    question: string,
+    chunks: contextSchema.AnswerContext[],
     concurrency: number = 2,
+    fastStop: boolean = true,
     progress?: asyncArray.ProcessProgress<
         contextSchema.AnswerContext,
         Result<answerSchema.AnswerResponse> | undefined
     >,
-): Promise<Result<answerSchema.AnswerResponse> | undefined> {
-    const chunks = splitContextIntoChunks(context, maxCharsPerChunk);
+): Promise<Result<answerSchema.AnswerResponse[]>> {
     if (chunks.length === 0) {
-        return undefined;
+        return success([]);
     }
     if (chunks.length === 1) {
-        const response = await answerGenerator.generateAnswer(
-            question,
-            chunks[0],
-        );
-        if (progress) {
-            progress(chunks[0], 0, response);
-        }
-        return response;
+        return runSingleChunk(chunks[0]);
     }
 
     const structuredChunks = chunks.filter(
         (c) => c.messages === undefined || c.messages.length === 0,
     );
-    let partialAnswers: answerSchema.AnswerResponse[] = [];
-    if (structuredChunks.length > 0) {
-        const structuredAnswers = flattenResultsArray(
-            await runGenerateAnswer(structuredChunks),
-        );
-        if (!structuredAnswers.success) {
-            return structuredAnswers;
-        }
-        partialAnswers.push(...structuredAnswers.data);
-    }
-
-    // Generate partial answers from each message chunk
-    const messageChunks = chunks.filter(
-        (c) => c.messages !== undefined && c.messages.length > 0,
+    let chunkAnswers: answerSchema.AnswerResponse[] = [];
+    const structuredAnswers = await runGenerateAnswers(
+        answerGenerator,
+        question,
+        structuredChunks,
+        concurrency,
+        progress,
     );
-    if (messageChunks.length > 0) {
-        const messageAnswers = flattenResultsArray(
-            await runGenerateAnswer(messageChunks),
+    if (!structuredAnswers.success) {
+        return structuredAnswers;
+    }
+    chunkAnswers.push(...structuredAnswers.data);
+
+    if (!hasAnswer(chunkAnswers) || !fastStop) {
+        // Generate partial answers from each message chunk
+        const messageChunks = chunks.filter(
+            (c) => c.messages !== undefined && c.messages.length > 0,
+        );
+        const messageAnswers = await runGenerateAnswers(
+            answerGenerator,
+            question,
+            messageChunks,
+            concurrency,
         );
         if (!messageAnswers.success) {
             return messageAnswers;
         }
-        partialAnswers.push(...messageAnswers.data);
+        chunkAnswers.push(...messageAnswers.data);
     }
 
-    return await combineAnswerResponses(
-        settings.languageModel,
-        question,
-        partialAnswers,
-        maxCharsPerChunk,
-    );
+    return success(chunkAnswers);
 
-    async function runGenerateAnswer(
-        chunks: contextSchema.AnswerContext[],
-    ): Promise<Result<answerSchema.AnswerResponse>[]> {
-        return await asyncArray.mapAsync(
-            chunks,
-            concurrency,
-            (chunk) => answerGenerator.generateAnswer(question, chunk),
-            (context, index, response) => {
-                if (progress) {
-                    progress(context, index, response);
-                }
-                if (!response.success) {
-                    return false;
-                }
-                // Return false if mapAsync should stop
-                return response && response.data.type !== "Answered";
-            },
-        );
+    async function runSingleChunk(
+        chunk: contextSchema.AnswerContext,
+    ): Promise<Result<answerSchema.AnswerResponse[]>> {
+        const response = await answerGenerator.generateAnswer(question, chunk);
+        if (progress) {
+            progress(chunks[0], 0, response);
+        }
+        return response.success ? success([response.data]) : response;
+    }
+
+    function hasAnswer(answers: answerSchema.AnswerResponse[]): boolean {
+        return answers.some((a) => a.type === "Answered");
     }
 }
 
-export async function combineAnswerResponses(
-    model: ChatModel,
+async function runGenerateAnswers(
+    answerGenerator: IAnswerGenerator,
     question: string,
-    partialAnswers: (answerSchema.AnswerResponse | undefined)[],
-    maxCharsInContext: number,
-): Promise<Result<answerSchema.AnswerResponse>> {
-    let answer = "";
-    let whyNoAnswer: string | undefined;
-    let answerCount = 0;
-    for (const partialAnswer of partialAnswers) {
-        if (partialAnswer) {
-            if (partialAnswer.type === "Answered") {
-                answerCount++;
-                answer += partialAnswer.answer + "\n";
-            } else {
-                whyNoAnswer ??= partialAnswer.whyNoAnswer;
-            }
-        }
+    chunks: contextSchema.AnswerContext[],
+    concurrency: number,
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse> | undefined
+    >,
+): Promise<Result<answerSchema.AnswerResponse[]>> {
+    if (chunks.length === 0) {
+        return success([]);
     }
-    if (answer.length > 0) {
-        if (answerCount > 1) {
-            answer = trimStringLength(answer, maxCharsInContext);
-            const rewrittenAnswer = await rewriteText(model, answer, question);
-            if (!rewrittenAnswer) {
-                return error("rewriteAnswer failed");
+    const results = await asyncArray.mapAsync(
+        chunks,
+        concurrency,
+        (chunk) => answerGenerator.generateAnswer(question, chunk),
+        (context, index, response) => {
+            if (progress) {
+                progress(context, index, response);
             }
-            answer = rewrittenAnswer;
-        }
-        return success({
-            type: "Answered",
-            answer,
-        });
-    }
-    whyNoAnswer ??= "";
-    return success({
-        type: "NoAnswer",
-        whyNoAnswer,
-    });
+            if (!response.success) {
+                return false;
+            }
+            // Return false if mapAsync should stop
+            return response && response.data.type !== "Answered";
+        },
+    );
+    return flattenResultsArray(results);
 }
 
 function createRelevantKnowledge(

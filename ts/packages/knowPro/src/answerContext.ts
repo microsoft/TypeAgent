@@ -39,17 +39,6 @@ export function answerContextToString(
     }
 }
 
-export function splitContextIntoChunks(
-    context: AnswerContext,
-    maxCharsPerChunk: number,
-): AnswerContext[] {
-    const chunkBuilder = new AnswerContextChunkBuilder(
-        context,
-        maxCharsPerChunk,
-    );
-    return [...chunkBuilder.getChunks()];
-}
-
 export class AnswerContextChunkBuilder {
     public currentChunk: AnswerContext = {};
     public currentChunkCharCount = 0;
