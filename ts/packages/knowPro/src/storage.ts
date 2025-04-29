@@ -56,7 +56,7 @@ export class Collection<T, TOrdinal extends number>
         }
     }
 
-    public *[Symbol.iterator](): Iterator<T, any, any> {
+    public [Symbol.iterator](): Iterator<T, any, any> {
         return this.items[Symbol.iterator]();
     }
 }
