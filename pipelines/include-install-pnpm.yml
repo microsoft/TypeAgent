@@ -15,13 +15,18 @@ parameters:
     type: boolean
     default: true
 
+  # The path to the pnpm store. The contents here will be cached and restored when using pnpm in a pipeline.
+  - name: pnpmStorePath
+    type: string
+    default: $(Pipeline.Workspace)/.pnpm-store
+
 steps:
   # The path to the pnpm store. The contents here will be cached and restored when using pnpm in a pipeline.
   - bash: |
       if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
-        echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]${{ replace(variables['Pipeline.Workspace'], '\', '/') }}/.pnpm-store"
+        echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]${{ replace(parameters.pnpmStorePath, '\', '/') }}"
       else
-        echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]$(Pipeline.Workspace)/.pnpm-store"
+        echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]${{ parameters.pnpmStorePath }}"
       fi
     displayName: Set pnpm store path variable
     name: SetPnpmStorePath
