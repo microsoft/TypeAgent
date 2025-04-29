@@ -15,6 +15,7 @@
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
+    "build:shell": "fluid-build agent-shell -t build --dep",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
     "check:policy": "node tools/scripts/repo-policy-check.mjs",
     "check:policy:fix": "node tools/scripts/repo-policy-check.mjs --fix",
@@ -36,6 +37,12 @@
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run dev",
+    "shell:package:linux": "pnpm -C packages/shell run package:linux",
+    "shell:package:mac": "pnpm -C packages/shell run package:mac",
+    "shell:package:win": "pnpm -C packages/shell run package:win",
+    "shell:start:linux": "pnpm -C packages/shell run start:linux",
+    "shell:start:mac": "pnpm -C packages/shell run start:mac",
+    "shell:start:win": "pnpm -C packages/shell run start:win",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
     "test": "pnpm run test:local && pnpm run test:live",
     "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:live",
@@ -48,7 +55,7 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f",
+  "packageManager": "pnpm@10.10.0",
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"

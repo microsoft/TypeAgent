@@ -34,19 +34,26 @@ steps:
           restoreKeys: |
             pnpm-store | "$(Agent.OS)"
 
-  - task: Bash@3
-    displayName: Install and configure pnpm
-    inputs:
-      targetType: "inline"
-      workingDirectory: ${{ parameters.buildDirectory }}
-      # The previous task (cache restoration) can timeout, which is classified as canceled, but since it's just cache
-      # restoration, we want to continue even if it timed out.
-      condition: or(succeeded(), canceled())
-      # workspace-concurrency 0 means use use the CPU core count. This is better than the default (4) for larger agents.
-      script: |
-        echo "Using node $(node --version)"
+  # workspace-concurrency 0 means use use the CPU core count. This is better than the default (4) for larger agents.
+  - bash: |
+      echo "Using node $(node --version)"
+      storePath=${{ parameters.pnpmStorePath }}
+      if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
+        npm install -g corepack@0.31.0 --force
+        corepack enable
+        storePath=$PNPM_STORE_PATH
+      else
         npm install -g corepack@0.31.0
         sudo corepack enable
-        echo "Using pnpm $(pnpm -v)"
-        pnpm config set store-dir ${{ parameters.pnpmStorePath }}
-        pnpm config set -g workspace-concurrency 0
+      fi
+      pnpm config set store-dir $storePath
+      pnpm config set -g workspace-concurrency 0
+      echo "Using pnpm $(pnpm -v)"
+      echo "Using pnpm store path $(pnpm store path)"
+    displayName: Install and configure pnpm
+    workingDirectory: ${{ parameters.buildDirectory }}
+    # The previous task (cache restoration) can timeout, which is classified as canceled, but since it's just cache
+    # restoration, we want to continue even if it timed out.
+    condition: or(succeeded(), canceled())
+    env:
+      PNPM_STORE_PATH: ${{ replace(parameters.pnpmStorePath, '\', '/') }}

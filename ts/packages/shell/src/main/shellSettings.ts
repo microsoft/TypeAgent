@@ -10,7 +10,6 @@ import {
 import { cloneConfig, mergeConfig } from "agent-dispatcher/helpers/config";
 
 import { ReadonlyDeep } from "type-fest";
-import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "path";
 import {
     getObjectProperty,
@@ -53,12 +52,12 @@ export const defaultSettings: ShellSettings = {
     user: defaultUserSettings,
 };
 
-export function getSettingsPath() {
-    return path.join(getInstanceDir(), "shellSettings.json");
+export function getSettingsPath(instanceDir: string) {
+    return path.join(instanceDir, "shellSettings.json");
 }
 
-export function loadShellSettings(): ShellSettings {
-    const settingsPath = getSettingsPath();
+export function loadShellSettings(instanceDir: string): ShellSettings {
+    const settingsPath = getSettingsPath(instanceDir);
     debugShell(
         `Loading shell settings from '${settingsPath}'`,
         performance.now(),
@@ -79,7 +78,10 @@ export function loadShellSettings(): ShellSettings {
 }
 
 export class ShellSettingManager {
-    constructor(private readonly settings: ShellSettings) {}
+    constructor(
+        private readonly settings: ShellSettings,
+        private readonly instanceDir: string,
+    ) {}
 
     public get window(): ReadonlyDeep<ShellWindowState> {
         return this.settings.window;
@@ -146,7 +148,7 @@ export class ShellSettingManager {
     }
 
     public save(windowState: ShellWindowState) {
-        const settingsPath = getSettingsPath();
+        const settingsPath = getSettingsPath(this.instanceDir);
         debugShell(`Saving settings to '${settingsPath}'.`);
 
         const settings = this.settings;

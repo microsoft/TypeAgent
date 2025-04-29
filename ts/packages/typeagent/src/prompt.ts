@@ -263,7 +263,7 @@ export function createPromptSectionBuilder(
         buffer: "",
         begin,
         pushText,
-        push: push,
+        push,
         complete,
     };
     return builder;

@@ -1209,7 +1209,7 @@ export async function rewriteText(
         prompt += rewriteFocus;
     } else {
         prompt +=
-            "make it more readable, with better formatting (line breaks, bullet points etc).";
+            "make it more readable, with better formatting (line breaks, bullet points, numbered lists etc).";
     }
     prompt +=
         "\n Remove all redundancy, duplication, contradiction, or anything that does not answer the question.";

@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# This workflow will build and test the TypeAgent TypeScript code
+# This workflow will build and package the TypeAgent TypeScript code
 
-name: build-ts
+name: build-package-shell
 
 on:
   workflow_dispatch:
@@ -18,27 +18,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  pull-requests: read
-  contents: read
-  id-token: write
-
-env:
-  NODE_OPTIONS: --max_old_space_size=8192
-
 jobs:
-  build_ts:
+  build_package_shell:
     strategy:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        version: [20, 22]
+        version: [22]
 
     runs-on: ${{ matrix.os }}
+
     steps:
-      - if: runner.os == 'Linux'
-        run: |
-          sudo apt install libsecret-1-0
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false
@@ -71,14 +61,21 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
-          npm run build
-      - name: Test
+          pnpm run build:shell
+      - name: Package - shell
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
+        shell: bash
         run: |
-          npm run test:local
-      - name: Lint
-        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
-        working-directory: ts
-        run: |
-          npm run lint
+          if [[ $RUNNER_OS == 'Linux' ]]; then
+            pnpm run shell:package:linux
+          elif [[ $RUNNER_OS == 'Windows' ]]; then
+            pnpm run shell:package:win
+          elif [[ $RUNNER_OS == 'macOS' ]]; then
+            pnpm run shell:package:mac
+          fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+        with:
+          name: typeagent-shell-package-${{ github.run_id }}-${{ matrix.os }}
+          path: ts/packages/shell/dist
