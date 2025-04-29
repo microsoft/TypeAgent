@@ -184,10 +184,8 @@ export function createIndexingEventHandler(
         },
         onTextIndexed(textAndLocations, batch, batchStartAt) {
             if (!startedMessages) {
-                progress.reset(textAndLocations.length);
-                printer.writeLine(
-                    `Indexing ${textAndLocations.length} messages`,
-                );
+                progress.reset(maxMessages);
+                printer.writeLine(`Indexing ${maxMessages} messages`);
                 startedMessages = true;
             }
             progress.advance(batch.length);

@@ -53,14 +53,14 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
     }
 
     public addMessages(
-        messages: IMessage[],
+        messages: Iterable<IMessage>,
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult> {
         const baseMessageOrdinal: MessageOrdinal = this.size;
         const allChunks: [string, TextLocation][] = [];
         // Collect everything so we can batch efficiently
-        for (let i = 0; i < messages.length; ++i) {
-            const message = messages[i];
+        let i = 0;
+        for (const message of messages) {
             let messageOrdinal = baseMessageOrdinal + i;
             for (
                 let chunkOrdinal = 0;
@@ -72,6 +72,7 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
                     { messageOrdinal, chunkOrdinal },
                 ]);
             }
+            ++i;
         }
         return this.textLocationIndex.addTextLocations(allChunks, eventHandler);
     }
