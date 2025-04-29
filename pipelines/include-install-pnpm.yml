@@ -55,5 +55,5 @@ steps:
           sudo corepack enable
         fi
         echo "Using pnpm $(pnpm -v)"
-        pnpm config set store-dir $(pnpmStorePath)
+        pnpm config set store-dir $pnpmStorePath
         pnpm config set -g workspace-concurrency 0
