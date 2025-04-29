@@ -633,13 +633,16 @@ export async function createKnowproCommands(
             context.printer.writeError(searchResults.message);
             return;
         }
+        if (searchResults.data.length === 0) {
+            context.printer.writeLine("No matches");
+            return;
+        }
         if (namedArgs.debug) {
             context.printer.writeInColor(chalk.gray, () => {
                 context.printer.writeLine();
                 context.printer.writeNaturalLanguageContext(debugContext);
             });
         }
-
         for (const searchResult of searchResults.data) {
             if (!namedArgs.messages) {
                 searchResult.messageMatches = [];
@@ -650,10 +653,12 @@ export async function createKnowproCommands(
                 searchText,
                 searchResult,
                 (chunk, _, result) => {
-                    context.printer.writeInColor(chalk.gray, () => {
-                        context.printer.writeLine();
-                        context.printer.writeJsonInColor(chalk.gray, chunk);
-                    });
+                    if (namedArgs.debug) {
+                        context.printer.writeInColor(chalk.gray, () => {
+                            context.printer.writeLine();
+                            context.printer.writeJsonInColor(chalk.gray, chunk);
+                        });
+                    }
                 },
             );
             context.printer.writeLine();
