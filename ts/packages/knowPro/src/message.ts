@@ -6,8 +6,10 @@
  */
 
 import { addToSet } from "./collections.js";
+import { Batch } from "./common.js";
 import {
     DateRange,
+    IConversation,
     IMessage,
     IMessageMetadata,
     MessageOrdinal,
@@ -15,6 +17,7 @@ import {
     TextLocation,
     TextRange,
 } from "./interfaces.js";
+import { getBatchesFromCollection } from "./storage.js";
 
 /**
  * Returns the text range represented by a message (and an optional chunk ordinal)
@@ -264,4 +267,16 @@ export function getEnclosingMetadataForMessages(
         }
         return set;
     }
+}
+
+export function getMessageBatches(
+    conversation: IConversation,
+    startAtOrdinal: number,
+    batchSize: number,
+): IterableIterator<Batch<IMessage>> {
+    return getBatchesFromCollection<IMessage>(
+        conversation.messages,
+        startAtOrdinal,
+        batchSize,
+    );
 }
