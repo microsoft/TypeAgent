@@ -31,14 +31,16 @@ import {
 import { openai } from "aiclient";
 
 import registerDebug from "debug";
+import { CatalogEntryWithMeta } from "../pdfDownLoader.js";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");
 
 export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
-    public docChunkId: string = "";
-    public pageNumber: string = "";
-    public topics: string[] | undefined;
-
-    constructor() {}
+    constructor(
+        public fileName: string,
+        public pageNumber: string = "-",
+        public chunkId: string,
+        public img: CatalogEntryWithMeta,
+    ) {}
 
     public get source() {
         return undefined;
@@ -52,11 +54,12 @@ export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
         const entities: kpLib.ConcreteEntity[] = [];
         const actions: kpLib.Action[] = [];
         const docChunkEntity: kpLib.ConcreteEntity = {
-            name: this.docChunkId,
-            type: ["chunk"],
+            name: this.fileName,
+            type: ["file", "pdf"],
             facets: [
-                { name: "Section Title", value: "Header 1" },
-                { name: "Page NUmber", value: "1" },
+                { name: "File Name", value: this.fileName },
+                { name: "Page NUmber", value: this.pageNumber },
+                { name: "Chunk ID", value: this.chunkId },
             ],
         };
         const chunkInPageAction: kpLib.Action = {
@@ -213,7 +216,7 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
         this.nameTag = pdfChunkData.nameTag;
         const pdfChunkMessages = pdfChunkData.messages.map((m) => {
             // placeholder - fix this later
-            const metadata = new PdfChunkMessageMeta();
+            const metadata = m.metadata as PdfChunkMessageMeta;
             return new PdfChunkMessage(m.textChunks, metadata, m.tags);
         });
         this.messages = pdfChunkMessages;

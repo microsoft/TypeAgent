@@ -216,15 +216,17 @@ export async function importPdf(
     }
 
     if (chunkingErrors.length <= 0) {
-        indexPdfChunks(io, verbose, results);
+        indexPdfChunks(io, pdfFilePath, verbose, results);
     }
     return undefined;
 }
 
 export function processPdfChunks(
-    catEntry: CatalogEntryWithMeta,
+    pdfFileName: string,
+    catMetaEntry: CatalogEntryWithMeta,
     chunks: Chunk[],
 ): PdfChunkMessage[] {
+    const fileName = path.basename(pdfFileName);
     let chunkMessages: PdfChunkMessage[] = [];
     const pageChunksMap: Record<
         string,
@@ -252,9 +254,12 @@ export function processPdfChunks(
 
             for (const blob of chunk.blobs) {
                 let chunkMessageMeta: PdfChunkMessageMeta =
-                    new PdfChunkMessageMeta();
-                chunkMessageMeta.docChunkId = chunkIdentifier;
-                chunkMessageMeta.pageNumber = pageCount.toString();
+                    new PdfChunkMessageMeta(
+                        fileName,
+                        pageCount.toString(),
+                        chunkIdentifier,
+                        catMetaEntry,
+                    );
                 let chunkMessage: PdfChunkMessage = new PdfChunkMessage(
                     [],
                     chunkMessageMeta,
@@ -273,6 +278,7 @@ export function processPdfChunks(
 
 export async function indexPdfChunks(
     io: iapp.InteractiveIo | undefined,
+    pdfFilePath: string,
     fVerbose: boolean,
     chunkResults: (ChunkedFile | ErrorItem)[] = [],
 ): Promise<void> {
@@ -292,7 +298,7 @@ export async function indexPdfChunks(
 
             let catEntry = pdfCatalog[paperId];
             if (catEntry !== undefined) {
-                await processPdfChunks(catEntry, chunkedFile.chunks);
+                processPdfChunks(pdfFilePath, catEntry, chunkedFile.chunks);
             }
         }
     }
