@@ -1,6 +1,6 @@
 {
   "name": "typeagent",
-  "version": "0.0.10",
+  "version": "0.0.1",
   "description": "Typeagent is a library for working with Agents from the Microsoft AI Systems team.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -47,6 +47,6 @@
     "rimraf": "^6.0.1"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

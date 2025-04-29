@@ -1,6 +1,6 @@
 {
   "name": "schema-author",
-  "version": "0.0.10",
+  "version": "0.0.1",
   "description": "schema-author is a library for creating intents and associated schemas.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
@@ -38,6 +38,6 @@
     "typescript": "^5.4.2"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   }
 }

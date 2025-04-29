@@ -15,6 +15,7 @@
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
+    "build:shell": "fluid-build agent-shell -t build --dep",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
     "check:policy": "node tools/scripts/repo-policy-check.mjs",
     "check:policy:fix": "node tools/scripts/repo-policy-check.mjs --fix",
@@ -24,7 +25,7 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
-    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx cp build/Release/better_sqlite3.node build/Release/better_sqlite3.n.node",
+    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx mkdir -p build/Release-Node && shx cp build/Release/better_sqlite3.node build/Release-Node",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
@@ -36,6 +37,12 @@
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run dev",
+    "shell:package:linux": "pnpm -C packages/shell run package:linux",
+    "shell:package:mac": "pnpm -C packages/shell run package:mac",
+    "shell:package:win": "pnpm -C packages/shell run package:win",
+    "shell:start:linux": "pnpm -C packages/shell run start:linux",
+    "shell:start:mac": "pnpm -C packages/shell run start:mac",
+    "shell:start:win": "pnpm -C packages/shell run start:win",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
     "test": "pnpm run test:local && pnpm run test:live",
     "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:live",
@@ -50,8 +57,8 @@
   },
   "packageManager": "pnpm@10.9.0+sha512.0486e394640d3c1fb3c9d43d49cf92879ff74f8516959c235308f5a8f62e2e19528a65cdc2a3058f587cde71eba3d5b56327c8c33a97e4c4051ca48a10ca2d5f",
   "engines": {
-    "node": ">=18",
-    "pnpm": ">=9"
+    "node": ">=20",
+    "pnpm": ">=10"
   },
   "peerDependencyRules": {
     "ignoreMissing": [

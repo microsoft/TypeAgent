@@ -46,7 +46,11 @@ steps:
       script: |
         echo "Using node $(node --version)"
         npm install -g corepack@0.31.0
-        sudo corepack enable
+        if [[ '$(AgentOS)' == 'Windows_NT' ]]; then
+          corepack enable
+        else
+          sudo corepack enable
+        fi
         echo "Using pnpm $(pnpm -v)"
         pnpm config set store-dir ${{ parameters.pnpmStorePath }}
         pnpm config set -g workspace-concurrency 0
