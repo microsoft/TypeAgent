@@ -33,6 +33,8 @@ jobs:
           image: "windows-latest"
         linux:
           image: "ubuntu-latest"
+        mac:
+          image: "macos-latest"
     pool:
       vmImage: "$(image)"
     steps:
@@ -77,12 +79,12 @@ jobs:
         workingDirectory: $(workingDirectory)
 
       - bash: |
-          if [[ $RUNNER_OS == 'Linux' ]]; then
-            tar -czf shell.tar.gz shell
-          elif [[ $RUNNER_OS == 'Windows' ]]; then
-            powershell Compress-Archive -Path shell -DestinationPath shell.zip
-          elif [[ $RUNNER_OS == 'macOS' ]]; then
-            tar -czf shell.tar.gz shell
+          if [[ $(Agent.OS) == 'Linux' ]]; then
+            pnpm run shell:package:linux
+          elif [[ $(Agent.OS) == 'Darwin' ]]; then
+            pnpm run shell:package:mac
+          elif [[ $(Agent.OS) == 'Windows_NT' ]]; then
+            pnpm run shell:package:win
           fi
         displayName: "Package - shell"
         workingDirectory: $(workingDirectory)
