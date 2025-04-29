@@ -19,7 +19,7 @@ steps:
   # The path to the pnpm store. The contents here will be cached and restored when using pnpm in a pipeline.
   - bash: |
       if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
-        echo "##vso[task.setvariable variable=pnpmStorePathWindows;isOutput=true]$(Pipeline.Workspace)\.pnpm-store"
+        echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]$(Pipeline.Workspace)\.pnpm-store"
       else
         echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]$(Pipeline.Workspace)/.pnpm-store"
       fi
@@ -55,6 +55,6 @@ steps:
           sudo corepack enable
         fi
         echo "Using pnpm $(pnpm -v)"
-        echo "Using pnpm store path $pnpmStorePath"
-        pnpm config set store-dir $pnpmStorePath
+        echo "Using pnpm store path $PNPMSTOREPATH"
+        pnpm config set store-dir $PNPMSTOREPATH
         pnpm config set -g workspace-concurrency 0
