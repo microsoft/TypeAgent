@@ -17,14 +17,13 @@ parameters:
 
 steps:
   # The path to the pnpm store. The contents here will be cached and restored when using pnpm in a pipeline.
-  - bash:
-    displayName: Set pnpm store path variable
-    script: |
+  - bash: |
       if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
         echo "##vso[task.setvariable variable=pnpmStorePathWindows;isOutput=true]$(Pipeline.Workspace)\.pnpm-store"
       else
         echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]$(Pipeline.Workspace)/.pnpm-store"
       fi
+    displayName: Set pnpm store path variable
   - ${{ if eq(parameters.enableCache, true) }}:
       - task: Cache@2
         displayName: Cache pnpm store
