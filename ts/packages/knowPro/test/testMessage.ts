@@ -32,10 +32,10 @@ export class TestMessage implements IMessage {
     }
 }
 
-export function createTestMessages(
+export function createTestMessagesArray(
     messageCount: number,
     chunkCount: number = 1,
-): MessageCollection<TestMessage> {
+): TestMessage[] {
     const messages: TestMessage[] = [];
     if (chunkCount > 1) {
         for (
@@ -58,6 +58,14 @@ export function createTestMessages(
             messages.push(new TestMessage(`Message_${i + 1}`, i));
         }
     }
+    return messages;
+}
+
+export function createTestMessages(
+    messageCount: number,
+    chunkCount: number = 1,
+): MessageCollection<TestMessage> {
+    const messages = createTestMessagesArray(messageCount, chunkCount);
     return new MessageCollection(messages);
 }
 
