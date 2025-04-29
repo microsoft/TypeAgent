@@ -39,7 +39,7 @@ export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
         public fileName: string,
         public pageNumber: string = "-",
         public chunkId: string,
-        public img: CatalogEntryWithMeta,
+        public pdfMetadata: CatalogEntryWithMeta,
     ) {}
 
     public get source() {
@@ -53,35 +53,143 @@ export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
     getKnowledge() {
         const entities: kpLib.ConcreteEntity[] = [];
         const actions: kpLib.Action[] = [];
+        const inverseActions: kpLib.Action[] = [];
+        const timestampParam = [];
+
+        if (this.pdfMetadata.meta.published) {
+            timestampParam.push({
+                name: "Timestamp",
+                value: this.pdfMetadata.meta.published,
+            });
+        }
+
+        // 1. Entity for the document chunk (this file chunk)
         const docChunkEntity: kpLib.ConcreteEntity = {
-            name: this.fileName,
-            type: ["file", "pdf"],
+            name: this.chunkId,
+            type: ["file-chunk", "pdf-chunk"],
             facets: [
                 { name: "File Name", value: this.fileName },
-                { name: "Page NUmber", value: this.pageNumber },
+                { name: "Page Number", value: this.pageNumber },
                 { name: "Chunk ID", value: this.chunkId },
             ],
         };
-        const chunkInPageAction: kpLib.Action = {
-            verbs: ["within", "in"],
+
+        // 2. Entity for the full paper
+        const paperEntity: kpLib.ConcreteEntity = {
+            name: this.pdfMetadata.meta.title,
+            type: ["paper", "arxiv"],
+            facets: [
+                { name: "arXiv ID", value: this.pdfMetadata.meta.id },
+                { name: "Published", value: this.pdfMetadata.meta.published },
+                { name: "Summary", value: this.pdfMetadata.meta.summary },
+                ...(this.pdfMetadata.meta.comment
+                    ? [
+                          {
+                              name: "Comment",
+                              value: this.pdfMetadata.meta.comment,
+                          },
+                      ]
+                    : []),
+                ...(this.pdfMetadata.meta.primary_category
+                    ? [
+                          {
+                              name: "Primary Category",
+                              value: this.pdfMetadata.meta.primary_category,
+                          },
+                      ]
+                    : []),
+            ],
+        };
+        entities.push(paperEntity);
+
+        // 3. Link chunk to paper
+        const chunkToPaperAction: kpLib.Action = {
+            verbs: ["extracted from", "derived from"],
             verbTense: "present",
-            subjectEntityName: "Page Number",
-            objectEntityName: docChunkEntity.name,
+            subjectEntityName: docChunkEntity.name,
+            objectEntityName: paperEntity.name,
             indirectObjectEntityName: "none",
             subjectEntityFacet: undefined,
         };
+        actions.push(chunkToPaperAction);
 
-        entities.push(docChunkEntity);
+        // 4. Authors
+        for (const author of this.pdfMetadata.meta.author) {
+            const authorEntity: kpLib.ConcreteEntity = {
+                name: author.name,
+                type: ["author"],
+            };
+            entities.push(authorEntity);
+
+            const authoredAction: kpLib.Action = {
+                verbs: ["written by", "authored by"],
+                verbTense: "past",
+                subjectEntityName: paperEntity.name,
+                objectEntityName: authorEntity.name,
+                indirectObjectEntityName: "none",
+                subjectEntityFacet: undefined,
+                params: timestampParam,
+            };
+            actions.push(authoredAction);
+        }
+
+        // 5. Chunk belongs to page
+        const chunkInPageAction: kpLib.Action = {
+            verbs: ["contained within", "part of"],
+            verbTense: "present",
+            subjectEntityName: docChunkEntity.name,
+            objectEntityName: `Page ${this.pageNumber}`,
+            indirectObjectEntityName: "none",
+            subjectEntityFacet: undefined,
+        };
         actions.push(chunkInPageAction);
+
+        // 6. Topics (categories)
+        const topics: string[] = [];
+        if (this.pdfMetadata.meta.category) {
+            topics.push(
+                ...this.pdfMetadata.meta.category
+                    .split(",")
+                    .map((s) => s.trim()),
+            );
+        }
+
+        // 7. Optionally generate inverse actions
+        for (const action of actions) {
+            inverseActions.push({
+                verbs: this.generateInverseVerbs(action.verbs),
+                verbTense: action.verbTense,
+                subjectEntityName: action.objectEntityName,
+                objectEntityName: action.subjectEntityName,
+                indirectObjectEntityName: action.indirectObjectEntityName,
+                subjectEntityFacet: undefined,
+            });
+        }
 
         return {
             entities,
             actions,
-            inverseActions: [],
-            topics: [],
+            inverseActions,
+            topics,
         };
     }
+
+    private generateInverseVerbs(verbs: string[]): string[] {
+        // Simple inverses
+        return verbs.map((verb) => {
+            if (verb.includes("by")) return `was ${verb}`;
+            if (verb.includes("within") || verb.includes("part of"))
+                return `contains`;
+            if (
+                verb.includes("extracted from") ||
+                verb.includes("derived from")
+            )
+                return `produced`;
+            return `related to`; // fallback generic
+        });
+    }
 }
+
 export class PdfChunkMessage implements IMessage {
     public timestamp: string | undefined = undefined;
     constructor(
@@ -109,8 +217,7 @@ export class PdfChunkMessage implements IMessage {
         }
     }
 }
-
-export class PdfDocument implements IConversation<PdfChunkMessage> {
+export class PdfKnowProIndex implements IConversation<PdfChunkMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
@@ -198,8 +305,8 @@ export class PdfDocument implements IConversation<PdfChunkMessage> {
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
-    ): Promise<PdfDocument | undefined> {
-        const pdfDoc = new PdfDocument();
+    ): Promise<PdfKnowProIndex | undefined> {
+        const pdfDoc = new PdfKnowProIndex();
         const data = await readConversationDataFromFile(
             dirPath,
             baseFileName,

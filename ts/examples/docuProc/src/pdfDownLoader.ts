@@ -394,7 +394,8 @@ export function getValidFilename(paperId: string): string {
 }
 
 export function getPaperIdFromFilename(filename: string): string {
-    return filename.replace(/__/g, "/");
+    const base = path.basename(filename, ".pdf");
+    return base.replace(/__/g, "/");
 }
 
 function getPdfUrlFromId(id: string): { paperId: string; downloadUrl: string } {

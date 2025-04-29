@@ -3,7 +3,7 @@
 import {
     PdfChunkMessageMeta,
     PdfChunkMessage,
-    PdfDocument,
+    PdfKnowProIndex,
 } from "./pdfDocument.js";
 import path from "node:path";
 import * as fs from "node:fs";
@@ -153,7 +153,7 @@ export async function importPdf(
     verbose = false,
     fChunkPdfFiles: boolean = true,
     maxPagesToProcess: number = -1,
-): Promise<PdfDocument | undefined> {
+): Promise<PdfKnowProIndex | undefined> {
     if (!pdfFilePath) {
         log(io, "No PDF file path provided.", chalk.red);
         return undefined;
@@ -221,8 +221,17 @@ export async function importPdf(
     return undefined;
 }
 
+export function generateChunkId(
+    paperId: string,
+    pageNumber: number | string,
+    chunkIndex: number | string,
+): string {
+    return `${paperId}_page_${pageNumber}_chunk_${chunkIndex}`;
+}
+
 export function processPdfChunks(
     pdfFileName: string,
+    paperId: string,
     catMetaEntry: CatalogEntryWithMeta,
     chunks: Chunk[],
 ): PdfChunkMessage[] {
@@ -242,6 +251,12 @@ export function processPdfChunks(
         }
     }
 
+    for (const chunk of chunks) {
+        if (chunk.parentId && pageChunksMap[chunk.pageid]) {
+            pageChunksMap[chunk.pageid].pageChunks.push(chunk);
+        }
+    }
+
     let pageCount = 0;
     for (const pageid in pageChunksMap) {
         pageCount++;
@@ -250,13 +265,17 @@ export function processPdfChunks(
             `Processing page ${pageCount} with root chunk ID: ${pageRootChunk.id}`,
         );
         for (const chunk of pageChunks) {
-            const chunkIdentifier = chunk.id;
+            const chunkIdentifier = generateChunkId(
+                paperId,
+                chunk.pageid,
+                chunk.id,
+            );
 
             for (const blob of chunk.blobs) {
                 let chunkMessageMeta: PdfChunkMessageMeta =
                     new PdfChunkMessageMeta(
                         fileName,
-                        pageCount.toString(),
+                        chunk.pageid,
                         chunkIdentifier,
                         catMetaEntry,
                     );
@@ -290,7 +309,6 @@ export async function indexPdfChunks(
         );
         log(io, `[Documenting ${chunkedFiles.length} files]`, chalk.grey);
 
-        // for each chunked file, index the chunks in a loop
         for (const chunkedFile of chunkedFiles) {
             const pdfFile = chunkedFile.fileName;
             assert(fs.existsSync(pdfFile), `File not found: ${pdfFile}`);
@@ -298,7 +316,12 @@ export async function indexPdfChunks(
 
             let catEntry = pdfCatalog[paperId];
             if (catEntry !== undefined) {
-                processPdfChunks(pdfFilePath, catEntry, chunkedFile.chunks);
+                processPdfChunks(
+                    pdfFilePath,
+                    paperId,
+                    catEntry,
+                    chunkedFile.chunks,
+                );
             }
         }
     }

@@ -13,12 +13,13 @@ export interface Blob {
         | "image_label"
         | "table_label"; // e.g. "text", "table", "image"
     start: number; // Page number (0-based)
-    paraHeader?: string[]; // Optional paragraph header
     content?: string | string[]; // e.g. chunk of text
     bbox?: number[]; // Optional bounding box
     img_name?: string; // Optional image name
     img_path?: string; // Optional image path
     image_chunk_ref?: string[]; // Optional reference to image chunk(s)
+    para_id?: number; // Optional Paragraph ID if needed
+    paraHeader?: string | string[]; // Optional paragraph header
 }
 
 export interface Chunk {
