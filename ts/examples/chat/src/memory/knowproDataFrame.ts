@@ -4,6 +4,7 @@
 import { fetchWithRetry, openai } from "aiclient";
 import {
     arg,
+    argNum,
     CommandHandler,
     CommandMetadata,
     NamedArgs,
@@ -50,19 +51,20 @@ export async function createKnowproDataFrameCommands(
             description: "Import a data frame",
             options: {
                 filePath: arg("filePath", undefined),
+                count: argNum("Number of import"),
             },
         };
     }
     commands.kpDataFrameImport.metadata = importDataFrameDef();
     async function importDataFrame(args: string[]) {
-        const namedArgs = parseNamedArguments(args);
+        const namedArgs = parseNamedArguments(args, importDataFrameDef());
         const dataFramePath = namedArgs.filePath ?? filePath;
         try {
             ensureIndex(true);
             //
             // Load some restaurants into a collection
             //
-            let numRestaurants = 16;
+            let numRestaurants = namedArgs.count ?? 16;
             const restaurantData: Restaurant[] =
                 await loadThings<Restaurant>(dataFramePath);
 
@@ -79,6 +81,7 @@ export async function createKnowproDataFrameCommands(
             options: {
                 filePath: arg("filePath", undefined),
                 indexFilePath: arg("Output path for index file"),
+                count: argNum("Number of import"),
             },
         };
     }
