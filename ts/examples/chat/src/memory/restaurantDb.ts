@@ -9,8 +9,8 @@ export class RestaurantDb {
     public geo: GeoTable;
     public restaurants: RestaurantsTable;
 
-    constructor(dbPath: string) {
-        this.db = ms.sqlite.createDatabase(dbPath, true);
+    constructor(dbPath: string, createNew: boolean) {
+        this.db = ms.sqlite.createDatabase(dbPath, createNew);
         this.restaurants = new RestaurantsTable(this.db);
         this.geo = new GeoTable(this.db);
     }

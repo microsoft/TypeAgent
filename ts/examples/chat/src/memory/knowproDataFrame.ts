@@ -2,15 +2,26 @@
 // Licensed under the MIT License.
 
 import { fetchWithRetry, openai } from "aiclient";
-import { CommandHandler, ProgressBar } from "interactive-app";
+import {
+    arg,
+    argNum,
+    CommandHandler,
+    CommandMetadata,
+    NamedArgs,
+    parseNamedArguments,
+    ProgressBar,
+    StopWatch,
+} from "interactive-app";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { Result, success } from "typechat";
-import { ensureDir, readAllText } from "typeagent";
+import { ensureDir, getFileName, readAllText } from "typeagent";
 import * as kp from "knowpro";
 import { createIndexingEventHandler } from "./knowproCommon.js";
 import chalk from "chalk";
 import { conversation as kpLib } from "knowledge-processor";
 import { RestaurantDb } from "./restaurantDb.js";
+import { argDestFile, argSourceFile } from "./common.js";
+import path from "path";
 
 export async function createKnowproDataFrameCommands(
     commands: Record<string, CommandHandler>,
@@ -21,25 +32,41 @@ export async function createKnowproDataFrameCommands(
     commands.kpDataFrameIndex = indexDataFrame;
     commands.kpDataFrameSearch = searchDataFrame;
     commands.kpDataFrameList = listFrames;
+    commands.kpDataFrameSave = saveDataFrame;
+    commands.kpDataFrameLoad = loadDataFrame;
     //commands.kpDataFrameTest = testDb;
 
-    await ensureDir("/data/testChat/knowpro/restaurants");
-    let db: RestaurantDb | undefined;
-    let restaurantIndex: RestaurantIndex | undefined;
-
+    const basePath = "/data/testChat/knowpro/restaurants";
     const filePath =
         "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
 
+    let db: RestaurantDb | undefined;
+    let restaurantIndex: RestaurantIndex | undefined;
+
+    await ensureDir(basePath);
+
+    function importDataFrameDef(): CommandMetadata {
+        return {
+            description: "Import a data frame",
+            options: {
+                filePath: arg("filePath", undefined),
+                count: argNum("Number of import"),
+            },
+        };
+    }
+    commands.kpDataFrameImport.metadata = importDataFrameDef();
     async function importDataFrame(args: string[]) {
+        const namedArgs = parseNamedArguments(args, importDataFrameDef());
+        const dataFramePath = namedArgs.filePath ?? filePath;
         try {
             ensureIndex(true);
             //
             // Load some restaurants into a collection
             //
-            let numRestaurants = 16;
+            let numRestaurants = namedArgs.count ?? 16;
             const restaurantData: Restaurant[] =
-                await loadThings<Restaurant>(filePath);
+                await loadThings<Restaurant>(dataFramePath);
 
             importRestaurants(restaurantIndex!, restaurantData, numRestaurants);
         } catch (ex) {
@@ -47,7 +74,21 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
+    function indexDataFrameDef(): CommandMetadata {
+        return {
+            description:
+                "Import a data frame, index it and optionally save the index",
+            options: {
+                filePath: arg("filePath", undefined),
+                indexFilePath: arg("Output path for index file"),
+                count: argNum("Number of import"),
+            },
+        };
+    }
+    commands.kpDataFrameIndex.metadata = indexDataFrameDef();
     async function indexDataFrame(args: string[]) {
+        const namedArgs = parseNamedArguments(args, indexDataFrameDef());
+        const dataFramePath = namedArgs.filePath ?? filePath;
         try {
             await importDataFrame(args);
             //
@@ -55,9 +96,77 @@ export async function createKnowproDataFrameCommands(
             //
             printer.writeHeading("Building index");
             await buildIndex(restaurantIndex!);
+            // Save the index
+            namedArgs.filePath = sourcePathToIndexPath(
+                dataFramePath,
+                namedArgs.indexFilePath,
+            );
+            await saveDataFrame(namedArgs);
         } catch (ex) {
             printer.writeError(`${ex}`);
         }
+    }
+
+    function saveDataFrameDef(): CommandMetadata {
+        return {
+            description: "Save Podcast",
+            args: {
+                filePath: argDestFile(),
+            },
+        };
+    }
+    commands.kpDataFrameSave.metadata = saveDataFrameDef();
+    async function saveDataFrame(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs = parseNamedArguments(args, saveDataFrameDef());
+        if (!restaurantIndex) {
+            printer.writeLine("No restaurant index");
+            return;
+        }
+
+        printer.writeLine("Saving index");
+        printer.writeLine(namedArgs.filePath);
+        const dirName = path.dirname(namedArgs.filePath);
+        await ensureDir(dirName);
+
+        const clock = new StopWatch();
+        clock.start();
+        await restaurantIndex.textIndex.writeToFile(
+            dirName,
+            getFileName(namedArgs.filePath),
+        );
+        clock.stop();
+        printer.writeTiming(chalk.gray, clock, "Write to file");
+    }
+
+    function loadDataFrameDef(): CommandMetadata {
+        return {
+            description: "Load data frame",
+            options: {
+                filePath: argSourceFile(),
+                name: arg("Data frame name"),
+            },
+        };
+    }
+    commands.kpDataFrameLoad.metadata = loadDataFrameDef();
+    async function loadDataFrame(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, loadDataFrameDef());
+        let dfFilePath = namedArgs.filePath;
+        dfFilePath ??= namedArgs.name
+            ? dfNameToFilePath(namedArgs.name)
+            : undefined;
+        if (!dfFilePath) {
+            printer.writeError("No filepath or name provided");
+            return;
+        }
+        await ensureIndex(false);
+        const clock = new StopWatch();
+        clock.start();
+        await restaurantIndex!.loadTextIndex(
+            path.dirname(dfFilePath),
+            getFileName(dfFilePath),
+        );
+        clock.stop();
+        printer.writeTiming(chalk.gray, clock, "Read file");
     }
 
     async function listFrames(args: string[]) {
@@ -68,6 +177,12 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
+    function searchDataFrameDef(): CommandMetadata {
+        return {
+            description: "Search data frame with language",
+        };
+    }
+    commands.kpDataFrameSearch.metadata = searchDataFrameDef();
     async function searchDataFrame(args: string[]) {
         if (!restaurantIndex) {
             ensureIndex(false);
@@ -101,9 +216,9 @@ export async function createKnowproDataFrameCommands(
         let filePath = "/data/testChat/knowpro/restaurants/restaurants.db";
         if (newDb) {
             db?.close();
-            db = new RestaurantDb(filePath);
+            db = new RestaurantDb(filePath, newDb);
         } else if (!db) {
-            db = new RestaurantDb(filePath);
+            db = new RestaurantDb(filePath, newDb);
         }
         restaurantIndex = new RestaurantIndex(db);
     }
@@ -143,6 +258,21 @@ export async function createKnowproDataFrameCommands(
     function writeRestaurantMatch(restaurant: Restaurant): void {
         printer.writeInColor(chalk.green, restaurant.name);
         printer.writeJsonInColor(chalk.gray, restaurant.facets);
+    }
+
+    const IndexFileSuffix = "_index.json";
+    function sourcePathToIndexPath(
+        sourcePath: string,
+        indexFilePath?: string,
+    ): string {
+        return (
+            indexFilePath ??
+            path.join(basePath, getFileName(sourcePath) + IndexFileSuffix)
+        );
+    }
+
+    function dfNameToFilePath(name: string): string {
+        return path.join(basePath, name + IndexFileSuffix);
     }
 
     /*
@@ -285,20 +415,25 @@ export type Container<T> = {
     item?: T | undefined;
 };
 
+// We will model a restaurant's information as messages for now
+// Pre-well known knowledge such as menus comes from here.
 export class RestaurantInfo implements kp.IMessage {
-    public restaurant: Restaurant;
-    public textChunks: string[];
-    public timestamp?: string | undefined;
-    public tags: string[] = [];
     public deletionInfo?: kp.DeletionInfo | undefined;
 
-    constructor(restaurant: Restaurant) {
+    constructor(
+        public restaurant: Restaurant,
+        public textChunks: string[] = [],
+        public timestamp?: string | undefined,
+        public tags: string[] = [],
+    ) {
         this.restaurant = restaurant;
-        let text = `Restaurant:\n${restaurant.name}`;
-        if (restaurant.description) {
-            text += `\n\n${restaurant.description}`;
+        if (textChunks.length === 0) {
+            let text = `Restaurant:\n${restaurant.name}`;
+            if (restaurant.description) {
+                text += `\n\n${restaurant.description}`;
+            }
+            this.textChunks.push(text);
         }
-        this.textChunks = [text];
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
@@ -320,7 +455,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public tags: string[] = [];
     public semanticRefs: kp.SemanticRef[] = [];
     public semanticRefIndex: kp.ConversationIndex;
-    public secondaryIndexes: kp.IConversationSecondaryIndexes;
+    public secondaryIndexes: kp.ConversationSecondaryIndexes;
 
     constructor(
         public messages: RestaurantInfo[] = [],
@@ -353,7 +488,86 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     ): Promise<kp.IndexingResults> {
         return kp.buildConversationIndex(this, this.settings, eventHandler);
     }
+
+    public async serialize(): Promise<RestaurantData> {
+        const data: RestaurantData = {
+            nameTag: this.nameTag,
+            messages: this.messages,
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermsIndexData:
+                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
+        };
+        return data;
+    }
+
+    public async deserialize(data: RestaurantData): Promise<void> {
+        this.nameTag = data.nameTag;
+        this.messages = this.deserializeMessages(data);
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
+        if (data.semanticIndexData) {
+            this.semanticRefIndex = new kp.ConversationIndex(
+                data.semanticIndexData,
+            );
+        }
+        if (data.relatedTermsIndexData) {
+            this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
+                data.relatedTermsIndexData,
+            );
+        }
+        if (data.messageIndexData) {
+            this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+                this.settings.messageTextIndexSettings,
+            );
+            this.secondaryIndexes.messageIndex.deserialize(
+                data.messageIndexData,
+            );
+        }
+        await kp.buildTransientSecondaryIndexes(this, this.settings);
+    }
+
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const data = await this.serialize();
+        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<RestaurantStructuredRagIndex | undefined> {
+        const index = new RestaurantStructuredRagIndex();
+        const data = await kp.readConversationDataFromFile(
+            dirPath,
+            baseFileName,
+            index.settings.relatedTermIndexSettings.embeddingIndexSettings
+                ?.embeddingSize,
+        );
+        if (data) {
+            index.deserialize(data);
+        }
+        return index;
+    }
+
+    private deserializeMessages(memoryData: RestaurantData) {
+        return memoryData.messages.map((m) => {
+            return new RestaurantInfo(
+                m.restaurant,
+                m.textChunks,
+                m.timestamp,
+                m.tags,
+            );
+        });
+    }
 }
+
+export interface RestaurantData
+    extends kp.IConversationDataWithIndexes<RestaurantInfo> {}
 
 export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
     /**
@@ -490,6 +704,26 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         await this.textIndex.buildIndex(eventHandler);
     }
 
+    public async saveTextIndex(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        return this.textIndex.writeToFile(dirPath, baseFileName);
+    }
+
+    public async loadTextIndex(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const index = await RestaurantStructuredRagIndex.readFromFile(
+            dirPath,
+            baseFileName,
+        );
+        if (index) {
+            this.textIndex = index;
+        }
+    }
+
     private collectRestaurants(
         matchedOrdinals: kp.ScoredMessageOrdinal[],
         matches?: Restaurant[],
@@ -523,6 +757,7 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         }
         return true;
     }
+
     private isGoodFacets(facets: RestaurantFacets): boolean {
         return (
             //facets.city !== undefined &&
