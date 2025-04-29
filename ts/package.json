@@ -39,6 +39,8 @@
     "shell": "pnpm -C packages/shell run dev",
     "shell:package:linux": "pnpm -C packages/shell run package:linux",
     "shell:package:mac": "pnpm -C packages/shell run package:mac",
+    "shell:package:mac:x64": "pnpm -C packages/shell run package:mac:x64",
+    "shell:package:mac:arm64": "pnpm -C packages/shell run package:mac:arm64",
     "shell:package:win": "pnpm -C packages/shell run package:win",
     "shell:start:linux": "pnpm -C packages/shell run start:linux",
     "shell:start:mac": "pnpm -C packages/shell run start:mac",
