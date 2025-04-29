@@ -59,6 +59,75 @@ export async function createKnowproDataFrameCommands(
         }
     }
 
+    function saveDataFrameDef(): CommandMetadata {
+        return {
+            description: "Save data frame",
+            args: {
+                filePath: argDestFile(),
+            },
+        };
+    }
+    commands.kpDataFrameSave.metadata = saveDataFrameDef();
+    async function saveDataFrame(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs = parseNamedArguments(args, saveDataFrameDef());
+        if (!restaurantIndex) {
+            printer.writeLine("No restaurant index");
+            return;
+        }
+
+        printer.writeLine("Saving index");
+        printer.writeLine(namedArgs.filePath);
+        const dirName = path.dirname(namedArgs.filePath);
+        await ensureDir(dirName);
+
+        const clock = new StopWatch();
+        clock.start();
+        await restaurantIndex.textIndex.writeToFile(
+            dirName,
+            getFileName(namedArgs.filePath),
+        );
+        clock.stop();
+        printer.writeTiming(chalk.gray, clock, "Write to file");
+    }
+
+    function loadDataFrameDef(): CommandMetadata {
+        return {
+            description: "Load data frame",
+            options: {
+                filePath: argSourceFile(),
+                name: arg("Data frame name"),
+            },
+        };
+    }
+    commands.kpDataFrameLoad.metadata = loadDataFrameDef();
+    async function loadDataFrame(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, loadDataFrameDef());
+        let dfFilePath = namedArgs.filePath;
+        dfFilePath ??= namedArgs.name
+            ? dfNameToFilePath(namedArgs.name)
+            : undefined;
+        if (!dfFilePath) {
+            printer.writeError("No filepath or name provided");
+            return;
+        }
+        await ensureIndex(false);
+        const clock = new StopWatch();
+        clock.start();
+        await restaurantIndex!.loadTextIndex(
+            path.dirname(dfFilePath),
+            getFileName(dfFilePath),
+        );
+        clock.stop();
+        printer.writeTiming(chalk.gray, clock, "Read file");
+    }
+
+    function listDataFrameDef(): CommandMetadata {
+        return {
+            description: "List records from the dataframe",
+        };
+    }
+
+    commands.kpDataFrameList.metadata = listDataFrameDef();
     async function listFrames(args: string[]) {
         if (restaurantIndex) {
             for (const r of restaurantIndex.restaurantFacets) {
