@@ -8,11 +8,11 @@ all: venv format check test build
 
 .PHONY: format
 format: venv
-	venv/bin/black typeagent tests
+	venv/bin/black typeagent test
 
 .PHONY: check
 check: venv
-	venv/bin/pyright --pythonpath venv/bin/python typeagent
+	venv/bin/pyright --pythonpath venv/bin/python typeagent test
 
 .PHONY: test
 test: venv
@@ -44,7 +44,7 @@ help:
 	@echo "make all    # venv, format, check, test, build"
 	@echo "make format # Run black"
 	@echo "make check  # Run pyright"
-	@echo "make test   # Run pytest (tests are in tests/)"
+	@echo "make test   # Run pytest (tests are in test/)"
 	@echo "make build  # Build the wheel (under dist/)"
 	@echo "make venv   # Create venv/"
 	@echo "make clean  # Remove build/, dist/, venv/, *.egg-info/"
