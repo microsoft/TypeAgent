@@ -114,7 +114,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showMessagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -255,7 +255,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showImagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -807,10 +807,10 @@ export async function createKnowproCommands(
         let originalMessages = context.podcast.messages;
         try {
             if (maxMessages < messageCount) {
-                context.podcast.messages = context.podcast.messages.slice(
-                    0,
-                    maxMessages,
-                );
+                context.podcast.messages =
+                    new kp.MessageCollection<cm.PodcastMessage>(
+                        context.podcast.messages.getSlice(0, maxMessages),
+                    );
             }
             context.printer.writeLine(`Building Index`);
             let progress = new ProgressBar(context.printer, maxMessages);

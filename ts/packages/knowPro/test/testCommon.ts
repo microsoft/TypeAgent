@@ -96,7 +96,7 @@ export class TestConversation implements IConversation<TestMessage> {
     constructor(
         public nameTag: string,
         public tags: string[] = [],
-        messages?: TestMessage[],
+        messages: TestMessage[] = [],
     ) {
         this.messages = new MessageCollection<TestMessage>(messages);
     }

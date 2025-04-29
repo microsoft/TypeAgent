@@ -22,7 +22,7 @@ export function addToConversation(
     for (let i = 0; i < messages.length; i++) {
         const messageOrdinal: kp.MessageOrdinal = conversation.messages.length;
         const chunkOrdinal = 0;
-        conversation.messages.push(messages[i]);
+        conversation.messages.append(messages[i]);
         const knowledge = knowledgeResponses[i];
         if (knowledge) {
             kp.addKnowledgeToSemanticRefIndex(
