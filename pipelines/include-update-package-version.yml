@@ -16,4 +16,4 @@ steps:
       echo "Updated package.json to version $new_version"
       cat package.json
     displayName: "Update Package Version"
-    workingDirectory: $(packageFolder)
+    workingDirectory: ${{ parameters.packageFolder }}
