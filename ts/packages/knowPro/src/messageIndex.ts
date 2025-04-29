@@ -175,7 +175,10 @@ export async function addToMessageIndex(
         const messageIndex = conversation.secondaryIndexes.messageIndex;
         const messages =
             startAtOrdinal > 0
-                ? conversation.messages.slice(startAtOrdinal)
+                ? conversation.messages.getSlice(
+                      startAtOrdinal,
+                      conversation.messages.length,
+                  )
                 : conversation.messages;
         if (messages.length > 0) {
             return messageIndex.addMessages(messages, eventHandler);
