@@ -32,4 +32,4 @@ export * from "./answerContextSchema.js";
 export * from "./answerContext.js";
 
 export * from "./storage.js";
-export * as hybrid from "./hybrid/index.js";
+export * as dataFrame from "./dataFrame/index.js";

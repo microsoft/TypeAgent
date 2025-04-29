@@ -9,9 +9,9 @@ import {
 import * as querySchema from "../searchQuerySchema.js";
 import { DataFrameCollection } from "./dataFrame.js";
 import {
-    IConversationHybrid,
+    IConversationWithDataFrame,
     searchConversationWithScope,
-} from "./hybridConversation.js";
+} from "./dataFrameConversation.js";
 import { getDataFrameAndColumnName } from "./dataFrameQuery.js";
 import * as search from "../search.js";
 import { loadSchemaFiles } from "typeagent";
@@ -26,7 +26,7 @@ import { createPropertySearchTerm } from "../searchLib.js";
  */
 
 export async function searchConversationMessages(
-    conversation: IConversationHybrid,
+    conversation: IConversationWithDataFrame,
     searchExpr: querySchema.SearchExpr,
     options?: search.SearchOptions | undefined,
 ): Promise<ScoredMessageOrdinal[][]> {
@@ -46,7 +46,7 @@ export async function searchConversationMessages(
 }
 
 async function searchConversationWithFilter(
-    conversation: IConversationHybrid,
+    conversation: IConversationWithDataFrame,
     searchFilter: querySchema.SearchFilter,
     options?: search.SearchOptions | undefined,
     rawQuery?: string,
@@ -87,15 +87,15 @@ export function createSearchQueryTranslator(
 }
 
 function compileHybridSearchFilter(
-    hybridConversation: IConversationHybrid,
+    dfConversation: IConversationWithDataFrame,
     searchFilter: querySchema.SearchFilter,
 ): SearchSelectExpr {
     const dfTerms = extractDataFrameFacetTermsFromFilter(
-        hybridConversation.dataFrames,
+        dfConversation.dataFrames,
         searchFilter,
     );
     const selectExpr = compileSearchFilter(
-        hybridConversation.conversation,
+        dfConversation.conversation,
         searchFilter,
     );
     selectExpr.searchTermGroup.terms.push(...facetTermsToSearchTerms(dfTerms));

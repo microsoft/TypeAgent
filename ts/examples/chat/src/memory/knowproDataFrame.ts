@@ -327,7 +327,7 @@ export async function createKnowproDataFrameCommands(
                 kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
                 kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
             );
-            const hybridMatches = await kp.hybrid.searchConversationWithJoin(
+            const hybridMatches = await kp.dataFrame.searchConversationWithJoin(
                 restaurantIndex,
                 termGroup,
             );
@@ -406,12 +406,12 @@ export interface Restaurant extends Thing {
     hasMenu?: Menu[];
 }
 
-export interface Geo extends Thing, kp.hybrid.DataFrameRecord {
+export interface Geo extends Thing, kp.dataFrame.DataFrameRecord {
     latitude?: string | undefined;
     longitude?: string | undefined;
 }
 
-export interface Address extends Thing, kp.hybrid.DataFrameRecord {
+export interface Address extends Thing, kp.dataFrame.DataFrameRecord {
     streetAddress?: string;
     postalCode?: string;
     addressLocality?: string;
@@ -445,7 +445,9 @@ interface Menu extends Thing {
     hasMenuSection: MenuSection[];
 }
 
-export interface RestaurantFacets extends kp.hybrid.DataFrameRecord, Location {
+export interface RestaurantFacets
+    extends kp.dataFrame.DataFrameRecord,
+        Location {
     rating?: number | undefined;
 }
 
@@ -623,7 +625,9 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
 export interface RestaurantData
     extends kp.IConversationDataWithIndexes<RestaurantInfo> {}
 
-export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
+export class RestaurantIndex
+    implements kp.dataFrame.IConversationWithDataFrame
+{
     /**
      * All raw textual data (descriptions, etc) is indexed using structured RAG
      * Knowledge and other salient information is auto-extracted from the
@@ -635,19 +639,19 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
      * strongly typed data frames ("tables") with spatial and other indexes.
      * These can be used as needed during query processing
      */
-    public dataFrames: kp.hybrid.DataFrameCollection;
-    public locations: kp.hybrid.IDataFrame;
-    public restaurantFacets: kp.hybrid.IDataFrame;
+    public dataFrames: kp.dataFrame.DataFrameCollection;
+    public locations: kp.dataFrame.IDataFrame;
+    public restaurantFacets: kp.dataFrame.IDataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor(public restaurantDb: RestaurantDb) {
         this.textIndex = new RestaurantStructuredRagIndex();
         /*
-        this.locations = new kp.hybrid.DataFrame("geo", [
+        this.locations = new kp.dataFrame.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
-        this.restaurantFacets = new kp.hybrid.DataFrame("restaurant", [
+        this.restaurantFacets = new kp.dataFrame.DataFrame("restaurant", [
             ["rating", { type: "number" }],
             ["city", { type: "string" }],
             ["country", { type: "string" }],
@@ -655,12 +659,12 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         */
         this.locations = restaurantDb.geo;
         this.restaurantFacets = restaurantDb.restaurants;
-        this.dataFrames = new Map<string, kp.hybrid.IDataFrame>([
+        this.dataFrames = new Map<string, kp.dataFrame.IDataFrame>([
             [this.locations.name, this.locations],
             [this.restaurantFacets.name, this.restaurantFacets],
         ]);
 
-        this.queryTranslator = kp.hybrid.lang.createSearchQueryTranslator(
+        this.queryTranslator = kp.dataFrame.lang.createSearchQueryTranslator(
             this.dataFrames,
             openai.createChatModelDefault("knowpro_test"),
         );
@@ -679,7 +683,7 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         if (facets === undefined || !this.isGoodFacets(facets)) {
             return undefined;
         }
-        const sourceRef: kp.hybrid.RowSourceRef = {
+        const sourceRef: kp.dataFrame.RowSourceRef = {
             range: this.textIndex.add(restaurant),
         };
         restaurant.facets = facets;
@@ -696,7 +700,9 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         return facets;
     }
 
-    public getDescriptionsFromRows(rows: kp.hybrid.DataFrameRow[]): string[] {
+    public getDescriptionsFromRows(
+        rows: kp.dataFrame.DataFrameRow[],
+    ): string[] {
         const descriptions: string[] = [];
         for (const row of rows) {
             if (row.record) {
@@ -735,7 +741,7 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         }
         const matchedRestaurants: Restaurant[][] = [];
         for (const searchExpr of searchQuery.searchExpressions) {
-            const results = await kp.hybrid.lang.searchConversationMessages(
+            const results = await kp.dataFrame.lang.searchConversationMessages(
                 this,
                 searchExpr,
                 undefined,
