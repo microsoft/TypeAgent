@@ -21,7 +21,8 @@ export type GetLocationInStore = {
 export type BuyProduct = {
     actionName: "buyProduct";
     parameters: {
-        productQuery: string;
+        // the original user request
+        userRequest: string;
     };
 };
 
