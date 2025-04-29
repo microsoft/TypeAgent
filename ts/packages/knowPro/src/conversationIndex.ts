@@ -292,8 +292,9 @@ async function addBatchToSemanticRefIndex(
     let indexingResult: TextIndexingResult = {};
 
     const textBatch = batch.map((tl) => {
-        const text =
-            messages[tl.messageOrdinal].textChunks[tl.chunkOrdinal ?? 0];
+        const text = messages.get(tl.messageOrdinal).textChunks[
+            tl.chunkOrdinal ?? 0
+        ];
         return text.trim();
     });
     const knowledgeResults = await extractKnowledgeFromTextBatch(
@@ -607,7 +608,7 @@ export function addMessageKnowledgeToSemanticRefIndex(
         messageOrdinal < messages.length;
         messageOrdinal++
     ) {
-        const msg = messages[messageOrdinal];
+        const msg = messages.get(messageOrdinal);
         const chunkOrdinal = 0;
         let knowledge = msg.getKnowledge();
         if (knowledge !== undefined) {

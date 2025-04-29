@@ -24,7 +24,7 @@ describe("message", () => {
         const flatBatch = batches.flat();
         expect(flatBatch).toHaveLength(messages.length);
         for (let i = 0; i < flatBatch.length; ++i) {
-            expect(flatBatch[i].messageOrdinal === messages[i].ordinal);
+            expect(flatBatch[i].messageOrdinal === messages.get(i).ordinal);
         }
     });
     test("messageBatch", () => {

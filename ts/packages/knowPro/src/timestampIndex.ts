@@ -5,7 +5,6 @@ import { collections, dateTime } from "typeagent";
 import {
     DateRange,
     IConversation,
-    IMessage,
     ListIndexingResult,
     MessageOrdinal,
 } from "./interfaces.js";
@@ -120,15 +119,16 @@ export function addToTimestampIndex(
         conversation.secondaryIndexes.timestampIndex ??=
             new TimestampToTextRangeIndex();
 
-        const messages: IMessage[] = conversation.messages;
+        const messages = conversation.messages;
+        const messageCount = messages.length;
         const timestampIndex = conversation.secondaryIndexes.timestampIndex;
         const messageTimestamps: [MessageOrdinal, string][] = [];
         for (
             let messageOrdinal = startAtOrdinal;
-            messageOrdinal < messages.length;
+            messageOrdinal < messageCount;
             ++messageOrdinal
         ) {
-            const timestamp = messages[messageOrdinal].timestamp;
+            const timestamp = messages.get(messageOrdinal).timestamp;
             if (timestamp) {
                 messageTimestamps.push([messageOrdinal, timestamp]);
             }

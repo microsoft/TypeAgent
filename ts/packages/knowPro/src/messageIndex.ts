@@ -18,6 +18,7 @@ import {
     ScoredTextLocation,
     TextToTextLocationIndex,
 } from "./textLocationIndex.js";
+import { getMessageBatches } from "./message.js";
 
 export type MessageTextIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
@@ -159,8 +160,15 @@ export async function buildMessageIndex(
     conversation: IConversation,
     settings: MessageTextIndexSettings,
     eventHandler?: IndexingEventHandlers,
+    batchSize: number = 8,
 ): Promise<ListIndexingResult> {
-    return addToMessageIndex(conversation, settings, 0, eventHandler);
+    return addToMessageIndex(
+        conversation,
+        settings,
+        0,
+        eventHandler,
+        batchSize,
+    );
 }
 
 export async function addToMessageIndex(
@@ -168,35 +176,33 @@ export async function addToMessageIndex(
     settings: MessageTextIndexSettings,
     startAtOrdinal: MessageOrdinal,
     eventHandler?: IndexingEventHandlers,
+    batchSize: number = 8,
 ): Promise<ListIndexingResult> {
-    let numberCompleted = 0;
+    let result: ListIndexingResult = {
+        numberCompleted: 0,
+    };
     if (conversation.secondaryIndexes) {
         conversation.secondaryIndexes.messageIndex ??= new MessageTextIndex(
             settings,
         );
-        const batchSize = settings.batchSize ?? 8;
         const messageIndex = conversation.secondaryIndexes.messageIndex;
-        while (true) {
-            const messages = conversation.messages.getSlice(
-                startAtOrdinal,
-                startAtOrdinal + batchSize,
-            );
-            if (messages.length === 0) {
-                break;
-            }
-            const result = await messageIndex.addMessages(
-                messages,
+        for (const messageBatch of getMessageBatches(
+            conversation,
+            startAtOrdinal,
+            batchSize,
+        )) {
+            const batchResult = await messageIndex.addMessages(
+                messageBatch.value,
                 eventHandler,
             );
-            numberCompleted += result.numberCompleted;
+            result.numberCompleted += batchResult.numberCompleted;
+            result.error = batchResult.error;
             if (result.error) {
                 break;
             }
         }
     }
-    return {
-        numberCompleted,
-    };
+    return result;
 }
 
 export function isMessageTextEmbeddingIndex(
