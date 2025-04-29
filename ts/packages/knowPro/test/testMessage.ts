@@ -4,6 +4,7 @@
 import { readTestJsonFile } from "test-lib";
 import { IMessage, DeletionInfo } from "../src/interfaces.js";
 import { createTimestamp } from "./testCommon.js";
+import { MessageCollection } from "../src/storage.js";
 
 export class TestMessage implements IMessage {
     public textChunks: string[];
@@ -31,7 +32,7 @@ export class TestMessage implements IMessage {
     }
 }
 
-export function createTestMessages(
+export function createTestMessagesArray(
     messageCount: number,
     chunkCount: number = 1,
 ): TestMessage[] {
@@ -58,6 +59,14 @@ export function createTestMessages(
         }
     }
     return messages;
+}
+
+export function createTestMessages(
+    messageCount: number,
+    chunkCount: number = 1,
+): MessageCollection<TestMessage> {
+    const messages = createTestMessagesArray(messageCount, chunkCount);
+    return new MessageCollection(messages);
 }
 
 export type TestTurn = {

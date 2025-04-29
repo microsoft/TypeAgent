@@ -500,6 +500,7 @@ export class RestaurantInfo implements kp.IMessage {
  * Maintains all textual information for the restaurant + any knowledge extracted from it
  */
 export class RestaurantStructuredRagIndex implements kp.IConversation {
+    public messages: kp.MessageCollection<RestaurantInfo>;
     public settings: kp.ConversationSettings;
     public nameTag: string = "description";
     public tags: string[] = [];
@@ -508,9 +509,10 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
 
     constructor(
-        public messages: RestaurantInfo[] = [],
+        messages: RestaurantInfo[] = [],
         settings?: kp.ConversationSettings,
     ) {
+        this.messages = new kp.MessageCollection<RestaurantInfo>(messages);
         settings ??= kp.createConversationSettings();
         this.settings = settings;
         this.semanticRefIndex = new kp.ConversationIndex();
@@ -521,7 +523,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
 
     public add(restaurant: Restaurant): kp.TextRange {
         const messageOrdinal = this.messages.length;
-        this.messages.push(new RestaurantInfo(restaurant));
+        this.messages.append(new RestaurantInfo(restaurant));
         return {
             start: { messageOrdinal, chunkOrdinal: 0 },
         };
@@ -530,7 +532,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public getDescriptionFromLocation(
         textLocation: kp.TextLocation,
     ): RestaurantInfo {
-        return this.messages[textLocation.messageOrdinal];
+        return this.messages.get(textLocation.messageOrdinal);
     }
 
     public async buildIndex(
@@ -542,7 +544,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public async serialize(): Promise<RestaurantData> {
         const data: RestaurantData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -555,7 +557,9 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
 
     public async deserialize(data: RestaurantData): Promise<void> {
         this.nameTag = data.nameTag;
-        this.messages = this.deserializeMessages(data);
+        this.messages = new kp.MessageCollection<RestaurantInfo>(
+            this.deserializeMessages(data),
+        );
         this.semanticRefs = data.semanticRefs;
         this.tags = data.tags;
         if (data.semanticIndexData) {
@@ -780,8 +784,9 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
     ): Restaurant[] {
         matches ??= [];
         for (const match of matchedOrdinals) {
-            const restaurant =
-                this.textIndex.messages[match.messageOrdinal].restaurant;
+            const restaurant = this.textIndex.messages.get(
+                match.messageOrdinal,
+            ).restaurant;
             matches.push(restaurant);
         }
         return matches;

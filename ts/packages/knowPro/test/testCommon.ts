@@ -47,6 +47,7 @@ import { dateTime } from "typeagent";
 import { TestMessage } from "./testMessage.js";
 import assert from "assert";
 import { verifyMessageOrdinals } from "./verify.js";
+import { MessageCollection } from "../src/storage.js";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
@@ -87,6 +88,7 @@ export function createOnlineConversationSettings(
 }
 
 export class TestConversation implements IConversation<TestMessage> {
+    public messages: MessageCollection<TestMessage>;
     public semanticRefs: SemanticRef[] | undefined;
     public semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     public secondaryIndexes?: IConversationSecondaryIndexes | undefined;
@@ -94,8 +96,10 @@ export class TestConversation implements IConversation<TestMessage> {
     constructor(
         public nameTag: string,
         public tags: string[] = [],
-        public messages: TestMessage[] = [],
-    ) {}
+        messages: TestMessage[] = [],
+    ) {
+        this.messages = new MessageCollection<TestMessage>(messages);
+    }
 }
 
 export function emptyConversation() {

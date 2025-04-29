@@ -21,6 +21,7 @@ import {
     buildTransientSecondaryIndexes,
     readConversationDataFromBuffer,
     IMessageMetadata,
+    MessageCollection,
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -366,15 +367,17 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
 }
 
 export class ImageCollection implements IConversation {
+    public messages: MessageCollection<Image>;
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
     constructor(
         public nameTag: string = "",
-        public messages: Image[] = [],
+        messages: Image[] = [],
         public tags: string[] = [],
         public semanticRefs: SemanticRef[] = [],
     ) {
+        this.messages = new MessageCollection<Image>(messages);
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
@@ -426,7 +429,7 @@ export class ImageCollection implements IConversation {
     public async serialize(): Promise<ImageCollectionData> {
         const conversationData: ImageCollectionData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -447,7 +450,7 @@ export class ImageCollection implements IConversation {
             image.timestamp = m.timestamp;
             return image;
         });
-        this.messages = messages;
+        this.messages = new MessageCollection<Image>(messages);
         this.semanticRefs = data.semanticRefs;
         this.tags = data.tags;
         if (data.semanticIndexData) {
@@ -574,7 +577,7 @@ export async function importImages(
     } else {
         const img = await indexImage(imagePath, cachePath, chatModel);
         if (img !== undefined) {
-            imgcol.messages.push(img);
+            imgcol.messages.append(img);
         }
     }
 
@@ -626,7 +629,7 @@ async function indexImages(
             const fullFilePath: string = path.join(sourcePath, fileNames[i]);
 
             if (isDirectoryPath(fullFilePath)) {
-                imageCollection.messages.push(
+                imageCollection.messages.append(
                     ...(await indexImages(
                         fullFilePath,
                         path.join(cachePath, fileNames[i]),
@@ -645,7 +648,7 @@ async function indexImages(
                 );
 
                 if (img !== undefined) {
-                    imageCollection.messages.push(img);
+                    imageCollection.messages.append(img);
                 }
 
                 if (callback && img) {
@@ -662,7 +665,7 @@ async function indexImages(
         debug(error);
     }
 
-    return imageCollection.messages;
+    return imageCollection.messages.getAll();
 }
 
 /**

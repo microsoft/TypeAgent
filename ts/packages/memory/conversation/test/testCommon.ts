@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createConversationSettings, createKnowledgeExtractor } from "knowpro";
+import {
+    createConversationSettings,
+    createKnowledgeExtractor,
+    MessageCollection,
+} from "knowpro";
 import {
     createTestChatModel,
     createTestEmbeddingModel,
@@ -10,7 +14,7 @@ import {
     NullEmbeddingModel,
 } from "test-lib";
 import { importPodcast } from "../src/importPodcast.js";
-import { Podcast } from "../src/podcast.js";
+import { Podcast, PodcastMessage } from "../src/podcast.js";
 import { ensureDir, removeDir } from "typeagent";
 
 export type TestTranscriptInfo = {
@@ -91,7 +95,9 @@ export async function loadTestPodcast(
             : createOfflineConversationSettings(),
     );
     if (maxMessages !== undefined && maxMessages > 0) {
-        podcast.messages = podcast.messages.slice(0, maxMessages);
+        podcast.messages = new MessageCollection<PodcastMessage>(
+            podcast.messages.getSlice(0, maxMessages),
+        );
     }
     return podcast;
 }

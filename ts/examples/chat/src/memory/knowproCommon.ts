@@ -22,7 +22,7 @@ export function addToConversation(
     for (let i = 0; i < messages.length; i++) {
         const messageOrdinal: kp.MessageOrdinal = conversation.messages.length;
         const chunkOrdinal = 0;
-        conversation.messages.push(messages[i]);
+        conversation.messages.append(messages[i]);
         const knowledge = knowledgeResponses[i];
         if (knowledge) {
             kp.addKnowledgeToSemanticRefIndex(
@@ -184,10 +184,8 @@ export function createIndexingEventHandler(
         },
         onTextIndexed(textAndLocations, batch, batchStartAt) {
             if (!startedMessages) {
-                progress.reset(textAndLocations.length);
-                printer.writeLine(
-                    `Indexing ${textAndLocations.length} messages`,
-                );
+                progress.reset(maxMessages);
+                printer.writeLine(`Indexing ${maxMessages} messages`);
                 startedMessages = true;
             }
             progress.advance(batch.length);
