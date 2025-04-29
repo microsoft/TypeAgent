@@ -12,7 +12,7 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { KnowProPrinter } from "./knowproPrinter.js";
+import { KnowProContext } from "./knowproMemory.js";
 import { Result, success } from "typechat";
 import { ensureDir, getFileName, readAllText } from "typeagent";
 import * as kp from "knowpro";
@@ -25,7 +25,7 @@ import path from "path";
 
 export async function createKnowproDataFrameCommands(
     commands: Record<string, CommandHandler>,
-    printer: KnowProPrinter,
+    context: KnowProContext,
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
     commands.kpDataFrameImport = importDataFrame;
@@ -44,6 +44,7 @@ export async function createKnowproDataFrameCommands(
     let restaurantIndex: RestaurantIndex | undefined;
 
     await ensureDir(basePath);
+    const printer = context.printer;
 
     function importDataFrameDef(): CommandMetadata {
         return {
@@ -108,7 +109,7 @@ export async function createKnowproDataFrameCommands(
 
     function saveDataFrameDef(): CommandMetadata {
         return {
-            description: "Save Podcast",
+            description: "Save data frame",
             args: {
                 filePath: argDestFile(),
             },
@@ -168,6 +169,13 @@ export async function createKnowproDataFrameCommands(
         printer.writeTiming(chalk.gray, clock, "Read file");
     }
 
+    function listDataFrameDef(): CommandMetadata {
+        return {
+            description: "List records from the dataframe",
+        };
+    }
+
+    commands.kpDataFrameList.metadata = listDataFrameDef();
     async function listFrames(args: string[]) {
         if (restaurantIndex) {
             for (const r of restaurantIndex.restaurantFacets) {
@@ -242,6 +250,9 @@ export async function createKnowproDataFrameCommands(
                 printer.writeError(`Skipped ${restaurant.name}`);
             }
         }
+
+        context.conversation = restaurantCollection.conversation;
+        context.printer.conversation = restaurantCollection.conversation;
     }
 
     async function buildIndex(restaurantCollection: RestaurantIndex) {
@@ -304,6 +315,7 @@ export async function createKnowproDataFrameCommands(
             }
         }
     }
+        
     async function testHybridQuery() {
         if (restaurantIndex) {
             printer.writeInColor(
@@ -402,6 +414,7 @@ export interface Address extends Thing, kp.hybrid.DataFrameRecord {
     streetAddress?: string;
     postalCode?: string;
     addressLocality?: string;
+    addressRegion?: string;
     addressCountry?: string;
 }
 
@@ -411,6 +424,7 @@ export interface AggregateRating extends Thing {
 
 export interface Location {
     city?: string | undefined;
+    region?: string | undefined;
     country?: string | undefined;
 }
 
@@ -455,9 +469,10 @@ export class RestaurantInfo implements kp.IMessage {
             if (restaurant.description) {
                 text += `\n\n${restaurant.description}`;
             }
-        if (restaurant.openingHours) {
-            text += `Open Hours:  \n\n${restaurant.openingHours}`;
-        }
+            if (restaurant.openingHours) {
+                text += `Open Hours:  \n\n${restaurant.openingHours}`;
+            }
+
             this.textChunks.push(text);
         }
     }
@@ -817,8 +832,9 @@ function parseRestaurantFacets(
 
 function parseAddressFacets(address: Address, facets: RestaurantFacets) {
     if (address.addressLocality) {
-        facets.city = address.addressLocality;
-        facets.country = address.addressCountry;
+        facets.city = address.addressLocality.toLowerCase();
+        facets.region = address.addressRegion?.toLowerCase();
+        facets.country = address.addressCountry?.toLowerCase();
     }
 }
 

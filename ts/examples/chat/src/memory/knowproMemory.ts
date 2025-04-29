@@ -71,7 +71,7 @@ export async function createKnowproCommands(
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproDataFrameCommands(commands, context.printer);
+    await createKnowproDataFrameCommands(commands, context);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
@@ -954,7 +954,7 @@ export async function createKnowproCommands(
             knowledgeType: namedArgs.ktype,
         };
         const conv: kp.IConversation | undefined =
-            context.podcast ?? context.images;
+            context.podcast ?? context.images ?? context.conversation;
         const dateRange = kp.getTimeRangeForConversation(conv!);
         if (dateRange) {
             let startDate: Date | undefined;
