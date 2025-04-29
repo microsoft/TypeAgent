@@ -87,7 +87,6 @@ jobs:
         displayName: "Package - shell"
         workingDirectory: $(workingDirectory)
 
-      - publish: dist
+      - publish: $(shell_folder)/dist
         displayName: "Publish"
         artifact: "shell"
-        workingDirectory: $(shell_folder)
