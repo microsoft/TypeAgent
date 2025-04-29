@@ -19,7 +19,7 @@ steps:
   # The path to the pnpm store. The contents here will be cached and restored when using pnpm in a pipeline.
   - bash: |
       if [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
-        echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]${{ replace(Pipeline.Workspace, '\', '/') }}/.pnpm-store"
+        echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]${{ replace(variables['Pipeline.Workspace'], '\', '/') }}/.pnpm-store"
       else
         echo "##vso[task.setvariable variable=pnpmStorePath;isOutput=true]$(Pipeline.Workspace)/.pnpm-store"
       fi
