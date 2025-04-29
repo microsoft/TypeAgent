@@ -17,8 +17,8 @@ variables:
   nodeVersion: "22"
 
 jobs:
-  - job: build_ts
-    displayName: "Build TypeScript Project"
+  - job: build_package_shell
+    displayName: "TypeAgent Shell"
     strategy:
       matrix:
         windows:
