@@ -62,6 +62,7 @@ export function createAnswerTranslator(
 }
 
 export interface IAnswerGenerator {
+    readonly settings: AnswerGeneratorSettings;
     generateAnswer(
         question: string,
         context: contextSchema.AnswerContext | string,
@@ -74,30 +75,32 @@ export interface IAnswerGenerator {
 
 export async function generateAnswer(
     conversation: IConversation,
-    settings: AnswerGeneratorSettings,
+    generator: IAnswerGenerator,
     question: string,
     searchResult: ConversationSearchResult,
     progress?: asyncArray.ProcessProgress<
         contextSchema.AnswerContext,
-        Result<answerSchema.AnswerResponse> | undefined
+        Result<answerSchema.AnswerResponse>
     >,
-): Promise<Result<answerSchema.AnswerResponse> | undefined> {
+): Promise<Result<answerSchema.AnswerResponse>> {
     const context = answerContextFromSearchResult(conversation, searchResult);
     const contextContent = answerContextToString(context);
-    const generator = new AnswerGenerator(settings);
-    if (contextContent.length <= settings.maxCharsInContext) {
+    if (contextContent.length <= generator.settings.maxCharsInContext) {
         // Context is small enough
         return generator.generateAnswer(question, contextContent);
     }
     //
     // Use chunks
     //
-    const chunks = splitContextIntoChunks(context, settings.maxCharsInContext);
+    const chunks = splitContextIntoChunks(
+        context,
+        generator.settings.maxCharsInContext,
+    );
     const chunkResponses = await generateAnswerInChunks(
         generator,
         question,
         chunks,
-        settings.concurrency,
+        generator.settings.concurrency,
         true,
         progress,
     );
@@ -112,7 +115,8 @@ export async function generateAnswer(
 }
 
 export type AnswerGeneratorSettings = {
-    languageModel: ChatModel;
+    answerModel: ChatModel;
+    rewriteModel: ChatModel; // The rewrite model must not produce JSON output
     maxCharsInContext: number;
     concurrency: number;
 };
@@ -126,7 +130,7 @@ export class AnswerGenerator implements IAnswerGenerator {
     constructor(settings?: AnswerGeneratorSettings) {
         this.settings = settings ?? createAnswerGeneratorSettings();
         this.answerTranslator = createAnswerTranslator(
-            this.settings.languageModel,
+            this.settings.answerModel,
         );
         this.contextSchema = loadSchema(
             ["dateTimeSchema.ts", "answerContextSchema.ts"],
@@ -185,7 +189,7 @@ export class AnswerGenerator implements IAnswerGenerator {
                     this.settings.maxCharsInContext,
                 );
                 const rewrittenAnswer = await rewriteText(
-                    this.settings.languageModel,
+                    this.settings.rewriteModel,
                     answer,
                     question,
                 );
@@ -211,8 +215,9 @@ export function createAnswerGeneratorSettings(
     model?: ChatModel,
 ): AnswerGeneratorSettings {
     return {
-        languageModel:
-            model ?? openai.createChatModelDefault("answerGenerator"),
+        answerModel:
+            model ?? openai.createJsonChatModel(undefined, ["answerGenerator"]),
+        rewriteModel: openai.createChatModel(),
         maxCharsInContext: 4096 * 4, // 4096 tokens * 4 chars per token,
         concurrency: 2,
     };
@@ -346,7 +351,7 @@ export async function generateAnswerInChunks(
     fastStop: boolean = true,
     progress?: asyncArray.ProcessProgress<
         contextSchema.AnswerContext,
-        Result<answerSchema.AnswerResponse> | undefined
+        Result<answerSchema.AnswerResponse>
     >,
 ): Promise<Result<answerSchema.AnswerResponse[]>> {
     if (chunks.length === 0) {
@@ -413,7 +418,7 @@ async function runGenerateAnswers(
     concurrency: number,
     progress?: asyncArray.ProcessProgress<
         contextSchema.AnswerContext,
-        Result<answerSchema.AnswerResponse> | undefined
+        Result<answerSchema.AnswerResponse>
     >,
 ): Promise<Result<answerSchema.AnswerResponse[]>> {
     if (chunks.length === 0) {

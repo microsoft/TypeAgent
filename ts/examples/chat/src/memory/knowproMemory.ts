@@ -633,24 +633,28 @@ export async function createKnowproCommands(
             context.printer.writeError(searchResults.message);
             return;
         }
+        if (namedArgs.debug) {
+            context.printer.writeInColor(chalk.gray, () => {
+                context.printer.writeLine();
+                context.printer.writeNaturalLanguageContext(debugContext);
+            });
+        }
+
         for (const searchResult of searchResults.data) {
-            const answerContext = kp.answerContextFromSearchResult(
-                context.conversation!,
-                searchResult,
-            );
             if (!namedArgs.messages) {
-                answerContext.messages = undefined;
+                searchResult.messageMatches = [];
             }
-            if (namedArgs.debug) {
-                context.printer.writeInColor(chalk.gray, () => {
-                    context.printer.writeLine();
-                    context.printer.writeNaturalLanguageContext(debugContext);
-                    context.printer.writeAnswerContext(answerContext);
-                });
-            }
-            const answerResult = await context.answerGenerator.generateAnswer(
+            const answerResult = await kp.generateAnswer(
+                context.conversation!,
+                context.answerGenerator,
                 searchText,
-                answerContext,
+                searchResult,
+                (chunk, _, result) => {
+                    context.printer.writeInColor(chalk.gray, () => {
+                        context.printer.writeLine();
+                        context.printer.writeJsonInColor(chalk.gray, chunk);
+                    });
+                },
             );
             context.printer.writeLine();
             if (answerResult.success) {
