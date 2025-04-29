@@ -23,6 +23,7 @@ import {
     ConversationSecondaryIndexes,
     IConversationDataWithIndexes,
     IMessageMetadata,
+    MessageCollection,
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -112,6 +113,7 @@ export class PodcastMessage implements IMessage {
 }
 
 export class Podcast implements IConversation<PodcastMessage> {
+    public messages: MessageCollection<PodcastMessage>;
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
@@ -122,10 +124,11 @@ export class Podcast implements IConversation<PodcastMessage> {
 
     constructor(
         public nameTag: string = "",
-        public messages: PodcastMessage[] = [],
+        messages: PodcastMessage[] = [],
         public tags: string[] = [],
         settings?: ConversationSettings,
     ) {
+        this.messages = new MessageCollection<PodcastMessage>(messages);
         this.semanticRefs = [];
         if (!settings) {
             settings = this.createSettings();
@@ -188,7 +191,7 @@ export class Podcast implements IConversation<PodcastMessage> {
     public async serialize(): Promise<PodcastData> {
         const data: PodcastData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -212,7 +215,7 @@ export class Podcast implements IConversation<PodcastMessage> {
                 m.timestamp,
             );
         });
-        this.messages = podcastMessages;
+        this.messages = new MessageCollection<PodcastMessage>(podcastMessages);
         this.semanticRefs = podcastData.semanticRefs;
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {

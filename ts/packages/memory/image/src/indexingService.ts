@@ -183,7 +183,7 @@ if (
             buildIndexPromise = images.buildIndex();
 
             buildIndexPromise.then(async (value: IndexingResults) => {
-                debug(`Found ${images!.messages.entries} images`);
+                debug(`Found ${images!.messages.length} images`);
 
                 await images?.writeToFile(index!.path, "index");
 

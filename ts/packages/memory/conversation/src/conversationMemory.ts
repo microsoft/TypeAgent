@@ -161,6 +161,7 @@ export type ConversationMemorySettings = {
 export class ConversationMemory
     implements kp.IConversation<ConversationMessage>
 {
+    public messages: kp.MessageCollection<ConversationMessage>;
     public settings: ConversationMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
@@ -172,10 +173,11 @@ export class ConversationMemory
 
     constructor(
         public nameTag: string = "",
-        public messages: ConversationMessage[] = [],
+        messages: ConversationMessage[] = [],
         public tags: string[] = [],
         settings?: ConversationMemorySettings,
     ) {
+        this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = [];
         if (!settings) {
             settings = this.createSettings();
@@ -217,7 +219,7 @@ export class ConversationMemory
         // Now, add the message to memory and index it
         let messageOrdinalStartAt = this.messages.length;
         let semanticRefOrdinalStartAt = this.semanticRefs.length;
-        this.messages.push(message);
+        this.messages.append(message);
         kp.addToConversationIndex(
             this,
             this.settings.conversationSettings,
@@ -291,7 +293,7 @@ export class ConversationMemory
     public async serialize(): Promise<ConversationMemoryData> {
         const data: ConversationMemoryData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -371,7 +373,7 @@ export class ConversationMemory
     }
 
     private deserializeMessages(memoryData: ConversationMemoryData) {
-        return memoryData.messages.map((m) => {
+        const messages = memoryData.messages.map((m) => {
             const metadata = new ConversationMessageMeta(m.metadata.sender);
             metadata.recipients = m.metadata.recipients;
             return new ConversationMessage(
@@ -382,6 +384,7 @@ export class ConversationMemory
                 m.timestamp,
             );
         });
+        return new kp.MessageCollection<ConversationMessage>(messages);
     }
 
     private createTaskQueue() {
