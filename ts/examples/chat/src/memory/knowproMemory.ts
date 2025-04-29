@@ -619,7 +619,7 @@ export async function createKnowproCommands(
         const searchText = namedArgs.query;
         const debugContext: kp.NaturalLanguageSearchContext = {};
 
-        const options = kp.createDefaultSearchOptions();
+        const options = createSearchOptions(namedArgs);
         options.exactMatch = namedArgs.exact;
 
         const searchResults = await kp.searchConversationWithNaturalLanguage(
@@ -684,14 +684,7 @@ export async function createKnowproCommands(
             context.conversation!,
             selectExpr.searchTermGroup,
             selectExpr.when,
-            {
-                exactMatch: namedArgs.exact,
-                maxKnowledgeMatches: namedArgs.knowledgeTopK,
-                maxMessageMatches: namedArgs.messageTopK,
-                maxMessageCharsInBudget: namedArgs.charBudget,
-                usePropertyIndex: true,
-                useTimestampIndex: true,
-            },
+            createSearchOptions(namedArgs),
             searchQueryExpr.rawQuery,
         );
         if (
@@ -990,6 +983,15 @@ export async function createKnowproCommands(
             }
         }
         return filter;
+    }
+
+    function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
+        let options = kp.createDefaultSearchOptions();
+        options.exactMatch = namedArgs.exact;
+        options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
+        options.maxMessageMatches = namedArgs.messageTopK;
+        options.maxMessageCharsInBudget = namedArgs.charBudget;
+        return options;
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {
