@@ -79,11 +79,11 @@ jobs:
         workingDirectory: $(workingDirectory)
 
       - bash: |
-          if [[ $(Agent.OS) == 'Linux' ]]; then
+          if [[ '$(Agent.OS)' == 'Linux' ]]; then
             pnpm run shell:package:linux
-          elif [[ $(Agent.OS) == 'Darwin' ]]; then
+          elif [[ '$(Agent.OS)' == 'Darwin' ]]; then
             pnpm run shell:package:mac
-          elif [[ $(Agent.OS) == 'Windows_NT' ]]; then
+          elif [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
             pnpm run shell:package:win
           fi
         displayName: "Package - shell"
@@ -91,4 +91,4 @@ jobs:
 
       - publish: $(shell_folder)/dist
         displayName: "Publish"
-        artifact: "shell"
+        artifact: "shell-$(Agent.OS)"
