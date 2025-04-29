@@ -435,7 +435,7 @@ export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
     get(ordinal: TOrdinal): T;
     getMultiple(ordinals: TOrdinal[]): T[];
     getSlice(start: TOrdinal, end: TOrdinal): T[];
-    getAll(): T[];
+    // getAll(): T[];
 }
 
 /**

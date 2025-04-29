@@ -21,6 +21,7 @@ import {
 
 export type MessageTextIndexSettings = {
     embeddingIndexSettings: TextEmbeddingIndexSettings;
+    batchSize?: number | number;
 };
 
 export interface IMessageTextIndexData {
@@ -168,24 +169,33 @@ export async function addToMessageIndex(
     startAtOrdinal: MessageOrdinal,
     eventHandler?: IndexingEventHandlers,
 ): Promise<ListIndexingResult> {
+    let numberCompleted = 0;
     if (conversation.secondaryIndexes) {
         conversation.secondaryIndexes.messageIndex ??= new MessageTextIndex(
             settings,
         );
+        const batchSize = settings.batchSize ?? 8;
         const messageIndex = conversation.secondaryIndexes.messageIndex;
-        const messages =
-            startAtOrdinal > 0
-                ? conversation.messages.getSlice(
-                      startAtOrdinal,
-                      conversation.messages.length,
-                  )
-                : conversation.messages;
-        if (messages.length > 0) {
-            return messageIndex.addMessages(messages, eventHandler);
+        while (true) {
+            const messages = conversation.messages.getSlice(
+                startAtOrdinal,
+                startAtOrdinal + batchSize,
+            );
+            if (messages.length === 0) {
+                break;
+            }
+            const result = await messageIndex.addMessages(
+                messages,
+                eventHandler,
+            );
+            numberCompleted += result.numberCompleted;
+            if (result.error) {
+                break;
+            }
         }
     }
     return {
-        numberCompleted: 0,
+        numberCompleted,
     };
 }
 
