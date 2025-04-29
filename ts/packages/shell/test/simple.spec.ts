@@ -45,7 +45,7 @@ test("why is the sky blue?", { tag: "@smoke" }, async ({}, testInfo) => {
     expect(
         msg.toLowerCase(),
         "Chat agent didn't respond with the expected message.",
-    ).toContain("scattering");
+    ).toContain("scatter");
 
     // close the application
     await exitApplication(mainWindow);

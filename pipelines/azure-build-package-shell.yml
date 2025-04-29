@@ -11,20 +11,24 @@ pr:
     exclude:
       - "*"
 
-pool:
-  vmImage: "ubuntu-latest"
-
 variables:
   workingDirectory: "ts"
-  agentsdk_folder: "ts/packages/agentSdk"
+  shell_folder: "ts/packages/shell"
+  nodeVersion: "22"
 
 jobs:
   - job: build_ts
     displayName: "Build TypeScript Project"
     strategy:
       matrix:
-        node_22:
-          nodeVersion: "22"
+        windows:
+          image: "windows-latest"
+        linux:
+          image: "ubuntu-latest"
+        mac:
+          image: "macos-latest"
+    pool:
+      vmImage: "$(image)"
     steps:
       - script: |
           sudo apt install libsecret-1-0
@@ -52,38 +56,24 @@ jobs:
 
       - template: include-update-package-version.yml
         parameters:
-          packageFolder: $(agentsdk_folder)
+          packageFolder: $(shell_folder)
 
       - script: |
-          npm run build
+          pnpm run build:shell
         displayName: "Build"
         workingDirectory: $(workingDirectory)
 
-      - script: |
-          npm run test:local
-        displayName: "Run Tests (Local)"
+      - bash: |
+          if [[ '$(Agent.OS)' == 'Linux' ]]; then
+            pnpm run shell:package:linux
+          elif [[ '$(Agent.OS)' == 'Darwin' ]]; then
+            pnpm run shell:package:mac
+          elif [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
+            pnpm run shell:package:win
+          fi
+        displayName: "Package - shell"
         workingDirectory: $(workingDirectory)
 
-      - script: |
-          npm run lint
-        displayName: "Lint"
-        workingDirectory: $(workingDirectory)
-
-      - script: |
-          echo $(ADO_REGISTRY)
-          echo "registry=$(ADO_REGISTRY)" > .npmrc
-          echo "always-auth=true" >> .npmrc
-          cat .npmrc
-        displayName: "Create .npmrc file."
-        workingDirectory: $(agentsdk_folder)
-
-      - task: npmAuthenticate@0
-        inputs:
-          workingFile: "$(agentsdk_folder)/.npmrc"
-        displayName: "Authenticate with Azure Artifacts"
-
-      - script: |
-          cd $(Build.SourcesDirectory)/$(agentsdk_folder)
-          npm publish --registry=$(ADO_REGISTRY)
-        displayName: "Pack and Publish agent-sdk Module"
-        condition: succeeded()
+      - publish: $(shell_folder)/dist
+        displayName: "Publish"
+        artifact: "shell-$(Agent.OS)"

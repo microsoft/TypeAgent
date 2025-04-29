@@ -30,18 +30,18 @@ export class AzureSpeech {
         // ...
     }
 
-    public static initializeAsync = async (config: {
+    public static initialize = (config: {
         azureSpeechSubscriptionKey: string;
         azureSpeechRegion: string;
         azureSpeechEndpoint: string;
-    }): Promise<void> => {
+    }): void => {
         if (AzureSpeech.instance) {
             return;
         }
         const {
             azureSpeechSubscriptionKey,
             azureSpeechRegion,
-            azureSpeechEndpoint: azureSpeechEndpoint,
+            azureSpeechEndpoint,
         } = config;
         AzureSpeech.instance = new AzureSpeech(
             azureSpeechSubscriptionKey,

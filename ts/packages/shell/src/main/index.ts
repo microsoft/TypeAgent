@@ -94,13 +94,13 @@ export function runningTests(): boolean {
 const time = performance.now();
 debugShell("Starting...");
 
-async function createWindow(shellSettings: ShellSettings) {
+function createWindow(shellSettings: ShellSettings) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
     const shellWindow = new ShellWindow(shellSettings, instanceDir);
 
-    await initializeSpeech(shellWindow.chatView);
+    initializeSpeech(shellWindow.chatView);
 
     ipcMain.on("views-resized-by-user", (_, newX: number) => {
         shellWindow.updateContentSize(newX);
@@ -148,12 +148,12 @@ async function triggerRecognitionOnce(chatView: WebContentsView) {
     );
 }
 
-async function initializeSpeech(chatView: WebContentsView) {
+function initializeSpeech(chatView: WebContentsView) {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
     if (key && region) {
-        await AzureSpeech.initializeAsync({
+        AzureSpeech.initialize({
             azureSpeechSubscriptionKey: key,
             azureSpeechRegion: region,
             azureSpeechEndpoint: endpoint,
@@ -283,7 +283,7 @@ async function initializeInstance(
     instanceDir: string,
     shellSettings: ShellSettings,
 ) {
-    const shellWindow = await createWindow(shellSettings);
+    const shellWindow = createWindow(shellSettings);
     const { mainWindow, chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {

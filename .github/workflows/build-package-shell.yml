@@ -77,5 +77,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
         with:
-          name: typeagent-shell-package-${{ github.run_id }}
-          path: ts/package/shell/dist
+          name: typeagent-shell-package-${{ github.run_id }}-${{ matrix.os }}
+          path: ts/packages/shell/dist
