@@ -9,7 +9,11 @@
         "databaseAccounts_typeagentlogdb_name": {
             "defaultValue": "typeagentlogdb",
             "type": "String"
-        }        
+        },
+        "typeagent_speech": {
+            "defaultValue": "typeagent_speech",
+            "type": "String"
+        }                
     },
     "variables": {},
     "resources": [
@@ -277,6 +281,31 @@
                     "throughput": 3200
                 }
             }
-        }        
+        },
+        {
+            "type": "Microsoft.CognitiveServices/accounts",
+            "apiVersion": "2024-10-01",
+            "name": "[parameters('typeagent_speech')]",
+            "location": "westus",
+            "tags": {
+            },
+            "sku": {
+                "name": "S0"
+            },
+            "kind": "SpeechServices",
+            "identity": {
+                "type": "None"
+            },
+            "properties": {
+                "customSubDomainName": "typeagent",
+                "networkAcls": {
+                    "defaultAction": "Allow",
+                    "virtualNetworkRules": [],
+                    "ipRules": []
+                },
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": true
+            }
+        }           
     ]
 }

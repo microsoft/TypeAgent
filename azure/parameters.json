@@ -4,6 +4,12 @@
     "parameters": {
         "accounts_agentmaps_name": {
             "value": null
+        },
+        "databaseAccounts_typeagentlogdb_name": {
+            "value": null
+        },
+        "typeagent_speech": {
+            "value": null
         }
     }
 }
