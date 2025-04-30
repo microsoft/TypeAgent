@@ -19,7 +19,7 @@ export interface IConversationWithDataFrame<
     get dataFrames(): DataFrameCollection;
 }
 
-export type HybridSearchResults = {
+export type ConversationDataFrameSearchResults = {
     conversationMatches?: search.ConversationSearchResult | undefined;
     dataFrameMatches?: ScoredMessageOrdinal[] | undefined;
     joinedMatches?: ScoredMessageOrdinal[] | undefined;
@@ -31,7 +31,7 @@ export async function searchConversationWithJoin(
     filter?: WhenFilter,
     options?: search.SearchOptions,
     rawQuery?: string,
-): Promise<HybridSearchResults> {
+): Promise<ConversationDataFrameSearchResults> {
     options ??= search.createDefaultSearchOptions();
 
     const conversationMatches = await search.searchConversation(
@@ -60,7 +60,7 @@ export async function searchConversationWithJoin(
 }
 
 /**
- * Search the hybrid conversation using dataFrames to determine additional
+ * Search the conversation using dataFrames to determine additional
  * 'outer' scope
  * @param dfConversation
  * @param searchTermGroup

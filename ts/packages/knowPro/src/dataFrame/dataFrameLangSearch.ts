@@ -51,7 +51,7 @@ async function searchConversationWithFilter(
     options?: search.SearchOptions | undefined,
     rawQuery?: string,
 ): Promise<search.ConversationSearchResult | undefined> {
-    const selectExpr = compileHybridSearchFilter(conversation, searchFilter);
+    const selectExpr = compileDfSearchFilter(conversation, searchFilter);
     return searchConversationWithScope(
         conversation,
         selectExpr.searchTermGroup,
@@ -86,7 +86,7 @@ export function createSearchQueryTranslator(
     );
 }
 
-function compileHybridSearchFilter(
+function compileDfSearchFilter(
     dfConversation: IConversationWithDataFrame,
     searchFilter: querySchema.SearchFilter,
 ): SearchSelectExpr {

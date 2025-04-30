@@ -316,7 +316,7 @@ export async function createKnowproDataFrameCommands(
         }
     }
         
-    async function testHybridQuery() {
+    async function testDfQuery() {
         if (restaurantIndex) {
             printer.writeInColor(
                 chalk.cyan,
@@ -327,13 +327,13 @@ export async function createKnowproDataFrameCommands(
                 kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
                 kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
             );
-            const hybridMatches = await kp.dataFrame.searchConversationWithJoin(
+            const dfMatches = await kp.dataFrame.searchConversationWithJoin(
                 restaurantIndex,
                 termGroup,
             );
-            if (hybridMatches && hybridMatches.dataFrameMatches) {
+            if (dfMatches && dfMatches.dataFrameMatches) {
                 printer.writeScoredMessages(
-                    hybridMatches.dataFrameMatches,
+                    dfMatches.dataFrameMatches,
                     restaurantIndex.conversation.messages,
                     25,
                 );
@@ -343,7 +343,7 @@ export async function createKnowproDataFrameCommands(
 
     function testDb(
         db: RestaurantDb,
-        restaurantCollection: HybridRestaurantCollection,
+        restaurantCollection: RestaurantIndex,
     ) {
         let latitude = "50.804436 (nl)";
         let rows = db.geo.getRow("latitude", latitude, kp.ComparisonOp.Eq);
