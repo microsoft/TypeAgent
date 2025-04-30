@@ -6,6 +6,7 @@ import {
     argBool,
     CommandHandler,
     CommandMetadata,
+    NamedArgs,
     parseNamedArguments,
     ProgressBar,
     StopWatch,
@@ -48,6 +49,9 @@ export async function createKnowproEmailCommands(
             args: {
                 filePath: argSourceFile(),
             },
+            options: {
+                saveIndex: argBool("Automatically save updated memory", true),
+            },
         };
     }
     commands.kpEmailAdd.metadata = emailAddDef();
@@ -69,17 +73,24 @@ export async function createKnowproEmailCommands(
             progress,
             1,
         );
-        await emailMemory.addMessage(emailMessage, eventHandler);
+        const result = await emailMemory.addMessage(emailMessage, eventHandler);
         progress.complete();
+        if (!result.success) {
+            context.printer.writeError(result.message);
+            return;
+        }
+        if (namedArgs.saveIndex) {
+            await emailsSave(args);
+        }
     }
 
     function emailsSaveDef(): CommandMetadata {
         return {
-            description: "Save email index",
+            description: "Save current email memory",
         };
     }
     commands.kpEmailsSave.metadata = emailsSaveDef();
-    async function emailsSave(args: string[]): Promise<void> {
+    async function emailsSave(args: string[] | NamedArgs): Promise<void> {
         const emailMemory = ensureMemoryLoaded();
         if (!emailMemory) {
             return;
@@ -119,7 +130,7 @@ export async function createKnowproEmailCommands(
             return;
         }
         closeEmail();
-        context.email = cm.createEmailMemory(
+        context.email = await cm.createEmailMemory(
             {
                 dirPath: path.dirname(emailIndexPath),
                 baseFileName: getFileName(emailIndexPath),

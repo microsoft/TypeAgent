@@ -168,16 +168,22 @@ export class EmailMemory implements kp.IConversation {
     }
 }
 
-export function createEmailMemory(
+export async function createEmailMemory(
     fileSettings: IndexFileSettings,
     createNew: boolean,
-): EmailMemory {
-    const db = ms.sqlite.createSqlStorageProvider(
-        fileSettings.dirPath,
-        fileSettings.baseFileName,
-        createNew,
-    );
-    const em = new EmailMemory(db);
+): Promise<EmailMemory> {
+    let em: EmailMemory | undefined;
+    if (!createNew) {
+        em = await EmailMemory.readFromFile(fileSettings);
+    }
+    if (!em) {
+        const db = ms.sqlite.createSqlStorageProvider(
+            fileSettings.dirPath,
+            fileSettings.baseFileName,
+            true,
+        );
+        em = new EmailMemory(db);
+    }
     em.settings.fileSaveSettings = fileSettings;
     return em;
 }

@@ -19,7 +19,7 @@ describeIf(
         test(
             "create",
             async () => {
-                const em = createEmailMemory(
+                const em = await createEmailMemory(
                     { dirPath: storeRoot!, baseFileName: "createTest" },
                     true,
                 );
@@ -48,7 +48,7 @@ describeIf(
                 const messageCount = 4;
                 const messages = createEmails(messageCount);
                 let semanticRefCount = 0;
-                let em = createEmailMemory(fileSettings, true);
+                let em = await createEmailMemory(fileSettings, true);
                 try {
                     await addToIndex(em, messages);
                     await em.writeToFile();
