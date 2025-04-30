@@ -1,0 +1,38 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "accounts_agentmaps_name": {
+            "defaultValue": "typeagentmaps",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Maps/accounts",
+            "apiVersion": "2024-07-01-preview",
+            "name": "[parameters('accounts_agentmaps_name')]",
+            "location": "eastus",
+            "sku": {
+                "name": "G2",
+                "tier": "Standard"
+            },
+            "kind": "Gen2",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "disableLocalAuth": true,
+                "cors": {
+                    "corsRules": [
+                        {
+                            "allowedOrigins": []
+                        }
+                    ]
+                },
+                "locations": []
+            }
+        }
+    ]
+}
