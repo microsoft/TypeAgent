@@ -506,7 +506,7 @@ export async function addToConversationIndex(
         indexingResult.semanticRefs = await addToSemanticRefIndex(
             conversation,
             settings.semanticRefIndexSettings,
-            semanticRefOrdinalStartAt,
+            messageOrdinalStartAt,
             eventHandler,
             termsAdded,
         );

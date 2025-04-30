@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createEmailMemory } from "../src/emailMemory.js";
+import { createEmailMemory, EmailMemory } from "../src/emailMemory.js";
 import { EmailMeta, EmailMessage } from "../src/emailMessage.js";
-import { verifyEmailHeadersEqual } from "./verify.js";
+import { verifyMessagesEqual } from "./verify.js";
 import { describeIf, ensureOutputDir, hasTestKeys } from "test-lib";
 
 describeIf(
@@ -18,28 +18,18 @@ describeIf(
         test(
             "create",
             async () => {
-                const emailMemory = createEmailMemory(
-                    storeRoot!,
-                    "createTest",
-                    true,
-                );
+                const em = createEmailMemory(storeRoot!, "createTest", true);
                 try {
                     const messageCount = 4;
                     const messages = createEmails(messageCount);
                     // Test direct add to collection
-                    emailMemory.messages.append(...messages);
-                    expect(emailMemory.messages.length).toEqual(messageCount);
+                    em.messages.append(...messages);
+                    expect(em.messages.length).toEqual(messageCount);
                     // Test enumeration
-                    const messages2 = [...emailMemory.messages];
-                    expect(messages).toHaveLength(messages2.length);
-                    for (let i = 0; i < messageCount; ++i) {
-                        verifyEmailHeadersEqual(
-                            messages[i].metadata,
-                            messages2[i].metadata,
-                        );
-                    }
+                    const messages2 = [...em.messages];
+                    verifyMessagesEqual(messages, messages2);
                 } finally {
-                    emailMemory.close();
+                    em.close();
                 }
             },
             testTimeout,
@@ -47,25 +37,45 @@ describeIf(
         test(
             "indexing",
             async () => {
-                const emailMemory = createEmailMemory(
-                    storeRoot!,
-                    "indexingTest",
-                    true,
-                );
+                const baseName = "indexingTest";
+                const messageCount = 4;
+                const messages = createEmails(messageCount);
+                let semanticRefCount = 0;
+                let em = createEmailMemory(storeRoot!, baseName, true);
                 try {
-                    const messageCount = 4;
-                    const messages = createEmails(messageCount, "sender@abc");
-                    for (const message of messages) {
-                        const result = await emailMemory.addMessage(message);
-                        expect(result.semanticRefs).toBeDefined();
-                        expect(result.secondaryIndexResults).toBeDefined();
-                    }
+                    await addToIndex(em, messages);
+                    await em.writeToFile(storeRoot!, baseName);
+                    expect(em.messages.length).toEqual(messageCount);
+                    semanticRefCount = em.semanticRefs.length;
                 } finally {
-                    emailMemory.close();
+                    em.close();
+                }
+                const em2 = await EmailMemory.readFromFile(
+                    storeRoot!,
+                    baseName,
+                );
+                expect(em2).toBeDefined();
+                if (em2) {
+                    verifyMessagesEqual(messages, [...em2!.messages]);
+                    expect(em2.messages.length).toEqual(messages.length);
+                    expect(em2.indexingState.lastMessageOrdinal).toEqual(
+                        messages.length - 1,
+                    );
+                    expect(em2.semanticRefs.length);
+                    expect(em2.indexingState.lastSemanticRefOrdinal).toEqual(
+                        semanticRefCount - 1,
+                    );
                 }
             },
             testTimeout,
         );
+
+        async function addToIndex(em: EmailMemory, messages: EmailMessage[]) {
+            for (const message of messages) {
+                const result = await em.addMessage(message);
+                expect(result.success).toBeTruthy();
+            }
+        }
     },
 );
 
@@ -73,7 +83,9 @@ function createEmails(count: number, from?: string): EmailMessage[] {
     const messages: EmailMessage[] = [];
     for (let i = 0; i < count; ++i) {
         let fromAlias = from ?? `alias${i}@xyz.pqr`;
-        messages.push(createEmail(fromAlias, `Body\nMessage_${i}`));
+        messages.push(
+            createEmail(fromAlias, `BookName_${i} is a book by Author_${i}`),
+        );
     }
     return messages;
 }

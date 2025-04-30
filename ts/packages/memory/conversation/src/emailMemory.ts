@@ -9,7 +9,8 @@ import {
     IndexingState,
     MemorySettings,
 } from "./memory.js";
-import { createIndexingState } from "./common.js";
+import { createIndexingState, getIndexingErrors } from "./common.js";
+import { Result, success, error } from "typechat";
 
 export type EmailMemorySettings = MemorySettings;
 
@@ -51,17 +52,24 @@ export class EmailMemory implements kp.IConversation {
 
     public async addMessage(
         message: EmailMessage,
-    ): Promise<kp.IndexingResults> {
+    ): Promise<Result<kp.IndexingResults>> {
         // Add the message to memory and index it
         this.messages.append(message);
         let messageOrdinalStartAt = this.messages.length - 1;
         let semanticRefOrdinalStartAt = this.semanticRefs.length;
-        return kp.addToConversationIndex(
+        const result = await kp.addToConversationIndex(
             this,
             this.settings.conversationSettings,
             messageOrdinalStartAt,
             semanticRefOrdinalStartAt,
         );
+        const errorMsg = getIndexingErrors(result);
+        if (errorMsg) {
+            return error(errorMsg);
+        }
+        this.indexingState.lastMessageOrdinal = messageOrdinalStartAt;
+        this.indexingState.lastSemanticRefOrdinal = semanticRefOrdinalStartAt;
+        return success(result);
     }
 
     public async serialize(): Promise<EmailMemoryData> {
@@ -158,5 +166,5 @@ export function createEmailMemory(
         baseFileName,
         createNew,
     );
-    return new EmailMemory(db);
+    return new EmailMemory(db, baseFileName);
 }
