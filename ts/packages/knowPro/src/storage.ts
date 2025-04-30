@@ -123,3 +123,18 @@ export function mapCollection<T = any>(
     }
     return results;
 }
+
+export function filterCollection<T = any>(
+    collection: IReadonlyCollection<T>,
+    predicate: (item: T, index: number) => boolean,
+) {
+    let results: T[] = [];
+    const length = collection.length;
+    for (let i = 0; i < length; ++i) {
+        const item = collection.get(i);
+        if (predicate(item, i)) {
+            results.push(item);
+        }
+    }
+    return results;
+}

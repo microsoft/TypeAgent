@@ -773,7 +773,8 @@ export async function createKnowproCommands(
             await searchTerms(args);
         } else {
             if (conversation.semanticRefs !== undefined) {
-                const entities = conversation.semanticRefs?.filter(
+                const entities = kp.filterCollection(
+                    conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
                 );
                 context.printer.writeSemanticRefs(entities);

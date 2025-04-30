@@ -408,7 +408,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public settings: kp.ConversationSettings;
     public nameTag: string = "description";
     public tags: string[] = [];
-    public semanticRefs: kp.SemanticRef[] = [];
+    public semanticRefs: kp.SemanticRefCollection;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
 
@@ -417,6 +417,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
         settings?: kp.ConversationSettings,
     ) {
         this.messages = new kp.MessageCollection<RestaurantInfo>(messages);
+        this.semanticRefs = new kp.SemanticRefCollection();
         settings ??= kp.createConversationSettings();
         this.settings = settings;
         this.semanticRefIndex = new kp.ConversationIndex();
@@ -450,7 +451,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -464,7 +465,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
         this.messages = new kp.MessageCollection<RestaurantInfo>(
             this.deserializeMessages(data),
         );
-        this.semanticRefs = data.semanticRefs;
+        this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
