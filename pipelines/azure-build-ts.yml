@@ -53,6 +53,7 @@ jobs:
       - template: include-update-package-version.yml
         parameters:
           packageFolder: $(agentsdk_folder)
+          prerelease: $(Build.BuildId)
 
       - script: |
           npm run build
