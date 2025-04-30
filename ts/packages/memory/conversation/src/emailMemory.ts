@@ -55,20 +55,17 @@ export class EmailMemory implements kp.IConversation {
     ): Promise<Result<kp.IndexingResults>> {
         // Add the message to memory and index it
         this.messages.append(message);
-        let messageOrdinalStartAt = this.messages.length - 1;
-        let semanticRefOrdinalStartAt = this.semanticRefs.length;
         const result = await kp.addToConversationIndex(
             this,
             this.settings.conversationSettings,
-            messageOrdinalStartAt,
-            semanticRefOrdinalStartAt,
+            this.messages.length - 1,
+            this.semanticRefs.length,
         );
         const errorMsg = getIndexingErrors(result);
         if (errorMsg) {
             return error(errorMsg);
         }
-        this.indexingState.lastMessageOrdinal = messageOrdinalStartAt;
-        this.indexingState.lastSemanticRefOrdinal = semanticRefOrdinalStartAt;
+        this.updateIndexingState();
         return success(result);
     }
 
@@ -153,6 +150,12 @@ export class EmailMemory implements kp.IConversation {
         return createMemorySettings(
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
+    }
+
+    private updateIndexingState(): void {
+        this.indexingState.lastMessageOrdinal = this.messages.length - 1;
+        this.indexingState.lastSemanticRefOrdinal =
+            this.semanticRefs.length - 1;
     }
 }
 

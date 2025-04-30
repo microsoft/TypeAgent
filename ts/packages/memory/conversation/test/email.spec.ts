@@ -61,7 +61,7 @@ describeIf(
                     expect(em2.indexingState.lastMessageOrdinal).toEqual(
                         messages.length - 1,
                     );
-                    expect(em2.semanticRefs.length);
+                    expect(em2.semanticRefs.length).toEqual(semanticRefCount);
                     expect(em2.indexingState.lastSemanticRefOrdinal).toEqual(
                         semanticRefCount - 1,
                     );
