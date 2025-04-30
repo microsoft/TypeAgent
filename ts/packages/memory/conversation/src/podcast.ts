@@ -1,29 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    IKnowledgeSource,
-    IMessage,
-    IConversation,
-    ConversationSettings,
-    ConversationIndex,
-    SemanticRef,
-    createConversationSettings,
-    IndexingEventHandlers,
-    IndexingResults,
-    buildConversationIndex,
-    SecondaryIndexingResults,
-    buildSecondaryIndexes,
-    ConversationThreads,
-    MessageTextIndex,
-    writeConversationDataToFile,
-    readConversationDataFromFile,
-    buildTransientSecondaryIndexes,
-    Term,
-    ConversationSecondaryIndexes,
-    IConversationDataWithIndexes,
-    IMessageMetadata,
-} from "knowpro";
+import * as kp from "knowpro";
 import {
     conversation as kpLib,
     TextEmbeddingModelWithCache,
@@ -32,106 +10,32 @@ import { collections } from "typeagent";
 import { createEmbeddingModel } from "./common.js";
 
 import registerDebug from "debug";
+import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
-// metadata for podcast messages
-
-export class PodcastMessageMeta implements IKnowledgeSource, IMessageMetadata {
-    public listeners: string[] = [];
-
-    constructor(public speaker?: string | undefined) {}
-
-    public get source() {
-        return this.speaker;
-    }
-
-    public get dest() {
-        return this.listeners;
-    }
-
-    getKnowledge() {
-        if (this.speaker === undefined) {
-            return {
-                entities: [],
-                actions: [],
-                inverseActions: [],
-                topics: [],
-            };
-        } else {
-            const entities: kpLib.ConcreteEntity[] = [];
-            entities.push({
-                name: this.speaker,
-                type: ["person"],
-            } as kpLib.ConcreteEntity);
-            const listenerEntities = this.listeners.map((listener) => {
-                return {
-                    name: listener,
-                    type: ["person"],
-                } as kpLib.ConcreteEntity;
-            });
-            entities.push(...listenerEntities);
-            const actions: kpLib.Action[] = [];
-            for (const listener of this.listeners) {
-                actions.push({
-                    verbs: ["say"],
-                    verbTense: "past",
-                    subjectEntityName: this.speaker,
-                    objectEntityName: listener,
-                } as kpLib.Action);
-            }
-            return {
-                entities,
-                actions,
-                // TODO: Also create inverse actions
-                inverseActions: [],
-                topics: [],
-            };
-        }
-    }
-}
-
-export class PodcastMessage implements IMessage {
-    constructor(
-        public textChunks: string[],
-        public metadata: PodcastMessageMeta,
-        public tags: string[] = [],
-        public timestamp: string | undefined = undefined,
-    ) {}
-
-    public getKnowledge(): kpLib.KnowledgeResponse {
-        return this.metadata.getKnowledge();
-    }
-
-    public addContent(content: string, chunkOrdinal = 0) {
-        if (chunkOrdinal > this.textChunks.length) {
-            this.textChunks.push(content);
-        } else {
-            this.textChunks[chunkOrdinal] += content;
-        }
-    }
-}
-
-export class Podcast implements IConversation<PodcastMessage> {
-    public settings: ConversationSettings;
-    public semanticRefIndex: ConversationIndex;
+export class Podcast implements kp.IConversation<PodcastMessage> {
+    public messages: kp.MessageCollection<PodcastMessage>;
+    public settings: kp.ConversationSettings;
+    public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
-    public semanticRefs: SemanticRef[];
+    public semanticRefs: kp.SemanticRef[];
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
     private embeddingSize: number | undefined;
 
     constructor(
         public nameTag: string = "",
-        public messages: PodcastMessage[] = [],
+        messages: PodcastMessage[] = [],
         public tags: string[] = [],
-        settings?: ConversationSettings,
+        settings?: kp.ConversationSettings,
     ) {
+        this.messages = new kp.MessageCollection<PodcastMessage>(messages);
         this.semanticRefs = [];
         if (!settings) {
             settings = this.createSettings();
         }
         this.settings = settings;
-        this.semanticRefIndex = new ConversationIndex();
+        this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
 
@@ -149,11 +53,11 @@ export class Podcast implements IConversation<PodcastMessage> {
     }
 
     public async buildIndex(
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<IndexingResults> {
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
-            const result = await buildConversationIndex(
+            const result = await kp.buildConversationIndex(
                 this,
                 this.settings,
                 eventHandler,
@@ -172,10 +76,10 @@ export class Podcast implements IConversation<PodcastMessage> {
     }
 
     public async buildSecondaryIndexes(
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<SecondaryIndexingResults> {
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.SecondaryIndexingResults> {
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
-        const result = await buildSecondaryIndexes(
+        const result = await kp.buildSecondaryIndexes(
             this,
             this.settings,
             eventHandler,
@@ -188,7 +92,7 @@ export class Podcast implements IConversation<PodcastMessage> {
     public async serialize(): Promise<PodcastData> {
         const data: PodcastData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -212,11 +116,13 @@ export class Podcast implements IConversation<PodcastMessage> {
                 m.timestamp,
             );
         });
-        this.messages = podcastMessages;
+        this.messages = new kp.MessageCollection<PodcastMessage>(
+            podcastMessages,
+        );
         this.semanticRefs = podcastData.semanticRefs;
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {
-            this.semanticRefIndex = new ConversationIndex(
+            this.semanticRefIndex = new kp.ConversationIndex(
                 podcastData.semanticIndexData,
             );
         }
@@ -226,13 +132,13 @@ export class Podcast implements IConversation<PodcastMessage> {
             );
         }
         if (podcastData.threadData) {
-            this.secondaryIndexes.threads = new ConversationThreads(
+            this.secondaryIndexes.threads = new kp.ConversationThreads(
                 this.settings.threadSettings,
             );
             this.secondaryIndexes.threads.deserialize(podcastData.threadData);
         }
         if (podcastData.messageIndexData) {
-            this.secondaryIndexes.messageIndex = new MessageTextIndex(
+            this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
                 this.settings.messageTextIndexSettings,
             );
             this.secondaryIndexes.messageIndex.deserialize(
@@ -247,7 +153,7 @@ export class Podcast implements IConversation<PodcastMessage> {
         baseFileName: string,
     ): Promise<void> {
         const data = await this.serialize();
-        await writeConversationDataToFile(data, dirPath, baseFileName);
+        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
     }
 
     public static async readFromFile(
@@ -255,7 +161,7 @@ export class Podcast implements IConversation<PodcastMessage> {
         baseFileName: string,
     ): Promise<Podcast | undefined> {
         const podcast = new Podcast();
-        const data = await readConversationDataFromFile(
+        const data = await kp.readConversationDataFromFile(
             dirPath,
             baseFileName,
             podcast.settings.relatedTermIndexSettings.embeddingIndexSettings
@@ -272,7 +178,7 @@ export class Podcast implements IConversation<PodcastMessage> {
             // Build transient secondary indexes associated with the conversation
             // These are automatically build by calls to buildConversationIndex, but
             // may need to get rebuilt when we deserialize persisted conversations
-            await buildTransientSecondaryIndexes(this, this.settings);
+            await kp.buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
     }
@@ -282,7 +188,7 @@ export class Podcast implements IConversation<PodcastMessage> {
         aliases.clear();
         const nameToAliasMap = this.collectParticipantAliases();
         for (const name of nameToAliasMap.keys()) {
-            const relatedTerms: Term[] = nameToAliasMap
+            const relatedTerms: kp.Term[] = nameToAliasMap
                 .get(name)!
                 .map((alias) => {
                     return { text: alias };
@@ -328,7 +234,7 @@ export class Podcast implements IConversation<PodcastMessage> {
         );
         this.embeddingModel = model;
         this.embeddingSize = size;
-        return createConversationSettings(
+        return kp.createConversationSettings(
             this.embeddingModel,
             this.embeddingSize,
         );
@@ -346,14 +252,14 @@ export class Podcast implements IConversation<PodcastMessage> {
     }
 }
 
-export class PodcastSecondaryIndexes extends ConversationSecondaryIndexes {
-    public threads: ConversationThreads;
+export class PodcastSecondaryIndexes extends kp.ConversationSecondaryIndexes {
+    public threads: kp.ConversationThreads;
 
-    constructor(settings: ConversationSettings) {
+    constructor(settings: kp.ConversationSettings) {
         super(settings);
-        this.threads = new ConversationThreads(settings.threadSettings);
+        this.threads = new kp.ConversationThreads(settings.threadSettings);
     }
 }
 
 export interface PodcastData
-    extends IConversationDataWithIndexes<PodcastMessage> {}
+    extends kp.IConversationDataWithIndexes<PodcastMessage> {}

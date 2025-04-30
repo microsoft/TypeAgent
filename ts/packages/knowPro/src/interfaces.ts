@@ -71,8 +71,8 @@ export interface Tag {
 export interface IConversation<TMessage extends IMessage = IMessage> {
     nameTag: string;
     tags: string[];
-    messages: TMessage[];
-    //messages: IMessageCollection<TMessage>;
+    //messages: TMessage[];
+    messages: IMessageCollection<TMessage>;
     semanticRefs: SemanticRef[] | undefined;
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
@@ -430,18 +430,17 @@ export type ListIndexingResult = {
 //---------------------
 // Storage
 //---------------------
-export interface IReadonlyCollection<T, TOrdinal> extends Iterable<T> {
+export interface IReadonlyCollection<T, TOrdinal = number> extends Iterable<T> {
     readonly length: number;
     get(ordinal: TOrdinal): T;
     getMultiple(ordinals: TOrdinal[]): T[];
     getSlice(start: TOrdinal, end: TOrdinal): T[];
-    getAll(): T[];
 }
 
 /**
  * ICollection is an APPEND ONLY collection
  */
-export interface ICollection<T, TOrdinal>
+export interface ICollection<T, TOrdinal = number>
     extends IReadonlyCollection<T, TOrdinal> {
     readonly isPersistent: boolean;
 
@@ -459,6 +458,7 @@ export interface IStorageProvider {
         TMessage extends IMessage = IMessage,
     >(): IMessageCollection<TMessage>;
     createSemanticRefCollection(): ISemanticRefCollection;
+    close(): void;
 }
 
 // Also look at:

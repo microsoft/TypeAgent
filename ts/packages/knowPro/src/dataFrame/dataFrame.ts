@@ -64,6 +64,10 @@ export interface IDataFrame extends Iterable<DataFrameRow> {
 
 export type DataFrameCollection = ReadonlyMap<string, IDataFrame>;
 
+export interface IDataFrameStorageProvider {
+    createDataFrame(name: string, columns: DataFrameColumns): IDataFrame;
+}
+
 export type DataFrameTermGroup = {
     booleanOp: "and" | "or" | "or_max";
     dataFrame: IDataFrame;

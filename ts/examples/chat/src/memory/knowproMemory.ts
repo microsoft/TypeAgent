@@ -35,6 +35,7 @@ import * as cm from "conversation-memory";
 import * as im from "image-memory";
 import {
     createIndexingEventHandler,
+    hasConversationResults,
     matchFilterToConversation,
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
@@ -63,14 +64,14 @@ export async function createKnowproCommands(
                 knowledgeModel,
             ),
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
-        answerGenerator: new kp.AnswerGenerator({
-            languageModel: knowledgeModel,
-        }),
+        answerGenerator: new kp.AnswerGenerator(
+            kp.createAnswerGeneratorSettings(knowledgeModel),
+        ),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproDataFrameCommands(commands, context.printer);
+    await createKnowproDataFrameCommands(commands, context);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
@@ -113,7 +114,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showMessagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -254,7 +255,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showImagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -617,15 +618,16 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, answerDefNew());
         const searchText = namedArgs.query;
-        const debugContext: kp.NaturalLanguageSearchContext = {};
+        const debugContext: kp.LanguageSearchContext = {};
 
-        const options = kp.createDefaultSearchOptions();
+        const options = createSearchOptions(namedArgs);
         options.exactMatch = namedArgs.exact;
 
-        const searchResults = await kp.searchConversationWithNaturalLanguage(
+        const searchResults = await kp.searchConversationWithLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
+            namedArgs.exactScope,
             options,
             debugContext,
         );
@@ -633,24 +635,34 @@ export async function createKnowproCommands(
             context.printer.writeError(searchResults.message);
             return;
         }
+        if (namedArgs.debug) {
+            context.printer.writeInColor(chalk.gray, () => {
+                context.printer.writeLine();
+                context.printer.writeNaturalLanguageContext(debugContext);
+            });
+        }
+        if (!hasConversationResults(searchResults.data)) {
+            context.printer.writeLine();
+            context.printer.writeLine("No matches");
+            return;
+        }
         for (const searchResult of searchResults.data) {
-            const answerContext = kp.answerContextFromSearchResult(
-                context.conversation!,
-                searchResult,
-            );
             if (!namedArgs.messages) {
-                answerContext.messages = undefined;
+                searchResult.messageMatches = [];
             }
-            if (namedArgs.debug) {
-                context.printer.writeInColor(chalk.gray, () => {
-                    context.printer.writeLine();
-                    context.printer.writeNaturalLanguageContext(debugContext);
-                    context.printer.writeAnswerContext(answerContext);
-                });
-            }
-            const answerResult = await context.answerGenerator.generateAnswer(
+            const answerResult = await kp.generateAnswer(
+                context.conversation!,
+                context.answerGenerator,
                 searchText,
-                answerContext,
+                searchResult,
+                (chunk, _, result) => {
+                    if (namedArgs.debug) {
+                        context.printer.writeInColor(chalk.gray, () => {
+                            context.printer.writeLine();
+                            context.printer.writeJsonInColor(chalk.gray, chunk);
+                        });
+                    }
+                },
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -675,14 +687,7 @@ export async function createKnowproCommands(
             context.conversation!,
             selectExpr.searchTermGroup,
             selectExpr.when,
-            {
-                exactMatch: namedArgs.exact,
-                maxKnowledgeMatches: namedArgs.knowledgeTopK,
-                maxMessageMatches: namedArgs.messageTopK,
-                maxMessageCharsInBudget: namedArgs.charBudget,
-                usePropertyIndex: true,
-                useTimestampIndex: true,
-            },
+            createSearchOptions(namedArgs),
             searchQueryExpr.rawQuery,
         );
         if (
@@ -802,10 +807,10 @@ export async function createKnowproCommands(
         let originalMessages = context.podcast.messages;
         try {
             if (maxMessages < messageCount) {
-                context.podcast.messages = context.podcast.messages.slice(
-                    0,
-                    maxMessages,
-                );
+                context.podcast.messages =
+                    new kp.MessageCollection<cm.PodcastMessage>(
+                        context.podcast.messages.getSlice(0, maxMessages),
+                    );
             }
             context.printer.writeLine(`Building Index`);
             let progress = new ProgressBar(context.printer, maxMessages);
@@ -949,7 +954,7 @@ export async function createKnowproCommands(
             knowledgeType: namedArgs.ktype,
         };
         const conv: kp.IConversation | undefined =
-            context.podcast ?? context.images;
+            context.podcast ?? context.images ?? context.conversation;
         const dateRange = kp.getTimeRangeForConversation(conv!);
         if (dateRange) {
             let startDate: Date | undefined;
@@ -981,6 +986,15 @@ export async function createKnowproCommands(
             }
         }
         return filter;
+    }
+
+    function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
+        let options = kp.createDefaultSearchOptions();
+        options.exactMatch = namedArgs.exact;
+        options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
+        options.maxMessageMatches = namedArgs.messageTopK;
+        options.maxMessageCharsInBudget = namedArgs.charBudget;
+        return options;
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {

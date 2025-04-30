@@ -2486,6 +2486,9 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
+      memory-storage:
+        specifier: workspace:*
+        version: link:../storage
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent

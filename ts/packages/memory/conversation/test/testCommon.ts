@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createConversationSettings, createKnowledgeExtractor } from "knowpro";
+import {
+    createConversationSettings,
+    createKnowledgeExtractor,
+    MessageCollection,
+} from "knowpro";
 import {
     createTestChatModel,
     createTestEmbeddingModel,
@@ -11,7 +15,9 @@ import {
 } from "test-lib";
 import { importPodcast } from "../src/importPodcast.js";
 import { Podcast } from "../src/podcast.js";
+import { PodcastMessage } from "../src/podcastMessage.js";
 import { ensureDir, removeDir } from "typeagent";
+import path from "path";
 
 export type TestTranscriptInfo = {
     filePath: string;
@@ -91,7 +97,9 @@ export async function loadTestPodcast(
             : createOfflineConversationSettings(),
     );
     if (maxMessages !== undefined && maxMessages > 0) {
-        podcast.messages = podcast.messages.slice(0, maxMessages);
+        podcast.messages = new MessageCollection<PodcastMessage>(
+            podcast.messages.getSlice(0, maxMessages),
+        );
     }
     return podcast;
 }
@@ -103,4 +111,9 @@ export async function ensureOutputDir(name: string, clean: boolean = true) {
     }
     await ensureDir(dirPath);
     return dirPath;
+}
+
+export async function getDbPath(name: string): Promise<string> {
+    const dirPath = await ensureOutputDir("databases");
+    return path.join(dirPath, name);
 }

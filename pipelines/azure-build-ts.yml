@@ -1,14 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-resources:
-  repositories:
-    - repository: TypeAgent-GH
-      type: github
-      endpoint: AI_Systems
-      name: microsoft/typeagent
-      ref: refs/heads/main
-
 trigger:
   branches:
     include:
@@ -39,7 +31,7 @@ jobs:
         displayName: "Install libsecret-1-0"
         condition: eq(variables['Agent.OS'], 'Linux')
 
-      - checkout: TypeAgent-GH
+      - checkout: self
         displayName: "Checkout TypeAgent Repository"
         path: "typeagent"
 
@@ -58,16 +50,10 @@ jobs:
         displayName: "Install dependencies"
         workingDirectory: $(workingDirectory)
 
-      - script: |
-          current_version=$(node -p "require('./package.json').version")
-          new_version="${current_version}-$(Build.BuildId)"
-          echo "##vso[task.setvariable variable=package_version]$new_version"
-          jq ".version=\"$new_version\"" package.json > package.tmp.json
-          mv package.tmp.json package.json
-          echo "Updated package.json to version $new_version"
-          cat package.json
-        displayName: "Update Package Version"
-        workingDirectory: $(agentsdk_folder)
+      - template: include-update-package-version.yml
+        parameters:
+          packageFolder: $(agentsdk_folder)
+          prerelease: $(Build.BuildId)
 
       - script: |
           npm run build

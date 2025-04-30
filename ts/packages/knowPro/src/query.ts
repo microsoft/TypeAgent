@@ -65,7 +65,7 @@ export function getTextRangeForDateRange(
     let rangeStartOrdinal: MessageOrdinal = -1;
     let rangeEndOrdinal = rangeStartOrdinal;
     for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
-        const message = messages[messageIndex];
+        const message = messages.get(messageIndex);
         if (message.timestamp) {
             if (isInDateRange(dateRange, new Date(message.timestamp))) {
                 if (rangeStartOrdinal < 0) {
@@ -447,11 +447,11 @@ export class QueryEvalContext {
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
         const messageIndex = semanticRef.range.start.messageOrdinal;
-        return this.conversation.messages[messageIndex];
+        return this.conversation.messages.get(messageIndex);
     }
 
     public getMessage(messageOrdinal: MessageOrdinal): IMessage {
-        return this.messages[messageOrdinal];
+        return this.messages.get(messageOrdinal);
     }
 
     public clearMatchedTerms() {

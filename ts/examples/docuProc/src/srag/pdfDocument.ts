@@ -1,27 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    IKnowledgeSource,
-    IMessage,
-    IConversation,
-    ConversationSettings,
-    ConversationIndex,
-    SemanticRef,
-    createConversationSettings,
-    IndexingEventHandlers,
-    IndexingResults,
-    buildConversationIndex,
-    ConversationSecondaryIndexes,
-    MessageTextIndex,
-    writeConversationDataToFile,
-    readConversationDataFromFile,
-    //addMessageKnowledgeToSemanticRefIndex,
-    buildTransientSecondaryIndexes,
-    //Term,
-    IConversationDataWithIndexes,
-    IMessageMetadata,
-} from "knowpro";
+import * as kp from "knowpro";
 import {
     conversation as kpLib,
     createEmbeddingCache,
@@ -29,12 +9,13 @@ import {
 } from "knowledge-processor";
 
 import { openai } from "aiclient";
-
 import registerDebug from "debug";
 import { CatalogEntryWithMeta } from "../pdfDownLoader.js";
 const debugLogger = registerDebug("conversation-memory.pdfdocs");
 
-export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
+export class PdfChunkMessageMeta
+    implements kp.IKnowledgeSource, kp.IMessageMetadata
+{
     constructor(
         public fileName: string,
         public pageNumber: string = "-",
@@ -192,7 +173,7 @@ export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
     }
 }
 
-export class PdfChunkMessage implements IMessage {
+export class PdfChunkMessage implements kp.IMessage {
     public timestamp: string | undefined = undefined;
     constructor(
         public textChunks: string[],
@@ -219,23 +200,27 @@ export class PdfChunkMessage implements IMessage {
         }
     }
 }
-export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
-    public settings: ConversationSettings;
-    public semanticRefIndex: ConversationIndex;
-    public secondaryIndexes: ConversationSecondaryIndexes;
+export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
+    public settings: kp.ConversationSettings;
+    public semanticRefIndex: kp.ConversationIndex;
+    public secondaryIndexes: kp.ConversationSecondaryIndexes;
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
+    public messages: kp.MessageCollection<PdfChunkMessage>;
 
     constructor(
         public nameTag: string = "",
-        public messages: PdfChunkMessage[] = [],
+        messages: PdfChunkMessage[] = [],
         public tags: string[] = [],
-        public semanticRefs: SemanticRef[] = [],
+        public semanticRefs: kp.SemanticRef[] = [],
     ) {
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.embeddingModel = model;
-        this.settings = createConversationSettings(model, embeddingSize);
-        this.semanticRefIndex = new ConversationIndex();
-        this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
+        this.settings = kp.createConversationSettings(model, embeddingSize);
+        this.semanticRefIndex = new kp.ConversationIndex();
+        this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
+            this.settings,
+        );
+        this.messages = new kp.MessageCollection<PdfChunkMessage>(messages);
     }
 
     private createEmbeddingModel(): [TextEmbeddingModelWithCache, number] {
@@ -250,11 +235,11 @@ export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
     }
 
     public async buildIndex(
-        eventHandler?: IndexingEventHandlers,
-    ): Promise<IndexingResults> {
+        eventHandler?: kp.IndexingEventHandlers,
+    ): Promise<kp.IndexingResults> {
         this.beginIndexing();
         try {
-            const result = await buildConversationIndex(
+            const result = await kp.buildConversationIndex(
                 this,
                 this.settings,
                 eventHandler,
@@ -287,13 +272,13 @@ export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
         baseFileName: string,
     ): Promise<void> {
         const data = await this.serialize();
-        await writeConversationDataToFile(data, dirPath, baseFileName);
+        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
     }
 
     public async serialize(): Promise<PdfChunkData> {
         const data: PdfChunkData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
             semanticRefs: this.semanticRefs,
             semanticIndexData: this.semanticRefIndex?.serialize(),
@@ -309,7 +294,7 @@ export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
         baseFileName: string,
     ): Promise<PdfKnowproIndex | undefined> {
         const pdfDoc = new PdfKnowproIndex();
-        const data = await readConversationDataFromFile(
+        const data = await kp.readConversationDataFromFile(
             dirPath,
             baseFileName,
             pdfDoc.settings.relatedTermIndexSettings.embeddingIndexSettings
@@ -328,11 +313,13 @@ export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
             const metadata = m.metadata as PdfChunkMessageMeta;
             return new PdfChunkMessage(m.textChunks, metadata, m.tags);
         });
-        this.messages = pdfChunkMessages;
+        this.messages = new kp.MessageCollection<PdfChunkMessage>(
+            pdfChunkMessages,
+        );
         this.semanticRefs = pdfChunkData.semanticRefs;
         this.tags = pdfChunkData.tags;
         if (pdfChunkData.semanticIndexData) {
-            this.semanticRefIndex = new ConversationIndex(
+            this.semanticRefIndex = new kp.ConversationIndex(
                 pdfChunkData.semanticIndexData,
             );
         }
@@ -344,7 +331,7 @@ export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
         }
 
         if (pdfChunkData.messageIndexData) {
-            this.secondaryIndexes.messageIndex = new MessageTextIndex(
+            this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
                 this.settings.messageTextIndexSettings,
             );
             this.secondaryIndexes.messageIndex.deserialize(
@@ -352,8 +339,8 @@ export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
             );
         }
 
-        await buildTransientSecondaryIndexes(this, this.settings);
+        await kp.buildTransientSecondaryIndexes(this, this.settings);
     }
 }
 export interface PdfChunkData
-    extends IConversationDataWithIndexes<PdfChunkMessage> {}
+    extends kp.IConversationDataWithIndexes<PdfChunkMessage> {}

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type Email = {
+export interface EmailHeader {
     from: EmailAddress;
     to: EmailAddress[] | undefined;
     cc?: EmailAddress[] | undefined;
@@ -12,8 +12,11 @@ export type Email = {
     importance?: string | undefined;
     sourcePath?: string | undefined;
     threadId?: string | undefined;
+}
+
+export interface Email extends EmailHeader {
     body: string;
-};
+}
 
 export type EmailAddress = {
     address?: string | undefined;

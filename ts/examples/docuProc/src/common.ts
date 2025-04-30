@@ -14,6 +14,7 @@ export const DIST_ROOT = distRoot;
 export const OUTPUT_DIR = path.join(distRoot, "output-data");
 export const CHUNKED_DOCS_DIR = path.join(OUTPUT_DIR, "chunked-docs");
 export const LOGS_DIR = path.join(OUTPUT_DIR, "logs");
+export const SRAG_MEM_DIR = path.join(OUTPUT_DIR, "knowpro-mem");
 
 export const PAPER_DOWNLOAD_DIR = path.join(OUTPUT_DIR, "papers/downloads");
 

@@ -8,7 +8,7 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
-    IMessage,
+    IMessageCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -19,7 +19,7 @@ import {
     Term,
     TextRange,
 } from "./interfaces.js";
-import { compareTextRange, isInTextRange } from "./common.js";
+import { Batch, compareTextRange, isInTextRange } from "./common.js";
 import { ScoredTextLocation } from "./textLocationIndex.js";
 import { getCountOfMessagesInCharBudget } from "./message.js";
 
@@ -584,7 +584,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     }
 
     public selectMessagesInBudget(
-        messages: IMessage[],
+        messages: IMessageCollection,
         maxCharsInBudget: number,
     ): void {
         let scoredMatches = this.getSortedByScore();
@@ -926,11 +926,6 @@ export function setIntersect<T = any>(
     }
     return set;
 }
-
-export type Batch<T = any> = {
-    startAt: number;
-    value: T[];
-};
 
 export function* getBatches<T = any>(
     array: T[],
