@@ -110,6 +110,11 @@ export class EmailMemory implements kp.IConversation {
                 emailData.messageIndexData,
             );
         }
+        // Rebuild transient secondary indexes associated with the conversation
+        await kp.buildTransientSecondaryIndexes(
+            this,
+            this.settings.conversationSettings,
+        );
     }
 
     public async writeToFile(

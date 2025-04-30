@@ -287,31 +287,34 @@ export class ConversationMemory
         return data;
     }
 
-    public async deserialize(
-        podcastData: ConversationMemoryData,
-    ): Promise<void> {
-        this.nameTag = podcastData.nameTag;
-        this.messages = this.deserializeMessages(podcastData);
-        this.semanticRefs = podcastData.semanticRefs;
-        this.tags = podcastData.tags;
-        if (podcastData.semanticIndexData) {
+    public async deserialize(data: ConversationMemoryData): Promise<void> {
+        this.nameTag = data.nameTag;
+        this.messages = this.deserializeMessages(data);
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
+        if (data.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
-                podcastData.semanticIndexData,
+                data.semanticIndexData,
             );
         }
-        if (podcastData.relatedTermsIndexData) {
+        if (data.relatedTermsIndexData) {
             this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
-                podcastData.relatedTermsIndexData,
+                data.relatedTermsIndexData,
             );
         }
-        if (podcastData.messageIndexData) {
+        if (data.messageIndexData) {
             this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
                 this.settings.conversationSettings.messageTextIndexSettings,
             );
             this.secondaryIndexes.messageIndex.deserialize(
-                podcastData.messageIndexData,
+                data.messageIndexData,
             );
         }
+        // Rebuild transient secondary indexes associated with the conversation
+        await kp.buildTransientSecondaryIndexes(
+            this,
+            this.settings.conversationSettings,
+        );
     }
 
     public async writeToFile(
