@@ -9,10 +9,10 @@ import * as kp from "knowpro";
 import { createEmbeddingModel } from "./common.js";
 import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
-
 import registerDebug from "debug";
-import { error, Result, success, TypeChatLanguageModel } from "typechat";
+import { error, Result, success } from "typechat";
 import { openai } from "aiclient";
+import { MemorySettings } from "./memory.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class ConversationMessageMeta
@@ -146,17 +146,7 @@ export class ConversationMessage implements kp.IMessage {
     }
 }
 
-export type FileSaveSettings = {
-    dirPath: string;
-    baseFileName: string;
-};
-
-export type ConversationMemorySettings = {
-    conversationSettings: kp.ConversationSettings;
-    languageModel: TypeChatLanguageModel;
-    queryTranslator?: kp.SearchQueryTranslator | undefined;
-    fileSaveSettings?: FileSaveSettings | undefined;
-};
+export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
     implements kp.IConversation<ConversationMessage>

@@ -5,6 +5,9 @@ import * as kp from "knowpro";
 //import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
 import { EmailMessage } from "./emailMessage.js";
+import { MemorySettings } from "./memory.js";
+
+export type EmailMemorySettings = MemorySettings;
 
 export class EmailMemory implements kp.IConversation {
     public messages: kp.IMessageCollection<EmailMessage>;
