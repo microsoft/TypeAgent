@@ -30,6 +30,7 @@ import sqlite from "better-sqlite3";
 import * as ms from "memory-storage";
 import { ExposureTable, GeoTable } from "./tables.js";
 import { Image, ImageMeta } from "./imageMeta.js";
+import path from "node:path";
 
 //const debug = registerDebug("typeagent:image-memory");
 
@@ -60,10 +61,9 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
         this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
 
         // create dataFrames (tables)
-        // TODO: replace with actual path
-        // TODO: make this an in-memory DB if the path isn't specified
-        // TODO: save in-memory DB to disk during "write" operations
-        dbPath = "c:\\temp\\pics\\temp.sqlite";
+        if (!dbPath) {
+            dbPath = ":memory:"
+        }
         this.db = ms.sqlite.createDatabase(dbPath, true);
         this.locations = new GeoTable(this.db);
         this.exposure = new ExposureTable(this.db);
@@ -101,7 +101,6 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
                     // add image location to dataframe
                     const latlong = img.metadata.getGeo();
                     if (this.locations && latlong) {
-
 
                         const sourceRef: hybrid.RowSourceRef =  { 
                             range: { 
@@ -192,12 +191,20 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
         await buildTransientSecondaryIndexes(this, this.settings);
     }
 
+    /*
+    * Writes the index & dataframes to disk
+    */
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
         const data = await this.serialize();
         await writeConversationDataToFile(data, dirPath, baseFileName);
+
+        // if we have an in-memory database we need to write it out to disk
+        if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
+            this.db?.exec(`vacuum main into '${path.join(dirPath, baseFileName)}_dataFrames.sqlite'`);
+        }
     }
 
     public static async readFromFile(
