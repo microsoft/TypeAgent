@@ -4,20 +4,7 @@
 import * as kp from "knowpro";
 //import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
-
-export class EmailMessage implements kp.IMessage {
-    constructor(
-        public textChunks: string[],
-        public tags: string[] = [],
-        public timestamp: string | undefined = undefined,
-        public metadata: kp.IMessageMetadata | undefined = undefined,
-        public deletionInfo?: kp.DeletionInfo | undefined,
-    ) {}
-
-    public getKnowledge() {
-        return undefined;
-    }
-}
+import { EmailMessage } from "./emailMessage.js";
 
 export class EmailMemory implements kp.IConversation {
     public messages: kp.IMessageCollection<EmailMessage>;
