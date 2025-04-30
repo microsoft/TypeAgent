@@ -2628,9 +2628,9 @@ importers:
 
   packages/shell:
     dependencies:
-      '@azure/msal-browser':
-        specifier: ^3.26.1
-        version: 3.26.1
+      '@azure/identity':
+        specifier: ^4.2.1
+        version: 4.2.1
       '@electron-toolkit/preload':
         specifier: ^3.0.2
         version: 3.0.2(electron@35.2.1)

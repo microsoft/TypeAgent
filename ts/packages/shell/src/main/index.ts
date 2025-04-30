@@ -14,7 +14,6 @@ import {
 import path from "node:path";
 import fs from "node:fs";
 import { electronApp, optimizer } from "@electron-toolkit/utils";
-import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     getDefaultAppAgentProviders,
@@ -44,8 +43,7 @@ import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { ShellWindow } from "./shellWindow.js";
 
-const debugShell = registerDebug("typeagent:shell");
-const debugShellError = registerDebug("typeagent:shell:error");
+import { debugShell, debugShellError } from "./debug.js";
 
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
