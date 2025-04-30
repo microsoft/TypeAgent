@@ -36,6 +36,21 @@ export class EmailMemory implements kp.IConversation {
         );
     }
 
+    public async addMessage(
+        message: EmailMessage,
+    ): Promise<kp.IndexingResults> {
+        // Add the message to memory and index it
+        this.messages.append(message);
+        let messageOrdinalStartAt = this.messages.length - 1;
+        let semanticRefOrdinalStartAt = this.semanticRefs.length;
+        return kp.addToConversationIndex(
+            this,
+            this.settings.conversationSettings,
+            messageOrdinalStartAt,
+            semanticRefOrdinalStartAt,
+        );
+    }
+
     public close() {
         if (this.storageProvider) {
             this.storageProvider.close();

@@ -85,7 +85,9 @@ export function cleanDir(folderPath: string): void {
     ensureDir(folderPath);
 }
 
-export function getDbPath(name: string): string {
-    const dirPath = ensureOutputDir("databases");
+export function getDbPath(name: string, subDir?: string): string {
+    const dbDirName = "databases";
+    subDir = subDir ? path.join(subDir, dbDirName) : dbDirName;
+    const dirPath = ensureOutputDir(subDir);
     return path.join(dirPath, name);
 }
