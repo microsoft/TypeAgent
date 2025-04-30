@@ -5,3 +5,4 @@ export * from "./podcast.js";
 export * from "./podcastMessage.js";
 export * from "./importPodcast.js";
 export * from "./conversationMemory.js";
+export * from "./email.js";
