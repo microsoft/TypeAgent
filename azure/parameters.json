@@ -10,6 +10,9 @@
         },
         "typeagent_speech": {
             "value": null
-        }
+        },
+        "openai_eastus_name": {
+            "value": null
+        }        
     }
 }
