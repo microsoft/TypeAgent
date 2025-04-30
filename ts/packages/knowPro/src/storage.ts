@@ -11,6 +11,7 @@ import {
     IMessageCollection,
     ISemanticRefCollection,
     IReadonlyCollection,
+    JsonSerializer,
 } from "./interfaces.js";
 
 export class Collection<T, TOrdinal extends number>
@@ -82,9 +83,9 @@ export class MessageCollection<TMessage extends IMessage = IMessage>
 export class MemoryStorageProvider implements IStorageProvider {
     constructor() {}
 
-    public createMessageCollection<
-        TMessage extends IMessage = IMessage,
-    >(): IMessageCollection<TMessage> {
+    public createMessageCollection<TMessage extends IMessage = IMessage>(
+        serializer?: JsonSerializer<TMessage>,
+    ): IMessageCollection<TMessage> {
         return new MessageCollection<TMessage>();
     }
 
