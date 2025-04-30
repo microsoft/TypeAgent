@@ -39,6 +39,7 @@ import {
     matchFilterToConversation,
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
+import { createKnowproEmailCommands } from "./knowproEmail.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -71,7 +72,8 @@ export async function createKnowproCommands(
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproDataFrameCommands(commands, context);
+    await createKnowproDataFrameCommands(context, commands);
+    await createKnowproEmailCommands(context, commands);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;

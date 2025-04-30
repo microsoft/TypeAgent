@@ -24,8 +24,8 @@ import { argDestFile, argSourceFile } from "./common.js";
 import path from "path";
 
 export async function createKnowproDataFrameCommands(
-    commands: Record<string, CommandHandler>,
     context: KnowProContext,
+    commands: Record<string, CommandHandler>,
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
     commands.kpDataFrameImport = importDataFrame;
@@ -34,7 +34,6 @@ export async function createKnowproDataFrameCommands(
     commands.kpDataFrameList = listFrames;
     commands.kpDataFrameSave = saveDataFrame;
     commands.kpDataFrameLoad = loadDataFrame;
-    //commands.kpDataFrameTest = testDb;
 
     const basePath = "/data/testChat/knowpro/restaurants";
     const filePath = "/data/testChat/knowpro/restaurants/all/split_011.json";

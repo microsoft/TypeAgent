@@ -9,3 +9,10 @@ export function removeFile(filePath: string): boolean {
     } catch {}
     return false;
 }
+
+export function ensureDir(folderPath: string): string {
+    if (!fs.existsSync(folderPath)) {
+        fs.promises.mkdir(folderPath, { recursive: true });
+    }
+    return folderPath;
+}

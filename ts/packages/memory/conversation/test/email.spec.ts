@@ -11,9 +11,8 @@ describeIf(
     () => hasTestKeys(),
     () => {
         test("create", async () => {
-            const name = "createTest.db";
-            const dbPath = await getDbPath(name);
-            const emailMemory = createEmailMemoryOnDb(name, dbPath, true);
+            const dbPath = await getDbPath("createTest.db");
+            const emailMemory = createEmailMemoryOnDb(dbPath, true);
             try {
                 const messageCount = 4;
                 const messages = createEmails(messageCount);

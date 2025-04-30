@@ -58,10 +58,9 @@ export class EmailSqliteProvider {
 }
 
 export function createEmailMemoryOnDb(
-    name: string,
     dbPath: string,
     createNew: boolean,
 ): EmailMemory {
     const db = new ms.sqlite.SqliteStorageProvider(dbPath, createNew);
-    return new EmailMemory(db, name);
+    return new EmailMemory(db);
 }
