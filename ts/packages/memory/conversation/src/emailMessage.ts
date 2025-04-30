@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
+import * as ms from "memory-storage";
 import { conversation as kpLib } from "knowledge-processor";
 import { email as email } from "knowledge-processor";
 
@@ -34,7 +35,7 @@ export class EmailMeta
         return email.emailToKnowledge(this);
     }
 
-    public copyFrom(meta: EmailMeta) {
+    public copyFrom(meta: email.EmailHeader) {
         this.bcc = meta.bcc;
         this.cc = meta.cc;
         this.from = meta.from;
@@ -69,6 +70,24 @@ export class EmailMessage implements kp.IMessage {
     public getKnowledge() {
         return this.metadata.getKnowledge();
     }
+}
+
+function importEmailMeta(header: email.EmailHeader): EmailMeta {
+    const meta = new EmailMeta(header.from);
+    meta.copyFrom(header);
+    return meta;
+}
+
+function importEmailMessage(email: email.Email): EmailMessage {
+    const meta = importEmailMeta(email);
+    return new EmailMessage(meta, email.body);
+}
+
+export function loadEmailMessageFromFile(
+    filePath: string,
+): EmailMessage | undefined {
+    const emailData = ms.readJsonFile<email.Email>(filePath);
+    return emailData ? importEmailMessage(emailData) : undefined;
 }
 
 export class EmailMessageSerializer implements kp.JsonSerializer<EmailMessage> {

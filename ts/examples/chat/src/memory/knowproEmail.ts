@@ -6,14 +6,16 @@ import {
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
+    StopWatch,
 } from "interactive-app";
 import { KnowProContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
-import { argDestFile } from "./common.js";
+import { argDestFile, argSourceFile } from "./common.js";
 import path from "path";
 import { ensureDir, getFileName } from "typeagent";
 import { memoryNameToIndexPath } from "./knowproCommon.js";
+import chalk from "chalk";
 
 export type KnowProEmailContext = {
     printer: KnowProPrinter;
@@ -31,9 +33,63 @@ export async function createKnowproEmailCommands(
     };
     await ensureDir(context.basePath);
 
-    commands.kpEmailLoad = loadIndex;
+    commands.kpEmailAdd = emailAdd;
+    commands.kpEmailsLoad = emailsLoad;
+    commands.kpEmailsSave = emailsSave;
 
-    function loadIndexDef(): CommandMetadata {
+    function emailAddDef(): CommandMetadata {
+        return {
+            description: "Add a new email to the index",
+            args: {
+                filePath: argSourceFile(),
+            },
+        };
+    }
+    commands.kpEmailAdd.metadata = emailAddDef();
+    async function emailAdd(args: string[]) {
+        if (!ensureIndexLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args);
+        const emailMessage = cm.loadEmailMessageFromFile(namedArgs.filePath);
+        if (!emailMessage) {
+            context.printer.writeError("File path not found");
+            return;
+        }
+        await context.email!.addMessage(emailMessage);
+    }
+
+    function emailsSaveDef(): CommandMetadata {
+        return {
+            description: "Save email index",
+            args: {
+                filePath: argDestFile(),
+            },
+        };
+    }
+    commands.emailsSave.metadata = emailsSaveDef();
+    async function emailsSave(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, emailsSaveDef());
+        if (!context.email) {
+            context.printer.writeError("No email index loaded");
+            return;
+        }
+        context.printer.writeLine("Saving index");
+        context.printer.writeLine(namedArgs.filePath);
+        const dirName = path.dirname(namedArgs.filePath);
+        await ensureDir(dirName);
+
+        const clock = new StopWatch();
+        clock.start();
+        await context.email.writeToFile(
+            dirName,
+            getFileName(namedArgs.filePath),
+        );
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock, "Write to file");
+    }
+
+    function loadEmailsDef(): CommandMetadata {
         return {
             description: "Create new email index",
             options: {
@@ -42,9 +98,9 @@ export async function createKnowproEmailCommands(
             },
         };
     }
-    commands.kpEmailLoad.metadata = loadIndexDef();
-    async function loadIndex(args: string[]) {
-        const namedArgs = parseNamedArguments(args, loadIndexDef());
+    commands.kpEmailLoad.metadata = loadEmailsDef();
+    async function emailsLoad(args: string[]) {
+        const namedArgs = parseNamedArguments(args, loadEmailsDef());
         let emailIndexPath = namedArgs.filePath;
         emailIndexPath ??= namedArgs.name
             ? memoryNameToIndexPath(context.basePath, namedArgs.name)
@@ -59,6 +115,14 @@ export async function createKnowproEmailCommands(
             getFileName(emailIndexPath),
             true,
         );
+    }
+
+    function ensureIndexLoaded() {
+        if (!context.email) {
+            context.printer.writeError("No email index loaded");
+            return false;
+        }
+        return true;
     }
 
     function closeEmail() {
