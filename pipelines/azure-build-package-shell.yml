@@ -18,6 +18,10 @@ parameters:
   - name: channel
     type: string
     default: ci
+    values:
+      - ci
+      - lkg
+      - test
 
 variables:
   workingDirectory: ts
@@ -81,7 +85,7 @@ jobs:
 
   - deployment: publish
     displayName: Publish TypeAgent Shell
-    environment: typeagent-shell
+    environment: typeagent-shell-${{ parameters.channel }}
     dependsOn: build_package_shell
     pool:
       # AzureFileCopy requires windows
