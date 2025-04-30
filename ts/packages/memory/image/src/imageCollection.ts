@@ -60,6 +60,10 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
         this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
 
         // create dataFrames (tables)
+        // TODO: replace with actual path
+        // TODO: make this an in-memory DB if the path isn't specified
+        // TODO: save in-memory DB to disk during "write" operations
+        dbPath = "c:\\temp\\pics\\temp.sqlite";
         this.db = ms.sqlite.createDatabase(dbPath, true);
         this.locations = new GeoTable(this.db);
         this.exposure = new ExposureTable(this.db);
@@ -89,21 +93,33 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
     * Enumerates the messages and adds them to the data frame.
     */
     public addMetadataToDataFrames() {
+
         if (this.semanticRefIndex) {
             this.messages.forEach(
                 (img: Image, index: number) => {
 
                     // add image location to dataframe
-                    const latlong = img.metadata.dataFrames[this.locations.name];
+                    const latlong = img.metadata.getGeo();
                     if (this.locations && latlong) {
-                        this.locations.addRows({ sourceRef: img, record: latlong});
+
+
+                        const sourceRef: hybrid.RowSourceRef =  { 
+                            range: { 
+                                start: { 
+                                    messageOrdinal: index, 
+                                    chunkOrdinal: 0 
+                                } 
+                            }
+                        }
+
+                        this.locations.addRows({ sourceRef, record: latlong});
                     } 
 
-                    // add exposure to dataframe
-                    const exposure = img.metadata.dataFrames[this.exposure.name];
-                    if (this.exposure && exposure) {
-                        this.exposure.addRows(exposure);
-                    } 
+                    // // add exposure to dataframe
+                    // const exposure = img.metadata.dataFrames[this.exposure.name];
+                    // if (this.exposure && exposure) {
+                    //     this.exposure.addRows(exposure);
+                    // } 
 
                     // TODO: add additional meta data tables
                 }

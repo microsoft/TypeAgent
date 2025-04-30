@@ -13,7 +13,6 @@ import {
 } from "knowledge-processor";
 import path from "node:path";
 import { AddressOutput } from "@azure-rest/maps-search";
-import { DataFrameValue } from "../../../knowPro/dist/hybrid/dataFrame.js";
 //import registerDebug from "debug";
 
 //const debug = registerDebug("typeagent:image-memory");
@@ -36,7 +35,7 @@ export class Image implements IMessage {
 export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
 
     public imageEntity: kpLib.ConcreteEntity | undefined = undefined;
-    public dataFrameRecords: Record<string, hybrid.DataFrameRecord> = {};
+    public dataFrameValues: Record<string, hybrid.DataFrameValue> = {};
 
     constructor(
         public fileName: string,
@@ -62,48 +61,21 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
         };
 
         // EXIF data are facets of this image
-        const latLongDataFrame: hybrid.DataFrameRecord = {}
         for (let i = 0; i < this.img?.exifData.length; i++) {
             
-            const exifPropertyName = this.img?.exifData[i];
-            const exifPropertyValue = this.img?.exifData[1];
+            const exifPropertyName = this.img?.exifData[i][0];
+            const exifPropertyValue = this.img?.exifData[i][1];
 
             if (exifPropertyName && exifPropertyValue) {
                 this.imageEntity.facets!.push({
-                    name: this.img?.exifData[i][0],
-                    value: this.img?.exifData[i][1],
+                    name: exifPropertyName,
+                    value: exifPropertyValue,
                 });
 
-                // save the dataFrame record
-                this.dataFrameRecords[exifPropertyName] = exifPropertyValue;
-
-                // TODO: add some of these to the dataFrames
-                // switch (exifPropertyName) {
-                //     case "GPSLatitude": {
-                //         latLongDataFrame[exifPropertyName] = exifPropertyValue as number;
-                //         break;
-                //     }
-                //     case "GPSLatitudeRef": {
-                //         break;
-                //     }
-                //     case "GPSLongitude": {
-                //         break;
-                //     }
-                //     case "GPSLongitudeRef": {
-                //         break;
-                //     }
-                //     default: {
-                //         break;
-                //     }
-                //}
+                // save the EXIF tag as a dataFrame record
+                this.dataFrameValues[exifPropertyName] = exifPropertyValue;
             }
         }
-
-        // construct the necessary data frames that the index is expecting
-        if (this.hasGeo()) {
-            this.dataFrameRecords["geo"] = this.getGeo();
-        }
-
 
         // create the return values
         let entities: kpLib.ConcreteEntity[] = [];
@@ -375,25 +347,41 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
         };
     }
 
-    hasGeo(): boolean {
+    getGeo(): hybrid.DataFrameRecord | undefined {
 
-        if (this.dataFrameRecords["GPSLatitude"]
-            && this.dataFrameRecords["GPSLatitudeRef"]
-            && this.dataFrameRecords["GPSLongitude"]
-            && this.dataFrameRecords["GPSLongitudeRef"]) {
-                return true;
-        }
+        // no EXIF data, no geo
+        if (!this.dataFrameValues["GPSLatitude"]
+            //&& this.dataFrameValues["GPSLatitudeRef"]
+            //&& this.dataFrameValues["GPSLongitudeRef"]
+            || !this.dataFrameValues["GPSLongitude"]) {
+                return undefined;
+        }        
 
-        return false;
-    }
+        // TODO: Ensure localization
+        const latlong: hybrid.DataFrameRecord = { };
+//        if (!this.dataFrameValues["latlong"]) {
+            const latRef: hybrid.DataFrameValue = this.dataFrameValues["GPSLatitudeRef"];
+            const longRef: hybrid.DataFrameValue  = this.dataFrameValues["GPSLongitudeRef"];
+            const lat: hybrid.DataFrameValue = this.dataFrameValues["GPSLatitude"];
+            const long: hybrid.DataFrameValue = this.dataFrameValues["GPSLongitude"];
+                
+            //const latlong: hybrid.DataFrameValue = { ...lat, ...long };
+            //const latlong2: hybrid.DataFrameValue = { lat: lat["lat"], long: long["long"] };
+            if (latRef?.toString().startsWith("South")) {
+                latlong.latitude = parseFloat(`-${lat}`);                
+            } else {
+                latlong.latitude = lat;
+            }
+    
+            if (longRef?.toString().startsWith("West")) {
+                latlong.longitude = parseFloat(`-${long}`);
+            } else {
+                latlong.longitude = long;
+            }
 
-    getGeo(): hybrid.DataFrameRecord {
-        const latRef: hybrid.DataFrameRecord = this.dataFrameRecords["GPSLatitudeRef"];
-        const longRef: hybrid.DataFrameRecord  = this.dataFrameRecords["GPSLongitudeRef"];
+//            this.dataFrameValues["latlong"] = latlong2;
+//        }
 
-        // TODO: implement
-        if (latRef)
-
-        return {"dafd": 'sdfsd'};
+        return latlong;
     }
 }
