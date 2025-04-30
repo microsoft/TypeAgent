@@ -48,3 +48,8 @@ export function createMemorySettings(
     };
     return memorySettings;
 }
+
+export type IndexingState = {
+    lastMessageOrdinal: kp.MessageOrdinal;
+    lastSemanticRefOrdinal: kp.SemanticRefOrdinal;
+};

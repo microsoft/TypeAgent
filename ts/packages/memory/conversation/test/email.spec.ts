@@ -45,7 +45,7 @@ describeIf(
                 const emailMemory = createEmailMemoryOnDb(dbPath, true);
                 try {
                     const messageCount = 4;
-                    const messages = createEmails(messageCount);
+                    const messages = createEmails(messageCount, "sender@abc");
                     for (const message of messages) {
                         const result = await emailMemory.addMessage(message);
                         expect(result.semanticRefs).toBeDefined();
@@ -60,10 +60,11 @@ describeIf(
     },
 );
 
-function createEmails(count: number): EmailMessage[] {
+function createEmails(count: number, from?: string): EmailMessage[] {
     const messages: EmailMessage[] = [];
     for (let i = 0; i < count; ++i) {
-        messages.push(createEmail(`alias${i}@xyz`, `Body\nMessage_${i}`));
+        let fromAlias = from ?? `alias${i}@xyz.pqr`;
+        messages.push(createEmail(fromAlias, `Body\nMessage_${i}`));
     }
     return messages;
 }

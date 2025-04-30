@@ -5,9 +5,19 @@ import * as kp from "knowpro";
 //import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
 import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
-import { createMemorySettings, MemorySettings } from "./memory.js";
+import {
+    createMemorySettings,
+    IndexingState,
+    MemorySettings,
+} from "./memory.js";
+import { createIndexingState } from "./common.js";
 
 export type EmailMemorySettings = MemorySettings;
+
+export interface EmailMemoryData
+    extends kp.IConversationDataWithIndexes<EmailMessage> {
+    indexingState: IndexingState;
+}
 
 export class EmailMemory implements kp.IConversation {
     public messages: kp.IMessageCollection<EmailMessage>;
@@ -16,6 +26,7 @@ export class EmailMemory implements kp.IConversation {
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
     public serializer: EmailMessageSerializer;
+    public indexingState: IndexingState;
 
     constructor(
         public storageProvider: kp.IStorageProvider,
@@ -28,6 +39,7 @@ export class EmailMemory implements kp.IConversation {
         }
         this.settings = settings;
         this.serializer = new EmailMessageSerializer();
+        this.indexingState = createIndexingState();
         this.messages = storageProvider.createMessageCollection<EmailMessage>(
             this.serializer,
         );
@@ -53,6 +65,46 @@ export class EmailMemory implements kp.IConversation {
         );
     }
 
+    public async serialize(): Promise<EmailMemoryData> {
+        const data: EmailMemoryData = {
+            indexingState: this.indexingState,
+            nameTag: this.nameTag,
+            messages: [],
+            tags: this.tags,
+            semanticRefs: this.semanticRefs,
+            semanticIndexData: this.semanticRefIndex?.serialize(),
+            relatedTermsIndexData:
+                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
+            messageIndexData: this.secondaryIndexes.messageIndex?.serialize(),
+        };
+        return data;
+    }
+
+    public async deserialize(emailData: EmailMemoryData): Promise<void> {
+        this.indexingState = emailData.indexingState;
+        this.nameTag = emailData.nameTag;
+        this.semanticRefs = emailData.semanticRefs;
+        this.tags = emailData.tags;
+        if (emailData.semanticIndexData) {
+            this.semanticRefIndex = new kp.ConversationIndex(
+                emailData.semanticIndexData,
+            );
+        }
+        if (emailData.relatedTermsIndexData) {
+            this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
+                emailData.relatedTermsIndexData,
+            );
+        }
+        if (emailData.messageIndexData) {
+            this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+                this.settings.conversationSettings.messageTextIndexSettings,
+            );
+            this.secondaryIndexes.messageIndex.deserialize(
+                emailData.messageIndexData,
+            );
+        }
+    }
+
     public close() {
         if (this.storageProvider) {
             this.storageProvider.close();
@@ -63,23 +115,6 @@ export class EmailMemory implements kp.IConversation {
         return createMemorySettings(
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
-    }
-}
-
-export class EmailSqliteProvider {
-    public dbProvider: ms.sqlite.SqliteStorageProvider;
-
-    constructor(dbPath: string, createNew: boolean) {
-        this.dbProvider = new ms.sqlite.SqliteStorageProvider(
-            dbPath,
-            createNew,
-        );
-    }
-
-    public close() {
-        if (this.dbProvider) {
-            this.dbProvider.close();
-        }
     }
 }
 

@@ -3,6 +3,7 @@
 
 import * as kpLib from "knowledge-processor";
 import { openai } from "aiclient";
+import { IndexingState } from "./memory.js";
 
 export function createEmbeddingModelWithCache(
     cacheSize: number,
@@ -15,4 +16,11 @@ export function createEmbeddingModelWithCache(
     );
 
     return [embeddingModel, 1536];
+}
+
+export function createIndexingState(): IndexingState {
+    return {
+        lastMessageOrdinal: -1,
+        lastSemanticRefOrdinal: -1,
+    };
 }
