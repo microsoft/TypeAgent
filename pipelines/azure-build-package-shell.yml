@@ -11,36 +11,39 @@ pr:
     exclude:
       - "*"
 
+parameters:
+  - name: platforms
+    type: object
+    default: [win, linux, mac]
+
 variables:
-  workingDirectory: "ts"
-  shell_folder: "ts/packages/shell"
-  nodeVersion: "22"
+  workingDirectory: ts
+  shell_folder: ts/packages/shell
+  nodeVersion: 22
 
 jobs:
   - job: build_package_shell
-    displayName: "TypeAgent Shell"
+    displayName: Build TypeAgent Shell
     strategy:
       matrix:
         windows:
-          image: "windows-latest"
+          image: windows-latest
+          platform: win
         linux:
-          image: "ubuntu-latest"
+          image: ubuntu-latest
+          platform: linux
         mac:
-          image: "macos-latest"
+          image: macos-latest
+          platform: mac
     pool:
-      vmImage: "$(image)"
+      vmImage: $(image)
     steps:
-      - script: |
-          sudo apt install libsecret-1-0
-        displayName: "Install libsecret-1-0"
-        condition: eq(variables['Agent.OS'], 'Linux')
-
       - checkout: self
-        displayName: "Checkout TypeAgent Repository"
+        displayName: Checkout TypeAgent Repository
         path: "typeagent"
 
       - task: UseNode@1
-        displayName: "Setup Node.js"
+        displayName: Setup Node.js
         inputs:
           version: $(nodeVersion)
           checkLatest: true
@@ -57,23 +60,48 @@ jobs:
       - template: include-update-package-version.yml
         parameters:
           packageFolder: $(shell_folder)
+          prerelease: ci.$(Build.BuildNumber)
 
       - script: |
           pnpm run build:shell
-        displayName: "Build"
+        displayName: Build Shell
         workingDirectory: $(workingDirectory)
 
-      - bash: |
-          if [[ '$(Agent.OS)' == 'Linux' ]]; then
-            pnpm run shell:package:linux
-          elif [[ '$(Agent.OS)' == 'Darwin' ]]; then
-            pnpm run shell:package:mac
-          elif [[ '$(Agent.OS)' == 'Windows_NT' ]]; then
-            pnpm run shell:package:win
-          fi
-        displayName: "Package - shell"
+      - script: |
+          pnpm run shell:package:$(platform)
+        displayName: Package - shell
         workingDirectory: $(workingDirectory)
 
       - publish: $(shell_folder)/dist
-        displayName: "Publish"
-        artifact: "shell-$(Agent.OS)"
+        displayName: Upload Artifact
+        artifact: shell-$(platform)
+
+  - deployment: publish
+    displayName: Publish TypeAgent Shell
+    environment: typeagent-shell
+    dependsOn: build_package_shell
+    pool:
+      # AzureFileCopy requires windows
+      vmImage: windows-latest
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - ${{ each platform in parameters.platforms }}:
+                - download: current
+                  artifact: shell-${{ platform }}
+                  displayName: Download shell package - ${{ platform }}
+                  patterns: |
+                    [Tt]ype[Aa]gent[- ]shell[-_]*
+                    ci*.yml
+                  condition: succeeded()
+
+                - task: AzureFileCopy@6
+                  displayName: Upload Azure Storage - ${{ platform }}
+                  inputs:
+                    SourcePath: $(Pipeline.Workspace)\shell-${{ platform }}\**
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
+                  condition: succeeded()
