@@ -4,8 +4,7 @@
 import { createEmailMemoryOnDb } from "../src/emailMemory.js";
 import { EmailHeader, EmailMessage } from "../src/emailMessage.js";
 import { verifyEmailHeadersEqual } from "./verify.js";
-import { getDbPath } from "./testCommon.js";
-import { describeIf, hasTestKeys } from "test-lib";
+import { describeIf, getDbPath, hasTestKeys } from "test-lib";
 
 describeIf(
     "email.online",

@@ -45,3 +45,47 @@ export function readTestJsonFile(filePath: string): any {
     const json = readTestFile(filePath);
     return JSON.parse(json);
 }
+
+export function ensureDir(folderPath: string): string {
+    if (!fs.existsSync(folderPath)) {
+        fs.promises.mkdir(folderPath, { recursive: true });
+    }
+    return folderPath;
+}
+
+export function ensureOutputDir(name: string, clean: boolean = true) {
+    const dirPath = getOutputDirPath(name);
+    if (clean) {
+        removeDir(dirPath);
+    }
+    ensureDir(dirPath);
+    return dirPath;
+}
+
+/**
+ * Remove directory from given file system
+ * @param folderPath
+ * @param fSys
+ * @returns true if success. False if folder does not exist
+ */
+export function removeDir(folderPath: string): boolean {
+    try {
+        fs.rmSync(folderPath, { recursive: true, force: true });
+        return true;
+    } catch (err: any) {
+        if (err.code !== "ENOENT") {
+            throw err;
+        }
+    }
+    return false;
+}
+
+export function cleanDir(folderPath: string): void {
+    removeDir(folderPath);
+    ensureDir(folderPath);
+}
+
+export function getDbPath(name: string): string {
+    const dirPath = ensureOutputDir("databases");
+    return path.join(dirPath, name);
+}
