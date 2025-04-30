@@ -50,7 +50,7 @@ export async function createKnowproEmailCommands(
         if (!ensureIndexLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args);
+        const namedArgs = parseNamedArguments(args, emailAddDef());
         const emailMessage = cm.loadEmailMessageFromFile(namedArgs.filePath);
         if (!emailMessage) {
             context.printer.writeError("File path not found");
@@ -67,7 +67,7 @@ export async function createKnowproEmailCommands(
             },
         };
     }
-    commands.emailsSave.metadata = emailsSaveDef();
+    commands.kpEmailsSave.metadata = emailsSaveDef();
     async function emailsSave(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, emailsSaveDef());
         if (!context.email) {
@@ -98,7 +98,7 @@ export async function createKnowproEmailCommands(
             },
         };
     }
-    commands.kpEmailLoad.metadata = loadEmailsDef();
+    commands.kpEmailsLoad.metadata = loadEmailsDef();
     async function emailsLoad(args: string[]) {
         const namedArgs = parseNamedArguments(args, loadEmailsDef());
         let emailIndexPath = namedArgs.filePath;
@@ -115,6 +115,7 @@ export async function createKnowproEmailCommands(
             getFileName(emailIndexPath),
             true,
         );
+        kpContext.conversation = context.email;
     }
 
     function ensureIndexLoaded() {
