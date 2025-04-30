@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import path from "path";
 import { fileURLToPath } from "url";
 import * as fsp from "fs/promises";

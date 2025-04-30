@@ -24,20 +24,33 @@ import {
     loadCatalogWithMeta,
 } from "../pdfDownLoader.js";
 import { assert } from "node:console";
+import { AppPrinter } from "../printer.js";
 
 const execPromise = promisify(exec);
 
+export function isInteractiveIo(
+    io: iapp.InteractiveIo | AppPrinter,
+): io is iapp.InteractiveIo {
+    return typeof (io as iapp.InteractiveIo).writer?.writeLine === "function";
+}
+
 function log(
-    io: iapp.InteractiveIo | undefined,
+    io: iapp.InteractiveIo | AppPrinter | undefined,
     message: string,
     color: ChalkInstance,
 ): void {
     message = color(message);
-    if (io) {
-        io.writer.writeLine(message);
-    } else {
-        console.log(message);
+    const colored = color(message);
+    if (io === undefined) {
+        console.log(colored);
+        return;
     }
+    if (isInteractiveIo(io)) {
+        io.writer.writeLine(colored);
+    } else {
+        io.writeLine(colored);
+    }
+    return;
 }
 
 export async function chunkifyPdfFiles(
@@ -147,7 +160,7 @@ export async function loadPdfChunksFromJson(
 }
 
 export async function importPdf(
-    io: iapp.InteractiveIo | undefined,
+    io: iapp.InteractiveIo | AppPrinter | undefined,
     pdfFilePath: string,
     outputDir: string | undefined,
     verbose = false,
@@ -338,7 +351,7 @@ export function processPdfChunks(
 }
 
 export async function indexPdfChunks(
-    io: iapp.InteractiveIo | undefined,
+    io: iapp.InteractiveIo | AppPrinter | undefined,
     pdfFilePath: string,
     fVerbose: boolean,
     chunkResults: (ChunkedFile | ErrorItem)[] = [],
