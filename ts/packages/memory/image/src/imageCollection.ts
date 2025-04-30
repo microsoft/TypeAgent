@@ -70,6 +70,7 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
 
         // create dataFrames collection
         // TODO: select other Facets/meta data fields
+        // TODO: put everything in a single table?
         this.dataFrames = new Map<string, hybrid.IDataFrame>([
             [this.locations.name, this.locations],
             [this.exposure.name, this.exposure]
