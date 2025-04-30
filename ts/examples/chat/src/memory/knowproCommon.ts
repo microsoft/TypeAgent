@@ -5,6 +5,8 @@ import { ProgressBar } from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
 import { ChatPrinter } from "../chatPrinter.js";
+import { addFileNameSuffixToPath } from "./common.js";
+import path from "path";
 
 /**
  * Appends the given messages and their pre-extracted associated knowledge to the conversation index
@@ -203,4 +205,21 @@ export function hasConversationResults(
     return results.some((r) => {
         return r.knowledgeMatches.size > 0 || r.messageMatches.length > 0;
     });
+}
+
+const IndexFileSuffix = "_index.json";
+export function sourcePathToMemoryIndexPath(
+    sourcePath: string,
+    indexFilePath?: string,
+): string {
+    return (
+        indexFilePath ?? addFileNameSuffixToPath(sourcePath, IndexFileSuffix)
+    );
+}
+
+export function memoryNameToIndexPath(
+    basePath: string,
+    memoryName: string,
+): string {
+    return path.join(basePath, memoryName + IndexFileSuffix);
 }

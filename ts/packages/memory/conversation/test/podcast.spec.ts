@@ -1,9 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describeIf, hasTestKeys } from "test-lib";
+import { describeIf, ensureOutputDir, hasTestKeys } from "test-lib";
 import {
-    ensureOutputDir,
     getTestTranscriptDialog,
     loadTestPodcast,
     // getTestTranscriptSmall,

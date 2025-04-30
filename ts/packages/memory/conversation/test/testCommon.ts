@@ -10,14 +10,11 @@ import {
     createTestChatModel,
     createTestEmbeddingModel,
     getAbsolutePath,
-    getOutputDirPath,
     NullEmbeddingModel,
 } from "test-lib";
 import { importPodcast } from "../src/importPodcast.js";
 import { Podcast } from "../src/podcast.js";
 import { PodcastMessage } from "../src/podcastMessage.js";
-import { ensureDir, removeDir } from "typeagent";
-import path from "path";
 
 export type TestTranscriptInfo = {
     filePath: string;
@@ -102,18 +99,4 @@ export async function loadTestPodcast(
         );
     }
     return podcast;
-}
-
-export async function ensureOutputDir(name: string, clean: boolean = true) {
-    const dirPath = getOutputDirPath(name);
-    if (clean) {
-        await removeDir(dirPath);
-    }
-    await ensureDir(dirPath);
-    return dirPath;
-}
-
-export async function getDbPath(name: string): Promise<string> {
-    const dirPath = await ensureOutputDir("databases");
-    return path.join(dirPath, name);
 }

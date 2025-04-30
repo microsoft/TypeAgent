@@ -4,6 +4,7 @@
 import { MatchAccumulator, setIntersect, setUnion } from "../collections.js";
 import { DataFrameCompiler } from "./dataFrameQuery.js";
 import {
+    MessageOrdinal,
     ScoredMessageOrdinal,
     SearchTerm,
     SearchTermGroup,
@@ -11,6 +12,7 @@ import {
 } from "../interfaces.js";
 import { ComparisonOp } from "../queryCmp.js";
 import { createDefaultSearchOptions, SearchOptions } from "../search.js";
+import { textRangeFromMessageChunk } from "../message.js";
 
 /**
  * EXPERIMENTAL CODE. SUBJECT TO RAPID CHANGE
@@ -279,6 +281,17 @@ export class DataFrame implements IDataFrame {
                 return value != propertyValue;
         }
     }
+}
+
+export function addRowToFrame(
+    df: IDataFrame,
+    messageOrdinal: MessageOrdinal,
+    record: DataFrameRecord,
+) {
+    const sourceRef: RowSourceRef = {
+        range: textRangeFromMessageChunk(messageOrdinal),
+    };
+    df.addRows({ sourceRef, record });
 }
 
 export function isDataFrameGroup(

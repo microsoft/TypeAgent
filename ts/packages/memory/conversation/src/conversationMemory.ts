@@ -1,18 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    conversation as kpLib,
-    TextEmbeddingModelWithCache,
-} from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 import * as kp from "knowpro";
-import { createEmbeddingModel } from "./common.js";
 import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
-
 import registerDebug from "debug";
-import { error, Result, success, TypeChatLanguageModel } from "typechat";
-import { openai } from "aiclient";
+import { error, Result, success } from "typechat";
+import { createMemorySettings, MemorySettings } from "./memory.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class ConversationMessageMeta
@@ -146,17 +141,7 @@ export class ConversationMessage implements kp.IMessage {
     }
 }
 
-export type FileSaveSettings = {
-    dirPath: string;
-    baseFileName: string;
-};
-
-export type ConversationMemorySettings = {
-    conversationSettings: kp.ConversationSettings;
-    languageModel: TypeChatLanguageModel;
-    queryTranslator?: kp.SearchQueryTranslator | undefined;
-    fileSaveSettings?: FileSaveSettings | undefined;
-};
+export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
     implements kp.IConversation<ConversationMessage>
@@ -167,8 +152,6 @@ export class ConversationMemory
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
 
-    private embeddingModel: TextEmbeddingModelWithCache | undefined;
-    private embeddingSize: number | undefined;
     private updatesTaskQueue: QueueObject<ConversationMemoryTasks>;
 
     constructor(
@@ -304,31 +287,34 @@ export class ConversationMemory
         return data;
     }
 
-    public async deserialize(
-        podcastData: ConversationMemoryData,
-    ): Promise<void> {
-        this.nameTag = podcastData.nameTag;
-        this.messages = this.deserializeMessages(podcastData);
-        this.semanticRefs = podcastData.semanticRefs;
-        this.tags = podcastData.tags;
-        if (podcastData.semanticIndexData) {
+    public async deserialize(data: ConversationMemoryData): Promise<void> {
+        this.nameTag = data.nameTag;
+        this.messages = this.deserializeMessages(data);
+        this.semanticRefs = data.semanticRefs;
+        this.tags = data.tags;
+        if (data.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
-                podcastData.semanticIndexData,
+                data.semanticIndexData,
             );
         }
-        if (podcastData.relatedTermsIndexData) {
+        if (data.relatedTermsIndexData) {
             this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
-                podcastData.relatedTermsIndexData,
+                data.relatedTermsIndexData,
             );
         }
-        if (podcastData.messageIndexData) {
+        if (data.messageIndexData) {
             this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
                 this.settings.conversationSettings.messageTextIndexSettings,
             );
             this.secondaryIndexes.messageIndex.deserialize(
-                podcastData.messageIndexData,
+                data.messageIndexData,
             );
         }
+        // Rebuild transient secondary indexes associated with the conversation
+        await kp.buildTransientSecondaryIndexes(
+            this,
+            this.settings.conversationSettings,
+        );
     }
 
     public async writeToFile(
@@ -438,30 +424,9 @@ export class ConversationMemory
     }
 
     private createSettings(): ConversationMemorySettings {
-        const languageModel =
-            openai.createChatModelDefault("conversationMemory");
-        /**
-         * Our index already has embeddings for every term in the podcast
-         * Create a caching embedding model that can just leverage those embeddings
-         * @returns embedding model, size of embedding
-         */
-        const [model, size] = createEmbeddingModel(
-            64,
+        return createMemorySettings(
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
-        this.embeddingModel = model;
-        this.embeddingSize = size;
-        const conversationSettings = kp.createConversationSettings(
-            this.embeddingModel,
-            this.embeddingSize,
-        );
-        conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
-            kp.createKnowledgeExtractor(languageModel);
-        const memorySettings: ConversationMemorySettings = {
-            conversationSettings,
-            languageModel,
-        };
-        return memorySettings;
     }
 
     private getQueryTranslator(): kp.SearchQueryTranslator {

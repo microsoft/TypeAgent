@@ -24,8 +24,8 @@ import { argDestFile, argSourceFile } from "./common.js";
 import path from "path";
 
 export async function createKnowproDataFrameCommands(
-    commands: Record<string, CommandHandler>,
     context: KnowProContext,
+    commands: Record<string, CommandHandler>,
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
     commands.kpDataFrameImport = importDataFrame;
@@ -34,7 +34,6 @@ export async function createKnowproDataFrameCommands(
     commands.kpDataFrameList = listFrames;
     commands.kpDataFrameSave = saveDataFrame;
     commands.kpDataFrameLoad = loadDataFrame;
-    //commands.kpDataFrameTest = testDb;
 
     const basePath = "/data/testChat/knowpro/restaurants";
     const filePath = "/data/testChat/knowpro/restaurants/all/split_011.json";
@@ -284,103 +283,6 @@ export async function createKnowproDataFrameCommands(
     function dfNameToFilePath(name: string): string {
         return path.join(basePath, name + IndexFileSuffix);
     }
-
-    /*
-    async function testDb() {
-        if (db) {
-            let rows = db.restaurants.getRow(
-                "city",
-                "amsterdam",
-                kp.ComparisonOp.Eq,
-            );
-            if (rows) {
-                printer.writeJson(rows);
-            }
-            let sources = db.restaurants.findSources({
-                booleanOp: "and",
-                dataFrame: db.restaurants,
-                terms: [
-                    {
-                        columnName: "city",
-                        columnValue: { term: { text: "amsterdam" } },
-                    },
-                    {
-                        columnName: "country",
-                        columnValue: { term: { text: "nl" } },
-                    },
-                ],
-            });
-            if (sources) {
-                printer.writeJson(sources);
-            }
-        }
-    }
-        
-    async function testDfQuery() {
-        if (restaurantIndex) {
-            printer.writeInColor(
-                chalk.cyan,
-                "Searching for 50.804436 (nl), 5.8997846 (nl)",
-            );
-            // Hybrid querying
-            let termGroup = kp.createAndTermGroup(
-                kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
-                kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
-            );
-            const dfMatches = await kp.dataFrame.searchConversationWithJoin(
-                restaurantIndex,
-                termGroup,
-            );
-            if (dfMatches && dfMatches.dataFrameMatches) {
-                printer.writeScoredMessages(
-                    dfMatches.dataFrameMatches,
-                    restaurantIndex.conversation.messages,
-                    25,
-                );
-            }
-        }
-    }
-
-    function testDb(
-        db: RestaurantDb,
-        restaurantCollection: RestaurantIndex,
-    ) {
-        let latitude = "50.804436 (nl)";
-        let rows = db.geo.getRow("latitude", latitude, kp.ComparisonOp.Eq);
-        if (rows) {
-            printer.writeInColor(chalk.cyan, "Geo matches Sqlite");
-            writeRows(rows, restaurantCollection);
-        }
-
-        // Hybrid querying
-        let termGroup = kp.createAndTermGroup(
-            kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
-            kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
-        );
-        const dataFrameMatches = kp.searchDataFrames(db.dataFrames, termGroup);
-        if (dataFrameMatches) {
-            printer.writeScoredMessages(
-                dataFrameMatches,
-                restaurantCollection.conversation.messages,
-                25,
-            );
-        }
-    }
-    function testGeo() {
-        if (restaurantIndex) {
-            let latitude = "50.804436 (nl)";
-            let rows = restaurantIndex.locations.getRow(
-                "latitude",
-                latitude,
-                kp.ComparisonOp.Eq,
-            );
-            if (rows) {
-                printer.writeLine("Geo matches");
-                printer.writeJson(rows);
-            }
-        }
-    }
-        */
 
     return;
 }

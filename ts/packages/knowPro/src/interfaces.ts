@@ -454,11 +454,16 @@ export interface ISemanticRefCollection
     extends ICollection<SemanticRef, SemanticRefOrdinal> {}
 
 export interface IStorageProvider {
-    createMessageCollection<
-        TMessage extends IMessage = IMessage,
-    >(): IMessageCollection<TMessage>;
+    createMessageCollection<TMessage extends IMessage = IMessage>(
+        serializer?: JsonSerializer<TMessage>,
+    ): IMessageCollection<TMessage>;
     createSemanticRefCollection(): ISemanticRefCollection;
     close(): void;
+}
+
+export interface JsonSerializer<T> {
+    serialize(value: T): string;
+    deserialize(json: string): T;
 }
 
 // Also look at:
