@@ -5,9 +5,9 @@ import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { email as email } from "knowledge-processor";
 
-export class EmailHeader implements kp.IMessageMetadata, email.EmailHeader {
-    public from: email.EmailAddress;
-    public to: email.EmailAddress[] | undefined;
+export class EmailHeader
+    implements email.EmailHeader, kp.IMessageMetadata, kp.IKnowledgeSource
+{
     public cc?: email.EmailAddress[] | undefined;
     public bcc?: email.EmailAddress[] | undefined;
     public subject?: string | undefined;
@@ -15,7 +15,10 @@ export class EmailHeader implements kp.IMessageMetadata, email.EmailHeader {
     public receivedOn?: string | undefined;
     public importance?: string | undefined;
 
-    constructor(from: email.EmailAddress) {
+    constructor(
+        public from: email.EmailAddress,
+        public to: email.EmailAddress[] | undefined = undefined,
+    ) {
         this.from = from;
     }
 
@@ -29,8 +32,8 @@ export class EmailHeader implements kp.IMessageMetadata, email.EmailHeader {
             : undefined;
     }
 
-    public getKnowledge(): kpLib.ConcreteEntity[] {
-        return email.emailToEntities(this);
+    public getKnowledge(): kpLib.KnowledgeResponse {
+        return email.emailToKnowledge(this);
     }
 }
 
@@ -55,6 +58,6 @@ export class EmailMessage implements kp.IMessage {
     }
 
     public getKnowledge() {
-        return undefined;
+        return this.metadata.getKnowledge();
     }
 }

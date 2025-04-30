@@ -289,7 +289,7 @@ export function emailToActions(email: EmailHeader): Action[] {
     }
 }
 
-function emailToKnowledge(email: EmailHeader): KnowledgeResponse {
+export function emailToKnowledge(email: EmailHeader): KnowledgeResponse {
     return {
         entities: emailToEntities(email),
         topics: email.subject ? [email.subject] : [],

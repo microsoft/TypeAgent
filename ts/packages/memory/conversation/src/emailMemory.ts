@@ -14,7 +14,7 @@ export class EmailMemory implements kp.IConversation {
     public semanticRefs: kp.SemanticRef[];
 
     constructor(
-        storageProvider: kp.IStorageProvider,
+        public storageProvider: kp.IStorageProvider,
         public nameTag: string = "",
         public tags: string[] = [],
         settings?: kp.ConversationSettings,
@@ -49,4 +49,13 @@ export class EmailSqliteProvider {
             this.dbProvider.close();
         }
     }
+}
+
+export function createEmailMemoryOnDb(
+    name: string,
+    dbPath: string,
+    createNew: boolean,
+): EmailMemory {
+    const db = new ms.sqlite.SqliteStorageProvider(dbPath, createNew);
+    return new EmailMemory(db, name);
 }

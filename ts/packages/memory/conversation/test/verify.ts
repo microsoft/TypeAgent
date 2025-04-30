@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { email } from "knowledge-processor";
 import * as kp from "knowpro";
 
 export function verifyNoIndexingErrors(results: kp.IndexingResults) {
@@ -68,4 +69,19 @@ export function verifyConversationBasic(
             expectedSemanticRefCount,
         );
     }
+}
+
+export function verifyEmailAddressEqual(
+    a1: email.EmailAddress,
+    a2: email.EmailAddress,
+) {
+    expect(a1.address).toEqual(a2.address);
+    expect(a1.displayName).toEqual(a2.displayName);
+}
+
+export function verifyEmailHeadersEqual(
+    e1: email.EmailHeader,
+    e2: email.EmailHeader,
+): void {
+    verifyEmailAddressEqual(e1.from, e2.from);
 }

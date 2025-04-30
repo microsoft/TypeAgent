@@ -17,6 +17,7 @@ import { importPodcast } from "../src/importPodcast.js";
 import { Podcast } from "../src/podcast.js";
 import { PodcastMessage } from "../src/podcastMessage.js";
 import { ensureDir, removeDir } from "typeagent";
+import path from "path";
 
 export type TestTranscriptInfo = {
     filePath: string;
@@ -110,4 +111,9 @@ export async function ensureOutputDir(name: string, clean: boolean = true) {
     }
     await ensureDir(dirPath);
     return dirPath;
+}
+
+export async function getDbPath(name: string): Promise<string> {
+    const dirPath = await ensureOutputDir("databases");
+    return path.join(dirPath, name);
 }
