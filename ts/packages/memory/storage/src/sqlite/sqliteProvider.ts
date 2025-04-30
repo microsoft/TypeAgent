@@ -34,7 +34,7 @@ export class SqlSemanticRefCollection
 }
 
 export class SqliteStorageProvider
-    implements kp.IStorageProvider, kp.dataFrame.IDataFrameProvider
+    implements kp.IStorageProvider, kp.dataFrame.IDataFrameStorageProvider
 {
     private db: sqlite.Database;
 
