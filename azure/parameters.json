@@ -13,6 +13,9 @@
         },
         "openai_eastus_name": {
             "value": null
-        }        
+        },
+        "storageAccounts_demopersistence_name": {
+            "value": null
+        }
     }
 }
