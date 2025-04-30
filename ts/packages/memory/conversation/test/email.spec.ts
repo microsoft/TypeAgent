@@ -1,22 +1,28 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createEmailMemoryOnDb } from "../src/emailMemory.js";
+import { createEmailMemory } from "../src/emailMemory.js";
 import { EmailMeta, EmailMessage } from "../src/emailMessage.js";
 import { verifyEmailHeadersEqual } from "./verify.js";
-import { describeIf, getDbPath, hasTestKeys } from "test-lib";
+import { describeIf, ensureOutputDir, hasTestKeys } from "test-lib";
 
 describeIf(
     "email.online",
     () => hasTestKeys(),
     () => {
         const testTimeout = 5 * 60 * 1000;
-
+        let storeRoot;
+        beforeAll(() => {
+            storeRoot = ensureOutputDir("emailMemory");
+        });
         test(
             "create",
             async () => {
-                const dbPath = await getDbPath("createTest.db", "email");
-                const emailMemory = createEmailMemoryOnDb(dbPath, true);
+                const emailMemory = createEmailMemory(
+                    storeRoot!,
+                    "createTest",
+                    true,
+                );
                 try {
                     const messageCount = 4;
                     const messages = createEmails(messageCount);
@@ -41,8 +47,11 @@ describeIf(
         test(
             "indexing",
             async () => {
-                const dbPath = await getDbPath("indexingTest.db", "email");
-                const emailMemory = createEmailMemoryOnDb(dbPath, true);
+                const emailMemory = createEmailMemory(
+                    storeRoot!,
+                    "indexingTest",
+                    true,
+                );
                 try {
                     const messageCount = 4;
                     const messages = createEmails(messageCount, "sender@abc");

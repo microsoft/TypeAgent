@@ -53,7 +53,7 @@ export function ensureDir(folderPath: string): string {
     return folderPath;
 }
 
-export function ensureOutputDir(name: string, clean: boolean = true) {
+export function ensureOutputDir(name: string, clean: boolean = true): string {
     const dirPath = getOutputDirPath(name);
     if (clean) {
         removeDir(dirPath);

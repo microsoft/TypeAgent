@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-//import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
 import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
 import {
@@ -105,6 +104,37 @@ export class EmailMemory implements kp.IConversation {
         }
     }
 
+    public async writeToFile(
+        dirPath: string,
+        baseFileName: string,
+    ): Promise<void> {
+        const data = await this.serialize();
+        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+    }
+
+    public static async readFromFile(
+        dirPath: string,
+        baseFileName: string,
+        storageProvider?: kp.IStorageProvider,
+    ): Promise<EmailMemory | undefined> {
+        storageProvider ??= ms.sqlite.createSqlStorageProvider(
+            dirPath,
+            baseFileName,
+            false,
+        );
+        const memory = new EmailMemory(storageProvider);
+        const data = (await kp.readConversationDataFromFile(
+            dirPath,
+            baseFileName,
+            memory.settings.conversationSettings.relatedTermIndexSettings
+                .embeddingIndexSettings?.embeddingSize,
+        )) as EmailMemoryData;
+        if (data) {
+            memory.deserialize(data);
+        }
+        return memory;
+    }
+
     public close() {
         if (this.storageProvider) {
             this.storageProvider.close();
@@ -118,10 +148,15 @@ export class EmailMemory implements kp.IConversation {
     }
 }
 
-export function createEmailMemoryOnDb(
-    dbPath: string,
+export function createEmailMemory(
+    dirPath: string,
+    baseFileName: string,
     createNew: boolean,
 ): EmailMemory {
-    const db = new ms.sqlite.SqliteStorageProvider(dbPath, createNew);
+    const db = ms.sqlite.createSqlStorageProvider(
+        dirPath,
+        baseFileName,
+        createNew,
+    );
     return new EmailMemory(db);
 }

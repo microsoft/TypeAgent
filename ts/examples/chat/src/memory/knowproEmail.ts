@@ -12,7 +12,8 @@ import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import { argDestFile } from "./common.js";
 import path from "path";
-import { ensureDir } from "typeagent";
+import { ensureDir, getFileName } from "typeagent";
+import { memoryNameToIndexPath } from "./knowproCommon.js";
 
 export type KnowProEmailContext = {
     printer: KnowProPrinter;
@@ -44,19 +45,20 @@ export async function createKnowproEmailCommands(
     commands.kpEmailLoad.metadata = loadIndexDef();
     async function loadIndex(args: string[]) {
         const namedArgs = parseNamedArguments(args, loadIndexDef());
-        let dbFilePath = namedArgs.filePath;
-        if (!dbFilePath && namedArgs.name) {
-            dbFilePath = path.join(context.basePath, namedArgs.name);
-        }
-        if (!dbFilePath) {
+        let emailIndexPath = namedArgs.filePath;
+        emailIndexPath ??= namedArgs.name
+            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
+            : undefined;
+        if (!emailIndexPath) {
             context.printer.writeError("No index name or path provided");
             return;
         }
-        if (!dbFilePath.endsWith(".db")) {
-            dbFilePath += ".db";
-        }
         closeEmail();
-        context.email = cm.createEmailMemoryOnDb(dbFilePath, true);
+        context.email = cm.createEmailMemory(
+            path.dirname(emailIndexPath),
+            getFileName(emailIndexPath),
+            true,
+        );
     }
 
     function closeEmail() {
