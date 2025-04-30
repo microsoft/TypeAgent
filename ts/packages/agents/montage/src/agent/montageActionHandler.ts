@@ -288,8 +288,7 @@ async function handleMontageAction(
     action: MontageAction,
     actionContext: ActionContext<MontageActionContext>,
 ) {
-    let result: ActionResult | undefined = undefined;
-    const activeMontage = getActiveMontage(actionContext.sessionContext.agentContext);
+    let result: ActionResult | undefined = undefined;    
 
     if (!actionContext.sessionContext.agentContext.viewProcess) {
         return createActionResultFromError(
@@ -361,7 +360,8 @@ async function handleMontageAction(
 
             let selectedCount: number = 0;
             // what is the intersection of the images in the montage and what we found in the search...that is the selection
-            // go through the files by name            
+            // go through the files by name
+            const activeMontage = getActiveMontage(actionContext.sessionContext.agentContext);       
             const intersection = action.parameters.files?.filter((item1) =>
                 activeMontage?.files.some(
                     (item2) => item1 === item2,
