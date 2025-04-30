@@ -39,6 +39,7 @@ export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
         public fileName: string,
         public pageNumber: string = "-",
         public chunkId: string,
+        public sectionName: string = "",
         public pdfMetadata: CatalogEntryWithMeta,
     ) {}
 
@@ -71,6 +72,7 @@ export class PdfChunkMessageMeta implements IKnowledgeSource, IMessageMetadata {
                 { name: "File Name", value: this.fileName },
                 { name: "Page Number", value: this.pageNumber },
                 { name: "Chunk ID", value: this.chunkId },
+                { name: "Section Name", value: this.sectionName },
             ],
         };
 
@@ -217,7 +219,7 @@ export class PdfChunkMessage implements IMessage {
         }
     }
 }
-export class PdfKnowProIndex implements IConversation<PdfChunkMessage> {
+export class PdfKnowproIndex implements IConversation<PdfChunkMessage> {
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
@@ -305,8 +307,8 @@ export class PdfKnowProIndex implements IConversation<PdfChunkMessage> {
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
-    ): Promise<PdfKnowProIndex | undefined> {
-        const pdfDoc = new PdfKnowProIndex();
+    ): Promise<PdfKnowproIndex | undefined> {
+        const pdfDoc = new PdfKnowproIndex();
         const data = await readConversationDataFromFile(
             dirPath,
             baseFileName,

@@ -3,7 +3,7 @@
 import {
     PdfChunkMessageMeta,
     PdfChunkMessage,
-    PdfKnowProIndex,
+    PdfKnowproIndex,
 } from "./pdfDocument.js";
 import path from "node:path";
 import * as fs from "node:fs";
@@ -153,7 +153,7 @@ export async function importPdf(
     verbose = false,
     fChunkPdfFiles: boolean = true,
     maxPagesToProcess: number = -1,
-): Promise<PdfKnowProIndex | undefined> {
+): Promise<PdfKnowproIndex | undefined> {
     if (!pdfFilePath) {
         log(io, "No PDF file path provided.", chalk.red);
         return undefined;
@@ -176,7 +176,13 @@ export async function importPdf(
         results = await chunkifyPdfFiles(outputDir, [pdfFilePath]);
         t1 = Date.now();
     } else {
-        results = await loadPdfChunksFromJson(outputDir, [pdfFilePath]);
+        let pdfFileName = getPaperIdFromFilename(pdfFilePath);
+        const chunkedJsonFile = path.join(
+            CHUNKED_DOCS_DIR,
+            pdfFileName,
+            `${pdfFileName}.pdf-chunked.json`,
+        );
+        results = await loadPdfChunksFromJson(outputDir, [chunkedJsonFile]);
         t1 = Date.now();
     }
 
@@ -216,7 +222,33 @@ export async function importPdf(
     }
 
     if (chunkingErrors.length <= 0) {
-        indexPdfChunks(io, pdfFilePath, verbose, results);
+        const messages = await indexPdfChunks(
+            io,
+            pdfFilePath,
+            verbose,
+            results,
+        );
+        const idxName = "arxiv-sragindex";
+        log(
+            io,
+            `Building ${idxName}, with ${messages.length} ...`,
+            chalk.green,
+        );
+        const pdfKnowproIndex = new PdfKnowproIndex(idxName, messages, [
+            idxName,
+        ]);
+        const idxResult = await pdfKnowproIndex.buildIndex();
+        if (idxResult) {
+            log(io, `Index ${idxName} built successfully`, chalk.green);
+            pdfKnowproIndex.writeToFile(
+                path.join(outputDir, "srag-index", `${idxName}.json`),
+                "index",
+            );
+            log(io, `Index ${idxName} written to file`, chalk.green);
+        } else {
+            log(io, `Failed to build index ${idxName}`, chalk.red);
+        }
+        return pdfKnowproIndex;
     }
     return undefined;
 }
@@ -272,22 +304,32 @@ export function processPdfChunks(
             );
 
             for (const blob of chunk.blobs) {
-                let chunkMessageMeta: PdfChunkMessageMeta =
-                    new PdfChunkMessageMeta(
-                        fileName,
-                        chunk.pageid,
-                        chunkIdentifier,
-                        catMetaEntry,
-                    );
-                let chunkMessage: PdfChunkMessage = new PdfChunkMessage(
-                    [],
-                    chunkMessageMeta,
-                );
+                if (blob.blob_type === "text") {
+                    let sectionName = "";
+                    if (blob.paraHeader) {
+                        sectionName += Array.isArray(blob.paraHeader)
+                            ? blob.paraHeader.join("\n")
+                            : blob.paraHeader;
+                    }
 
-                if (blob.content !== undefined) {
-                    chunkMessage.addContent(blob.content);
+                    let chunkMessageMeta: PdfChunkMessageMeta =
+                        new PdfChunkMessageMeta(
+                            fileName,
+                            chunk.pageid,
+                            chunkIdentifier,
+                            sectionName,
+                            catMetaEntry,
+                        );
+                    let chunkMessage: PdfChunkMessage = new PdfChunkMessage(
+                        [],
+                        chunkMessageMeta,
+                    );
+
+                    if (blob.content !== undefined) {
+                        chunkMessage.addContent(blob.content);
+                    }
+                    chunkMessages.push(chunkMessage);
                 }
-                chunkMessages.push(chunkMessage);
             }
         }
     }
@@ -300,8 +342,9 @@ export async function indexPdfChunks(
     pdfFilePath: string,
     fVerbose: boolean,
     chunkResults: (ChunkedFile | ErrorItem)[] = [],
-): Promise<void> {
+): Promise<PdfChunkMessage[]> {
     const pdfCatalog = await loadCatalogWithMeta();
+    let pdfChunkMessages: PdfChunkMessage[] = [];
 
     if (pdfCatalog !== undefined) {
         const chunkedFiles = chunkResults.filter(
@@ -316,13 +359,15 @@ export async function indexPdfChunks(
 
             let catEntry = pdfCatalog[paperId];
             if (catEntry !== undefined) {
-                processPdfChunks(
+                const messages = processPdfChunks(
                     pdfFilePath,
                     paperId,
                     catEntry,
                     chunkedFile.chunks,
                 );
+                pdfChunkMessages.push(...messages);
             }
         }
     }
+    return pdfChunkMessages;
 }

@@ -1074,13 +1074,13 @@ class PDFChunker:
             page_lines = [text for text, _, _ in page_lines_with_labels]
 
             if self.debug:
-                print(f"\n--- 🚀 DEBUG: Page {page_num} ---")
+                print(f"\n--- 🚀 DEBUG: Page {page_num+1} ---")
                 print_lines_with_label(page_num, page_lines_with_labels)
 
             page_chunk_id = generate_id()
             page_chunk = Chunk(
                 id=page_chunk_id,
-                pageid=str(page_num),
+                pageid=str(page_num+1),
                 blobs=[],
                 children=[]
             )
