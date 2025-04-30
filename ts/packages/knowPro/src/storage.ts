@@ -111,3 +111,15 @@ export function* getBatchesFromCollection<T = any>(
         startAt += batchSize;
     }
 }
+
+export function mapCollection<T = any>(
+    collection: IReadonlyCollection<T>,
+    callback: (item: T, index: number) => T,
+) {
+    let results: T[] = [];
+    const length = collection.length;
+    for (let i = 0; i < length; ++i) {
+        results.push(callback(collection.get(i), i));
+    }
+    return results;
+}

@@ -28,6 +28,7 @@ import {
     ITimestampToTextRangeIndex,
     IPropertyToSemanticRefIndex,
     SemanticRefSearchResult,
+    ISemanticRefCollection,
 } from "./interfaces.js";
 import {
     Match,
@@ -325,7 +326,7 @@ export function matchPropertySearchTermToSemanticRef(
 export function lookupTermFiltered(
     semanticRefIndex: ITermToSemanticRefIndex,
     term: Term,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     filter: (
         semanticRef: SemanticRef,
         scoredRef: ScoredSemanticRefOrdinal,
@@ -334,7 +335,7 @@ export function lookupTermFiltered(
     const scoredRefs = semanticRefIndex.lookupTerm(term.text);
     if (scoredRefs && scoredRefs.length > 0) {
         let filtered = scoredRefs.filter((sr) => {
-            const semanticRef = semanticRefs[sr.semanticRefOrdinal];
+            const semanticRef = semanticRefs.get(sr.semanticRefOrdinal);
             const result = filter(semanticRef, sr);
             return result;
         });
@@ -346,7 +347,7 @@ export function lookupTermFiltered(
 export function lookupTerm(
     semanticRefIndex: ITermToSemanticRefIndex,
     term: Term,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     rangesInScope?: TextRangesInScope,
 ): ScoredSemanticRefOrdinal[] | undefined {
     if (rangesInScope) {
@@ -361,7 +362,7 @@ export function lookupTerm(
 export function lookupProperty(
     semanticRefIndex: ITermToSemanticRefIndex,
     propertySearchTerm: PropertySearchTerm,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     rangesInScope?: TextRangesInScope,
 ): ScoredSemanticRefOrdinal[] | undefined {
     if (typeof propertySearchTerm.propertyName !== "string") {
@@ -442,7 +443,7 @@ export class QueryEvalContext {
     }
 
     public getSemanticRef(semanticRefOrdinal: SemanticRefOrdinal): SemanticRef {
-        return this.conversation.semanticRefs![semanticRefOrdinal];
+        return this.conversation.semanticRefs!.get(semanticRefOrdinal);
     }
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
@@ -1433,7 +1434,7 @@ export class NoOpExpr<T> extends QueryOpExpr<T> {
 }
 
 function messageMatchesFromKnowledgeMatches(
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>,
     intersectAcrossKnowledgeTypes: boolean = true,
 ): MessageAccumulator {
@@ -1445,7 +1446,7 @@ function messageMatchesFromKnowledgeMatches(
             knowledgeTypeHitCount++;
             for (const match of matchesByType.semanticRefMatches) {
                 messageMatches.addMessagesForSemanticRef(
-                    semanticRefs[match.semanticRefOrdinal],
+                    semanticRefs.get(match.semanticRefOrdinal),
                     match.score,
                 );
             }
