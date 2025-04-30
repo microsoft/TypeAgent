@@ -277,6 +277,10 @@ export class DataFrame implements IDataFrame {
     }
 }
 
+export interface IDataFrameProvider {
+    createDataFrame(name: string, columns: DataFrameColumns): IDataFrame;
+}
+
 export function isDataFrameGroup(
     term: DataFrameTermGroup | DataFrameSearchTerm,
 ): term is DataFrameTermGroup {

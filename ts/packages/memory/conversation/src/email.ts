@@ -20,15 +20,15 @@ export class EmailMessage implements kp.IMessage {
 }
 
 export class EmailMemory implements kp.IConversation {
-    public messages: kp.MessageCollection<EmailMessage>;
+    public messages: kp.IMessageCollection<EmailMessage>;
     public settings: kp.ConversationSettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
 
     constructor(
+        storageProvider: kp.IStorageProvider,
         public nameTag: string = "",
-        messages: EmailMessage[] = [],
         public tags: string[] = [],
         settings?: kp.ConversationSettings,
     ) {
@@ -37,8 +37,9 @@ export class EmailMemory implements kp.IConversation {
         }
         this.settings = settings;
 
-        this.messages = new kp.MessageCollection<EmailMessage>(messages);
-        this.semanticRefs = [];
+        (this.messages =
+            storageProvider.createMessageCollection<EmailMessage>()),
+            (this.semanticRefs = []);
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings,
@@ -46,16 +47,19 @@ export class EmailMemory implements kp.IConversation {
     }
 }
 
-export class EmailDb {
-    private db: any;
+export class EmailSqliteProvider {
+    public dbProvider: ms.sqlite.SqliteStorageProvider;
 
     constructor(dbPath: string, createNew: boolean) {
-        this.db = ms.sqlite.createDatabase(dbPath, createNew);
+        this.dbProvider = new ms.sqlite.SqliteStorageProvider(
+            dbPath,
+            createNew,
+        );
     }
 
     public close() {
-        if (this.db) {
-            this.db.close();
+        if (this.dbProvider) {
+            this.dbProvider.close();
         }
     }
 }
