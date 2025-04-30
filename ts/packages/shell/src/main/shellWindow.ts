@@ -41,12 +41,12 @@ export class ShellWindow {
     private readonly settings: ShellSettingManager;
     private dispatcherReady: boolean = false;
     private retryCount: number = 0;
-
-    constructor(shellSettings: ShellSettings) {
+    private closing: boolean = false;
+    constructor(shellSettings: ShellSettings, instanceDir: string) {
         if (ShellWindow.instance !== undefined) {
             throw new Error("ShellWindow already created");
         }
-        this.settings = new ShellSettingManager(shellSettings);
+        this.settings = new ShellSettingManager(shellSettings, instanceDir);
 
         this.inlineWidth = shellSettings.window.inlineWidth;
 
@@ -116,7 +116,15 @@ export class ShellWindow {
     }
 
     public async waitForContentLoaded() {
-        return Promise.all(this.contentLoadP);
+        try {
+            await Promise.all(this.contentLoadP);
+        } catch (e) {
+            if (this.closing) {
+                // Ignore errors if the window is closing
+                return;
+            }
+            throw e;
+        }
     }
 
     private ready() {
@@ -156,6 +164,7 @@ export class ShellWindow {
     }
 
     private cleanup() {
+        this.closing = true;
         for (const [key, handler] of this.handlers) {
             ipcMain.removeListener(key, handler);
         }

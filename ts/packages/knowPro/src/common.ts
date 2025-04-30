@@ -23,6 +23,7 @@ import {
     ConversationSecondaryIndexes,
     buildTransientSecondaryIndexes,
 } from "./secondaryIndexes.js";
+import { error, PromptSection, Result, success } from "typechat";
 
 export type Scored<T = any> = {
     item: T;
@@ -107,6 +108,53 @@ export function isInDateRange(outerRange: DateRange, date: Date): boolean {
 
 export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
+}
+
+export function isPromptSection(value: any): value is PromptSection {
+    const ps = value as PromptSection;
+    return ps.role && ps.content !== undefined;
+}
+
+export function flattenResultsArray<T>(results: Result<T>[]): Result<T[]> {
+    let data: T[] = [];
+    for (const result of results) {
+        if (!result.success) {
+            return error(result.message);
+        }
+        data.push(result.data);
+    }
+    return success(data);
+}
+
+//
+// String processing
+//
+
+export function trimStringLength(
+    text: string,
+    maxLength: number | undefined,
+    trimWhitespace: boolean = true,
+): string {
+    text = trimWhitespace ? text.trim() : text;
+    if (maxLength && text.length > maxLength) {
+        return text.slice(0, maxLength);
+    }
+    return text;
+}
+
+/**
+ * Ensures that dates are serialized in ISO format, which is more compact
+ * @param value
+ * @param spaces
+ * @returns
+ */
+export function jsonStringifyForPrompt(value: any, spaces?: number): string {
+    const json = JSON.stringify(
+        value,
+        (key, value) => (value instanceof Date ? value.toISOString() : value),
+        spaces,
+    );
+    return json;
 }
 
 export async function createConversationFromData(

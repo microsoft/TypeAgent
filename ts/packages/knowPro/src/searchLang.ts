@@ -34,17 +34,19 @@ import {
     APIs for searching with Natural Language
 */
 
-export async function searchConversationWithNaturalLanguage(
+export async function searchConversationWithLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
+    exactScope: boolean = true,
     options?: SearchOptions,
-    context?: NaturalLanguageSearchContext,
+    context?: LanguageSearchContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     const searchQueryExprResult = await searchQueryExprFromLanguage(
         conversation,
         queryTranslator,
         searchText,
+        exactScope,
         context,
     );
     if (!searchQueryExprResult.success) {
@@ -73,7 +75,8 @@ export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
     queryText: string,
-    context?: NaturalLanguageSearchContext,
+    exactScope: boolean = true,
+    context?: LanguageSearchContext,
 ): Promise<Result<SearchQueryExpr[]>> {
     const queryResult = await searchQueryFromLanguage(
         conversation,
@@ -85,13 +88,17 @@ export async function searchQueryExprFromLanguage(
         if (context) {
             context.searchQuery = searchQuery;
         }
-        const searchExpr = compileSearchQuery(conversation, searchQuery);
+        const searchExpr = compileSearchQuery(
+            conversation,
+            searchQuery,
+            exactScope,
+        );
         return success(searchExpr);
     }
     return queryResult;
 }
 
-export type NaturalLanguageSearchContext = {
+export type LanguageSearchContext = {
     searchQuery?: querySchema.SearchQuery | undefined;
     searchQueryExpr?: SearchQueryExpr[] | undefined;
 };

@@ -38,7 +38,7 @@ import {
 } from "./openaiSettings.js";
 import { AzureApiSettings, azureApiSettingsFromEnv } from "./azureSettings.js";
 
-export { azureApiSettingsFromEnv };
+export { azureApiSettingsFromEnv, openAIApiSettingsFromEnv };
 
 const debugOpenAI = registerDebug("typeagent:openai");
 

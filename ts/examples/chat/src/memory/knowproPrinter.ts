@@ -511,9 +511,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeNaturalLanguageContext(
-        context: kp.NaturalLanguageSearchContext,
-    ) {
+    public writeNaturalLanguageContext(context: kp.LanguageSearchContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
             this.writeJson(context.searchQuery);

@@ -249,25 +249,32 @@ export class ConversationMemory
     /**
      * Run a natural language query against this memory
      * @param searchText
-     * @param translator
      * @returns
      */
-    public async searchWithNaturalLanguage(
+    public async search(
         searchText: string,
-        queryTranslator?: kp.SearchQueryTranslator,
     ): Promise<Result<kp.ConversationSearchResult[]>> {
-        queryTranslator ??= this.settings.queryTranslator;
-        if (!queryTranslator) {
-            return error(`No query translator provided for ${this.nameTag}`);
-        }
-        return kp.searchConversationWithNaturalLanguage(
+        return kp.searchConversationWithLanguage(
             this,
             searchText,
-            queryTranslator,
+            this.getQueryTranslator(),
         );
     }
 
-    public async search(
+    public async createSearchQuery(
+        searchText: string,
+        exactScope: boolean = true,
+    ): Promise<Result<kp.SearchQueryExpr[]>> {
+        const queryResult = await kp.searchQueryExprFromLanguage(
+            this,
+            this.getQueryTranslator(),
+            searchText,
+            exactScope,
+        );
+        return queryResult;
+    }
+
+    public async selectFromConversation(
         selectExpr: kp.SearchSelectExpr,
     ): Promise<kp.ConversationSearchResult | undefined> {
         return kp.searchConversation(
@@ -452,6 +459,14 @@ export class ConversationMemory
             languageModel,
         };
         return memorySettings;
+    }
+
+    private getQueryTranslator(): kp.SearchQueryTranslator {
+        const queryTranslator = this.settings.queryTranslator;
+        if (!queryTranslator) {
+            throw new Error(`No query translator provided for ${this.nameTag}`);
+        }
+        return queryTranslator;
     }
 }
 

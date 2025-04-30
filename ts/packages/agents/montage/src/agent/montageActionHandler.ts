@@ -32,7 +32,6 @@ import {
 import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
-import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
 //import Registry from "winreg";
 import koffi from "koffi";
@@ -42,7 +41,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 import { spawnSync } from "node:child_process";
-import { createSemanticMap } from "../../../../typeagent/dist/vector/semanticMap.js";
+import { createSemanticMap } from "typeagent";
 import { openai, TextEmbeddingModel } from "aiclient";
 
 const debug = registerDebug("typeagent:agent:montage");
@@ -846,7 +845,7 @@ async function findRequestedImages(
 
                                     // did we get a direct hit on an image?
                                     if (entity.type.includes("image")) {
-                                        const f: Facet | undefined =
+                                        const f: kpLib.Facet | undefined =
                                             entity.facets?.find((v) => {
                                                 return v.name === "File Name";
                                             });

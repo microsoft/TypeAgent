@@ -1,0 +1,19 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# include-update-package-version
+
+parameters:
+  packageFolder: string
+
+steps:
+  - bash: |
+      current_version=$(node -p "require('./package.json').version")
+      new_version="${current_version}-$(Build.BuildId)"
+      echo "##vso[task.setvariable variable=package_version]$new_version"
+      jq ".version=\"$new_version\"" package.json > package.tmp.json
+      mv package.tmp.json package.json
+      echo "Updated package.json to version $new_version"
+      cat package.json
+    displayName: "Update Package Version"
+    workingDirectory: ${{ parameters.packageFolder }}
