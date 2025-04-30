@@ -32,6 +32,12 @@ export class EmailMemory implements kp.IConversation {
             this.settings,
         );
     }
+
+    public close() {
+        if (this.storageProvider) {
+            this.storageProvider.close();
+        }
+    }
 }
 
 export class EmailSqliteProvider {

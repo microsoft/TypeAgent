@@ -14,20 +14,24 @@ describeIf(
             const name = "createTest.db";
             const dbPath = await getDbPath(name);
             const emailMemory = createEmailMemoryOnDb(name, dbPath, true);
-            const messageCount = 4;
-            const messages = createEmails(messageCount);
-            for (const msg of messages) {
-                emailMemory.messages.append(msg);
-            }
-            expect(emailMemory.messages.length).toEqual(messageCount);
+            try {
+                const messageCount = 4;
+                const messages = createEmails(messageCount);
+                for (const msg of messages) {
+                    emailMemory.messages.append(msg);
+                }
+                expect(emailMemory.messages.length).toEqual(messageCount);
 
-            const messages2 = [...emailMemory.messages];
-            expect(messages).toHaveLength(messages2.length);
-            for (let i = 0; i < messageCount; ++i) {
-                verifyEmailHeadersEqual(
-                    messages[i].metadata,
-                    messages2[i].metadata,
-                );
+                const messages2 = [...emailMemory.messages];
+                expect(messages).toHaveLength(messages2.length);
+                for (let i = 0; i < messageCount; ++i) {
+                    verifyEmailHeadersEqual(
+                        messages[i].metadata,
+                        messages2[i].metadata,
+                    );
+                }
+            } finally {
+                emailMemory.close();
             }
         });
     },
