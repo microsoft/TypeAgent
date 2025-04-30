@@ -99,20 +99,28 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
             this.messages.forEach(
                 (img: Image, index: number) => {
 
+                    const sourceRef: hybrid.RowSourceRef =  { 
+                        range: { 
+                            start: { 
+                                messageOrdinal: index, 
+                                chunkOrdinal: 0 
+                            } 
+                        }
+                    }
+
                     // add image location to dataframe
                     const latlong = img.metadata.getGeo();
                     if (this.locations && latlong) {
-
-                        const sourceRef: hybrid.RowSourceRef =  { 
-                            range: { 
-                                start: { 
-                                    messageOrdinal: index, 
-                                    chunkOrdinal: 0 
-                                } 
-                            }
-                        }
-
                         this.locations.addRows({ sourceRef, record: latlong});
+                    } 
+
+                    // add camera settings to dataframe
+                    if (this.exposure) {
+                        // this.exposure.addRows({ sourceRef, record: {
+                        //     ISO: img.metadata.dataFrameValues.ISO,
+                        //     aperature: img.metadata.dataFrameValues.aperature,
+                        //     shutter: img.metadata.dataFrameValues.shutter
+                        // }})
                     } 
 
                     // // add exposure to dataframe
