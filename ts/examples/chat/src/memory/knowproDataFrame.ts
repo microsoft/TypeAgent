@@ -508,7 +508,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
                 ?.embeddingSize,
         );
         if (data) {
-            index.deserialize(data);
+            await index.deserialize(data);
         }
         return index;
     }
