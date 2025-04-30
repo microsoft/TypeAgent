@@ -7,7 +7,7 @@ import {
     TextEmbeddingModelWithCache,
 } from "knowledge-processor";
 import { collections } from "typeagent";
-import { createEmbeddingModel } from "./common.js";
+import { createEmbeddingModelWithCache } from "./common.js";
 
 import registerDebug from "debug";
 import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
@@ -228,7 +228,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
      * @returns embedding model, size of embedding
      */
     private createSettings() {
-        const [model, size] = createEmbeddingModel(
+        const [model, size] = createEmbeddingModelWithCache(
             64,
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );

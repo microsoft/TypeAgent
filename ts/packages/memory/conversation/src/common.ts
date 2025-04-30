@@ -4,9 +4,9 @@
 import * as kpLib from "knowledge-processor";
 import { openai } from "aiclient";
 
-export function createEmbeddingModel(
+export function createEmbeddingModelWithCache(
     cacheSize: number,
-    getCache: () => kpLib.TextEmbeddingCache | undefined,
+    getCache?: () => kpLib.TextEmbeddingCache | undefined,
 ): [kpLib.TextEmbeddingModelWithCache, number] {
     const embeddingModel = kpLib.createEmbeddingCache(
         openai.createEmbeddingModel(),

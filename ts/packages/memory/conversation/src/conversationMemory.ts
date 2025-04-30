@@ -1,18 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    conversation as kpLib,
-    TextEmbeddingModelWithCache,
-} from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 import * as kp from "knowpro";
-import { createEmbeddingModel } from "./common.js";
 import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";
 import { error, Result, success } from "typechat";
-import { openai } from "aiclient";
-import { MemorySettings } from "./memory.js";
+import { createMemorySettings, MemorySettings } from "./memory.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class ConversationMessageMeta
@@ -157,8 +152,6 @@ export class ConversationMemory
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
 
-    private embeddingModel: TextEmbeddingModelWithCache | undefined;
-    private embeddingSize: number | undefined;
     private updatesTaskQueue: QueueObject<ConversationMemoryTasks>;
 
     constructor(
@@ -428,30 +421,9 @@ export class ConversationMemory
     }
 
     private createSettings(): ConversationMemorySettings {
-        const languageModel =
-            openai.createChatModelDefault("conversationMemory");
-        /**
-         * Our index already has embeddings for every term in the podcast
-         * Create a caching embedding model that can just leverage those embeddings
-         * @returns embedding model, size of embedding
-         */
-        const [model, size] = createEmbeddingModel(
-            64,
+        return createMemorySettings(
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
-        this.embeddingModel = model;
-        this.embeddingSize = size;
-        const conversationSettings = kp.createConversationSettings(
-            this.embeddingModel,
-            this.embeddingSize,
-        );
-        conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
-            kp.createKnowledgeExtractor(languageModel);
-        const memorySettings: ConversationMemorySettings = {
-            conversationSettings,
-            languageModel,
-        };
-        return memorySettings;
     }
 
     private getQueryTranslator(): kp.SearchQueryTranslator {

@@ -5,13 +5,13 @@ import * as kp from "knowpro";
 //import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
 import { EmailMessage } from "./emailMessage.js";
-import { MemorySettings } from "./memory.js";
+import { createMemorySettings, MemorySettings } from "./memory.js";
 
 export type EmailMemorySettings = MemorySettings;
 
 export class EmailMemory implements kp.IConversation {
     public messages: kp.IMessageCollection<EmailMessage>;
-    public settings: kp.ConversationSettings;
+    public settings: EmailMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
@@ -20,10 +20,10 @@ export class EmailMemory implements kp.IConversation {
         public storageProvider: kp.IStorageProvider,
         public nameTag: string = "",
         public tags: string[] = [],
-        settings?: kp.ConversationSettings,
+        settings?: EmailMemorySettings,
     ) {
         if (!settings) {
-            settings = kp.createConversationSettings();
+            settings = this.createSettings();
         }
         this.settings = settings;
 
@@ -32,7 +32,7 @@ export class EmailMemory implements kp.IConversation {
             (this.semanticRefs = []);
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
-            this.settings,
+            this.settings.conversationSettings,
         );
     }
 
@@ -40,6 +40,12 @@ export class EmailMemory implements kp.IConversation {
         if (this.storageProvider) {
             this.storageProvider.close();
         }
+    }
+
+    private createSettings(): EmailMemorySettings {
+        return createMemorySettings(
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
     }
 }
 
