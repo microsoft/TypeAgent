@@ -7,7 +7,7 @@ import * as kpLib from "knowledge-processor";
 import { TypeChatLanguageModel } from "typechat";
 import { createEmbeddingModelWithCache } from "./common.js";
 
-export type FileSaveSettings = {
+export type IndexFileSettings = {
     dirPath: string;
     baseFileName: string;
 };
@@ -18,7 +18,7 @@ export interface MemorySettings {
     embeddingSize: number;
     conversationSettings: kp.ConversationSettings;
     queryTranslator?: kp.SearchQueryTranslator | undefined;
-    fileSaveSettings?: FileSaveSettings | undefined;
+    fileSaveSettings?: IndexFileSettings | undefined;
 }
 
 export function createMemorySettings(

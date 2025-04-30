@@ -3,6 +3,7 @@
 
 import { createEmailMemory, EmailMemory } from "../src/emailMemory.js";
 import { EmailMeta, EmailMessage } from "../src/emailMessage.js";
+import { IndexFileSettings } from "../src/memory.js";
 import { verifyMessagesEqual } from "./verify.js";
 import { describeIf, ensureOutputDir, hasTestKeys } from "test-lib";
 
@@ -18,7 +19,10 @@ describeIf(
         test(
             "create",
             async () => {
-                const em = createEmailMemory(storeRoot!, "createTest", true);
+                const em = createEmailMemory(
+                    { dirPath: storeRoot!, baseFileName: "createTest" },
+                    true,
+                );
                 try {
                     const messageCount = 4;
                     const messages = createEmails(messageCount);
@@ -37,23 +41,23 @@ describeIf(
         test(
             "indexing",
             async () => {
-                const baseName = "indexingTest";
+                const fileSettings: IndexFileSettings = {
+                    dirPath: storeRoot!,
+                    baseFileName: "indexingTest",
+                };
                 const messageCount = 4;
                 const messages = createEmails(messageCount);
                 let semanticRefCount = 0;
-                let em = createEmailMemory(storeRoot!, baseName, true);
+                let em = createEmailMemory(fileSettings, true);
                 try {
                     await addToIndex(em, messages);
-                    await em.writeToFile(storeRoot!, baseName);
+                    await em.writeToFile();
                     expect(em.messages.length).toEqual(messageCount);
                     semanticRefCount = em.semanticRefs.length;
                 } finally {
                     em.close();
                 }
-                const em2 = await EmailMemory.readFromFile(
-                    storeRoot!,
-                    baseName,
-                );
+                const em2 = await EmailMemory.readFromFile(fileSettings);
                 expect(em2).toBeDefined();
                 if (em2) {
                     verifyMessagesEqual(messages, [...em2!.messages]);

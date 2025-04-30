@@ -6,6 +6,7 @@ import * as ms from "memory-storage";
 import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
 import {
     createMemorySettings,
+    IndexFileSettings,
     IndexingState,
     MemorySettings,
 } from "./memory.js";
@@ -29,7 +30,7 @@ export class EmailMemory implements kp.IConversation {
     public indexingState: IndexingState;
 
     constructor(
-        public storageProvider: kp.IStorageProvider,
+        public storageProvider: ms.sqlite.SqliteStorageProvider,
         public nameTag: string = "",
         public tags: string[] = [],
         settings?: EmailMemorySettings,
@@ -52,6 +53,7 @@ export class EmailMemory implements kp.IConversation {
 
     public async addMessage(
         message: EmailMessage,
+        eventHandler?: kp.IndexingEventHandlers,
     ): Promise<Result<kp.IndexingResults>> {
         // Add the message to memory and index it
         this.messages.append(message);
@@ -60,6 +62,7 @@ export class EmailMemory implements kp.IConversation {
             this.settings.conversationSettings,
             this.messages.length - 1,
             this.semanticRefs.length,
+            eventHandler,
         );
         const errorMsg = getIndexingErrors(result);
         if (errorMsg) {
@@ -110,27 +113,33 @@ export class EmailMemory implements kp.IConversation {
     }
 
     public async writeToFile(
-        dirPath: string,
-        baseFileName: string,
+        fileSaveSettings?: IndexFileSettings,
     ): Promise<void> {
+        fileSaveSettings ??= this.settings.fileSaveSettings;
+        if (!fileSaveSettings) {
+            throw new Error("No file save settings provided");
+        }
         const data = await this.serialize();
-        await kp.writeConversationDataToFile(data, dirPath, baseFileName);
+        await kp.writeConversationDataToFile(
+            data,
+            fileSaveSettings.dirPath,
+            fileSaveSettings.baseFileName,
+        );
     }
 
     public static async readFromFile(
-        dirPath: string,
-        baseFileName: string,
-        storageProvider?: kp.IStorageProvider,
+        fileSettings: IndexFileSettings,
     ): Promise<EmailMemory | undefined> {
-        storageProvider ??= ms.sqlite.createSqlStorageProvider(
-            dirPath,
-            baseFileName,
+        const storageProvider = ms.sqlite.createSqlStorageProvider(
+            fileSettings.dirPath,
+            fileSettings.baseFileName,
             false,
         );
         const memory = new EmailMemory(storageProvider);
+        memory.settings.fileSaveSettings = fileSettings;
         const data = (await kp.readConversationDataFromFile(
-            dirPath,
-            baseFileName,
+            fileSettings.dirPath,
+            fileSettings.baseFileName,
             memory.settings.conversationSettings.relatedTermIndexSettings
                 .embeddingIndexSettings?.embeddingSize,
         )) as EmailMemoryData;
@@ -160,14 +169,15 @@ export class EmailMemory implements kp.IConversation {
 }
 
 export function createEmailMemory(
-    dirPath: string,
-    baseFileName: string,
+    fileSettings: IndexFileSettings,
     createNew: boolean,
 ): EmailMemory {
     const db = ms.sqlite.createSqlStorageProvider(
-        dirPath,
-        baseFileName,
+        fileSettings.dirPath,
+        fileSettings.baseFileName,
         createNew,
     );
-    return new EmailMemory(db, baseFileName);
+    const em = new EmailMemory(db);
+    em.settings.fileSaveSettings = fileSettings;
+    return em;
 }
