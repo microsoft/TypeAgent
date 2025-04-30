@@ -32,6 +32,7 @@
     "debug": "^4.4.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
+    "memory-storage": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },

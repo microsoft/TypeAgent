@@ -91,6 +91,8 @@ export class MemoryStorageProvider implements IStorageProvider {
     public createSemanticRefCollection(): ISemanticRefCollection {
         return new SemanticRefCollection();
     }
+
+    public close(): void {}
 }
 
 export function* getBatchesFromCollection<T = any>(

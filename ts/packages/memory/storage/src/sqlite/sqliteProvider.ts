@@ -5,7 +5,7 @@ import * as kp from "knowpro";
 import * as sqlite from "better-sqlite3";
 import { SqliteCollection } from "./sqliteCollection.js";
 import { createDatabase } from "./sqliteCommon.js";
-import path from "path";
+import { SqliteDataFrame } from "./sqliteDataFrame.js";
 
 export class SqlMessageCollection<TMessage extends kp.IMessage = kp.IMessage>
     extends SqliteCollection<TMessage, kp.MessageOrdinal>
@@ -33,11 +33,12 @@ export class SqlSemanticRefCollection
     }
 }
 
-export class SqliteStorageProvider implements kp.IStorageProvider {
+export class SqliteStorageProvider
+    implements kp.IStorageProvider, kp.dataFrame.IDataFrameStorageProvider
+{
     private db: sqlite.Database;
 
-    constructor(rootPath: string, name: string, createNew: boolean) {
-        const dbPath = path.join(rootPath, name);
+    constructor(dbPath: string, createNew: boolean) {
         this.db = createDatabase(dbPath, createNew);
     }
 
@@ -49,6 +50,15 @@ export class SqliteStorageProvider implements kp.IStorageProvider {
 
     public createSemanticRefCollection(): kp.ISemanticRefCollection {
         return new SqlSemanticRefCollection(this.db);
+    }
+
+    public createDataFrame(
+        name: string,
+        columns:
+            | kp.dataFrame.DataFrameColumns
+            | [string, kp.dataFrame.DataFrameColumnDef][],
+    ): kp.dataFrame.IDataFrame {
+        return new SqliteDataFrame(this.db, name, columns);
     }
 
     public close() {

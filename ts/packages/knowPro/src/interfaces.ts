@@ -435,7 +435,6 @@ export interface IReadonlyCollection<T, TOrdinal = number> extends Iterable<T> {
     get(ordinal: TOrdinal): T;
     getMultiple(ordinals: TOrdinal[]): T[];
     getSlice(start: TOrdinal, end: TOrdinal): T[];
-    // getAll(): T[];
 }
 
 /**
@@ -459,6 +458,7 @@ export interface IStorageProvider {
         TMessage extends IMessage = IMessage,
     >(): IMessageCollection<TMessage>;
     createSemanticRefCollection(): ISemanticRefCollection;
+    close(): void;
 }
 
 // Also look at:

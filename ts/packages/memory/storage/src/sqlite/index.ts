@@ -4,3 +4,4 @@
 export * from "./sqliteCollection.js";
 export * from "./sqliteCommon.js";
 export * from "./sqliteDataFrame.js";
+export * from "./sqliteProvider.js";
