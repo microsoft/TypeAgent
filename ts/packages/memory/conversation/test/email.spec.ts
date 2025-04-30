@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { createEmailMemoryOnDb } from "../src/emailMemory.js";
-import { EmailHeader, EmailMessage } from "../src/emailMessage.js";
+import { EmailMeta, EmailMessage } from "../src/emailMessage.js";
 import { verifyEmailHeadersEqual } from "./verify.js";
 import { describeIf, getDbPath, hasTestKeys } from "test-lib";
 
@@ -69,5 +69,5 @@ function createEmails(count: number): EmailMessage[] {
 }
 
 function createEmail(from: string, body: string): EmailMessage {
-    return new EmailMessage(new EmailHeader({ address: from }), body);
+    return new EmailMessage(new EmailMeta({ address: from }), body);
 }

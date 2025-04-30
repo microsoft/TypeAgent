@@ -19,9 +19,9 @@ export class SqliteCollection<T, TOrdinal extends number>
 
     constructor(
         db: sqlite.Database,
+        serializer: kp.JsonSerializer<T> | undefined,
         public tableName: string,
         ensureExists: boolean = true,
-        serializer?: kp.JsonSerializer<T>,
     ) {
         this.db = db;
         this.serializer = serializer;

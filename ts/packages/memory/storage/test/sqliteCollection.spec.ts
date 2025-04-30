@@ -30,6 +30,7 @@ describe("memory.sqlite.messageCollection", () => {
         () => {
             const messageCollection = new SqlMessageCollection(
                 db!,
+                undefined,
                 "messages_single",
             );
             const messages = createMessages(4);
@@ -39,7 +40,11 @@ describe("memory.sqlite.messageCollection", () => {
     );
     test("addMessages", () => {
         const collectionName = "messages_multi";
-        const messageCollection = new SqlMessageCollection(db!, collectionName);
+        const messageCollection = new SqlMessageCollection(
+            db!,
+            undefined,
+            collectionName,
+        );
         const messages = createMessages(4);
 
         let prevLength = messageCollection.length;
@@ -51,14 +56,23 @@ describe("memory.sqlite.messageCollection", () => {
         let gotMessages = messageCollection.getMultiple(ordinals);
         verifyMessages(messages, gotMessages, 0, ordinals.length);
 
-        let collection2 = new SqlMessageCollection(db!, collectionName, false);
+        let collection2 = new SqlMessageCollection(
+            db!,
+            undefined,
+            collectionName,
+            false,
+        );
         expect(collection2).toHaveLength(messageCollection.length);
         let gotMessage = collection2.get(2);
         expect(messageText(gotMessage)).toEqual(messageText(messages[2]));
     });
     test("sliceMessages", () => {
         const collectionName = "messages_slice";
-        const messageCollection = new SqlMessageCollection(db!, collectionName);
+        const messageCollection = new SqlMessageCollection(
+            db!,
+            undefined,
+            collectionName,
+        );
         const messages = createMessages(10);
         messageCollection.append(...messages);
 

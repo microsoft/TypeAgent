@@ -5,7 +5,7 @@ import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
 import { email as email } from "knowledge-processor";
 
-export class EmailHeader
+export class EmailMeta
     implements email.EmailHeader, kp.IMessageMetadata, kp.IKnowledgeSource
 {
     public cc?: email.EmailAddress[] | undefined;
@@ -18,9 +18,7 @@ export class EmailHeader
     constructor(
         public from: email.EmailAddress,
         public to: email.EmailAddress[] | undefined = undefined,
-    ) {
-        this.from = from;
-    }
+    ) {}
 
     public get source() {
         return email.emailAddressToString(this.from);
@@ -35,15 +33,26 @@ export class EmailHeader
     public getKnowledge(): kpLib.KnowledgeResponse {
         return email.emailToKnowledge(this);
     }
+
+    public copyFrom(meta: EmailMeta) {
+        this.bcc = meta.bcc;
+        this.cc = meta.cc;
+        this.from = meta.from;
+        this.importance = meta.importance;
+        this.receivedOn = meta.receivedOn;
+        this.sentOn = meta.sentOn;
+        this.subject = meta.subject;
+        this.to = meta.to;
+    }
 }
 
 export class EmailMessage implements kp.IMessage {
-    public metadata: EmailHeader;
+    public metadata: EmailMeta;
     public textChunks: string[];
     public timestamp: string | undefined;
 
     constructor(
-        metadata: EmailHeader,
+        metadata: EmailMeta,
         emailBody: string | string[],
         public tags: string[] = [],
         public deletionInfo?: kp.DeletionInfo | undefined,
@@ -59,5 +68,24 @@ export class EmailMessage implements kp.IMessage {
 
     public getKnowledge() {
         return this.metadata.getKnowledge();
+    }
+}
+
+export class EmailMessageSerializer implements kp.JsonSerializer<EmailMessage> {
+    public serialize(value: EmailMessage): string {
+        return JSON.stringify(value);
+    }
+
+    public deserialize(json: string): EmailMessage {
+        const jMsg: EmailMessage = JSON.parse(json);
+        const jMeta: EmailMeta = jMsg.metadata;
+        const meta = new EmailMeta(jMeta.from);
+        meta.copyFrom(jMeta);
+        return new EmailMessage(
+            meta,
+            jMsg.textChunks,
+            jMsg.tags,
+            jMsg.deletionInfo,
+        );
     }
 }

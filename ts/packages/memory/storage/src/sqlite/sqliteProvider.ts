@@ -13,10 +13,11 @@ export class SqlMessageCollection<TMessage extends kp.IMessage = kp.IMessage>
 {
     constructor(
         db: sqlite.Database,
+        serializer?: kp.JsonSerializer<TMessage>,
         tableName: string = "messages",
         ensureExists: boolean = true,
     ) {
-        super(db, tableName, ensureExists);
+        super(db, serializer, tableName, ensureExists);
     }
 }
 
@@ -29,7 +30,7 @@ export class SqlSemanticRefCollection
         tableName: string = "semanticRefs",
         ensureExists: boolean = true,
     ) {
-        super(db, tableName, ensureExists);
+        super(db, undefined, tableName, ensureExists);
     }
 }
 
@@ -42,10 +43,10 @@ export class SqliteStorageProvider
         this.db = createDatabase(dbPath, createNew);
     }
 
-    public createMessageCollection<
-        TMessage extends kp.IMessage = kp.IMessage,
-    >(): kp.IMessageCollection<TMessage> {
-        return new SqlMessageCollection(this.db);
+    public createMessageCollection<TMessage extends kp.IMessage = kp.IMessage>(
+        serializer?: kp.JsonSerializer<TMessage>,
+    ): kp.IMessageCollection<TMessage> {
+        return new SqlMessageCollection(this.db, serializer);
     }
 
     public createSemanticRefCollection(): kp.ISemanticRefCollection {

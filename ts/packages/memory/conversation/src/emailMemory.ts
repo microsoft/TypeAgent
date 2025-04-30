@@ -4,7 +4,7 @@
 import * as kp from "knowpro";
 //import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
-import { EmailMessage } from "./emailMessage.js";
+import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
 import { createMemorySettings, MemorySettings } from "./memory.js";
 
 export type EmailMemorySettings = MemorySettings;
@@ -15,6 +15,7 @@ export class EmailMemory implements kp.IConversation {
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRef[];
+    public serializer: EmailMessageSerializer;
 
     constructor(
         public storageProvider: kp.IStorageProvider,
@@ -26,10 +27,11 @@ export class EmailMemory implements kp.IConversation {
             settings = this.createSettings();
         }
         this.settings = settings;
-
-        (this.messages =
-            storageProvider.createMessageCollection<EmailMessage>()),
-            (this.semanticRefs = []);
+        this.serializer = new EmailMessageSerializer();
+        this.messages = storageProvider.createMessageCollection<EmailMessage>(
+            this.serializer,
+        );
+        this.semanticRefs = [];
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
