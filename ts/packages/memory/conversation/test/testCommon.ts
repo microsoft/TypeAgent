@@ -14,7 +14,8 @@ import {
     NullEmbeddingModel,
 } from "test-lib";
 import { importPodcast } from "../src/importPodcast.js";
-import { Podcast, PodcastMessage } from "../src/podcast.js";
+import { Podcast } from "../src/podcast.js";
+import { PodcastMessage } from "../src/podcastMessage.js";
 import { ensureDir, removeDir } from "typeagent";
 
 export type TestTranscriptInfo = {
