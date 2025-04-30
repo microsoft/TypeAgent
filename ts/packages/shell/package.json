@@ -41,7 +41,7 @@
     "typecheck:web": "tsc -p tsconfig.web.json"
   },
   "dependencies": {
-    "@azure/msal-browser": "^3.26.1",
+    "@azure/identity": "^4.2.1",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@fontsource/lato": "^5.2.5",

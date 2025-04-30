@@ -61,6 +61,6 @@ export default {
     },
     publish: {
         provider: "generic",
-        url: "https://example.com/auto-updates",
+        url: "",
     },
 };

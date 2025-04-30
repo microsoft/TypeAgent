@@ -7,7 +7,6 @@ import {
     ActionResultSuccess,
     AppAction,
     AppAgent,
-    ParameterDefinitions,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -20,7 +19,7 @@ import {
 
 class RequestCommandHandler implements CommandHandler {
     public readonly description = "Send a request to the Oracle";
-    public readonly parameters: ParameterDefinitions = {
+    public readonly parameters = {
         // Must have a single string parameter and implicit quotes
         // in order to support '@config request <agent>'
         args: {
@@ -31,10 +30,10 @@ class RequestCommandHandler implements CommandHandler {
                 implicitQuotes: true,
             },
         },
-    };
+    } as const;
     public async run(
         context: ActionContext<OracleActionContext>,
-        params: ParsedCommandParams<ParameterDefinitions>,
+        params: ParsedCommandParams<typeof this.parameters>,
     ): Promise<void> {
         if (typeof params.args?.question === "string") {
             const result = makeRandomResponse(params.args.question);
