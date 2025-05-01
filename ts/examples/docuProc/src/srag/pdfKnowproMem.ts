@@ -4,18 +4,23 @@
 import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import {
+    arg,
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
     parseNamedArguments,
+    NamedArgs,
 } from "interactive-app";
-import { ensureDir } from "typeagent";
+import { ensureDir, getFileName } from "typeagent";
 
 import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
 import { SRAG_MEM_DIR } from "../common.js";
 import fs from "fs";
 import { AppPrinter } from "../printer.js";
 import { importPdf } from "./importPdf.js";
+import path from "path";
+import * as pi from "./pdfDocument.js";
+import { argDestFile, argSourceFile } from "../common.js";
 
 export type Models = {
     chatModel: ChatModel;
@@ -74,6 +79,7 @@ export type KnowProContext = {
     knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
     printer: AppPrinter;
+    pdfIndex: pi.PdfKnowproIndex | undefined;
     queryTranslator: kp.SearchQueryTranslator;
     answerGenerator: kp.AnswerGenerator;
 };
@@ -89,6 +95,7 @@ export async function createKnowproCommands(
             knowLib.conversation.createKnowledgeActionTranslator(
                 knowledgeModel,
             ),
+        pdfIndex: undefined,
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         answerGenerator: new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(knowledgeModel),
@@ -99,6 +106,9 @@ export async function createKnowproCommands(
 
     await ensureDir(context.basePath);
     commands.kpPdfImport = pdfImport;
+    commands.kpPdfSave = pdfSave;
+    commands.kpPdfLoad = pdfLoad;
+    //commands.kpPdfBuildIndex = pdfBuildIndex;
 
     function pdfImportDef(): CommandMetadata {
         return {
@@ -166,13 +176,79 @@ export async function createKnowproCommands(
         }
 
         // import files in to srag index
-        await importPdf(
-            undefined,
+        context.pdfIndex = await importPdf(
+            context.printer,
             files[0],
             undefined,
             namedArgs.verbose,
             chunkPdfs,
             maxPagesToProcess,
         );
+        context.printer.writeLine("Imported PDF files ...");
+    }
+
+    function pdfSaveDef(): CommandMetadata {
+        return {
+            description: "Save the pdf srag index",
+            args: {
+                filePath: argDestFile(),
+            },
+        };
+    }
+
+    commands.kpImagesSave.metadata = pdfSaveDef();
+    async function pdfSave(args: string[] | NamedArgs): Promise<void> {
+        const namedArgs = parseNamedArguments(args, pdfSaveDef());
+        if (!context.pdfIndex) {
+            context.printer.writeError("No image collection loaded");
+            return;
+        }
+        context.printer.writeLine("Saving index");
+        context.printer.writeLine(namedArgs.filePath);
+        if (context.pdfIndex) {
+            const dirName = path.dirname(namedArgs.filePath);
+            await ensureDir(dirName);
+            await context.pdfIndex.writeToFile(
+                dirName,
+                getFileName(namedArgs.filePath),
+            );
+        }
+    }
+
+    function pdfLoadDef(): CommandMetadata {
+        return {
+            description: "Load pdf srag index",
+            options: {
+                filePath: argSourceFile(),
+                name: arg("Pdf SRAG Index Name"),
+            },
+        };
+    }
+
+    commands.kpImagesLoad.metadata = pdfLoadDef();
+    async function pdfLoad(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, pdfLoadDef());
+        let imagesFilePath = namedArgs.filePath;
+        imagesFilePath ??= namedArgs.name
+            ? indexFilePathFromName(namedArgs.name)
+            : undefined;
+        if (!imagesFilePath) {
+            context.printer.writeError("No filepath or name provided");
+            return;
+        }
+        context.pdfIndex = await pi.PdfKnowproIndex.readFromFile(
+            path.dirname(imagesFilePath),
+            getFileName(imagesFilePath),
+        );
+        if (!context.pdfIndex) {
+            context.printer.writeLine("Pdf SRAG Index not found");
+            return;
+        }
+        //context.conversation = context.pdfIndex;
+    }
+
+    const IndexFileSuffix = "_index.json";
+    function indexFilePathFromName(indexName: string): string {
+        return path.join(context.basePath, indexName + IndexFileSuffix);
     }
 }

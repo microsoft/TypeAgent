@@ -7,6 +7,8 @@ import * as fsp from "fs/promises";
 import * as fs from "fs";
 import { lock } from "proper-lockfile";
 
+import { ArgDef } from "interactive-app";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -70,4 +72,19 @@ export async function withFileLock<T>(
     } finally {
         await release();
     }
+}
+export function argDestFile(defaultValue?: string | undefined): ArgDef {
+    return {
+        description: "Path to output file",
+        type: "string",
+        defaultValue,
+    };
+}
+
+export function argSourceFile(defaultValue?: string | undefined): ArgDef {
+    return {
+        description: "Path to source file",
+        type: "path",
+        defaultValue,
+    };
 }
