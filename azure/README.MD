@@ -4,13 +4,13 @@ The templates in this folder allow you to quickly create all of the necessary Az
 
 ## Quickstart
 
-To deploy these resources in your Azure subscription into a resource group called *typeagent_demo* run the following command: 
+To deploy these resources in your Azure subscription into a resource group called *typeagent_demo* run the following command either in the cloud shell or from an AzureCLI: 
 
 `az deployment group create --resource-group typeagent_demo --template-file template.json`
 
 ## Features Not Covered
 
-The following TypeAgent features are not automatically created by these ARM tempates:
+The following TypeAgent features/components are not automatically created or configured by these ARM tempates:
 
 - Demo Tenant for [Calendar](../ts/packages/agents/calendar) & [Email](../ts/packages/agents/email/) agents
 - Permissions Assignment
