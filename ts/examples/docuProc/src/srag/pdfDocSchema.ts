@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 export type ChunkId = string;
-
 export interface Blob {
     /** Stores text, table, or image data plus metadata. */
     blob_type:

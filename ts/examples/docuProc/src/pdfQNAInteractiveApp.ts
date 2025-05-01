@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// User interface for querying the index.
-
 import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
 import * as util from "util";
@@ -26,8 +24,11 @@ import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai } from "aiclient";
 import { downloadArxivPapers } from "./pdfDownLoader.js";
-import { importPdf } from "./srag/importPdf.js";
-//import { createKnowproCommands } from "./srag/pdfKnowproMem.js";
+import {
+    createChatMemoryContext,
+    createKnowproCommands,
+} from "./srag/pdfKnowproMem.js";
+import { AppPrinter } from "./printer.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -79,7 +80,7 @@ export async function interactiveAppLoop(
     verbose = false,
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
-        import: importHandler, // Since you can't name a function "import".
+        import: importHandler,
         download,
         clearMemory,
         chunk,
@@ -90,13 +91,29 @@ export async function interactiveAppLoop(
         synonyms,
         files,
         purgeFile,
-        kpimport: kpImportHandler,
-        kpclearMemory,
     };
 
-    iapp.addStandardHandlers(handlers);
     const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
     const pdfDownloader = createPDFDownloadTranslator(model);
+
+    let context = await createChatMemoryContext(captureTokenStats);
+    let showTokenStats = false;
+    let printer = context.printer;
+
+    await createKnowproCommands(context, handlers);
+    iapp.addStandardHandlers(handlers);
+
+    function captureTokenStats(req: any, response: any): void {
+        if (context.stats) {
+            context.stats.updateCurrentTokenStats(response.usage);
+        }
+        if (showTokenStats) {
+            printer.writeCompletionStats(response.usage);
+            printer.writeLine();
+        } else {
+            printer.write(".");
+        }
+    }
 
     function createPDFDownloadTranslator(
         model: TypeChatLanguageModel,
@@ -629,105 +646,19 @@ export async function interactiveAppLoop(
         });
     }
 
+    function onStart(io: iapp.InteractiveIo): void {
+        if (io !== context.printer.io) {
+            printer = new AppPrinter(io);
+            context.printer = printer;
+        }
+    }
+
     await iapp.runConsole({
+        onStart,
         inputHandler: _inputHandler,
         handlers,
         prompt: "\n🤖> ",
     });
-
-    // Handle @import command.
-    function kpimportDef(): iapp.CommandMetadata {
-        return {
-            description: "Import a single or multiple PDF files.",
-            options: {
-                fileName: {
-                    description:
-                        "File to import (or multiple files separated by commas)",
-                    type: "string",
-                },
-                files: {
-                    description: "File containing the list of files to import",
-                    type: "string",
-                },
-                verbose: {
-                    description: "More verbose output",
-                    type: "boolean",
-                    defaultValue: verbose,
-                },
-                chunkPdfs: {
-                    description: "Chunk the PDFs",
-                    type: "boolean",
-                    defaultValue: true,
-                },
-                maxPages: {
-                    description:
-                        "Maximum number of pages to process, default is all pages.",
-                    type: "integer",
-                    defaultValue: -1,
-                },
-            },
-        };
-    }
-    handlers.import.metadata = kpimportDef();
-    async function kpImportHandler(
-        args: string[] | iapp.NamedArgs,
-        io: iapp.InteractiveIo,
-    ): Promise<void> {
-        const namedArgs = iapp.parseNamedArguments(args, importDef());
-        const files = namedArgs.fileName
-            ? (namedArgs.fileName as string).trim().split(",")
-            : namedArgs.files
-              ? fs
-                    .readFileSync(namedArgs.files as string, "utf-8")
-                    .split("\n")
-                    .map((line) => line.trim())
-                    .filter((line) => line.length > 0 && line[0] !== "#")
-              : [];
-        if (!files.length) {
-            writeError(io, "[No files to import (use --? for help)]");
-            return;
-        }
-
-        const chunkPdfs =
-            namedArgs.chunkPdfs === undefined
-                ? true
-                : namedArgs.chunkPdfs?.toString().toLowerCase() === "true";
-
-        const maxPagesToProcess =
-            namedArgs.maxPages === undefined
-                ? -1
-                : parseInt(namedArgs.maxPages as string);
-        if (isNaN(maxPagesToProcess)) {
-            writeError(io, "[Invalid maxPages value]");
-            return;
-        }
-
-        // import files in to srag index
-        await importPdf(
-            io,
-            files[0],
-            undefined,
-            namedArgs.verbose,
-            chunkPdfs,
-            maxPagesToProcess,
-        );
-    }
-
-    // Handle @clearMemory command.
-    handlers.kpclearMemory.metadata = "Clear all memory (and all indexes)";
-    async function kpclearMemory(
-        args: string[],
-        io: iapp.InteractiveIo,
-    ): Promise<void> {
-        // TB Impl
-        // await fs.promises.rm(chunkyIndex.rootDir, {
-        //     recursive: true,
-        //     force: true,
-        // });
-        // await chunkyIndex.reInitialize(chunkyIndex.rootDir);
-        // writeNote(io, "[All memory and all indexes cleared]");
-        // Actually the embeddings cache isn't. But we shouldn't have to care.
-    }
 }
 
 export async function purgeNormalizedFile(

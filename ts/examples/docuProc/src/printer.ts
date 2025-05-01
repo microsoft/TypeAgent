@@ -7,6 +7,7 @@ import {
     InteractiveIo,
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
+import { openai } from "aiclient";
 
 export type ChalkColor = {
     foreColor?: ChalkInstance | undefined;
@@ -82,5 +83,32 @@ export class AppPrinter extends ConsoleWriter {
 
     public writeHeading(message: string): void {
         this.writeColor(chalk.green, message);
+    }
+
+    public writeCompletionStats(stats: openai.CompletionUsageStats) {
+        this.writeInColor(chalk.gray, () => {
+            this.writeLine(`Prompt tokens: ${stats.prompt_tokens}`);
+            this.writeLine(`Completion tokens: ${stats.completion_tokens}`);
+            this.writeLine(`Total tokens: ${stats.total_tokens}`);
+        });
+        return this;
+    }
+
+    public writeInColor(
+        color: ChalkInstance,
+        writable: string | number | (() => void),
+    ) {
+        const prevColor = this.setForeColor(color);
+        try {
+            if (typeof writable === "string") {
+                this.writeLine(writable);
+            } else if (typeof writable === "number") {
+                this.writeLine(writable.toString());
+            } else {
+                writable();
+            }
+        } finally {
+            this.setForeColor(prevColor);
+        }
     }
 }

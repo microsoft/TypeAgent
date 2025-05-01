@@ -1,5 +1,6 @@
-//import { dateTime, getFileName, readAllText } from "typeagent";
-//import { ConversationSettings } from "knowpro";
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import {
     PdfChunkMessageMeta,
     PdfChunkMessage,

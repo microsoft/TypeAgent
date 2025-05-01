@@ -18,7 +18,7 @@ import { ensureDir, getFileName } from "typeagent";
 import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
 import { SRAG_MEM_DIR, OUTPUT_DIR } from "../common.js";
 import fs from "fs";
-//import { AppPrinter } from "../printer.js";
+import { AppPrinter } from "../printer.js";
 import { KPPrinter } from "./kpPrinter.js";
 import { importPdf } from "./importPdf.js";
 import path from "path";
@@ -45,6 +45,7 @@ export type ChatContext = {
     actionTopK: number;
     conversationName: string;
     conversationSettings: knowLib.conversation.ConversationSettings;
+    printer: AppPrinter;
 };
 
 export function createModels(): Models {
@@ -104,6 +105,7 @@ export async function createChatMemoryContext(
         actionTopK: 16,
         conversationName: conversationName,
         conversationSettings: conversationSettings,
+        printer: new AppPrinter(),
     };
 
     return context;
@@ -231,7 +233,7 @@ export async function createKnowproCommands(
         };
     }
 
-    commands.kpImagesSave.metadata = pdfSaveDef();
+    commands.kpPdfSave.metadata = pdfSaveDef();
     async function pdfSave(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, pdfSaveDef());
         if (!context.pdfIndex) {
@@ -260,7 +262,7 @@ export async function createKnowproCommands(
         };
     }
 
-    commands.kpImagesLoad.metadata = pdfLoadDef();
+    commands.kpPdfLoad.metadata = pdfLoadDef();
     async function pdfLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, pdfLoadDef());
         let imagesFilePath = namedArgs.filePath;
@@ -293,7 +295,7 @@ export async function createKnowproCommands(
         };
     }
 
-    commands.kpImagesBuildIndex.metadata = pdfBuildIndexDef();
+    commands.kpPdfBuildIndex.metadata = pdfBuildIndexDef();
     async function pdfBuildIndex(args: string[] | NamedArgs): Promise<void> {
         if (!context.pdfIndex) {
             context.printer.writeError("No Pdfs loaded");
