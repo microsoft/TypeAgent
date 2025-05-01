@@ -1,8 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { MessageCollection } from "../src/storage.js";
-import { TestMessage } from "./testMessage.js";
+import { getBatchesFromCollection, MessageCollection } from "../src/storage.js";
+import {
+    createTestMessages,
+    createTestMessagesArray,
+    TestMessage,
+} from "./testMessage.js";
 
 describe("messageCollection", () => {
     test("addMessage", () => {
@@ -30,5 +34,42 @@ describe("messageCollection", () => {
         expect(messages).toHaveLength(ordinals.length);
         expect(messages[0]).toBeDefined();
         expect(messages[1]).toBeUndefined();
+    });
+    test("constructor", () => {
+        const messageCount = 10;
+        const testMessages = createTestMessagesArray(messageCount);
+        const messageCollection = new MessageCollection(testMessages);
+        expect(messageCollection.length).toEqual(messageCount);
+    });
+    test("enumeration", () => {
+        const messageCount = 10;
+        const messageCollection = createTestMessages(messageCount);
+        expect(messageCollection.length).toEqual(messageCount);
+        // Enumeration
+        let messagesCopy = [...messageCollection];
+        expect(messagesCopy).toHaveLength(messageCollection.length);
+    });
+    test("batching", () => {
+        const messageCount = 10;
+        const messageCollection = createTestMessages(messageCount);
+        expect(messageCollection.length).toEqual(messageCount);
+
+        const messagesCopy = messageCollection.getAll();
+        expect(messagesCopy).toHaveLength(messageCount);
+        let completed = 0;
+        let batchSize = 4;
+        for (const batch of getBatchesFromCollection(
+            messageCollection,
+            0,
+            batchSize,
+        )) {
+            expect(batch.startAt).toEqual(completed);
+            const slice = messagesCopy.slice(
+                batch.startAt,
+                batch.startAt + batchSize,
+            );
+            expect(batch.value).toHaveLength(slice.length);
+            completed += batch.value.length;
+        }
     });
 });

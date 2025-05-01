@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
-import { ICollection } from "knowpro";
+import * as kp from "knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
 export class SqliteCollection<T, TOrdinal extends number>
-    implements ICollection<T, TOrdinal>
+    implements kp.ICollection<T, TOrdinal>
 {
     private db: sqlite.Database;
     private count: number;
@@ -15,12 +15,16 @@ export class SqliteCollection<T, TOrdinal extends number>
     private sql_getAll: sqlite.Statement;
     private sql_slice: sqlite.Statement;
 
+    private serializer: kp.JsonSerializer<T> | undefined;
+
     constructor(
         db: sqlite.Database,
+        serializer: kp.JsonSerializer<T> | undefined,
         public tableName: string,
         ensureExists: boolean = true,
     ) {
         this.db = db;
+        this.serializer = serializer;
         if (ensureExists) {
             this.ensureDb();
         }
@@ -112,14 +116,18 @@ export class SqliteCollection<T, TOrdinal extends number>
     }
 
     private pushObject(obj: T): void {
-        const json = JSON.stringify(obj);
+        const json = this.serializer
+            ? this.serializer.serialize(obj)
+            : JSON.stringify(obj);
         this.sql_push.run(json);
         this.count++;
     }
 
     private deserializeObject(row: unknown): T {
         const data = row as CollectionRow;
-        return JSON.parse(data.value);
+        return this.serializer
+            ? this.serializer.deserialize(data.value)
+            : JSON.parse(data.value);
     }
 
     private ensureDb() {

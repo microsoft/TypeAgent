@@ -8,7 +8,8 @@
 
 import { collections, createTopNList } from "typeagent";
 import {
-    IMessage,
+    IMessageCollection,
+    ISemanticRefCollection,
     Knowledge,
     KnowledgeType,
     MessageOrdinal,
@@ -19,7 +20,7 @@ import {
     Term,
     TextRange,
 } from "./interfaces.js";
-import { compareTextRange, isInTextRange } from "./common.js";
+import { Batch, compareTextRange, isInTextRange } from "./common.js";
 import { ScoredTextLocation } from "./textLocationIndex.js";
 import { getCountOfMessagesInCharBudget } from "./message.js";
 
@@ -398,11 +399,11 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
     }
 
     public *getSemanticRefs(
-        semanticRefs: SemanticRef[],
+        semanticRefs: ISemanticRefCollection,
         predicate?: (semanticRef: SemanticRef) => boolean,
     ): IterableIterator<SemanticRef> {
         for (const match of this.getMatches()) {
-            const semanticRef = semanticRefs[match.value];
+            const semanticRef = semanticRefs.get(match.value);
             if (predicate === undefined || predicate(semanticRef))
                 yield semanticRef;
         }
@@ -426,11 +427,11 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
     }
 
     public groupMatchesByType(
-        semanticRefs: SemanticRef[],
+        semanticRefs: ISemanticRefCollection,
     ): Map<KnowledgeType, SemanticRefAccumulator> {
         const groups = new Map<KnowledgeType, SemanticRefAccumulator>();
         for (const match of this.getMatches()) {
-            const semanticRef = semanticRefs[match.value];
+            const semanticRef = semanticRefs.get(match.value);
             let group = groups.get(semanticRef.knowledgeType);
             if (group === undefined) {
                 group = new SemanticRefAccumulator();
@@ -443,12 +444,16 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
     }
 
     public getMatchesInScope(
-        semanticRefs: SemanticRef[],
+        semanticRefs: ISemanticRefCollection,
         rangesInScope: TextRangesInScope,
     ) {
         const accumulator = new SemanticRefAccumulator(this.searchTermMatches);
         for (const match of this.getMatches()) {
-            if (rangesInScope.isRangeInScope(semanticRefs[match.value].range)) {
+            if (
+                rangesInScope.isRangeInScope(
+                    semanticRefs.get(match.value).range,
+                )
+            ) {
                 accumulator.setMatch(match);
             }
         }
@@ -584,7 +589,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
     }
 
     public selectMessagesInBudget(
-        messages: IMessage[],
+        messages: IMessageCollection,
         maxCharsInBudget: number,
     ): void {
         let scoredMatches = this.getSortedByScore();
@@ -926,11 +931,6 @@ export function setIntersect<T = any>(
     }
     return set;
 }
-
-export type Batch<T = any> = {
-    startAt: number;
-    value: T[];
-};
 
 export function* getBatches<T = any>(
     array: T[],

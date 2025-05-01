@@ -1,17 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createConversationSettings, createKnowledgeExtractor } from "knowpro";
+import {
+    createConversationSettings,
+    createKnowledgeExtractor,
+    MessageCollection,
+} from "knowpro";
 import {
     createTestChatModel,
     createTestEmbeddingModel,
     getAbsolutePath,
-    getOutputDirPath,
     NullEmbeddingModel,
 } from "test-lib";
 import { importPodcast } from "../src/importPodcast.js";
 import { Podcast } from "../src/podcast.js";
-import { ensureDir, removeDir } from "typeagent";
+import { PodcastMessage } from "../src/podcastMessage.js";
 
 export type TestTranscriptInfo = {
     filePath: string;
@@ -91,16 +94,9 @@ export async function loadTestPodcast(
             : createOfflineConversationSettings(),
     );
     if (maxMessages !== undefined && maxMessages > 0) {
-        podcast.messages = podcast.messages.slice(0, maxMessages);
+        podcast.messages = new MessageCollection<PodcastMessage>(
+            podcast.messages.getSlice(0, maxMessages),
+        );
     }
     return podcast;
-}
-
-export async function ensureOutputDir(name: string, clean: boolean = true) {
-    const dirPath = getOutputDirPath(name);
-    if (clean) {
-        await removeDir(dirPath);
-    }
-    await ensureDir(dirPath);
-    return dirPath;
 }

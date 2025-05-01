@@ -6,6 +6,7 @@ import { createAndTermGroup } from "./searchLib.js";
 import {
     IConversation,
     IConversationSecondaryIndexes,
+    ISemanticRefCollection,
     KnowledgeType,
     PropertySearchTerm,
     ScoredKnowledge,
@@ -183,7 +184,7 @@ export async function searchConversationKnowledge(
  * @returns
  */
 export function getDistinctEntityMatches(
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
@@ -198,7 +199,7 @@ export function getDistinctEntityMatches(
  * @returns
  */
 export function getDistinctTopicMatches(
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     searchResults: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {

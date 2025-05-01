@@ -124,6 +124,7 @@ export function compileSearchFilter(
     queryBuilder.exactScoping = exactScoping;
     return queryBuilder.compileSearchFilter(searchFilter);
 }
+
 class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
     private dedupe: boolean = true;

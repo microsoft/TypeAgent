@@ -20,7 +20,6 @@ import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
 import {
-    addFileNameSuffixToPath,
     argDestFile,
     argSourceFile,
     argToDate,
@@ -37,8 +36,11 @@ import {
     createIndexingEventHandler,
     hasConversationResults,
     matchFilterToConversation,
+    memoryNameToIndexPath,
+    sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
+import { createKnowproEmailCommands } from "./knowproEmail.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -71,7 +73,8 @@ export async function createKnowproCommands(
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproDataFrameCommands(commands, context.printer);
+    await createKnowproDataFrameCommands(context, commands);
+    await createKnowproEmailCommands(context, commands);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
@@ -114,7 +117,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showMessagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -162,7 +165,7 @@ export async function createKnowproCommands(
         await podcastBuildIndex(namedArgs);
 
         // Save the index
-        namedArgs.filePath = sourcePathToIndexPath(
+        namedArgs.filePath = sourcePathToMemoryIndexPath(
             namedArgs.filePath,
             namedArgs.indexFilePath,
         );
@@ -213,7 +216,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastLoadDef());
         let podcastFilePath = namedArgs.filePath;
         podcastFilePath ??= namedArgs.name
-            ? podcastNameToFilePath(namedArgs.name)
+            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
             : undefined;
         if (!podcastFilePath) {
             context.printer.writeError("No filepath or name provided");
@@ -255,7 +258,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showImagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -309,7 +312,7 @@ export async function createKnowproCommands(
         await imagesBuildIndex(namedArgs);
 
         // Save the image collection index
-        namedArgs.filePath = sourcePathToIndexPath(
+        namedArgs.filePath = sourcePathToMemoryIndexPath(
             namedArgs.filePath,
             namedArgs.indexFilePath,
         );
@@ -359,7 +362,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, imagesLoadDef());
         let imagesFilePath = namedArgs.filePath;
         imagesFilePath ??= namedArgs.name
-            ? podcastNameToFilePath(namedArgs.name)
+            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
             : undefined;
         if (!imagesFilePath) {
             context.printer.writeError("No filepath or name provided");
@@ -770,7 +773,8 @@ export async function createKnowproCommands(
             await searchTerms(args);
         } else {
             if (conversation.semanticRefs !== undefined) {
-                const entities = conversation.semanticRefs?.filter(
+                const entities = kp.filterCollection(
+                    conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
                 );
                 context.printer.writeSemanticRefs(entities);
@@ -807,10 +811,10 @@ export async function createKnowproCommands(
         let originalMessages = context.podcast.messages;
         try {
             if (maxMessages < messageCount) {
-                context.podcast.messages = context.podcast.messages.slice(
-                    0,
-                    maxMessages,
-                );
+                context.podcast.messages =
+                    new kp.MessageCollection<cm.PodcastMessage>(
+                        context.podcast.messages.getSlice(0, maxMessages),
+                    );
             }
             context.printer.writeLine(`Building Index`);
             let progress = new ProgressBar(context.printer, maxMessages);
@@ -954,7 +958,7 @@ export async function createKnowproCommands(
             knowledgeType: namedArgs.ktype,
         };
         const conv: kp.IConversation | undefined =
-            context.podcast ?? context.images;
+            context.podcast ?? context.images ?? context.conversation;
         const dateRange = kp.getTimeRangeForConversation(conv!);
         if (dateRange) {
             let startDate: Date | undefined;
@@ -1003,20 +1007,5 @@ export async function createKnowproCommands(
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
-    }
-
-    const IndexFileSuffix = "_index.json";
-    function sourcePathToIndexPath(
-        sourcePath: string,
-        indexFilePath?: string,
-    ): string {
-        return (
-            indexFilePath ??
-            addFileNameSuffixToPath(sourcePath, IndexFileSuffix)
-        );
-    }
-
-    function podcastNameToFilePath(podcastName: string): string {
-        return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
 }

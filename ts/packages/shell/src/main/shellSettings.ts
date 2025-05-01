@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import registerDebug from "debug";
 import { readFileSync, existsSync, writeFileSync } from "fs";
 import {
     defaultUserSettings,
@@ -19,7 +18,7 @@ import {
 
 export type { ShellUserSettings };
 
-const debugShell = registerDebug("typeagent:shell");
+import { debugShell } from "./debug.js";
 
 export type ShellWindowState = {
     x: number;
@@ -106,9 +105,23 @@ export class ShellSettingManager {
             // Coerce the type
             switch (valueType) {
                 case "string":
-                case "undefined": // undefined is assume to be string only
+                    if (value === undefined) {
+                        // use default value to determine if the value is optional
+                        const defaultValue = getObjectProperty(
+                            defaultSettings,
+                            name,
+                        );
+                        if (defaultValue !== undefined) {
+                            throw new Error(
+                                `Invalid undefined for property '${name}`,
+                            );
+                        }
+                        break;
+                    }
+                case "undefined": // only allow optional on string types
                     newValue = String(value);
                     break;
+
                 case "number":
                     newValue = Number(value);
                     if (isNaN(newValue)) {

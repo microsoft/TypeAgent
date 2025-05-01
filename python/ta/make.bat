@@ -24,13 +24,13 @@ goto help
 :format
 if not exist "venv\" call make.bat venv
 echo Formatting code...
-venv\Scripts\black typeagent
+venv\Scripts\black typeagent test
 goto end
 
 :check
 if not exist "venv\" call make.bat venv
 echo Running checks...
-venv\Scripts\pyright --pythonpath venv\Scripts\python typeagent *.py
+venv\Scripts\pyright --pythonpath venv\Scripts\python typeagent test
 goto end
 
 :test

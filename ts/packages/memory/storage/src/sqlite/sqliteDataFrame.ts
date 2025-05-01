@@ -5,8 +5,8 @@ import * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 
-export class SqliteDataFrame implements kp.hybrid.IDataFrame {
-    public columns: kp.hybrid.DataFrameColumns;
+export class SqliteDataFrame implements kp.dataFrame.IDataFrame {
+    public columns: kp.dataFrame.DataFrameColumns;
 
     private sql_add: sqlite.Statement;
     private sql_getAll: sqlite.Statement;
@@ -16,12 +16,12 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         public db: sqlite.Database,
         public name: string,
         columns:
-            | kp.hybrid.DataFrameColumns
-            | [string, kp.hybrid.DataFrameColumnDef][],
+            | kp.dataFrame.DataFrameColumns
+            | [string, kp.dataFrame.DataFrameColumnDef][],
         ensureDb: boolean = true,
     ) {
         if (Array.isArray(columns)) {
-            this.columns = new Map<string, kp.hybrid.DataFrameColumnDef>(
+            this.columns = new Map<string, kp.dataFrame.DataFrameColumnDef>(
                 columns,
             );
         } else {
@@ -36,7 +36,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         this.sql_getAll = this.sqlGetAll();
     }
 
-    public addRows(...rows: kp.hybrid.DataFrameRow[]): void {
+    public addRows(...rows: kp.dataFrame.DataFrameRow[]): void {
         for (const row of rows) {
             const rowValues = this.getAddValues(row);
             this.sql_add.run(rowValues);
@@ -45,11 +45,11 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
 
     public getRow(
         columnName: string,
-        columnValue: kp.hybrid.DataFrameValue,
+        columnValue: kp.dataFrame.DataFrameValue,
         op: kp.ComparisonOp,
-    ): kp.hybrid.DataFrameRow[] | undefined {
+    ): kp.dataFrame.DataFrameRow[] | undefined {
         const stmt = this.sqlGet(columnName, op);
-        let rows: kp.hybrid.DataFrameRow[] = [];
+        let rows: kp.dataFrame.DataFrameRow[] = [];
         for (const row of stmt.iterate(columnValue)) {
             rows.push(this.toDataFrameRow(row));
         }
@@ -57,9 +57,9 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
     }
 
     public findRows(
-        searchTerms: kp.hybrid.DataFrameTermGroup,
-    ): kp.hybrid.DataFrameRow[] | undefined {
-        const dfRows: kp.hybrid.DataFrameRow[] = [];
+        searchTerms: kp.dataFrame.DataFrameTermGroup,
+    ): kp.dataFrame.DataFrameRow[] | undefined {
+        const dfRows: kp.dataFrame.DataFrameRow[] = [];
         const stmt = this.queryRows(searchTerms);
         for (const row of stmt.iterate()) {
             dfRows.push(this.toDataFrameRow(row));
@@ -68,9 +68,9 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
     }
 
     public findSources(
-        searchTerms: kp.hybrid.DataFrameTermGroup,
-    ): kp.hybrid.RowSourceRef[] | undefined {
-        const sources: kp.hybrid.RowSourceRef[] = [];
+        searchTerms: kp.dataFrame.DataFrameTermGroup,
+    ): kp.dataFrame.RowSourceRef[] | undefined {
+        const sources: kp.dataFrame.RowSourceRef[] = [];
         const stmt = this.queryRows(searchTerms);
         for (const row of stmt.iterate()) {
             sources.push(this.deserializeSourceRef(row as SqliteDataFrameRow));
@@ -78,7 +78,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         return sources;
     }
 
-    public *[Symbol.iterator](): Iterator<kp.hybrid.DataFrameRow> {
+    public *[Symbol.iterator](): Iterator<kp.dataFrame.DataFrameRow> {
         for (let row of this.sql_getAll.iterate()) {
             const value = this.toDataFrameRow(row);
             if (value !== undefined) {
@@ -88,7 +88,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
     }
 
     private queryRows(
-        searchTerms: kp.hybrid.DataFrameTermGroup,
+        searchTerms: kp.dataFrame.DataFrameTermGroup,
     ): sqlite.Statement {
         let sql = `SELECT sourceRef from ${this.name} WHERE `;
         const where = dataFrameTermGroupToSql(searchTerms, this.columns);
@@ -96,20 +96,20 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         return this.db.prepare(sql);
     }
 
-    private toDataFrameRow(row: unknown): kp.hybrid.DataFrameRow {
+    private toDataFrameRow(row: unknown): kp.dataFrame.DataFrameRow {
         return {
             sourceRef: this.deserializeSourceRef(row as SqliteDataFrameRow),
-            record: row as kp.hybrid.DataFrameRecord,
+            record: row as kp.dataFrame.DataFrameRecord,
         };
     }
 
     private deserializeSourceRef(
         row: SqliteDataFrameRow,
-    ): kp.hybrid.RowSourceRef {
+    ): kp.dataFrame.RowSourceRef {
         return JSON.parse(row.sourceRef);
     }
 
-    private getAddValues(row: kp.hybrid.DataFrameRow) {
+    private getAddValues(row: kp.dataFrame.DataFrameRow) {
         let values: any[] = [];
         values.push(this.serializeSourceRef(row.sourceRef));
         for (const colName of this.recordColumnNames) {
@@ -123,7 +123,7 @@ export class SqliteDataFrame implements kp.hybrid.IDataFrame {
         return colNames;
     }
 
-    private serializeSourceRef(sr: kp.hybrid.RowSourceRef) {
+    private serializeSourceRef(sr: kp.dataFrame.RowSourceRef) {
         return JSON.stringify(sr);
     }
 
@@ -160,8 +160,8 @@ export interface SqliteDataFrameRow {
 }
 
 export function dataFrameTermGroupToSql(
-    group: kp.hybrid.DataFrameTermGroup,
-    colDefs: kp.hybrid.DataFrameColumns,
+    group: kp.dataFrame.DataFrameTermGroup,
+    colDefs: kp.dataFrame.DataFrameColumns,
 ): string {
     let clauses: string[] = [];
     for (let searchTerm of group.terms) {
@@ -178,8 +178,8 @@ export function dataFrameTermGroupToSql(
 }
 
 export function dataFrameSearchTermToSql(
-    term: kp.hybrid.DataFrameSearchTerm,
-    colDef: kp.hybrid.DataFrameColumnDef,
+    term: kp.dataFrame.DataFrameSearchTerm,
+    colDef: kp.dataFrame.DataFrameColumnDef,
 ): string {
     const op = comparisonOpToSql(term.compareOp ?? kp.ComparisonOp.Eq);
     const val = searchTermToSql(term.columnValue, colDef);
@@ -188,7 +188,7 @@ export function dataFrameSearchTermToSql(
 
 export function searchTermToSql(
     valueTerm: kp.SearchTerm,
-    columnDef: kp.hybrid.DataFrameColumnDef,
+    columnDef: kp.dataFrame.DataFrameColumnDef,
 ): string {
     const valueText = valueTerm.term.text;
     if (columnDef.type === "number") {
@@ -197,7 +197,7 @@ export function searchTermToSql(
     return `'${valueText}'`;
 }
 
-export function boolOpToSql(group: kp.hybrid.DataFrameTermGroup): string {
+export function boolOpToSql(group: kp.dataFrame.DataFrameTermGroup): string {
     switch (group.booleanOp) {
         case "and":
             return " AND ";
@@ -226,7 +226,7 @@ export function comparisonOpToSql(op: kp.ComparisonOp): string {
 
 export function dataFrameToSchemaSql(
     dfName: string,
-    colDefs: kp.hybrid.DataFrameColumns,
+    colDefs: kp.dataFrame.DataFrameColumns,
 ): string {
     if (colDefs.size === 0) {
         return "";
@@ -243,7 +243,7 @@ export function dataFrameToSchemaSql(
 
 export function dataFrameToIndexSql(
     dfName: string,
-    colDefs: kp.hybrid.DataFrameColumns,
+    colDefs: kp.dataFrame.DataFrameColumns,
 ): string {
     if (colDefs.size === 0) {
         return "";
@@ -259,7 +259,7 @@ export function dataFrameToIndexSql(
 
 function columnDefToSchemaSql(
     columnName: string,
-    columnDef: kp.hybrid.DataFrameColumnDef,
+    columnDef: kp.dataFrame.DataFrameColumnDef,
 ): string {
     let sql = columnName;
     if (columnDef.type === "string") {
@@ -277,7 +277,7 @@ function columnDefToSchemaSql(
 function columnDefToIndexSql(
     dfName: string,
     columnName: string,
-    columnDef: kp.hybrid.DataFrameColumnDef,
+    columnDef: kp.dataFrame.DataFrameColumnDef,
 ) {
     let sql = `CREATE INDEX IF NOT EXISTS idx_${columnName} ON ${dfName} (${columnName});`;
     return sql;

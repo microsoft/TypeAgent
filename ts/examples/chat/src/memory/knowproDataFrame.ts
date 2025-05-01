@@ -12,7 +12,7 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { KnowProPrinter } from "./knowproPrinter.js";
+import { KnowProContext } from "./knowproMemory.js";
 import { Result, success } from "typechat";
 import { ensureDir, getFileName, readAllText } from "typeagent";
 import * as kp from "knowpro";
@@ -24,8 +24,8 @@ import { argDestFile, argSourceFile } from "./common.js";
 import path from "path";
 
 export async function createKnowproDataFrameCommands(
+    context: KnowProContext,
     commands: Record<string, CommandHandler>,
-    printer: KnowProPrinter,
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
     commands.kpDataFrameImport = importDataFrame;
@@ -34,17 +34,16 @@ export async function createKnowproDataFrameCommands(
     commands.kpDataFrameList = listFrames;
     commands.kpDataFrameSave = saveDataFrame;
     commands.kpDataFrameLoad = loadDataFrame;
-    //commands.kpDataFrameTest = testDb;
 
     const basePath = "/data/testChat/knowpro/restaurants";
-    const filePath =
-        "/data/testChat/knowpro/restaurants/all_restaurants/part_12.json";
+    const filePath = "/data/testChat/knowpro/restaurants/all/split_011.json";
     let query = "Punjabi restaurant with Rating 3.0 in Eisenhüttenstadt";
 
     let db: RestaurantDb | undefined;
     let restaurantIndex: RestaurantIndex | undefined;
 
     await ensureDir(basePath);
+    const printer = context.printer;
 
     function importDataFrameDef(): CommandMetadata {
         return {
@@ -109,7 +108,7 @@ export async function createKnowproDataFrameCommands(
 
     function saveDataFrameDef(): CommandMetadata {
         return {
-            description: "Save Podcast",
+            description: "Save data frame",
             args: {
                 filePath: argDestFile(),
             },
@@ -169,6 +168,13 @@ export async function createKnowproDataFrameCommands(
         printer.writeTiming(chalk.gray, clock, "Read file");
     }
 
+    function listDataFrameDef(): CommandMetadata {
+        return {
+            description: "List records from the dataframe",
+        };
+    }
+
+    commands.kpDataFrameList.metadata = listDataFrameDef();
     async function listFrames(args: string[]) {
         if (restaurantIndex) {
             for (const r of restaurantIndex.restaurantFacets) {
@@ -243,6 +249,9 @@ export async function createKnowproDataFrameCommands(
                 printer.writeError(`Skipped ${restaurant.name}`);
             }
         }
+
+        context.conversation = restaurantCollection.conversation;
+        context.printer.conversation = restaurantCollection.conversation;
     }
 
     async function buildIndex(restaurantCollection: RestaurantIndex) {
@@ -275,103 +284,12 @@ export async function createKnowproDataFrameCommands(
         return path.join(basePath, name + IndexFileSuffix);
     }
 
-    /*
-    async function testDb() {
-        if (db) {
-            let rows = db.restaurants.getRow(
-                "city",
-                "amsterdam",
-                kp.ComparisonOp.Eq,
-            );
-            if (rows) {
-                printer.writeJson(rows);
-            }
-            let sources = db.restaurants.findSources({
-                booleanOp: "and",
-                dataFrame: db.restaurants,
-                terms: [
-                    {
-                        columnName: "city",
-                        columnValue: { term: { text: "amsterdam" } },
-                    },
-                    {
-                        columnName: "country",
-                        columnValue: { term: { text: "nl" } },
-                    },
-                ],
-            });
-            if (sources) {
-                printer.writeJson(sources);
-            }
-        }
-    }
-    async function testHybridQuery() {
-        if (restaurantIndex) {
-            printer.writeInColor(
-                chalk.cyan,
-                "Searching for 50.804436 (nl), 5.8997846 (nl)",
-            );
-            // Hybrid querying
-            let termGroup = kp.createAndTermGroup(
-                kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
-                kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
-            );
-            const hybridMatches = await kp.hybrid.searchConversationWithJoin(
-                restaurantIndex,
-                termGroup,
-            );
-            if (hybridMatches && hybridMatches.dataFrameMatches) {
-                printer.writeScoredMessages(
-                    hybridMatches.dataFrameMatches,
-                    restaurantIndex.conversation.messages,
-                    25,
-                );
-            }
-        }
-    }
-
-    function testDb(
-        db: RestaurantDb,
-        restaurantCollection: HybridRestaurantCollection,
-    ) {
-        let latitude = "50.804436 (nl)";
-        let rows = db.geo.getRow("latitude", latitude, kp.ComparisonOp.Eq);
-        if (rows) {
-            printer.writeInColor(chalk.cyan, "Geo matches Sqlite");
-            writeRows(rows, restaurantCollection);
-        }
-
-        // Hybrid querying
-        let termGroup = kp.createAndTermGroup(
-            kp.createPropertySearchTerm("geo.latitude", "50.804436 (nl)"),
-            kp.createPropertySearchTerm("geo.longitude", "5.8997846 (nl)"),
-        );
-        const dataFrameMatches = kp.searchDataFrames(db.dataFrames, termGroup);
-        if (dataFrameMatches) {
-            printer.writeScoredMessages(
-                dataFrameMatches,
-                restaurantCollection.conversation.messages,
-                25,
-            );
-        }
-    }
-    function testGeo() {
-        if (restaurantIndex) {
-            let latitude = "50.804436 (nl)";
-            let rows = restaurantIndex.locations.getRow(
-                "latitude",
-                latitude,
-                kp.ComparisonOp.Eq,
-            );
-            if (rows) {
-                printer.writeLine("Geo matches");
-                printer.writeJson(rows);
-            }
-        }
-    }
-        */
-
     return;
+}
+
+interface Entity {
+    name: string;
+    type: string[];
 }
 
 export interface Thing {
@@ -381,21 +299,26 @@ export interface Thing {
 export interface Restaurant extends Thing {
     name: string;
     description?: string;
+    openingHours?: string;
+    servesCuisine?: string;
     geo?: Geo;
     address?: Address;
     aggregateRating?: AggregateRating;
     facets?: RestaurantFacets;
+    hasMenu?: Menu[];
 }
 
-export interface Geo extends Thing, kp.hybrid.DataFrameRecord {
+export interface Geo extends Thing, kp.dataFrame.DataFrameRecord {
     latitude?: string | undefined;
     longitude?: string | undefined;
 }
 
-export interface Address extends Thing, kp.hybrid.DataFrameRecord {
+export interface Address extends Thing, kp.dataFrame.DataFrameRecord {
     streetAddress?: string;
     postalCode?: string;
     addressLocality?: string;
+    addressRegion?: string;
+    addressCountry?: string;
 }
 
 export interface AggregateRating extends Thing {
@@ -404,10 +327,29 @@ export interface AggregateRating extends Thing {
 
 export interface Location {
     city?: string | undefined;
+    region?: string | undefined;
     country?: string | undefined;
 }
 
-export interface RestaurantFacets extends kp.hybrid.DataFrameRecord, Location {
+interface MenuItem extends Thing {
+    name: string;
+    description: string | null;
+}
+
+interface MenuSection extends Thing {
+    name: string;
+    description: string | null;
+    hasMenuItem: MenuItem[];
+}
+
+interface Menu extends Thing {
+    name: string;
+    hasMenuSection: MenuSection[];
+}
+
+export interface RestaurantFacets
+    extends kp.dataFrame.DataFrameRecord,
+        Location {
     rating?: number | undefined;
 }
 
@@ -432,13 +374,25 @@ export class RestaurantInfo implements kp.IMessage {
             if (restaurant.description) {
                 text += `\n\n${restaurant.description}`;
             }
+            if (restaurant.openingHours) {
+                text += `Open Hours:  \n\n${restaurant.openingHours}`;
+            }
+
             this.textChunks.push(text);
         }
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
+        // cuisine
+        const cuisineEntities = parseCuisine(this.restaurant);
+        const menuItems = parseMenuItems(this.restaurant);
+
         return {
-            entities: [{ name: this.restaurant.name, type: ["restaurant"] }],
+            entities: [
+                { name: this.restaurant.name, type: ["restaurant"] },
+                ...cuisineEntities,
+                ...menuItems,
+            ],
             actions: [],
             inverseActions: [],
             topics: [],
@@ -450,17 +404,20 @@ export class RestaurantInfo implements kp.IMessage {
  * Maintains all textual information for the restaurant + any knowledge extracted from it
  */
 export class RestaurantStructuredRagIndex implements kp.IConversation {
+    public messages: kp.MessageCollection<RestaurantInfo>;
     public settings: kp.ConversationSettings;
     public nameTag: string = "description";
     public tags: string[] = [];
-    public semanticRefs: kp.SemanticRef[] = [];
+    public semanticRefs: kp.SemanticRefCollection;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
 
     constructor(
-        public messages: RestaurantInfo[] = [],
+        messages: RestaurantInfo[] = [],
         settings?: kp.ConversationSettings,
     ) {
+        this.messages = new kp.MessageCollection<RestaurantInfo>(messages);
+        this.semanticRefs = new kp.SemanticRefCollection();
         settings ??= kp.createConversationSettings();
         this.settings = settings;
         this.semanticRefIndex = new kp.ConversationIndex();
@@ -471,7 +428,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
 
     public add(restaurant: Restaurant): kp.TextRange {
         const messageOrdinal = this.messages.length;
-        this.messages.push(new RestaurantInfo(restaurant));
+        this.messages.append(new RestaurantInfo(restaurant));
         return {
             start: { messageOrdinal, chunkOrdinal: 0 },
         };
@@ -480,7 +437,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public getDescriptionFromLocation(
         textLocation: kp.TextLocation,
     ): RestaurantInfo {
-        return this.messages[textLocation.messageOrdinal];
+        return this.messages.get(textLocation.messageOrdinal);
     }
 
     public async buildIndex(
@@ -492,9 +449,9 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public async serialize(): Promise<RestaurantData> {
         const data: RestaurantData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -505,8 +462,10 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
 
     public async deserialize(data: RestaurantData): Promise<void> {
         this.nameTag = data.nameTag;
-        this.messages = this.deserializeMessages(data);
-        this.semanticRefs = data.semanticRefs;
+        this.messages = new kp.MessageCollection<RestaurantInfo>(
+            this.deserializeMessages(data),
+        );
+        this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
@@ -549,7 +508,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
                 ?.embeddingSize,
         );
         if (data) {
-            index.deserialize(data);
+            await index.deserialize(data);
         }
         return index;
     }
@@ -569,7 +528,9 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
 export interface RestaurantData
     extends kp.IConversationDataWithIndexes<RestaurantInfo> {}
 
-export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
+export class RestaurantIndex
+    implements kp.dataFrame.IConversationWithDataFrame
+{
     /**
      * All raw textual data (descriptions, etc) is indexed using structured RAG
      * Knowledge and other salient information is auto-extracted from the
@@ -581,19 +542,19 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
      * strongly typed data frames ("tables") with spatial and other indexes.
      * These can be used as needed during query processing
      */
-    public dataFrames: kp.hybrid.DataFrameCollection;
-    public locations: kp.hybrid.IDataFrame;
-    public restaurantFacets: kp.hybrid.IDataFrame;
+    public dataFrames: kp.dataFrame.DataFrameCollection;
+    public locations: kp.dataFrame.IDataFrame;
+    public restaurantFacets: kp.dataFrame.IDataFrame;
     private queryTranslator: kp.SearchQueryTranslator;
 
     constructor(public restaurantDb: RestaurantDb) {
         this.textIndex = new RestaurantStructuredRagIndex();
         /*
-        this.locations = new kp.hybrid.DataFrame("geo", [
+        this.locations = new kp.dataFrame.DataFrame("geo", [
             ["latitude", { type: "string" }],
             ["longitude", { type: "string" }],
         ]);
-        this.restaurantFacets = new kp.hybrid.DataFrame("restaurant", [
+        this.restaurantFacets = new kp.dataFrame.DataFrame("restaurant", [
             ["rating", { type: "number" }],
             ["city", { type: "string" }],
             ["country", { type: "string" }],
@@ -601,12 +562,12 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         */
         this.locations = restaurantDb.geo;
         this.restaurantFacets = restaurantDb.restaurants;
-        this.dataFrames = new Map<string, kp.hybrid.IDataFrame>([
+        this.dataFrames = new Map<string, kp.dataFrame.IDataFrame>([
             [this.locations.name, this.locations],
             [this.restaurantFacets.name, this.restaurantFacets],
         ]);
 
-        this.queryTranslator = kp.hybrid.lang.createSearchQueryTranslator(
+        this.queryTranslator = kp.dataFrame.lang.createSearchQueryTranslator(
             this.dataFrames,
             openai.createChatModelDefault("knowpro_test"),
         );
@@ -625,7 +586,7 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         if (facets === undefined || !this.isGoodFacets(facets)) {
             return undefined;
         }
-        const sourceRef: kp.hybrid.RowSourceRef = {
+        const sourceRef: kp.dataFrame.RowSourceRef = {
             range: this.textIndex.add(restaurant),
         };
         restaurant.facets = facets;
@@ -642,7 +603,9 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         return facets;
     }
 
-    public getDescriptionsFromRows(rows: kp.hybrid.DataFrameRow[]): string[] {
+    public getDescriptionsFromRows(
+        rows: kp.dataFrame.DataFrameRow[],
+    ): string[] {
         const descriptions: string[] = [];
         for (const row of rows) {
             if (row.record) {
@@ -681,7 +644,7 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
         }
         const matchedRestaurants: Restaurant[][] = [];
         for (const searchExpr of searchQuery.searchExpressions) {
-            const results = await kp.hybrid.lang.searchConversationMessages(
+            const results = await kp.dataFrame.lang.searchConversationMessages(
                 this,
                 searchExpr,
                 undefined,
@@ -730,8 +693,9 @@ export class RestaurantIndex implements kp.hybrid.IConversationHybrid {
     ): Restaurant[] {
         matches ??= [];
         for (const match of matchedOrdinals) {
-            const restaurant =
-                this.textIndex.messages[match.messageOrdinal].restaurant;
+            const restaurant = this.textIndex.messages.get(
+                match.messageOrdinal,
+            ).restaurant;
             matches.push(restaurant);
         }
         return matches;
@@ -783,12 +747,45 @@ function parseRestaurantFacets(
 
 function parseAddressFacets(address: Address, facets: RestaurantFacets) {
     if (address.addressLocality) {
-        const location = parseLocation(address.addressLocality);
-        if (location) {
-            facets.city = location.city?.toLowerCase();
-            facets.country = location.country?.toLowerCase();
+        facets.city = address.addressLocality.toLowerCase();
+        facets.region = address.addressRegion?.toLowerCase();
+        facets.country = address.addressCountry?.toLowerCase();
+    }
+}
+
+function parseCuisine(restaurant: Restaurant): Entity[] {
+    if (!restaurant.servesCuisine) {
+        return [];
+    }
+
+    const entities = restaurant.servesCuisine
+        .split(",")
+        .map((item) => item.trim());
+
+    return entities.map((entity) => ({
+        name: entity,
+        type: ["cuisine"],
+    }));
+}
+
+function parseMenuItems(restaurant: Restaurant): Entity[] {
+    if (!restaurant.hasMenu || restaurant.hasMenu.length === 0) {
+        return [];
+    }
+
+    const menuItems: Entity[] = [];
+    for (const menu of restaurant.hasMenu) {
+        for (const section of menu.hasMenuSection) {
+            for (const item of section.hasMenuItem) {
+                menuItems.push({
+                    name: item.name,
+                    type: ["menuItem"],
+                });
+            }
         }
     }
+
+    return menuItems;
 }
 
 export async function loadThings<T extends Thing>(
@@ -796,12 +793,15 @@ export async function loadThings<T extends Thing>(
     maxCount?: number,
 ): Promise<T[]> {
     const json = await readAllText(filePath);
+    console.log(`Length read: ${json.length}`);
+
     const containers: Container<T>[] = JSON.parse(json);
     const items: T[] = [];
     maxCount ??= containers.length;
+    console.log(`Items read: ${containers.length}`);
     maxCount = Math.min(containers.length, maxCount);
     for (let i = 0; i < maxCount; ++i) {
-        const item = containers[i].item;
+        const item = containers[i] as T;
         if (item !== undefined) {
             items.push(item);
         }
@@ -832,19 +832,6 @@ export function parseNumberAndText(str: string): NumberAndText {
 function parseNumber(str: string | undefined): number | undefined {
     try {
         return str ? Number.parseFloat(str.trim()) : undefined;
-    } catch {}
-    return undefined;
-}
-
-function parseLocation(location: string): Location | undefined {
-    try {
-        const match = location.match(/^(.+?)\s*\((.+?)\)$/);
-        if (match && match.length > 1) {
-            return {
-                city: match[1].trim(),
-                country: match[2].trim(),
-            };
-        }
     } catch {}
     return undefined;
 }

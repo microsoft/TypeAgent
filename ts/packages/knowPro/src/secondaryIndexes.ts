@@ -66,8 +66,8 @@ export async function buildSecondaryIndexes(
 export async function addToSecondaryIndexes(
     conversation: IConversation,
     conversationSettings: ConversationSettings,
-    startAtMessageOrdinal: MessageOrdinal,
-    startAtSemanticRefOrdinal: SemanticRefOrdinal,
+    messageOrdinalStartAt: MessageOrdinal,
+    semanticRefOrdinalStartAt: SemanticRefOrdinal,
     relatedTerms: string[],
     eventHandler?: IndexingEventHandlers,
 ): Promise<SecondaryIndexingResults> {
@@ -77,8 +77,8 @@ export async function addToSecondaryIndexes(
     let result: SecondaryIndexingResults = addToTransientSecondaryIndexes(
         conversation,
         conversationSettings,
-        startAtMessageOrdinal,
-        startAtSemanticRefOrdinal,
+        messageOrdinalStartAt,
+        semanticRefOrdinalStartAt,
     );
     result.relatedTerms = await addToRelatedTermsIndex(
         conversation,
@@ -89,7 +89,7 @@ export async function addToSecondaryIndexes(
     result.message = await addToMessageIndex(
         conversation,
         conversationSettings.messageTextIndexSettings,
-        startAtMessageOrdinal,
+        messageOrdinalStartAt,
         eventHandler,
     );
     return result;

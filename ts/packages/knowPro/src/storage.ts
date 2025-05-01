@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+import { Batch } from "./common.js";
 import {
     SemanticRef,
     SemanticRefOrdinal,
@@ -9,6 +10,8 @@ import {
     IStorageProvider,
     IMessageCollection,
     ISemanticRefCollection,
+    IReadonlyCollection,
+    JsonSerializer,
 } from "./interfaces.js";
 
 export class Collection<T, TOrdinal extends number>
@@ -54,7 +57,7 @@ export class Collection<T, TOrdinal extends number>
         }
     }
 
-    public *[Symbol.iterator](): Iterator<T, any, any> {
+    public [Symbol.iterator](): Iterator<T, any, any> {
         return this.items[Symbol.iterator]();
     }
 }
@@ -80,13 +83,58 @@ export class MessageCollection<TMessage extends IMessage = IMessage>
 export class MemoryStorageProvider implements IStorageProvider {
     constructor() {}
 
-    public createMessageCollection<
-        TMessage extends IMessage = IMessage,
-    >(): IMessageCollection<TMessage> {
+    public createMessageCollection<TMessage extends IMessage = IMessage>(
+        serializer?: JsonSerializer<TMessage>,
+    ): IMessageCollection<TMessage> {
         return new MessageCollection<TMessage>();
     }
 
     public createSemanticRefCollection(): ISemanticRefCollection {
         return new SemanticRefCollection();
     }
+
+    public close(): void {}
+}
+
+export function* getBatchesFromCollection<T = any>(
+    collection: IReadonlyCollection<T>,
+    startAtOrdinal: number,
+    batchSize: number,
+): IterableIterator<Batch<T>> {
+    let startAt = startAtOrdinal;
+    while (true) {
+        let batch = collection.getSlice(startAt, startAt + batchSize);
+        if (batch.length === 0) {
+            break;
+        }
+        yield { startAt, value: batch };
+        startAt += batchSize;
+    }
+}
+
+export function mapCollection<T = any>(
+    collection: IReadonlyCollection<T>,
+    callback: (item: T, index: number) => T,
+) {
+    let results: T[] = [];
+    const length = collection.length;
+    for (let i = 0; i < length; ++i) {
+        results.push(callback(collection.get(i), i));
+    }
+    return results;
+}
+
+export function filterCollection<T = any>(
+    collection: IReadonlyCollection<T>,
+    predicate: (item: T, index: number) => boolean,
+) {
+    let results: T[] = [];
+    const length = collection.length;
+    for (let i = 0; i < length; ++i) {
+        const item = collection.get(i);
+        if (predicate(item, i)) {
+            results.push(item);
+        }
+    }
+    return results;
 }

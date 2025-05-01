@@ -24,6 +24,7 @@ import {
     buildTransientSecondaryIndexes,
 } from "./secondaryIndexes.js";
 import { error, PromptSection, Result, success } from "typechat";
+import { MessageCollection, SemanticRefCollection } from "./storage.js";
 
 export type Scored<T = any> = {
     item: T;
@@ -164,8 +165,8 @@ export async function createConversationFromData(
     const conversation: IConversation = {
         nameTag: data.nameTag,
         tags: data.tags,
-        messages: data.messages,
-        semanticRefs: data.semanticRefs,
+        messages: new MessageCollection(data.messages),
+        semanticRefs: new SemanticRefCollection(data.semanticRefs),
         semanticRefIndex: data.semanticIndexData
             ? new ConversationIndex(data.semanticIndexData)
             : undefined,
@@ -185,3 +186,8 @@ export async function createConversationFromData(
     await buildTransientSecondaryIndexes(conversation, conversationSettings);
     return conversation;
 }
+
+export type Batch<T = any> = {
+    startAt: number;
+    value: T[];
+};

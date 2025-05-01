@@ -25,10 +25,11 @@ import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js"
 import { ShellAction } from "./shellActionSchema.js";
 import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
+import { updateHandlerTable } from "./commands/update.js";
 
 const port = process.env.PORT || 9001;
 
-type ShellContext = {
+export type ShellContext = {
     shellWindow: ShellWindow;
 };
 
@@ -288,6 +289,7 @@ const handlers: CommandHandlerTable = {
         close: new ShellCloseWebContentView(),
         localWhisper: getLocalWhisperCommandHandlers(),
         theme: getThemeCommandHandlers(),
+        update: updateHandlerTable,
     },
 };
 

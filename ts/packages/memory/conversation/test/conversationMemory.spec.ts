@@ -1,17 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { describeIf, hasTestKeys, readTestFile } from "test-lib";
+import {
+    describeIf,
+    ensureOutputDir,
+    hasTestKeys,
+    readTestFile,
+} from "test-lib";
 import {
     ConversationMemory,
     ConversationMessage,
     parseConversationMemoryTranscript,
 } from "../src/conversationMemory.js";
-import {
-    ensureOutputDir,
-    getTestTranscriptDialog,
-    TestTranscriptInfo,
-} from "./testCommon.js";
+import { getTestTranscriptDialog, TestTranscriptInfo } from "./testCommon.js";
 import { verifyConversationBasic } from "./verify.js";
 
 describeIf(
@@ -25,7 +26,7 @@ describeIf(
                 const maxMessages = 4;
                 const messages = loadTestMessages(maxMessages);
                 const cm = new ConversationMemory();
-                const dirPath = await ensureOutputDir(
+                const dirPath = ensureOutputDir(
                     "conversationMemory.online.endToEnd",
                 );
                 // Set up for auto-save

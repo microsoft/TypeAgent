@@ -407,10 +407,11 @@ async function handleMontageAction(
                     );
                 } else {
                     (action as FindPhotosAction).parameters.files =
-                        actionContext.sessionContext.agentContext.imageCollection?.messages.map(
-                            (img) =>
+                        actionContext.sessionContext.agentContext.imageCollection?.messages
+                            .getAll()
+                            .map((img) =>
                                 img.metadata.img.fileName.toLocaleLowerCase(),
-                        );
+                            );
                 }
             } else {
                 result = createActionResultFromError(
@@ -835,9 +836,9 @@ async function findRequestedImages(
                     (value: kp.ScoredSemanticRefOrdinal) => {
                         if (value.score >= context.searchSettings.minScore) {
                             const semanticRef: kp.SemanticRef | undefined =
-                                context.imageCollection!.semanticRefs[
-                                    value.semanticRefOrdinal
-                                ];
+                                context.imageCollection!.semanticRefs.get(
+                                    value.semanticRefOrdinal,
+                                );
                             if (semanticRef) {
                                 if (semanticRef.knowledgeType === "entity") {
                                     const entity: kpLib.ConcreteEntity =
@@ -862,9 +863,9 @@ async function findRequestedImages(
                                         const imgRange: kp.TextLocation =
                                             semanticRef.range.start;
                                         const img: im.Image =
-                                            context.imageCollection!.messages[
-                                                imgRange.messageOrdinal
-                                            ];
+                                            context.imageCollection!.messages.get(
+                                                imgRange.messageOrdinal,
+                                            );
 
                                         imageFiles.add(
                                             img.metadata.fileName.toLocaleLowerCase(),
@@ -876,9 +877,9 @@ async function findRequestedImages(
                                     const imgRange: kp.TextLocation =
                                         semanticRef.range.start;
                                     const img: im.Image =
-                                        context.imageCollection!.messages[
-                                            imgRange.messageOrdinal
-                                        ];
+                                        context.imageCollection!.messages.get(
+                                            imgRange.messageOrdinal,
+                                        );
                                     imageFiles.add(
                                         img.metadata.fileName.toLocaleLowerCase(),
                                     );

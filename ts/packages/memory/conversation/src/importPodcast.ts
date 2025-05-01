@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import { dateTime, getFileName, readAllText } from "typeagent";
-import { Podcast, PodcastMessage, PodcastMessageMeta } from "./podcast.js";
+import { Podcast } from "./podcast.js";
+import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
 import { ConversationSettings } from "knowpro";
 import { parseTranscript, timestampMessages } from "./transcript.js";
 
