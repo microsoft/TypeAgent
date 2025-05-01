@@ -130,11 +130,13 @@ export class PdfChunkMessageMeta
         // 6. Topics (categories)
         const topics: string[] = [];
         if (this.pdfMetadata.meta.category) {
-            topics.push(
-                ...this.pdfMetadata.meta.category
-                    .split(",")
-                    .map((s) => s.trim()),
-            );
+            if (Array.isArray(this.pdfMetadata?.meta?.category)) {
+                topics.push(
+                    ...this.pdfMetadata.meta.category.map((cat: any) =>
+                        cat["@_term"].trim(),
+                    ),
+                );
+            }
         }
 
         // 7. Optionally generate inverse actions
