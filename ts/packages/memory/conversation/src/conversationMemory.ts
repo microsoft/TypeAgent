@@ -250,13 +250,13 @@ export class ConversationMemory
 
     public async createSearchQuery(
         searchText: string,
-        exactScope: boolean = true,
+        options?: kp.LanguageSearchOptions,
     ): Promise<Result<kp.SearchQueryExpr[]>> {
         const queryResult = await kp.searchQueryExprFromLanguage(
             this,
             this.getQueryTranslator(),
             searchText,
-            exactScope,
+            options,
         );
         return queryResult;
     }

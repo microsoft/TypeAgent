@@ -32,7 +32,7 @@ export async function searchConversationWithJoin(
     options?: search.SearchOptions,
     rawQuery?: string,
 ): Promise<ConversationDataFrameSearchResults> {
-    options ??= search.createDefaultSearchOptions();
+    options ??= search.createSearchOptions();
 
     const conversationMatches = await search.searchConversation(
         dfConversation.conversation,

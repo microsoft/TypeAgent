@@ -611,7 +611,7 @@ export async function createKnowproCommands(
     function answerDefNew(): CommandMetadata {
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
-        def.options!.messages = argBool("Include messages", false);
+        def.options!.messages = argBool("Include messages", true);
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -621,16 +621,17 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, answerDefNew());
         const searchText = namedArgs.query;
-        const debugContext: kp.LanguageSearchContext = {};
+        const debugContext: kp.LanguageSearchDebugContext = {};
 
-        const options = createSearchOptions(namedArgs);
+        const options: kp.LanguageSearchOptions =
+            createSearchOptions(namedArgs);
         options.exactMatch = namedArgs.exact;
+        options.exactScope = namedArgs.exactScope;
 
         const searchResults = await kp.searchConversationWithLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
-            namedArgs.exactScope,
             options,
             debugContext,
         );
@@ -660,10 +661,8 @@ export async function createKnowproCommands(
                 searchResult,
                 (chunk, _, result) => {
                     if (namedArgs.debug) {
-                        context.printer.writeInColor(chalk.gray, () => {
-                            context.printer.writeLine();
-                            context.printer.writeJsonInColor(chalk.gray, chunk);
-                        });
+                        context.printer.writeLine();
+                        context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
             );
@@ -993,7 +992,7 @@ export async function createKnowproCommands(
     }
 
     function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
-        let options = kp.createDefaultSearchOptions();
+        let options = kp.createSearchOptions();
         options.exactMatch = namedArgs.exact;
         options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;

@@ -10,6 +10,7 @@ import {
 } from "./interfaces.js";
 import {
     ConversationSearchResult,
+    createSearchOptions,
     runSearchQuery,
     SearchOptions,
     SearchQueryExpr,
@@ -38,15 +39,14 @@ export async function searchConversationWithLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
-    exactScope: boolean = true,
-    options?: SearchOptions,
-    context?: LanguageSearchContext,
+    options?: LanguageSearchOptions,
+    context?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     const searchQueryExprResult = await searchQueryExprFromLanguage(
         conversation,
         queryTranslator,
         searchText,
-        exactScope,
+        options,
         context,
     );
     if (!searchQueryExprResult.success) {
@@ -75,8 +75,8 @@ export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
     queryText: string,
-    exactScope: boolean = true,
-    context?: LanguageSearchContext,
+    options?: LanguageSearchOptions,
+    context?: LanguageSearchDebugContext,
 ): Promise<Result<SearchQueryExpr[]>> {
     const queryResult = await searchQueryFromLanguage(
         conversation,
@@ -88,18 +88,36 @@ export async function searchQueryExprFromLanguage(
         if (context) {
             context.searchQuery = searchQuery;
         }
+        options ??= createLanguageSearchOptions();
         const searchExpr = compileSearchQuery(
             conversation,
             searchQuery,
-            exactScope,
+            options.exactScope,
         );
         return success(searchExpr);
     }
     return queryResult;
 }
 
-export type LanguageSearchContext = {
+export interface LanguageSearchOptions extends SearchOptions {
+    exactScope?: boolean | undefined;
+}
+
+export function createLanguageSearchOptions(): LanguageSearchOptions {
+    return {
+        ...createSearchOptions(),
+        exactScope: true,
+    };
+}
+
+export type LanguageSearchDebugContext = {
+    /**
+     * Query returned by the LLM
+     */
     searchQuery?: querySchema.SearchQuery | undefined;
+    /**
+     * What searchQuery was compiled into
+     */
     searchQueryExpr?: SearchQueryExpr[] | undefined;
 };
 
@@ -190,7 +208,7 @@ class SearchQueryCompiler {
         }
         if (filter.actionSearchTerm) {
             termGroup.terms.push(
-                this.compileActionTerm(filter.actionSearchTerm, false),
+                this.compileActionTerm(filter.actionSearchTerm, false, true),
             );
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
@@ -281,14 +299,14 @@ class SearchQueryCompiler {
 
     private compileScope(
         actionTerm: querySchema.ActionTerm,
-        includeAdditional: boolean = true,
+        includeAdditionalEntities: boolean = true,
     ): SearchTermGroup {
         const dedupe = this.dedupe;
         this.dedupe = false;
 
-        let termGroup = this.compileActionTerm(actionTerm, true);
+        let termGroup = this.compileActionTerm(actionTerm, true, true);
         if (
-            includeAdditional &&
+            includeAdditionalEntities &&
             isEntityTermArray(actionTerm.additionalEntities)
         ) {
             this.addEntityNamesToGroup(
@@ -306,6 +324,7 @@ class SearchQueryCompiler {
     private compileActionTerm(
         actionTerm: querySchema.ActionTerm,
         useAnd: boolean,
+        includeVerbs: boolean,
     ) {
         const dedupe = this.dedupe;
         this.dedupe = false;
@@ -313,26 +332,47 @@ class SearchQueryCompiler {
         if (isEntityTermArray(actionTerm.targetEntities)) {
             termGroup = useAnd ? createAndTermGroup() : createOrTermGroup();
             for (const entity of actionTerm.targetEntities) {
-                const svo = this.compileSubjectVerb(actionTerm);
+                const svoTermGroup = includeVerbs
+                    ? this.compileSubjectAndVerb(actionTerm)
+                    : this.compileSubject(actionTerm);
                 // A target can be the name of an object of an action OR the name of an entity
-                svo.terms.push(this.compileObjectOrEntityName(entity));
-                termGroup.terms.push(svo);
+                svoTermGroup.terms.push(this.compileObjectOrEntityName(entity));
+                termGroup.terms.push(svoTermGroup);
             }
             if (termGroup.terms.length === 1) {
                 termGroup = termGroup.terms[0] as SearchTermGroup;
             }
         } else {
-            termGroup = this.compileSubjectVerb(actionTerm);
+            termGroup = this.compileSubjectAndVerb(actionTerm);
         }
 
         this.dedupe = dedupe;
         return termGroup;
     }
 
-    private compileSubjectVerb(
+    private compileSubjectAndVerb(
         actionTerm: querySchema.ActionTerm,
     ): SearchTermGroup {
         const termGroup = createAndTermGroup();
+        this.addSubjectToGroup(actionTerm, termGroup);
+        if (actionTerm.actionVerbs !== undefined) {
+            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
+        }
+        return termGroup;
+    }
+
+    private compileSubject(
+        actionTerm: querySchema.ActionTerm,
+    ): SearchTermGroup {
+        const termGroup = createAndTermGroup();
+        this.addSubjectToGroup(actionTerm, termGroup);
+        return termGroup;
+    }
+
+    private addSubjectToGroup(
+        actionTerm: querySchema.ActionTerm,
+        termGroup: SearchTermGroup,
+    ): void {
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(
                 actionTerm.actorEntities,
@@ -340,11 +380,6 @@ class SearchQueryCompiler {
                 termGroup,
             );
         }
-
-        if (actionTerm.actionVerbs !== undefined) {
-            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
-        }
-        return termGroup;
     }
 
     private compileObjectOrEntityName(

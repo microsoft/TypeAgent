@@ -50,19 +50,30 @@ export type SearchQueryExpr = {
     rawQuery?: string | undefined;
 };
 
-export type SearchOptions = {
+export interface SearchOptions {
     maxKnowledgeMatches?: number | undefined;
     exactMatch?: boolean | undefined;
     usePropertyIndex?: boolean | undefined;
     useTimestampIndex?: boolean | undefined;
     maxMessageMatches?: number | undefined;
     maxMessageCharsInBudget?: number | undefined;
-};
+}
 
-export function createDefaultSearchOptions(): SearchOptions {
+export function createSearchOptions(): SearchOptions {
     return {
         usePropertyIndex: true,
         useTimestampIndex: true,
+    };
+}
+
+export function createSearchOptionsTypical(): SearchOptions {
+    return {
+        usePropertyIndex: true,
+        useTimestampIndex: true,
+        exactMatch: false,
+        maxKnowledgeMatches: 50,
+        maxMessageMatches: 25,
+        maxMessageCharsInBudget: 1024 * 8,
     };
 }
 
@@ -82,7 +93,7 @@ export async function runSearchQuery(
     query: SearchQueryExpr,
     options?: SearchOptions,
 ): Promise<ConversationSearchResult[]> {
-    options ??= createDefaultSearchOptions();
+    options ??= createSearchOptions();
     const results: ConversationSearchResult[] = [];
     for (const expr of query.selectExpressions) {
         const searchResults = await searchConversation(
@@ -114,7 +125,7 @@ export async function searchConversation(
     options?: SearchOptions,
     rawSearchQuery?: string,
 ): Promise<ConversationSearchResult | undefined> {
-    options ??= createDefaultSearchOptions();
+    options ??= createSearchOptions();
     const knowledgeMatches = await searchConversationKnowledge(
         conversation,
         searchTermGroup,
@@ -162,7 +173,7 @@ export async function searchConversationKnowledge(
     if (!q.isConversationSearchable(conversation)) {
         return undefined;
     }
-    options ??= createDefaultSearchOptions();
+    options ??= createSearchOptions();
     const queryBuilder = new QueryCompiler(
         conversation,
         conversation.secondaryIndexes ?? {},

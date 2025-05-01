@@ -11,7 +11,7 @@ import {
     TextRange,
 } from "../interfaces.js";
 import { ComparisonOp } from "../queryCmp.js";
-import { createDefaultSearchOptions, SearchOptions } from "../search.js";
+import { createSearchOptions, SearchOptions } from "../search.js";
 import { textRangeFromMessageChunk } from "../message.js";
 
 /**
@@ -305,7 +305,7 @@ export function searchDataFrames(
     searchTermGroup: SearchTermGroup,
     options?: SearchOptions,
 ): ScoredMessageOrdinal[] | undefined {
-    options ??= createDefaultSearchOptions();
+    options ??= createSearchOptions();
     let dataFrameMatches: ScoredMessageOrdinal[] | undefined;
     const dfCompiler = new DataFrameCompiler(dataFrames);
     const dfQuery = dfCompiler.compile(searchTermGroup);

@@ -30,7 +30,7 @@ import { createConversationFromData } from "../src/common.js";
 import { readConversationDataFromFile } from "../src/serialization.js";
 import {
     ConversationSearchResult,
-    createDefaultSearchOptions,
+    createSearchOptions,
     searchConversation,
 } from "../src/search.js";
 import {
@@ -298,7 +298,7 @@ export async function runSearchConversation(
         conversation,
         termGroup,
         when,
-        createDefaultSearchOptions(),
+        createSearchOptions(),
     );
     expect(matches).toBeDefined();
     expect(matches!.messageMatches.length).toBeGreaterThan(0);
