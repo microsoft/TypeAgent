@@ -1,6 +1,6 @@
-### Azure ARM Templates
+# Azure ARM Templates
 
-The templates in this folder allow you to quickly create all of the necessary Azure resources to use the majority of TypeAgent features.  Please follow [https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/deploy-portal](these instructions) to deploy these ARM templates.
+The templates in this folder allow you to quickly create all of the necessary Azure resources to use the majority of TypeAgent features.  Please follow [these instructions](https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/deploy-portal) to deploy these ARM templates.
 
 ## Quickstart
 
@@ -13,5 +13,5 @@ The following TypeAgent features are not automatically created by these ARM temp
     - Demo Tenant for Calendar & Email agents
     - Permissions Assignment
     - Identity Management
-    - Populating Key values in KeyVault (see [./ts/getKeys](getKeys) script)
+    - Populating Key values in KeyVault (see [getKeys](./ts/getKeys) script)
     - Docker endpoint app service
