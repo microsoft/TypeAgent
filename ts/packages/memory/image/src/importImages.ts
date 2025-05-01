@@ -22,6 +22,8 @@ import {
     readConversationDataFromBuffer,
     IMessageMetadata,
     MessageCollection,
+    SemanticRefCollection,
+    ISemanticRefCollection,
 } from "knowpro";
 import {
     conversation as kpLib,
@@ -368,6 +370,7 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
 
 export class ImageCollection implements IConversation {
     public messages: MessageCollection<Image>;
+    public semanticRefs: SemanticRefCollection;
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
@@ -375,9 +378,10 @@ export class ImageCollection implements IConversation {
         public nameTag: string = "",
         messages: Image[] = [],
         public tags: string[] = [],
-        public semanticRefs: SemanticRef[] = [],
+        semanticRefs: SemanticRef[] = [],
     ) {
         this.messages = new MessageCollection<Image>(messages);
+        this.semanticRefs = new SemanticRefCollection(semanticRefs);
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
@@ -408,7 +412,7 @@ export class ImageCollection implements IConversation {
         //const result = await buildConversationIndex(this, eventHandler);
         this.semanticRefIndex = new ConversationIndex();
         if (this.semanticRefs === undefined) {
-            this.semanticRefs = [];
+            this.semanticRefs = new SemanticRefCollection();
         }
 
         this.addMetadataToIndex();
@@ -431,7 +435,7 @@ export class ImageCollection implements IConversation {
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -451,7 +455,7 @@ export class ImageCollection implements IConversation {
             return image;
         });
         this.messages = new MessageCollection<Image>(messages);
-        this.semanticRefs = data.semanticRefs;
+        this.semanticRefs = new SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new ConversationIndex(
@@ -710,17 +714,17 @@ async function indexImage(
  */
 function isDuplicateEntity(
     entity: kpLib.ConcreteEntity,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
 ) {
     for (let i = 0; i < semanticRefs.length; i++) {
         if (
-            semanticRefs[i].knowledgeType == "entity" &&
+            semanticRefs.get(i).knowledgeType == "entity" &&
             entity.name ==
-                (semanticRefs[i].knowledge as kpLib.ConcreteEntity).name
+                (semanticRefs.get(i).knowledge as kpLib.ConcreteEntity).name
         ) {
             if (
                 JSON.stringify(entity) ===
-                JSON.stringify(semanticRefs[i].knowledge)
+                JSON.stringify(semanticRefs.get(i).knowledge)
             ) {
                 return true;
             }

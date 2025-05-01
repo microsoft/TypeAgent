@@ -42,7 +42,7 @@ function beginIndexing(conversation: kp.IConversation) {
         conversation.semanticRefIndex = new kp.ConversationIndex();
     }
     if (conversation.semanticRefs === undefined) {
-        conversation.semanticRefs = [];
+        conversation.semanticRefs = new kp.SemanticRefCollection();
     }
 }
 

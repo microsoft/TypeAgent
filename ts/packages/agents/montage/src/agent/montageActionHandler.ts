@@ -784,9 +784,9 @@ async function findRequestedImages(
                     (value: kp.ScoredSemanticRefOrdinal) => {
                         if (value.score >= context.searchSettings.minScore) {
                             const semanticRef: kp.SemanticRef | undefined =
-                                context.imageCollection!.semanticRefs[
-                                    value.semanticRefOrdinal
-                                ];
+                                context.imageCollection!.semanticRefs.get(
+                                    value.semanticRefOrdinal,
+                                );
                             if (semanticRef) {
                                 if (semanticRef.knowledgeType === "entity") {
                                     const entity: kpLib.ConcreteEntity =

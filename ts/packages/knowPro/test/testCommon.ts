@@ -47,7 +47,7 @@ import { dateTime } from "typeagent";
 import { TestMessage } from "./testMessage.js";
 import assert from "assert";
 import { verifyMessageOrdinals } from "./verify.js";
-import { MessageCollection } from "../src/storage.js";
+import { MessageCollection, SemanticRefCollection } from "../src/storage.js";
 
 export function createTimestamp(): string {
     return new Date().toISOString();
@@ -89,7 +89,7 @@ export function createOnlineConversationSettings(
 
 export class TestConversation implements IConversation<TestMessage> {
     public messages: MessageCollection<TestMessage>;
-    public semanticRefs: SemanticRef[] | undefined;
+    public semanticRefs: SemanticRefCollection;
     public semanticRefIndex?: ITermToSemanticRefIndex | undefined;
     public secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 
@@ -99,6 +99,7 @@ export class TestConversation implements IConversation<TestMessage> {
         messages: TestMessage[] = [],
     ) {
         this.messages = new MessageCollection<TestMessage>(messages);
+        this.semanticRefs = new SemanticRefCollection();
     }
 }
 
@@ -260,8 +261,8 @@ export function getSemanticRefsForSearchResult(
     result: SemanticRefSearchResult,
 ): SemanticRef[] {
     return conversation.semanticRefs
-        ? result.semanticRefMatches.map(
-              (m) => conversation.semanticRefs![m.semanticRefOrdinal],
+        ? result.semanticRefMatches.map((m) =>
+              conversation.semanticRefs!.get(m.semanticRefOrdinal),
           )
         : [];
 }

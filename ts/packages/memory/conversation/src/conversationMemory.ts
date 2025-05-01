@@ -150,7 +150,7 @@ export class ConversationMemory
     public settings: ConversationMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
-    public semanticRefs: kp.SemanticRef[];
+    public semanticRefs: kp.SemanticRefCollection;
 
     private updatesTaskQueue: QueueObject<ConversationMemoryTasks>;
 
@@ -161,7 +161,7 @@ export class ConversationMemory
         settings?: ConversationMemorySettings,
     ) {
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
-        this.semanticRefs = [];
+        this.semanticRefs = new kp.SemanticRefCollection();
         if (!settings) {
             settings = this.createSettings();
         }
@@ -278,7 +278,7 @@ export class ConversationMemory
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -290,7 +290,7 @@ export class ConversationMemory
     public async deserialize(data: ConversationMemoryData): Promise<void> {
         this.nameTag = data.nameTag;
         this.messages = this.deserializeMessages(data);
-        this.semanticRefs = data.semanticRefs;
+        this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(

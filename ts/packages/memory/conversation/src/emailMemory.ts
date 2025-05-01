@@ -25,7 +25,7 @@ export class EmailMemory implements kp.IConversation {
     public settings: EmailMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
-    public semanticRefs: kp.SemanticRef[];
+    public semanticRefs: kp.ISemanticRefCollection;
     public serializer: EmailMessageSerializer;
     public indexingState: IndexingState;
 
@@ -44,7 +44,7 @@ export class EmailMemory implements kp.IConversation {
         this.messages = storageProvider.createMessageCollection<EmailMessage>(
             this.serializer,
         );
-        this.semanticRefs = [];
+        this.semanticRefs = storageProvider.createSemanticRefCollection();
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
@@ -78,7 +78,7 @@ export class EmailMemory implements kp.IConversation {
             nameTag: this.nameTag,
             messages: [],
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: [],
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -90,7 +90,6 @@ export class EmailMemory implements kp.IConversation {
     public async deserialize(emailData: EmailMemoryData): Promise<void> {
         this.indexingState = emailData.indexingState;
         this.nameTag = emailData.nameTag;
-        this.semanticRefs = emailData.semanticRefs;
         this.tags = emailData.tags;
         if (emailData.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
