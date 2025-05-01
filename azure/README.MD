@@ -12,8 +12,8 @@ To deploy these resources in your Azure subscription into a resource group calle
 
 The following TypeAgent features are not automatically created by these ARM tempates:
 
-    - Demo Tenant for Calendar & Email agents
+    - Demo Tenant for [Calendar](../ts/packages/agents/calendar) & [Email](../ts/packages/agents/email/) agents
     - Permissions Assignment
     - Identity Management
-    - Populating Key values in KeyVault (see [getKeys](./ts/getKeys) script)
-    - Docker endpoint app service
+    - Populating Key values in KeyVault (see [getKeys](../ts/tools/scripts/getKeys.mjs) script)
+    - [Docker](../ts/Dockerfile) endpoint app service
