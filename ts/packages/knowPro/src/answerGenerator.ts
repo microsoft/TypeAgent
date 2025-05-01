@@ -115,8 +115,17 @@ export async function generateAnswer(
 }
 
 export type AnswerGeneratorSettings = {
-    answerModel: ChatModel;
-    rewriteModel: ChatModel; // The rewrite model must not produce JSON output
+    /**
+     * Model used to generate answers from context
+     */
+    answerGeneratorModel: ChatModel;
+    /**
+     * The Answer Generator can combine multiple partial answers which
+     * can be produced by sending chunks of the relevant context to the model in parallel
+     * These partial answers may be combined using the 'combinePartialAnswers' call.
+     * Implementations use the "rewriteModel"
+     */
+    answerCombinerModel: ChatModel;
     maxCharsInContext: number;
     concurrency: number;
 };
@@ -130,7 +139,7 @@ export class AnswerGenerator implements IAnswerGenerator {
     constructor(settings?: AnswerGeneratorSettings) {
         this.settings = settings ?? createAnswerGeneratorSettings();
         this.answerTranslator = createAnswerTranslator(
-            this.settings.answerModel,
+            this.settings.answerGeneratorModel,
         );
         this.contextSchema = loadSchema(
             ["dateTimeSchema.ts", "answerContextSchema.ts"],
@@ -189,7 +198,7 @@ export class AnswerGenerator implements IAnswerGenerator {
                     this.settings.maxCharsInContext,
                 );
                 const rewrittenAnswer = await rewriteText(
-                    this.settings.rewriteModel,
+                    this.settings.answerCombinerModel,
                     answer,
                     question,
                 );
@@ -215,9 +224,9 @@ export function createAnswerGeneratorSettings(
     model?: ChatModel,
 ): AnswerGeneratorSettings {
     return {
-        answerModel:
+        answerGeneratorModel:
             model ?? openai.createJsonChatModel(undefined, ["answerGenerator"]),
-        rewriteModel: openai.createChatModel(),
+        answerCombinerModel: openai.createChatModel(),
         maxCharsInContext: 4096 * 4, // 4096 tokens * 4 chars per token,
         concurrency: 2,
     };
