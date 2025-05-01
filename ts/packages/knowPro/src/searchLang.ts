@@ -552,7 +552,7 @@ class SearchQueryCompiler {
     }
 
     private shouldAddScope(actionTerm: querySchema.ActionTerm): boolean {
-        if (!actionTerm) {
+        if (!actionTerm || actionTerm.isInformational) {
             return false;
         }
         if (this.exactScoping) {
