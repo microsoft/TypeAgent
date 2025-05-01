@@ -346,7 +346,10 @@ class SearchQueryCompiler {
                     ? this.compileSubjectAndVerb(actionTerm)
                     : this.compileSubject(actionTerm);
                 // A target can be the name of an object of an action OR the name of an entity
-                svoTermGroup.terms.push(this.compileObjectOrEntityName(entity));
+                const objectTermGroup = this.compileObjectOrEntityName(entity);
+                if (objectTermGroup.terms.length > 0) {
+                    svoTermGroup.terms.push(objectTermGroup);
+                }
                 termGroup.terms.push(svoTermGroup);
             }
             if (termGroup.terms.length === 1) {
