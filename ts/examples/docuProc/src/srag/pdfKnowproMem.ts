@@ -5,10 +5,13 @@ import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import {
     arg,
+    argBool,
+    argNum,
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
     parseNamedArguments,
+    ProgressBar,
     NamedArgs,
 } from "interactive-app";
 import { ensureDir, getFileName } from "typeagent";
@@ -108,7 +111,7 @@ export async function createKnowproCommands(
     commands.kpPdfImport = pdfImport;
     commands.kpPdfSave = pdfSave;
     commands.kpPdfLoad = pdfLoad;
-    //commands.kpPdfBuildIndex = pdfBuildIndex;
+    commands.kpPdfBuildIndex = pdfBuildIndex;
 
     function pdfImportDef(): CommandMetadata {
         return {
@@ -247,8 +250,85 @@ export async function createKnowproCommands(
         //context.conversation = context.pdfIndex;
     }
 
+    function pdfBuildIndexDef(): CommandMetadata {
+        return {
+            description: "Build Pdf SRAG index",
+            options: {
+                knowledge: argBool("Index knowledge", false),
+                related: argBool("Index related terms", false),
+                maxMessages: argNum("Maximum pages to index"),
+            },
+        };
+    }
+
+    commands.kpImagesBuildIndex.metadata = pdfBuildIndexDef();
+    async function pdfBuildIndex(args: string[] | NamedArgs): Promise<void> {
+        if (!context.pdfIndex) {
+            context.printer.writeError("No Pdfs loaded");
+            return;
+        }
+        const messageCount = context.pdfIndex.messages.length;
+        if (messageCount === 0) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, pdfBuildIndexDef());
+        // Build index
+        context.printer.writeLine();
+        context.printer.writeLine("Building index");
+        const maxMessages = namedArgs.maxMessages ?? messageCount;
+
+        let progress = new ProgressBar(context.printer, maxMessages);
+        const indexResult = await context.pdfIndex?.buildIndex(
+            createIndexingEventHandler(context.printer, progress, maxMessages),
+        );
+        if (indexResult !== undefined) {
+        }
+        //context.printer.writeIndexingResults(indexResult);
+    }
+
     const IndexFileSuffix = "_index.json";
     function indexFilePathFromName(indexName: string): string {
         return path.join(context.basePath, indexName + IndexFileSuffix);
     }
+}
+
+export function createIndexingEventHandler(
+    printer: AppPrinter,
+    progress: ProgressBar,
+    maxMessages: number,
+): kp.IndexingEventHandlers {
+    let startedKnowledge = false;
+    let startedRelated = false;
+    let startedMessages = false;
+    return {
+        onKnowledgeExtracted(upto, knowledge) {
+            if (!startedKnowledge) {
+                printer.writeLine("Indexing knowledge");
+                startedKnowledge = true;
+            }
+            progress.advance();
+            return progress.count < maxMessages;
+        },
+        onEmbeddingsCreated(sourceTexts, batch, batchStartAt) {
+            if (!startedRelated) {
+                progress.reset(sourceTexts.length);
+                printer.writeLine(
+                    `Indexing ${sourceTexts.length} related terms`,
+                );
+                startedRelated = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+        onTextIndexed(textAndLocations, batch, batchStartAt) {
+            if (!startedMessages) {
+                progress.reset(maxMessages);
+                printer.writeLine(`Indexing ${maxMessages} messages`);
+                startedMessages = true;
+            }
+            progress.advance(batch.length);
+            return true;
+        },
+    };
 }
