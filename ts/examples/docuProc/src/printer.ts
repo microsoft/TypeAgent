@@ -8,14 +8,48 @@ import {
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
 
+export type ChalkColor = {
+    foreColor?: ChalkInstance | undefined;
+    backColor?: ChalkInstance | undefined;
+};
+
 export class AppPrinter extends ConsoleWriter {
     private _io: InteractiveIo;
+    private _color: ChalkColor;
+
     constructor(io?: InteractiveIo | undefined) {
         if (!io) {
             io = getInteractiveIO();
         }
         super(io.stdout);
         this._io = io;
+        this._color = {};
+    }
+
+    public get io(): InteractiveIo {
+        return this._io;
+    }
+
+    public getColor(): ChalkColor {
+        return { ...this._color };
+    }
+
+    public setForeColor(color?: ChalkInstance): ChalkInstance | undefined {
+        const prev = this._color.foreColor;
+        this._color.foreColor = color;
+        return prev;
+    }
+
+    public setBackColor(color?: ChalkInstance): ChalkInstance | undefined {
+        const prev = this._color.backColor;
+        this._color.backColor = color;
+        return prev;
+    }
+
+    public setColor(color: ChalkColor): ChalkColor {
+        const prevColor = this._color;
+        this._color = { ...color };
+        return prevColor;
     }
 
     public writeLog(value: string) {

@@ -19,7 +19,8 @@ import { ensureDir, getFileName } from "typeagent";
 import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
 import { SRAG_MEM_DIR } from "../common.js";
 import fs from "fs";
-import { AppPrinter } from "../printer.js";
+//import { AppPrinter } from "../printer.js";
+import { KPPrinter } from "./kpPrinter.js";
 import { importPdf } from "./importPdf.js";
 import path from "path";
 import * as pi from "./pdfDocument.js";
@@ -81,7 +82,7 @@ export type KnowProContext = {
     knowledgeModel: ChatModel;
     knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
-    printer: AppPrinter;
+    printer: KPPrinter;
     pdfIndex: pi.PdfKnowproIndex | undefined;
     queryTranslator: kp.SearchQueryTranslator;
     answerGenerator: kp.AnswerGenerator;
@@ -104,7 +105,7 @@ export async function createKnowproCommands(
             kp.createAnswerGeneratorSettings(knowledgeModel),
         ),
         basePath: `${SRAG_MEM_DIR}`,
-        printer: new AppPrinter(),
+        printer: new KPPrinter(),
     };
 
     await ensureDir(context.basePath);
@@ -294,7 +295,7 @@ export async function createKnowproCommands(
 }
 
 export function createIndexingEventHandler(
-    printer: AppPrinter,
+    printer: KPPrinter,
     progress: ProgressBar,
     maxMessages: number,
 ): kp.IndexingEventHandlers {
