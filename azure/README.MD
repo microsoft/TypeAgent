@@ -8,8 +8,10 @@ To deploy these resources in your Azure subscription into a resource group calle
 
 ## Features Not Covered
 
-The following features are not automatically created by these ARM tempates:
+The following TypeAgent features are not automatically created by these ARM tempates:
 
     - Demo Tenant for Calendar & Email agents
     - Permissions Assignment
     - Identity Management
+    - Populating Key values in KeyVault (see [./ts/getKeys](getKeys) script)
+    - Docker endpoint app service

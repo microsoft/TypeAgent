@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "resources": [
+    {
+      "type": "Microsoft.Bing/accounts",
+      "apiVersion": "2020-06-10",
+      "name": "[parameters('search_name')]",
+      "location": "global",
+      "sku": {
+        "name": "S1"
+      },
+      "kind": "Bing.Search.v7",
+      "tags": {},
+      "properties": {
+        "provisioningState": "Succeeded",
+        "endpoint": "https://api.bing.microsoft.com/",
+        "internalId": "3534d9bccab442b9b0d43b56b6924610",
+        "statisticsEnabled": false
+      }
+    }
+  ]
+}

@@ -21,7 +21,15 @@
         "storageAccounts_demopersistence_name": {
             "defaultValue": "demopersistence",
             "type": "String"
-        }            
+        },
+        "search_name": {
+            "defaultValue": "typeagent_search",
+            "type": "String"
+        },
+        "vaults_aisystems_name": {
+            "defaultValue": "aisystems",
+            "type": "String"
+        }        
     },
     "variables": {},
     "resources": [
@@ -931,6 +939,583 @@
                 "denyEncryptionScopeOverride": false,
                 "publicAccess": "None"
             }
-        }                    
+        },
+        {
+            "type": "Microsoft.Bing/accounts",
+            "apiVersion": "2020-06-10",
+            "name": "[parameters('search_name')]",
+            "location": "global",
+            "sku": {
+              "name": "S1"
+            },
+            "kind": "Bing.Search.v7",
+            "tags": {},
+            "properties": {
+              "provisioningState": "Succeeded",
+              "endpoint": "https://api.bing.microsoft.com/",
+              "internalId": "3534d9bccab442b9b0d43b56b6924610",
+              "statisticsEnabled": false
+            }
+          },
+          {
+            "type": "Microsoft.KeyVault/vaults",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[parameters('vaults_aisystems_name')]",
+            "location": "westus2",
+            "properties": {
+                "sku": {
+                    "family": "A",
+                    "name": "Standard"
+                },
+                "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
+                "accessPolicies": [],
+                "enabledForDeployment": false,
+                "enabledForDiskEncryption": false,
+                "enabledForTemplateDeployment": false,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 90,
+                "enableRbacAuthorization": true,
+                "vaultUri": "[concat('https://', parameters('vaults_aisystems_name'), '.vault.azure.net/')]",
+                "provisioningState": "Succeeded",
+                "publicNetworkAccess": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-MAPS-CLIENTID')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-MAPS-ENDPOINT')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-DALLE')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-EMBEDDING')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-35-TURBO')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-4-O')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-4-O-MINI')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-v')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-DALLE')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-EMBEDDING')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-35-TURBO')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-4-O')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-4-O-MINI')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-v')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-MAX-CONCURRENCY')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-RESPONSE-FORMAT')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-STORAGE-ACCOUNT')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-STORAGE-CONTAINER')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/BING-API-KEY')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/BING-MAPS-API-KEY')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/MONGODB-CONNECTION-STRING')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-CLIENTID')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-CLIENTSECRET')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-PASSWD')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-TENANTID')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-USERNAME')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-API-KEY-LOCAL')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-ENDPOINT-LOCAL')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-MODEL-LOCAL')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-ORGANIZATION-LOCAL')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-RESPONSE-FORMAT-LOCAL')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "tags": {
+                "file-encoding": "utf-8"
+            },
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/SPEECH-SDK-ENDPOINT')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/SPEECH-SDK-KEY')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        },
+        {
+            "type": "Microsoft.KeyVault/vaults/secrets",
+            "apiVersion": "2024-12-01-preview",
+            "name": "[concat(parameters('vaults_aisystems_name'), '/SPEECH-SDK-REGION')]",
+            "location": "westus2",
+            "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
+            ],
+            "properties": {
+                "attributes": {
+                    "enabled": true
+                }
+            }
+        }                                
     ]
 }
