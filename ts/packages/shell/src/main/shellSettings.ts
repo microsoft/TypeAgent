@@ -51,8 +51,12 @@ export const defaultSettings: ShellSettings = {
     user: defaultUserSettings,
 };
 
+export function getShellDataDir(instanceDir: string) {
+    return path.join(instanceDir, "shell");
+}
+
 export function getSettingsPath(instanceDir: string) {
-    return path.join(instanceDir, "shellSettings.json");
+    return path.join(getShellDataDir(instanceDir), "shellSettings.json");
 }
 
 export function loadShellSettings(instanceDir: string): ShellSettings {
