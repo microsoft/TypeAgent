@@ -15,6 +15,13 @@ parameters:
   - name: platforms
     type: object
     default: [win, linux, mac]
+  - name: channel
+    type: string
+    default: ci
+    values:
+      - ci
+      - lkg
+      - test
 
 variables:
   workingDirectory: ts
@@ -60,7 +67,7 @@ jobs:
       - template: include-update-package-version.yml
         parameters:
           packageFolder: $(shell_folder)
-          prerelease: ci.$(Build.BuildNumber)
+          prerelease: ${{ parameters.channel }}.$(Build.BuildNumber)
 
       - script: |
           pnpm run build:shell
@@ -78,7 +85,7 @@ jobs:
 
   - deployment: publish
     displayName: Publish TypeAgent Shell
-    environment: typeagent-shell
+    environment: typeagent-shell-${{ parameters.channel }}
     dependsOn: build_package_shell
     pool:
       # AzureFileCopy requires windows
@@ -93,7 +100,7 @@ jobs:
                   displayName: Download shell package - ${{ platform }}
                   patterns: |
                     [Tt]ype[Aa]gent[- ]shell[-_]*
-                    ci*.yml
+                    ${{ parameters.channel }}*.yml
                   condition: succeeded()
 
                 - task: AzureFileCopy@6

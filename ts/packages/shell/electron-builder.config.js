@@ -4,6 +4,12 @@
 // Configuration used for 'electron-builder build' step, and not 'install-app-deps' step.
 
 const name = "typeagent-shell";
+const account = process.env.AZURESTORAGEACCOUNTNAME;
+const container = process.env.AZURESTORAGECONTAINERNAME;
+const url =
+    account && container
+        ? `https://${account}.blob.core.windows.net/${container}/`
+        : "";
 export default {
     productName: "TypeAgent Shell",
     extraMetadata: {
@@ -61,6 +67,6 @@ export default {
     },
     publish: {
         provider: "generic",
-        url: "",
+        url,
     },
 };

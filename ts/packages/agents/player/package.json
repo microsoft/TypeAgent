@@ -39,7 +39,7 @@
     "action-schema-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "rimraf": "^6.0.1",
-    "typescript": "^5.4.2"
+    "typescript": "~5.4.5"
   },
   "fluidBuild": {
     "declarativeTasks": {
