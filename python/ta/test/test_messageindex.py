@@ -23,7 +23,7 @@ from typeagent.knowpro.interfaces import (
     IndexingEventHandlers,
     MessageTextIndexData,
 )
-from typeagent.knowpro.textlocationindex import TextToTextLocationIndex
+from typeagent.knowpro.textlocindex import TextToTextLocationIndex
 
 from fixtures import needs_auth
 
