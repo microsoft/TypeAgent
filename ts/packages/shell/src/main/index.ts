@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
 import {
     ipcMain,
     app,
@@ -21,12 +20,11 @@ import {
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 import {
-    getSettingsPath,
+    getShellDataDir,
     loadShellSettings,
     ShellSettings,
     ShellUserSettings,
 } from "./shellSettings.js";
-import { unlinkSync } from "fs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createShellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
@@ -44,6 +42,8 @@ import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { ShellWindow } from "./shellWindow.js";
 
 import { debugShell, debugShellError } from "./debug.js";
+import { loadKeys } from "./keys.js";
+import { parseShellCommandLine } from "./args.js";
 
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
@@ -52,35 +52,22 @@ if (process.platform === "darwin") {
     }
 }
 
+// Make sure we have chalk colors
+process.env.FORCE_COLOR = "true";
+
 const appPath = app.getAppPath();
 debugShell("App path", appPath);
 const isAsar = path.basename(appPath) === "app.asar"; // running with packaged, behaves like prod
 debugShell("Is ASAR", isAsar);
 const instanceDir = getInstanceDir(isAsar);
-function getDotEnvPath() {
-    const dotEnvPath = isAsar
-        ? path.join(app.getPath("userData"), ".env")
-        : path.join(appPath, "../../.env"); // running with electron-vite in repo
+debugShell("Instance Dir", instanceDir);
 
-    return fs.existsSync(dotEnvPath) ? dotEnvPath : undefined;
+const parsedArgs = parseShellCommandLine();
+
+if (parsedArgs.reset) {
+    // Delete shell setting files.
+    await fs.promises.rm(getShellDataDir(instanceDir), { recursive: true });
 }
-
-const envPath = getDotEnvPath();
-if (envPath) {
-    debugShell("Loading environment variables from", envPath);
-    dotenv.config({ path: envPath });
-}
-
-// Make sure we have chalk colors
-process.env.FORCE_COLOR = "true";
-
-// do we need to reset shell settings?
-process.argv.forEach((arg) => {
-    const settingsPath = getSettingsPath(instanceDir);
-    if (arg.toLowerCase() == "--setup" && existsSync(settingsPath)) {
-        unlinkSync(settingsPath);
-    }
-});
 
 export function runningTests(): boolean {
     return (
@@ -360,6 +347,12 @@ async function initializeInstance(
 // Some APIs can only be used after this event occurs.
 async function initialize() {
     debugShell("Ready", performance.now() - time);
+
+    await loadKeys(
+        instanceDir,
+        parsedArgs.env ? path.resolve(appPath, parsedArgs.env) : undefined,
+    );
+
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
@@ -378,13 +371,13 @@ async function initialize() {
     const shellSettings = loadShellSettings(instanceDir);
     const settings = shellSettings.user;
     ipcMain.handle("get-chat-history", async () => {
-        // Load chat history if enabled
-        const chatHistory: string = path.join(instanceDir, "chat_history.html");
-        if (settings.chatHistory && existsSync(chatHistory)) {
-            return readFileSync(
-                path.join(instanceDir, "chat_history.html"),
-                "utf-8",
-            );
+        if (settings.chatHistory) {
+            // Load chat history if enabled
+            const dataDir = getShellDataDir(instanceDir);
+            const chatHistory: string = path.join(dataDir, "chat_history.html");
+            if (existsSync(chatHistory)) {
+                return readFileSync(chatHistory, "utf-8");
+            }
         }
         return undefined;
     });
