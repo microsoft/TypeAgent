@@ -652,6 +652,7 @@ export async function createKnowproCommands(
         }
         for (const searchResult of searchResults.data) {
             if (!namedArgs.messages) {
+                // Don't include raw message text... try answering only with knowledge
                 searchResult.messageMatches = [];
             }
             const answerResult = await kp.generateAnswer(
