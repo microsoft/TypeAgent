@@ -9,7 +9,6 @@ import {
     argNum,
     CommandHandler,
     CommandMetadata,
-    InteractiveIo,
     parseNamedArguments,
     ProgressBar,
     NamedArgs,
@@ -17,7 +16,7 @@ import {
 import { ensureDir, getFileName } from "typeagent";
 
 import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
-import { SRAG_MEM_DIR } from "../common.js";
+import { SRAG_MEM_DIR, OUTPUT_DIR } from "../common.js";
 import fs from "fs";
 //import { AppPrinter } from "../printer.js";
 import { KPPrinter } from "./kpPrinter.js";
@@ -34,7 +33,6 @@ export type Models = {
 };
 
 export type ChatContext = {
-    io: InteractiveIo;
     storePath: string;
     statsPath: string;
     models: Models;
@@ -76,6 +74,39 @@ export function createModels(): Models {
     models.chatModel.completionSettings.seed = 123;
     models.answerModel.completionSettings.seed = 123;
     return models;
+}
+
+export async function createChatMemoryContext(
+    completionCallback?: (req: any, resp: any) => void,
+): Promise<ChatContext> {
+    const storePath = `${OUTPUT_DIR}/testChat`;
+    const statsPath = path.join(storePath, "stats");
+    await ensureDir(storePath);
+    await ensureDir(statsPath);
+
+    const models: Models = createModels();
+    models.chatModel.completionCallback = completionCallback;
+    models.answerModel.completionCallback = completionCallback;
+
+    const conversationName = "pdf-conversation";
+    const conversationSettings =
+        knowLib.conversation.createConversationSettings(models.embeddingModel);
+
+    const context: ChatContext = {
+        storePath,
+        statsPath,
+        models,
+        maxCharsPerChunk: 4096,
+        topicWindowSize: 8,
+        searchConcurrency: 2,
+        minScore: 0.9,
+        entityTopK: 100,
+        actionTopK: 16,
+        conversationName: conversationName,
+        conversationSettings: conversationSettings,
+    };
+
+    return context;
 }
 
 export type KnowProContext = {
@@ -285,7 +316,7 @@ export async function createKnowproCommands(
         );
         if (indexResult !== undefined) {
         }
-        //context.printer.writeIndexingResults(indexResult);
+        context.printer.writeIndexingResults(indexResult);
     }
 
     const IndexFileSuffix = "_index.json";

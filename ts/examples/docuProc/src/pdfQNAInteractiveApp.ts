@@ -27,6 +27,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai } from "aiclient";
 import { downloadArxivPapers } from "./pdfDownLoader.js";
 import { importPdf } from "./srag/importPdf.js";
+//import { createKnowproCommands } from "./srag/pdfKnowproMem.js";
 
 type QueryOptions = {
     maxHits: number;

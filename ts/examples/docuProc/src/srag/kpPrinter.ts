@@ -12,6 +12,17 @@ export interface IMessageMetadata<TMeta = any> {
     metadata: TMeta;
 }
 
+export function textLocationToString(location: kp.TextLocation): string {
+    let text = `MessageOrdinal: ${location.messageOrdinal}`;
+    if (location.chunkOrdinal) {
+        text += `\nChunkOrdinal: ${location.chunkOrdinal}`;
+    }
+    if (location.charOrdinal) {
+        text += `\nCharOrdinal: ${location.charOrdinal}`;
+    }
+    return text;
+}
+
 export class KPPrinter extends AppPrinter {
     public sortAsc: boolean = true;
     constructor(public conversation: kp.IConversation | undefined = undefined) {
@@ -57,5 +68,65 @@ export class KPPrinter extends AppPrinter {
         }
     }
 
+    public writeTextIndexingResult(
+        result: kp.TextIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
+        if (result.completedUpto) {
+            this.writeLine(
+                `Completed upto ${textLocationToString(result.completedUpto)}`,
+            );
+        }
+        if (result.error) {
+            this.writeError(result.error);
+        }
+        return this;
+    }
 
+    public writeListIndexingResult(
+        result: kp.ListIndexingResult,
+        label?: string,
+    ) {
+        if (label) {
+            this.write(label + ": ");
+        }
+        this.writeLine(`Indexed ${result.numberCompleted} items`);
+        if (result.error) {
+            this.writeError(result.error);
+        }
+        return this;
+    }
+
+    public writeIndexingResults(results: kp.IndexingResults) {
+        if (results.semanticRefs) {
+            this.writeTextIndexingResult(results.semanticRefs, "Semantic Refs");
+        }
+        if (results.secondaryIndexResults) {
+            if (results.secondaryIndexResults.properties) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.properties,
+                    "Properties",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.timestamps) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.timestamps,
+                    "Timestamps",
+                );
+                this;
+            }
+            if (results.secondaryIndexResults.relatedTerms) {
+                this.writeListIndexingResult(
+                    results.secondaryIndexResults.relatedTerms,
+                    "Related Terms",
+                );
+                this;
+            }
+        }
+        return this;
+    }
 }
