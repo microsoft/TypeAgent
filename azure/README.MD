@@ -1,6 +1,6 @@
 # Azure ARM Templates
 
-The templates in this folder allow you to quickly create all of the necessary Azure resources to use the majority of TypeAgent features.  Please follow [these instructions](https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/deploy-portal) to deploy these ARM templates.
+The templates in this folder allow you to quickly create all of the necessary Azure resources to use the majority of TypeAgent features. Please follow [these instructions](https://learn.microsoft.com/en-us/azure/azure-resource-manager/templates/deploy-portal) to deploy these ARM templates.
 
 ## Quickstart
 
