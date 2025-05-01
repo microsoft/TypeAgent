@@ -32,7 +32,6 @@ export type VerbsTerm = {
     tense: "Past" | "Present" | "Future";
 };
 
-// - "target" refers to the recipient or target of the action or information
 export type ActionTerm = {
     // Action verbs describing the interaction
     actionVerbs?: VerbsTerm | undefined;

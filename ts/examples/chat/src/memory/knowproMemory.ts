@@ -546,7 +546,8 @@ export async function createKnowproCommands(
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
-        def.options.exactScope = argBool("(Future) Exact scope", false);
+        def.options.applyScope = argBool("Apply scopes", true);
+        def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         return def;
     }
@@ -575,6 +576,7 @@ export async function createKnowproCommands(
                 context.conversation!,
                 searchQuery,
                 exactScope,
+                namedArgs.applyScope,
             );
             let countSelectMatches = 0;
             for (const searchQueryExpr of searchQueryExpressions) {
@@ -627,6 +629,7 @@ export async function createKnowproCommands(
             createSearchOptions(namedArgs);
         options.exactMatch = namedArgs.exact;
         options.exactScope = namedArgs.exactScope;
+        options.applyScope = namedArgs.applyScope;
 
         const searchResults = await kp.searchConversationWithLanguage(
             context.conversation!,

@@ -93,6 +93,7 @@ export async function searchQueryExprFromLanguage(
             conversation,
             searchQuery,
             options.exactScope,
+            options.applyScope,
         );
         return success(searchExpr);
     }
@@ -100,13 +101,15 @@ export async function searchQueryExprFromLanguage(
 }
 
 export interface LanguageSearchOptions extends SearchOptions {
+    applyScope?: boolean | undefined;
     exactScope?: boolean | undefined;
 }
 
 export function createLanguageSearchOptions(): LanguageSearchOptions {
     return {
         ...createSearchOptions(),
-        exactScope: true,
+        applyScope: true,
+        exactScope: false,
     };
 }
 
@@ -125,8 +128,10 @@ export function compileSearchQuery(
     conversation: IConversation,
     query: querySchema.SearchQuery,
     exactScoping: boolean = true,
+    applyScoping: boolean = true,
 ): SearchQueryExpr[] {
     const queryBuilder = new SearchQueryCompiler(conversation);
+    queryBuilder.applyScoping = applyScoping;
     queryBuilder.exactScoping = exactScoping;
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
@@ -147,6 +152,7 @@ class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
     private dedupe: boolean = true;
     public queryExpressions: SearchQueryExpr[];
+    public applyScoping: boolean = true;
     public exactScoping: boolean = false;
 
     constructor(public conversation: IConversation) {
@@ -226,7 +232,11 @@ class SearchQueryCompiler {
 
         let when: WhenFilter | undefined;
         const actionTerm = filter.actionSearchTerm;
-        if (actionTerm) {
+        if (
+            this.applyScoping &&
+            actionTerm &&
+            this.shouldAddScope(actionTerm)
+        ) {
             const scopeDefiningTerms = this.compileScope(actionTerm);
             if (scopeDefiningTerms.terms.length > 0) {
                 when ??= {};
@@ -536,6 +546,18 @@ class SearchQueryCompiler {
             case "entity":
                 return true;
         }
+    }
+
+    private shouldAddScope(actionTerm: querySchema.ActionTerm): boolean {
+        if (!actionTerm) {
+            return false;
+        }
+        if (this.exactScoping) {
+            return true;
+        }
+        // If the action has no subject, disable scope
+        // isEntityTermArray checks for wildcards etc
+        return isEntityTermArray(actionTerm.actorEntities);
     }
 }
 
