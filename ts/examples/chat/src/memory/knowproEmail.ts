@@ -73,7 +73,10 @@ export async function createKnowproEmailCommands(
             progress,
             1,
         );
-        const result = await emailMemory.addMessage(emailMessage, eventHandler);
+        const result = await emailMemory.addMessages(
+            emailMessage,
+            eventHandler,
+        );
         progress.complete();
         if (!result.success) {
             context.printer.writeError(result.message);

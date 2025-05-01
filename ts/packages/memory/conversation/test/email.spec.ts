@@ -74,10 +74,18 @@ describeIf(
             testTimeout,
         );
 
-        async function addToIndex(em: EmailMemory, messages: EmailMessage[]) {
-            for (const message of messages) {
-                const result = await em.addMessage(message);
-                expect(result.success).toBeTruthy();
+        async function addToIndex(
+            em: EmailMemory,
+            messages: EmailMessage[],
+            multiple = true,
+        ) {
+            if (multiple) {
+                await em.addMessages(messages);
+            } else {
+                for (const message of messages) {
+                    const result = await em.addMessages(message);
+                    expect(result.success).toBeTruthy();
+                }
             }
         }
     },
