@@ -21,20 +21,31 @@ function escapeCssSelector(selector: string) {
     return prefix + suffix;
 }
 
-function simulateMouseClick(targetNode: HTMLElement) {
-    function triggerMouseEvent(targetNode: HTMLElement, eventType: string) {
-        let clickEvent = new MouseEvent(eventType, {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-        });
-        targetNode.dispatchEvent(clickEvent);
-    }
-    ["mouseover", "mousedown", "mouseup", "click"].forEach(
-        function (eventType) {
-            triggerMouseEvent(targetNode, eventType);
-        },
-    );
+function simulateMouseClick(element: HTMLElement): void {
+    // Element needs to be visible/focusable for this to work properly
+    (element as HTMLElement).focus();
+
+    // Create event options that will be used for all events
+    const eventOptions = {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+    };
+
+    // Simulate the full click sequence
+    const events = [
+        new MouseEvent("mouseenter", eventOptions),
+        new MouseEvent("mouseover", eventOptions),
+        new FocusEvent("focusin", eventOptions),
+        new MouseEvent("mousedown", eventOptions),
+        new PointerEvent("pointerdown", eventOptions),
+        new MouseEvent("mouseup", eventOptions),
+        new PointerEvent("pointerup", eventOptions),
+        new MouseEvent("click", eventOptions),
+    ];
+
+    // Dispatch all events in sequence
+    events.forEach((event) => element.dispatchEvent(event));
 }
 
 function clickOnElement(selector: string) {
@@ -251,33 +262,6 @@ function simulateKeyEvent(inputElement: HTMLElement, char: string) {
         cancelable: true,
     });
     inputElement.dispatchEvent(keyupEvent);
-}
-
-function enterLetterInElement(letter: string, selector: string) {
-    const targetElement = document.querySelector(selector) as HTMLDivElement;
-
-    if (targetElement) {
-        const position = targetElement.getBoundingClientRect();
-
-        simulateMouseClick(targetElement);
-        const activeElement = document.elementFromPoint(
-            position.x,
-            position.y,
-        ) as HTMLElement;
-        if (activeElement) {
-            simulateKeyEvent(activeElement, letter);
-        }
-    }
-}
-
-async function enterTextOnPage(text: string) {
-    const activeElement = document.activeElement as HTMLElement;
-    if (activeElement) {
-        for (var i = 0; i < text.length; i++) {
-            simulateKeyEvent(activeElement, text[i]);
-            await new Promise((r) => setTimeout(r, 20));
-        }
-    }
 }
 
 async function selectDropdownOption(selector: string, optionLabel: string) {
