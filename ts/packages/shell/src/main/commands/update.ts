@@ -18,6 +18,7 @@ import {
     displaySuccess,
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
+import { getElapsedString } from "common-utils";
 
 const { autoUpdater } = electronUpdater;
 
@@ -36,7 +37,7 @@ type UpdateState = {
     lastChecked: Date | undefined;
     updateInfo: electronUpdater.UpdateInfo | undefined;
     custom: boolean;
-    stop: (() => void) | undefined;
+    stop: (() => boolean) | undefined;
 };
 
 const state: UpdateState = {
@@ -53,15 +54,19 @@ export function setUpdateConfigPath(configPath: string) {
     updateConfigPath = configPath;
 }
 
+export function hasPendingUpdate() {
+    return state.updateInfo !== undefined;
+}
+
 function isUpdaterEnabled(url?: string) {
     return app.isPackaged || updateConfigPath !== null || url !== undefined;
 }
 
-const minIntervalSeconds = 60 * 60; // 1 hour
+const minIntervalMs = 60 * 60 * 1000; // 1 hour
 export function startBackgroundUpdateCheck(
-    intervalSeconds: number,
+    intervalMs: number,
     restart: boolean,
-    initialIntervalSeconds?: number,
+    initialIntervalMs: number,
 ) {
     const id = ++state.id;
     const debugBackgroundUpdate = registerDebug(
@@ -83,14 +88,8 @@ export function startBackgroundUpdateCheck(
         return;
     }
     stopBackgroundUpdateCheck();
-    if (intervalSeconds < 0) {
+    if (intervalMs < 0) {
         return;
-    }
-    if (app.isPackaged && intervalSeconds < minIntervalSeconds) {
-        debugBackgroundUpdateError(
-            `Interval too small.  Minimum is ${minIntervalSeconds}s`,
-        );
-        intervalSeconds = minIntervalSeconds;
     }
 
     debugBackgroundUpdate(`Starting`);
@@ -147,27 +146,37 @@ export function startBackgroundUpdateCheck(
             debugBackgroundUpdate("Stopped");
             return;
         }
-        debugBackgroundUpdate(`Scheduled: ${intervalSeconds}s`);
-        timer = setTimeout(f, intervalSeconds * 1000);
+        schedule(intervalMs);
     };
 
-    const startInterval = initialIntervalSeconds ?? intervalSeconds;
-    debugBackgroundUpdate(`Scheduled: ${startInterval}s`);
-    timer = setTimeout(f, startInterval * 1000);
+    const schedule = (intervalMs: number) => {
+        if (app.isPackaged && intervalMs < minIntervalMs) {
+            // Guard against too small intervals unless we are in dev build.
+            debugBackgroundUpdateError(
+                `Interval too small.  Minimum is ${getElapsedString(minIntervalMs)}`,
+            );
+            intervalMs = minIntervalMs;
+        }
+        debugBackgroundUpdate(`Scheduled: ${getElapsedString(intervalMs)}`);
+        timer = setTimeout(f, intervalMs);
+    };
+    schedule(initialIntervalMs);
 
     state.stop = () => {
+        state.stop = undefined;
         controller.abort();
         if (timer) {
             clearTimeout(timer);
             debugBackgroundUpdate("Cancelled");
-        } else {
-            debugBackgroundUpdate("Stopping");
+            return false;
         }
+        debugBackgroundUpdate("Stopping");
+        return true;
     };
 }
 
 function stopBackgroundUpdateCheck() {
-    state.stop?.();
+    return state.stop?.();
 }
 
 async function getAzureBlobStorageToken() {
@@ -180,12 +189,10 @@ async function getAzureBlobStorageToken() {
     }
 }
 
-async function checkUpdate(
-    install: boolean,
-    download: boolean = false,
-    url?: string,
-    channel?: string,
-) {
+// Always true.  Use autoDownload to control download.
+autoUpdater.autoInstallOnAppQuit = true;
+
+async function checkUpdate(install: boolean, url?: string, channel?: string) {
     const token = await getAzureBlobStorageToken();
 
     autoUpdater.forceDevUpdateConfig =
@@ -204,13 +211,8 @@ async function checkUpdate(
         (autoUpdater as any)._channel = null;
         autoUpdater.allowDowngrade = false;
     }
-    if (download || install) {
-        autoUpdater.autoDownload = true;
-        autoUpdater.autoInstallOnAppQuit = install;
-    } else {
-        autoUpdater.autoDownload = false;
-        autoUpdater.autoInstallOnAppQuit = false;
-    }
+
+    autoUpdater.autoDownload = install;
     autoUpdater.disableWebInstaller = true;
     autoUpdater.requestHeaders = {
         Authorization: `Bearer ${token.token}`,
@@ -259,10 +261,6 @@ export class ShellUpdateCheckCommand implements CommandHandler {
                 description: "The update channel to use",
                 optional: true,
             },
-            download: {
-                description: "Download the update",
-                default: false,
-            },
             install: {
                 description: "Install the update",
                 default: false,
@@ -296,7 +294,6 @@ export class ShellUpdateCheckCommand implements CommandHandler {
             displayStatus("Checking for update", context);
             const result = await checkUpdate(
                 params.flags.install,
-                params.flags.download,
                 params.flags.url,
                 params.flags.channel,
             );
@@ -331,18 +328,16 @@ export class ShellUpdateCheckCommand implements CommandHandler {
             displayStatus("Downloading update...", context);
             const downloadResult = await result.downloadPromise;
 
-            if (!params.flags.install) {
-                displaySuccess(
-                    `Download successful. Please install manually. Files:\n- ${downloadResult.join("\n= ")}`,
-                    context,
-                );
-                return;
-            }
+            displaySuccess(
+                ["Download successful", ...downloadResult.map((f) => `  ${f}`)],
+                context,
+            );
+
             if (!params.flags.restart) {
                 displaySuccess(
                     [
-                        "Download successful.  Update pending.",
-                        "Restart the app, or specify --restart to auto install and restart.",
+                        "Download successful.  Update pending app restart.",
+                        "Or specify --restart to auto install and restart.",
                     ],
                     context,
                 );
@@ -357,6 +352,20 @@ export class ShellUpdateCheckCommand implements CommandHandler {
     }
 }
 
+function displayUpdateState(context: ActionContext<ShellContext>) {
+    const settings =
+        context.sessionContext.agentContext.shellWindow.getUserSettings();
+    displayResult(
+        [
+            `Background update is ${state.currentCheck ? "checking" : state.stop ? "scheduled" : "not running"}`,
+            "Settings:",
+            `  Interval: ${getElapsedString(settings.autoUpdate.intervalMs)}`,
+            `  Initial: ${getElapsedString(settings.autoUpdate.initialIntervalMs)}`,
+            `  Restart: ${settings.autoUpdate.restart}`,
+        ],
+        context,
+    );
+}
 class ShellUpdateStatusCommand implements CommandHandlerNoParams {
     public readonly description = "Show update status";
     public async run(context: ActionContext<ShellContext>): Promise<void> {
@@ -377,19 +386,7 @@ class ShellUpdateStatusCommand implements CommandHandlerNoParams {
             displayResult("No updates checked", context);
         }
 
-        const settings =
-            context.sessionContext.agentContext.shellWindow.getUserSettings();
-        displayResult(
-            [
-                "",
-                "Settings:",
-                `  Interval: ${settings.autoUpdate}s`,
-                `  Restart: ${settings.autoRestart}`,
-                "",
-                `Background update ${state.currentCheck ? "checking" : state.stop ? "scheduled" : "not running"}`,
-            ],
-            context,
-        );
+        displayUpdateState(context);
     }
 }
 
@@ -398,12 +395,16 @@ class ShellUpdateAutoCommand implements CommandHandler {
     public readonly parameters = {
         flags: {
             interval: {
-                description: "Interval in milliseconds.  -1 to disable.",
+                description: "Interval in seconds.  -1 to disable.",
                 default: 24 * 60 * 60, // 24 hours
             },
             restart: {
                 description: "Restart the app after downloading the update",
                 default: false,
+            },
+            initial: {
+                description: "Initial interval in seconds",
+                default: 60, // 1 minute
             },
         },
     } as const;
@@ -411,23 +412,32 @@ class ShellUpdateAutoCommand implements CommandHandler {
         context: ActionContext<ShellContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ): Promise<void> {
-        const shellWindow = context.sessionContext.agentContext.shellWindow;
-        shellWindow.setUserSettingValue("autoUpdate", params.flags.interval);
-        shellWindow.setUserSettingValue("autoRestart", params.flags.restart);
-        if (params.flags.interval === -1) {
-            stopBackgroundUpdateCheck();
-            displayResult("Background update check disabled", context);
-            return;
+        if (params.flags.initial < 0) {
+            throw new Error("Initial interval must be >= 0");
         }
-        startBackgroundUpdateCheck(params.flags.interval, params.flags.restart);
-        displayResult(
-            [
-                "Background update check enabled.",
-                `  Interval: ${params.flags.interval}s`,
-                `  Restart: ${params.flags.restart}`,
-            ],
-            context,
-        );
+        const shellWindow = context.sessionContext.agentContext.shellWindow;
+
+        const intervalMs =
+            params.flags.interval < 0 ? -1 : params.flags.interval * 1000;
+
+        const initialIntervalMs = params.flags.initial * 1000;
+        shellWindow.setUserSettingValue("autoUpdate", {
+            intervalMs,
+            initialIntervalMs,
+            restart: params.flags.restart,
+        });
+        if (intervalMs < 0) {
+            if (stopBackgroundUpdateCheck() !== undefined) {
+                displayResult("Background update check disabled", context);
+            }
+        } else {
+            startBackgroundUpdateCheck(
+                intervalMs,
+                params.flags.restart,
+                initialIntervalMs,
+            );
+        }
+        displayUpdateState(context);
     }
 }
 

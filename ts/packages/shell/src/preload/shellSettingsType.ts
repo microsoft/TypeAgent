@@ -20,8 +20,11 @@ export type ShellUserSettings = {
     notifyFilter: string;
     disallowedDisplayType: string; // semicolon separated list of display types that should not be used
     canvas: string | undefined; // the last item shown in the canvas
-    autoUpdate: number;
-    autoRestart: boolean;
+    autoUpdate: {
+        intervalMs: number; // the interval in milliseconds to check for updates
+        initialIntervalMs: number; // the initial interval in milliseconds to check for updates
+        restart: boolean; // should the shell restart after an update?
+    };
 };
 
 export const defaultUserSettings: ShellUserSettings = {
@@ -41,6 +44,9 @@ export const defaultUserSettings: ShellUserSettings = {
     darkMode: false,
     chatHistory: true,
     canvas: undefined,
-    autoUpdate: 24 * 60 * 60, // 24 hours
-    autoRestart: false,
+    autoUpdate: {
+        intervalMs: 24 * 60 * 60 * 1000, // 24 hours
+        initialIntervalMs: 60 * 1000, // 1 minute
+        restart: false,
+    },
 };
