@@ -615,6 +615,10 @@ export async function createKnowproCommands(
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
+        def.options!.fastStop = argBool(
+            "Ignore messages if knowledge produces answers",
+            true,
+        );
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -659,6 +663,7 @@ export async function createKnowproCommands(
                 // Don't include raw message text... try answering only with knowledge
                 searchResult.messageMatches = [];
             }
+            context.answerGenerator.settings.fastStop = namedArgs.fastStop;
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
