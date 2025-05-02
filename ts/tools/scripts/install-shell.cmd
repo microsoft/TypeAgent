@@ -59,7 +59,7 @@ IF ERRORLEVEL 1 (
     exit /B 1
 )
 
-call :Install %PACKAGE%
+call :ExecutePackage %PACKAGE%
 IF ERRORLEVEL 1 (
     call :Cleanup    
     exit /B 1
@@ -89,7 +89,7 @@ IF ERRORLEVEL 1 (
 )
 exit /B 0
 
-:Install
+:ExecutePackage
 call :Info Running %1
 %DEST%\%1 > %DEST%\install-shell.log 2>&1
 IF ERRORLEVEL 1 (

@@ -219,13 +219,15 @@ async function checkUpdate(
 
     const result = await autoUpdater.checkForUpdates();
 
-    if (result !== null && result.isUpdateAvailable && install) {
+    if (install) {
         state.lastChecked = new Date();
-        state.updateInfo = result.updateInfo;
-        if (url !== undefined || channel !== undefined) {
-            stopBackgroundUpdateCheck();
-            // If we have a custom update queued, don't check again.
-            state.custom = true;
+        if (result !== null && result.isUpdateAvailable) {
+            state.updateInfo = result.updateInfo;
+            if (url !== undefined || channel !== undefined) {
+                stopBackgroundUpdateCheck();
+                // If we have a custom update queued, don't check again.
+                state.custom = true;
+            }
         }
     }
     return result;
