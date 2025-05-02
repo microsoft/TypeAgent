@@ -5,6 +5,7 @@ import { debugShell } from "./debug.js";
 
 type ShellCommandLineArgs = {
     reset: boolean;
+    update?: string;
     env?: string;
 };
 
@@ -26,6 +27,16 @@ export function parseShellCommandLine() {
                     result.env = process.argv[i];
                 } else {
                     debugShell("Missing value for --env argument");
+                }
+                continue;
+            }
+
+            if (arg === "--update") {
+                i++;
+                if (i < process.argv.length) {
+                    result.update = process.argv[i];
+                } else {
+                    debugShell("Missing value for --update argument");
                 }
                 continue;
             }
