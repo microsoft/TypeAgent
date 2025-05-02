@@ -1,0 +1,24 @@
+[
+  {
+    "term": "send",
+    "relatedTerms": [
+      "discuss",
+      "discussed",
+      "discussing",
+      "mention",
+      "mentioned",
+      "mentioning",
+      "say",
+      "said",
+      "speak",
+      "spoke",
+      "speaking",
+      "talked",
+      "talking",
+      "state",
+      "stated",
+      "stating"
+    ]
+  },
+  { "term": "receive", "relatedTerms": ["got"] }
+]

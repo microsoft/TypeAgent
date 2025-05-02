@@ -11,6 +11,8 @@ import { createEmbeddingModelWithCache } from "./common.js";
 
 import registerDebug from "debug";
 import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
+import { addSynonymsFileAsAliases } from "./memory.js";
+import { getAbsolutePathFromUrl } from "memory-storage";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class Podcast implements kp.IConversation<PodcastMessage> {
@@ -183,7 +185,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
             await kp.buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
-        this.addVerbAliases();
+        this.addSynonyms();
     }
 
     private buildParticipantAliases(): void {
@@ -200,14 +202,12 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
         }
     }
 
-    private addVerbAliases() {
-        // TODO: load ths from a file
+    private addSynonyms() {
         const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
-        let sayTerm: kp.Term = { text: "say" };
-        aliases.addRelatedTerm("discuss", sayTerm);
-        aliases.addRelatedTerm("discussed", sayTerm);
-        aliases.addRelatedTerm("talk", sayTerm);
-        aliases.addRelatedTerm("talked", sayTerm);
+        addSynonymsFileAsAliases(
+            aliases,
+            getAbsolutePathFromUrl(import.meta.url, "podcastVerbs.json"),
+        );
     }
 
     private collectParticipantAliases() {

@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
 import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
 import {
+    addSynonymsFileAsAliases,
     createMemorySettings,
     IndexFileSettings,
     IndexingState,
@@ -219,12 +219,10 @@ export class EmailMemory extends Memory implements kp.IConversation {
     private addVerbAliases() {
         // TODO: load ths from a file
         const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
-        let sendTerm: kp.Term = { text: kpLib.email.EmailVerbs.send };
-        let receiveTerm: kp.Term = { text: kpLib.email.EmailVerbs.receive };
-        aliases.addRelatedTerm("say", sendTerm);
-        aliases.addRelatedTerm("discuss", sendTerm);
-        aliases.addRelatedTerm("talk", sendTerm);
-        aliases.addRelatedTerm("get", receiveTerm);
+        addSynonymsFileAsAliases(
+            aliases,
+            ms.getAbsolutePathFromUrl(import.meta.url, "emailVerbs.json"),
+        );
     }
 }
 
