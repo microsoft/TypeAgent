@@ -2719,9 +2719,6 @@ importers:
       '@electron-toolkit/preload':
         specifier: ^3.0.2
         version: 3.0.2(electron@35.2.2)
-      '@electron-toolkit/utils':
-        specifier: ^4.0.0
-        version: 4.0.0(electron@35.2.2)
       '@fontsource/lato':
         specifier: ^5.2.5
         version: 5.2.5
@@ -3451,11 +3448,6 @@ packages:
     resolution: {integrity: sha512-M0Mol3odspvtCuheyujLNAW7bXq7KFNYVMRtpjFa4ZfES4MuklXBC7Nli/omvc+PRKlrklgAGx3l4VakjNo8jg==}
     peerDependencies:
       '@types/node': '*'
-
-  '@electron-toolkit/utils@4.0.0':
-    resolution: {integrity: sha512-qXSntwEzluSzKl4z5yFNBknmPGjPa3zFhE4mp9+h0cgokY5ornAeP+CJQDBhKsL1S58aOQfcwkD3NwLZCl+64g==}
-    peerDependencies:
-      electron: '>=13.0.0'
 
   '@electron/asar@3.2.18':
     resolution: {integrity: sha512-2XyvMe3N3Nrs8cV39IKELRHTYUWFKrmqqSY1U+GMlc0jvqjIVnoxhNd2H4JolWQncbJi1DCvb5TNxZuI2fEjWg==}
@@ -11039,10 +11031,6 @@ snapshots:
   '@electron-toolkit/tsconfig@1.0.1(@types/node@22.15.3)':
     dependencies:
       '@types/node': 22.15.3
-
-  '@electron-toolkit/utils@4.0.0(electron@35.2.2)':
-    dependencies:
-      electron: 35.2.2
 
   '@electron/asar@3.2.18':
     dependencies:

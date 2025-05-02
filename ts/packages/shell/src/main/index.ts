@@ -12,7 +12,6 @@ import {
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import { electronApp, optimizer } from "@electron-toolkit/utils";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     getDefaultAppAgentProviders,
@@ -64,20 +63,36 @@ if (process.platform === "darwin") {
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
+const parsedArgs = parseShellCommandLine();
+export const isProd = parsedArgs.prod ?? app.isPackaged;
+
+// Set app user model id for windows
+if (process.platform === "win32") {
+    app.setAppUserModelId(
+        isProd ? "com.electron.typeagent-shell" : process.execPath,
+    );
+}
+
+const instanceDir =
+    parsedArgs.data ??
+    (app.isPackaged
+        ? path.join(app.getPath("userData"), "data")
+        : getInstanceDir());
+
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
-
-const appPath = app.getAppPath();
-debugShell("App path", appPath);
-const isAsar = path.basename(appPath) === "app.asar"; // running with packaged, behaves like prod
-debugShell("Is ASAR", isAsar);
-const instanceDir = getInstanceDir(isAsar);
+debugShell("Is prod", isProd);
 debugShell("Instance Dir", instanceDir);
 
-const parsedArgs = parseShellCommandLine();
-if (parsedArgs.reset) {
+if (parsedArgs.clean) {
+    // Delete all files in the instance dir.
+    await fs.promises.rm(instanceDir, { recursive: true });
+    debugShell("Cleaned data dir", instanceDir);
+} else if (parsedArgs.reset) {
     // Delete shell setting files.
-    await fs.promises.rm(getShellDataDir(instanceDir), { recursive: true });
+    const shellDataDir = getShellDataDir(instanceDir);
+    await fs.promises.rm(shellDataDir, { recursive: true });
+    debugShell("Cleaned shell data dir", shellDataDir);
 }
 
 if (parsedArgs.update) {
@@ -368,18 +383,16 @@ async function initializeInstance(
 async function initialize() {
     debugShell("Ready", performance.now() - time);
 
+    const appPath = app.getAppPath();
     await loadKeys(
         instanceDir,
         parsedArgs.env ? path.resolve(appPath, parsedArgs.env) : undefined,
     );
 
-    // Set app user model id for windows
-    electronApp.setAppUserModelId("com.electron");
-
     const browserExtensionPath = path.join(
         // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
         // Assume we can just replace app.asar with app.asar.unpacked in all cases.
-        isAsar
+        path.basename(appPath) === "app.asar"
             ? path.join(path.dirname(appPath), "app.asar.unpacked")
             : appPath,
         "node_modules/browser-typeagent/dist/electron",
@@ -428,13 +441,6 @@ async function initialize() {
 
     ipcMain.on("send-to-browser-ipc", async (_, data: WebSocketMessageV2) => {
         await BrowserAgentIpc.getinstance().send(data);
-    });
-
-    // Default open or close DevTools by F12 in development
-    // and ignore CommandOrControl + R in production.
-    // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-    app.on("browser-window-created", async (_, window) => {
-        optimizer.watchWindowShortcuts(window);
     });
 
     app.on("activate", async function () {
@@ -542,4 +548,29 @@ app.on("second-instance", () => {
     // Someone tried to run a second instance, we should focus our window.
     debugShell("Second instance");
     ShellWindow.getInstance()?.showAndFocus();
+});
+
+// Similar to what electron-toolkit does with optimizer.watchWindowShortcuts, but apply to all web contents, not just browser windows.
+// Default open or close DevTools by F12 in development
+// and ignore CommandOrControl + R in production.
+// see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+app.on("web-contents-created", async (_, webContents) => {
+    webContents.on("before-input-event", (_event, input) => {
+        if (input.type === "keyDown") {
+            if (isProd) {
+                // Ignore CommandOrControl + R
+                if (input.code === "KeyR" && (input.control || input.meta))
+                    _event.preventDefault();
+            } else {
+                // Toggle devtool(F12)
+                if (input.code === "F12") {
+                    if (webContents.isDevToolsOpened()) {
+                        webContents.closeDevTools();
+                    } else {
+                        webContents.openDevTools({ mode: "undocked" });
+                    }
+                }
+            }
+        }
+    });
 });
