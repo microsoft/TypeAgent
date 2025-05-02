@@ -131,6 +131,18 @@ export function textRangesFromMessageOrdinals(
     return ranges;
 }
 
+export function getMaxMessageOrdinal(
+    messages: IMessageCollection,
+    messageOrdinalStartAt: MessageOrdinal,
+    messageCount?: number,
+): number {
+    let maxOrdinal = messageCount
+        ? messageOrdinalStartAt + messageCount
+        : messages.length;
+    maxOrdinal = Math.min(messages.length, maxOrdinal);
+    return maxOrdinal;
+}
+
 export function* getMessageChunkBatch(
     messages: IMessageCollection,
     messageOrdinalStartAt: MessageOrdinal,
@@ -138,7 +150,11 @@ export function* getMessageChunkBatch(
     count?: number,
 ): IterableIterator<TextLocation[]> {
     let batch: TextLocation[] = [];
-    let maxOrdinal = count ? messageOrdinalStartAt + count : messages.length;
+    let maxOrdinal = getMaxMessageOrdinal(
+        messages,
+        messageOrdinalStartAt,
+        count,
+    );
     maxOrdinal = Math.min(messages.length, maxOrdinal);
     for (
         let messageOrdinal = messageOrdinalStartAt;

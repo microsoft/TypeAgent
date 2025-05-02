@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readFile, readJsonFile, writeFile, writeJsonFile } from "typeagent";
+import {
+    readFile,
+    readJsonFile,
+    removeFile,
+    writeFile,
+    writeJsonFile,
+} from "typeagent";
 import { deserializeEmbeddings, serializeEmbeddings } from "./fuzzyIndex.js";
 import path from "path";
 import { IConversationDataWithIndexes } from "./secondaryIndexes.js";
@@ -86,6 +92,14 @@ export async function readConversationDataFromBuffer(
 
 const DataFileSuffix = "_data.json";
 const EmbeddingFileSuffix = "_embeddings.bin";
+
+export async function removeConversationData(
+    dirPath: string,
+    baseFileName: string,
+): Promise<void> {
+    await removeFile(path.join(dirPath, baseFileName + DataFileSuffix));
+    await removeFile(path.join(dirPath, baseFileName + EmbeddingFileSuffix));
+}
 
 type ConversationFileData = {
     // This data goes into a JSON text file

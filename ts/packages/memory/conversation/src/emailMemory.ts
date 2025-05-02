@@ -53,10 +53,18 @@ export class EmailMemory extends Memory implements kp.IConversation {
         );
     }
 
+    /**
+     * Add email messages. If updateIndex is true, also index them.
+     * @param messages
+     * @param updateIndex (default) true
+     * @param eventHandler
+     * @returns
+     */
     public async addMessages(
         messages: EmailMessage | EmailMessage[],
+        updateIndex: boolean = true,
         eventHandler?: kp.IndexingEventHandlers,
-    ): Promise<Result<kp.IndexingResults>> {
+    ): Promise<Result<IndexingState>> {
         if (Array.isArray(messages)) {
             for (const message of messages) {
                 this.messages.append(message);
@@ -64,19 +72,42 @@ export class EmailMemory extends Memory implements kp.IConversation {
         } else {
             this.messages.append(messages);
         }
-        const result = await kp.addToConversationIndex(
-            this,
-            this.settings.conversationSettings,
-            this.messages.length - 1,
-            this.semanticRefs.length,
-            eventHandler,
-        );
-        const errorMsg = getIndexingErrors(result);
-        if (errorMsg) {
-            return error(errorMsg);
+        if (updateIndex) {
+            return this.buildIndex(eventHandler);
         }
-        this.updateIndexingState();
-        return success(result);
+        return success(this.indexingState);
+    }
+
+    /**
+     * Indexing all pending messages.
+     * Resumes at this.indexingState.lastMessageOrdinal + 1
+     * @param eventHandler
+     * @param autoSave (default true) Automatically save the updated index
+     * @returns
+     */
+    public async buildIndex(
+        eventHandler?: kp.IndexingEventHandlers,
+        autoSave: boolean = true,
+    ): Promise<Result<IndexingState>> {
+        const messageOrdinalStartAt = this.indexingState.lastMessageOrdinal + 1;
+        if (messageOrdinalStartAt < this.messages.length) {
+            const result = await kp.addToConversationIndex(
+                this,
+                this.settings.conversationSettings,
+                messageOrdinalStartAt,
+                this.semanticRefs.length,
+                eventHandler,
+            );
+            const errorMsg = getIndexingErrors(result);
+            if (errorMsg) {
+                return error(errorMsg);
+            }
+            this.updateIndexingState();
+            if (autoSave) {
+                await this.writeToFile(this.settings.fileSaveSettings);
+            }
+        }
+        return success(this.indexingState);
     }
 
     public async serialize(): Promise<EmailMemoryData> {
@@ -184,7 +215,12 @@ export async function createEmailMemory(
     createNew: boolean,
 ): Promise<EmailMemory> {
     let em: EmailMemory | undefined;
-    if (!createNew) {
+    if (createNew) {
+        await kp.removeConversationData(
+            fileSettings.dirPath,
+            fileSettings.baseFileName,
+        );
+    } else {
         em = await EmailMemory.readFromFile(fileSettings);
     }
     if (!em) {
