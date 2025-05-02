@@ -8,6 +8,7 @@ import {
     createMemorySettings,
     IndexFileSettings,
     IndexingState,
+    Memory,
     MemorySettings,
 } from "./memory.js";
 import { createIndexingState, getIndexingErrors } from "./common.js";
@@ -20,7 +21,7 @@ export interface EmailMemoryData
     indexingState: IndexingState;
 }
 
-export class EmailMemory implements kp.IConversation {
+export class EmailMemory extends Memory implements kp.IConversation {
     public messages: kp.IMessageCollection<EmailMessage>;
     public settings: EmailMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
@@ -35,6 +36,7 @@ export class EmailMemory implements kp.IConversation {
         public tags: string[] = [],
         settings?: EmailMemorySettings,
     ) {
+        super();
         if (!settings) {
             settings = this.createSettings();
         }
@@ -51,12 +53,17 @@ export class EmailMemory implements kp.IConversation {
         );
     }
 
-    public async addMessage(
-        message: EmailMessage,
+    public async addMessages(
+        messages: EmailMessage | EmailMessage[],
         eventHandler?: kp.IndexingEventHandlers,
     ): Promise<Result<kp.IndexingResults>> {
-        // Add the message to memory and index it
-        this.messages.append(message);
+        if (Array.isArray(messages)) {
+            for (const message of messages) {
+                this.messages.append(message);
+            }
+        } else {
+            this.messages.append(messages);
+        }
         const result = await kp.addToConversationIndex(
             this,
             this.settings.conversationSettings,

@@ -137,9 +137,10 @@ export function* getMessageChunkBatch(
     batchSize: number,
 ): IterableIterator<TextLocation[]> {
     let batch: TextLocation[] = [];
+    let length = messages.length;
     for (
         let messageOrdinal = ordinalStartAt;
-        messageOrdinal < messages.length;
+        messageOrdinal < length;
         ++messageOrdinal
     ) {
         const message = messages.get(messageOrdinal);
