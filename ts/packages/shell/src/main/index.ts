@@ -60,6 +60,11 @@ if (process.platform === "darwin") {
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
+if (!app.requestSingleInstanceLock()) {
+    debugShellError("Another instance is running");
+    app.quit();
+}
+
 const appPath = app.getAppPath();
 debugShell("App path", appPath);
 const isAsar = path.basename(appPath) === "app.asar"; // running with packaged, behaves like prod
@@ -68,7 +73,6 @@ const instanceDir = getInstanceDir(isAsar);
 debugShell("Instance Dir", instanceDir);
 
 const parsedArgs = parseShellCommandLine();
-
 if (parsedArgs.reset) {
     // Delete shell setting files.
     await fs.promises.rm(getShellDataDir(instanceDir), { recursive: true });
@@ -530,4 +534,10 @@ app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
         app.quit();
     }
+});
+
+app.on("second-instance", () => {
+    // Someone tried to run a second instance, we should focus our window.
+    debugShell("Second instance");
+    ShellWindow.getInstance()?.showAndFocus();
 });

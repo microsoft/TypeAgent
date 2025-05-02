@@ -128,6 +128,14 @@ export class ShellWindow {
         }
     }
 
+    public showAndFocus() {
+        if (this.closing) {
+            return;
+        }
+        this.mainWindow.show();
+        this.mainWindow.focus();
+    }
+
     private ready() {
         // Send settings asap
         this.sendUserSettingChanged();
