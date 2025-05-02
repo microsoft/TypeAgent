@@ -13,17 +13,17 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build:server": "tsc -p src/server/tsconfig.json",
-    "build:client": "vite build",
-    "build:shared": "tsc -p src/shared/tsconfig.json",
     "build": "npm run build:shared && npm run build:server && npm run build:client",
+    "build:client": "vite build",
+    "build:server": "tsc -p src/server/tsconfig.json",
+    "build:shared": "tsc -p src/shared/tsconfig.json",
     "clean": "rimraf dist public/js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/server/server.js\"",
     "dev:client": "vite",
     "dev:server": "tsc -p src/server/tsconfig.json --watch",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "preview:client": "vite preview",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/server/server.js\"",
     "start": "node --experimental-specifier-resolution=node dist/server/server.js"
   },
   "dependencies": {
@@ -44,8 +44,5 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "vite": "^6.3.4"
-  },
-  "engines": {
-    "node": ">=14.0.0"
   }
 }
