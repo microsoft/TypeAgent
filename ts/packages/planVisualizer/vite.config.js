@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { defineConfig } from "vite";
 import typescript from "@rollup/plugin-typescript";
 import { resolve } from "path";
