@@ -513,7 +513,7 @@ export class ChatView {
     updateScroll() {
         // REVIEW: electron 35 (chrome 134) scrollIntoView behavior changed compared to electron 30 (chrome 124)
         // Multiple call to scrollIntoView has no effect for the latter call(?)
-        // At logic to delay scroll into view call until animation frame so that scroll event is immediately triggered
+        // Add logic to delay scroll into view call until animation frame so that scroll event is immediately triggered
         // and queue scroll into view when scrolling is happening.
         if (this.isScrolling) {
             this.pendingUpdateScroll = true;
