@@ -1,6 +1,5 @@
 {
   "name": "agent-shell",
-  "productName": "TypeAgent Shell",
   "version": "0.0.1",
   "description": "TypeAgent Shell",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
@@ -79,5 +78,6 @@
     "type-fest": "^4.39.1",
     "typescript": "~5.4.5",
     "vite": "^6.2.7"
-  }
+  },
+  "productName": "TypeAgent Shell"
 }
