@@ -43,7 +43,7 @@ export function resolveAndValidateFiles(filenames: string[]): string[] {
         if (!fs.existsSync(absPath)) {
             missingFiles.push(absPath);
         }
-        return `"${absPath}"`;
+        return absPath;
     });
 
     if (missingFiles.length > 0) {

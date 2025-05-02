@@ -117,6 +117,7 @@ export type KnowProContext = {
     basePath: string;
     printer: KPPrinter;
     pdfIndex: pi.PdfKnowproIndex | undefined;
+    conversation?: kp.IConversation | undefined;
     queryTranslator: kp.SearchQueryTranslator;
     answerGenerator: kp.AnswerGenerator;
 };
@@ -221,6 +222,7 @@ export async function createKnowproCommands(
             chunkPdfs,
             maxPagesToProcess,
         );
+        context.conversation = context.pdfIndex;
         context.printer.writeLine("Imported PDF files ...");
     }
 

@@ -12,7 +12,8 @@ import chalk, { ChalkInstance } from "chalk";
 import * as iapp from "interactive-app";
 import { Chunk, ChunkedFile, ErrorItem } from "./pdfDocSchema.js";
 import { promisify } from "node:util";
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
+
 import {
     OUTPUT_DIR,
     CHUNKED_DOCS_DIR,
@@ -28,7 +29,7 @@ import { assert } from "node:console";
 import { AppPrinter } from "../printer.js";
 import { ensureDir } from "typeagent";
 
-const execPromise = promisify(exec);
+const execFilePromise = promisify(execFile);
 
 export function isInteractiveIo(
     io: iapp.InteractiveIo | AppPrinter,
@@ -70,9 +71,18 @@ export async function chunkifyPdfFiles(
             fs.mkdirSync(CHUNKED_DOCS_DIR, { recursive: true });
         }
 
-        let { stdout, stderr } = await execPromise(
-            `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${CHUNKED_DOCS_DIR}`,
-            { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
+        let { stdout, stderr } = await execFilePromise(
+            "python3",
+            [
+                "-X",
+                "utf8",
+                absChunkerPath,
+                "-files",
+                ...absFilenames,
+                "-outdir",
+                CHUNKED_DOCS_DIR,
+            ],
+            { maxBuffer: 64 * 1024 * 1024 },
         );
         output = stdout;
         errors = stderr;
