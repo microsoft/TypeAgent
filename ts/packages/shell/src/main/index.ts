@@ -370,11 +370,11 @@ async function initialize() {
 
     const shellSettings = loadShellSettings(instanceDir);
     const settings = shellSettings.user;
+    const dataDir = getShellDataDir(instanceDir);
+    const chatHistory: string = path.join(dataDir, "chat_history.html");
     ipcMain.handle("get-chat-history", async () => {
         if (settings.chatHistory) {
             // Load chat history if enabled
-            const dataDir = getShellDataDir(instanceDir);
-            const chatHistory: string = path.join(dataDir, "chat_history.html");
             if (existsSync(chatHistory)) {
                 return readFileSync(chatHistory, "utf-8");
             }
@@ -386,15 +386,17 @@ async function initialize() {
     // this let's us rehydrate the chat when reopening the shell
     ipcMain.on("save-chat-history", async (_, html) => {
         // store the modified DOM contents
-        const file: string = path.join(instanceDir, "chat_history.html");
 
-        debugShell(`Saving chat history to '${file}'.`, performance.now());
+        debugShell(
+            `Saving chat history to '${chatHistory}'.`,
+            performance.now(),
+        );
 
         try {
-            writeFileSync(file, html);
+            writeFileSync(chatHistory, html);
         } catch (e) {
             debugShell(
-                `Unable to save history to '${file}'. Error: ${e}`,
+                `Unable to save history to '${chatHistory}'. Error: ${e}`,
                 performance.now(),
             );
         }
