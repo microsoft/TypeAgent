@@ -549,6 +549,7 @@ export async function createKnowproCommands(
         def.options.applyScope = argBool("Apply scopes", true);
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
+        def.options.distinct = argBool("Show distinct results", true);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
