@@ -57,11 +57,11 @@ function isUpdaterEnabled(url?: string) {
     return app.isPackaged || updateConfigPath !== null || url !== undefined;
 }
 
-const minInterval = 60 * 60 * 1000; // 1 hour
+const minIntervalSeconds = 60 * 60; // 1 hour
 export function startBackgroundUpdateCheck(
-    interval: number,
+    intervalSeconds: number,
     restart: boolean,
-    initialInterval?: number,
+    initialIntervalSeconds?: number,
 ) {
     const id = ++state.id;
     const debugBackgroundUpdate = registerDebug(
@@ -83,14 +83,14 @@ export function startBackgroundUpdateCheck(
         return;
     }
     stopBackgroundUpdateCheck();
-    if (interval < 0) {
+    if (intervalSeconds < 0) {
         return;
     }
-    if (app.isPackaged && interval < minInterval) {
+    if (app.isPackaged && intervalSeconds < minIntervalSeconds) {
         debugBackgroundUpdateError(
-            `Interval too small.  Minimum is ${minInterval}ms`,
+            `Interval too small.  Minimum is ${minIntervalSeconds}s`,
         );
-        interval = minInterval;
+        intervalSeconds = minIntervalSeconds;
     }
 
     debugBackgroundUpdate(`Starting`);
@@ -107,6 +107,7 @@ export function startBackgroundUpdateCheck(
             return;
         }
         if (state.custom) {
+            // Shouldn't be here. We should have been aborted.
             debugBackgroundUpdateError(
                 "Custom update URL or channel specified, stop checking in the background",
             );
@@ -146,11 +147,11 @@ export function startBackgroundUpdateCheck(
             debugBackgroundUpdate("Stopped");
             return;
         }
-        debugBackgroundUpdate(`Scheduled: ${interval}s`);
-        timer = setTimeout(f, interval * 1000);
+        debugBackgroundUpdate(`Scheduled: ${intervalSeconds}s`);
+        timer = setTimeout(f, intervalSeconds * 1000);
     };
 
-    const startInterval = initialInterval ?? interval;
+    const startInterval = initialIntervalSeconds ?? intervalSeconds;
     debugBackgroundUpdate(`Scheduled: ${startInterval}s`);
     timer = setTimeout(f, startInterval * 1000);
 
@@ -380,7 +381,7 @@ class ShellUpdateStatusCommand implements CommandHandlerNoParams {
             [
                 "",
                 "Settings:",
-                `  Interval: ${settings.autoUpdate}`,
+                `  Interval: ${settings.autoUpdate}s`,
                 `  Restart: ${settings.autoRestart}`,
                 "",
                 `Background update ${state.currentCheck ? "checking" : state.stop ? "scheduled" : "not running"}`,
@@ -420,8 +421,8 @@ class ShellUpdateAutoCommand implements CommandHandler {
         displayResult(
             [
                 "Background update check enabled.",
-                `Interval: ${params.flags.interval}s`,
-                `Restart: ${params.flags.restart}`,
+                `  Interval: ${params.flags.interval}s`,
+                `  Restart: ${params.flags.restart}`,
             ],
             context,
         );
