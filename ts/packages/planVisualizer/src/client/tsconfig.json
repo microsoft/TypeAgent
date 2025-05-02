@@ -1,7 +1,7 @@
 {
     "extends": "../../tsconfig.json",
     "compilerOptions": {
-      "outDir": "../../public/js",
+      "outDir": "../../dist/public/js",
       "rootDir": ".",
       "lib": ["DOM", "ES2020", "DOM.Iterable"]
     },

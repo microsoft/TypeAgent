@@ -9,14 +9,14 @@ export default defineConfig({
         }),
     ],
     build: {
-        outDir: "public/js",
+        outDir: "dist/public",
         sourcemap: true,
         rollupOptions: {
             input: {
                 main: resolve(__dirname, "src/client/app.ts"),
             },
             output: {
-                entryFileNames: "[name].js",
+                entryFileNames: "js/[name].js",
             },
         },
     },
