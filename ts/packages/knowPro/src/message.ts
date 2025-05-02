@@ -133,14 +133,16 @@ export function textRangesFromMessageOrdinals(
 
 export function* getMessageChunkBatch(
     messages: IMessageCollection,
-    ordinalStartAt: MessageOrdinal,
+    messageOrdinalStartAt: MessageOrdinal,
     batchSize: number,
+    count?: number,
 ): IterableIterator<TextLocation[]> {
     let batch: TextLocation[] = [];
-    let length = messages.length;
+    let maxOrdinal = count ? messageOrdinalStartAt + count : messages.length;
+    maxOrdinal = Math.min(messages.length, maxOrdinal);
     for (
-        let messageOrdinal = ordinalStartAt;
-        messageOrdinal < length;
+        let messageOrdinal = messageOrdinalStartAt;
+        messageOrdinal < maxOrdinal;
         ++messageOrdinal
     ) {
         const message = messages.get(messageOrdinal);

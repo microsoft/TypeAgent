@@ -28,14 +28,15 @@ describe("message", () => {
         }
     });
     test("messageBatch", () => {
-        const chunkCount = 4;
         const messageCount = 4;
-        const totalChunkCount = messageCount * chunkCount;
+        const chunkCountPerMessage = 4;
+        const totalChunkCount = messageCount * chunkCountPerMessage;
+        // Use a batch size that will cause chunks from a single message to span 2 batches
         const batchSize = 3;
         const numFullBatches = Math.floor(totalChunkCount / batchSize);
         const numBatches = numFullBatches + 1;
 
-        const messages = createTestMessages(messageCount, chunkCount);
+        const messages = createTestMessages(messageCount, chunkCountPerMessage);
         let startAt = 0;
         const batches = [...getMessageChunkBatch(messages, startAt, batchSize)];
         expect(batches).toHaveLength(numBatches);
@@ -44,5 +45,31 @@ describe("message", () => {
             expect(batches[batchOrdinal]).toHaveLength(batchSize);
         }
         expect(batches[batchOrdinal]).toHaveLength(totalChunkCount % batchSize);
+    });
+    test("messageBatch.count", () => {
+        const messageCount = 5;
+        const chunkCountPerMessage = 4;
+        // Use a batch size that will cause chunks from a single message to span 2 batches
+        const batchSize = 3;
+
+        const messages = createTestMessages(messageCount, chunkCountPerMessage);
+        let messageOrdinalStartAt = 1;
+        let messageCountToIndex = 3;
+        let expectedBatchCount = Math.ceil(
+            (messageCountToIndex * chunkCountPerMessage) / batchSize,
+        );
+        const batches = [
+            ...getMessageChunkBatch(
+                messages,
+                messageOrdinalStartAt,
+                batchSize,
+                messageCountToIndex,
+            ),
+        ];
+        expect(batches).toHaveLength(expectedBatchCount);
+        let batchOrdinal = 0;
+        for (; batchOrdinal < messageCountToIndex; ++batchOrdinal) {
+            expect(batches[batchOrdinal]).toHaveLength(batchSize);
+        }
     });
 });
