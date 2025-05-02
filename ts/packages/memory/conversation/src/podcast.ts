@@ -183,6 +183,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
             await kp.buildTransientSecondaryIndexes(this, this.settings);
         }
         this.buildParticipantAliases();
+        this.addVerbAliases();
     }
 
     private buildParticipantAliases(): void {
@@ -197,6 +198,16 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
                 });
             aliases.addRelatedTerm(name, relatedTerms);
         }
+    }
+
+    private addVerbAliases() {
+        // TODO: load ths from a file
+        const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
+        let sayTerm: kp.Term = { text: "say" };
+        aliases.addRelatedTerm("discuss", sayTerm);
+        aliases.addRelatedTerm("discussed", sayTerm);
+        aliases.addRelatedTerm("talk", sayTerm);
+        aliases.addRelatedTerm("talked", sayTerm);
     }
 
     private collectParticipantAliases() {
