@@ -97,6 +97,15 @@ export class ShellSettingManager {
     }
 
     public setUserSettingValue(name: string, value: unknown) {
+        if (typeof value === "object" && value !== null) {
+            let changed = false;
+            for (const [k, v] of Object.entries(value)) {
+                if (this.setUserSettingValue(`${name}.${k}`, v)) {
+                    changed = true;
+                }
+            }
+            return changed;
+        }
         const names = getObjectPropertyNames(this.settings.user);
         // Only allow setting leaf properties.
         if (!names.includes(name)) {

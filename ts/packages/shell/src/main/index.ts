@@ -44,6 +44,16 @@ import { ShellWindow } from "./shellWindow.js";
 import { debugShell, debugShellError } from "./debug.js";
 import { loadKeys } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
+import {
+    hasPendingUpdate,
+    setUpdateConfigPath,
+    startBackgroundUpdateCheck,
+} from "./commands/update.js";
+
+if (!app.requestSingleInstanceLock()) {
+    debugShellError("Another instance is running");
+    app.quit();
+}
 
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
@@ -51,9 +61,11 @@ if (process.platform === "darwin") {
         process.env.PATH = `/opt/homebrew/bin:${process.env.PATH}`;
     }
 }
-
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
+
+debugShell("App name", app.getName());
+debugShell("App version", app.getVersion());
 
 const appPath = app.getAppPath();
 debugShell("App path", appPath);
@@ -63,10 +75,18 @@ const instanceDir = getInstanceDir(isAsar);
 debugShell("Instance Dir", instanceDir);
 
 const parsedArgs = parseShellCommandLine();
-
 if (parsedArgs.reset) {
     // Delete shell setting files.
     await fs.promises.rm(getShellDataDir(instanceDir), { recursive: true });
+}
+
+if (parsedArgs.update) {
+    if (!fs.existsSync(parsedArgs.update)) {
+        throw new Error(
+            `Update config file does not exist: ${parsedArgs.update}`,
+        );
+    }
+    setUpdateConfigPath(parsedArgs.update);
 }
 
 export function runningTests(): boolean {
@@ -274,10 +294,10 @@ async function initializeInstance(
     function updateTitle(dispatcher: Dispatcher) {
         const newSettingSummary = dispatcher.getSettingSummary();
         const zoomFactor = chatView.webContents.zoomFactor;
-        const newTitle =
-            zoomFactor === 1
-                ? newSettingSummary
-                : `${newSettingSummary} Zoom: ${Math.round(zoomFactor * 100)}%`;
+        const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
+        const zoomFactorTitle =
+            zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
+        const newTitle = `${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
         if (newTitle !== title) {
             title = newTitle;
             chatView.webContents.send(
@@ -452,7 +472,15 @@ async function initialize() {
             debugShellError(`Error creating pipe at ${pipePath}`);
         }
     }
-    return initializeInstance(instanceDir, shellSettings);
+    await initializeInstance(instanceDir, shellSettings);
+
+    if (shellSettings.user.autoUpdate.intervalMs !== -1) {
+        startBackgroundUpdateCheck(
+            shellSettings.user.autoUpdate.intervalMs,
+            shellSettings.user.autoUpdate.restart,
+            shellSettings.user.autoUpdate.initialIntervalMs,
+        );
+    }
 }
 
 app.whenReady()
@@ -508,4 +536,10 @@ app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
         app.quit();
     }
+});
+
+app.on("second-instance", () => {
+    // Someone tried to run a second instance, we should focus our window.
+    debugShell("Second instance");
+    ShellWindow.getInstance()?.showAndFocus();
 });

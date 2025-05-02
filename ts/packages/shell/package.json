@@ -78,5 +78,6 @@
     "type-fest": "^4.39.1",
     "typescript": "~5.4.5",
     "vite": "^6.2.7"
-  }
+  },
+  "productName": "TypeAgent Shell"
 }
