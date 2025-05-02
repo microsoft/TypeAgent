@@ -1,0 +1,127 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dynamic Web Plan Visualizer</title>
+
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+
+    <!-- Application CSS -->
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Dynamic Web Plan Visualizer</h1>
+
+      <div class="plan-title-container">
+        <h2 id="plan-title">Plan Title</h2>
+      </div>
+
+      <div class="toggle-container">
+        <span class="toggle-label">Static Plan</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="view-mode-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Dynamic Plan</span>
+      </div>
+
+      <div class="form-container">
+        <h2>Add New Transition</h2>
+        <div id="status-message" class="status-message"></div>
+
+        <form id="transition-form">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="current-state">Current State Name (optional):</label>
+              <input
+                type="text"
+                id="current-state"
+                name="currentState"
+                placeholder="Enter state name or leave blank"
+              />
+              <small class="form-hint"
+                >First node added will be the start node (blank will be labeled
+                "Start")</small
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="action-name">Next Action:</label>
+              <input
+                type="text"
+                id="action-name"
+                name="action"
+                placeholder="Enter action (leave empty for end state)"
+              />
+              <small class="form-hint"
+                >The action leading to the next state (leave empty for end
+                node)</small
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="node-type">State Node Type:</label>
+              <select id="node-type" name="nodeType">
+                <option value="action">Action</option>
+                <option value="decision">Decision</option>
+                <option value="end">End</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top: 15px">
+            <button type="submit" id="add-transition-button">
+              Add Transition
+            </button>
+            <button type="button" id="reset-button">Reset Plan</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="controls">
+        <button id="zoom-fit-button">Fit View</button>
+        <div class="node-selector">
+          <label for="node-select">Current Node:</label>
+          <select id="node-select"></select>
+        </div>
+        <button id="show-path-button">Show Current Path</button>
+      </div>
+
+      <div id="cy-container"></div>
+
+      <div class="legend">
+        <h2>Legend</h2>
+        <div class="legend-grid">
+          <div class="legend-item">
+            <div class="legend-color legend-start"></div>
+            <div>Start Node</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color legend-action"></div>
+            <div>Action Node</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color legend-decision"></div>
+            <div>Decision Node</div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-color legend-end"></div>
+            <div>End Node</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tooltip element for hover information -->
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <!-- Application JS - Using ES modules -->
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>

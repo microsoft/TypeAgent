@@ -49,7 +49,7 @@ export class VisualizerClient {
      * Create a new visualizer client
      * @param baseUrl The base URL of the visualizer server
      */
-    constructor(private baseUrl: string = "http://localhost:3000") {}
+    constructor(private baseUrl: string) {}
 
     /**
      * Helper method to handle fetch requests
@@ -162,7 +162,7 @@ export class StateMachineTracker {
      * @param baseUrl The base URL of the visualizer server
      * @param title Optional title for the plan
      */
-    constructor(baseUrl: string = "http://localhost:3000", title?: string) {
+    constructor(baseUrl: string, title?: string) {
         this.client = new VisualizerClient(baseUrl);
         if (title) {
             this.planTitle = title;
@@ -278,7 +278,7 @@ export class StateMachineTracker {
  * @returns An object with functions for tracking execution
  */
 export function createExecutionTracker(
-    baseUrl: string = "http://localhost:3000",
+    baseUrl: string,
     title?: string,
 ): {
     trackState: (

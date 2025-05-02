@@ -208,7 +208,7 @@ export async function handleCommerceAction(
         let lastAction: any;
 
         const { trackState, reset } = createExecutionTracker(
-            "http://localhost:3000",
+            context.sessionContext.agentContext.planVisualizationEndpoint!,
             action.parameters.userRequest,
         );
 
