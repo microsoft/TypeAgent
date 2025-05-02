@@ -34,4 +34,4 @@ export {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
-} from "../../../dist/common/webAgentMessageTypes.mjs";
+} from "../../common/webAgentMessageTypes.mjs";
