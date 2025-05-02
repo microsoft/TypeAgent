@@ -58,7 +58,7 @@ describe("message", () => {
         let expectedBatchCount = Math.ceil(
             (messageCountToIndex * chunkCountPerMessage) / batchSize,
         );
-        const batches = [
+        let batches = [
             ...getMessageChunkBatch(
                 messages,
                 messageOrdinalStartAt,
@@ -70,6 +70,24 @@ describe("message", () => {
         let batchOrdinal = 0;
         for (; batchOrdinal < messageCountToIndex; ++batchOrdinal) {
             expect(batches[batchOrdinal]).toHaveLength(batchSize);
+        }
+
+        // Now send in a count that exceeds max ordinal...
+        expectedBatchCount = Math.ceil(
+            ((messageCount - messageOrdinalStartAt) * chunkCountPerMessage) /
+                batchSize,
+        );
+        for (let i = 0; i < 3; ++i) {
+            messageCountToIndex = messageCount + i;
+            let batches = [
+                ...getMessageChunkBatch(
+                    messages,
+                    messageOrdinalStartAt,
+                    batchSize,
+                    messageCountToIndex,
+                ),
+            ];
+            expect(batches).toHaveLength(expectedBatchCount);
         }
     });
 });
