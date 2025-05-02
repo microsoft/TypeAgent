@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
+import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
 import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
 import {
@@ -51,6 +52,7 @@ export class EmailMemory extends Memory implements kp.IConversation {
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
+        this.updateStaticAliases();
     }
 
     /**
@@ -152,6 +154,7 @@ export class EmailMemory extends Memory implements kp.IConversation {
             this,
             this.settings.conversationSettings,
         );
+        this.updateStaticAliases();
     }
 
     public async writeToFile(
@@ -207,6 +210,21 @@ export class EmailMemory extends Memory implements kp.IConversation {
         this.indexingState.lastMessageOrdinal = this.messages.length - 1;
         this.indexingState.lastSemanticRefOrdinal =
             this.semanticRefs.length - 1;
+    }
+
+    private updateStaticAliases() {
+        this.addVerbAliases();
+    }
+
+    private addVerbAliases() {
+        // TODO: load ths from a file
+        const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
+        let sendTerm: kp.Term = { text: kpLib.email.EmailVerbs.send };
+        let receiveTerm: kp.Term = { text: kpLib.email.EmailVerbs.receive };
+        aliases.addRelatedTerm("say", sendTerm);
+        aliases.addRelatedTerm("discuss", sendTerm);
+        aliases.addRelatedTerm("talk", sendTerm);
+        aliases.addRelatedTerm("get", receiveTerm);
     }
 }
 
