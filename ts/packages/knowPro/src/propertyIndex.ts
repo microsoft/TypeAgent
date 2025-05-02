@@ -3,9 +3,9 @@
 
 import {
     IConversation,
+    ISemanticRefCollection,
     ListIndexingResult,
     ScoredSemanticRefOrdinal,
-    SemanticRef,
     SemanticRefOrdinal,
     Tag,
 } from "./interfaces.js";
@@ -122,7 +122,7 @@ export function addToPropertyIndex(
             conversation.secondaryIndexes.propertyToSemanticRefIndex;
         const semanticRefs = conversation.semanticRefs;
         for (let i = startAtOrdinal; i < semanticRefs.length; ++i) {
-            const semanticRef = semanticRefs[i];
+            const semanticRef = semanticRefs.get(i);
             const semanticRefOrdinal: SemanticRefOrdinal = i;
             switch (semanticRef.knowledgeType) {
                 default:
@@ -229,14 +229,14 @@ export function lookupPropertyInPropertyIndex(
     propertyIndex: IPropertyToSemanticRefIndex,
     propertyName: string,
     propertyValue: string,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     rangesInScope?: TextRangesInScope,
 ): ScoredSemanticRefOrdinal[] | undefined {
     let scoredRefs = propertyIndex.lookupProperty(propertyName, propertyValue);
     if (scoredRefs && scoredRefs.length > 0 && rangesInScope) {
         scoredRefs = scoredRefs.filter((sr) =>
             rangesInScope.isRangeInScope(
-                semanticRefs[sr.semanticRefOrdinal].range,
+                semanticRefs.get(sr.semanticRefOrdinal).range,
             ),
         );
     }

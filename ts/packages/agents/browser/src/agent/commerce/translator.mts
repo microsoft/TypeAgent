@@ -437,7 +437,7 @@ ${bootstrapTranslator.validator.getSchemaText()}
                 text: `
        
     # Special Actions
-  1. If you believe the user's request has been FULLY completed, you can respond with actionName: "PlanCompleted" and no parameters.
+  1. If you believe the user's request has been FULLY completed, you can respond with actionName: "planCompleted" and no parameters.
   
   
   # Instructions
@@ -448,11 +448,11 @@ ${bootstrapTranslator.validator.getSchemaText()}
   5. Respond with ONLY a JSON object containing the actionName and parameters
   
   Always ensure that:
-- The actionName corresponds to one of the available actions or "PlanCompleted"
+- The actionName corresponds to one of the available actions or "planCompleted"
 - All required parameters for the action are provided
 - Parameter types match what's expected (string, number, boolean)
 - Your reasoning is deliberate and goal-oriented towards completing the user's request
-- You select "PlanCompleted" only when you are certain the user's request has been fully completed
+- You select "planCompleted" only when you are certain the user's request has been fully completed
 
   Think step-by-step before making your decision. Consider what has been done so far and what remains to be done to fulfill the user's request.
     `,

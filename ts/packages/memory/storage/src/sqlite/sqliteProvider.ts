@@ -3,6 +3,7 @@
 
 import * as kp from "knowpro";
 import * as sqlite from "better-sqlite3";
+import path from "path";
 import { SqliteCollection } from "./sqliteCollection.js";
 import { createDatabase } from "./sqliteCommon.js";
 import { SqliteDataFrame } from "./sqliteDataFrame.js";
@@ -13,10 +14,11 @@ export class SqlMessageCollection<TMessage extends kp.IMessage = kp.IMessage>
 {
     constructor(
         db: sqlite.Database,
+        serializer?: kp.JsonSerializer<TMessage>,
         tableName: string = "messages",
         ensureExists: boolean = true,
     ) {
-        super(db, tableName, ensureExists);
+        super(db, serializer, tableName, ensureExists);
     }
 }
 
@@ -29,7 +31,7 @@ export class SqlSemanticRefCollection
         tableName: string = "semanticRefs",
         ensureExists: boolean = true,
     ) {
-        super(db, tableName, ensureExists);
+        super(db, undefined, tableName, ensureExists);
     }
 }
 
@@ -42,10 +44,10 @@ export class SqliteStorageProvider
         this.db = createDatabase(dbPath, createNew);
     }
 
-    public createMessageCollection<
-        TMessage extends kp.IMessage = kp.IMessage,
-    >(): kp.IMessageCollection<TMessage> {
-        return new SqlMessageCollection(this.db);
+    public createMessageCollection<TMessage extends kp.IMessage = kp.IMessage>(
+        serializer?: kp.JsonSerializer<TMessage>,
+    ): kp.IMessageCollection<TMessage> {
+        return new SqlMessageCollection(this.db, serializer);
     }
 
     public createSemanticRefCollection(): kp.ISemanticRefCollection {
@@ -66,4 +68,13 @@ export class SqliteStorageProvider
             this.db.close();
         }
     }
+}
+
+export function createSqlStorageProvider(
+    dirPath: string,
+    baseFileName: string,
+    createNew: boolean,
+): SqliteStorageProvider {
+    const dbPath = path.join(dirPath, baseFileName + ".db");
+    return new SqliteStorageProvider(dbPath, createNew);
 }

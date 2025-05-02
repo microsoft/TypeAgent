@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "debug": "^4.4.0",
-    "typescript": "^5.4.2"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

@@ -169,7 +169,7 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeScoredSemanticRefs(
         semanticRefMatches: kp.ScoredSemanticRefOrdinal[],
-        semanticRefs: kp.SemanticRef[],
+        semanticRefs: kp.ISemanticRefCollection,
         maxToDisplay: number,
     ) {
         if (this.sortAsc) {
@@ -218,9 +218,9 @@ export class KnowProPrinter extends ChatPrinter {
         matchNumber: number,
         totalMatches: number,
         scoredRef: kp.ScoredSemanticRefOrdinal,
-        semanticRefs: kp.SemanticRef[],
+        semanticRefs: kp.ISemanticRefCollection,
     ) {
-        const semanticRef = semanticRefs[scoredRef.semanticRefOrdinal];
+        const semanticRef = semanticRefs.get(scoredRef.semanticRefOrdinal);
         this.writeInColor(
             chalk.green,
             `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
@@ -511,7 +511,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeNaturalLanguageContext(context: kp.LanguageSearchContext) {
+    public writeNaturalLanguageContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
             this.writeJson(context.searchQuery);

@@ -11,6 +11,7 @@ import { collections } from "typeagent";
 import { unionArrays } from "./collections.js";
 import { Scored } from "./common.js";
 import {
+    ISemanticRefCollection,
     MessageOrdinal,
     ScoredKnowledge,
     ScoredSemanticRefOrdinal,
@@ -24,7 +25,7 @@ import {
 } from "./knowledgeLib.js";
 
 export function getDistinctSemanticRefTopics(
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {
@@ -44,7 +45,7 @@ export function getDistinctSemanticRefTopics(
 }
 
 export function getDistinctSemanticRefEntities(
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     topK?: number,
 ): ScoredKnowledge[] {

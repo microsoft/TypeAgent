@@ -32,7 +32,6 @@ export type VerbsTerm = {
     tense: "Past" | "Present" | "Future";
 };
 
-// - "target" refers to the recipient or target of the action or information
 export type ActionTerm = {
     // Action verbs describing the interaction
     actionVerbs?: VerbsTerm | undefined;
@@ -45,6 +44,11 @@ export type ActionTerm = {
     // E.g. in the phrase "Jane ate the spaghetti with the fork", "the fork" would be an additional entity
     // E.g. in the phrase "Did Jane speak about Bach with Nina", "Bach" would be the additional entity "
     additionalEntities?: EntityTerm[];
+    // Is the intent of the phrase translated to this ActionTerm to actually get information about a specific entities?
+    // Examples:
+    // true: if asking for specific information about an entity, such as "What is Mia's phone number?" or "Where did Jane study?"
+    // false if involves actions and interactions between entities, such as "What phone number did Mia mention in her note to Jane?"
+    isInformational: boolean;
 };
 
 // Search a search engine for:
@@ -69,5 +73,6 @@ export type SearchExpr = {
 
 export type SearchQuery = {
     // One expression for each search required by user request
+    // Each SearchExpr runs independently, so make them standalone by resolving references like 'it', 'that', 'them' etc.
     searchExpressions: SearchExpr[];
 };

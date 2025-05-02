@@ -20,7 +20,7 @@ import {
     loadTestQueries,
     parseTestQuery,
 } from "./testCommon.js";
-import { createDefaultSearchOptions } from "../src/search.js";
+import { createSearchOptions } from "../src/search.js";
 import { runSearchConversation } from "./testCommon.js";
 import {
     expectDoesNotHaveEntities,
@@ -150,7 +150,7 @@ describe("search.offline", () => {
             conversation,
             termGroup,
             { knowledgeType },
-            createDefaultSearchOptions(),
+            createSearchOptions(),
         );
         if (expectMatches) {
             expect(matches).toBeDefined();

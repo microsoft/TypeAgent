@@ -204,16 +204,16 @@ export class PdfChunkMessage implements kp.IMessage {
 }
 export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
     public settings: kp.ConversationSettings;
+    private embeddingModel: TextEmbeddingModelWithCache | undefined;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
-    private embeddingModel: TextEmbeddingModelWithCache | undefined;
+    public semanticRefs: kp.SemanticRefCollection;
     public messages: kp.MessageCollection<PdfChunkMessage>;
 
     constructor(
         public nameTag: string = "",
         messages: PdfChunkMessage[] = [],
         public tags: string[] = [],
-        public semanticRefs: kp.SemanticRef[] = [],
     ) {
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.embeddingModel = model;
@@ -222,6 +222,7 @@ export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings,
         );
+        this.semanticRefs = new kp.SemanticRefCollection();
         this.messages = new kp.MessageCollection<PdfChunkMessage>(messages);
     }
 
@@ -282,7 +283,7 @@ export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -318,7 +319,9 @@ export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
         this.messages = new kp.MessageCollection<PdfChunkMessage>(
             pdfChunkMessages,
         );
-        this.semanticRefs = pdfChunkData.semanticRefs;
+        this.semanticRefs = new kp.SemanticRefCollection(
+            pdfChunkData.semanticRefs,
+        );
         this.tags = pdfChunkData.tags;
         if (pdfChunkData.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(

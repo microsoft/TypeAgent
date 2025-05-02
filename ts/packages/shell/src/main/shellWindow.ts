@@ -20,6 +20,7 @@ import {
     ShellWindowState,
     ShellSettingManager,
 } from "./shellSettings.js";
+import { debugShellError } from "./debug.js";
 
 const userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
@@ -127,6 +128,14 @@ export class ShellWindow {
         }
     }
 
+    public showAndFocus() {
+        if (this.closing) {
+            return;
+        }
+        this.mainWindow.show();
+        this.mainWindow.focus();
+    }
+
     private ready() {
         // Send settings asap
         this.sendUserSettingChanged();
@@ -144,7 +153,14 @@ export class ShellWindow {
 
         // open the canvas if it was previously open
         if (user.canvas) {
-            this.openInlineBrowser(new URL(user.canvas));
+            try {
+                this.openInlineBrowser(new URL(user.canvas));
+            } catch (e) {
+                // Don't care if this failed.
+                debugShellError(
+                    `Failed to open canvas URL ${user.canvas} on app start: ${e}`,
+                );
+            }
         }
 
         globalShortcut.register("Alt+Right", () => {
@@ -382,6 +398,7 @@ export class ShellWindow {
         // clear the canvas settings
         if (save) {
             this.targetUrl = undefined;
+            this.settings.setUserSettingValue("canvas", undefined);
         }
     }
 

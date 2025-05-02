@@ -225,13 +225,23 @@ export async function handleCommerceAction(
 
         while (true) {
             const htmlFragments = await browser.getHtmlFragments();
+            const currentStateRequest = await agent.getPageState(
+                undefined,
+                htmlFragments,
+            );
+            let currentState = undefined;
+            if (currentStateRequest.success) {
+                currentState = currentStateRequest.data;
+            }
 
             const executionHistoryText =
                 executionHistory.length > 0
                     ? executionHistory
                           .map((entry, index) => {
-                              return `Action ${index + 1}: ${entry.actionName}
-Parameters: ${JSON.stringify(entry.parameters)}`;
+                              return `
+Page State ${index + 1}: ${JSON.stringify(entry.state, null, 2)}
+Action ${index + 1}: ${entry.action.actionName}
+Parameters: ${JSON.stringify(entry.action.parameters)}`;
                           })
                           .join("\n\n")
                     : "No actions executed yet.";
@@ -252,7 +262,7 @@ Parameters: ${JSON.stringify(entry.parameters)}`;
 
             const nextAction = response.data as ShoppingPlanActions;
 
-            if (nextAction.actionName === "PlanCompleted") {
+            if (nextAction.actionName === "planCompleted") {
                 context.actionIO.appendDisplay({
                     type: "text",
                     speak: true,
@@ -280,7 +290,12 @@ Parameters: ${JSON.stringify(entry.parameters)}`;
 
             let actionSucceeded = await runUserAction(nextAction);
             console.log(`Succeeded?: ${actionSucceeded}`);
-            executionHistory.push(nextAction);
+
+            executionHistory.push({
+                state: currentState,
+                action: nextAction,
+            });
+
             lastAction = nextAction;
         }
     }

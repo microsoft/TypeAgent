@@ -73,6 +73,43 @@ export interface IAnswerGenerator {
     ): Promise<Result<answerSchema.AnswerResponse>>;
 }
 
+export type AnswerGeneratorSettings = {
+    /**
+     * Model used to generate answers from context
+     */
+    answerGeneratorModel: ChatModel;
+    /**
+     * The Answer Generator can combine multiple partial answers which
+     * can be produced by sending chunks of the relevant context to the model in parallel
+     * These partial answers may be combined using the 'combinePartialAnswers' call.
+     * Implementations use the "rewriteModel"
+     */
+    answerCombinerModel: ChatModel;
+    /**
+     * Maximum number of characters allowed in the context for any given call
+     */
+    maxCharsInBudget: number;
+    /**
+     * When chunking, produce answer in parallel
+     */
+    concurrency: number;
+    /**
+     * Stop processing if answer found using just knowledge
+     */
+    fastStop: boolean;
+};
+
+/**
+ * Generate a natural language answer for question about a queusing the provided search results as context
+ * If the context exceeds the generator.setting.maxCharsInBudget, will break up the context into
+ * chunks, run them in parallel, and then merge the answers found in individual chunks
+ * @param conversation conversation about which this is a question
+ * @param generator answer generator to use
+ * @param question question that was asked
+ * @param searchResult the results of running a search query for the question on the conversation
+ * @param progress Progress callback
+ * @returns Answers
+ */
 export async function generateAnswer(
     conversation: IConversation,
     generator: IAnswerGenerator,
@@ -85,7 +122,7 @@ export async function generateAnswer(
 ): Promise<Result<answerSchema.AnswerResponse>> {
     const context = answerContextFromSearchResult(conversation, searchResult);
     const contextContent = answerContextToString(context);
-    if (contextContent.length <= generator.settings.maxCharsInContext) {
+    if (contextContent.length <= generator.settings.maxCharsInBudget) {
         // Context is small enough
         return generator.generateAnswer(question, contextContent);
     }
@@ -94,19 +131,18 @@ export async function generateAnswer(
     //
     const chunks = splitContextIntoChunks(
         context,
-        generator.settings.maxCharsInContext,
+        generator.settings.maxCharsInBudget,
     );
     const chunkResponses = await generateAnswerInChunks(
         generator,
         question,
         chunks,
-        generator.settings.concurrency,
-        true,
         progress,
     );
     if (!chunkResponses.success) {
         return chunkResponses;
     }
+    // We have partial answers from each chunk... merge and rewrite them into a whole
     const answer = await generator.combinePartialAnswers(
         question,
         chunkResponses.data,
@@ -114,12 +150,69 @@ export async function generateAnswer(
     return answer;
 }
 
-export type AnswerGeneratorSettings = {
-    answerModel: ChatModel;
-    rewriteModel: ChatModel; // The rewrite model must not produce JSON output
-    maxCharsInContext: number;
-    concurrency: number;
-};
+export async function generateAnswerInChunks(
+    answerGenerator: IAnswerGenerator,
+    question: string,
+    chunks: contextSchema.AnswerContext[],
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse>
+    >,
+): Promise<Result<answerSchema.AnswerResponse[]>> {
+    if (chunks.length === 0) {
+        return success([]);
+    }
+    if (chunks.length === 1) {
+        return runSingleChunk(chunks[0]);
+    }
+
+    const structuredChunks = chunks.filter(
+        (c) => c.messages === undefined || c.messages.length === 0,
+    );
+    let chunkAnswers: answerSchema.AnswerResponse[] = [];
+    const structuredAnswers = await runGenerateAnswers(
+        answerGenerator,
+        question,
+        structuredChunks,
+        progress,
+    );
+    if (!structuredAnswers.success) {
+        return structuredAnswers;
+    }
+    chunkAnswers.push(...structuredAnswers.data);
+
+    if (!hasAnswer(chunkAnswers) || !answerGenerator.settings.fastStop) {
+        // Generate partial answers from each message chunk
+        const messageChunks = chunks.filter(
+            (c) => c.messages !== undefined && c.messages.length > 0,
+        );
+        const messageAnswers = await runGenerateAnswers(
+            answerGenerator,
+            question,
+            messageChunks,
+        );
+        if (!messageAnswers.success) {
+            return messageAnswers;
+        }
+        chunkAnswers.push(...messageAnswers.data);
+    }
+
+    return success(chunkAnswers);
+
+    async function runSingleChunk(
+        chunk: contextSchema.AnswerContext,
+    ): Promise<Result<answerSchema.AnswerResponse[]>> {
+        const response = await answerGenerator.generateAnswer(question, chunk);
+        if (progress) {
+            progress(chunks[0], 0, response);
+        }
+        return response.success ? success([response.data]) : response;
+    }
+
+    function hasAnswer(answers: answerSchema.AnswerResponse[]): boolean {
+        return answers.some((a) => a.type === "Answered");
+    }
+}
 
 export class AnswerGenerator implements IAnswerGenerator {
     public settings: AnswerGeneratorSettings;
@@ -130,7 +223,7 @@ export class AnswerGenerator implements IAnswerGenerator {
     constructor(settings?: AnswerGeneratorSettings) {
         this.settings = settings ?? createAnswerGeneratorSettings();
         this.answerTranslator = createAnswerTranslator(
-            this.settings.answerModel,
+            this.settings.answerGeneratorModel,
         );
         this.contextSchema = loadSchema(
             ["dateTimeSchema.ts", "answerContextSchema.ts"],
@@ -147,10 +240,10 @@ export class AnswerGenerator implements IAnswerGenerator {
             typeof context === "string"
                 ? context
                 : answerContextToString(context);
-        if (contextContent.length > this.settings.maxCharsInContext) {
+        if (contextContent.length > this.settings.maxCharsInBudget) {
             contextContent = trimStringLength(
                 contextContent,
-                this.settings.maxCharsInContext,
+                this.settings.maxCharsInBudget,
             );
         }
 
@@ -186,10 +279,10 @@ export class AnswerGenerator implements IAnswerGenerator {
             if (answerCount > 1) {
                 answer = trimStringLength(
                     answer,
-                    this.settings.maxCharsInContext,
+                    this.settings.maxCharsInBudget,
                 );
                 const rewrittenAnswer = await rewriteText(
-                    this.settings.rewriteModel,
+                    this.settings.answerCombinerModel,
                     answer,
                     question,
                 );
@@ -215,11 +308,12 @@ export function createAnswerGeneratorSettings(
     model?: ChatModel,
 ): AnswerGeneratorSettings {
     return {
-        answerModel:
+        answerGeneratorModel:
             model ?? openai.createJsonChatModel(undefined, ["answerGenerator"]),
-        rewriteModel: openai.createChatModel(),
-        maxCharsInContext: 4096 * 4, // 4096 tokens * 4 chars per token,
+        answerCombinerModel: openai.createChatModel(),
+        maxCharsInBudget: 4096 * 4, // 4096 tokens * 4 chars per token,
         concurrency: 2,
+        fastStop: true,
     };
 }
 
@@ -343,79 +437,10 @@ export function splitContextIntoChunks(
     return [...chunkBuilder.getChunks()];
 }
 
-export async function generateAnswerInChunks(
-    answerGenerator: IAnswerGenerator,
-    question: string,
-    chunks: contextSchema.AnswerContext[],
-    concurrency: number = 2,
-    fastStop: boolean = true,
-    progress?: asyncArray.ProcessProgress<
-        contextSchema.AnswerContext,
-        Result<answerSchema.AnswerResponse>
-    >,
-): Promise<Result<answerSchema.AnswerResponse[]>> {
-    if (chunks.length === 0) {
-        return success([]);
-    }
-    if (chunks.length === 1) {
-        return runSingleChunk(chunks[0]);
-    }
-
-    const structuredChunks = chunks.filter(
-        (c) => c.messages === undefined || c.messages.length === 0,
-    );
-    let chunkAnswers: answerSchema.AnswerResponse[] = [];
-    const structuredAnswers = await runGenerateAnswers(
-        answerGenerator,
-        question,
-        structuredChunks,
-        concurrency,
-        progress,
-    );
-    if (!structuredAnswers.success) {
-        return structuredAnswers;
-    }
-    chunkAnswers.push(...structuredAnswers.data);
-
-    if (!hasAnswer(chunkAnswers) || !fastStop) {
-        // Generate partial answers from each message chunk
-        const messageChunks = chunks.filter(
-            (c) => c.messages !== undefined && c.messages.length > 0,
-        );
-        const messageAnswers = await runGenerateAnswers(
-            answerGenerator,
-            question,
-            messageChunks,
-            concurrency,
-        );
-        if (!messageAnswers.success) {
-            return messageAnswers;
-        }
-        chunkAnswers.push(...messageAnswers.data);
-    }
-
-    return success(chunkAnswers);
-
-    async function runSingleChunk(
-        chunk: contextSchema.AnswerContext,
-    ): Promise<Result<answerSchema.AnswerResponse[]>> {
-        const response = await answerGenerator.generateAnswer(question, chunk);
-        if (progress) {
-            progress(chunks[0], 0, response);
-        }
-        return response.success ? success([response.data]) : response;
-    }
-
-    function hasAnswer(answers: answerSchema.AnswerResponse[]): boolean {
-        return answers.some((a) => a.type === "Answered");
-    }
-}
-
 async function runGenerateAnswers(
     answerGenerator: IAnswerGenerator,
     question: string,
     chunks: contextSchema.AnswerContext[],
-    concurrency: number,
     progress?: asyncArray.ProcessProgress<
         contextSchema.AnswerContext,
         Result<answerSchema.AnswerResponse>
@@ -426,7 +451,7 @@ async function runGenerateAnswers(
     }
     const results = await asyncArray.mapAsync(
         chunks,
-        concurrency,
+        answerGenerator.settings.concurrency,
         (chunk) => answerGenerator.generateAnswer(question, chunk),
         (context, index, response) => {
             if (progress) {
@@ -479,6 +504,7 @@ function createQuestionPrompt(question: string): string {
         "Use the name and type of the provided entities to select those highly relevant to answering the question.",
         "List ALL entities if query intent implies that.",
         "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
+        "Include direct quotes where suitable but otherwise answer in your own words.",
     ];
     return prompt.join("\n");
 }

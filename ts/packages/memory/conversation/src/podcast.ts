@@ -7,18 +7,18 @@ import {
     TextEmbeddingModelWithCache,
 } from "knowledge-processor";
 import { collections } from "typeagent";
-import { createEmbeddingModel } from "./common.js";
+import { createEmbeddingModelWithCache } from "./common.js";
 
 import registerDebug from "debug";
 import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class Podcast implements kp.IConversation<PodcastMessage> {
-    public messages: kp.MessageCollection<PodcastMessage>;
     public settings: kp.ConversationSettings;
+    public messages: kp.MessageCollection<PodcastMessage>;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
-    public semanticRefs: kp.SemanticRef[];
+    public semanticRefs: kp.SemanticRefCollection;
 
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
     private embeddingSize: number | undefined;
@@ -30,7 +30,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
         settings?: kp.ConversationSettings,
     ) {
         this.messages = new kp.MessageCollection<PodcastMessage>(messages);
-        this.semanticRefs = [];
+        this.semanticRefs = new kp.SemanticRefCollection();
         if (!settings) {
             settings = this.createSettings();
         }
@@ -94,7 +94,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
             nameTag: this.nameTag,
             messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -119,7 +119,9 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
         this.messages = new kp.MessageCollection<PodcastMessage>(
             podcastMessages,
         );
-        this.semanticRefs = podcastData.semanticRefs;
+        this.semanticRefs = new kp.SemanticRefCollection(
+            podcastData.semanticRefs,
+        );
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
@@ -228,7 +230,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
      * @returns embedding model, size of embedding
      */
     private createSettings() {
-        const [model, size] = createEmbeddingModel(
+        const [model, size] = createEmbeddingModelWithCache(
             64,
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );

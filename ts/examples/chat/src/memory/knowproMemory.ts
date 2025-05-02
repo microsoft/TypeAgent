@@ -20,7 +20,6 @@ import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
 import {
-    addFileNameSuffixToPath,
     argDestFile,
     argSourceFile,
     argToDate,
@@ -37,8 +36,11 @@ import {
     createIndexingEventHandler,
     hasConversationResults,
     matchFilterToConversation,
+    memoryNameToIndexPath,
+    sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
+import { createKnowproEmailCommands } from "./knowproEmail.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -71,7 +73,8 @@ export async function createKnowproCommands(
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproDataFrameCommands(commands, context);
+    await createKnowproDataFrameCommands(context, commands);
+    await createKnowproEmailCommands(context, commands);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
@@ -162,7 +165,7 @@ export async function createKnowproCommands(
         await podcastBuildIndex(namedArgs);
 
         // Save the index
-        namedArgs.filePath = sourcePathToIndexPath(
+        namedArgs.filePath = sourcePathToMemoryIndexPath(
             namedArgs.filePath,
             namedArgs.indexFilePath,
         );
@@ -213,7 +216,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastLoadDef());
         let podcastFilePath = namedArgs.filePath;
         podcastFilePath ??= namedArgs.name
-            ? podcastNameToFilePath(namedArgs.name)
+            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
             : undefined;
         if (!podcastFilePath) {
             context.printer.writeError("No filepath or name provided");
@@ -309,7 +312,7 @@ export async function createKnowproCommands(
         await imagesBuildIndex(namedArgs);
 
         // Save the image collection index
-        namedArgs.filePath = sourcePathToIndexPath(
+        namedArgs.filePath = sourcePathToMemoryIndexPath(
             namedArgs.filePath,
             namedArgs.indexFilePath,
         );
@@ -359,7 +362,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, imagesLoadDef());
         let imagesFilePath = namedArgs.filePath;
         imagesFilePath ??= namedArgs.name
-            ? podcastNameToFilePath(namedArgs.name)
+            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
             : undefined;
         if (!imagesFilePath) {
             context.printer.writeError("No filepath or name provided");
@@ -396,14 +399,6 @@ export async function createKnowproCommands(
                 endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
-                usePropertyIndex: argBool(
-                    "Use property index while searching",
-                    true,
-                ),
-                useTimestampIndex: argBool(
-                    "Use timestamp index while searching",
-                    true,
-                ),
                 distinct: argBool("Show distinct results", false),
             },
         };
@@ -451,8 +446,6 @@ export async function createKnowproCommands(
                 selectExpr.when,
                 {
                     exactMatch: namedArgs.exact,
-                    usePropertyIndex: namedArgs.usePropertyIndex,
-                    useTimestampIndex: namedArgs.useTimestampIndex,
                 },
             );
             timer.stop();
@@ -543,8 +536,10 @@ export async function createKnowproCommands(
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget", 8192);
-        def.options.exactScope = argBool("(Future) Exact scope", false);
+        def.options.applyScope = argBool("Apply scopes", true);
+        def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
+        def.options.distinct = argBool("Show distinct results", true);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -572,6 +567,7 @@ export async function createKnowproCommands(
                 context.conversation!,
                 searchQuery,
                 exactScope,
+                namedArgs.applyScope,
             );
             let countSelectMatches = 0;
             for (const searchQueryExpr of searchQueryExpressions) {
@@ -608,7 +604,11 @@ export async function createKnowproCommands(
     function answerDefNew(): CommandMetadata {
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
-        def.options!.messages = argBool("Include messages", false);
+        def.options!.messages = argBool("Include messages", true);
+        def.options!.fastStop = argBool(
+            "Ignore messages if knowledge produces answers",
+            true,
+        );
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -618,16 +618,18 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, answerDefNew());
         const searchText = namedArgs.query;
-        const debugContext: kp.LanguageSearchContext = {};
+        const debugContext: kp.LanguageSearchDebugContext = {};
 
-        const options = createSearchOptions(namedArgs);
+        const options: kp.LanguageSearchOptions =
+            createSearchOptions(namedArgs);
         options.exactMatch = namedArgs.exact;
+        options.exactScope = namedArgs.exactScope;
+        options.applyScope = namedArgs.applyScope;
 
         const searchResults = await kp.searchConversationWithLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
-            namedArgs.exactScope,
             options,
             debugContext,
         );
@@ -648,8 +650,10 @@ export async function createKnowproCommands(
         }
         for (const searchResult of searchResults.data) {
             if (!namedArgs.messages) {
+                // Don't include raw message text... try answering only with knowledge
                 searchResult.messageMatches = [];
             }
+            context.answerGenerator.settings.fastStop = namedArgs.fastStop;
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
@@ -657,10 +661,8 @@ export async function createKnowproCommands(
                 searchResult,
                 (chunk, _, result) => {
                     if (namedArgs.debug) {
-                        context.printer.writeInColor(chalk.gray, () => {
-                            context.printer.writeLine();
-                            context.printer.writeJsonInColor(chalk.gray, chunk);
-                        });
+                        context.printer.writeLine();
+                        context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
             );
@@ -770,7 +772,8 @@ export async function createKnowproCommands(
             await searchTerms(args);
         } else {
             if (conversation.semanticRefs !== undefined) {
-                const entities = conversation.semanticRefs?.filter(
+                const entities = kp.filterCollection(
+                    conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
                 );
                 context.printer.writeSemanticRefs(entities);
@@ -989,7 +992,7 @@ export async function createKnowproCommands(
     }
 
     function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
-        let options = kp.createDefaultSearchOptions();
+        let options = kp.createSearchOptions();
         options.exactMatch = namedArgs.exact;
         options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
@@ -1003,20 +1006,5 @@ export async function createKnowproCommands(
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
-    }
-
-    const IndexFileSuffix = "_index.json";
-    function sourcePathToIndexPath(
-        sourcePath: string,
-        indexFilePath?: string,
-    ): string {
-        return (
-            indexFilePath ??
-            addFileNameSuffixToPath(sourcePath, IndexFileSuffix)
-        );
-    }
-
-    function podcastNameToFilePath(podcastName: string): string {
-        return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
 }
