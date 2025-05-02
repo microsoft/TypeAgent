@@ -14,7 +14,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run tsc",
-    "postbuild": "pnpm run copy-data && copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" \"data/**/*\" dist && rimraf --glob 'copyfiles-*.done.build.log'",
+    "postbuild": "pnpm run copy-data && copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" \"src/srag/*.py\" \"data/**/*\" dist && rimraf --glob 'copyfiles-*.done.build.log'",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log dist/data",
     "copy-data": "copyfiles \"data/**/*\" dist",
     "install-python-deps": "node -e \"const { execSync } = require('child_process'); try { execSync('python3 --version', { stdio: 'ignore' }); execSync('python3 -m pip install --user -qq -r requirements.txt', { stdio: 'inherit' }); } catch { try { execSync('python --version', { stdio: 'ignore' }); execSync('python -m pip install --user -qq -r requirements.txt', { stdio: 'inherit' }); } catch { console.log('Python not found, skipping...'); } }\"",
@@ -28,18 +28,25 @@
     "aiclient": "workspace:*",
     "canvas": "^3.1.0",
     "chalk": "^5.4.1",
+    "cheerio": "1.0.0-rc.12",
+    "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "fast-xml-parser": "4.5.1",
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
+    "knowpro": "workspace:*",
     "memory-providers": "workspace:*",
     "pdfjs-dist": "^4.10.38",
+    "proper-lockfile": "^4.1.2",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "^5.4.2"
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "@types/proper-lockfile": "^4.1.4",
     "copyfiles": "^2.4.1",
+    "prettier": "^3.5.3",
     "rimraf": "^6.0.1"
   },
   "engines": {

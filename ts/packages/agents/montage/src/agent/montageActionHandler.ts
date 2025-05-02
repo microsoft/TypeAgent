@@ -768,8 +768,6 @@ async function findRequestedImages(
                 // options
                 {
                     exactMatch: exactMatch,
-                    usePropertyIndex: true,
-                    useTimestampIndex: true,
                 },
             );
 

@@ -321,9 +321,9 @@
         "--runTestsByPath",
         "${jest.testFile}"
       ],
-      //"cwd": "${workspaceFolder}/packages/knowpro",
+      "cwd": "${workspaceFolder}/packages/knowpro",
       //"cwd": "${workspaceFolder}/packages/memory/storage",
-      "cwd": "${workspaceFolder}/packages/memory/conversation",
+      //"cwd": "${workspaceFolder}/packages/memory/conversation",
       //"cwd": "${workspaceFolder}/packages/knowledgeProcessor",
       //"cwd": "${workspaceFolder}/packages/aiclient",
       "console": "integratedTerminal",
@@ -336,6 +336,7 @@
       "skipFiles": [
           "<node_internals>/**"
       ],
+      "args": [],
       "program": "${workspaceFolder}/examples/docuProc/src/main.ts",
       "console": "integratedTerminal",
       //"preLaunchTask": "pnpm: build",

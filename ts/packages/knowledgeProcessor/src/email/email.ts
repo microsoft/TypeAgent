@@ -210,7 +210,7 @@ export function emailToEntities(
     }
 }
 
-enum EmailVerbs {
+export enum EmailVerbs {
     send = "send",
     receive = "receive",
 }

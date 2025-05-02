@@ -1,0 +1,21 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "accounts_agentmaps_name": {
+            "value": null 
+        },
+        "databaseAccounts_typeagentlogdb_name": {
+            "value": null
+        },
+        "typeagent_speech": {
+            "value": null
+        },
+        "openai_eastus_name": {
+            "value": null
+        },
+        "storageAccounts_demopersistence_name": {
+            "value": null
+        }
+    }
+}

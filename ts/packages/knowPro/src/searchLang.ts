@@ -10,6 +10,7 @@ import {
 } from "./interfaces.js";
 import {
     ConversationSearchResult,
+    createSearchOptions,
     runSearchQuery,
     SearchOptions,
     SearchQueryExpr,
@@ -38,15 +39,14 @@ export async function searchConversationWithLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
-    exactScope: boolean = true,
-    options?: SearchOptions,
-    context?: LanguageSearchContext,
+    options?: LanguageSearchOptions,
+    context?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     const searchQueryExprResult = await searchQueryExprFromLanguage(
         conversation,
         queryTranslator,
         searchText,
-        exactScope,
+        options,
         context,
     );
     if (!searchQueryExprResult.success) {
@@ -75,8 +75,8 @@ export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
     queryText: string,
-    exactScope: boolean = true,
-    context?: LanguageSearchContext,
+    options?: LanguageSearchOptions,
+    context?: LanguageSearchDebugContext,
 ): Promise<Result<SearchQueryExpr[]>> {
     const queryResult = await searchQueryFromLanguage(
         conversation,
@@ -88,18 +88,39 @@ export async function searchQueryExprFromLanguage(
         if (context) {
             context.searchQuery = searchQuery;
         }
+        options ??= createLanguageSearchOptions();
         const searchExpr = compileSearchQuery(
             conversation,
             searchQuery,
-            exactScope,
+            options.exactScope,
+            options.applyScope,
         );
         return success(searchExpr);
     }
     return queryResult;
 }
 
-export type LanguageSearchContext = {
+export interface LanguageSearchOptions extends SearchOptions {
+    applyScope?: boolean | undefined;
+    exactScope?: boolean | undefined;
+}
+
+export function createLanguageSearchOptions(): LanguageSearchOptions {
+    return {
+        ...createSearchOptions(),
+        applyScope: true,
+        exactScope: false,
+    };
+}
+
+export type LanguageSearchDebugContext = {
+    /**
+     * Query returned by the LLM
+     */
     searchQuery?: querySchema.SearchQuery | undefined;
+    /**
+     * What searchQuery was compiled into
+     */
     searchQueryExpr?: SearchQueryExpr[] | undefined;
 };
 
@@ -107,8 +128,10 @@ export function compileSearchQuery(
     conversation: IConversation,
     query: querySchema.SearchQuery,
     exactScoping: boolean = true,
+    applyScoping: boolean = true,
 ): SearchQueryExpr[] {
     const queryBuilder = new SearchQueryCompiler(conversation);
+    queryBuilder.applyScoping = applyScoping;
     queryBuilder.exactScoping = exactScoping;
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
@@ -129,6 +152,7 @@ class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
     private dedupe: boolean = true;
     public queryExpressions: SearchQueryExpr[];
+    public applyScoping: boolean = true;
     public exactScoping: boolean = false;
 
     constructor(public conversation: IConversation) {
@@ -189,12 +213,15 @@ class SearchQueryCompiler {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
         }
         if (filter.actionSearchTerm) {
+            /*
             termGroup.terms.push(
-                this.compileActionTerm(filter.actionSearchTerm, false),
+                this.compileActionTerm(filter.actionSearchTerm, false, true),
             );
+            */
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
                 termGroup,
+                false,
             );
         }
         if (filter.searchTerms) {
@@ -208,7 +235,11 @@ class SearchQueryCompiler {
 
         let when: WhenFilter | undefined;
         const actionTerm = filter.actionSearchTerm;
-        if (actionTerm) {
+        if (
+            this.applyScoping &&
+            actionTerm &&
+            this.shouldAddScope(actionTerm)
+        ) {
             const scopeDefiningTerms = this.compileScope(actionTerm);
             if (scopeDefiningTerms.terms.length > 0) {
                 when ??= {};
@@ -281,14 +312,14 @@ class SearchQueryCompiler {
 
     private compileScope(
         actionTerm: querySchema.ActionTerm,
-        includeAdditional: boolean = true,
+        includeAdditionalEntities: boolean = true,
     ): SearchTermGroup {
         const dedupe = this.dedupe;
         this.dedupe = false;
 
-        let termGroup = this.compileActionTerm(actionTerm, true);
+        let termGroup = this.compileActionTerm(actionTerm, true, true);
         if (
-            includeAdditional &&
+            includeAdditionalEntities &&
             isEntityTermArray(actionTerm.additionalEntities)
         ) {
             this.addEntityNamesToGroup(
@@ -306,6 +337,7 @@ class SearchQueryCompiler {
     private compileActionTerm(
         actionTerm: querySchema.ActionTerm,
         useAnd: boolean,
+        includeVerbs: boolean,
     ) {
         const dedupe = this.dedupe;
         this.dedupe = false;
@@ -313,26 +345,50 @@ class SearchQueryCompiler {
         if (isEntityTermArray(actionTerm.targetEntities)) {
             termGroup = useAnd ? createAndTermGroup() : createOrTermGroup();
             for (const entity of actionTerm.targetEntities) {
-                const svo = this.compileSubjectVerb(actionTerm);
+                const svoTermGroup = includeVerbs
+                    ? this.compileSubjectAndVerb(actionTerm)
+                    : this.compileSubject(actionTerm);
                 // A target can be the name of an object of an action OR the name of an entity
-                svo.terms.push(this.compileObjectOrEntityName(entity));
-                termGroup.terms.push(svo);
+                const objectTermGroup = this.compileObjectOrEntityName(entity);
+                if (objectTermGroup.terms.length > 0) {
+                    svoTermGroup.terms.push(objectTermGroup);
+                }
+                termGroup.terms.push(svoTermGroup);
             }
             if (termGroup.terms.length === 1) {
                 termGroup = termGroup.terms[0] as SearchTermGroup;
             }
         } else {
-            termGroup = this.compileSubjectVerb(actionTerm);
+            termGroup = this.compileSubjectAndVerb(actionTerm);
         }
 
         this.dedupe = dedupe;
         return termGroup;
     }
 
-    private compileSubjectVerb(
+    private compileSubjectAndVerb(
         actionTerm: querySchema.ActionTerm,
     ): SearchTermGroup {
         const termGroup = createAndTermGroup();
+        this.addSubjectToGroup(actionTerm, termGroup);
+        if (actionTerm.actionVerbs !== undefined) {
+            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
+        }
+        return termGroup;
+    }
+
+    private compileSubject(
+        actionTerm: querySchema.ActionTerm,
+    ): SearchTermGroup {
+        const termGroup = createAndTermGroup();
+        this.addSubjectToGroup(actionTerm, termGroup);
+        return termGroup;
+    }
+
+    private addSubjectToGroup(
+        actionTerm: querySchema.ActionTerm,
+        termGroup: SearchTermGroup,
+    ): void {
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(
                 actionTerm.actorEntities,
@@ -340,11 +396,6 @@ class SearchQueryCompiler {
                 termGroup,
             );
         }
-
-        if (actionTerm.actionVerbs !== undefined) {
-            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
-        }
-        return termGroup;
     }
 
     private compileObjectOrEntityName(
@@ -501,6 +552,18 @@ class SearchQueryCompiler {
             case "entity":
                 return true;
         }
+    }
+
+    private shouldAddScope(actionTerm: querySchema.ActionTerm): boolean {
+        if (!actionTerm || actionTerm.isInformational) {
+            return false;
+        }
+        if (this.exactScoping) {
+            return true;
+        }
+        // If the action has no subject, disable scope
+        // isEntityTermArray checks for wildcards etc
+        return isEntityTermArray(actionTerm.actorEntities);
     }
 }
 

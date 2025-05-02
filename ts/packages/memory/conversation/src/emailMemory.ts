@@ -2,12 +2,14 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
+import * as kpLib from "knowledge-processor";
 import * as ms from "memory-storage";
 import { EmailMessage, EmailMessageSerializer } from "./emailMessage.js";
 import {
     createMemorySettings,
     IndexFileSettings,
     IndexingState,
+    Memory,
     MemorySettings,
 } from "./memory.js";
 import { createIndexingState, getIndexingErrors } from "./common.js";
@@ -20,7 +22,7 @@ export interface EmailMemoryData
     indexingState: IndexingState;
 }
 
-export class EmailMemory implements kp.IConversation {
+export class EmailMemory extends Memory implements kp.IConversation {
     public messages: kp.IMessageCollection<EmailMessage>;
     public settings: EmailMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
@@ -35,6 +37,7 @@ export class EmailMemory implements kp.IConversation {
         public tags: string[] = [],
         settings?: EmailMemorySettings,
     ) {
+        super();
         if (!settings) {
             settings = this.createSettings();
         }
@@ -49,27 +52,64 @@ export class EmailMemory implements kp.IConversation {
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
+        this.updateStaticAliases();
     }
 
-    public async addMessage(
-        message: EmailMessage,
+    /**
+     * Add email messages. If updateIndex is true, also index them.
+     * @param messages
+     * @param updateIndex (default) true
+     * @param eventHandler
+     * @returns
+     */
+    public async addMessages(
+        messages: EmailMessage | EmailMessage[],
+        updateIndex: boolean = true,
         eventHandler?: kp.IndexingEventHandlers,
-    ): Promise<Result<kp.IndexingResults>> {
-        // Add the message to memory and index it
-        this.messages.append(message);
-        const result = await kp.addToConversationIndex(
-            this,
-            this.settings.conversationSettings,
-            this.messages.length - 1,
-            this.semanticRefs.length,
-            eventHandler,
-        );
-        const errorMsg = getIndexingErrors(result);
-        if (errorMsg) {
-            return error(errorMsg);
+    ): Promise<Result<IndexingState>> {
+        if (Array.isArray(messages)) {
+            for (const message of messages) {
+                this.messages.append(message);
+            }
+        } else {
+            this.messages.append(messages);
         }
-        this.updateIndexingState();
-        return success(result);
+        if (updateIndex) {
+            return this.buildIndex(eventHandler);
+        }
+        return success(this.indexingState);
+    }
+
+    /**
+     * Indexing all pending messages.
+     * Resumes at this.indexingState.lastMessageOrdinal + 1
+     * @param eventHandler
+     * @param autoSave (default true) Automatically save the updated index
+     * @returns
+     */
+    public async buildIndex(
+        eventHandler?: kp.IndexingEventHandlers,
+        autoSave: boolean = true,
+    ): Promise<Result<IndexingState>> {
+        const messageOrdinalStartAt = this.indexingState.lastMessageOrdinal + 1;
+        if (messageOrdinalStartAt < this.messages.length) {
+            const result = await kp.addToConversationIndex(
+                this,
+                this.settings.conversationSettings,
+                messageOrdinalStartAt,
+                this.semanticRefs.length,
+                eventHandler,
+            );
+            const errorMsg = getIndexingErrors(result);
+            if (errorMsg) {
+                return error(errorMsg);
+            }
+            this.updateIndexingState();
+            if (autoSave) {
+                await this.writeToFile(this.settings.fileSaveSettings);
+            }
+        }
+        return success(this.indexingState);
     }
 
     public async serialize(): Promise<EmailMemoryData> {
@@ -114,6 +154,7 @@ export class EmailMemory implements kp.IConversation {
             this,
             this.settings.conversationSettings,
         );
+        this.updateStaticAliases();
     }
 
     public async writeToFile(
@@ -170,6 +211,21 @@ export class EmailMemory implements kp.IConversation {
         this.indexingState.lastSemanticRefOrdinal =
             this.semanticRefs.length - 1;
     }
+
+    private updateStaticAliases() {
+        this.addVerbAliases();
+    }
+
+    private addVerbAliases() {
+        // TODO: load ths from a file
+        const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
+        let sendTerm: kp.Term = { text: kpLib.email.EmailVerbs.send };
+        let receiveTerm: kp.Term = { text: kpLib.email.EmailVerbs.receive };
+        aliases.addRelatedTerm("say", sendTerm);
+        aliases.addRelatedTerm("discuss", sendTerm);
+        aliases.addRelatedTerm("talk", sendTerm);
+        aliases.addRelatedTerm("get", receiveTerm);
+    }
 }
 
 export async function createEmailMemory(
@@ -177,7 +233,12 @@ export async function createEmailMemory(
     createNew: boolean,
 ): Promise<EmailMemory> {
     let em: EmailMemory | undefined;
-    if (!createNew) {
+    if (createNew) {
+        await kp.removeConversationData(
+            fileSettings.dirPath,
+            fileSettings.baseFileName,
+        );
+    } else {
         em = await EmailMemory.readFromFile(fileSettings);
     }
     if (!em) {

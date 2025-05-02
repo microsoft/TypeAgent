@@ -51,8 +51,12 @@ export const defaultSettings: ShellSettings = {
     user: defaultUserSettings,
 };
 
+export function getShellDataDir(instanceDir: string) {
+    return path.join(instanceDir, "shell");
+}
+
 export function getSettingsPath(instanceDir: string) {
-    return path.join(instanceDir, "shellSettings.json");
+    return path.join(getShellDataDir(instanceDir), "shellSettings.json");
 }
 
 export function loadShellSettings(instanceDir: string): ShellSettings {
@@ -93,6 +97,15 @@ export class ShellSettingManager {
     }
 
     public setUserSettingValue(name: string, value: unknown) {
+        if (typeof value === "object" && value !== null) {
+            let changed = false;
+            for (const [k, v] of Object.entries(value)) {
+                if (this.setUserSettingValue(`${name}.${k}`, v)) {
+                    changed = true;
+                }
+            }
+            return changed;
+        }
         const names = getObjectPropertyNames(this.settings.user);
         // Only allow setting leaf properties.
         if (!names.includes(name)) {

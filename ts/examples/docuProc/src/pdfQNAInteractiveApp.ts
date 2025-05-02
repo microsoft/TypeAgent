@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// User interface for querying the index.
-
 import chalk, { ChalkInstance } from "chalk";
 import * as fs from "fs";
 import * as util from "util";
@@ -26,6 +24,11 @@ import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai } from "aiclient";
 import { downloadArxivPapers } from "./pdfDownLoader.js";
+import {
+    createChatMemoryContext,
+    createKnowproCommands,
+} from "./srag/pdfKnowproMem.js";
+import { AppPrinter } from "./printer.js";
 
 type QueryOptions = {
     maxHits: number;
@@ -72,12 +75,12 @@ function writeHeading(
     writeColor(io, chalk.green, message);
 }
 
-export async function interactiveDocQueryLoop(
+export async function interactiveAppLoop(
     chunkyIndex: ChunkyIndex,
     verbose = false,
 ): Promise<void> {
     const handlers: Record<string, iapp.CommandHandler> = {
-        import: importHandler, // Since you can't name a function "import".
+        import: importHandler,
         download,
         clearMemory,
         chunk,
@@ -90,9 +93,27 @@ export async function interactiveDocQueryLoop(
         purgeFile,
     };
 
-    iapp.addStandardHandlers(handlers);
     const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
     const pdfDownloader = createPDFDownloadTranslator(model);
+
+    let context = await createChatMemoryContext(captureTokenStats);
+    let showTokenStats = false;
+    let printer = context.printer;
+
+    await createKnowproCommands(context, handlers);
+    iapp.addStandardHandlers(handlers);
+
+    function captureTokenStats(req: any, response: any): void {
+        if (context.stats) {
+            context.stats.updateCurrentTokenStats(response.usage);
+        }
+        if (showTokenStats) {
+            printer.writeCompletionStats(response.usage);
+            printer.writeLine();
+        } else {
+            printer.write(".");
+        }
+    }
 
     function createPDFDownloadTranslator(
         model: TypeChatLanguageModel,
@@ -111,7 +132,7 @@ export async function interactiveDocQueryLoop(
         return translator;
     }
 
-    // Handle @download command.// Handle @download command.
+    // Handle @download command.
     function downloadDef(): iapp.CommandMetadata {
         return {
             description: "Download a PDF file with the query string.",
@@ -625,7 +646,15 @@ export async function interactiveDocQueryLoop(
         });
     }
 
+    function onStart(io: iapp.InteractiveIo): void {
+        if (io !== context.printer.io) {
+            printer = new AppPrinter(io);
+            context.printer = printer;
+        }
+    }
+
     await iapp.runConsole({
+        onStart,
         inputHandler: _inputHandler,
         handlers,
         prompt: "\n🤖> ",

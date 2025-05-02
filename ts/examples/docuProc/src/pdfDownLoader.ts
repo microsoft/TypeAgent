@@ -1,16 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { load } from "cheerio";
 import { PdfDownloadQuery } from "./pdfDownloadSchema.js";
 import { XMLParser } from "fast-xml-parser";
 import { fetchWithRetry } from "aiclient";
 import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+import * as fs from "fs";
+import * as fsp from "fs/promises";
+import {
+    PAPER_DOWNLOAD_DIR,
+    PAPER_CATALOG_PATH,
+    withFileLock,
+} from "./common.js";
 interface ArxivPaperAuthor {
     name: string;
     affiliation?: string;
@@ -28,12 +30,17 @@ interface ArxivPaper {
     published: string;
     journal_ref?: string;
 }
+export interface CatalogEntry {
+    id: string; // arXiv ID
+    filePath: string;
+    metaPath: string;
+    downloadedAt: string;
+    tags: string[];
+}
+export interface CatalogEntryWithMeta extends CatalogEntry {
+    meta: ArxivPaper;
+}
 
-const PAPER_CATALOG_PATH = path.join(
-    __dirname,
-    "papers/downloads",
-    "downloaded_papers.json",
-);
 function loadDownloadedPapers(): Set<string> {
     try {
         if (fs.existsSync(PAPER_CATALOG_PATH)) {
@@ -58,7 +65,83 @@ function saveDownloadedPapersCatalog(downloadedPapers: Set<string>) {
     }
 }
 
-export async function downloadArxivPapers(
+/**
+ * Extract the canonical arXiv identifier from any arXiv link or string.
+ *
+ * ✔ https://arxiv.org/abs/1706.03762v5     → "1706.03762v5"
+ * ✔ https://arxiv.org/pdf/1706.03762.pdf   → "1706.03762"
+ * ✔ http://export.arxiv.org/abs/cs/0101010 → "cs/0101010"
+ * ✔ 1706.03762v4                           → "1706.03762v4"
+ * ✔ pdf/1706.03762.pdf                     → "1706.03762"
+ */
+export function arxivIdFromLink(linkOrId: string): string {
+    // Helper: strip leading prefixes & trailing .pdf
+    const clean = (s: string) =>
+        s
+            .replace(/^arXiv:/i, "") // remove "arXiv:" if present
+            .replace(/\.pdf$/i, "") // drop file extension
+            .replace(/^abs\//, "") // "abs/1706.03762" → "1706.03762"
+            .replace(/^pdf\//, ""); // "pdf/1706.03762" → "1706.03762"
+
+    try {
+        // If it parses as a URL, look for /abs/... or /pdf/...
+        const { pathname } = new URL(linkOrId);
+        const [, type, ...rest] = pathname.split("/"); // ["", "abs", "1706.03762v5"]
+        if (type === "abs" || type === "pdf") {
+            return clean(rest.join("/"));
+        }
+    } catch {
+        /* Not a valid URL → fall through */
+    }
+
+    // Handle plain strings like "abs/1706.03762v5" or just the bare ID.
+    return clean(linkOrId.trim());
+}
+
+export async function downloadArxivPaperOrig(
+    paper: ArxivPaper,
+): Promise<string | undefined> {
+    const { downloadUrl, paperId } = getPdfUrlFromId(paper.id);
+
+    const filePath = path.join(
+        PAPER_DOWNLOAD_DIR,
+        `${getValidFilename(paperId)}.pdf`,
+    );
+    const tmpPath = `${filePath}.tmp`;
+
+    try {
+        return await withFileLock(filePath, async () => {
+            if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+                return filePath;
+            }
+
+            const options: RequestInit = {
+                method: "GET",
+                headers: { Accept: "application/pdf" },
+            };
+            const response = await fetchWithRetry(downloadUrl, options);
+            if (!response.success) {
+                throw new Error(
+                    `Failed to download paper: ${response.message}`,
+                );
+            }
+
+            const buffer = Buffer.from(
+                await (await response.data.blob()).arrayBuffer(),
+            );
+            await fsp.writeFile(tmpPath, buffer);
+            await fsp.rename(tmpPath, filePath);
+
+            console.log(`Downloaded paper: ${filePath}`);
+            return filePath;
+        });
+    } catch (err) {
+        console.error("Error downloading paper:", err);
+        return undefined;
+    }
+}
+
+export async function downloadArxivPapersOrig(
     query: PdfDownloadQuery,
 ): Promise<any[] | undefined> {
     const apiUrl = "https://export.arxiv.org/api/query";
@@ -123,7 +206,7 @@ export async function downloadArxivPapers(
 
                 await Promise.all(
                     newPapers.map(
-                        async (paper) => await downloadArxivPaper(paper),
+                        async (paper) => await downloadArxivPaperOrig(paper),
                     ),
                 );
                 saveDownloadedPapersCatalog(downloadedPapers);
@@ -136,6 +219,126 @@ export async function downloadArxivPapers(
     }
 
     return undefined;
+}
+
+export async function downloadArxivPaper(
+    paper: ArxivPaper,
+): Promise<CatalogEntry | undefined> {
+    const { downloadUrl, paperId } = getPdfUrlFromId(paper.id);
+
+    const filePath = path.join(
+        PAPER_DOWNLOAD_DIR,
+        `${getValidFilename(paperId)}.pdf`,
+    );
+    const metaPath = path.join(
+        PAPER_DOWNLOAD_DIR,
+        `${getValidFilename(paperId)}.json`,
+    );
+    const tmpPath = `${filePath}.tmp`;
+
+    try {
+        return await withFileLock(filePath, async () => {
+            if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+                return buildEntry();
+            }
+
+            const resp = await fetchWithRetry(downloadUrl, {
+                method: "GET",
+                headers: { Accept: "application/pdf" },
+            });
+            if (!resp.success) {
+                throw new Error(`Failed to download: ${resp.message}`);
+            }
+            const buf = Buffer.from(
+                await (await resp.data.blob()).arrayBuffer(),
+            );
+
+            await fsp.writeFile(tmpPath, buf);
+            await fsp.rename(tmpPath, filePath);
+
+            await fsp.writeFile(metaPath, JSON.stringify(paper, null, 2));
+            return buildEntry();
+        });
+    } catch (err) {
+        console.error("Error downloading paper:", err);
+        return undefined;
+    }
+
+    // helper to assemble the catalog object
+    function buildEntry(): CatalogEntry {
+        return {
+            id: arxivIdFromLink(paper.id),
+            filePath,
+            metaPath,
+            downloadedAt: new Date().toISOString(),
+            tags: deriveTags(paper), // basic tag extractor (below)
+        };
+    }
+}
+
+function deriveTags(p: ArxivPaper): string[] {
+    const tags = new Set<string>();
+    if (p.primary_category) tags.add(p.primary_category);
+    if (p.category) tags.add(p.category);
+    return [...tags];
+}
+
+export async function downloadArxivPapers(
+    query: PdfDownloadQuery,
+): Promise<ArxivPaper[]> {
+    const apiUrl = "https://export.arxiv.org/api/query";
+
+    const field = query.searchField ?? "title"; // sensible default
+    const prefix =
+        field === "author" ? "au:" : field === "all" ? "all:" : "ti:";
+
+    const qs = new URLSearchParams({
+        search_query: `${prefix}${query.searchTerm}`,
+        start: String(query.start ?? 0),
+        max_results: String(query.maxResults ?? 3),
+        sortBy: query.sortBy ?? "relevance",
+        sortOrder: query.sortOrder ?? "descending",
+    });
+
+    // ----- call arXiv --------------------------------------------------------
+    const response = await fetchWithRetry(`${apiUrl}?${qs}`, {
+        method: "GET",
+        headers: { Accept: "application/xml" },
+    });
+    if (!response.success) {
+        throw new Error(`HTTP error! Status: ${response.message}`);
+    }
+
+    // ----- parse XML ---------------------------------------------------------
+    const xml = await response.data.text();
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+    const entries = parsed.feed?.entry ?? [];
+    const papers: ArxivPaper[] = Array.isArray(entries) ? entries : [entries];
+    if (papers.length === 0) return papers; // nothing found
+
+    // ----- determine which papers are new ----------------------
+    const catalog = await loadCatalog();
+    const newPapers = papers.filter((p) => !catalog[arxivIdFromLink(p.id)]);
+
+    if (newPapers.length === 0) {
+        console.log("No new papers to download.");
+        return papers;
+    }
+    console.log(`Found ${newPapers.length} new papers to download.`);
+
+    // ----- download PDFs + metadata --------------------------------
+    const newEntries = await Promise.all(
+        newPapers.map((p) => downloadArxivPaper(p)),
+    );
+
+    // ----- merge new entries back into the catalog atomically ----------------
+    await updateCatalog((cat) => {
+        for (const entry of newEntries) {
+            if (entry) cat[entry.id] = entry;
+        }
+    });
+
+    return papers;
 }
 
 export function printArxivPaperParsedData(papers: ArxivPaper[]) {
@@ -179,12 +382,20 @@ export async function createFolderIfNotExists(
     }
 }
 
+export async function writeJsonPretty(
+    file: string,
+    data: unknown,
+): Promise<void> {
+    await fs.promises.writeFile(file, JSON.stringify(data, null, 2), "utf8");
+}
+
 export function getValidFilename(paperId: string): string {
     return paperId.replace(/\//g, "__");
 }
 
 export function getPaperIdFromFilename(filename: string): string {
-    return filename.replace(/__/g, "/");
+    const base = path.basename(filename, ".pdf");
+    return base.replace(/__/g, "/");
 }
 
 function getPdfUrlFromId(id: string): { paperId: string; downloadUrl: string } {
@@ -192,39 +403,98 @@ function getPdfUrlFromId(id: string): { paperId: string; downloadUrl: string } {
     return { paperId: `${pid}`, downloadUrl: `https://arxiv.org/pdf/${pid}` };
 }
 
-export async function downloadArxivPaper(
-    paper: ArxivPaper,
-): Promise<string | undefined> {
-    const arxivInfo = getPdfUrlFromId(paper.id);
+export async function loadCatalog(): Promise<Record<string, CatalogEntry>> {
+    return withFileLock(PAPER_CATALOG_PATH, async () => {
+        const raw = await fsp.readFile(PAPER_CATALOG_PATH, "utf8");
+        return raw.trim() ? JSON.parse(raw) : {};
+    });
+}
 
-    const outputDir = path.join(__dirname, "papers/downloads");
-    const filePath = path.join(
-        outputDir,
-        `${getValidFilename(arxivInfo.paperId)}.pdf`,
-    );
+export async function updateCatalog(
+    updateEntry: (cat: Record<string, CatalogEntry>) => void,
+): Promise<void> {
+    return withFileLock(PAPER_CATALOG_PATH, async () => {
+        const raw = await fsp.readFile(PAPER_CATALOG_PATH, "utf8");
+        const catalog: Record<string, CatalogEntry> = raw.trim()
+            ? JSON.parse(raw)
+            : {};
+        updateEntry(catalog);
+        await writeJsonPretty(PAPER_CATALOG_PATH, catalog);
+    });
+}
 
+export async function fetchArxivCategories(): Promise<
+    Record<string, string> | undefined
+> {
+    const url = "https://arxiv.org/category_taxonomy";
     try {
-        createFolderIfNotExists(outputDir);
-        const options: RequestInit = {
-            method: "GET",
-            headers: {
-                Accept: "application/pdf",
-            },
-        };
+        const response = await fetch(url);
 
-        const response = await fetchWithRetry(arxivInfo.downloadUrl, options);
-        if (!response.success) {
-            throw new Error(`Failed to download paper: ${response.message}`);
+        if (!response.ok) {
+            console.error(
+                `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
+            );
+            return undefined;
         }
 
-        const pdfBlob = await response.data.blob();
-        const buffer = Buffer.from(await pdfBlob.arrayBuffer());
-        fs.writeFileSync(filePath, buffer, { flag: "w" });
+        const html = await response.text();
+        const $ = load(html);
 
-        console.log(`Downloaded paper: ${filePath}`);
-        return filePath;
-    } catch (error) {
-        console.error("Error downloading paper:", error);
+        const categoryMap: Record<string, string> = {};
+
+        $("#category_taxonomy_list h4").each((_, elem) => {
+            const codeWithName = $(elem).text().trim(); // Example: "cs.CL (Computation and Language)"
+            const code = codeWithName.split(" ")[0].trim(); // "cs.CL"
+            const name = $(elem)
+                .find("span")
+                .text()
+                .replace(/[()]/g, "")
+                .trim(); // "Computation and Language"
+
+            if (code && name) {
+                categoryMap[code] = name;
+            }
+        });
+
+        return categoryMap;
+    } catch (error: any) {
+        console.error(
+            `Error fetching or parsing arXiv categories: ${error.message}`,
+        );
         return undefined;
     }
+}
+
+export async function loadCatalogWithMeta(): Promise<
+    Record<string, CatalogEntryWithMeta>
+> {
+    const catalog = await loadCatalog(); // Use your existing one!
+
+    const loadMetaPromises = Object.values(catalog).map(async (entry) => {
+        try {
+            const metaRaw = await fsp.readFile(entry.metaPath, "utf-8");
+            const metaJson = JSON.parse(metaRaw) as ArxivPaper;
+
+            return {
+                ...entry,
+                meta: metaJson,
+            };
+        } catch (error: any) {
+            console.error(
+                `Failed to load meta for id ${entry.id}:`,
+                error.message,
+            );
+            return undefined;
+        }
+    });
+
+    const entriesWithMeta = await Promise.all(loadMetaPromises);
+
+    const map: Record<string, CatalogEntryWithMeta> = {};
+    for (const result of entriesWithMeta) {
+        if (result) {
+            map[result.id] = result;
+        }
+    }
+    return map;
 }

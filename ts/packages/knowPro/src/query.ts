@@ -63,16 +63,21 @@ export function getTextRangeForDateRange(
     dateRange: DateRange,
 ): TextRange | undefined {
     const messages = conversation.messages;
+    const messageCount = messages.length;
     let rangeStartOrdinal: MessageOrdinal = -1;
     let rangeEndOrdinal = rangeStartOrdinal;
-    for (let messageIndex = 0; messageIndex < messages.length; ++messageIndex) {
-        const message = messages.get(messageIndex);
+    for (
+        let messageOrdinal = 0;
+        messageOrdinal < messageCount;
+        ++messageOrdinal
+    ) {
+        const message = messages.get(messageOrdinal);
         if (message.timestamp) {
             if (isInDateRange(dateRange, new Date(message.timestamp))) {
                 if (rangeStartOrdinal < 0) {
-                    rangeStartOrdinal = messageIndex;
+                    rangeStartOrdinal = messageOrdinal;
                 }
-                rangeEndOrdinal = messageIndex;
+                rangeEndOrdinal = messageOrdinal;
             } else {
                 if (rangeStartOrdinal >= 0) {
                     break;
@@ -1268,7 +1273,11 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
         }
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
-        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
+        if (
+            messageIndex &&
+            isMessageTextEmbeddingIndex(messageIndex) &&
+            messageIndex.size > 0
+        ) {
             const messageOrdinals = [...matches.getMatchedValues()];
             const rankedMessages = messageIndex.lookupInSubsetByEmbedding(
                 this.embedding,

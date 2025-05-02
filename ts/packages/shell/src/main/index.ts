@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
 import {
     ipcMain,
     app,
@@ -21,12 +20,11 @@ import {
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 import {
-    getSettingsPath,
+    getShellDataDir,
     loadShellSettings,
     ShellSettings,
     ShellUserSettings,
 } from "./shellSettings.js";
-import { unlinkSync } from "fs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createShellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
@@ -44,6 +42,18 @@ import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { ShellWindow } from "./shellWindow.js";
 
 import { debugShell, debugShellError } from "./debug.js";
+import { loadKeys } from "./keys.js";
+import { parseShellCommandLine } from "./args.js";
+import {
+    hasPendingUpdate,
+    setUpdateConfigPath,
+    startBackgroundUpdateCheck,
+} from "./commands/update.js";
+
+if (!app.requestSingleInstanceLock()) {
+    debugShellError("Another instance is running");
+    app.quit();
+}
 
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
@@ -51,36 +61,33 @@ if (process.platform === "darwin") {
         process.env.PATH = `/opt/homebrew/bin:${process.env.PATH}`;
     }
 }
+// Make sure we have chalk colors
+process.env.FORCE_COLOR = "true";
+
+debugShell("App name", app.getName());
+debugShell("App version", app.getVersion());
 
 const appPath = app.getAppPath();
 debugShell("App path", appPath);
 const isAsar = path.basename(appPath) === "app.asar"; // running with packaged, behaves like prod
 debugShell("Is ASAR", isAsar);
 const instanceDir = getInstanceDir(isAsar);
-function getDotEnvPath() {
-    const dotEnvPath = isAsar
-        ? path.join(app.getPath("userData"), ".env")
-        : path.join(appPath, "../../.env"); // running with electron-vite in repo
+debugShell("Instance Dir", instanceDir);
 
-    return fs.existsSync(dotEnvPath) ? dotEnvPath : undefined;
+const parsedArgs = parseShellCommandLine();
+if (parsedArgs.reset) {
+    // Delete shell setting files.
+    await fs.promises.rm(getShellDataDir(instanceDir), { recursive: true });
 }
 
-const envPath = getDotEnvPath();
-if (envPath) {
-    debugShell("Loading environment variables from", envPath);
-    dotenv.config({ path: envPath });
-}
-
-// Make sure we have chalk colors
-process.env.FORCE_COLOR = "true";
-
-// do we need to reset shell settings?
-process.argv.forEach((arg) => {
-    const settingsPath = getSettingsPath(instanceDir);
-    if (arg.toLowerCase() == "--setup" && existsSync(settingsPath)) {
-        unlinkSync(settingsPath);
+if (parsedArgs.update) {
+    if (!fs.existsSync(parsedArgs.update)) {
+        throw new Error(
+            `Update config file does not exist: ${parsedArgs.update}`,
+        );
     }
-});
+    setUpdateConfigPath(parsedArgs.update);
+}
 
 export function runningTests(): boolean {
     return (
@@ -287,10 +294,10 @@ async function initializeInstance(
     function updateTitle(dispatcher: Dispatcher) {
         const newSettingSummary = dispatcher.getSettingSummary();
         const zoomFactor = chatView.webContents.zoomFactor;
-        const newTitle =
-            zoomFactor === 1
-                ? newSettingSummary
-                : `${newSettingSummary} Zoom: ${Math.round(zoomFactor * 100)}%`;
+        const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
+        const zoomFactorTitle =
+            zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
+        const newTitle = `${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
         if (newTitle !== title) {
             title = newTitle;
             chatView.webContents.send(
@@ -360,6 +367,12 @@ async function initializeInstance(
 // Some APIs can only be used after this event occurs.
 async function initialize() {
     debugShell("Ready", performance.now() - time);
+
+    await loadKeys(
+        instanceDir,
+        parsedArgs.env ? path.resolve(appPath, parsedArgs.env) : undefined,
+    );
+
     // Set app user model id for windows
     electronApp.setAppUserModelId("com.electron");
 
@@ -377,14 +390,14 @@ async function initialize() {
 
     const shellSettings = loadShellSettings(instanceDir);
     const settings = shellSettings.user;
+    const dataDir = getShellDataDir(instanceDir);
+    const chatHistory: string = path.join(dataDir, "chat_history.html");
     ipcMain.handle("get-chat-history", async () => {
-        // Load chat history if enabled
-        const chatHistory: string = path.join(instanceDir, "chat_history.html");
-        if (settings.chatHistory && existsSync(chatHistory)) {
-            return readFileSync(
-                path.join(instanceDir, "chat_history.html"),
-                "utf-8",
-            );
+        if (settings.chatHistory) {
+            // Load chat history if enabled
+            if (existsSync(chatHistory)) {
+                return readFileSync(chatHistory, "utf-8");
+            }
         }
         return undefined;
     });
@@ -393,15 +406,17 @@ async function initialize() {
     // this let's us rehydrate the chat when reopening the shell
     ipcMain.on("save-chat-history", async (_, html) => {
         // store the modified DOM contents
-        const file: string = path.join(instanceDir, "chat_history.html");
 
-        debugShell(`Saving chat history to '${file}'.`, performance.now());
+        debugShell(
+            `Saving chat history to '${chatHistory}'.`,
+            performance.now(),
+        );
 
         try {
-            writeFileSync(file, html);
+            writeFileSync(chatHistory, html);
         } catch (e) {
             debugShell(
-                `Unable to save history to '${file}'. Error: ${e}`,
+                `Unable to save history to '${chatHistory}'. Error: ${e}`,
                 performance.now(),
             );
         }
@@ -457,7 +472,15 @@ async function initialize() {
             debugShellError(`Error creating pipe at ${pipePath}`);
         }
     }
-    return initializeInstance(instanceDir, shellSettings);
+    await initializeInstance(instanceDir, shellSettings);
+
+    if (shellSettings.user.autoUpdate.intervalMs !== -1) {
+        startBackgroundUpdateCheck(
+            shellSettings.user.autoUpdate.intervalMs,
+            shellSettings.user.autoUpdate.restart,
+            shellSettings.user.autoUpdate.initialIntervalMs,
+        );
+    }
 }
 
 app.whenReady()
@@ -513,4 +536,10 @@ app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
         app.quit();
     }
+});
+
+app.on("second-instance", () => {
+    // Someone tried to run a second instance, we should focus our window.
+    debugShell("Second instance");
+    ShellWindow.getInstance()?.showAndFocus();
 });

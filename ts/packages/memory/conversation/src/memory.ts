@@ -53,3 +53,7 @@ export type IndexingState = {
     lastMessageOrdinal: kp.MessageOrdinal;
     lastSemanticRefOrdinal: kp.SemanticRefOrdinal;
 };
+
+export class Memory {
+    constructor() {}
+}

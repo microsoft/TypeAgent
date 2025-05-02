@@ -7,7 +7,7 @@ import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";
 import { error, Result, success } from "typechat";
-import { createMemorySettings, MemorySettings } from "./memory.js";
+import { createMemorySettings, Memory, MemorySettings } from "./memory.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
 export class ConversationMessageMeta
@@ -144,6 +144,7 @@ export class ConversationMessage implements kp.IMessage {
 export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
+    extends Memory
     implements kp.IConversation<ConversationMessage>
 {
     public messages: kp.MessageCollection<ConversationMessage>;
@@ -160,6 +161,7 @@ export class ConversationMemory
         public tags: string[] = [],
         settings?: ConversationMemorySettings,
     ) {
+        super();
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = new kp.SemanticRefCollection();
         if (!settings) {
@@ -248,13 +250,13 @@ export class ConversationMemory
 
     public async createSearchQuery(
         searchText: string,
-        exactScope: boolean = true,
+        options?: kp.LanguageSearchOptions,
     ): Promise<Result<kp.SearchQueryExpr[]>> {
         const queryResult = await kp.searchQueryExprFromLanguage(
             this,
             this.getQueryTranslator(),
             searchText,
-            exactScope,
+            options,
         );
         return queryResult;
     }

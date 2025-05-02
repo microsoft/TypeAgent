@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import fs from "fs";
+import path from "path";
 
 export function removeFile(filePath: string): boolean {
     try {
@@ -10,11 +11,24 @@ export function removeFile(filePath: string): boolean {
     return false;
 }
 
-export function ensureDir(folderPath: string): string {
-    if (!fs.existsSync(folderPath)) {
-        fs.promises.mkdir(folderPath, { recursive: true });
+export function ensureDir(dirPath: string): string {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
     }
-    return folderPath;
+    return dirPath;
+}
+
+export function getFileNamesInDir(dirPath: string): string[] {
+    const fileNames = fs.readdirSync(dirPath);
+    return fileNames.filter((name) =>
+        fs.statSync(path.join(dirPath, name)).isFile(),
+    );
+}
+
+export function getFilePathsInDir(dirPath: string): string[] {
+    const fileNames = fs.readdirSync(dirPath);
+    const filePaths = fileNames.map((name) => path.join(dirPath, name));
+    return filePaths.filter((fPath) => fs.statSync(fPath).isFile());
 }
 
 /**
