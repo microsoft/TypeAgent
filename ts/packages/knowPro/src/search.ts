@@ -53,8 +53,6 @@ export type SearchQueryExpr = {
 export interface SearchOptions {
     maxKnowledgeMatches?: number | undefined;
     exactMatch?: boolean | undefined;
-    usePropertyIndex?: boolean | undefined;
-    useTimestampIndex?: boolean | undefined;
     maxMessageMatches?: number | undefined;
     /**
      * The maximum # of total message characters to select
@@ -66,16 +64,13 @@ export interface SearchOptions {
 
 export function createSearchOptions(): SearchOptions {
     return {
-        usePropertyIndex: true,
-        useTimestampIndex: true,
+        exactMatch: false,
     };
 }
 
 export function createSearchOptionsTypical(): SearchOptions {
     return {
-        usePropertyIndex: true,
-        useTimestampIndex: true,
-        exactMatch: false,
+        ...createSearchOptions(),
         maxKnowledgeMatches: 50,
         maxMessageMatches: 25,
         maxMessageCharsInBudget: 1024 * 8,
@@ -232,12 +227,8 @@ function runQuery<T = any>(
     return query.eval(
         new q.QueryEvalContext(
             conversation,
-            options?.usePropertyIndex
-                ? secondaryIndexes.propertyToSemanticRefIndex
-                : undefined,
-            options?.useTimestampIndex
-                ? secondaryIndexes.timestampIndex
-                : undefined,
+            secondaryIndexes.propertyToSemanticRefIndex,
+            secondaryIndexes.timestampIndex,
         ),
     );
 }

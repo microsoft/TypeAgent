@@ -399,14 +399,6 @@ export async function createKnowproCommands(
                 endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
-                usePropertyIndex: argBool(
-                    "Use property index while searching",
-                    true,
-                ),
-                useTimestampIndex: argBool(
-                    "Use timestamp index while searching",
-                    true,
-                ),
                 distinct: argBool("Show distinct results", false),
             },
         };
@@ -454,8 +446,6 @@ export async function createKnowproCommands(
                 selectExpr.when,
                 {
                     exactMatch: namedArgs.exact,
-                    usePropertyIndex: namedArgs.usePropertyIndex,
-                    useTimestampIndex: namedArgs.useTimestampIndex,
                 },
             );
             timer.stop();
