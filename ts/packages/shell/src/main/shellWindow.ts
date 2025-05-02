@@ -11,7 +11,6 @@ import {
     WebContentsView,
 } from "electron";
 import path from "node:path";
-import { is } from "@electron-toolkit/utils";
 import { WebSocketMessageV2 } from "common-utils";
 import { runDemo } from "./demo.js";
 import {
@@ -21,6 +20,7 @@ import {
     ShellSettingManager,
 } from "./shellSettings.js";
 import { debugShellError } from "./debug.js";
+import { isProd } from "./index.js";
 
 const userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
@@ -90,7 +90,7 @@ export class ShellWindow {
         const contentLoadP: Promise<void>[] = [];
         // HMR for renderer base on electron-vite cli.
         // Load the remote URL for development or the local html file for production.
-        if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+        if (!isProd && process.env["ELECTRON_RENDERER_URL"]) {
             contentLoadP.push(
                 chatView.webContents.loadURL(
                     process.env["ELECTRON_RENDERER_URL"],
@@ -170,7 +170,6 @@ export class ShellWindow {
 
     private setupWebContents(webContents: WebContents) {
         this.setupZoomHandlers(webContents);
-        setupDevToolsHandlers(webContents);
         webContents.setUserAgent(userAgent);
     }
 
@@ -606,25 +605,4 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
             return false;
         },
     );
-}
-
-function setupDevToolsHandlers(webContents: WebContents) {
-    webContents.on("before-input-event", (_event, input) => {
-        if (input.type === "keyDown") {
-            if (!is.dev) {
-                // Ignore CommandOrControl + R
-                if (input.code === "KeyR" && (input.control || input.meta))
-                    _event.preventDefault();
-            } else {
-                // Toggle devtool(F12)
-                if (input.code === "F12") {
-                    if (webContents.isDevToolsOpened()) {
-                        webContents.closeDevTools();
-                    } else {
-                        webContents.openDevTools({ mode: "undocked" });
-                    }
-                }
-            }
-        }
-    });
 }
