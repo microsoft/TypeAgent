@@ -30,6 +30,7 @@ export default {
     npmRebuild: false,
     win: {
         executableName: name,
+        icon: "build/win/icon.png",
     },
     nsis: {
         artifactName: "${name}-${version}-setup.${ext}",
