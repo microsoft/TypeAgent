@@ -11,7 +11,6 @@ const url =
         ? `https://${account}.blob.core.windows.net/${container}/`
         : "";
 export default {
-    productName: "TypeAgent Shell",
     extraMetadata: {
         name,
         author: {
