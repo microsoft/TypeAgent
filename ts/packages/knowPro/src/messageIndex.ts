@@ -30,6 +30,7 @@ export interface IMessageTextIndexData {
 }
 
 export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
+    readonly size: number;
     generateEmbedding(text: string): Promise<NormalizedEmbedding>;
     lookupInSubsetByEmbedding(
         textEmbedding: NormalizedEmbedding,

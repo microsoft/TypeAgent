@@ -1273,7 +1273,11 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
         }
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
-        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
+        if (
+            messageIndex &&
+            isMessageTextEmbeddingIndex(messageIndex) &&
+            messageIndex.size > 0
+        ) {
             const messageOrdinals = [...matches.getMatchedValues()];
             const rankedMessages = messageIndex.lookupInSubsetByEmbedding(
                 this.embedding,

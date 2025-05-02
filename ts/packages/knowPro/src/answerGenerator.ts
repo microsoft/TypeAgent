@@ -89,7 +89,14 @@ export type AnswerGeneratorSettings = {
      * Maximum number of characters allowed in the context for any given call
      */
     maxCharsInBudget: number;
+    /**
+     * When chunking, produce answer in parallel
+     */
     concurrency: number;
+    /**
+     * Stop processing if answer found using just knowledge
+     */
+    fastStop: boolean;
 };
 
 /**
@@ -130,8 +137,6 @@ export async function generateAnswer(
         generator,
         question,
         chunks,
-        generator.settings.concurrency,
-        true,
         progress,
     );
     if (!chunkResponses.success) {
@@ -149,8 +154,6 @@ export async function generateAnswerInChunks(
     answerGenerator: IAnswerGenerator,
     question: string,
     chunks: contextSchema.AnswerContext[],
-    concurrency: number = 2,
-    fastStop: boolean = true,
     progress?: asyncArray.ProcessProgress<
         contextSchema.AnswerContext,
         Result<answerSchema.AnswerResponse>
@@ -171,7 +174,6 @@ export async function generateAnswerInChunks(
         answerGenerator,
         question,
         structuredChunks,
-        concurrency,
         progress,
     );
     if (!structuredAnswers.success) {
@@ -179,7 +181,7 @@ export async function generateAnswerInChunks(
     }
     chunkAnswers.push(...structuredAnswers.data);
 
-    if (!hasAnswer(chunkAnswers) || !fastStop) {
+    if (!hasAnswer(chunkAnswers) || !answerGenerator.settings.fastStop) {
         // Generate partial answers from each message chunk
         const messageChunks = chunks.filter(
             (c) => c.messages !== undefined && c.messages.length > 0,
@@ -188,7 +190,6 @@ export async function generateAnswerInChunks(
             answerGenerator,
             question,
             messageChunks,
-            concurrency,
         );
         if (!messageAnswers.success) {
             return messageAnswers;
@@ -312,6 +313,7 @@ export function createAnswerGeneratorSettings(
         answerCombinerModel: openai.createChatModel(),
         maxCharsInBudget: 4096 * 4, // 4096 tokens * 4 chars per token,
         concurrency: 2,
+        fastStop: true,
     };
 }
 
@@ -439,7 +441,6 @@ async function runGenerateAnswers(
     answerGenerator: IAnswerGenerator,
     question: string,
     chunks: contextSchema.AnswerContext[],
-    concurrency: number,
     progress?: asyncArray.ProcessProgress<
         contextSchema.AnswerContext,
         Result<answerSchema.AnswerResponse>
@@ -450,7 +451,7 @@ async function runGenerateAnswers(
     }
     const results = await asyncArray.mapAsync(
         chunks,
-        concurrency,
+        answerGenerator.settings.concurrency,
         (chunk) => answerGenerator.generateAnswer(question, chunk),
         (context, index, response) => {
             if (progress) {
@@ -503,6 +504,7 @@ function createQuestionPrompt(question: string): string {
         "Use the name and type of the provided entities to select those highly relevant to answering the question.",
         "List ALL entities if query intent implies that.",
         "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
+        "Include direct quotes where suitable but otherwise answer in your own words.",
     ];
     return prompt.join("\n");
 }

@@ -399,14 +399,6 @@ export async function createKnowproCommands(
                 endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
-                usePropertyIndex: argBool(
-                    "Use property index while searching",
-                    true,
-                ),
-                useTimestampIndex: argBool(
-                    "Use timestamp index while searching",
-                    true,
-                ),
                 distinct: argBool("Show distinct results", false),
             },
         };
@@ -454,8 +446,6 @@ export async function createKnowproCommands(
                 selectExpr.when,
                 {
                     exactMatch: namedArgs.exact,
-                    usePropertyIndex: namedArgs.usePropertyIndex,
-                    useTimestampIndex: namedArgs.useTimestampIndex,
                 },
             );
             timer.stop();
@@ -549,6 +539,7 @@ export async function createKnowproCommands(
         def.options.applyScope = argBool("Apply scopes", true);
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
+        def.options.distinct = argBool("Show distinct results", true);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -614,6 +605,10 @@ export async function createKnowproCommands(
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
+        def.options!.fastStop = argBool(
+            "Ignore messages if knowledge produces answers",
+            true,
+        );
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -658,6 +653,7 @@ export async function createKnowproCommands(
                 // Don't include raw message text... try answering only with knowledge
                 searchResult.messageMatches = [];
             }
+            context.answerGenerator.settings.fastStop = namedArgs.fastStop;
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
