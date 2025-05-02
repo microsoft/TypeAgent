@@ -90,6 +90,18 @@ export function loadEmailMessageFromFile(
     return emailData ? importEmailMessage(emailData) : undefined;
 }
 
+export function loadEmailMessagesFromDir(dirPath: string): EmailMessage[] {
+    const filePaths = ms.getFilePathsInDir(dirPath);
+    let emails: EmailMessage[] = [];
+    for (const filePath of filePaths) {
+        const email = loadEmailMessageFromFile(filePath);
+        if (email) {
+            emails.push(email);
+        }
+    }
+    return emails;
+}
+
 export class EmailMessageSerializer implements kp.JsonSerializer<EmailMessage> {
     public serialize(value: EmailMessage): string {
         return JSON.stringify(value);

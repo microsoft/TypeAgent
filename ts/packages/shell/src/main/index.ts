@@ -50,20 +50,22 @@ import {
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
 
+if (!app.requestSingleInstanceLock()) {
+    debugShellError("Another instance is running");
+    app.quit();
+}
+
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
         // Set the PATH to include homebrew so it have access to Azure CLI
         process.env.PATH = `/opt/homebrew/bin:${process.env.PATH}`;
     }
 }
-
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
-if (!app.requestSingleInstanceLock()) {
-    debugShellError("Another instance is running");
-    app.quit();
-}
+debugShell("App name", app.getName());
+debugShell("App version", app.getVersion());
 
 const appPath = app.getAppPath();
 debugShell("App path", appPath);
