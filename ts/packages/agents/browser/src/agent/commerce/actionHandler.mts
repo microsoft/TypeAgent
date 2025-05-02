@@ -16,6 +16,8 @@ import {
 import { ShoppingActions } from "./schema/userActions.mjs";
 import { ShoppingPlanActions } from "./schema/planActions.mjs";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createExecutionTracker } from "../planVisualizationClient.mjs";
+import { PageState } from "./schema/pageStates.mjs";
 
 export async function handleCommerceAction(
     action: ShoppingActions,
@@ -205,6 +207,13 @@ export async function handleCommerceAction(
         let executionHistory: any[] = [];
         let lastAction: any;
 
+        const { trackState, reset } = createExecutionTracker(
+            "http://localhost:3000",
+            action.parameters.userRequest,
+        );
+
+        await reset(true);
+
         context.actionIO.appendDisplay({
             type: "text",
             speak: true,
@@ -231,7 +240,7 @@ export async function handleCommerceAction(
             );
             let currentState = undefined;
             if (currentStateRequest.success) {
-                currentState = currentStateRequest.data;
+                currentState = currentStateRequest.data as PageState;
             }
 
             const executionHistoryText =
@@ -257,6 +266,7 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
             if (!response.success) {
                 console.error(`Attempt to get next action failed`);
                 console.error(response.message);
+                await trackState("Failed", "", "end");
                 break;
             }
 
@@ -268,6 +278,8 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
                     speak: true,
                     content: "Completed ",
                 });
+
+                await trackState("Completed", "", "end");
                 break;
             }
 
@@ -287,6 +299,11 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
 
                 return result;
             }
+
+            await trackState(
+                currentState?.pageType ?? "",
+                nextAction.actionName,
+            );
 
             let actionSucceeded = await runUserAction(nextAction);
             console.log(`Succeeded?: ${actionSucceeded}`);
