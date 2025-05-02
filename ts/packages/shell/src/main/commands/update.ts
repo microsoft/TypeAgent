@@ -220,10 +220,10 @@ async function checkUpdate(
     const result = await autoUpdater.checkForUpdates();
 
     if (install) {
-        state.lastChecked = new Date();
-        if (result !== null && result.isUpdateAvailable) {
-            state.updateInfo = result.updateInfo;
-            if (url !== undefined || channel !== undefined) {
+        if (url !== undefined || channel !== undefined) {
+            state.lastChecked = new Date();
+            if (result !== null && result.isUpdateAvailable) {
+                state.updateInfo = result.updateInfo;
                 stopBackgroundUpdateCheck();
                 // If we have a custom update queued, don't check again.
                 state.custom = true;
