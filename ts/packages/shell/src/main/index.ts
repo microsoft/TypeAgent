@@ -44,6 +44,10 @@ import { ShellWindow } from "./shellWindow.js";
 import { debugShell, debugShellError } from "./debug.js";
 import { loadKeys } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
+import {
+    setUpdateConfigPath,
+    startBackgroundUpdateCheck,
+} from "./commands/update.js";
 
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
@@ -67,6 +71,15 @@ const parsedArgs = parseShellCommandLine();
 if (parsedArgs.reset) {
     // Delete shell setting files.
     await fs.promises.rm(getShellDataDir(instanceDir), { recursive: true });
+}
+
+if (parsedArgs.update) {
+    if (!fs.existsSync(parsedArgs.update)) {
+        throw new Error(
+            `Update config file does not exist: ${parsedArgs.update}`,
+        );
+    }
+    setUpdateConfigPath(parsedArgs.update);
 }
 
 export function runningTests(): boolean {
@@ -452,7 +465,15 @@ async function initialize() {
             debugShellError(`Error creating pipe at ${pipePath}`);
         }
     }
-    return initializeInstance(instanceDir, shellSettings);
+    await initializeInstance(instanceDir, shellSettings);
+
+    if (shellSettings.user.autoUpdate !== -1) {
+        startBackgroundUpdateCheck(
+            shellSettings.user.autoUpdate,
+            shellSettings.user.autoRestart,
+            60, // start up delay of 1 minute
+        );
+    }
 }
 
 app.whenReady()

@@ -20,6 +20,8 @@ export type ShellUserSettings = {
     notifyFilter: string;
     disallowedDisplayType: string; // semicolon separated list of display types that should not be used
     canvas: string | undefined; // the last item shown in the canvas
+    autoUpdate: number;
+    autoRestart: boolean;
 };
 
 export const defaultUserSettings: ShellUserSettings = {
@@ -39,4 +41,6 @@ export const defaultUserSettings: ShellUserSettings = {
     darkMode: false,
     chatHistory: true,
     canvas: undefined,
+    autoUpdate: 24 * 60 * 60, // 24 hours
+    autoRestart: false,
 };
