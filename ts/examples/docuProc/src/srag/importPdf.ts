@@ -26,6 +26,7 @@ import {
 } from "../pdfDownLoader.js";
 import { assert } from "node:console";
 import { AppPrinter } from "../printer.js";
+import { ensureDir } from "typeagent";
 
 const execPromise = promisify(exec);
 
@@ -254,10 +255,11 @@ export async function importPdf(
         const idxResult = await pdfKnowproIndex.buildIndex();
         if (idxResult) {
             log(io, `Index ${idxName} built successfully`, chalk.green);
-            pdfKnowproIndex.writeToFile(
-                path.join(outputDir, "srag-index", `${idxName}.json`),
-                "index",
-            );
+            const cachedir = path.join(outputDir, "kpindex");
+            ensureDir(cachedir);
+
+            pdfKnowproIndex.writeToFile(cachedir, idxName);
+
             log(io, `Index ${idxName} written to file`, chalk.green);
         } else {
             log(io, `Failed to build index ${idxName}`, chalk.red);
