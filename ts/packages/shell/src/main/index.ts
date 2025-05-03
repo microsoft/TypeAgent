@@ -69,7 +69,7 @@ export const isProd = parsedArgs.prod ?? app.isPackaged;
 // Set app user model id for windows
 if (process.platform === "win32") {
     app.setAppUserModelId(
-        isProd ? "com.electron.typeagent-shell" : process.execPath,
+        isProd ? "Microsoft.TypeAgentShell" : process.execPath,
     );
 }
 
