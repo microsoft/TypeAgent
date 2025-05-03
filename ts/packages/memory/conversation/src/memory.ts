@@ -4,6 +4,7 @@
 import { openai } from "aiclient";
 import * as kp from "knowpro";
 import * as kpLib from "knowledge-processor";
+import * as ms from "memory-storage";
 import { TypeChatLanguageModel } from "typechat";
 import { createEmbeddingModelWithCache } from "./common.js";
 
@@ -40,6 +41,7 @@ export function createMemorySettings(
     );
     conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
         kp.createKnowledgeExtractor(languageModel);
+
     const memorySettings: MemorySettings = {
         embeddingModel,
         embeddingSize,
@@ -53,6 +55,33 @@ export type IndexingState = {
     lastMessageOrdinal: kp.MessageOrdinal;
     lastSemanticRefOrdinal: kp.SemanticRefOrdinal;
 };
+
+export type TermSynonyms = {
+    term: string;
+    relatedTerms: string[];
+};
+
+export function addSynonymsAsAliases(
+    aliases: kp.TermToRelatedTermsMap,
+    synonyms: TermSynonyms[],
+): void {
+    for (const ts of synonyms) {
+        let relatedTerm: kp.Term = { text: ts.term.toLowerCase() };
+        for (const synonym of ts.relatedTerms) {
+            aliases.addRelatedTerm(synonym.toLowerCase(), relatedTerm);
+        }
+    }
+}
+
+export function addSynonymsFileAsAliases(
+    aliases: kp.TermToRelatedTermsMap,
+    filePath: string,
+) {
+    const synonyms = ms.readJsonFile<TermSynonyms[]>(filePath);
+    if (synonyms && synonyms.length > 0) {
+        addSynonymsAsAliases(aliases, synonyms);
+    }
+}
 
 export class Memory {
     constructor() {}

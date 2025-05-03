@@ -12,12 +12,12 @@ import { MessageTextIndexSettings } from "./messageIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
 import { SemanticRefIndexSettings } from "./conversationIndex.js";
 
-export type ConversationSettings = {
+export interface ConversationSettings {
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
     messageTextIndexSettings: MessageTextIndexSettings;
     semanticRefIndexSettings: SemanticRefIndexSettings;
-};
+}
 
 export function createConversationSettings(
     embeddingModel?: TextEmbeddingModel | undefined,

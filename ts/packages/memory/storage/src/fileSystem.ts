@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 
 export function removeFile(filePath: string): boolean {
     try {
@@ -29,6 +30,10 @@ export function getFilePathsInDir(dirPath: string): string[] {
     const fileNames = fs.readdirSync(dirPath);
     const filePaths = fileNames.map((name) => path.join(dirPath, name));
     return filePaths.filter((fPath) => fs.statSync(fPath).isFile());
+}
+
+export function getAbsolutePathFromUrl(baseUrl: string, relativePath: string) {
+    return fileURLToPath(new URL(relativePath, baseUrl));
 }
 
 /**

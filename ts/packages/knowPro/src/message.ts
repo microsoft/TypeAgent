@@ -67,12 +67,22 @@ export function getMessageCharCount(message: IMessage): number {
     return total;
 }
 
+export function getCharCountOfMessages(messages: Iterable<IMessage>) {
+    let total = 0;
+    for (const message of messages) {
+        total += getMessageCharCount(message);
+    }
+    return total;
+}
+
+/*
 export function getCountOfChunksInMessages(messages: IMessage[]): number {
     return messages.reduce<number>(
         (total, message) => total + message.textChunks.length,
         0,
     );
 }
+*/
 
 /**
  * Given a set of message ordinals, returns the count of messages whose cumulative
@@ -84,20 +94,19 @@ export function getCountOfChunksInMessages(messages: IMessage[]): number {
  */
 export function getCountOfMessagesInCharBudget(
     messages: IMessageCollection,
-    messageOrdinals: MessageOrdinal[],
+    messageOrdinals: Iterable<MessageOrdinal>,
     maxCharsInBudget: number,
 ): number {
     let i = 0;
     let totalCharCount = 0;
-    // TODO: use batches
-    for (; i < messageOrdinals.length; ++i) {
-        const messageOrdinal = messageOrdinals[i];
+    for (const messageOrdinal of messageOrdinals) {
         const message = messages.get(messageOrdinal);
         const messageCharCount = getMessageCharCount(message);
         if (messageCharCount + totalCharCount > maxCharsInBudget) {
             break;
         }
         totalCharCount += messageCharCount;
+        ++i;
     }
     return i;
 }
@@ -197,6 +206,15 @@ export function* getMessagesFromScoredOrdinals(
 ) {
     for (const scoredOrdinal of ordinals) {
         yield messages.get(scoredOrdinal.messageOrdinal);
+    }
+}
+
+export function* getMessageOrdinalsFromScored(
+    messages: IMessageCollection,
+    ordinals: Iterable<ScoredMessageOrdinal>,
+): IterableIterator<MessageOrdinal> {
+    for (const scoredOrdinal of ordinals) {
+        yield scoredOrdinal.messageOrdinal;
     }
 }
 

@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getMessageChunkBatch } from "../src/message.js";
+import { MessageOrdinal } from "../src/interfaces.js";
+import {
+    getCharCountOfMessages,
+    getCountOfMessagesInCharBudget,
+    getMessageChunkBatch,
+} from "../src/message.js";
 import { createTestMessages } from "./testMessage.js";
 
 describe("message", () => {
@@ -89,5 +94,21 @@ describe("message", () => {
             ];
             expect(batches).toHaveLength(expectedBatchCount);
         }
+    });
+    test("message.budget", () => {
+        const messages = createTestMessages(16);
+        let ordinals: MessageOrdinal[] = [];
+        for (let i = 0; i < messages.length; ++i) {
+            ordinals.push(i);
+        }
+        const expectedCount = 8;
+        const partialMessages = messages.getSlice(0, expectedCount);
+        let charBudget = getCharCountOfMessages(partialMessages);
+        let messageCount = getCountOfMessagesInCharBudget(
+            messages,
+            ordinals,
+            charBudget,
+        );
+        expect(messageCount).toEqual(expectedCount);
     });
 });
