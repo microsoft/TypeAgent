@@ -75,7 +75,7 @@ call az storage blob download --account-name %STORAGE% --container-name %CONTAIN
 IF ERRORLEVEL 1 (
     call :Error Failed to download %CHANNEL%.yml from %STORAGE%/%CONTAINER%.
     call :Error Ensure you that you are logged into azure cli with 'az login' and have access to the storage account.
-    call :Error See %DEST%\install-shell.log for more details.
+    type %DEST%\install-shell.log    
     exit /B 1
 )
 exit /B 0
@@ -85,7 +85,7 @@ call :Info Downloading %1
 call az storage blob download --account-name %STORAGE% --container-name %CONTAINER% --name %1 --file %DEST%\%1 --overwrite --auth-mode login > %DEST%\install-shell.log 2>&1
 IF ERRORLEVEL 1 (
     call :Error Failed to download %1 from %STORAGE%/%CONTAINER%.
-    call :Error See %DEST%\install-shell.log for more details.
+    type %DEST%\install-shell.log
     exit /B 1
 )
 exit /B 0
@@ -95,7 +95,7 @@ call :Info Running %1
 %DEST%\%1 > %DEST%\install-shell.log 2>&1
 IF ERRORLEVEL 1 (
     call :Error Failed to install %1
-    call :Error See %DEST%\install-shell.log for more details.    
+    type %DEST%\install-shell.log    
     exit /B 1
 )
 

@@ -386,6 +386,7 @@ async function initialize() {
     const appPath = app.getAppPath();
     await loadKeys(
         instanceDir,
+        parsedArgs.reset || parsedArgs.clean,
         parsedArgs.env ? path.resolve(appPath, parsedArgs.env) : undefined,
     );
 
