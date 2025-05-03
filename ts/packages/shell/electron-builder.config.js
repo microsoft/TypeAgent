@@ -3,16 +3,18 @@
 
 // Configuration used for 'electron-builder build' step, and not 'install-app-deps' step.
 
-const name = "typeagent-shell";
+const name = "typeagentshell";
+const fullName = "TypeAgent Shell";
 const account = process.env.AZURESTORAGEACCOUNTNAME;
 const container = process.env.AZURESTORAGECONTAINERNAME;
 const url =
     account && container
         ? `https://${account}.blob.core.windows.net/${container}/`
         : "";
+
 export default {
     extraMetadata: {
-        name,
+        name: fullName,
         author: {
             name: "Microsoft Corporation",
         },
@@ -29,16 +31,18 @@ export default {
     // Don't need to install
     npmRebuild: false,
     win: {
+        appId: `Microsoft.TypeAgentShell`,
         executableName: name,
         icon: "build/win/icon.png",
     },
     nsis: {
-        artifactName: "${name}-${version}-setup.${ext}",
+        artifactName: name + "-${version}-setup.${ext}",
         shortcutName: "${productName}",
         uninstallDisplayName: "${productName}",
         createDesktopShortcut: "always",
     },
     mac: {
+        appId: `com.microsoft.typeagentshell`,
         entitlementsInherit: "build/entitlements.mac.plist",
         extendInfo: {
             NSCameraUsageDescription:
@@ -53,7 +57,7 @@ export default {
         notarize: false,
     },
     dmg: {
-        artifactName: "${name}-${version}.${ext}",
+        artifactName: name + "-${version}.${ext}",
     },
     linux: {
         target: ["AppImage", "snap", "deb"],
@@ -63,7 +67,7 @@ export default {
         asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
     },
     appImage: {
-        artifactName: "${name}-${version}.${ext}",
+        artifactName: name + "-${version}.${ext}",
     },
     publish: {
         provider: "generic",
