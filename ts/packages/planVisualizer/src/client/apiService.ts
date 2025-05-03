@@ -56,12 +56,24 @@ class ApiService {
                 ),
             );
 
+            // Prepare the request body - include screenshot data if available
+            const requestBody: TransitionFormData = {
+                currentState: formData.currentState,
+                action: formData.action,
+                nodeType: formData.nodeType,
+            };
+
+            // Only include screenshot if it exists to reduce payload size
+            if (formData.screenshot) {
+                requestBody.screenshot = formData.screenshot;
+            }
+
             const response = await fetch(CONFIG.API.ADD_TRANSITION, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(requestBody),
             });
 
             if (!response.ok) {

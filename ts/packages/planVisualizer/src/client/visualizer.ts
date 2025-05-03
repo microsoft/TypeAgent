@@ -93,8 +93,8 @@ class Visualizer {
 
             // Only add screenshot data if it exists
             if (node.screenshot) {
-                // nodeData.screenshot = node.screenshot.split(',')[1]; // remove data prefix
                 nodeData.screenshot = node.screenshot;
+                nodeData.hasScreenshot = true;
             }
 
             elements.push({
@@ -1012,10 +1012,31 @@ class Visualizer {
         if (enabled) {
             // Add screenshot-mode class to all nodes
             this.cy.nodes().addClass("screenshot-mode");
+
+            // Update the UI to indicate screenshot mode is active
+            const screenshotBadge = document.querySelector(".screenshot-badge");
+            if (screenshotBadge) {
+                screenshotBadge.classList.add("active");
+            } else {
+                // Create badge if it doesn't exist
+                const badge = document.createElement("div");
+                badge.className = "screenshot-badge active";
+                badge.textContent = "Screenshot Mode";
+                document.querySelector(".container")?.appendChild(badge);
+            }
         } else {
             // Remove screenshot-mode class from all nodes
             this.cy.nodes().removeClass("screenshot-mode");
+
+            // Hide the screenshot mode indicator
+            const screenshotBadge = document.querySelector(".screenshot-badge");
+            if (screenshotBadge) {
+                screenshotBadge.classList.remove("active");
+            }
         }
+
+        // Force a redraw of the graph to update node appearance
+        this.cy.style().update();
     }
 
     updateNodeScreenshot(nodeId: string, screenshot: string): void {
@@ -1026,11 +1047,23 @@ class Visualizer {
             node.data("screenshot", screenshot);
             node.data("hasScreenshot", true);
 
+            // Check if the node has the proper CSS classes if in screenshot mode
+            if (this.screenshotMode && !node.hasClass("screenshot-mode")) {
+                node.addClass("screenshot-mode");
+            }
+
             // Force a redraw
-            // this.cy.elements().style('visibility', 'visible');
             this.cy.style().update();
         }
     }
+    // Helper method to check if a node has a screenshot
+    hasScreenshot(nodeId: string): boolean {
+        if (!this.cy) return false;
+
+        const node = this.cy.getElementById(nodeId);
+        return node.length > 0 && node.data("hasScreenshot") === true;
+    }
+
     /**
      * Set up event listeners for Cytoscape
      * @param {NodeSelectCallback} onNodeSelect - Callback for node selection

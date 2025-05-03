@@ -43,6 +43,7 @@ export interface TransitionFormData {
     currentState: string;
     action: string;
     nodeType: string;
+    screenshot?: string;
 }
 
 // API transition response

@@ -722,15 +722,25 @@ document.addEventListener("DOMContentLoaded", function () {
             document.getElementById("node-type") as HTMLSelectElement
         ).value;
 
+        // Get screenshot if in screenshot mode
+        let screenshotData = undefined;
+        if (isScreenshotMode && currentBase64Screenshot) {
+            screenshotData = currentBase64Screenshot;
+        }
+
         const formData = {
             currentState: currentState,
             action: "", // No action for this request
             nodeType: nodeType,
+            screenshot: screenshotData, // Add screenshot if available
         };
 
         ApiService.addTransition(formData)
             .then((result) => {
                 const { oldData, newData } = result;
+
+                // Clear the current screenshot data after successful submission
+                currentBase64Screenshot = null;
 
                 // Update the reference data
                 if (
@@ -794,15 +804,25 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
         }
 
+        // Get screenshot if in screenshot mode
+        let screenshotData = undefined;
+        if (isScreenshotMode && currentBase64Screenshot) {
+            screenshotData = currentBase64Screenshot;
+        }
+
         const formData = {
             currentState: "", // No state name for this request
             action: action,
             nodeType: "action", // Default type for new nodes
+            screenshot: screenshotData, // Add screenshot if available
         };
 
         ApiService.addTransition(formData)
             .then((result) => {
                 const { oldData, newData } = result;
+
+                // Clear the current screenshot data after successful submission
+                currentBase64Screenshot = null;
 
                 // Update the reference data
                 if (
@@ -837,6 +857,107 @@ document.addEventListener("DOMContentLoaded", function () {
                 console.error(error);
             });
     });
+
+    function addScreenshotAttachmentUI() {
+        // Add screenshot preview and control to state form
+        const stateFormControls = document.querySelector(
+            "#state-form .form-controls",
+        );
+        if (stateFormControls) {
+            const screenshotControl = document.createElement("div");
+            screenshotControl.className = "form-group screenshot-control";
+            screenshotControl.innerHTML = `
+                <label for="state-screenshot">Attach Screenshot:</label>
+                <input type="file" id="state-screenshot" accept="image/*" class="screenshot-input">
+                <div class="screenshot-preview" id="state-screenshot-preview" style="display: none;">
+                    <img id="state-preview-img" src="" alt="Preview">
+                    <button type="button" class="clear-screenshot">Clear</button>
+                </div>
+            `;
+            stateFormControls.appendChild(screenshotControl);
+        }
+
+        // Add screenshot preview and control to action form
+        const actionFormControls = document.querySelector(
+            "#action-form .form-controls",
+        );
+        if (actionFormControls) {
+            const screenshotControl = document.createElement("div");
+            screenshotControl.className = "form-group screenshot-control";
+            screenshotControl.innerHTML = `
+                <label for="action-screenshot">Attach Screenshot:</label>
+                <input type="file" id="action-screenshot" accept="image/*" class="screenshot-input">
+                <div class="screenshot-preview" id="action-screenshot-preview" style="display: none;">
+                    <img id="action-preview-img" src="" alt="Preview">
+                    <button type="button" class="clear-screenshot">Clear</button>
+                </div>
+            `;
+            actionFormControls.appendChild(screenshotControl);
+        }
+
+        // Set up event listeners for screenshot inputs
+        const screenshotInputs = document.querySelectorAll(".screenshot-input");
+        screenshotInputs.forEach((input) => {
+            input.addEventListener("change", function (e) {
+                const files = (e.target as HTMLInputElement).files;
+                if (!files || !files[0]) return;
+
+                const file = files[0];
+                const reader = new FileReader();
+
+                // Get the associated preview elements
+                const formId = (e.target as HTMLInputElement).id.includes(
+                    "state",
+                )
+                    ? "state"
+                    : "action";
+                const previewContainer = document.getElementById(
+                    `${formId}-screenshot-preview`,
+                );
+                const previewImg = document.getElementById(
+                    `${formId}-preview-img`,
+                ) as HTMLImageElement;
+
+                reader.onload = function (e) {
+                    if (!e.target || !e.target.result) return;
+
+                    const dataURL = e.target.result as string;
+                    if (previewImg) previewImg.src = dataURL;
+                    if (previewContainer)
+                        previewContainer.style.display = "block";
+
+                    // Store the base64 screenshot data
+                    currentBase64Screenshot = dataURL.split(",")[1]; // Remove the data URL prefix
+                };
+
+                reader.readAsDataURL(file);
+            });
+        });
+
+        // Clear screenshot buttons
+        const clearButtons = document.querySelectorAll(".clear-screenshot");
+        clearButtons.forEach((button) => {
+            button.addEventListener("click", function (e) {
+                const formId = (e.target as HTMLElement)
+                    .closest(".screenshot-preview")
+                    ?.id.includes("state")
+                    ? "state"
+                    : "action";
+                const previewContainer = document.getElementById(
+                    `${formId}-screenshot-preview`,
+                );
+                const fileInput = document.getElementById(
+                    `${formId}-screenshot`,
+                ) as HTMLInputElement;
+
+                if (previewContainer) previewContainer.style.display = "none";
+                if (fileInput) fileInput.value = "";
+
+                // Clear the stored screenshot data
+                currentBase64Screenshot = null;
+            });
+        });
+    }
 
     /**
      * Toggle screenshot mode
@@ -1040,6 +1161,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             visualizer = new Visualizer(cyContainer, webPlanData);
             visualizer.initialize();
+            stateForm;
 
             // Setup event listeners
             visualizer.setupEventListeners((nodeId: string) => {
@@ -1098,6 +1220,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Setup screenshot functionality
     setupScreenshotEventListeners();
+    addScreenshotAttachmentUI();
 
     // Make the functions available globally
     (window as any).showScreenshotUploadModal = showScreenshotUploadModal;

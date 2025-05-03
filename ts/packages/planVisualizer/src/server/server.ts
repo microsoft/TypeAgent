@@ -174,6 +174,11 @@ app.post("/api/transition", (req: Request, res: Response) => {
             // If the state exists, set it as the current node
             dynamicPlanData.currentNode = existingNode.id;
 
+            // Apply screenshot if provided
+            if (screenshot) {
+                existingNode.screenshot = screenshot;
+            }
+
             broadcastUpdate("transition", dynamicPlanData);
             return res.json(dynamicPlanData);
         }
@@ -192,6 +197,11 @@ app.post("/api/transition", (req: Request, res: Response) => {
             tempNode.isTemporary = false;
             tempNode.type = isFirstNode ? "start" : nodeType;
 
+            // Apply screenshot if provided
+            if (screenshot) {
+                tempNode.screenshot = screenshot;
+            }
+
             // Set it as the current node
             dynamicPlanData.currentNode = tempNode.id;
 
@@ -203,21 +213,19 @@ app.post("/api/transition", (req: Request, res: Response) => {
         sourceNodeId = `node-${dynamicPlanData.nodes.length}`;
 
         // If this is the first node, use "Start" type
-        dynamicPlanData.nodes.push({
+        const newNode: PlanNode = {
             id: sourceNodeId,
             label: currentState,
             type: isFirstNode ? "start" : nodeType,
             isTemporary: false,
-        });
+        };
 
+        // Apply screenshot if provided
         if (screenshot) {
-            const node = dynamicPlanData.nodes.find(
-                (n) => n.id === sourceNodeId,
-            );
-            if (node) {
-                node.screenshot = screenshot;
-            }
+            newNode.screenshot = screenshot;
         }
+
+        dynamicPlanData.nodes.push(newNode);
 
         // Set it as the current node
         dynamicPlanData.currentNode = sourceNodeId;
@@ -238,23 +246,33 @@ app.post("/api/transition", (req: Request, res: Response) => {
         // Use the current node as the source
         sourceNodeId = dynamicPlanData.currentNode;
 
+        // Update screenshot on source node if provided
         if (screenshot) {
-            const node = dynamicPlanData.nodes.find(
+            const sourceNode = dynamicPlanData.nodes.find(
                 (n) => n.id === sourceNodeId,
             );
-            if (node) {
-                node.screenshot = screenshot;
+            if (sourceNode) {
+                sourceNode.screenshot = screenshot;
             }
         }
 
         // Create a new temporary node as the target
         targetNodeId = `node-${dynamicPlanData.nodes.length}`;
-        dynamicPlanData.nodes.push({
+
+        // Create new temporary node with screenshot if provided
+        const tempNode: PlanNode = {
             id: targetNodeId,
             label: "", // Blank label for temporary nodes
             type: "temporary",
             isTemporary: true,
-        });
+        };
+
+        // Apply screenshot if provided (to the new temporary node)
+        if (screenshot) {
+            tempNode.screenshot = screenshot;
+        }
+
+        dynamicPlanData.nodes.push(tempNode);
 
         // Create the link with the action name
         dynamicPlanData.links.push({
@@ -285,6 +303,11 @@ app.post("/api/transition", (req: Request, res: Response) => {
         tempNode.isTemporary = false;
         tempNode.type = isFirstNode ? "start" : nodeType;
 
+        // Apply screenshot if provided
+        if (screenshot) {
+            tempNode.screenshot = screenshot;
+        }
+
         sourceNodeId = tempNode.id;
     } else {
         // Case 3.2: No temporary node to replace, use/create the current state
@@ -294,6 +317,11 @@ app.post("/api/transition", (req: Request, res: Response) => {
 
         if (existingNode) {
             sourceNodeId = existingNode.id;
+
+            // Apply screenshot to existing node if provided
+            if (screenshot) {
+                existingNode.screenshot = screenshot;
+            }
         } else {
             // This is the first node or a new branch
             sourceNodeId = `node-${dynamicPlanData.nodes.length}`;
@@ -302,23 +330,38 @@ app.post("/api/transition", (req: Request, res: Response) => {
             const nodeLabel =
                 isFirstNode && !currentState ? "Start" : currentState || "";
 
-            dynamicPlanData.nodes.push({
+            // Create a new node with the screenshot if provided
+            const newNode: PlanNode = {
                 id: sourceNodeId,
                 label: nodeLabel,
                 type: isFirstNode ? "start" : nodeType,
                 isTemporary: false,
-            });
+            };
+
+            // Apply screenshot if provided
+            if (screenshot) {
+                newNode.screenshot = screenshot;
+            }
+
+            dynamicPlanData.nodes.push(newNode);
         }
     }
 
     // Create a new temporary node with blank label
     targetNodeId = `node-${dynamicPlanData.nodes.length}`;
-    dynamicPlanData.nodes.push({
+
+    // Create temporary node
+    const newTempNode: PlanNode = {
         id: targetNodeId,
         label: "", // Blank label for temporary nodes
         type: "temporary",
         isTemporary: true,
-    });
+    };
+
+    // We don't apply screenshot to the temporary node in this case,
+    // as we want it on the source node that we just confirmed
+
+    dynamicPlanData.nodes.push(newTempNode);
 
     // Create the link with the action name
     dynamicPlanData.links.push({
@@ -326,13 +369,6 @@ app.post("/api/transition", (req: Request, res: Response) => {
         target: targetNodeId,
         label: action,
     });
-
-    if (screenshot) {
-        const node = dynamicPlanData.nodes.find((n) => n.id === sourceNodeId);
-        if (node) {
-            node.screenshot = screenshot;
-        }
-    }
 
     // Update current node
     dynamicPlanData.currentNode = targetNodeId;
