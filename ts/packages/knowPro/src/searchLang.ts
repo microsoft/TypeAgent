@@ -30,6 +30,10 @@ import {
     createAndTermGroup,
     createPropertySearchTerm,
 } from "./searchLib.js";
+import {
+    getCountOfMessagesInCharBudget,
+    getMessageOrdinalsFromScored,
+} from "./message.js";
 
 /*
     APIs for searching with Natural Language
@@ -57,12 +61,27 @@ export async function searchConversationWithLanguage(
     }
     const searchResults: ConversationSearchResult[] = [];
     for (const searchQuery of searchQueryExprResult.data) {
-        const queryResult = await runSearchQuery(
+        let queryResult = await runSearchQuery(
             conversation,
             searchQuery,
             options,
         );
-        searchResults.push(...queryResult);
+        if (
+            queryResult.length === 0 &&
+            searchQuery.rawQuery &&
+            options?.fallbackSearch
+        ) {
+            const ragMatches = await searchConversationRag(
+                conversation,
+                searchQuery.rawQuery,
+                options.fallbackSearch,
+            );
+            if (ragMatches) {
+                searchResults.push(ragMatches);
+            }
+        } else {
+            searchResults.push(...queryResult);
+        }
     }
     return success(searchResults);
 }
@@ -70,7 +89,6 @@ export async function searchConversationWithLanguage(
 /**
  * Functions for compiling natural language queries
  */
-
 export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
@@ -103,6 +121,7 @@ export async function searchQueryExprFromLanguage(
 export interface LanguageSearchOptions extends SearchOptions {
     applyScope?: boolean | undefined;
     exactScope?: boolean | undefined;
+    fallbackSearch?: LanguageSearchRagOptions | undefined;
 }
 
 export function createLanguageSearchOptions(): LanguageSearchOptions {
@@ -147,6 +166,43 @@ export function compileSearchFilter(
     queryBuilder.exactScoping = exactScoping;
     return queryBuilder.compileSearchFilter(searchFilter);
 }
+
+export async function searchConversationRag(
+    conversation: IConversation,
+    searchText: string,
+    options: LanguageSearchRagOptions,
+): Promise<ConversationSearchResult | undefined> {
+    const messageIndex = conversation.secondaryIndexes?.messageIndex;
+    if (!messageIndex) {
+        return undefined;
+    }
+    let messageMatches = await messageIndex.lookupMessages(
+        searchText,
+        options.maxMessageMatches,
+        options.thresholdScore,
+    );
+    if (messageMatches.length === 0) {
+        return undefined;
+    }
+    if (options.maxCharsInBudget && options.maxCharsInBudget > 0) {
+        const messageCountInBudget = getCountOfMessagesInCharBudget(
+            conversation.messages,
+            getMessageOrdinalsFromScored(conversation.messages, messageMatches),
+            options.maxCharsInBudget,
+        );
+        messageMatches = messageMatches.slice(0, messageCountInBudget);
+    }
+    return {
+        messageMatches,
+        knowledgeMatches: new Map(),
+    };
+}
+
+export type LanguageSearchRagOptions = {
+    maxMessageMatches: number;
+    thresholdScore?: number | undefined;
+    maxCharsInBudget?: number | undefined;
+};
 
 class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;

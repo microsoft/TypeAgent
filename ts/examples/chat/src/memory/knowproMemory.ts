@@ -605,6 +605,7 @@ export async function createKnowproCommands(
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
+        def.options!.fallback = argBool("Fallback to rag", true);
         def.options!.fastStop = argBool(
             "Ignore messages if knowledge produces answers",
             true,
@@ -625,6 +626,7 @@ export async function createKnowproCommands(
         options.exactMatch = namedArgs.exact;
         options.exactScope = namedArgs.exactScope;
         options.applyScope = namedArgs.applyScope;
+        options.fallbackSearch = namedArgs.fallback;
 
         const searchResults = await kp.searchConversationWithLanguage(
             context.conversation!,
