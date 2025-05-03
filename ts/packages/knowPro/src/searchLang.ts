@@ -67,14 +67,14 @@ export async function searchConversationWithLanguage(
             options,
         );
         if (
-            queryResult.length === 0 &&
+            !hasConversationResults(queryResult) &&
             searchQuery.rawQuery &&
-            options?.fallbackSearch
+            options?.fallbackRagOptions
         ) {
             const ragMatches = await searchConversationRag(
                 conversation,
                 searchQuery.rawQuery,
-                options.fallbackSearch,
+                options.fallbackRagOptions,
             );
             if (ragMatches) {
                 searchResults.push(ragMatches);
@@ -121,7 +121,7 @@ export async function searchQueryExprFromLanguage(
 export interface LanguageSearchOptions extends SearchOptions {
     applyScope?: boolean | undefined;
     exactScope?: boolean | undefined;
-    fallbackSearch?: LanguageSearchRagOptions | undefined;
+    fallbackRagOptions?: LanguageSearchRagOptions | undefined;
 }
 
 export function createLanguageSearchOptions(): LanguageSearchOptions {
@@ -199,7 +199,7 @@ export async function searchConversationRag(
 }
 
 export type LanguageSearchRagOptions = {
-    maxMessageMatches: number;
+    maxMessageMatches?: number | undefined;
     thresholdScore?: number | undefined;
     maxCharsInBudget?: number | undefined;
 };
@@ -651,4 +651,13 @@ function optimizeOrMax(termGroup: SearchTermGroup) {
         return termGroup.terms[0];
     }
     return termGroup;
+}
+
+function hasConversationResults(results: ConversationSearchResult[]): boolean {
+    if (results.length === 0) {
+        return false;
+    }
+    return results.some((r) => {
+        return r.knowledgeMatches.size > 0 || r.messageMatches.length > 0;
+    });
 }
