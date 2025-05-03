@@ -28,11 +28,10 @@ export interface HTMLFragment {
     content: string;
     text: string;
 }
-/*
+
 // Re-export types that are used across multiple files
 export {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
 } from "../../common/webAgentMessageTypes.mjs";
-*/
