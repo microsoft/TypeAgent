@@ -23,6 +23,7 @@
     "clean": "rimraf --glob out dist deploy *.tsbuildinfo *.done.build.log",
     "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --config.node-linker=hoisted --legacy",
     "dev": "npm run prepare-vite && electron-vite dev -- --env ../../.env",
+    "dev:noenv": "npm run prepare-vite && electron-vite dev",
     "postinstall": "cross-env \"npm_execpath=\" electron-builder install-app-deps",
     "package:linux": "npm run deploy && electron-builder --linux --config electron-builder.config.js -p never",
     "package:mac": "npm run deploy && electron-builder --mac --config electron-builder.config.js -p never",

@@ -85,8 +85,19 @@ async function getKeys(dir: string, envFile?: string): Promise<string | null> {
         if (result.response === 0) {
             // Use the sync version as nothing else is going on.
             const result = dialog.showOpenDialogSync({
-                properties: ["openFile"],
+                properties: ["openFile", "showHiddenFiles"],
                 message: "Select the .env file",
+                filters: [
+                    {
+                        name: "Environment files",
+                        extensions: ["env"],
+                    },
+                    {
+                        name: "All files",
+                        extensions: ["*"],
+                    },
+                ]
+
             });
             if (result && result.length > 0) {
                 const content = await fs.promises.readFile(result[0], "utf-8");
