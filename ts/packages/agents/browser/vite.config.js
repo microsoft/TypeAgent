@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-import { chromeExtension, simpleReloader } from 'vite-plugin-chrome-extension';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 const srcDir = resolve(__dirname, 'src/extension');
@@ -21,6 +20,7 @@ export default defineConfig(({ mode }) => ({
         'electron/agentActivation': resolve(electronSrcDir, 'agentActivation.ts'),
         'electron/webTypeAgentMain': resolve(srcDir, 'webTypeAgentMain.ts'),
         'extension/options': resolve(srcDir, 'options.ts'),
+        // Change this to match exact path expected in manifest.json
         'extension/serviceWorker': resolve(srcDir, 'serviceWorker/index.ts'),
         'extension/sidepanel': resolve(srcDir, 'sidepanel.ts'),
         'extension/uiEventsDispatcher': resolve(srcDir, 'uiEventsDispatcher.ts'),
@@ -30,24 +30,12 @@ export default defineConfig(({ mode }) => ({
       },
       output: {
         entryFileNames: '[name].js',
-        format: 'es',
+        chunkFileNames: '[name].js',
+        assetFileNames: '[name].[ext]',
+        // Make sure format is set to ES for service worker compatibility
+        format: 'es'
       },
-       // Customizing the output format per entry point
-       plugins: [
-        {
-          name: 'adjust-output-format',
-          generateBundle(options, bundle) {
-            // Change format for specific entry points (like content.js)
-            if (bundle['extension/contentScript.js']) {
-              bundle['extension/contentScript.js'].format = 'iife'; // Set IIFE format for content scripts
-            }
-            if (bundle['electron/contentScript.js']) {
-              bundle['electron/contentScript.js'].format = 'iife'; // Set IIFE format for content scripts
-            }
-          }
-        }
-      ],
-      target: 'es2022',
+      // Remove the custom format plugin that's setting IIFE
     },
     sourcemap: mode === 'development',
   },
@@ -59,6 +47,22 @@ export default defineConfig(({ mode }) => ({
   },
 
   plugins: [
+    // Add a post-process plugin to add Content-Type header
+    {
+      name: 'service-worker-content-type',
+      writeBundle(options, bundle) {
+        // Process service worker specifically
+        const swKey = 'extension/serviceWorker.js';
+        const sw = bundle[swKey];
+        if (sw) {
+          // Ensure service worker has correct type
+          sw.code = `// Content-Type: text/javascript\n${sw.code}`;
+          console.log('Added Content-Type header to service worker');
+        } else {
+          console.warn('Service worker not found in bundle!');
+        }
+      }
+    },
     viteStaticCopy({
         targets: [
             {

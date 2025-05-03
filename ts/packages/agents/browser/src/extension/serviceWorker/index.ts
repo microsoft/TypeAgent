@@ -11,11 +11,13 @@ import { toggleSiteTranslator } from "./siteTranslator";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { getActiveTab } from "./tabManager";
 import { handleMessage } from "./messageHandlers";
+
 import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
-} from "./types";
+} from "../../common/webAgentMessageTypes.mjs";;
+
 
 /**
  * Initializes the service worker

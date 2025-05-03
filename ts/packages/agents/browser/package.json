@@ -29,8 +29,10 @@
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
-    "vite": "vite build --mode production",
-    "vite:dev": "vite build --mode development",
+    "vite": "vite build --mode production && node fix-service-worker.js",
+    "vite:dev": "npm run dev:extension",
+    "dev:extension": "vite build --config vite.extension.config.js",
+    "dev:electron": "vite build --config vite.electron.config.js",
     "webpack": "webpack --config webpack.prod.js",
     "webpack:dev": "webpack --config webpack.dev.js"
   },
@@ -88,6 +90,7 @@
     "vite-plugin-chrome-extension": "^0.0.7",
     "vite-plugin-node-polyfills": "^0.17.0",
     "vite-plugin-static-copy": "^0.15.0",
+    "vite-plugin-web-extension": "^4.4.3",
     "webpack": "^5.94.0",
     "webpack-cli": "^5.1.4",
     "webpack-merge": "^5.10.0"
