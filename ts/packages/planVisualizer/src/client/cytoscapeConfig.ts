@@ -98,6 +98,42 @@ const CytoscapeConfig = {
                     "shadow-opacity": 0.8,
                 },
             },
+            // Screenshot mode styles - larger rectangles
+            {
+                selector: "node.screenshot-mode",
+                style: {
+                    width: 200,
+                    height: 120,
+                    "text-margin-y": -5,
+                    "text-background-color": "rgba(255,255,255,0.7)",
+                    "text-background-opacity": 1,
+                    "text-background-padding": 3,
+                    "text-background-shape": "roundrectangle",
+                },
+            },
+
+            // Nodes with screenshots regardless of mode - add background image
+            {
+                selector: "node[?hasScreenshot]",
+                style: {
+                    "background-image": function (ele: {
+                        data: (arg0: string) => any;
+                    }) {
+                        let base64Str = ele.data("screenshot");
+                        if (base64Str) {
+                            const hasPrefix =
+                                /^data:image\/[a-zA-Z]+;base64,/.test(
+                                    base64Str,
+                                );
+                            return hasPrefix
+                                ? base64Str
+                                : `data:image/png;base64,${base64Str}`;
+                        }
+                        return "none";
+                    },
+                    "background-fit": "contain",
+                },
+            },
             // Temporary nodes
             {
                 selector: "node[?isTemporary]",

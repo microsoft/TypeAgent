@@ -26,6 +26,7 @@ class Visualizer {
     private cy: cytoscape.Core | null;
     public pathHighlighted: boolean;
     private tempAnimInterval: number | null;
+    private screenshotMode: boolean = false;
 
     /**
      * Create a new Visualizer
@@ -82,14 +83,22 @@ class Visualizer {
 
         // Add nodes
         this.webPlanData.nodes.forEach((node) => {
+            const nodeData: any = {
+                id: node.id,
+                label: node.label,
+                type: node.type,
+                isActive: node.id === this.webPlanData.currentNode,
+                isTemporary: node.isTemporary || false,
+            };
+
+            // Only add screenshot data if it exists
+            if (node.screenshot) {
+                // nodeData.screenshot = node.screenshot.split(',')[1]; // remove data prefix
+                nodeData.screenshot = node.screenshot;
+            }
+
             elements.push({
-                data: {
-                    id: node.id,
-                    label: node.label,
-                    type: node.type,
-                    isActive: node.id === this.webPlanData.currentNode,
-                    isTemporary: node.isTemporary || false,
-                },
+                data: nodeData,
             });
         });
 
@@ -278,6 +287,7 @@ class Visualizer {
                         type: replacementNode.type,
                         isTemporary: false,
                         isActive: true,
+                        screenshot: replacementNode.screenshot,
                     });
 
                     // Animate the node in place
@@ -344,6 +354,7 @@ class Visualizer {
                                 type: newTempNode.type || "temporary",
                                 isTemporary: true,
                                 isActive: false,
+                                screenshot: newTempNode.screenshot,
                             },
                         });
 
@@ -414,6 +425,7 @@ class Visualizer {
                             type: newTempNode.type || "temporary",
                             isTemporary: true,
                             isActive: false,
+                            screenshot: newTempNode.screenshot,
                         },
                     });
 
@@ -485,6 +497,7 @@ class Visualizer {
                             type: newNode.type,
                             isTemporary: false,
                             isActive: newData.currentNode === newNode.id,
+                            screenshot: newNode.screenshot,
                         },
                     });
 
@@ -555,6 +568,7 @@ class Visualizer {
                         type: replacementNode.type,
                         isTemporary: false,
                         isActive: true,
+                        screenshot: replacementNode.screenshot,
                     });
 
                     // Update the node style - use end node style
@@ -990,6 +1004,33 @@ class Visualizer {
         }
     }
 
+    setScreenshotMode(enabled: boolean): void {
+        this.screenshotMode = enabled;
+
+        if (!this.cy) return;
+
+        if (enabled) {
+            // Add screenshot-mode class to all nodes
+            this.cy.nodes().addClass("screenshot-mode");
+        } else {
+            // Remove screenshot-mode class from all nodes
+            this.cy.nodes().removeClass("screenshot-mode");
+        }
+    }
+
+    updateNodeScreenshot(nodeId: string, screenshot: string): void {
+        if (!this.cy) return;
+
+        const node = this.cy.getElementById(nodeId);
+        if (node.length > 0) {
+            node.data("screenshot", screenshot);
+            node.data("hasScreenshot", true);
+
+            // Force a redraw
+            // this.cy.elements().style('visibility', 'visible');
+            this.cy.style().update();
+        }
+    }
     /**
      * Set up event listeners for Cytoscape
      * @param {NodeSelectCallback} onNodeSelect - Callback for node selection
@@ -1007,6 +1048,26 @@ class Visualizer {
             this.updateCurrentNode(nodeId);
             if (onNodeSelect) {
                 onNodeSelect(nodeId);
+            }
+        });
+
+        // Node double-click handler for screenshot upload
+        this.cy.on("dblclick", "node", (evt: any) => {
+            const nodeId = evt.target.id();
+            const node = this.webPlanData.nodes.find((n) => n.id === nodeId);
+
+            if (node) {
+                // Call the global function, which is now properly defined
+                if (typeof window.showScreenshotUploadModal === "function") {
+                    window.showScreenshotUploadModal(
+                        nodeId,
+                        node.label || nodeId,
+                    );
+                } else {
+                    console.error(
+                        "showScreenshotUploadModal function not found in global scope",
+                    );
+                }
             }
         });
 

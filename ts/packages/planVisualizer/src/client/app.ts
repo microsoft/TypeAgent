@@ -13,14 +13,6 @@ import ApiService from "./apiService.js";
 import Visualizer from "./visualizer.js";
 import { WebPlanData, SSEEvent } from "../shared/types.js";
 
-// Ensure the window.webPlanData is accessible globally
-declare global {
-    interface Window {
-        webPlanData?: WebPlanData;
-        dagre: any;
-    }
-}
-
 document.addEventListener("DOMContentLoaded", function () {
     // Check if dagre and cytoscape-dagre are properly loaded
     if (typeof dagre === "undefined") {
@@ -69,10 +61,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const resetButton = document.getElementById(
         "reset-button",
     ) as HTMLButtonElement;
-    const transitionForm = document.getElementById(
-        "transition-form",
-    ) as HTMLFormElement;
-    const originalSubmitHandler = transitionForm.onsubmit;
 
     const statusMessage = document.getElementById(
         "status-message",
@@ -95,6 +83,47 @@ document.addEventListener("DOMContentLoaded", function () {
     const dynamicOnlyControls = document.querySelectorAll(
         ".dynamic-only-control",
     );
+
+    const stateTab = document.getElementById("state-tab") as HTMLElement;
+    const actionTab = document.getElementById("action-tab") as HTMLElement;
+    const stateForm = document.getElementById("state-form") as HTMLFormElement;
+    const actionForm = document.getElementById(
+        "action-form",
+    ) as HTMLFormElement;
+    const activeStateName = document.getElementById(
+        "active-state-name",
+    ) as HTMLElement;
+
+    const screenshotModeButton = document.getElementById(
+        "screenshot-mode-button",
+    ) as HTMLButtonElement;
+    const screenshotUploadModal = document.getElementById(
+        "screenshot-upload-modal",
+    ) as HTMLDivElement;
+    const uploadNodeName = document.getElementById(
+        "upload-node-name",
+    ) as HTMLElement;
+    const screenshotFile = document.getElementById(
+        "screenshot-file",
+    ) as HTMLInputElement;
+    const dropArea = document.getElementById("drop-area") as HTMLDivElement;
+    const previewContainer = document.getElementById(
+        "preview-container",
+    ) as HTMLDivElement;
+    const previewImage = document.getElementById(
+        "preview-image",
+    ) as HTMLImageElement;
+    const uploadScreenshotButton = document.getElementById(
+        "upload-screenshot-button",
+    ) as HTMLButtonElement;
+    const closeModalButtons = document.querySelectorAll(
+        ".close-modal, .cancel-modal",
+    );
+
+    // Add application state for screenshot mode
+    let isScreenshotMode = false;
+    let currentBase64Screenshot: string | null = null;
+    let currentUploadNodeId: string | null = null;
 
     /**
      * Show status message
@@ -184,6 +213,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Make sure animation is running if there are temporary nodes
         visualizer.startTemporaryNodeAnimation();
+
+        updateCurrentStateIndicator();
     }
 
     /**
@@ -212,6 +243,292 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    /**
+     * Show the screenshot upload modal for a node
+     * @param {string} nodeId - The ID of the node
+     * @param {string} nodeLabel - The label of the node
+     */
+    function showScreenshotUploadModal(
+        nodeId: string,
+        nodeLabel: string,
+    ): void {
+        // Store the node ID in our global variable
+        currentUploadNodeId = nodeId;
+
+        // Get references to modal elements
+        const screenshotUploadModal = document.getElementById(
+            "screenshot-upload-modal",
+        ) as HTMLDivElement;
+        const uploadNodeName = document.getElementById(
+            "upload-node-name",
+        ) as HTMLElement;
+
+        // Only proceed if elements exist
+        if (!screenshotUploadModal || !uploadNodeName) {
+            console.error("Screenshot upload modal elements not found");
+            return;
+        }
+
+        // Set the node info in the modal
+        uploadNodeName.textContent = nodeLabel || nodeId;
+
+        // Reset the form
+        const screenshotFile = document.getElementById(
+            "screenshot-file",
+        ) as HTMLInputElement;
+        const previewContainer = document.getElementById(
+            "preview-container",
+        ) as HTMLDivElement;
+        const uploadScreenshotButton = document.getElementById(
+            "upload-screenshot-button",
+        ) as HTMLButtonElement;
+
+        if (screenshotFile) screenshotFile.value = "";
+        currentBase64Screenshot = null;
+        if (previewContainer) previewContainer.style.display = "none";
+        if (uploadScreenshotButton) uploadScreenshotButton.disabled = true;
+
+        // Show the modal
+        screenshotUploadModal.classList.add("active");
+
+        console.log(`Upload modal opened for node: ${nodeId}`);
+    }
+
+    /**
+     * Handle file selection for screenshot upload
+     * @param {FileList} files - The selected files
+     */
+    function handleFileSelect(files: FileList | null): void {
+        if (!files || !files[0]) return;
+
+        const file = files[0];
+
+        // Validate file type
+        if (!file.type.match("image.*")) {
+            showStatus("Please select an image file", true);
+            return;
+        }
+
+        // Get references to preview elements
+        const previewContainer = document.getElementById(
+            "preview-container",
+        ) as HTMLDivElement;
+        const previewImage = document.getElementById(
+            "preview-image",
+        ) as HTMLImageElement;
+        const uploadScreenshotButton = document.getElementById(
+            "upload-screenshot-button",
+        ) as HTMLButtonElement;
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            if (!e.target || !e.target.result) return;
+
+            const result = e.target.result as string;
+            if (previewImage) previewImage.src = result;
+            if (previewContainer) previewContainer.style.display = "block";
+
+            // Store the base64 data without the prefix
+            currentBase64Screenshot = result.split(",")[1]; // Remove data URL prefix
+
+            // Enable the upload button
+            if (uploadScreenshotButton) uploadScreenshotButton.disabled = false;
+
+            console.log("Screenshot preview loaded");
+        };
+        reader.readAsDataURL(file);
+    }
+
+    /**
+     * Upload the screenshot to the server
+     */
+    function uploadScreenshot(): void {
+        console.log(`Uploading screenshot for node: ${currentUploadNodeId}`);
+
+        if (!currentUploadNodeId || !currentBase64Screenshot) {
+            console.error("Missing node ID or screenshot data for upload");
+            showStatus("Error: Missing upload data", true);
+            return;
+        }
+
+        // Get the upload button to show loading state
+        const uploadScreenshotButton = document.getElementById(
+            "upload-screenshot-button",
+        ) as HTMLButtonElement;
+        if (uploadScreenshotButton) {
+            uploadScreenshotButton.disabled = true;
+            uploadScreenshotButton.textContent = "Uploading...";
+        }
+
+        // Send the screenshot to the server
+        fetch("/api/screenshot", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                nodeId: currentUploadNodeId,
+                screenshot: currentBase64Screenshot,
+            }),
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((data) => {
+                // Update the visualization if needed
+                if (window.webPlanData) {
+                    window.webPlanData = data;
+                }
+
+                // If we have a visualizer instance, update the node
+                if (visualizer) {
+                    visualizer.updateNodeScreenshot(
+                        currentUploadNodeId!,
+                        currentBase64Screenshot!,
+                    );
+                }
+
+                // Show success message
+                showStatus("Screenshot uploaded successfully!");
+
+                // Close the modal
+                const screenshotUploadModal = document.getElementById(
+                    "screenshot-upload-modal",
+                ) as HTMLDivElement;
+                if (screenshotUploadModal) {
+                    screenshotUploadModal.classList.remove("active");
+                }
+
+                console.log("Screenshot uploaded successfully");
+            })
+            .catch((error) => {
+                console.error("Error uploading screenshot:", error);
+                showStatus(
+                    `Error uploading screenshot: ${error.message}`,
+                    true,
+                );
+            })
+            .finally(() => {
+                // Reset button state
+                const uploadScreenshotButton = document.getElementById(
+                    "upload-screenshot-button",
+                ) as HTMLButtonElement;
+                if (uploadScreenshotButton) {
+                    uploadScreenshotButton.disabled = false;
+                    uploadScreenshotButton.textContent = "Upload Screenshot";
+                }
+            });
+    }
+
+    /**
+     * Set up all event listeners for the screenshot upload functionality
+     */
+    function setupScreenshotEventListeners(): void {
+        console.log("Setting up screenshot event listeners");
+
+        // Get references to elements
+        const screenshotFile = document.getElementById(
+            "screenshot-file",
+        ) as HTMLInputElement;
+        const dropArea = document.getElementById("drop-area") as HTMLDivElement;
+        const uploadScreenshotButton = document.getElementById(
+            "upload-screenshot-button",
+        ) as HTMLButtonElement;
+        const closeModalButtons = document.querySelectorAll(
+            ".close-modal, .cancel-modal",
+        );
+        const screenshotUploadModal = document.getElementById(
+            "screenshot-upload-modal",
+        ) as HTMLDivElement;
+
+        // File input change
+        if (screenshotFile) {
+            screenshotFile.addEventListener("change", function () {
+                handleFileSelect(this.files);
+            });
+        }
+
+        // Drag and drop for file upload
+        if (dropArea) {
+            dropArea.addEventListener("click", function () {
+                if (screenshotFile) screenshotFile.click();
+            });
+
+            ["dragenter", "dragover", "dragleave", "drop"].forEach(
+                (eventName) => {
+                    dropArea.addEventListener(
+                        eventName,
+                        (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        },
+                        false,
+                    );
+                },
+            );
+
+            ["dragenter", "dragover"].forEach((eventName) => {
+                dropArea.addEventListener(
+                    eventName,
+                    () => {
+                        dropArea.classList.add("dragover");
+                    },
+                    false,
+                );
+            });
+
+            ["dragleave", "drop"].forEach((eventName) => {
+                dropArea.addEventListener(
+                    eventName,
+                    () => {
+                        dropArea.classList.remove("dragover");
+                    },
+                    false,
+                );
+            });
+
+            dropArea.addEventListener(
+                "drop",
+                (e) => {
+                    handleFileSelect(e.dataTransfer?.files || null);
+                },
+                false,
+            );
+        }
+
+        // Upload button
+        if (uploadScreenshotButton) {
+            uploadScreenshotButton.addEventListener("click", function (e) {
+                e.preventDefault();
+                uploadScreenshot();
+            });
+        }
+
+        // Close modal buttons
+        closeModalButtons.forEach((button) => {
+            button.addEventListener("click", function () {
+                if (screenshotUploadModal) {
+                    screenshotUploadModal.classList.remove("active");
+                }
+            });
+        });
+
+        // Close modal when clicking outside
+        if (screenshotUploadModal) {
+            screenshotUploadModal.addEventListener("click", function (e) {
+                if (e.target === screenshotUploadModal) {
+                    screenshotUploadModal.classList.remove("active");
+                }
+            });
+        }
+
+        console.log("Screenshot event listeners setup complete");
+    }
+
     // Toggle view mode
     viewModeToggle.addEventListener("change", function () {
         updateDynamicControls();
@@ -234,6 +551,8 @@ document.addEventListener("DOMContentLoaded", function () {
     nodeSelect.addEventListener("change", (e) => {
         if (visualizer) {
             visualizer.updateCurrentNode((e.target as HTMLSelectElement).value);
+
+            setTimeout(updateCurrentStateIndicator, 100);
         }
     });
 
@@ -295,74 +614,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    // Handle form submission
-    transitionForm.addEventListener("submit", function (e) {
-        e.preventDefault();
-
-        if (currentViewMode === CONFIG.VIEW_MODES.STATIC) {
-            showStatus(
-                "Cannot add transitions in static view. Switch to dynamic view.",
-                true,
-            );
-            return;
-        }
-
-        const currentState = (
-            document.getElementById("current-state") as HTMLInputElement
-        ).value;
-        const action = (
-            document.getElementById("action-name") as HTMLInputElement
-        ).value;
-        const nodeType = (
-            document.getElementById("node-type") as HTMLSelectElement
-        ).value;
-
-        const formData = {
-            currentState: currentState, // Can be empty
-            action: action, // Can be empty
-            nodeType: nodeType,
-        };
-
-        ApiService.addTransition(formData)
-            .then((result) => {
-                const { oldData, newData } = result;
-
-                // Only need to update reference if visualization doesn't do it
-                if (
-                    !visualizer ||
-                    !visualizer.updateWithoutRedraw(oldData, newData)
-                ) {
-                    webPlanData = newData;
-
-                    // If visualization update failed, reinitialize completely
-                    initializeVisualization();
-
-                    // Focus on current node - but don't animate again
-                    if (visualizer && webPlanData.currentNode) {
-                        visualizer._focusOnNodeContext(webPlanData.currentNode);
-                    }
-                }
-
-                // Clear the form for the next entry
-                (
-                    document.getElementById("current-state") as HTMLInputElement
-                ).value = "";
-                (
-                    document.getElementById("action-name") as HTMLInputElement
-                ).value = "";
-
-                formFlyout.style.display = "none";
-                toggleFormButton.classList.remove("active");
-            })
-            .catch((error) => {
-                showStatus(
-                    `Error adding transition: ${(error as Error).message}`,
-                    true,
-                );
-                console.error(error);
-            });
-    });
-
     toggleFormButton.addEventListener("click", function () {
         const isVisible = formFlyout.style.display === "block";
 
@@ -408,6 +659,202 @@ document.addEventListener("DOMContentLoaded", function () {
 
             formFlyout.style.top = `${top}px`;
             formFlyout.style.right = `${right}px`;
+        }
+    }
+
+    // Tab switching functionality
+    stateTab.addEventListener("click", function () {
+        stateTab.classList.add("active");
+        actionTab.classList.remove("active");
+        stateForm.style.display = "block";
+        actionForm.style.display = "none";
+    });
+
+    actionTab.addEventListener("click", function () {
+        actionTab.classList.add("active");
+        stateTab.classList.remove("active");
+        actionForm.style.display = "block";
+        stateForm.style.display = "none";
+    });
+
+    // Update the current state indicator whenever a node is selected
+    function updateCurrentStateIndicator() {
+        if (webPlanData.currentNode) {
+            const currentNode = webPlanData.nodes.find(
+                (node) => node.id === webPlanData.currentNode,
+            );
+
+            if (currentNode) {
+                // Display the label or a placeholder for temporary nodes
+                const displayName = currentNode.isTemporary
+                    ? "(Temporary Node)"
+                    : currentNode.label || "(Unnamed)";
+
+                activeStateName.textContent = displayName;
+
+                // Auto-switch to action tab if we've just set a state
+                actionTab.click();
+            } else {
+                activeStateName.textContent = "None";
+            }
+        } else {
+            activeStateName.textContent = "None";
+        }
+    }
+
+    // Set State form handler
+    stateForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        if (currentViewMode === CONFIG.VIEW_MODES.STATIC) {
+            showStatus(
+                "Cannot add states in static view. Switch to dynamic view.",
+                true,
+            );
+            return;
+        }
+
+        const currentState = (
+            document.getElementById("current-state") as HTMLInputElement
+        ).value;
+
+        const nodeType = (
+            document.getElementById("node-type") as HTMLSelectElement
+        ).value;
+
+        const formData = {
+            currentState: currentState,
+            action: "", // No action for this request
+            nodeType: nodeType,
+        };
+
+        ApiService.addTransition(formData)
+            .then((result) => {
+                const { oldData, newData } = result;
+
+                // Update the reference data
+                if (
+                    !visualizer ||
+                    !visualizer.updateWithoutRedraw(oldData, newData)
+                ) {
+                    webPlanData = newData;
+                    initializeVisualization();
+
+                    // Focus on current node
+                    if (visualizer && webPlanData.currentNode) {
+                        visualizer._focusOnNodeContext(webPlanData.currentNode);
+                    }
+                }
+
+                // Update the state indicator
+                updateCurrentStateIndicator();
+
+                // Clear the state input
+                (
+                    document.getElementById("current-state") as HTMLInputElement
+                ).value = "";
+
+                // Show success message
+                showStatus("State set successfully", false);
+            })
+            .catch((error) => {
+                showStatus(
+                    `Error setting state: ${(error as Error).message}`,
+                    true,
+                );
+                console.error(error);
+            });
+    });
+
+    // Add Action form handler
+    actionForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        if (currentViewMode === CONFIG.VIEW_MODES.STATIC) {
+            showStatus(
+                "Cannot add actions in static view. Switch to dynamic view.",
+                true,
+            );
+            return;
+        }
+
+        const action = (
+            document.getElementById("action-name") as HTMLInputElement
+        ).value;
+
+        // Validate we have a current node
+        if (!webPlanData.currentNode) {
+            showStatus(
+                "Please set a state first before adding an action.",
+                true,
+            );
+
+            // Switch to state tab
+            stateTab.click();
+            return;
+        }
+
+        const formData = {
+            currentState: "", // No state name for this request
+            action: action,
+            nodeType: "action", // Default type for new nodes
+        };
+
+        ApiService.addTransition(formData)
+            .then((result) => {
+                const { oldData, newData } = result;
+
+                // Update the reference data
+                if (
+                    !visualizer ||
+                    !visualizer.updateWithoutRedraw(oldData, newData)
+                ) {
+                    webPlanData = newData;
+                    initializeVisualization();
+
+                    // Focus on current node
+                    if (visualizer && webPlanData.currentNode) {
+                        visualizer._focusOnNodeContext(webPlanData.currentNode);
+                    }
+                }
+
+                // Update the state indicator
+                updateCurrentStateIndicator();
+
+                // Clear the action input
+                (
+                    document.getElementById("action-name") as HTMLInputElement
+                ).value = "";
+
+                // Show success message
+                showStatus("Action added successfully", false);
+            })
+            .catch((error) => {
+                showStatus(
+                    `Error adding action: ${(error as Error).message}`,
+                    true,
+                );
+                console.error(error);
+            });
+    });
+
+    /**
+     * Toggle screenshot mode
+     */
+    function toggleScreenshotMode() {
+        isScreenshotMode = !isScreenshotMode;
+
+        if (isScreenshotMode) {
+            screenshotModeButton.classList.add("active");
+            screenshotModeButton.title = "Disable Screenshot Mode";
+        } else {
+            screenshotModeButton.classList.remove("active");
+            screenshotModeButton.title = "Enable Screenshot Mode";
+        }
+
+        // Update visualization to show/hide screenshots
+        if (visualizer) {
+            visualizer.setScreenshotMode(isScreenshotMode);
         }
     }
 
@@ -645,7 +1092,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
     updateDynamicControls();
 
+    updateCurrentStateIndicator();
+
     initializeSSE();
+
+    // Setup screenshot functionality
+    setupScreenshotEventListeners();
+
+    // Make the functions available globally
+    (window as any).showScreenshotUploadModal = showScreenshotUploadModal;
+    (window as any).uploadScreenshot = uploadScreenshot;
+    (window as any).handleFileSelect = handleFileSelect;
 
     // Make sure to close the connection when the page unloads
     window.addEventListener("beforeunload", () => {

@@ -12,12 +12,6 @@ import {
     TitleUpdateRequest,
 } from "../shared/types.js";
 
-declare global {
-    interface Window {
-        webPlanData?: WebPlanData;
-    }
-}
-
 class ApiService {
     /**
      * Fetch plan data from the server
@@ -199,6 +193,47 @@ class ApiService {
             return parsedData;
         } catch (error) {
             console.error("Error parsing import data:", error);
+            throw error;
+        }
+    }
+
+    /**
+     * Upload a screenshot for a node
+     * @param {string} nodeId - ID of the node to add screenshot to
+     * @param {string} screenshot - Base64-encoded screenshot data
+     * @returns {Promise<WebPlanData>} Promise that resolves to the updated plan data
+     */
+    static async uploadScreenshot(
+        nodeId: string,
+        screenshot: string,
+    ): Promise<WebPlanData> {
+        try {
+            if (!nodeId) {
+                throw new Error("Node ID is required");
+            }
+
+            if (!screenshot) {
+                throw new Error("Screenshot data is required");
+            }
+
+            const response = await fetch(CONFIG.API.UPLOAD_SCREENSHOT, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    nodeId,
+                    screenshot,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            return (await response.json()) as WebPlanData;
+        } catch (error) {
+            console.error("Error uploading screenshot:", error);
             throw error;
         }
     }

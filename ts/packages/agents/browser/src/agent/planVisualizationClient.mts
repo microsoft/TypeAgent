@@ -19,6 +19,7 @@ export interface WebPlanNode {
     label: string;
     type: "start" | "action" | "decision" | "end" | "temporary";
     isTemporary?: boolean;
+    screenshot?: string; // Base64-encoded screenshot
 }
 
 /**
@@ -36,7 +37,16 @@ export interface WebPlanLink {
 export interface TransitionData {
     currentState: string;
     action: string;
-    nodeType?: "action" | "decision" | "end";
+    nodeType?: "action" | "decision" | "end" | undefined;
+    screenshot?: string | undefined; // Base64-encoded screenshot
+}
+
+/**
+ * Interface for screenshot submission data
+ */
+export interface ScreenshotData {
+    nodeId: string;
+    screenshot: string; // Base64-encoded screenshot
 }
 
 /**
@@ -81,7 +91,7 @@ export class VisualizerClient {
      * @returns Promise resolving to the plan data
      */
     async getPlan(
-        mode: "static" | "dynamic" = "dynamic",
+        mode: "static" | "dynamic" | "screenshot" = "dynamic",
     ): Promise<WebPlanData> {
         const data = await this.fetchApi<WebPlanData>(`/api/plan?mode=${mode}`);
         this.currentPlan = data;
@@ -107,6 +117,46 @@ export class VisualizerClient {
 
         this.currentPlan = updatedPlan;
         return updatedPlan;
+    }
+
+    /**
+     * Upload a screenshot for a specific node
+     * @param nodeId The ID of the node to add a screenshot to
+     * @param screenshot Base64-encoded screenshot data
+     * @returns Promise resolving to the updated plan data
+     */
+    async uploadScreenshot(
+        nodeId: string,
+        screenshot: string,
+    ): Promise<WebPlanData> {
+        const updatedPlan = await this.fetchApi<WebPlanData>(
+            "/api/screenshot",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    nodeId,
+                    screenshot,
+                }),
+            },
+        );
+
+        this.currentPlan = updatedPlan;
+        return updatedPlan;
+    }
+
+    /**
+     * Find a node by its label
+     * @param label The label of the node to find
+     * @returns The node ID if found, null otherwise
+     */
+    findNodeIdByLabel(label: string): string | null {
+        if (!this.currentPlan) return null;
+        
+        const node = this.currentPlan.nodes.find(n => n.label === label);
+        return node ? node.id : null;
     }
 
     /**
@@ -156,6 +206,7 @@ export class StateMachineTracker {
     private client: VisualizerClient;
     private currentStateName: string | null = null;
     private planTitle: string = "Untitled Plan";
+    private screenShots = new Map<string, string>(); // Map state names to screenshots
 
     /**
      * Create a new state machine tracker
@@ -199,6 +250,7 @@ export class StateMachineTracker {
     async reset(keepTitle: boolean = true): Promise<void> {
         await this.client.resetPlan();
         this.currentStateName = null;
+        this.screenShots.clear(); // Clear cached screenshots
 
         // Restore title if requested
         if (keepTitle && this.planTitle) {
@@ -211,52 +263,105 @@ export class StateMachineTracker {
      * @param currentState The current state name
      * @param action The action being taken (leave empty for end states)
      * @param nodeType The type of node (action, decision, or end)
+     * @param screenshot Optional base64-encoded screenshot to associate with this state
      * @returns Promise resolving when transition is added
      */
     async processTransition(
         currentState: string,
         action: string = "",
         nodeType: "action" | "decision" | "end" = "action",
+        screenshot?: string,
     ): Promise<void> {
+        // If we have a cached screenshot for this state, use it
+        if (!screenshot && this.screenShots.has(currentState)) {
+            screenshot = this.screenShots.get(currentState);
+        }
+
         await this.client.addTransition({
             currentState,
             action,
             nodeType,
+            screenshot,
         });
 
         this.currentStateName = currentState;
+        
+        // Cache the screenshot for this state if provided
+        if (screenshot) {
+            this.screenShots.set(currentState, screenshot);
+        }
+    }
+
+    /**
+     * Add a screenshot to an existing node
+     * @param stateName The name of the state to add a screenshot to
+     * @param screenshot Base64-encoded screenshot data
+     * @returns Promise resolving when screenshot is added
+     */
+    async addScreenshot(stateName: string, screenshot: string): Promise<void> {
+        // Find the node ID for this state name
+        const nodeId = this.client.findNodeIdByLabel(stateName);
+        
+        if (!nodeId) {
+            throw new Error(`No node found with label: ${stateName}`);
+        }
+        
+        await this.client.uploadScreenshot(nodeId, screenshot);
+        
+        // Cache the screenshot for this state
+        this.screenShots.set(stateName, screenshot);
     }
 
     /**
      * Mark the current state as an end state
      * @param stateName The name of the end state
+     * @param screenshot Optional base64-encoded screenshot to associate with this state
      * @returns Promise resolving when end state is added
      */
-    async markEndState(stateName: string): Promise<void> {
+    async markEndState(stateName: string, screenshot?: string): Promise<void> {
+        // If we have a cached screenshot for this state, use it
+        if (!screenshot && this.screenShots.has(stateName)) {
+            screenshot = this.screenShots.get(stateName);
+        }
+
         await this.client.addTransition({
             currentState: stateName,
             action: "",
             nodeType: "end",
+            screenshot,
         });
 
         this.currentStateName = stateName;
+        
+        // Cache the screenshot for this state if provided
+        if (screenshot) {
+            this.screenShots.set(stateName, screenshot);
+        }
     }
 
     /**
      * Create a decision point with multiple possible actions
      * @param stateName The name of the decision state
      * @param actions The possible actions from this state
+     * @param screenshot Optional base64-encoded screenshot to associate with this state
      * @returns Promise resolving when decision and actions are added
      */
     async createDecisionPoint(
         stateName: string,
         actions: string[],
+        screenshot?: string,
     ): Promise<void> {
+        // If we have a cached screenshot for this state, use it
+        if (!screenshot && this.screenShots.has(stateName)) {
+            screenshot = this.screenShots.get(stateName);
+        }
+
         // First add the decision state
         await this.client.addTransition({
             currentState: stateName,
             action: actions[0] || "",
             nodeType: "decision",
+            screenshot,
         });
 
         // Then add subsequent actions if any
@@ -268,6 +373,11 @@ export class StateMachineTracker {
         }
 
         this.currentStateName = stateName;
+        
+        // Cache the screenshot for this state if provided
+        if (screenshot) {
+            this.screenShots.set(stateName, screenshot);
+        }
     }
 }
 
@@ -285,12 +395,18 @@ export function createExecutionTracker(
         stateName: string,
         nextAction?: string,
         nodeType?: "action" | "decision" | "end",
+        screenshot?: string,
+    ) => Promise<void>;
+    addScreenshot: (
+        stateName: string,
+        screenshot: string,
     ) => Promise<void>;
     reset: (keepTitle?: boolean) => Promise<void>;
     setTitle: (title: string) => Promise<void>;
 } {
     const client = new VisualizerClient(baseUrl);
     let planTitle = title || "Execution Plan";
+    const screenShots = new Map<string, string>(); // Map state names to screenshots
 
     // Set initial title if provided
     if (title) {
@@ -305,17 +421,52 @@ export function createExecutionTracker(
          * @param stateName The current state name
          * @param nextAction The next action to take (optional)
          * @param nodeType The type of node
+         * @param screenshot Optional base64-encoded screenshot for this state
          */
         trackState: async (
             stateName: string,
             nextAction?: string,
             nodeType: "action" | "decision" | "end" = "action",
+            screenshot?: string,
         ): Promise<void> => {
+            // If we have a cached screenshot for this state, use it
+            if (!screenshot && screenShots.has(stateName)) {
+                screenshot = screenShots.get(stateName);
+            }
+
             await client.addTransition({
                 currentState: stateName,
                 action: nextAction || "",
                 nodeType,
+                screenshot,
             });
+            
+            // Cache the screenshot for this state if provided
+            if (screenshot) {
+                screenShots.set(stateName, screenshot);
+            }
+        },
+
+        /**
+         * Add a screenshot to an existing node
+         * @param stateName The name of the state to add a screenshot to 
+         * @param screenshot Base64-encoded screenshot data
+         */
+        addScreenshot: async (
+            stateName: string,
+            screenshot: string,
+        ): Promise<void> => {
+            // Find the node ID for this state name
+            const nodeId = client.findNodeIdByLabel(stateName);
+            
+            if (!nodeId) {
+                throw new Error(`No node found with label: ${stateName}`);
+            }
+            
+            await client.uploadScreenshot(nodeId, screenshot);
+            
+            // Cache the screenshot for this state
+            screenShots.set(stateName, screenshot);
         },
 
         /**
@@ -324,6 +475,7 @@ export function createExecutionTracker(
          */
         reset: async (keepTitle: boolean = true): Promise<void> => {
             await client.resetPlan();
+            screenShots.clear(); // Clear cached screenshots
 
             // Restore title if requested
             if (keepTitle && planTitle) {

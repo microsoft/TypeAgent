@@ -23,10 +23,16 @@ interface TransitionRequest {
     currentState: string;
     action: string;
     nodeType: string;
+    screenshot?: string;
 }
 
 interface TitleRequest {
     title: string;
+}
+
+interface ScreenshotRequest {
+    nodeId: string;
+    screenshot: string; // Base64-encoded screenshot
 }
 
 // Initial web plan data (will be modified by API calls)
@@ -80,8 +86,8 @@ const staticPlanData: WebPlanData = {
 
 // Middleware
 app.use(express.static(path.join(__dirname, "..", "public")));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 // Track connected SSE clients
 const clients: Set<Client> = new Set();
@@ -142,32 +148,146 @@ app.post("/api/transition", (req: Request, res: Response) => {
         currentState,
         action,
         nodeType = "action",
-    } = req.body as TransitionRequest;
+        screenshot = null,
+    } = req.body as TransitionRequest & { screenshot?: string };
 
     let sourceNodeId: string;
     let targetNodeId: string;
 
     const isFirstNode = dynamicPlanData.nodes.length === 0;
 
-    // Case 1: Replacing a temporary node
+    // Case 0: If both currentState and action are empty, return an error
+    if (!currentState && !action) {
+        return res.status(400).json({
+            error: "Either state name or action must be provided",
+        });
+    }
+
+    // Case 1: Only currentState is provided (no action)
+    if (currentState && !action) {
+        // Case 1.1: Check if the state already exists
+        const existingNode = dynamicPlanData.nodes.find(
+            (node) => node.label === currentState && !node.isTemporary,
+        );
+
+        if (existingNode) {
+            // If the state exists, set it as the current node
+            dynamicPlanData.currentNode = existingNode.id;
+
+            broadcastUpdate("transition", dynamicPlanData);
+            return res.json(dynamicPlanData);
+        }
+
+        // Case 1.2: If there's a temporary node, replace it with this state
+        const tempNodeIndex = dynamicPlanData.nodes.findIndex(
+            (node) => node.isTemporary,
+        );
+
+        if (tempNodeIndex >= 0) {
+            // Replace the temporary node with the confirmed state
+            const tempNode = dynamicPlanData.nodes[tempNodeIndex];
+
+            // Update the temporary node to be a confirmed state
+            tempNode.label = currentState;
+            tempNode.isTemporary = false;
+            tempNode.type = isFirstNode ? "start" : nodeType;
+
+            // Set it as the current node
+            dynamicPlanData.currentNode = tempNode.id;
+
+            broadcastUpdate("transition", dynamicPlanData);
+            return res.json(dynamicPlanData);
+        }
+
+        // Case 1.3: If this is the first node or we need to create a new one
+        sourceNodeId = `node-${dynamicPlanData.nodes.length}`;
+
+        // If this is the first node, use "Start" type
+        dynamicPlanData.nodes.push({
+            id: sourceNodeId,
+            label: currentState,
+            type: isFirstNode ? "start" : nodeType,
+            isTemporary: false,
+        });
+
+        if (screenshot) {
+            const node = dynamicPlanData.nodes.find(
+                (n) => n.id === sourceNodeId,
+            );
+            if (node) {
+                node.screenshot = screenshot;
+            }
+        }
+
+        // Set it as the current node
+        dynamicPlanData.currentNode = sourceNodeId;
+
+        broadcastUpdate("transition", dynamicPlanData);
+        return res.json(dynamicPlanData);
+    }
+
+    // Case 2: Only action is provided (no currentState)
+    if (!currentState && action) {
+        // We must have a current node to add an action from
+        if (!dynamicPlanData.currentNode) {
+            return res.status(400).json({
+                error: "No current node selected. Please set a state first.",
+            });
+        }
+
+        // Use the current node as the source
+        sourceNodeId = dynamicPlanData.currentNode;
+
+        if (screenshot) {
+            const node = dynamicPlanData.nodes.find(
+                (n) => n.id === sourceNodeId,
+            );
+            if (node) {
+                node.screenshot = screenshot;
+            }
+        }
+
+        // Create a new temporary node as the target
+        targetNodeId = `node-${dynamicPlanData.nodes.length}`;
+        dynamicPlanData.nodes.push({
+            id: targetNodeId,
+            label: "", // Blank label for temporary nodes
+            type: "temporary",
+            isTemporary: true,
+        });
+
+        // Create the link with the action name
+        dynamicPlanData.links.push({
+            source: sourceNodeId,
+            target: targetNodeId,
+            label: action,
+        });
+
+        // Update current node to the new temporary node
+        dynamicPlanData.currentNode = targetNodeId;
+
+        broadcastUpdate("transition", dynamicPlanData);
+        return res.json(dynamicPlanData);
+    }
+
+    // Case 3: Both currentState and action are provided (original behavior)
+    // Case 3.1: Replacing a temporary node
     const tempNodeIndex = dynamicPlanData.nodes.findIndex(
         (node) => node.isTemporary,
     );
+
     if (tempNodeIndex >= 0) {
         // Replace the temporary node with the confirmed state
         const tempNode = dynamicPlanData.nodes[tempNodeIndex];
 
         // Update the temporary node to be a confirmed state
-        // If currentState is empty and this is the first node, label it "Start"
-        tempNode.label =
-            isFirstNode && !currentState ? "Start" : currentState || "";
+        tempNode.label = currentState || "";
         tempNode.isTemporary = false;
         tempNode.type = isFirstNode ? "start" : nodeType;
 
         sourceNodeId = tempNode.id;
     } else {
-        // Case 2: No temporary node to replace, just use/create the current state
-        // Allow blank state names to create unnamed states
+        // Case 3.2: No temporary node to replace, use/create the current state
         const existingNode = currentState
             ? dynamicPlanData.nodes.find((node) => node.label === currentState)
             : null;
@@ -191,25 +311,7 @@ app.post("/api/transition", (req: Request, res: Response) => {
         }
     }
 
-    // If action is empty, this is an end state with no outgoing transitions
-    if (!action || action.trim() === "") {
-        // Just update the current node without creating a new transition
-        dynamicPlanData.currentNode = sourceNodeId;
-
-        // If this is an end state, mark it as such
-        const sourceNode = dynamicPlanData.nodes.find(
-            (node) => node.id === sourceNodeId,
-        );
-        if (sourceNode) {
-            sourceNode.type = "end";
-        }
-
-        broadcastUpdate("transition", dynamicPlanData);
-        res.json(dynamicPlanData);
-        return;
-    }
-
-    // Create a new temporary node with blank label (not using action name)
+    // Create a new temporary node with blank label
     targetNodeId = `node-${dynamicPlanData.nodes.length}`;
     dynamicPlanData.nodes.push({
         id: targetNodeId,
@@ -225,11 +327,17 @@ app.post("/api/transition", (req: Request, res: Response) => {
         label: action,
     });
 
+    if (screenshot) {
+        const node = dynamicPlanData.nodes.find((n) => n.id === sourceNodeId);
+        if (node) {
+            node.screenshot = screenshot;
+        }
+    }
+
     // Update current node
     dynamicPlanData.currentNode = targetNodeId;
 
     broadcastUpdate("transition", dynamicPlanData);
-
     res.json(dynamicPlanData);
 });
 
@@ -251,6 +359,42 @@ app.post("/api/title", (req: Request, res: Response) => {
         broadcastUpdate("title", dynamicPlanData);
         res.json(dynamicPlanData);
     }
+});
+
+// API endpoint to set a screenshot for a node
+app.post("/api/screenshot", (req: Request, res: Response) => {
+    const { nodeId, screenshot } = req.body as ScreenshotRequest;
+
+    if (!nodeId || !screenshot) {
+        return res
+            .status(400)
+            .json({ error: "Node ID and screenshot are required" });
+    }
+
+    // Find the node in both dynamic and static plan data
+    const dynamicNode = dynamicPlanData.nodes.find(
+        (node) => node.id === nodeId,
+    );
+    const staticNode = staticPlanData.nodes.find((node) => node.id === nodeId);
+
+    // Update the node if found
+    if (dynamicNode) {
+        dynamicNode.screenshot = screenshot;
+        broadcastUpdate("node-update", dynamicPlanData);
+    }
+
+    if (staticNode) {
+        staticNode.screenshot = screenshot;
+        broadcastUpdate("node-update", staticPlanData);
+    }
+
+    if (!dynamicNode && !staticNode) {
+        return res.status(404).json({ error: "Node not found" });
+    }
+
+    // Return the updated plan data
+    const currentPlanData = dynamicNode ? dynamicPlanData : staticPlanData;
+    res.json(currentPlanData);
 });
 
 // Modify your reset endpoint to preserve title if requested

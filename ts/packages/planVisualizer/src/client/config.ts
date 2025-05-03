@@ -11,6 +11,7 @@ export interface ApiConfig {
     ADD_TRANSITION: string;
     RESET_PLAN: string;
     SET_TITLE: string;
+    UPLOAD_SCREENSHOT: string;
 }
 
 export interface NodeTypes {
@@ -24,6 +25,7 @@ export interface NodeTypes {
 export interface ViewModes {
     STATIC: string;
     DYNAMIC: string;
+    SCREENSHOT: string;
 }
 
 export interface Colors {
@@ -65,6 +67,7 @@ const CONFIG: Config = {
         ADD_TRANSITION: "/api/transition",
         RESET_PLAN: "/api/reset",
         SET_TITLE: "/api/title",
+        UPLOAD_SCREENSHOT: "/api/screenshot",
     },
 
     // Node types
@@ -80,6 +83,7 @@ const CONFIG: Config = {
     VIEW_MODES: {
         STATIC: "static",
         DYNAMIC: "dynamic",
+        SCREENSHOT: "screenshot",
     },
 
     // Node colors - Updated to lighter pastel colors for a more pleasant visualization

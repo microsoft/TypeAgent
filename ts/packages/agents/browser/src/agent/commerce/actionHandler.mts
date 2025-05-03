@@ -234,6 +234,7 @@ export async function handleCommerceAction(
 
         while (true) {
             const htmlFragments = await browser.getHtmlFragments();
+            const screenshot = await browser.getCurrentPageScreenshot();
             const currentStateRequest = await agent.getPageState(
                 undefined,
                 htmlFragments,
@@ -241,6 +242,13 @@ export async function handleCommerceAction(
             let currentState = undefined;
             if (currentStateRequest.success) {
                 currentState = currentStateRequest.data as PageState;
+
+                await trackState(
+                    currentState?.pageType ?? "",
+                    undefined,
+                    "action",
+                    screenshot
+                );
             }
 
             const executionHistoryText =
