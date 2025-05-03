@@ -66,9 +66,9 @@ export function addSynonymsAsAliases(
     synonyms: TermSynonyms[],
 ): void {
     for (const ts of synonyms) {
-        let relatedTerm: kp.Term = { text: ts.term };
+        let relatedTerm: kp.Term = { text: ts.term.toLowerCase() };
         for (const synonym of ts.relatedTerms) {
-            aliases.addRelatedTerm(synonym, relatedTerm);
+            aliases.addRelatedTerm(synonym.toLowerCase(), relatedTerm);
         }
     }
 }
