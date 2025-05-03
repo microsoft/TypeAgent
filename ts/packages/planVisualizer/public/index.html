@@ -27,6 +27,15 @@
           <button id="zoom-fit-button" class="icon-button" title="Fit View">
             <i class="fas fa-expand"></i>
           </button>
+
+          <button
+            id="screenshot-mode-button"
+            class="icon-button"
+            title="Toggle Screenshot Mode"
+          >
+            <i class="fas fa-image"></i>
+          </button>
+
           <button
             id="show-path-button"
             class="icon-button"
@@ -74,6 +83,39 @@
 
       <div id="status-message" class="status-message"></div>
 
+      <!-- Form for uploading screenshots -->
+      <div id="screenshot-upload-modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Upload Screenshot</h2>
+            <button class="close-modal"><i class="fas fa-times"></i></button>
+          </div>
+          <div class="modal-body">
+            <p>
+              Upload a screenshot for the selected node:
+              <strong id="upload-node-name"></strong>
+            </p>
+
+            <div class="upload-container">
+              <input type="file" id="screenshot-file" accept="image/*" />
+              <div class="drop-area" id="drop-area">
+                <p>Drag & drop an image here or click to select</p>
+                <div class="preview-container" id="preview-container">
+                  <img id="preview-image" src="" alt="Preview" />
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <button id="upload-screenshot-button" disabled>
+                Upload Screenshot
+              </button>
+              <button class="cancel-modal">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Flyout form for adding transitions -->
       <div id="form-flyout" class="form-flyout">
         <div class="form-flyout-header">
@@ -82,52 +124,72 @@
             <i class="fas fa-times"></i>
           </button>
         </div>
-        <form id="transition-form">
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="current-state">Current State Name (optional):</label>
-              <input
-                type="text"
-                id="current-state"
-                name="currentState"
-                placeholder="Enter state name or leave blank"
-              />
-              <small class="form-hint"
-                >First node added will be the start node (blank will be labeled
-                "Start")</small
-              >
-            </div>
+        <div class="form-tabs">
+          <button id="state-tab" class="form-tab active">Set State</button>
+          <button id="action-tab" class="form-tab">Add Action</button>
+        </div>
 
-            <div class="form-group">
-              <label for="action-name">Next Action:</label>
-              <input
-                type="text"
-                id="action-name"
-                name="action"
-                placeholder="Enter action (leave empty for end state)"
-              />
-              <small class="form-hint"
-                >The action leading to the next state (leave empty for end
-                node)</small
-              >
-            </div>
+        <!-- State Form -->
+        <form id="state-form" class="transition-subform">
+          <div class="form-group">
+            <label for="current-state">State Name:</label>
+            <input
+              type="text"
+              id="current-state"
+              name="currentState"
+              placeholder="Enter state name or leave blank"
+            />
+            <small class="form-hint">
+              If name matches existing node, it will be selected. If this is the
+              first node or replacing a temporary node, a new node will be
+              created.
+            </small>
+          </div>
 
-            <div class="form-group">
-              <label for="node-type">State Node Type:</label>
-              <select id="node-type" name="nodeType">
-                <option value="action">Action</option>
-                <option value="decision">Decision</option>
-                <option value="end">End</option>
-              </select>
-            </div>
+          <div class="form-group">
+            <label for="node-type">Node Type:</label>
+            <select id="node-type" name="nodeType">
+              <option value="action">Action</option>
+              <option value="decision">Decision</option>
+              <option value="end">End</option>
+            </select>
           </div>
 
           <div class="form-actions">
-            <button type="submit" id="add-transition-button">
-              <i class="fas fa-plus"></i> Add Transition
+            <button type="submit" id="set-state-button">
+              <i class="fas fa-map-marker-alt"></i> Set State
             </button>
           </div>
         </form>
+
+        <!-- Action Form -->
+        <form id="action-form" class="transition-subform" style="display: none">
+          <div class="form-group">
+            <label for="action-name">Action Name:</label>
+            <input
+              type="text"
+              id="action-name"
+              name="action"
+              placeholder="Enter action (leave empty for end state)"
+            />
+            <small class="form-hint">
+              This will create a transition from the current state. Leave empty
+              to mark as an end state.
+            </small>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="add-action-button">
+              <i class="fas fa-arrow-right"></i> Add Action
+            </button>
+          </div>
+        </form>
+
+        <!-- Current state indicator -->
+        <div class="current-state-indicator">
+          <span>Current State: </span>
+          <strong id="active-state-name">None</strong>
+        </div>
       </div>
 
       <div id="cy-container"></div>

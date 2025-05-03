@@ -5,12 +5,22 @@
  * Type definitions for the Web Plan Visualizer
  */
 
+declare global {
+    interface Window {
+        webPlanData?: any;
+        showScreenshotUploadModal?: (nodeId: string, nodeLabel: string) => void;
+        uploadScreenshot?: () => void;
+        handleFileSelect?: (files: FileList | null) => void;
+    }
+}
+
 // Node in the web plan
 export interface PlanNode {
     id: string;
     label: string;
     type: string;
     isTemporary?: boolean;
+    screenshot?: string;
 }
 
 // Link between nodes in the web plan
@@ -33,6 +43,7 @@ export interface TransitionFormData {
     currentState: string;
     action: string;
     nodeType: string;
+    screenshot?: string;
 }
 
 // API transition response

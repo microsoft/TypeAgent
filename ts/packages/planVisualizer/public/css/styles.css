@@ -361,3 +361,349 @@ input[type="text"] {
 .dynamic-only-control.hidden {
   display: none;
 }
+
+/* Styling for updated transition form with tabs */
+.form-tabs {
+  display: flex;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 15px;
+}
+
+.form-tab {
+  padding: 8px 15px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.form-tab:hover {
+  color: #333;
+}
+
+.form-tab.active {
+  color: #333;
+  border-bottom-color: #c5e1a5;
+}
+
+.transition-subform {
+  transition: all 0.3s ease;
+}
+
+.form-actions {
+  margin-top: 15px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+#set-state-button,
+#add-action-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #e8f5e9;
+  color: #333;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+#set-state-button:hover,
+#add-action-button:hover {
+  background-color: #c5e1a5;
+}
+
+.current-state-indicator {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #f0f4f8;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#active-state-name {
+  color: #1976d2;
+}
+
+/* Add these styles to your CSS file */
+
+/* Screenshot mode button */
+#screenshot-mode-button.active {
+  background-color: #e8f5e9;
+  color: #333;
+}
+
+/* Modal for screenshot uploads */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal.active {
+  display: flex;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 500px;
+  max-width: 90%;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.modal-actions button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  border: none;
+}
+
+.close-modal,
+.cancel-modal {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #777;
+  font-size: 16px;
+  transition: color 0.2s;
+}
+
+.close-modal:hover,
+.cancel-modal:hover {
+  color: #333;
+}
+
+#upload-screenshot-button {
+  background-color: #e8f5e9;
+  color: #333;
+}
+
+#upload-screenshot-button:hover {
+  background-color: #c5e1a5;
+}
+
+#upload-screenshot-button:disabled {
+  background-color: #f0f0f0;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* File upload area */
+.upload-container {
+  margin: 20px 0;
+}
+
+#screenshot-file {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.drop-area {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 25px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  min-height: 100px;
+}
+
+.drop-area:hover,
+.drop-area.dragover {
+  border-color: #c5e1a5;
+  background-color: #f9f9f9;
+}
+
+.preview-container {
+  margin-top: 15px;
+  display: none;
+  max-height: 200px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.preview-container img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+/* Special styles for nodes with screenshots */
+.node-has-screenshot {
+  border: 2px solid #c5e1a5;
+}
+/* CSS for screenshot controls */
+.screenshot-control {
+  margin-top: 15px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.screenshot-preview {
+  margin-top: 10px;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.screenshot-preview img {
+  max-width: 100%;
+  max-height: 150px;
+  display: block;
+  margin: 0 auto 10px;
+}
+
+.clear-screenshot {
+  display: block;
+  margin: 0 auto;
+  padding: 3px 8px;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.clear-screenshot:hover {
+  background-color: #d32f2f;
+}
+
+/* Adjust for better node display in screenshot mode */
+.screenshot-mode #cy-container {
+  background-color: #f5f5f5;
+}
+
+node.screenshot-mode {
+  width: 200px !important;
+  height: 120px !important;
+  background-size: cover !important;
+}
+
+/* Add a badge to indicate when screenshot mode is enabled */
+.screenshot-badge {
+  position: absolute;
+  top: 10px;
+  right: 60px;
+  background-color: rgba(0, 150, 136, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: none;
+  z-index: 1000;
+}
+
+.screenshot-badge.active {
+  display: block;
+}
+
+/* Custom styling for the text labels on screenshot nodes (applied via a class) */
+.cy-node-screenshot-label {
+  position: absolute;
+  top: -18px;
+  left: 0; /* Aligned with the left edge of the node */
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Remove any transform that might offset the label */
+  transform: none;
+  /* Ensure left padding is minimal to maintain alignment */
+  padding-left: 3px;
+}
+
+/* When using Cytoscape's built-in label positioning */
+body.using-cytoscape-labels [data-id][?hasScreenshot] {
+  /* Override any potential Cytoscape internal margin */
+  text-indent: 0 !important;
+  margin-left: 0 !important;
+}
+
+/* Enhanced styling for the screenshot badge */
+.screenshot-badge {
+  position: absolute;
+  top: 10px;
+  right: 60px;
+  background-color: rgba(0, 150, 136, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: none;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.screenshot-badge.active {
+  display: block;
+}
+
+/* Specific styling for node labels in screenshot mode */
+.cy-node.screenshot-mode {
+  background-size: cover !important;
+  background-position: center center !important;
+}
+
+/* Ensure perfect alignment within Cytoscape's rendering */
+.cy-node .nodeLabel,
+.cy-node text {
+  text-anchor: start !important; /* For SVG text elements */
+  dominant-baseline: hanging !important; /* For SVG text elements */
+}
