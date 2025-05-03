@@ -13,6 +13,7 @@ const isDev =
     process.argv.includes("--dev") ||
     process.argv.includes("--mode=development");
 const buildMode = isDev ? "development" : "production";
+const verbose = process.argv.includes("--verbose");
 
 const chromeOutDir = resolve(__dirname, "../dist/extension");
 const electronOutDir = resolve(__dirname, "../dist/electron");
@@ -54,14 +55,19 @@ const vendorAssets = [
     ],
 ];
 
-// console.log(chalk.blueBright(`\n🔨 Building in ${buildMode.toUpperCase()} mode...\n`));
+if (verbose)
+    console.log(
+        chalk.blueBright(
+            `\n🔨 Building in ${buildMode.toUpperCase()} mode...\n`,
+        ),
+    );
 
 //
 // ------------------------
 // 🔹 Browser Extension
 // ------------------------
 //
-// console.log(chalk.cyan('🚀 Building Browser extension...'));
+if (verbose) console.log(chalk.cyan("🚀 Building Browser extension..."));
 
 // Service worker (ESM)
 await build({
@@ -80,12 +86,12 @@ await build({
         },
     },
 });
-// console.log(chalk.green('✅ Chrome service worker built'));
+if (verbose) console.log(chalk.green("✅ Chrome service worker built"));
 
 // Content scripts (IIFE)
 for (const [name, relPath] of Object.entries(sharedScripts)) {
     const input = resolve(srcDir, relPath);
-    // console.log(chalk.yellow(`➡️  Chrome content: ${name}`));
+    if (verbose) console.log(chalk.yellow(`➡️  Chrome content: ${name}`));
     await build({
         logLevel: "error",
         build: {
@@ -103,11 +109,11 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
             },
         },
     });
-    // console.log(chalk.green(`✅ Chrome ${name}.js built`));
+    if (verbose) console.log(chalk.green(`✅ Chrome ${name}.js built`));
 }
 
 // Static file copy
-// console.log(chalk.cyan('\n📁 Copying Chrome static files...'));
+if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
 copyFileSync(`${srcDir}/sidepanel.html`, `${chromeOutDir}/sidepanel.html`);
 copyFileSync(`${srcDir}/options.html`, `${chromeOutDir}/options.html`);
@@ -122,18 +128,18 @@ for (const [src, destRel] of vendorAssets) {
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(resolve(__dirname, "../", src), dest);
 }
-// console.log(chalk.green('✅ Chrome static assets copied'));
+if (verbose) console.log(chalk.green("✅ Chrome static assets copied"));
 
 //
 // ------------------------
 // 🟣 Electron Extension
 // ------------------------
 //
-// console.log(chalk.cyan('\n🚀 Building Electron extension...'));
+if (verbose) console.log(chalk.cyan("\n🚀 Building Electron extension..."));
 
 for (const [name, relPath] of Object.entries(sharedScripts)) {
     const input = resolve(srcDir, relPath);
-    // console.log(chalk.yellow(`➡️  Electron shared: ${name}`));
+    if (verbose) console.log(chalk.yellow(`➡️  Electron shared: ${name}`));
     await build({
         logLevel: "error",
         build: {
@@ -151,12 +157,12 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
             },
         },
     });
-    // console.log(chalk.green(`✅ Electron ${name}.js built`));
+    if (verbose) console.log(chalk.green(`✅ Electron ${name}.js built`));
 }
 
 for (const [name, relPath] of Object.entries(electronOnlyScripts)) {
     const input = resolve(__dirname, relPath);
-    // console.log(chalk.yellow(`➡️  Electron only: ${name}`));
+    if (verbose) console.log(chalk.yellow(`➡️  Electron only: ${name}`));
     await build({
         logLevel: "error",
         build: {
@@ -174,15 +180,20 @@ for (const [name, relPath] of Object.entries(electronOnlyScripts)) {
             },
         },
     });
-    // console.log(chalk.green(`✅ Electron ${name}.js built`));
+    if (verbose) console.log(chalk.green(`✅ Electron ${name}.js built`));
 }
 
 // Copy electron manifest
-// console.log(chalk.cyan('\n📁 Copying Electron static files...'));
+if (verbose) console.log(chalk.cyan("\n📁 Copying Electron static files..."));
 copyFileSync(
     `${electronSrcDir}/manifest.json`,
     `${electronOutDir}/manifest.json`,
 );
-// console.log(chalk.green('✅ Electron static assets copied\n'));
+if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
 
-// console.log(chalk.bold.green(`\n🎉 Extension build complete [${buildMode.toUpperCase()} mode]`));
+if (verbose)
+    console.log(
+        chalk.bold.green(
+            `\n🎉 Extension build complete [${buildMode.toUpperCase()} mode]`,
+        ),
+    );
