@@ -16,8 +16,7 @@ import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
-} from "../../common/webAgentMessageTypes.mjs";;
-
+} from "../../common/webAgentMessageTypes.mjs";
 
 /**
  * Initializes the service worker

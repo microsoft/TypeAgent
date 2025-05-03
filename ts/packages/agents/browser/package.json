@@ -18,10 +18,8 @@
   },
   "main": "index.js",
   "scripts": {
-    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack",
-    "build2": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite",
-    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:webpack:dev",
-    "build:dev2": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev",
+    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite",
+    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev",
     "clean": "rimraf dist deploy",
     "package": "node scripts/packExtension.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
@@ -29,12 +27,8 @@
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
-    "vite": "vite build --mode production && node fix-service-worker.js",
-    "vite:dev": "npm run dev:extension",
-    "dev:extension": "vite build --config vite.extension.config.js",
-    "dev:electron": "vite build --config vite.electron.config.js",
-    "webpack": "webpack --config webpack.prod.js",
-    "webpack:dev": "webpack --config webpack.dev.js"
+    "vite": "node scripts/buildExtension.mjs",
+    "vite:dev": "node scripts/buildExtension.mjs --dev"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -43,6 +37,7 @@
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
     "bootstrap": "^5.3.3",
+    "chalk": "^5.4.1",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
     "dompurify": "^3.2.5",
@@ -73,26 +68,13 @@
     "@types/ws": "^8.5.10",
     "archiver": "^7.0.1",
     "concurrently": "^9.1.2",
-    "copy-webpack-plugin": "^12.0.1",
     "crx": "^5.0.1",
     "dotenv": "^16.5.0",
     "find-up": "^7.0.0",
     "fs-extra": "^11.2.0",
     "rimraf": "^6.0.1",
     "rollup-plugin-copy": "^3.5.0",
-    "rollup-plugin-node-polyfills": "^0.2.1",
-    "rollup-plugin-visualizer": "^5.12.0",
-    "terser": "^5.24.0",
-    "ts-loader": "^9.5.1",
-    "tslib": "^2.6.2",
     "typescript": "~5.4.5",
-    "vite": "^5.4.19",
-    "vite-plugin-chrome-extension": "^0.0.7",
-    "vite-plugin-node-polyfills": "^0.17.0",
-    "vite-plugin-static-copy": "^0.15.0",
-    "vite-plugin-web-extension": "^4.4.3",
-    "webpack": "^5.94.0",
-    "webpack-cli": "^5.1.4",
-    "webpack-merge": "^5.10.0"
+    "vite": "^5.4.19"
   }
 }
