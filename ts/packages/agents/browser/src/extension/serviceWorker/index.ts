@@ -11,6 +11,7 @@ import { toggleSiteTranslator } from "./siteTranslator";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { getActiveTab } from "./tabManager";
 import { handleMessage } from "./messageHandlers";
+
 import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
