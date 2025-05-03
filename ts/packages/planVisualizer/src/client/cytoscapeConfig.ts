@@ -132,6 +132,42 @@ const CytoscapeConfig = {
                         return "none";
                     },
                     "background-fit": "contain",
+                    // Position the label outside the node at the top-left
+                    "text-valign": "top",
+                    "text-halign": "left",
+                    // Add background to make text more readable
+                    "text-background-color": "rgba(255,255,255,0.8)",
+                    "text-background-opacity": 1,
+                    "text-background-padding": 3,
+                    "text-background-shape": "roundrectangle",
+                    // Adjust the margin to move text above the node
+                    "text-margin-y": -10,
+                    "text-margin-x": 0, // Set to 0 to align with the left edge
+                    // Make font smaller
+                    "font-size": "11px",
+                    // Ensure text is above the node visually
+                    "z-index": 10,
+                },
+            },
+
+            // For screenshot mode, make the styling even more pronounced
+            {
+                selector: "node.screenshot-mode[?hasScreenshot]",
+                style: {
+                    // Same background-image and background-fit as above
+                    // Make the label even smaller and more out of the way
+                    "font-size": "10px",
+                    "text-margin-y": -12,
+                    "text-margin-x": 0, // Set to 0 to align with the left edge
+                    "text-valign": "top",
+                    "text-halign": "left",
+                    "text-background-color": "rgba(255,255,255,0.9)",
+                    "text-background-shape": "roundrectangle",
+                    "text-background-padding": 2,
+                    "border-width": 2,
+                    // Increase the node size in screenshot mode
+                    width: 220,
+                    height: 140,
                 },
             },
             // Temporary nodes

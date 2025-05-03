@@ -154,8 +154,8 @@ export class VisualizerClient {
      */
     findNodeIdByLabel(label: string): string | null {
         if (!this.currentPlan) return null;
-        
-        const node = this.currentPlan.nodes.find(n => n.label === label);
+
+        const node = this.currentPlan.nodes.find((n) => n.label === label);
         return node ? node.id : null;
     }
 
@@ -285,7 +285,7 @@ export class StateMachineTracker {
         });
 
         this.currentStateName = currentState;
-        
+
         // Cache the screenshot for this state if provided
         if (screenshot) {
             this.screenShots.set(currentState, screenshot);
@@ -301,13 +301,13 @@ export class StateMachineTracker {
     async addScreenshot(stateName: string, screenshot: string): Promise<void> {
         // Find the node ID for this state name
         const nodeId = this.client.findNodeIdByLabel(stateName);
-        
+
         if (!nodeId) {
             throw new Error(`No node found with label: ${stateName}`);
         }
-        
+
         await this.client.uploadScreenshot(nodeId, screenshot);
-        
+
         // Cache the screenshot for this state
         this.screenShots.set(stateName, screenshot);
     }
@@ -332,7 +332,7 @@ export class StateMachineTracker {
         });
 
         this.currentStateName = stateName;
-        
+
         // Cache the screenshot for this state if provided
         if (screenshot) {
             this.screenShots.set(stateName, screenshot);
@@ -373,7 +373,7 @@ export class StateMachineTracker {
         }
 
         this.currentStateName = stateName;
-        
+
         // Cache the screenshot for this state if provided
         if (screenshot) {
             this.screenShots.set(stateName, screenshot);
@@ -397,10 +397,7 @@ export function createExecutionTracker(
         nodeType?: "action" | "decision" | "end",
         screenshot?: string,
     ) => Promise<void>;
-    addScreenshot: (
-        stateName: string,
-        screenshot: string,
-    ) => Promise<void>;
+    addScreenshot: (stateName: string, screenshot: string) => Promise<void>;
     reset: (keepTitle?: boolean) => Promise<void>;
     setTitle: (title: string) => Promise<void>;
 } {
@@ -440,7 +437,7 @@ export function createExecutionTracker(
                 nodeType,
                 screenshot,
             });
-            
+
             // Cache the screenshot for this state if provided
             if (screenshot) {
                 screenShots.set(stateName, screenshot);
@@ -449,7 +446,7 @@ export function createExecutionTracker(
 
         /**
          * Add a screenshot to an existing node
-         * @param stateName The name of the state to add a screenshot to 
+         * @param stateName The name of the state to add a screenshot to
          * @param screenshot Base64-encoded screenshot data
          */
         addScreenshot: async (
@@ -458,13 +455,13 @@ export function createExecutionTracker(
         ): Promise<void> => {
             // Find the node ID for this state name
             const nodeId = client.findNodeIdByLabel(stateName);
-            
+
             if (!nodeId) {
                 throw new Error(`No node found with label: ${stateName}`);
             }
-            
+
             await client.uploadScreenshot(nodeId, screenshot);
-            
+
             // Cache the screenshot for this state
             screenShots.set(stateName, screenshot);
         },

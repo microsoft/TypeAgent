@@ -71,6 +71,11 @@ class Visualizer {
 
         // Start temporary node animation if there are any temporary nodes
         this.startTemporaryNodeAnimation();
+
+        // If screenshot mode is already active, create custom labels
+        if (this.screenshotMode) {
+            this.createCustomLabelsForScreenshotNodes();
+        }
     }
 
     /**
@@ -145,6 +150,14 @@ class Visualizer {
                 CytoscapeConfig.getDagreLayoutOptions(),
             );
             dagreLayout.run();
+
+            // After layout completes, update label positions if in screenshot mode
+            if (this.screenshotMode) {
+                // Use setTimeout to ensure layout has finished
+                setTimeout(() => {
+                    this.updateCustomLabelPositions();
+                }, CONFIG.ANIMATION.LAYOUT + 50);
+            }
         } catch (e) {
             console.error("Error running dagre layout:", e);
 
@@ -943,6 +956,13 @@ class Visualizer {
                 } as any);
             },
         });
+
+        // Update label positions after the animation completes
+        if (this.screenshotMode) {
+            setTimeout(() => {
+                this.updateCustomLabelPositions();
+            }, CONFIG.ANIMATION.ZOOM + 50);
+        }
     }
 
     /**
@@ -1009,9 +1029,22 @@ class Visualizer {
 
         if (!this.cy) return;
 
+        // Get two collections: nodes with screenshots and nodes without
+        const nodesWithScreenshots = this.cy
+            .nodes()
+            .filter((node) => node.data("hasScreenshot"));
+        const nodesWithoutScreenshots = this.cy
+            .nodes()
+            .filter((node) => !node.data("hasScreenshot"));
+
         if (enabled) {
             // Add screenshot-mode class to all nodes
             this.cy.nodes().addClass("screenshot-mode");
+
+            // For nodes with screenshots, apply special styling for visibility
+            nodesWithScreenshots.forEach((node) => {
+                node.style("z-index", 10); // Ensure label is above other elements
+            });
 
             // Update the UI to indicate screenshot mode is active
             const screenshotBadge = document.querySelector(".screenshot-badge");
@@ -1024,15 +1057,30 @@ class Visualizer {
                 badge.textContent = "Screenshot Mode";
                 document.querySelector(".container")?.appendChild(badge);
             }
+
+            this.createCustomLabelsForScreenshotNodes();
         } else {
             // Remove screenshot-mode class from all nodes
             this.cy.nodes().removeClass("screenshot-mode");
+
+            // Reset z-index for all nodes
+            this.cy.nodes().style("z-index", 0);
+
+            // Still keep labels above nodes with screenshots
+            nodesWithScreenshots.forEach((node) => {
+                node.style("z-index", 5); // Less than in screenshot mode, but still above
+            });
 
             // Hide the screenshot mode indicator
             const screenshotBadge = document.querySelector(".screenshot-badge");
             if (screenshotBadge) {
                 screenshotBadge.classList.remove("active");
             }
+
+            // Remove any existing custom labels
+            document
+                .querySelectorAll(".cy-node-screenshot-label")
+                .forEach((el) => el.remove());
         }
 
         // Force a redraw of the graph to update node appearance
@@ -1047,13 +1095,15 @@ class Visualizer {
             node.data("screenshot", screenshot);
             node.data("hasScreenshot", true);
 
-            // Check if the node has the proper CSS classes if in screenshot mode
-            if (this.screenshotMode && !node.hasClass("screenshot-mode")) {
-                node.addClass("screenshot-mode");
-            }
+            // Apply screenshot-specific styling
+            this.refreshNodeStyle(nodeId);
 
             // Force a redraw
             this.cy.style().update();
+        }
+
+        if (this.screenshotMode) {
+            this.createCustomLabelsForScreenshotNodes();
         }
     }
     // Helper method to check if a node has a screenshot
@@ -1062,6 +1112,110 @@ class Visualizer {
 
         const node = this.cy.getElementById(nodeId);
         return node.length > 0 && node.data("hasScreenshot") === true;
+    }
+
+    /**
+     * Ensure the proper stylesheet is applied when a node gets a screenshot
+     * This addresses label positioning for screenshot nodes
+     */
+    refreshNodeStyle(nodeId: string): void {
+        if (!this.cy) return;
+
+        const node = this.cy.getElementById(nodeId);
+        if (node.length > 0) {
+            // Force a style recalculation
+            this.cy.style().update();
+
+            // Apply screenshot-specific styling if needed
+            if (node.data("hasScreenshot")) {
+                // If we're in screenshot mode, make sure the node has that class
+                if (this.screenshotMode && !node.hasClass("screenshot-mode")) {
+                    node.addClass("screenshot-mode");
+                }
+
+                // For better performance, only animate this specific node
+                // rather than all nodes
+                node.style("z-index", 10); // Ensure label is above other elements
+            }
+        }
+    }
+    /**
+     * Creates custom DOM labels for nodes with screenshots
+     * This is an alternative approach if pure CSS styling isn't sufficient
+     * Labels will be positioned aligned with the left edge of the node
+     */
+    createCustomLabelsForScreenshotNodes(): void {
+        if (!this.cy) return;
+
+        // Remove any existing custom labels
+        document
+            .querySelectorAll(".cy-node-screenshot-label")
+            .forEach((el) => el.remove());
+
+        // Only proceed if we have nodes with screenshots and we're in screenshot mode
+        if (!this.screenshotMode) return;
+
+        const nodesWithScreenshots = this.cy
+            .nodes()
+            .filter((node) => node.data("hasScreenshot"));
+
+        nodesWithScreenshots.forEach((node) => {
+            const nodePosition = node.renderedPosition();
+            const nodeLabel = node.data("label") || "";
+
+            // Create a label element
+            const labelEl = document.createElement("div");
+            labelEl.className = "cy-node-screenshot-label";
+            labelEl.textContent = nodeLabel;
+
+            // Position it relative to the node - precisely at the left edge
+            // Calculate exact left position aligned with the node's left edge
+            const leftPosition = nodePosition.x - node.renderedWidth() / 2;
+
+            labelEl.style.left = `${leftPosition}px`;
+            labelEl.style.top = `${nodePosition.y - node.renderedHeight() / 2 - 10}px`;
+
+            // Add it to the container
+            this.container.appendChild(labelEl);
+        });
+    }
+
+    /**
+     * Update custom label positions whenever the graph is panned or zoomed
+     * This ensures labels stay aligned with their nodes
+     */
+    updateCustomLabelPositions(): void {
+        if (!this.cy || !this.screenshotMode) return;
+
+        const labels = document.querySelectorAll(".cy-node-screenshot-label");
+        if (labels.length === 0) return;
+
+        const nodesWithScreenshots = this.cy
+            .nodes()
+            .filter((node) => node.data("hasScreenshot"));
+
+        // Create a mapping of node IDs to label elements
+        const labelMap = new Map();
+        labels.forEach((labelEl, index) => {
+            if (index < nodesWithScreenshots.length) {
+                const node = nodesWithScreenshots[index];
+                labelMap.set(node.id(), labelEl);
+            }
+        });
+
+        // Update each label position
+        nodesWithScreenshots.forEach((node) => {
+            const labelEl = labelMap.get(node.id());
+            if (labelEl) {
+                const nodePosition = node.renderedPosition();
+
+                // Exact alignment with the left edge of the node
+                const leftPosition = nodePosition.x - node.renderedWidth() / 2;
+
+                labelEl.style.left = `${leftPosition}px`;
+                labelEl.style.top = `${nodePosition.y - node.renderedHeight() / 2 - 10}px`;
+            }
+        });
     }
 
     /**
@@ -1138,9 +1292,13 @@ class Visualizer {
             tooltip.style.opacity = "0";
         });
 
-        // Hide tooltip on pan/zoom
+        // Hide tooltip on pan/zoom, update labels
         this.cy.on("pan zoom", () => {
             tooltip.style.opacity = "0";
+
+            if (this.screenshotMode) {
+                this.updateCustomLabelPositions();
+            }
         });
 
         // Node hover effects

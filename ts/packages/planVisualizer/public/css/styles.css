@@ -645,3 +645,65 @@ node.screenshot-mode {
 .screenshot-badge.active {
   display: block;
 }
+
+/* Custom styling for the text labels on screenshot nodes (applied via a class) */
+.cy-node-screenshot-label {
+  position: absolute;
+  top: -18px;
+  left: 0; /* Aligned with the left edge of the node */
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Remove any transform that might offset the label */
+  transform: none;
+  /* Ensure left padding is minimal to maintain alignment */
+  padding-left: 3px;
+}
+
+/* When using Cytoscape's built-in label positioning */
+body.using-cytoscape-labels [data-id][?hasScreenshot] {
+  /* Override any potential Cytoscape internal margin */
+  text-indent: 0 !important;
+  margin-left: 0 !important;
+}
+
+/* Enhanced styling for the screenshot badge */
+.screenshot-badge {
+  position: absolute;
+  top: 10px;
+  right: 60px;
+  background-color: rgba(0, 150, 136, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: none;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.screenshot-badge.active {
+  display: block;
+}
+
+/* Specific styling for node labels in screenshot mode */
+.cy-node.screenshot-mode {
+  background-size: cover !important;
+  background-position: center center !important;
+}
+
+/* Ensure perfect alignment within Cytoscape's rendering */
+.cy-node .nodeLabel,
+.cy-node text {
+  text-anchor: start !important; /* For SVG text elements */
+  dominant-baseline: hanging !important; /* For SVG text elements */
+}

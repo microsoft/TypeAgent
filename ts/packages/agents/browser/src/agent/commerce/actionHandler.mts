@@ -247,7 +247,7 @@ export async function handleCommerceAction(
                     currentState?.pageType ?? "",
                     undefined,
                     "action",
-                    screenshot
+                    screenshot,
                 );
             }
 
@@ -274,7 +274,7 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
             if (!response.success) {
                 console.error(`Attempt to get next action failed`);
                 console.error(response.message);
-                await trackState("Failed", "", "end");
+                await trackState("Failed", "", "end", screenshot);
                 break;
             }
 
@@ -287,7 +287,7 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
                     content: "Completed ",
                 });
 
-                await trackState("Completed", "", "end");
+                await trackState("Completed", "", "end", screenshot);
                 break;
             }
 
