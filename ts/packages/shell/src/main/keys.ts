@@ -46,7 +46,11 @@ function populateKeys(keys: string) {
     dotenv.populate(process.env as any, parsed, { override: true });
 }
 
-async function getKeys(dir: string, reset: boolean, envFile?: string): Promise<string | null> {
+async function getKeys(
+    dir: string,
+    reset: boolean,
+    envFile?: string,
+): Promise<string | null> {
     const keys = reset ? null : await loadKeysFromPersistence(dir);
     if (envFile) {
         if (!fs.existsSync(envFile)) {
@@ -87,17 +91,6 @@ async function getKeys(dir: string, reset: boolean, envFile?: string): Promise<s
             const result = dialog.showOpenDialogSync({
                 properties: ["openFile", "showHiddenFiles"],
                 message: "Select the .env file",
-                filters: [
-                    {
-                        name: "Environment files",
-                        extensions: ["env"],
-                    },
-                    {
-                        name: "All files",
-                        extensions: ["*"],
-                    },
-                ]
-
             });
             if (result && result.length > 0) {
                 const content = await fs.promises.readFile(result[0], "utf-8");
@@ -109,7 +102,11 @@ async function getKeys(dir: string, reset: boolean, envFile?: string): Promise<s
     return keys;
 }
 
-export async function loadKeys(dir: string, reset: boolean = false, envFile?: string) {
+export async function loadKeys(
+    dir: string,
+    reset: boolean = false,
+    envFile?: string,
+) {
     const keys = await getKeys(dir, reset, envFile);
     if (keys) {
         populateKeys(keys);
