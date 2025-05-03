@@ -16,7 +16,6 @@ import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
-} from "../../common/webAgentMessageTypes.mjs";
 } from "./types";
 
 /**
