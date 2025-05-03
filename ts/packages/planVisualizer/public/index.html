@@ -7,34 +7,81 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dynamic Web Plan Visualizer</title>
-
-    <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-
-    <!-- Application CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
     <div class="container">
-      <h1>Dynamic Web Plan Visualizer</h1>
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <h1 id="plan-title">Dynamic Web Plan Visualizer</h1>
+        </div>
 
-      <div class="plan-title-container">
-        <h2 id="plan-title">Plan Title</h2>
+        <div class="toolbar-group"></div>
+
+        <div class="toolbar-group">
+          <button id="zoom-fit-button" class="icon-button" title="Fit View">
+            <i class="fas fa-expand"></i>
+          </button>
+          <button
+            id="show-path-button"
+            class="icon-button"
+            title="Show Current Path"
+          >
+            <i class="fas fa-route"></i>
+          </button>
+
+          <div class="node-selector">
+            <label for="node-select"
+              ><i class="fas fa-map-marker-alt"></i
+            ></label>
+            <select id="node-select"></select>
+          </div>
+
+          <div class="toggle-container">
+            <span class="toggle-label"><i class="fas fa-sitemap"></i></span>
+            <label class="toggle-switch">
+              <input type="checkbox" id="view-mode-toggle" checked />
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label"
+              ><i class="fas fa-project-diagram"></i
+            ></span>
+          </div>
+
+          <!-- Add transition button -->
+          <button
+            id="reset-button"
+            class="icon-button dynamic-only-control"
+            title="Reset Plan"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+
+          <button
+            id="toggle-form-button"
+            class="icon-button dynamic-only-control"
+            title="Add New Transition"
+          >
+            <i class="fas fa-file-circle-plus"></i>
+          </button>
+        </div>
       </div>
 
-      <div class="toggle-container">
-        <span class="toggle-label">Static Plan</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="view-mode-toggle" checked />
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="toggle-label">Dynamic Plan</span>
-      </div>
+      <div id="status-message" class="status-message"></div>
 
-      <div class="form-container">
-        <h2>Add New Transition</h2>
-        <div id="status-message" class="status-message"></div>
-
+      <!-- Flyout form for adding transitions -->
+      <div id="form-flyout" class="form-flyout">
+        <div class="form-flyout-header">
+          <h2>Add New Transition</h2>
+          <button id="close-flyout-button" class="icon-button">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
         <form id="transition-form">
           <div class="form-grid">
             <div class="form-group">
@@ -75,47 +122,15 @@
             </div>
           </div>
 
-          <div style="margin-top: 15px">
+          <div class="form-actions">
             <button type="submit" id="add-transition-button">
-              Add Transition
+              <i class="fas fa-plus"></i> Add Transition
             </button>
-            <button type="button" id="reset-button">Reset Plan</button>
           </div>
         </form>
       </div>
 
-      <div class="controls">
-        <button id="zoom-fit-button">Fit View</button>
-        <div class="node-selector">
-          <label for="node-select">Current Node:</label>
-          <select id="node-select"></select>
-        </div>
-        <button id="show-path-button">Show Current Path</button>
-      </div>
-
       <div id="cy-container"></div>
-
-      <div class="legend">
-        <h2>Legend</h2>
-        <div class="legend-grid">
-          <div class="legend-item">
-            <div class="legend-color legend-start"></div>
-            <div>Start Node</div>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color legend-action"></div>
-            <div>Action Node</div>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color legend-decision"></div>
-            <div>Decision Node</div>
-          </div>
-          <div class="legend-item">
-            <div class="legend-color legend-end"></div>
-            <div>End Node</div>
-          </div>
-        </div>
-      </div>
 
       <!-- Tooltip element for hover information -->
       <div class="tooltip" id="tooltip"></div>
