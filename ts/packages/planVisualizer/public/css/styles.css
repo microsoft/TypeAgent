@@ -230,19 +230,19 @@ select {
 }
 
 .legend-start {
-  background-color: #4caf50;
+  background-color: #8adfb2;
 }
 
 .legend-action {
-  background-color: #2196f3;
+  background-color: #80c5ff;
 }
 
 .legend-decision {
-  background-color: #9c27b0;
+  background-color: #d7b0ff;
 }
 
 .legend-end {
-  background-color: #f44336;
+  background-color: #ff9e9e;
 }
 
 /* Tooltip styles */
