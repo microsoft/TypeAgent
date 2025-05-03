@@ -951,6 +951,9 @@ importers:
       rollup-plugin-copy:
         specifier: ^3.5.0
         version: 3.5.0
+      ts-loader:
+        specifier: ^9.5.1
+        version: 9.5.2(typescript@5.4.5)(webpack@5.99.7(esbuild@0.25.3))
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -18881,6 +18884,16 @@ snapshots:
       utf8-byte-length: 1.0.5
 
   ts-deepmerge@7.0.2: {}
+
+  ts-loader@9.5.2(typescript@5.4.5)(webpack@5.99.7(esbuild@0.25.3)):
+    dependencies:
+      chalk: 4.1.2
+      enhanced-resolve: 5.18.1
+      micromatch: 4.0.8
+      semver: 7.7.1
+      source-map: 0.7.4
+      typescript: 5.4.5
+      webpack: 5.99.7(esbuild@0.25.3)
 
   ts-loader@9.5.2(typescript@5.4.5)(webpack@5.99.7):
     dependencies:
