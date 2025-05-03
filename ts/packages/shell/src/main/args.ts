@@ -17,7 +17,7 @@ export function parseShellCommandLine() {
         reset: false,
         clean: false,
     };
-    for (let i = 0; i < process.argv.length; i++) {
+    for (let i = 1; i < process.argv.length; i++) {
         const arg = process.argv[i];
         if (arg.startsWith("--")) {
             if (arg === "--reset") {

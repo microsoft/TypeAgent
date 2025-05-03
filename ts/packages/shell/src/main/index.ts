@@ -49,10 +49,8 @@ import {
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
 
-if (!app.requestSingleInstanceLock()) {
-    debugShellError("Another instance is running");
-    app.quit();
-}
+debugShell("App name", app.getName());
+debugShell("App version", app.getVersion());
 
 if (process.platform === "darwin") {
     if (fs.existsSync("/opt/homebrew/bin/az")) {
@@ -65,6 +63,14 @@ process.env.FORCE_COLOR = "true";
 
 const parsedArgs = parseShellCommandLine();
 export const isProd = parsedArgs.prod ?? app.isPackaged;
+debugShell("Is prod", isProd);
+
+// Use single instance lock in prod to make the existing instance focus
+// Allow multiple instance for dev build, with lock for data directory "instanceDir".
+if (isProd && !app.requestSingleInstanceLock()) {
+    debugShellError("Another instance is running");
+    process.exit(0);
+}
 
 // Set app user model id for windows
 if (process.platform === "win32") {
@@ -79,9 +85,6 @@ const instanceDir =
         ? path.join(app.getPath("userData"), "data")
         : getInstanceDir());
 
-debugShell("App name", app.getName());
-debugShell("App version", app.getVersion());
-debugShell("Is prod", isProd);
 debugShell("Instance Dir", instanceDir);
 
 if (parsedArgs.clean) {
