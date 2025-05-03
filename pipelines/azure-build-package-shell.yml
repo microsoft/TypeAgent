@@ -99,7 +99,7 @@ jobs:
                   artifact: shell-${{ platform }}
                   displayName: Download shell package - ${{ platform }}
                   patterns: |
-                    TypeAgent Shell=*
+                    TypeAgent Shell[-_]*
                     typeagentshell-*
                     ${{ parameters.channel }}*.yml
                   condition: succeeded()
