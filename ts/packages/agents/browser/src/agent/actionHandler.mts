@@ -59,6 +59,7 @@ export type BrowserActionContext = {
     browserConnector: BrowserConnector | undefined;
     browserProcess: ChildProcess | undefined;
     tabTitleIndex: TabTitleIndex | undefined;
+    planVisualizationEndpoint: string | undefined;
 };
 
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
@@ -69,6 +70,7 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
         browserConnector: undefined,
         browserProcess: undefined,
         tabTitleIndex: undefined,
+        planVisualizationEndpoint: undefined,
     };
 }
 
@@ -84,6 +86,11 @@ async function updateBrowserContext(
     if (enable) {
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
+        }
+
+        if (!context.agentContext.planVisualizationEndpoint) {
+            context.agentContext.planVisualizationEndpoint =
+                "http://localhost:9015";
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {

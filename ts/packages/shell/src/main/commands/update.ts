@@ -19,6 +19,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 import { getElapsedString } from "common-utils";
+import { isProd } from "../index.js";
 
 const { autoUpdater } = electronUpdater;
 
@@ -150,7 +151,7 @@ export function startBackgroundUpdateCheck(
     };
 
     const schedule = (intervalMs: number) => {
-        if (app.isPackaged && intervalMs < minIntervalMs) {
+        if (isProd && intervalMs < minIntervalMs) {
             // Guard against too small intervals unless we are in dev build.
             debugBackgroundUpdateError(
                 `Interval too small.  Minimum is ${getElapsedString(minIntervalMs)}`,
