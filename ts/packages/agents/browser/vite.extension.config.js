@@ -60,49 +60,49 @@ export default defineConfig(({ mode }) => ({
       targets: [
         // Copy manifest first
         {
-          src: resolve(srcDir, 'manifest.json'),
+          src: 'src/extension/manifest.json',
           dest: './'
         },
         // Copy source directory files
         {
-          src: resolve(srcDir, 'images/**/*'),
+          src: 'src/extension/images/**/*',
           dest: 'images'
         },
         {
-          src: resolve(srcDir, 'sidepanel.html'),
+          src: 'src/extension/sidepanel.html',
           dest: './'
         },
         {
-          src: resolve(srcDir, 'options.html'),
+          src: 'src/extension/options.html',
           dest: './'
         },
         {
-          src: resolve(srcDir, 'sites/paleobiodbSchema.mts'),
+          src: 'src/extension/sites/paleobiodbSchema.mts',
           dest: 'sites'
         },
         // Copy vendor files from node_modules
         {
-          src: resolve(process.cwd(), 'node_modules/bootstrap/dist/css/bootstrap.min.css'),
+          src: 'node_modules/bootstrap/dist/css/bootstrap.min.css',
           dest: 'vendor/bootstrap'
         },
         {
-          src: resolve(process.cwd(), 'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js'),
+          src: 'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js',
           dest: 'vendor/bootstrap'
         },
         {
-          src: resolve(process.cwd(), 'node_modules/prismjs/prism.js'),
+          src: 'node_modules/prismjs/prism.js',
           dest: 'vendor/prism'
         },
         {
-          src: resolve(process.cwd(), 'node_modules/prismjs/themes/prism.css'),
+          src: 'node_modules/prismjs/themes/prism.css',
           dest: 'vendor/prism'
         },
         {
-          src: resolve(process.cwd(), 'node_modules/prismjs/components/prism-typescript.js'),
+          src: 'node_modules/prismjs/components/prism-typescript.js',
           dest: 'vendor/prism'
         },
         {
-          src: resolve(process.cwd(), 'node_modules/prismjs/components/prism-json.js'),
+          src: 'node_modules/prismjs/components/prism-json.js',
           dest: 'vendor/prism'
         }
       ],
