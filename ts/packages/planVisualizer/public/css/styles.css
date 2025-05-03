@@ -73,6 +73,11 @@ h1 {
   font-size: 16px;
 }
 
+.icon-button.active {
+  background-color: #333;
+  color: #fff;
+}
+
 #add-transition-button {
   display: flex;
   align-items: center;
@@ -89,10 +94,6 @@ h1 {
 
 #add-transition-button:hover {
   background-color: #c5e1a5;
-}
-
-#reset-button {
-  color: #f44336;
 }
 
 #reset-button:hover {
@@ -233,18 +234,6 @@ select {
   justify-content: flex-end;
 }
 
-#toggle-form-button {
-  color: #e8f5e9;
-  background-color: #555;
-  border-radius: 50%;
-  transition: all 0.2s ease;
-}
-
-#toggle-form-button:hover {
-  background-color: #444;
-  transform: scale(1.05);
-}
-
 #toggle-form-button.active {
   background-color: #c5e1a5;
   color: #333;
@@ -352,13 +341,23 @@ input[type="text"] {
     flex-direction: column;
     gap: 10px;
   }
-  
+
   .toolbar-group {
     width: 100%;
     justify-content: center;
   }
-  
+
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Dynamic only controls */
+.dynamic-only-control {
+  display: flex; /* Will be toggled by JavaScript */
+}
+
+/* Hidden state */
+.dynamic-only-control.hidden {
+  display: none;
 }

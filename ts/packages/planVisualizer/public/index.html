@@ -7,55 +7,67 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dynamic Web Plan Visualizer</title>
-
-    <!-- External Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <!-- Add Font Awesome for icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <!-- Application CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
     <div class="container">
-      <div class="plan-title-container">
-      <h1 id="plan-title">Dynamic Web Plan Visualizer</h1>
-      </div>
-
-      <!-- New toolbar -->
       <div class="toolbar">
+        <div class="toolbar-group">
+          <h1 id="plan-title">Dynamic Web Plan Visualizer</h1>
+        </div>
+
+        <div class="toolbar-group"></div>
+
         <div class="toolbar-group">
           <button id="zoom-fit-button" class="icon-button" title="Fit View">
             <i class="fas fa-expand"></i>
           </button>
-          <button id="show-path-button" class="icon-button" title="Show Current Path">
+          <button
+            id="show-path-button"
+            class="icon-button"
+            title="Show Current Path"
+          >
             <i class="fas fa-route"></i>
           </button>
-          <button id="reset-button" class="icon-button" title="Reset Plan">
-            <i class="fas fa-trash"></i>
-          </button>
-        </div>
 
-        <div class="toolbar-group">
+          <div class="node-selector">
+            <label for="node-select"
+              ><i class="fas fa-map-marker-alt"></i
+            ></label>
+            <select id="node-select"></select>
+          </div>
+
           <div class="toggle-container">
             <span class="toggle-label"><i class="fas fa-sitemap"></i></span>
             <label class="toggle-switch">
               <input type="checkbox" id="view-mode-toggle" checked />
               <span class="toggle-slider"></span>
             </label>
-            <span class="toggle-label"><i class="fas fa-project-diagram"></i></span>
+            <span class="toggle-label"
+              ><i class="fas fa-project-diagram"></i
+            ></span>
           </div>
-        </div>
 
-        <div class="toolbar-group">
-          <div class="node-selector">
-            <label for="node-select"><i class="fas fa-map-marker-alt"></i></label>
-            <select id="node-select"></select>
-          </div>
-          
           <!-- Add transition button -->
-          <button id="toggle-form-button" class="icon-button" title="Add New Transition">
-            <i class="fas fa-plus-circle"></i>
+          <button
+            id="reset-button"
+            class="icon-button dynamic-only-control"
+            title="Reset Plan"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+
+          <button
+            id="toggle-form-button"
+            class="icon-button dynamic-only-control"
+            title="Add New Transition"
+          >
+            <i class="fas fa-file-circle-plus"></i>
           </button>
         </div>
       </div>

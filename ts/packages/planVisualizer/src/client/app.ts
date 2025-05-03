@@ -85,9 +85,16 @@ document.addEventListener("DOMContentLoaded", function () {
         ".form-container",
     ) as HTMLDivElement;
 
-    const toggleFormButton = document.getElementById("toggle-form-button") as HTMLButtonElement;
+    const toggleFormButton = document.getElementById(
+        "toggle-form-button",
+    ) as HTMLButtonElement;
     const formFlyout = document.getElementById("form-flyout") as HTMLDivElement;
-    const closeFlyoutButton = document.getElementById("close-flyout-button") as HTMLButtonElement;
+    const closeFlyoutButton = document.getElementById(
+        "close-flyout-button",
+    ) as HTMLButtonElement;
+    const dynamicOnlyControls = document.querySelectorAll(
+        ".dynamic-only-control",
+    );
 
     /**
      * Show status message
@@ -100,6 +107,9 @@ document.addEventListener("DOMContentLoaded", function () {
         isError: boolean = false,
         duration: number = 3000,
     ): void {
+        // for now, only show errors
+        if (!isError) return;
+
         statusMessage.textContent = message;
         statusMessage.className =
             "status-message " + (isError ? "error" : "success");
@@ -109,6 +119,18 @@ document.addEventListener("DOMContentLoaded", function () {
         setTimeout(() => {
             statusMessage.style.display = "none";
         }, duration);
+    }
+
+    function updateDynamicControls() {
+        const isDynamic = viewModeToggle.checked;
+
+        dynamicOnlyControls.forEach(function (element) {
+            if (isDynamic) {
+                element.classList.remove("hidden");
+            } else {
+                element.classList.add("hidden");
+            }
+        });
     }
 
     /**
@@ -179,8 +201,10 @@ document.addEventListener("DOMContentLoaded", function () {
             if (titleElement && webPlanData.title) {
                 titleElement.textContent = webPlanData.title;
             }
+
+            updateDynamicControls();
         } catch (error) {
-            console.log(error)
+            console.log(error);
             showStatus(
                 `Error loading plan data: ${(error as Error).message}`,
                 true,
@@ -190,14 +214,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Toggle view mode
     viewModeToggle.addEventListener("change", function () {
+        updateDynamicControls();
+
         currentViewMode = this.checked
             ? CONFIG.VIEW_MODES.DYNAMIC
             : CONFIG.VIEW_MODES.STATIC;
         loadData();
 
         // Update show path button - using icon now
-    showPathButton.innerHTML = '<i class="fas fa-route"></i>';
-    showPathButton.title = "Show Current Path";
+        showPathButton.classList.remove("active");
+        showPathButton.innerHTML = '<i class="fas fa-route"></i>';
+        showPathButton.title = "Show Current Path";
 
         // Show a status message
         showStatus(`Switched to ${currentViewMode} plan view`);
@@ -226,11 +253,13 @@ document.addEventListener("DOMContentLoaded", function () {
                 visualizer.highlightPath(webPlanData.currentNode);
             }
             // Update only the icon instead of the text
-            showPathButton.innerHTML = '<i class="fas fa-undo"></i>';
+            showPathButton.classList.add("active");
+            showPathButton.innerHTML = '<i class="fas fa-route"></i>';
             showPathButton.title = "Reset Path View";
         } else {
             visualizer.resetEdgeStyles();
             // Update only the icon instead of the text
+            showPathButton.classList.remove("active");
             showPathButton.innerHTML = '<i class="fas fa-route"></i>';
             showPathButton.title = "Show Current Path";
         }
@@ -334,31 +363,33 @@ document.addEventListener("DOMContentLoaded", function () {
             });
     });
 
-    toggleFormButton.addEventListener("click", function() {
+    toggleFormButton.addEventListener("click", function () {
         const isVisible = formFlyout.style.display === "block";
-        
+
         if (isVisible) {
             formFlyout.style.display = "none";
             toggleFormButton.classList.remove("active");
         } else {
             formFlyout.style.display = "block";
             toggleFormButton.classList.add("active");
-            
+
             // Position the flyout relative to the button
             positionFlyout();
         }
     });
 
     // Close flyout when close button is clicked
-    closeFlyoutButton.addEventListener("click", function() {
+    closeFlyoutButton.addEventListener("click", function () {
         formFlyout.style.display = "none";
         toggleFormButton.classList.remove("active");
     });
 
     // Close flyout when clicking outside
-    document.addEventListener("click", function(event) {
-        if (!formFlyout.contains(event.target as Node) && 
-            event.target !== toggleFormButton) {
+    document.addEventListener("click", function (event) {
+        if (
+            !formFlyout.contains(event.target as Node) &&
+            event.target !== toggleFormButton
+        ) {
             formFlyout.style.display = "none";
             toggleFormButton.classList.remove("active");
         }
@@ -367,15 +398,16 @@ document.addEventListener("DOMContentLoaded", function () {
     // Position the flyout based on button position
     function positionFlyout() {
         const buttonRect = toggleFormButton.getBoundingClientRect();
-        const containerRect = document.querySelector(".container")?.getBoundingClientRect();
-        if(containerRect){
-        
-        // Calculate position relative to container
-        const top = buttonRect.bottom - containerRect.top + 10;
-        const right = containerRect.right - buttonRect.right;
-        
-        formFlyout.style.top = `${top}px`;
-        formFlyout.style.right = `${right}px`;
+        const containerRect = document
+            .querySelector(".container")
+            ?.getBoundingClientRect();
+        if (containerRect) {
+            // Calculate position relative to container
+            const top = buttonRect.bottom - containerRect.top + 10;
+            const right = containerRect.right - buttonRect.right;
+
+            formFlyout.style.top = `${top}px`;
+            formFlyout.style.right = `${right}px`;
         }
     }
 
@@ -611,6 +643,8 @@ document.addEventListener("DOMContentLoaded", function () {
     // Initial load
     loadData();
 
+    updateDynamicControls();
+
     initializeSSE();
 
     // Make sure to close the connection when the page unloads
@@ -620,7 +654,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     });
 
-    window.addEventListener("resize", function() {
+    window.addEventListener("resize", function () {
         if (formFlyout.style.display === "block") {
             positionFlyout();
         }

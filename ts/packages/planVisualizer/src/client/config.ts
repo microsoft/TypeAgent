@@ -84,13 +84,13 @@ const CONFIG: Config = {
 
     // Node colors - Updated to lighter pastel colors for a more pleasant visualization
     COLORS: {
-        START: "#8adfb2",       // Light pastel green
-        ACTION: "#80c5ff",      // Light pastel blue
-        DECISION: "#d7b0ff",    // Light pastel purple
-        END: "#ff9e9e",         // Light pastel red/pink
-        DEFAULT: "#aaaaaa",     // Light gray
-        HIGHLIGHT: "#ffc56e",   // Light pastel orange
-        TEMPORARY: "#ffed8a",   // Light pastel yellow
+        START: "#8adfb2", // Light pastel green
+        ACTION: "#80c5ff", // Light pastel blue
+        DECISION: "#d7b0ff", // Light pastel purple
+        END: "#ff9e9e", // Light pastel red/pink
+        DEFAULT: "#aaaaaa", // Light gray
+        HIGHLIGHT: "#ffc56e", // Light pastel orange
+        TEMPORARY: "#ffed8a", // Light pastel yellow
     },
 
     // Edge types
