@@ -46,8 +46,8 @@ function populateKeys(keys: string) {
     dotenv.populate(process.env as any, parsed, { override: true });
 }
 
-async function getKeys(dir: string, envFile?: string): Promise<string | null> {
-    const keys = await loadKeysFromPersistence(dir);
+async function getKeys(dir: string, reset: boolean, envFile?: string): Promise<string | null> {
+    const keys = reset ? null : await loadKeysFromPersistence(dir);
     if (envFile) {
         if (!fs.existsSync(envFile)) {
             throw new Error(`Environment file ${envFile} not found`);
@@ -109,8 +109,8 @@ async function getKeys(dir: string, envFile?: string): Promise<string | null> {
     return keys;
 }
 
-export async function loadKeys(dir: string, envFile?: string) {
-    const keys = await getKeys(dir, envFile);
+export async function loadKeys(dir: string, reset: boolean = false, envFile?: string) {
+    const keys = await getKeys(dir, reset, envFile);
     if (keys) {
         populateKeys(keys);
     } else {
