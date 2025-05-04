@@ -10,8 +10,13 @@ import {
     TextInput,
 } from "./schema/pageComponents.mjs";
 import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
+import { createExecutionTracker } from "../planVisualizationClient.mjs";
 
-export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
+export function setupAuthoringActions(
+    browser: BrowserConnector,
+    agent: any,
+    context: any,
+) {
     return {
         getComponentFromPage: getComponentFromPage,
         followLink: followLink,
@@ -112,6 +117,12 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
         targetPlan: PageActionsPlan,
         userSuppliedParameters: Map<string, any>,
     ) {
+        const { trackState, reset } = createExecutionTracker(
+            context.sessionContext.agentContext.planVisualizationEndpoint!,
+            targetPlan.planName,
+        );
+        await reset(true);
+
         console.log(`Running ${targetPlan.planName}`);
 
         for (const step of targetPlan.steps) {
@@ -122,6 +133,8 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
                             param.shortName ==
                             step.parameters.linkTextParameter,
                     );
+                    await trackState("", `Click on ${linkParameter?.name}`);
+
                     const link = (await getComponentFromPage(
                         "NavigationLink",
                         `link text ${linkParameter?.name}`,
@@ -135,6 +148,11 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
                         `element text ${step.parameters?.elementText}`,
                     )) as Element;
                     if (element !== undefined) {
+                        await trackState(
+                            "",
+                            `Click on ${step.parameters?.elementText}`,
+                        );
+
                         await browser.clickOn(element.cssSelector);
                         await browser.awaitPageInteraction();
                         await browser.awaitPageLoad();
@@ -146,6 +164,11 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
                         `element text ${step.parameters?.buttonText}`,
                     )) as Element;
                     if (button !== undefined) {
+                        await trackState(
+                            "",
+                            `Click on ${step.parameters?.buttonText}`,
+                        );
+
                         await browser.clickOn(button.cssSelector);
                         await browser.awaitPageInteraction();
                         await browser.awaitPageLoad();
@@ -157,6 +180,7 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
                         (param) =>
                             param.shortName == step.parameters.textParameter,
                     );
+
                     const textElement = (await getComponentFromPage(
                         "TextInput",
                         `input label ${textParameter?.name}`,
@@ -164,6 +188,11 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
 
                     const userProvidedTextValue = userSuppliedParameters.get(
                         step.parameters.textParameter,
+                    );
+
+                    await trackState(
+                        "",
+                        `Enter text "${userProvidedTextValue}" in ${textParameter?.name}`,
                     );
 
                     if (userProvidedTextValue !== undefined) {
@@ -187,6 +216,11 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
                     );
 
                     if (userProvidedValue !== undefined) {
+                        await trackState(
+                            "",
+                            `Select "${userProvidedValue}" in ${selectParameter?.name}`,
+                        );
+
                         const selectElement = (await getComponentFromPage(
                             "DropdownControl",
                             `text ${selectParameter?.name}`,
@@ -214,5 +248,7 @@ export function setupAuthoringActions(browser: BrowserConnector, agent: any) {
                     break;
             }
         }
+
+        await trackState("Completed", "", "end");
     }
 }
