@@ -417,10 +417,18 @@ class QueryCompiler {
     private compilePropertyTerm(
         term: PropertySearchTerm,
     ): IQueryOpExpr<SemanticRefAccumulator | undefined> {
-        if (isEntityPropertyTerm(term)) {
-            term.propertyValue.term.weight ??= this.entityTermMatchWeight;
+        switch (term.propertyName) {
+            default:
+                if (isEntityPropertyTerm(term)) {
+                    term.propertyValue.term.weight ??=
+                        this.entityTermMatchWeight;
+                }
+                return new q.MatchPropertySearchTermExpr(term);
+            case "tag":
+                return new q.MatchTagExpr(term.propertyValue);
+            case "topic":
+                return new q.MatchTopicExpr(term.propertyValue);
         }
-        return new q.MatchPropertySearchTermExpr(term);
     }
 
     private async compileScope(
