@@ -27,6 +27,7 @@ class Visualizer {
     public pathHighlighted: boolean;
     private tempAnimInterval: number | null;
     private screenshotMode: boolean = false;
+    private _resizeObserver: ResizeObserver | null;
 
     /**
      * Create a new Visualizer
@@ -39,6 +40,7 @@ class Visualizer {
         this.cy = null;
         this.pathHighlighted = false;
         this.tempAnimInterval = null;
+        this._resizeObserver = null;
     }
 
     /**
@@ -688,79 +690,76 @@ class Visualizer {
     }
 
     /**
-     * Apply a partial layout to position new nodes without disrupting the entire graph
+     * Apply a partial layout with optional animation
+     * @param {boolean} animate - Whether to animate the layout transition
      */
-    applyPartialLayout(): void {
+    applyPartialLayout(animate: boolean = true): void {
         if (!this.cy) return;
 
-        // Simple positioning update that keeps existing node positions stable
-        // and only adjusts the new or changed nodes
-        const layout = this.cy.layout({
-            name: "preset",
-            fit: false, // Don't change zoom level
-            animate: true,
-            animationDuration: 300,
-            positions: (node: any) => {
-                // If node already has a position, keep it there
-                if (
-                    node.position("x") !== undefined &&
-                    node.position("y") !== undefined
-                ) {
-                    return node.position();
-                }
+        // Use a modified layout that keeps nodes in relatively the same positions
+        const layoutOptions = {
+            name: "dagre",
+            rankDir: "TB",
+            rankSep: 100,
+            nodeSep: 50,
+            edgeSep: 50,
+            ranker: "network-simplex",
+            // Only animate if requested
+            animate: animate,
+            animationDuration: animate ? CONFIG.ANIMATION.LAYOUT : 0,
+            // Don't automatically fit, we'll do that separately
+            fit: false,
+            padding: 30,
+        };
 
-                // For new nodes, position them based on their connections
-                const connectedEdges = node.connectedEdges();
-                if (connectedEdges.length > 0) {
-                    // Find all connected nodes that have positions
-                    const connectedNodes = connectedEdges
-                        .connectedNodes()
-                        .filter(
-                            (n: any) =>
-                                n.id() !== node.id() &&
-                                n.position("x") !== undefined &&
-                                n.position("y") !== undefined,
-                        );
+        try {
+            // Run the layout
+            const layout = this.cy.layout(layoutOptions as any);
+            layout.run();
 
-                    if (connectedNodes.length > 0) {
-                        // Find incoming edges (where this node is the target)
-                        const incomers = node.incomers("edge");
-                        if (incomers.length > 0) {
-                            // Position below the source node
-                            const sourceNode = incomers
-                                .connectedNodes()
-                                .filter((n: any) => n.id() !== node.id());
-                            if (sourceNode.length > 0) {
-                                return {
-                                    x: sourceNode[0].position("x"),
-                                    y: sourceNode[0].position("y") + 150,
-                                };
-                            }
-                        }
+            // Fit to view after layout completes
+            if (animate) {
+                setTimeout(() => {
+                    this.fitToView();
+                }, CONFIG.ANIMATION.LAYOUT + 50);
+            } else {
+                this.fitToView();
+            }
+        } catch (e) {
+            console.error("Error running layout:", e);
+            // Use breadthfirst as fallback with no animation
+            this.cy
+                .layout({
+                    name: "breadthfirst",
+                    directed: true,
+                    spacingFactor: 1.75,
+                    animate: false,
+                })
+                .run();
 
-                        // If no incoming edges, use average position of connected nodes
-                        let avgX = 0,
-                            avgY = 0;
-                        connectedNodes.forEach((n: any) => {
-                            avgX += n.position("x");
-                            avgY += n.position("y");
-                        });
-                        return {
-                            x: avgX / connectedNodes.length,
-                            y: avgY / connectedNodes.length + 150,
-                        };
-                    }
-                }
+            this.fitToView();
+        }
+    }
 
-                // Default position if no connections or no positioned connections
-                return {
-                    x: this?.cy?.width() ?? 0 / 2,
-                    y: this?.cy?.height() ?? 0 / 2,
-                };
-            },
+    /**
+     * Handle container resize events
+     * This ensures the graph layout updates when the container size changes
+     */
+    handleContainerResize(): void {
+        if (!this.cy) return;
+
+        // Use requestAnimationFrame to avoid performance issues on rapid resize
+        window.requestAnimationFrame(() => {
+            if (!this.cy) return;
+
+            // First make sure the style dimensions are updated
+            this.cy.resize();
+
+            // Then apply the layout if needed
+            if (this.cy.nodes().length > 1) {
+                this.applyPartialLayout(false);
+            }
         });
-
-        layout.run();
     }
 
     /**
@@ -923,20 +922,56 @@ class Visualizer {
     fitToView(): void {
         if (!this.cy) return;
 
-        this.cy.fit();
-        this.cy.center();
+        // First check if we need to fit - only do it if nodes are outside the viewport
+        const extent = this.cy.extent();
+        const nodes = this.cy.nodes();
 
-        // Animate the reset with a slight zoom effect
+        if (nodes.length === 0) return;
+
+        // Get the current viewport
+        const viewport = {
+            x1: this.cy.extent().x1,
+            y1: this.cy.extent().y1,
+            x2: this.cy.extent().x2,
+            y2: this.cy.extent().y2,
+            w: this.cy.width(),
+            h: this.cy.height(),
+        };
+
+        // Check if all nodes are within the viewport with padding
+        const padding = 50;
+        let needsFit = false;
+
+        // Loop through nodes to see if any are outside the visible area
+        nodes.forEach((node) => {
+            const pos = node.position();
+            if (
+                pos.x < viewport.x1 + padding ||
+                pos.x > viewport.x2 - padding ||
+                pos.y < viewport.y1 + padding ||
+                pos.y > viewport.y2 - padding
+            ) {
+                needsFit = true;
+            }
+        });
+
+        // If we need to fit or the graph is very small, adjust the view
+        if (needsFit || nodes.length <= 3) {
+            this.cy.fit(undefined, 50);
+            this.cy.center();
+        }
+
+        // Animate the reset with a slight zoom effect for better UX
         this.cy.animate({
             zoom: {
-                level: this.cy.zoom() * 0.9,
+                level: this.cy.zoom() * 0.95,
                 position: this.cy.center(),
             } as any,
             duration: 200,
             complete: () => {
-                this?.cy?.animate({
+                this.cy?.animate({
                     zoom: {
-                        level: this.cy.zoom() * 1.1,
+                        level: this.cy.zoom() * 1.05,
                         position: this.cy.center(),
                     },
                     duration: 300,
@@ -1234,6 +1269,23 @@ class Visualizer {
                 duration: CONFIG.ANIMATION.HOVER,
             });
         });
+
+        // Add container resize observer for responsive behavior
+        if (this.container && window.ResizeObserver) {
+            const resizeObserver = new ResizeObserver((entries) => {
+                this.handleContainerResize();
+            });
+
+            resizeObserver.observe(this.container);
+
+            // Store observer reference so it can be disconnected later
+            this._resizeObserver = resizeObserver;
+        } else {
+            // Fallback for browsers without ResizeObserver
+            window.addEventListener("resize", () => {
+                this.handleContainerResize();
+            });
+        }
     }
 
     /**
@@ -1295,6 +1347,13 @@ class Visualizer {
      */
     destroy(): void {
         this.stopTemporaryNodeAnimation();
+
+        // Clean up resize observer if it exists
+        if (this._resizeObserver) {
+            this._resizeObserver.disconnect();
+            this._resizeObserver = null;
+        }
+
         if (this.cy) {
             this.cy.destroy();
             this.cy = null;

@@ -207,7 +207,7 @@ class ShellOpenWebContentView implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         let targetUrl: URL;
-        switch (params.args.site.toLowerCase()) {
+        switch (params.args.site.toString().toLowerCase()) {
             case "paleobiodb":
                 targetUrl = new URL("https://paleobiodb.org/navigator/");
 
@@ -229,6 +229,10 @@ class ShellOpenWebContentView implements CommandHandler {
             case "montage":
                 // TODO: agents should publish their port #s in manifests
                 targetUrl = new URL(`http://localhost:9012/`);
+
+                break;
+            case "planviewer":
+                targetUrl = new URL(`http://localhost:9015/`);
 
                 break;
             default:
