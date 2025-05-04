@@ -26,6 +26,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { TextEmbeddingCache } from "knowledge-processor";
+import { CompiledTermGroup } from "./search.js";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -188,13 +189,14 @@ export async function addToRelatedTermsIndex(
  */
 export async function resolveRelatedTerms(
     relatedTermsIndex: ITermToRelatedTermsIndex,
-    searchTerms: SearchTerm[],
+    compiledTerms: CompiledTermGroup[],
     ensureSingleOccurrence: boolean = true,
     shouldResolveFuzzy?: (term: SearchTerm) => boolean,
 ): Promise<void> {
+    const allSearchTerms = compiledTerms.flatMap((ct) => ct.terms);
     const searchableTerms = new TermSet();
     const searchTermsNeedingRelated: SearchTerm[] = [];
-    for (const searchTerm of searchTerms) {
+    for (const searchTerm of allSearchTerms) {
         if (isSearchTermWildcard(searchTerm)) {
             continue;
         }
@@ -232,7 +234,11 @@ export async function resolveRelatedTerms(
     // - The same related term can show up for different search terms but with different weights
     // - related terms may also already be present as search terms
     //
-    dedupeRelatedTerms(searchTerms, ensureSingleOccurrence);
+    for (const ct of compiledTerms) {
+        if (ct.booleanOp !== "and") {
+            dedupeRelatedTerms(ct.terms, ensureSingleOccurrence);
+        }
+    }
 }
 
 function dedupeRelatedTerms(
