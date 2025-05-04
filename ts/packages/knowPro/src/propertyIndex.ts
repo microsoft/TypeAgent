@@ -24,6 +24,7 @@ export enum PropertyNames {
     Object = "object",
     IndirectObject = "indirectObject",
     Tag = "tag",
+    Topic = "topic",
 }
 
 function addFacet(
