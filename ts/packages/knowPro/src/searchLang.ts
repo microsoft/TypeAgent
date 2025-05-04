@@ -269,11 +269,9 @@ class SearchQueryCompiler {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
         }
         if (filter.actionSearchTerm) {
-            /*
             termGroup.terms.push(
                 this.compileActionTerm(filter.actionSearchTerm, false, true),
             );
-            */
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
                 termGroup,
