@@ -55,12 +55,16 @@ export function setUpdateConfigPath(configPath: string) {
     updateConfigPath = configPath;
 }
 
-let pendingUpdateCallback: (() => void) | undefined;
 export function hasPendingUpdate() {
     return state.updateInfo !== undefined;
 }
 
-export function setPendingUpdateCallback(fn: () => void) {
+let pendingUpdateCallback:
+    | ((version: electronUpdater.UpdateInfo, background: boolean) => void)
+    | undefined;
+export function setPendingUpdateCallback(
+    fn: (version: electronUpdater.UpdateInfo, background: boolean) => void,
+) {
     pendingUpdateCallback = fn;
 }
 
@@ -198,7 +202,12 @@ async function getAzureBlobStorageToken() {
 // Always true.  Use autoDownload to control download.
 autoUpdater.autoInstallOnAppQuit = true;
 
-async function checkUpdate(install: boolean, url?: string, channel?: string) {
+async function checkUpdate(
+    install: boolean,
+    background: boolean = true,
+    url?: string,
+    channel?: string,
+) {
     const token = await getAzureBlobStorageToken();
 
     autoUpdater.forceDevUpdateConfig =
@@ -231,7 +240,7 @@ async function checkUpdate(install: boolean, url?: string, channel?: string) {
         state.lastChecked = new Date();
         if (result !== null && result.isUpdateAvailable) {
             state.updateInfo = result.updateInfo;
-            pendingUpdateCallback?.();
+            pendingUpdateCallback?.(result.updateInfo, background);
             if (url !== undefined || channel !== undefined) {
                 stopBackgroundUpdateCheck();
                 // If we have a custom update queued, don't check again.
@@ -301,6 +310,7 @@ export class ShellUpdateCheckCommand implements CommandHandler {
             displayStatus("Checking for update", context);
             const result = await checkUpdate(
                 params.flags.install,
+                false,
                 params.flags.url,
                 params.flags.channel,
             );
