@@ -411,7 +411,10 @@ export class ChatInput {
      *
      * @param dataTransfer The dataTransfer object from drag/drop/paste events
      */
-    public getTextFromDataTransfer(dataTransfer: DataTransfer, replace: boolean = false) {
+    public getTextFromDataTransfer(
+        dataTransfer: DataTransfer,
+        replace: boolean = false,
+    ) {
         if (dataTransfer.files.length > 0) {
             this.loadImageFile(dataTransfer.files[0]);
         } else if (dataTransfer.items.length > 0) {
