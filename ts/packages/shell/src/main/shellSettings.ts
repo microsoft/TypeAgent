@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import {
     defaultUserSettings,
     ShellUserSettings,
@@ -55,6 +55,15 @@ export function getShellDataDir(instanceDir: string) {
     return path.join(instanceDir, "shell");
 }
 
+export function ensureShellDataDir(instanceDir: string) {
+    const shellDataDir = getShellDataDir(instanceDir);
+    if (!existsSync(shellDataDir)) {
+        debugShell(`Creating shell data directory '${shellDataDir}'`);
+        mkdirSync(shellDataDir, { recursive: true });
+    }
+    return shellDataDir;
+}
+
 export function getSettingsPath(instanceDir: string) {
     return path.join(getShellDataDir(instanceDir), "shellSettings.json");
 }
@@ -84,7 +93,7 @@ export class ShellSettingManager {
     constructor(
         private readonly settings: ShellSettings,
         private readonly instanceDir: string,
-    ) {}
+    ) { }
 
     public get window(): ReadonlyDeep<ShellWindowState> {
         return this.settings.window;
