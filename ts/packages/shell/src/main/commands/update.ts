@@ -55,8 +55,13 @@ export function setUpdateConfigPath(configPath: string) {
     updateConfigPath = configPath;
 }
 
+let pendingUpdateCallback: (() => void) | undefined;
 export function hasPendingUpdate() {
     return state.updateInfo !== undefined;
+}
+
+export function setPendingUpdateCallback(fn: () => void) {
+    pendingUpdateCallback = fn;
 }
 
 function isUpdaterEnabled(url?: string) {
@@ -226,6 +231,7 @@ async function checkUpdate(install: boolean, url?: string, channel?: string) {
         state.lastChecked = new Date();
         if (result !== null && result.isUpdateAvailable) {
             state.updateInfo = result.updateInfo;
+            pendingUpdateCallback?.();
             if (url !== undefined || channel !== undefined) {
                 stopBackgroundUpdateCheck();
                 // If we have a custom update queued, don't check again.
@@ -329,25 +335,19 @@ export class ShellUpdateCheckCommand implements CommandHandler {
             displayStatus("Downloading update...", context);
             const downloadResult = await result.downloadPromise;
 
-            displaySuccess(
+            displayResult(
                 ["Download successful", ...downloadResult.map((f) => `  ${f}`)],
                 context,
             );
 
             if (!params.flags.restart) {
                 displaySuccess(
-                    [
-                        "Download successful.  Update pending app restart.",
-                        "Or specify --restart to auto install and restart.",
-                    ],
+                    ["Restart the app, or specify --restart to update."],
                     context,
                 );
                 return;
             }
-            displaySuccess(
-                "Download successful. Installing and restarting app...",
-                context,
-            );
+            displaySuccess("Installing and restarting app...", context);
             autoUpdater.quitAndInstall(false, true);
         });
     }

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import {
     defaultUserSettings,
     ShellUserSettings,
@@ -53,6 +53,15 @@ export const defaultSettings: ShellSettings = {
 
 export function getShellDataDir(instanceDir: string) {
     return path.join(instanceDir, "shell");
+}
+
+export function ensureShellDataDir(instanceDir: string) {
+    const shellDataDir = getShellDataDir(instanceDir);
+    if (!existsSync(shellDataDir)) {
+        debugShell(`Creating shell data directory '${shellDataDir}'`);
+        mkdirSync(shellDataDir, { recursive: true });
+    }
+    return shellDataDir;
 }
 
 export function getSettingsPath(instanceDir: string) {

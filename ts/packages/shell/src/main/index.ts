@@ -19,6 +19,7 @@ import {
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 import {
+    ensureShellDataDir,
     getShellDataDir,
     loadShellSettings,
     ShellSettings,
@@ -45,6 +46,7 @@ import { loadKeys } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
 import {
     hasPendingUpdate,
+    setPendingUpdateCallback,
     setUpdateConfigPath,
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
@@ -89,14 +91,20 @@ debugShell("Instance Dir", instanceDir);
 
 if (parsedArgs.clean) {
     // Delete all files in the instance dir.
-    await fs.promises.rm(instanceDir, { recursive: true });
-    debugShell("Cleaned data dir", instanceDir);
+    if (fs.existsSync(instanceDir)) {
+        await fs.promises.rm(instanceDir, { recursive: true });
+        debugShell("Cleaned data dir", instanceDir);
+    }
 } else if (parsedArgs.reset) {
     // Delete shell setting files.
     const shellDataDir = getShellDataDir(instanceDir);
-    await fs.promises.rm(shellDataDir, { recursive: true });
-    debugShell("Cleaned shell data dir", shellDataDir);
+    if (fs.existsSync(shellDataDir)) {
+        await fs.promises.rm(shellDataDir, { recursive: true });
+        debugShell("Cleaned shell data dir", shellDataDir);
+    }
 }
+
+ensureShellDataDir(instanceDir);
 
 if (parsedArgs.update) {
     if (!fs.existsSync(parsedArgs.update)) {
@@ -315,7 +323,7 @@ async function initializeInstance(
         const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
         const zoomFactorTitle =
             zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
-        const newTitle = `${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
+        const newTitle = `${app.getName()} - ${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
         if (newTitle !== title) {
             title = newTitle;
             chatView.webContents.send(
@@ -333,6 +341,7 @@ async function initializeInstance(
         shellWindow,
         updateTitle,
     );
+
     ipcMain.on("dom ready", async () => {
         debugShell("Showing window", performance.now() - time);
 
@@ -343,6 +352,9 @@ async function initializeInstance(
             return;
         }
         updateTitle(dispatcher);
+        setPendingUpdateCallback(() => {
+            updateTitle(dispatcher);
+        });
 
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {
