@@ -269,9 +269,11 @@ class SearchQueryCompiler {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
         }
         if (filter.actionSearchTerm) {
+            /*
             termGroup.terms.push(
                 this.compileActionTerm(filter.actionSearchTerm, false, true),
             );
+            */
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
                 termGroup,
@@ -314,20 +316,7 @@ class SearchQueryCompiler {
     ): SearchTermGroup {
         termGroup ??= createOrTermGroup();
         const actionGroup = useOrMax ? createOrMaxTermGroup() : termGroup;
-        /*
-        if (actionTerm.actionVerbs !== undefined) {
-            this.compileSearchTerms(actionTerm.actionVerbs.words, actionGroup);
-        }
-        if (isEntityTermArray(actionTerm.actorEntities)) {
-            this.compileEntityTerms(actionTerm.actorEntities, actionGroup);
-        }
-        if (isEntityTermArray(actionTerm.targetEntities)) {
-            this.compileEntityTerms(actionTerm.targetEntities, actionGroup);
-        }
-        if (isEntityTermArray(actionTerm.additionalEntities)) {
-            this.compileEntityTerms(actionTerm.additionalEntities, actionGroup);
-        }
-            */
+
         if (actionTerm.actionVerbs !== undefined) {
             for (const verb of actionTerm.actionVerbs.words) {
                 this.addPropertyTermToGroup(
