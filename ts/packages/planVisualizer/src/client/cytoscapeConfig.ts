@@ -134,17 +134,18 @@ const CytoscapeConfig = {
                     "background-fit": "contain",
                     // Position the label outside the node at the top-left
                     "text-valign": "top",
-                    "text-halign": "left",
+                    "text-halign": "center",
                     // Add background to make text more readable
                     "text-background-color": "rgba(255,255,255,0.8)",
-                    "text-background-opacity": 1,
+                    "text-background-opacity": 0.5,
                     "text-background-padding": 3,
                     "text-background-shape": "roundrectangle",
                     // Adjust the margin to move text above the node
-                    "text-margin-y": -10,
+                    "text-margin-y": -6,
                     "text-margin-x": 0, // Set to 0 to align with the left edge
                     // Make font smaller
-                    "font-size": "11px",
+                    "font-weight": "lighter",
+                    "font-size": "12px",
                     // Ensure text is above the node visually
                     "z-index": 10,
                 },

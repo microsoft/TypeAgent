@@ -668,13 +668,6 @@ node.screenshot-mode {
   padding-left: 3px;
 }
 
-/* When using Cytoscape's built-in label positioning */
-body.using-cytoscape-labels [data-id][?hasScreenshot] {
-  /* Override any potential Cytoscape internal margin */
-  text-indent: 0 !important;
-  margin-left: 0 !important;
-}
-
 /* Enhanced styling for the screenshot badge */
 .screenshot-badge {
   position: absolute;
