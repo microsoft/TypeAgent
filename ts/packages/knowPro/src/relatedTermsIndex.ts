@@ -235,9 +235,12 @@ export async function resolveRelatedTerms(
     // - related terms may also already be present as search terms
     //
     for (const ct of compiledTerms) {
-        if (ct.booleanOp !== "and") {
-            dedupeRelatedTerms(ct.terms, ensureSingleOccurrence);
-        }
+        dedupeRelatedTerms(
+            ct.terms,
+            ensureSingleOccurrence
+                ? ct.booleanOp !== "and"
+                : ensureSingleOccurrence,
+        );
     }
 }
 
