@@ -26,15 +26,19 @@ variables:
     value: ts/packages/shell
   - name: nodeVersion
     value: 22
+  - name: platforms
+    value: win,linux,mac
+  - name: ELECTRON_CACHE_DIR
+    value: $(Pipeline.Workspace)/cache/
+  - name: ELECTRON_CACHE
+    value: $(ELECTRON_CACHE_DIR)electron
   - name: ELECTRON_BUILDER_CACHE
-    value: $(Pipeline.Workspace)/electron-builder-cache
+    value: $(ELECTRON_CACHE_DIR)electron-builder-cache
   - name: channel
     ${{ if eq(variables['Build.Reason'], 'Manual') }}:
       value: ${{ parameters.channel }}
     ${{ if ne(variables['Build.Reason'], 'Manual') }}:
       value: ci
-  - name: platform
-    value: windows,linux,mac
 
 jobs:
   - job: build_package_shell
@@ -94,7 +98,17 @@ jobs:
         displayName: Build Shell
         workingDirectory: $(workingDirectory)
 
-      - script: |
+      - task: Cache@2
+        displayName: Cache Electron Builder
+        inputs:
+          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(Build.SourcesDirectory)/ts/pnpm-lock.yaml
+          path: $(ELECTRON_CACHE_DIR)
+          restoreKeys: |
+            electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+      - bash: |
+          echo $ELECTRON_BUILDER_CACHE
+          echo $ELECTRON_CACHE
           pnpm run shell:package:$(platform)
         displayName: Package - shell
         workingDirectory: $(workingDirectory)
@@ -114,7 +128,7 @@ jobs:
       runOnce:
         deploy:
           steps:
-            - ${{ each platform in split(variables.platform, ',') }}:
+            - ${{ each platform in split(variables.platforms, ',') }}:
                 - download: current
                   artifact: shell-${{ platform }}
                   displayName: Download shell package - ${{ platform }}
