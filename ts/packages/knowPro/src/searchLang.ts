@@ -380,6 +380,23 @@ class SearchQueryCompiler {
                 this.addEntityTermToGroup(term, termGroup);
             }
         }
+        // Also search for topics
+        /*
+        for (const term of entityTerms) {
+            this.addEntityNameToGroup(term, PropertyNames.Topic, termGroup);
+            if (term.facets) {
+                for (const facet of term.facets) {
+                    if (!isWildcard(facet.facetValue)) {
+                        this.addPropertyTermToGroup(
+                            facet.facetValue,
+                            PropertyNames.Topic,
+                            termGroup,
+                        );
+                    }
+                }
+            }
+        }
+        */
     }
 
     private compileEntityTermsAsSearchTerms(
