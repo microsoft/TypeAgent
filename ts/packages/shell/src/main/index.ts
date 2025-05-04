@@ -354,7 +354,7 @@ async function initializeInstance(
         updateTitle(dispatcher);
         setPendingUpdateCallback(() => {
             updateTitle(dispatcher);
-        })
+        });
 
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {

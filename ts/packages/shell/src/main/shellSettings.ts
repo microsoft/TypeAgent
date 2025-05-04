@@ -93,7 +93,7 @@ export class ShellSettingManager {
     constructor(
         private readonly settings: ShellSettings,
         private readonly instanceDir: string,
-    ) { }
+    ) {}
 
     public get window(): ReadonlyDeep<ShellWindowState> {
         return this.settings.window;

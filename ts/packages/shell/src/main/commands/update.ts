@@ -64,7 +64,6 @@ export function setPendingUpdateCallback(fn: () => void) {
     pendingUpdateCallback = fn;
 }
 
-
 function isUpdaterEnabled(url?: string) {
     return app.isPackaged || updateConfigPath !== null || url !== undefined;
 }
@@ -343,17 +342,12 @@ export class ShellUpdateCheckCommand implements CommandHandler {
 
             if (!params.flags.restart) {
                 displaySuccess(
-                    [
-                        "Restart the app, or specify --restart to update.",
-                    ],
+                    ["Restart the app, or specify --restart to update."],
                     context,
                 );
                 return;
             }
-            displaySuccess(
-                "Installing and restarting app...",
-                context,
-            );
+            displaySuccess("Installing and restarting app...", context);
             autoUpdater.quitAndInstall(false, true);
         });
     }
