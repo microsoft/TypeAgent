@@ -94,3 +94,8 @@ export function isSearchGroupTerm(
 ): term is SearchTermGroup {
     return term.hasOwnProperty("booleanOp");
 }
+
+export type CompiledTermGroup = {
+    booleanOp: BooleanOp;
+    terms: SearchTerm[];
+};

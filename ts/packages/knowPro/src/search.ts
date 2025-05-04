@@ -31,6 +31,7 @@ import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
 import {
     BooleanOp,
+    CompiledTermGroup,
     createMatchMessagesBooleanExpr,
     createMatchTermsBooleanExpr,
     isActionPropertyTerm,
@@ -640,8 +641,3 @@ class QueryCompiler {
         return scoredRef;
     }
 }
-
-export type CompiledTermGroup = {
-    booleanOp: BooleanOp;
-    terms: SearchTerm[];
-};

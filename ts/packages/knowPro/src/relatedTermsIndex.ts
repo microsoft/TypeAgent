@@ -26,7 +26,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { TextEmbeddingCache } from "knowledge-processor";
-import { CompiledTermGroup } from "./search.js";
+import { CompiledTermGroup } from "./compileLib.js";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
