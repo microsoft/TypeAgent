@@ -55,13 +55,16 @@ export function setUpdateConfigPath(configPath: string) {
     updateConfigPath = configPath;
 }
 
-
 export function hasPendingUpdate() {
     return state.updateInfo !== undefined;
 }
 
-let pendingUpdateCallback: ((version: electronUpdater.UpdateInfo, background: boolean) => void) | undefined;
-export function setPendingUpdateCallback(fn: (version: electronUpdater.UpdateInfo, background: boolean) => void) {
+let pendingUpdateCallback:
+    | ((version: electronUpdater.UpdateInfo, background: boolean) => void)
+    | undefined;
+export function setPendingUpdateCallback(
+    fn: (version: electronUpdater.UpdateInfo, background: boolean) => void,
+) {
     pendingUpdateCallback = fn;
 }
 
@@ -199,7 +202,12 @@ async function getAzureBlobStorageToken() {
 // Always true.  Use autoDownload to control download.
 autoUpdater.autoInstallOnAppQuit = true;
 
-async function checkUpdate(install: boolean, background: boolean = true, url?: string, channel?: string) {
+async function checkUpdate(
+    install: boolean,
+    background: boolean = true,
+    url?: string,
+    channel?: string,
+) {
     const token = await getAzureBlobStorageToken();
 
     autoUpdater.forceDevUpdateConfig =

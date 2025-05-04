@@ -357,7 +357,8 @@ async function initializeInstance(
             updateTitle(dispatcher);
             if (background) {
                 new Notification({
-                    title: `New version ${version.version} available`, body: `Restart to install the update.`
+                    title: `New version ${version.version} available`,
+                    body: `Restart to install the update.`,
                 }).show();
             }
         });
