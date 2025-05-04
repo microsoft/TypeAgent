@@ -9,6 +9,7 @@ import {
     session,
     WebContentsView,
     shell,
+    Notification,
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
@@ -323,7 +324,7 @@ async function initializeInstance(
         const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
         const zoomFactorTitle =
             zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
-        const newTitle = `${app.getName()} - ${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
+        const newTitle = `${app.getName()} v${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
         if (newTitle !== title) {
             title = newTitle;
             chatView.webContents.send(
@@ -352,8 +353,13 @@ async function initializeInstance(
             return;
         }
         updateTitle(dispatcher);
-        setPendingUpdateCallback(() => {
+        setPendingUpdateCallback((version, background) => {
             updateTitle(dispatcher);
+            if (background) {
+                new Notification({
+                    title: `New version ${version.version} available`, body: `Restart to install the update.`
+                }).show();
+            }
         });
 
         // send the agent greeting if it's turned on
