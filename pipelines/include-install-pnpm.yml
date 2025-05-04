@@ -20,10 +20,6 @@ parameters:
     type: string
     default: $(Pipeline.Workspace)/.pnpm-store
 
-  - name: pnpmCacheKey
-    type: string
-    default: $(System.DefinitionId)
-
 steps:
   - ${{ if eq(parameters.enableCache, true) }}:
       - task: Cache@2
@@ -33,10 +29,10 @@ steps:
         inputs:
           # Caches are already scoped to individual pipelines, so no need to include the release group name or tag
           # in the cache key
-          key: '${{ parameters.pnpmCacheKey }} | pnpm-store | "$(Agent.OS)" | ${{ parameters.buildDirectory }}/pnpm-lock.yaml'
+          key: pnpm-store | $(Agent.OS) | $(Agent.OSArchitecture) | ${{ parameters.buildDirectory }}/pnpm-lock.yaml
           path: ${{ parameters.pnpmStorePath }}
           restoreKeys: |
-            ${{ parameters.pnpmCacheKey }} | pnpm-store | "$(Agent.OS)"
+            pnpm-store | $(Agent.OS) | $(Agent.OSArchitecture)
 
   # workspace-concurrency 0 means use use the CPU core count. This is better than the default (4) for larger agents.
   - bash: |
