@@ -13,6 +13,12 @@ import ApiService from "./apiService.js";
 import Visualizer from "./visualizer.js";
 import { WebPlanData, SSEEvent } from "../shared/types.js";
 
+declare global {
+    interface Window {
+        visualizer?: Visualizer;
+    }
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     // Check if dagre and cytoscape-dagre are properly loaded
     if (typeof dagre === "undefined") {
@@ -202,6 +208,9 @@ document.addEventListener("DOMContentLoaded", function () {
         // Create new visualizer
         visualizer = new Visualizer(cyContainer, webPlanData);
         visualizer.initialize();
+
+        // Make visualizer accessible globally for resize handler
+        window.visualizer = visualizer;
 
         // Set up event listeners
         visualizer.setupEventListeners((nodeId: string) => {
@@ -980,6 +989,47 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     /**
+     * Adjusts the canvas height based on window size and content
+     * This ensures the canvas resizes both horizontally and vertically
+     */
+    function adjustCanvasHeight(): void {
+        const cyContainer = document.getElementById("cy-container");
+        const containerParent = document.querySelector(
+            ".container",
+        ) as HTMLElement;
+
+        if (!cyContainer || !containerParent) return;
+
+        // Get available height in the window
+        const windowHeight = window.innerHeight;
+
+        // Calculate offset from top of window to top of container
+        const containerTop = containerParent.getBoundingClientRect().top;
+
+        // Calculate height of other UI elements below container (footer, etc.)
+        // Adjust this based on your layout - padding for bottom elements
+        const bottomPadding = 40;
+
+        // Calculate available height (subtract footer or other elements if needed)
+        const availableHeight = windowHeight - containerTop - bottomPadding;
+
+        // Set minimum height (don't let it get too small)
+        const minHeight = 400;
+
+        // Set the container height to the calculated height or minimum
+        const newHeight = Math.max(availableHeight, minHeight);
+        cyContainer.style.height = `${newHeight}px`;
+
+        // If visualizer instance exists, fit to view after resize
+        if (
+            window.visualizer &&
+            typeof window.visualizer.fitToView === "function"
+        ) {
+            window.visualizer.fitToView();
+        }
+    }
+
+    /**
      * Initialize the SSE connection
      */
     function initializeSSE(): void {
@@ -1212,6 +1262,8 @@ document.addEventListener("DOMContentLoaded", function () {
     // Initial load
     loadData();
 
+    adjustCanvasHeight();
+
     updateDynamicControls();
 
     updateCurrentStateIndicator();
@@ -1238,5 +1290,7 @@ document.addEventListener("DOMContentLoaded", function () {
         if (formFlyout.style.display === "block") {
             positionFlyout();
         }
+
+        adjustCanvasHeight();
     });
 });

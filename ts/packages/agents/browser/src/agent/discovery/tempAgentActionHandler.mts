@@ -17,7 +17,7 @@ export function createTempAgentForSchema(
     agent: any,
     context: any,
 ): AppAgent {
-    const actionUtils = setupAuthoringActions(browser, agent);
+    const actionUtils = setupAuthoringActions(browser, agent, context);
     return {
         async executeAction(action: any, tempContext: any): Promise<undefined> {
             console.log(`Executing action: ${action.actionName}`);
