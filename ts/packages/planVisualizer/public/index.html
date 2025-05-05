@@ -15,74 +15,90 @@
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
-    <div class="container">
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <h1 id="plan-title">Dynamic Web Plan Visualizer</h1>
-        </div>
-
-        <div class="toolbar-group"></div>
-
-        <div class="toolbar-group">
-          <button id="zoom-fit-button" class="icon-button" title="Fit View">
-            <i class="fas fa-expand"></i>
-          </button>
-
-          <button
-            id="screenshot-mode-button"
-            class="icon-button"
-            title="Toggle Screenshot Mode"
-          >
-            <i class="fas fa-image"></i>
-          </button>
-
-          <button
-            id="show-path-button"
-            class="icon-button"
-            title="Show Current Path"
-          >
-            <i class="fas fa-route"></i>
-          </button>
-
-          <div class="node-selector">
-            <label for="node-select"
-              ><i class="fas fa-map-marker-alt"></i
-            ></label>
-            <select id="node-select"></select>
+    <!-- App wrapper for the responsive layout -->
+    <div class="app-wrapper">
+      <!-- Container with responsive layout -->
+      <div class="container">
+        <!-- Header/Toolbar section -->
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <h1 id="plan-title">Dynamic Web Plan Visualizer</h1>
           </div>
 
-          <div class="toggle-container">
-            <span class="toggle-label"><i class="fas fa-sitemap"></i></span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="view-mode-toggle" checked />
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="toggle-label"
-              ><i class="fas fa-project-diagram"></i
-            ></span>
+          <div class="toolbar-group"></div>
+
+          <div class="toolbar-group">
+            <button id="zoom-fit-button" class="icon-button" title="Fit View">
+              <i class="fas fa-expand"></i>
+            </button>
+
+            <button
+              id="screenshot-mode-button"
+              class="icon-button"
+              title="Toggle Screenshot Mode"
+            >
+              <i class="fas fa-image"></i>
+            </button>
+
+            <button
+              id="show-path-button"
+              class="icon-button"
+              title="Show Current Path"
+            >
+              <i class="fas fa-route"></i>
+            </button>
+
+            <div class="node-selector">
+              <label for="node-select"
+                ><i class="fas fa-map-marker-alt"></i
+              ></label>
+              <select id="node-select"></select>
+            </div>
+
+            <div class="toggle-container">
+              <span class="toggle-label"><i class="fas fa-sitemap"></i></span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="view-mode-toggle" checked />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label"
+                ><i class="fas fa-project-diagram"></i
+              ></span>
+            </div>
+
+            <!-- Add transition button -->
+            <button
+              id="reset-button"
+              class="icon-button dynamic-only-control"
+              title="Reset Plan"
+            >
+              <i class="fas fa-trash"></i>
+            </button>
+
+            <button
+              id="toggle-form-button"
+              class="icon-button dynamic-only-control"
+              title="Add New Transition"
+            >
+              <i class="fas fa-file-circle-plus"></i>
+            </button>
           </div>
-
-          <!-- Add transition button -->
-          <button
-            id="reset-button"
-            class="icon-button dynamic-only-control"
-            title="Reset Plan"
-          >
-            <i class="fas fa-trash"></i>
-          </button>
-
-          <button
-            id="toggle-form-button"
-            class="icon-button dynamic-only-control"
-            title="Add New Transition"
-          >
-            <i class="fas fa-file-circle-plus"></i>
-          </button>
         </div>
+
+        <!-- Status message -->
+        <div id="status-message" class="status-message"></div>
+
+        <!-- Main content area with the visualization canvas -->
+        <div class="main-content">
+          <!-- Cytoscape container will resize both horizontally and vertically -->
+          <div id="cy-container"></div>
+        </div>
+
+        <!-- Tooltip element for hover information -->
+        <div class="tooltip" id="tooltip"></div>
       </div>
 
-      <div id="status-message" class="status-message"></div>
-
+      <!-- Modals and flyouts positioned outside the main container -->
       <!-- Form for uploading screenshots -->
       <div id="screenshot-upload-modal" class="modal">
         <div class="modal-content">
@@ -191,11 +207,6 @@
           <strong id="active-state-name">None</strong>
         </div>
       </div>
-
-      <div id="cy-container"></div>
-
-      <!-- Tooltip element for hover information -->
-      <div class="tooltip" id="tooltip"></div>
     </div>
 
     <!-- Application JS - Using ES modules -->

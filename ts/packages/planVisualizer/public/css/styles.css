@@ -668,13 +668,6 @@ node.screenshot-mode {
   padding-left: 3px;
 }
 
-/* When using Cytoscape's built-in label positioning */
-body.using-cytoscape-labels [data-id][?hasScreenshot] {
-  /* Override any potential Cytoscape internal margin */
-  text-indent: 0 !important;
-  margin-left: 0 !important;
-}
-
 /* Enhanced styling for the screenshot badge */
 .screenshot-badge {
   position: absolute;
@@ -706,4 +699,146 @@ body.using-cytoscape-labels [data-id][?hasScreenshot] {
 .cy-node text {
   text-anchor: start !important; /* For SVG text elements */
   dominant-baseline: hanging !important; /* For SVG text elements */
+}
+
+/* Make the html and body take full viewport height */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* App wrapper for full-height layout */
+.app-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Update container for flexible layout */
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Toolbar stays at the top */
+.toolbar {
+  flex: 0 0 auto;
+  padding: 10px 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  background-color: white;
+}
+
+/* Main content area will expand to fill available space */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  min-height: 0; /* Important for flex container to respect child's height */
+}
+
+/* Cytoscape container can now expand vertically */
+#cy-container {
+  flex: 1;
+  width: 100%;
+  min-height: 0; /* Important for flex container */
+  position: relative;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  transition: height 0.3s ease-in-out;
+}
+
+/* Make sure tooltips appear above the canvas */
+.tooltip {
+  z-index: 100;
+}
+
+/* Status message positioning */
+.status-message {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  min-width: 200px;
+}
+
+/* Modal and flyout positioning adjustments */
+.modal,
+.form-flyout {
+  position: fixed;
+  z-index: 2000;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-height: 700px) {
+  .toolbar {
+    padding: 5px 10px;
+  }
+
+  .toolbar h1 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  .toolbar-group {
+    gap: 5px;
+  }
+
+  .icon-button {
+    padding: 5px;
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toolbar-group:last-child {
+    margin-top: 10px;
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .node-selector {
+    width: 100%;
+    margin-top: 5px;
+  }
+}
+
+/* Make sure nodes with screenshots have properly positioned labels */
+.cy-node-screenshot-label {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: none;
+  padding-left: 3px;
 }

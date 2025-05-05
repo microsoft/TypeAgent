@@ -54,9 +54,9 @@ async function getKeys(
     const keys = reset ? null : await loadKeysFromPersistence(dir);
     if (envFile) {
         if (!fs.existsSync(envFile)) {
-            throw new Error(`Environment file ${envFile} not found`);
+            throw new Error(`Env file ${envFile} not found`);
         }
-        debugShell("Loading environment variables from file", envFile);
+        debugShell("Loading service keys from file", envFile);
         const content = await fs.promises.readFile(envFile, "utf-8");
         if (keys === null) {
             await saveKeysToPersistence(dir, content);
@@ -67,8 +67,8 @@ async function getKeys(
             const result = await dialog.showMessageBox({
                 type: "question",
                 buttons: ["Yes", "No"],
-                title: "Loading keys",
-                message: `The environment variables from ${envFile} is different from saved keys. Do you want to update them?`,
+                title: "Loading service keys",
+                message: `The service keys from ${envFile} is different from saved keys. Do you want to update them?`,
             });
 
             if (result.response === 0) {
@@ -81,16 +81,16 @@ async function getKeys(
     } else if (keys === null) {
         const result = await dialog.showMessageBox({
             type: "question",
-            buttons: ["Import from file", "Cancel"],
-            title: "Loading keys",
-            message: `Environment variables not found. Do you want to import them from a file?`,
+            buttons: ["Import from a .env file", "Cancel"],
+            title: "Loading service keys",
+            message: `Service keys not found.`,
         });
 
         if (result.response === 0) {
             // Use the sync version as nothing else is going on.
             const result = dialog.showOpenDialogSync({
                 properties: ["openFile", "showHiddenFiles"],
-                message: "Select the .env file",
+                message: "Select .env file",
             });
             if (result && result.length > 0) {
                 const content = await fs.promises.readFile(result[0], "utf-8");
@@ -111,12 +111,12 @@ export async function loadKeys(
     if (keys) {
         populateKeys(keys);
     } else {
-        debugShellError("No keys loaded");
+        debugShellError("No serivce keys loaded");
         await dialog.showMessageBox({
             type: "warning",
             buttons: ["OK"],
-            title: "Loading keys",
-            message: `No keys loaded. Using values in existing environment variables.`,
+            title: "Loading service keys",
+            message: `Service keys not loaded. Using existing environment variables.`,
         });
     }
 }

@@ -12,21 +12,33 @@ pr:
       - "*"
 
 parameters:
-  - name: platforms
-    type: object
-    default: [win, linux, mac]
   - name: channel
     type: string
-    default: ci
+    default: test
     values:
-      - ci
-      - lkg
       - test
+      - lkg
 
 variables:
-  workingDirectory: ts
-  shell_folder: ts/packages/shell
-  nodeVersion: 22
+  - name: workingDirectory
+    value: ts
+  - name: shell_folder
+    value: ts/packages/shell
+  - name: nodeVersion
+    value: 22
+  - name: platforms
+    value: win,linux,mac
+  - name: ELECTRON_CACHE_DIR
+    value: $(Pipeline.Workspace)/cache/
+  - name: ELECTRON_CACHE
+    value: $(ELECTRON_CACHE_DIR)electron
+  - name: ELECTRON_BUILDER_CACHE
+    value: $(ELECTRON_CACHE_DIR)electron-builder-cache
+  - name: channel
+    ${{ if eq(variables['Build.Reason'], 'Manual') }}:
+      value: ${{ parameters.channel }}
+    ${{ if ne(variables['Build.Reason'], 'Manual') }}:
+      value: ci
 
 jobs:
   - job: build_package_shell
@@ -49,6 +61,18 @@ jobs:
         displayName: Checkout TypeAgent Repository
         path: "typeagent"
 
+      - bash: |
+          echo "registry=$(REGISTRY)" > .npmrc
+          echo "always-auth=true" >> .npmrc
+          cat .npmrc
+        displayName: Set npm registry
+        workingDirectory: $(Build.SourcesDirectory)/ts
+
+      - task: npmAuthenticate@0
+        displayName: Authenticate to npm registry
+        inputs:
+          workingFile: $(Build.SourcesDirectory)/ts/.npmrc
+
       - task: UseNode@1
         displayName: Setup Node.js
         inputs:
@@ -67,14 +91,24 @@ jobs:
       - template: include-update-package-version.yml
         parameters:
           packageFolder: $(shell_folder)
-          prerelease: ${{ parameters.channel }}.$(Build.BuildNumber)
+          prerelease: $(channel).$(Build.BuildNumber)
 
       - script: |
           pnpm run build:shell
         displayName: Build Shell
         workingDirectory: $(workingDirectory)
 
-      - script: |
+      - task: Cache@2
+        displayName: Cache Electron Builder
+        inputs:
+          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(Build.SourcesDirectory)/ts/pnpm-lock.yaml
+          path: $(ELECTRON_CACHE_DIR)
+          restoreKeys: |
+            electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+      - bash: |
+          echo $ELECTRON_BUILDER_CACHE
+          echo $ELECTRON_CACHE
           pnpm run shell:package:$(platform)
         displayName: Package - shell
         workingDirectory: $(workingDirectory)
@@ -85,7 +119,7 @@ jobs:
 
   - deployment: publish
     displayName: Publish TypeAgent Shell
-    environment: typeagent-shell-${{ parameters.channel }}
+    environment: typeagent-shell-$(channel)
     dependsOn: build_package_shell
     pool:
       # AzureFileCopy requires windows
@@ -94,14 +128,14 @@ jobs:
       runOnce:
         deploy:
           steps:
-            - ${{ each platform in parameters.platforms }}:
+            - ${{ each platform in split(variables.platforms, ',') }}:
                 - download: current
                   artifact: shell-${{ platform }}
                   displayName: Download shell package - ${{ platform }}
                   patterns: |
                     TypeAgent Shell[-_]*
                     typeagentshell-*
-                    ${{ parameters.channel }}*.yml
+                    $(channel)*.yml
                   condition: succeeded()
 
                 - task: AzureFileCopy@6

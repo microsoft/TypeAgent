@@ -59,6 +59,15 @@ export function hasPendingUpdate() {
     return state.updateInfo !== undefined;
 }
 
+let pendingUpdateCallback:
+    | ((version: electronUpdater.UpdateInfo, background: boolean) => void)
+    | undefined;
+export function setPendingUpdateCallback(
+    fn: (version: electronUpdater.UpdateInfo, background: boolean) => void,
+) {
+    pendingUpdateCallback = fn;
+}
+
 function isUpdaterEnabled(url?: string) {
     return app.isPackaged || updateConfigPath !== null || url !== undefined;
 }
@@ -193,7 +202,12 @@ async function getAzureBlobStorageToken() {
 // Always true.  Use autoDownload to control download.
 autoUpdater.autoInstallOnAppQuit = true;
 
-async function checkUpdate(install: boolean, url?: string, channel?: string) {
+async function checkUpdate(
+    install: boolean,
+    background: boolean = true,
+    url?: string,
+    channel?: string,
+) {
     const token = await getAzureBlobStorageToken();
 
     autoUpdater.forceDevUpdateConfig =
@@ -226,6 +240,7 @@ async function checkUpdate(install: boolean, url?: string, channel?: string) {
         state.lastChecked = new Date();
         if (result !== null && result.isUpdateAvailable) {
             state.updateInfo = result.updateInfo;
+            pendingUpdateCallback?.(result.updateInfo, background);
             if (url !== undefined || channel !== undefined) {
                 stopBackgroundUpdateCheck();
                 // If we have a custom update queued, don't check again.
@@ -295,6 +310,7 @@ export class ShellUpdateCheckCommand implements CommandHandler {
             displayStatus("Checking for update", context);
             const result = await checkUpdate(
                 params.flags.install,
+                false,
                 params.flags.url,
                 params.flags.channel,
             );
@@ -329,25 +345,19 @@ export class ShellUpdateCheckCommand implements CommandHandler {
             displayStatus("Downloading update...", context);
             const downloadResult = await result.downloadPromise;
 
-            displaySuccess(
+            displayResult(
                 ["Download successful", ...downloadResult.map((f) => `  ${f}`)],
                 context,
             );
 
             if (!params.flags.restart) {
                 displaySuccess(
-                    [
-                        "Download successful.  Update pending app restart.",
-                        "Or specify --restart to auto install and restart.",
-                    ],
+                    ["Restart the app, or specify --restart to update."],
                     context,
                 );
                 return;
             }
-            displaySuccess(
-                "Download successful. Installing and restarting app...",
-                context,
-            );
+            displaySuccess("Installing and restarting app...", context);
             autoUpdater.quitAndInstall(false, true);
         });
     }
