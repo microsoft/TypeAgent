@@ -559,6 +559,8 @@ export async function createKnowproCommands(
             return;
         }
         let exactScope = namedArgs.exactScope;
+        let compileOptions = kp.createLanguageQueryCompileOptions();
+        compileOptions.exactScope = exactScope;
         let retried = !exactScope;
         const searchQuery = result.data;
         context.printer.writeJson(searchQuery, true);
@@ -566,8 +568,10 @@ export async function createKnowproCommands(
             const searchQueryExpressions = kp.compileSearchQuery(
                 context.conversation!,
                 searchQuery,
-                exactScope,
-                namedArgs.applyScope,
+                {
+                    exactScope,
+                    applyScope: namedArgs.applyScope,
+                },
             );
             let countSelectMatches = 0;
             for (const searchQueryExpr of searchQueryExpressions) {
@@ -621,11 +625,14 @@ export async function createKnowproCommands(
         const searchText = namedArgs.query;
         const debugContext: kp.LanguageSearchDebugContext = {};
 
-        const options: kp.LanguageSearchOptions =
-            createSearchOptions(namedArgs);
+        const options: kp.LanguageSearchOptions = {
+            ...createSearchOptions(namedArgs),
+            compileOptions: {
+                exactScope: namedArgs.exactScope,
+                applyScope: namedArgs.applyScope,
+            },
+        };
         options.exactMatch = namedArgs.exact;
-        options.exactScope = namedArgs.exactScope;
-        options.applyScope = namedArgs.applyScope;
         if (namedArgs.fallback) {
             options.fallbackRagOptions = {
                 maxMessageMatches: options.maxMessageMatches,
