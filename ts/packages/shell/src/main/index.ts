@@ -496,9 +496,17 @@ async function initialize() {
         });
 
         try {
-            server.listen(pipePath);
-        } catch {
-            debugShellError(`Error creating pipe at ${pipePath}`);
+            const p = Promise.withResolvers<void>();
+            server.on("error", (e) => {
+                p.reject(e);
+            });
+            server.listen(pipePath, () => {
+                debugShell("Listening for pen events on", pipePath);
+                p.resolve();
+            });
+            await p.promise;
+        } catch (e) {
+            debugShellError(`Error creating pipe at ${pipePath}: ${e}`);
         }
     }
     await initializeInstance(instanceDir, shellSettings);
