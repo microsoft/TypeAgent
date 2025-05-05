@@ -44,7 +44,11 @@ class MailClientLoginCommandHandler implements CommandHandlerNoParams {
         }
 
         await mailClient.login((prompt) => displayStatus(prompt, context));
-        displaySuccess("Successfully logged in", context);
+        const name = await mailClient.getUserAsync();
+        displaySuccess(
+            `Successfully logged in as ${name.displayName}<${name.mail}>`,
+            context,
+        );
     }
 }
 
