@@ -58,7 +58,11 @@ export class CalendarClientLoginCommandHandler
             throw new Error("Calendar client not initialized");
         }
         if (calendarClient.isAuthenticated()) {
-            displayWarn("Already logged in", context);
+            const name = await calendarClient.getUserAsync();
+            displayWarn(
+                `Already logged in as ${name.displayName}<${name.mail}>`,
+                context,
+            );
             return;
         }
 
