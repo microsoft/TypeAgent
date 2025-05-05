@@ -61,6 +61,7 @@ export function createPropertySearchTerm(
         case "object":
         case "indirectObject":
         case "tag":
+        case "topic":
             propertyName = name;
             break;
     }

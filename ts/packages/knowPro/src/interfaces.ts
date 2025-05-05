@@ -279,7 +279,8 @@ export type KnowledgePropertyName =
     | "subject" // the subject of an action
     | "object" // the object of an action
     | "indirectObject" // The indirectObject of an action
-    | "tag"; // Tag
+    | "tag" // Tag
+    | "topic";
 
 export type PropertySearchTerm = {
     /**

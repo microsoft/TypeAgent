@@ -31,6 +31,7 @@ import { resolveRelatedTerms } from "./relatedTermsIndex.js";
 import { conversation as kpLib } from "knowledge-processor";
 import {
     BooleanOp,
+    CompiledTermGroup,
     createMatchMessagesBooleanExpr,
     createMatchTermsBooleanExpr,
     isActionPropertyTerm,
@@ -235,10 +236,10 @@ function runQuery<T = any>(
 
 class QueryCompiler {
     // All SearchTerms used which compiling the 'select' portion of the query
-    private allSearchTerms: SearchTerm[] = [];
+    private allSearchTerms: CompiledTermGroup[] = [];
     // All search terms used while compiling predicates in the query
-    private allPredicateSearchTerms: SearchTerm[] = [];
-    private allScopeSearchTerms: SearchTerm[] = [];
+    private allPredicateSearchTerms: CompiledTermGroup[] = [];
+    private allScopeSearchTerms: CompiledTermGroup[] = [];
 
     constructor(
         public conversation: IConversation,
@@ -335,7 +336,7 @@ class QueryCompiler {
     private compileSearchGroupTerms(
         searchGroup: SearchTermGroup,
         scopeExpr?: q.GetScopeExpr,
-    ): [SearchTerm[], q.IQueryOpExpr<SemanticRefAccumulator>] {
+    ): [CompiledTermGroup[], q.IQueryOpExpr<SemanticRefAccumulator>] {
         return this.compileSearchGroup(
             searchGroup,
             (termExpressions, booleanOp, scope) => {
@@ -351,7 +352,7 @@ class QueryCompiler {
 
     public compileSearchGroupMessages(
         searchGroup: SearchTermGroup,
-    ): [SearchTerm[], q.IQueryOpExpr<MessageAccumulator>] {
+    ): [CompiledTermGroup[], q.IQueryOpExpr<MessageAccumulator>] {
         return this.compileSearchGroup(
             searchGroup,
             (termExpressions, booleanOp) => {
@@ -371,26 +372,28 @@ class QueryCompiler {
             scopeExpr?: q.GetScopeExpr,
         ) => IQueryOpExpr,
         scopeExpr?: q.GetScopeExpr,
-    ): [SearchTerm[], q.IQueryOpExpr] {
-        const searchTermsUsed: SearchTerm[] = [];
+    ): [CompiledTermGroup[], q.IQueryOpExpr] {
+        const compiledTerms: CompiledTermGroup[] = [
+            { booleanOp: searchGroup.booleanOp, terms: [] },
+        ];
         const termExpressions: q.IQueryOpExpr[] = [];
         for (const term of searchGroup.terms) {
             if (isPropertyTerm(term)) {
                 termExpressions.push(this.compilePropertyTerm(term));
                 if (typeof term.propertyName !== "string") {
-                    searchTermsUsed.push(term.propertyName);
+                    compiledTerms[0].terms.push(term.propertyName);
                 }
-                searchTermsUsed.push(term.propertyValue);
+                compiledTerms[0].terms.push(term.propertyValue);
             } else if (isSearchGroupTerm(term)) {
-                const [termsUsed, groupExpr] = this.compileSearchGroup(
+                const [nestedTerms, groupExpr] = this.compileSearchGroup(
                     term,
                     createOp,
                 );
-                searchTermsUsed.push(...termsUsed);
+                compiledTerms.push(...nestedTerms);
                 termExpressions.push(groupExpr);
             } else {
                 termExpressions.push(this.compileSearchTerm(term));
-                searchTermsUsed.push(term);
+                compiledTerms[0].terms.push(term);
             }
         }
         let boolExpr = createOp(
@@ -398,7 +401,7 @@ class QueryCompiler {
             searchGroup.booleanOp,
             scopeExpr,
         );
-        return [searchTermsUsed, boolExpr];
+        return [compiledTerms, boolExpr];
     }
 
     private compileSearchTerm(
@@ -414,10 +417,18 @@ class QueryCompiler {
     private compilePropertyTerm(
         term: PropertySearchTerm,
     ): IQueryOpExpr<SemanticRefAccumulator | undefined> {
-        if (isEntityPropertyTerm(term)) {
-            term.propertyValue.term.weight ??= this.entityTermMatchWeight;
+        switch (term.propertyName) {
+            default:
+                if (isEntityPropertyTerm(term)) {
+                    term.propertyValue.term.weight ??=
+                        this.entityTermMatchWeight;
+                }
+                return new q.MatchPropertySearchTermExpr(term);
+            case "tag":
+                return new q.MatchTagExpr(term.propertyValue);
+            case "topic":
+                return new q.MatchTopicExpr(term.propertyValue);
         }
-        return new q.MatchPropertySearchTermExpr(term);
     }
 
     private async compileScope(
@@ -544,19 +555,23 @@ class QueryCompiler {
     }
 
     private async resolveRelatedTerms(
-        searchTerms: SearchTerm[],
+        compiledTerms: CompiledTermGroup[],
         dedupe: boolean,
         filter?: WhenFilter,
     ) {
-        this.validateAndPrepareSearchTerms(searchTerms);
+        compiledTerms.forEach((ct) =>
+            this.validateAndPrepareSearchTerms(ct.terms),
+        );
         if (this.secondaryIndexes?.termToRelatedTermsIndex) {
             await resolveRelatedTerms(
                 this.secondaryIndexes.termToRelatedTermsIndex,
-                searchTerms,
+                compiledTerms,
                 dedupe,
             );
             // Ensure that the resolved terms are valid etc.
-            this.validateAndPrepareSearchTerms(searchTerms);
+            compiledTerms.forEach((ct) =>
+                this.validateAndPrepareSearchTerms(ct.terms),
+            );
         }
     }
 

@@ -258,6 +258,12 @@ export class KnowProPrinter extends ChatPrinter {
         maxToDisplay: number,
         distinct: boolean = false,
     ) {
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "tag",
+            results,
+            maxToDisplay,
+        );
         if (distinct) {
             this.writeResultDistinct(
                 conversation,
@@ -265,6 +271,21 @@ export class KnowProPrinter extends ChatPrinter {
                 results,
                 maxToDisplay,
             );
+        } else {
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+        }
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "action",
+            results,
+            maxToDisplay,
+        );
+        if (distinct) {
             this.writeResultDistinct(
                 conversation,
                 "entity",
@@ -272,24 +293,6 @@ export class KnowProPrinter extends ChatPrinter {
                 maxToDisplay,
             );
         } else {
-            this.writeKnowledgeSearchResult(
-                conversation,
-                "tag",
-                results,
-                maxToDisplay,
-            );
-            this.writeKnowledgeSearchResult(
-                conversation,
-                "topic",
-                results,
-                maxToDisplay,
-            );
-            this.writeKnowledgeSearchResult(
-                conversation,
-                "action",
-                results,
-                maxToDisplay,
-            );
             this.writeKnowledgeSearchResult(
                 conversation,
                 "entity",

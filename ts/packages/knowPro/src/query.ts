@@ -884,6 +884,23 @@ export class MatchTagExpr extends MatchSearchTermExpr {
     }
 }
 
+export class MatchTopicExpr extends MatchSearchTermExpr {
+    constructor(public tagTerm: SearchTerm) {
+        super(tagTerm);
+    }
+    protected override lookupTerm(
+        context: QueryEvalContext,
+        term: Term,
+    ): ScoredSemanticRefOrdinal[] | undefined {
+        return lookupTermFiltered(
+            context.semanticRefIndex,
+            term,
+            context.semanticRefs,
+            (semanticRef) => semanticRef.knowledgeType === "topic",
+        );
+    }
+}
+
 export class GroupByKnowledgeTypeExpr extends QueryOpExpr<
     Map<KnowledgeType, SemanticRefAccumulator>
 > {

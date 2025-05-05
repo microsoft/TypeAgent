@@ -316,17 +316,33 @@ class SearchQueryCompiler {
     ): SearchTermGroup {
         termGroup ??= createOrTermGroup();
         const actionGroup = useOrMax ? createOrMaxTermGroup() : termGroup;
+
         if (actionTerm.actionVerbs !== undefined) {
-            this.compileSearchTerms(actionTerm.actionVerbs.words, actionGroup);
+            for (const verb of actionTerm.actionVerbs.words) {
+                this.addPropertyTermToGroup(
+                    PropertyNames.Topic,
+                    verb,
+                    actionGroup,
+                );
+            }
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
-            this.compileEntityTerms(actionTerm.actorEntities, actionGroup);
+            this.compileEntityTermsAsSearchTerms(
+                actionTerm.actorEntities,
+                actionGroup,
+            );
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
-            this.compileEntityTerms(actionTerm.targetEntities, actionGroup);
+            this.compileEntityTermsAsSearchTerms(
+                actionTerm.targetEntities,
+                actionGroup,
+            );
         }
         if (isEntityTermArray(actionTerm.additionalEntities)) {
-            this.compileEntityTerms(actionTerm.additionalEntities, actionGroup);
+            this.compileEntityTermsAsSearchTerms(
+                actionTerm.additionalEntities,
+                actionGroup,
+            );
         }
         if (actionGroup !== termGroup) {
             termGroup.terms.push(actionGroup);
@@ -363,6 +379,32 @@ class SearchQueryCompiler {
             for (const term of entityTerms) {
                 this.addEntityTermToGroup(term, termGroup);
             }
+        }
+        // Also search for topics
+        /*
+        for (const term of entityTerms) {
+            this.addEntityNameToGroup(term, PropertyNames.Topic, termGroup);
+            if (term.facets) {
+                for (const facet of term.facets) {
+                    if (!isWildcard(facet.facetValue)) {
+                        this.addPropertyTermToGroup(
+                            facet.facetValue,
+                            PropertyNames.Topic,
+                            termGroup,
+                        );
+                    }
+                }
+            }
+        }
+        */
+    }
+
+    private compileEntityTermsAsSearchTerms(
+        entityTerms: querySchema.EntityTerm[],
+        termGroup: SearchTermGroup,
+    ): void {
+        for (const term of entityTerms) {
+            this.addEntityTermAsSearchTermsToGroup(term, termGroup);
         }
     }
 
@@ -589,6 +631,26 @@ class SearchQueryCompiler {
                 propertyName,
                 searchTerm.propertyValue.term,
             );
+        }
+    }
+
+    private addEntityTermAsSearchTermsToGroup(
+        entityTerm: querySchema.EntityTerm,
+        termGroup: SearchTermGroup,
+    ): void {
+        if (entityTerm.isNamePronoun) {
+            return;
+        }
+        termGroup.terms.push(createSearchTerm(entityTerm.name));
+        if (entityTerm.facets && entityTerm.facets.length > 0) {
+            for (const facetTerm of entityTerm.facets) {
+                const valueWildcard = isWildcard(facetTerm.facetValue);
+                if (!valueWildcard) {
+                    termGroup.terms.push(
+                        createSearchTerm(facetTerm.facetValue),
+                    );
+                }
+            }
         }
     }
 
