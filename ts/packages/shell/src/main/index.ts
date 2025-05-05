@@ -70,9 +70,16 @@ debugShell("Is prod", isProd);
 
 // Use single instance lock in prod to make the existing instance focus
 // Allow multiple instance for dev build, with lock for data directory "instanceDir".
-if (isProd && !app.requestSingleInstanceLock()) {
-    debugShellError("Another instance is running");
-    process.exit(0);
+if (isProd) {
+    if (!app.requestSingleInstanceLock()) {
+        debugShellError("Another instance is running");
+        process.exit(0);
+    }
+} else {
+    // dev mode
+    if (process.env.PORT === undefined) {
+        process.env.PORT = "9050";
+    }
 }
 
 // Set app user model id for windows

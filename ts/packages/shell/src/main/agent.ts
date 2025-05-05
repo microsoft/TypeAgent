@@ -27,7 +27,10 @@ import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { updateHandlerTable } from "./commands/update.js";
 
-const port = process.env.PORT || 9001;
+const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const markdownPortIndex = 0;
+const montagePortIndex = 1;
+const planViewerPortIndex = 2;
 
 export type ShellContext = {
     shellWindow: ShellWindow;
@@ -223,16 +226,22 @@ class ShellOpenWebContentView implements CommandHandler {
 
                 break;
             case "markdown":
-                targetUrl = new URL(`http://localhost:${port}/`);
+                targetUrl = new URL(
+                    `http://localhost:${portBase + markdownPortIndex}/`,
+                );
 
                 break;
             case "montage":
                 // TODO: agents should publish their port #s in manifests
-                targetUrl = new URL(`http://localhost:9012/`);
+                targetUrl = new URL(
+                    `http://localhost:${portBase + montagePortIndex}/`,
+                );
 
                 break;
             case "planviewer":
-                targetUrl = new URL(`http://localhost:9015/`);
+                targetUrl = new URL(
+                    `http://localhost:${portBase + planViewerPortIndex}/`,
+                );
 
                 break;
             default:

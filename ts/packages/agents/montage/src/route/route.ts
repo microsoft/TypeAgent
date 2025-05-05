@@ -13,7 +13,9 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:agent:montage:route");
 const app: Express = express();
-const port = process.env.PORT || 9012;
+const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const montagePortIndex = 1;
+const port = portBase + montagePortIndex;
 
 // configurable folders for securing folder access. Is populated based on available indexes
 // but can be customized further here
