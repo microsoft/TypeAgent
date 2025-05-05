@@ -702,7 +702,8 @@ export async function createKnowproCommands(
         );
         if (
             searchResults === undefined ||
-            searchResults.messageMatches.length === 0
+            (searchResults.knowledgeMatches.size === 0 &&
+                searchResults.messageMatches.length === 0)
         ) {
             return false;
         }

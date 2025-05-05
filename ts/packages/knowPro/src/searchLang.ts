@@ -11,6 +11,7 @@ import {
 import {
     ConversationSearchResult,
     createSearchOptions,
+    hasConversationResults,
     runSearchQuery,
     SearchOptions,
     SearchQueryExpr,
@@ -713,13 +714,4 @@ function optimizeOrMax(termGroup: SearchTermGroup) {
         return termGroup.terms[0];
     }
     return termGroup;
-}
-
-function hasConversationResults(results: ConversationSearchResult[]): boolean {
-    if (results.length === 0) {
-        return false;
-    }
-    return results.some((r) => {
-        return r.knowledgeMatches.size > 0 || r.messageMatches.length > 0;
-    });
 }

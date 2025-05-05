@@ -5,7 +5,74 @@ import * as kp from "knowpro";
 import * as ms from "memory-storage";
 import { conversation as kpLib } from "knowledge-processor";
 import { email as email } from "knowledge-processor";
+import { MemoryMessage, MessageMetadata } from "./memory.js";
 
+export class EmailMeta extends MessageMetadata {
+    public cc?: email.EmailAddress[] | undefined;
+    public bcc?: email.EmailAddress[] | undefined;
+    public subject?: string | undefined;
+    public sentOn?: string | undefined;
+    public receivedOn?: string | undefined;
+    public importance?: string | undefined;
+
+    constructor(
+        public from: email.EmailAddress,
+        public to: email.EmailAddress[] | undefined = undefined,
+    ) {
+        super();
+    }
+
+    public override get source() {
+        return email.emailAddressToString(this.from);
+    }
+
+    public get dest() {
+        return this.to
+            ? this.to.map((addr) => email.emailAddressToString(addr))
+            : undefined;
+    }
+
+    public getKnowledge(): kpLib.KnowledgeResponse {
+        return email.emailToKnowledge(this);
+    }
+
+    public copyFrom(meta: email.EmailHeader) {
+        this.bcc = meta.bcc;
+        this.cc = meta.cc;
+        this.from = meta.from;
+        this.importance = meta.importance;
+        this.receivedOn = meta.receivedOn;
+        this.sentOn = meta.sentOn;
+        this.subject = meta.subject;
+        this.to = meta.to;
+    }
+}
+
+export class EmailMessage extends MemoryMessage<EmailMeta> {
+    constructor(
+        metadata: EmailMeta,
+        emailBody: string | string[],
+        public tags: string[] = [],
+        public deletionInfo?: kp.DeletionInfo | undefined,
+    ) {
+        let textChunks: string[];
+        if (Array.isArray(emailBody)) {
+            textChunks = emailBody;
+        } else {
+            textChunks = [emailBody];
+        }
+        super(
+            metadata,
+            textChunks,
+            tags,
+            metadata.sentOn,
+            undefined,
+            deletionInfo,
+        );
+    }
+}
+
+/*
 export class EmailMeta
     implements email.EmailHeader, kp.IMessageMetadata, kp.IKnowledgeSource
 {
@@ -71,6 +138,7 @@ export class EmailMessage implements kp.IMessage {
         return this.metadata.getKnowledge();
     }
 }
+*/
 
 function importEmailMeta(header: email.EmailHeader): EmailMeta {
     const meta = new EmailMeta(header.from);

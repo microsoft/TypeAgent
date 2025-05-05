@@ -90,19 +90,23 @@ export function addSynonymsFileAsAliases(
 export class MessageMetadata
     implements kp.IMessageMetadata, kp.IKnowledgeSource
 {
-    source?: string | string[] | undefined;
-    dest?: string | string[] | undefined;
+    public get source(): string | string[] | undefined {
+        return undefined;
+    }
+    public get dest(): string | string[] | undefined {
+        return undefined;
+    }
 
     public getKnowledge(): kpLib.KnowledgeResponse | undefined {
         return undefined;
     }
 }
 
-export class Message<TMeta extends MessageMetadata = MessageMetadata>
+export class MemoryMessage<TMeta extends MessageMetadata = MessageMetadata>
     implements kp.IMessage
 {
     constructor(
-        public metadata: MessageMetadata,
+        public metadata: TMeta,
         public textChunks: string[],
         public tags: string[] = [],
         public timestamp: string | undefined = undefined,
