@@ -74,6 +74,10 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
     };
 }
 
+const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const planViewerPortIndex = 2;
+const port = portBase + planViewerPortIndex;
+
 async function updateBrowserContext(
     enable: boolean,
     context: SessionContext<BrowserActionContext>,
@@ -89,8 +93,7 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.planVisualizationEndpoint) {
-            context.agentContext.planVisualizationEndpoint =
-                "http://localhost:9015";
+            context.agentContext.planVisualizationEndpoint = `http://localhost:${port}`;
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {

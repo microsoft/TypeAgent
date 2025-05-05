@@ -12,8 +12,9 @@ import path from "path";
 import fs from "fs";
 
 const app: Express = express();
-const port = process.env.PORT || 9001;
-
+const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const markDownPortIndex = 0;
+const port = portBase + markDownPortIndex;
 const limiter = rateLimit({
     windowMs: 60000,
     max: 100, // limit each IP to 100 requests per windowMs

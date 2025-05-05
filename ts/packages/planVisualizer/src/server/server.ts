@@ -12,7 +12,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const port = 9015;
+
+const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const planViewerPortIndex = 2;
+const port = portBase + planViewerPortIndex;
 
 // Type definitions for the server
 interface Client extends Response {
