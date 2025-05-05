@@ -267,23 +267,23 @@ export async function createKnowproCommands(
     commands.kpPdfLoad.metadata = pdfLoadDef();
     async function pdfLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, pdfLoadDef());
-        let imagesFilePath = namedArgs.filePath;
-        imagesFilePath ??= namedArgs.name
+        let pdfIndexFilePath = namedArgs.filePath;
+        pdfIndexFilePath ??= namedArgs.name
             ? indexFilePathFromName(namedArgs.name)
             : undefined;
-        if (!imagesFilePath) {
+        if (!pdfIndexFilePath) {
             context.printer.writeError("No filepath or name provided");
             return;
         }
         context.pdfIndex = await pi.PdfKnowproIndex.readFromFile(
-            path.dirname(imagesFilePath),
-            getFileName(imagesFilePath),
+            path.dirname(pdfIndexFilePath),
+            getFileName(pdfIndexFilePath),
         );
         if (!context.pdfIndex) {
             context.printer.writeLine("Pdf SRAG Index not found");
             return;
         }
-        //context.conversation = context.pdfIndex;
+        context.conversation = context.pdfIndex;
     }
 
     function pdfBuildIndexDef(): CommandMetadata {
