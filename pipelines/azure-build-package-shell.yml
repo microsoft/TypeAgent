@@ -101,7 +101,7 @@ jobs:
       - task: Cache@2
         displayName: Cache Electron Builder
         inputs:
-          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(Build.SourcesDirectory)/ts/pnpm-lock.yaml
+          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(shell_folder)/package.json | $(Build.SourcesDirectory)/ts/pnpm-lock.yaml
           path: $(ELECTRON_CACHE_DIR)
           restoreKeys: |
             electron | $(Agent.OS) | $(Agent.OSArchitecture)
