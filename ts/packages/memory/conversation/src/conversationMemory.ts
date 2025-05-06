@@ -7,25 +7,32 @@ import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";
 import { error, Result, success } from "typechat";
-import { createMemorySettings, Memory, MemorySettings } from "./memory.js";
+import {
+    createMemorySettings,
+    Memory,
+    MemorySettings,
+    Message,
+    MessageMetadata,
+} from "./memory.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
-export class ConversationMessageMeta
-    implements kp.IKnowledgeSource, kp.IMessageMetadata
-{
+export class ConversationMessageMeta extends MessageMetadata {
     constructor(
         public sender?: string | undefined,
         public recipients?: string[] | undefined,
-    ) {}
+    ) {
+        super();
+    }
 
-    public get source() {
+    public override get source() {
         return this.sender;
     }
-    public get dest() {
+
+    public override get dest() {
         return this.recipients;
     }
 
-    getKnowledge(): kpLib.KnowledgeResponse | undefined {
+    public getKnowledge(): kpLib.KnowledgeResponse | undefined {
         if (this.sender) {
             const entities: kpLib.ConcreteEntity[] = [];
             const actions: kpLib.Action[] = [];
@@ -73,25 +80,19 @@ export class ConversationMessageMeta
     }
 }
 
-export class ConversationMessage implements kp.IMessage {
-    public textChunks: string[];
-    public timestamp: string;
-    public deletionInfo?: kp.DeletionInfo | undefined;
-
+export class ConversationMessage extends Message<ConversationMessageMeta> {
     constructor(
         messageText: string | string[],
-        public metadata: ConversationMessageMeta,
-        public tags: string[] = [],
+        metadata: ConversationMessageMeta,
+        tags: string[] = [],
         /**
          * Any pre-extracted knowledge for this message.
          */
-        public knowledge?: kpLib.KnowledgeResponse,
+        knowledge?: kpLib.KnowledgeResponse,
         timestamp?: string,
     ) {
-        this.textChunks = Array.isArray(messageText)
-            ? messageText
-            : [messageText];
-        this.timestamp = timestamp ?? new Date().toISOString();
+        timestamp = timestamp ?? new Date().toISOString();
+        super(metadata, messageText, tags, timestamp, knowledge);
     }
 
     public addContent(content: string, chunkOrdinal = 0) {
@@ -100,44 +101,6 @@ export class ConversationMessage implements kp.IMessage {
         } else {
             this.textChunks[chunkOrdinal] += content;
         }
-    }
-
-    public addKnowledge(
-        newKnowledge: kpLib.KnowledgeResponse,
-    ): kpLib.KnowledgeResponse {
-        if (this.knowledge !== undefined) {
-            this.knowledge.entities = kp.mergeConcreteEntities([
-                ...this.knowledge.entities,
-                ...newKnowledge.entities,
-            ]);
-            this.knowledge.topics = kp.mergeTopics([
-                ...this.knowledge.topics,
-                ...newKnowledge.topics,
-            ]);
-            this.knowledge.actions.push(...newKnowledge.actions);
-            this.knowledge.inverseActions.push(...newKnowledge.inverseActions);
-        } else {
-            this.knowledge = newKnowledge;
-        }
-        return this.knowledge;
-    }
-
-    public getKnowledge(): kpLib.KnowledgeResponse | undefined {
-        let metaKnowledge = this.metadata.getKnowledge();
-        if (!metaKnowledge) {
-            return this.knowledge;
-        }
-        if (!this.knowledge) {
-            return metaKnowledge;
-        }
-        const combinedKnowledge: kpLib.KnowledgeResponse = {
-            ...this.knowledge,
-        };
-        combinedKnowledge.entities.push(...metaKnowledge.entities);
-        combinedKnowledge.actions.push(...metaKnowledge.actions);
-        combinedKnowledge.inverseActions.push(...metaKnowledge.inverseActions);
-        combinedKnowledge.topics.push(...metaKnowledge.topics);
-        return combinedKnowledge;
     }
 }
 

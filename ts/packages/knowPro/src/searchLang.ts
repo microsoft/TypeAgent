@@ -457,7 +457,7 @@ class SearchQueryCompiler {
                     ? this.compileSubjectAndVerb(actionTerm)
                     : this.compileSubject(actionTerm);
                 // A target can be the name of an object of an action OR the name of an entity
-                const objectTermGroup = this.compileObjectOrEntityName(entity);
+                const objectTermGroup = this.compileObject(entity);
                 if (objectTermGroup.terms.length > 0) {
                     svoTermGroup.terms.push(objectTermGroup);
                 }
@@ -506,9 +506,7 @@ class SearchQueryCompiler {
         }
     }
 
-    private compileObjectOrEntityName(
-        entity: querySchema.EntityTerm,
-    ): SearchTermGroup {
+    private compileObject(entity: querySchema.EntityTerm): SearchTermGroup {
         // A target can be the name of an object of an action OR the name of an entity
         const objectTermGroup = createOrTermGroup();
         this.addEntityNameToGroup(
@@ -519,6 +517,12 @@ class SearchQueryCompiler {
         this.addEntityNameToGroup(
             entity,
             PropertyNames.EntityName,
+            objectTermGroup,
+            this.compileOptions.exactScope,
+        );
+        this.addEntityNameToGroup(
+            entity,
+            PropertyNames.Topic,
             objectTermGroup,
             this.compileOptions.exactScope,
         );

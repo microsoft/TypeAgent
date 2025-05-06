@@ -86,6 +86,7 @@ export async function createKnowproCommands(
     commands.kpAnswer = answer;
     commands.kpPodcastRag = podcastRag;
     commands.kpEntities = entities;
+    commands.kpTopics = topics;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
     commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
 
@@ -791,6 +792,33 @@ export async function createKnowproCommands(
                 const entities = kp.filterCollection(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
+                );
+                context.printer.writeSemanticRefs(entities);
+            }
+        }
+    }
+
+    function topicsDef(): CommandMetadata {
+        return searchTermsDef(
+            "Search topics only in current conversation",
+            "topic",
+        );
+    }
+    commands.topics.metadata = topicsDef();
+    async function topics(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("topic");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const entities = kp.filterCollection(
+                    conversation.semanticRefs,
+                    (sr) => sr.knowledgeType === "topic",
                 );
                 context.printer.writeSemanticRefs(entities);
             }
