@@ -20,10 +20,10 @@ parameters:
       - lkg
 
 variables:
-  - name: workingDirectory
-    value: ts
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
   - name: shell_folder
-    value: ts/packages/shell
+    value: $(buildDirectory)/packages/shell
   - name: nodeVersion
     value: 22
   - name: platforms
@@ -57,36 +57,11 @@ jobs:
     pool:
       vmImage: $(image)
     steps:
-      - checkout: self
-        displayName: Checkout TypeAgent Repository
-        path: "typeagent"
-
-      - bash: |
-          echo "registry=$(REGISTRY)" > .npmrc
-          echo "always-auth=true" >> .npmrc
-          cat .npmrc
-        displayName: Set npm registry
-        workingDirectory: $(Build.SourcesDirectory)/ts
-
-      - task: npmAuthenticate@0
-        displayName: Authenticate to npm registry
-        inputs:
-          workingFile: $(Build.SourcesDirectory)/ts/.npmrc
-
-      - task: UseNode@1
-        displayName: Setup Node.js
-        inputs:
-          version: $(nodeVersion)
-          checkLatest: true
-
-      - template: include-install-pnpm.yml
+      - template: include-prepare-repo.yml
         parameters:
-          buildDirectory: $(Build.SourcesDirectory)/ts
-
-      - script: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies
-        displayName: "Install dependencies"
-        workingDirectory: $(workingDirectory)
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
 
       - template: include-update-package-version.yml
         parameters:
@@ -96,12 +71,12 @@ jobs:
       - script: |
           pnpm run build:shell
         displayName: Build Shell
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
 
       - task: Cache@2
         displayName: Cache Electron Builder
         inputs:
-          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(Build.SourcesDirectory)/ts/pnpm-lock.yaml
+          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
           path: $(ELECTRON_CACHE_DIR)
           restoreKeys: |
             electron | $(Agent.OS) | $(Agent.OSArchitecture)
@@ -109,7 +84,7 @@ jobs:
       - script: |
           pnpm run shell:package
         displayName: Package - shell
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
         env:
           ELECTRON_BUILDER_CHANNEL: $(channel)
 

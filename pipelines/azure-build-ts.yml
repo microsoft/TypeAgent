@@ -15,8 +15,10 @@ pool:
   vmImage: "ubuntu-latest"
 
 variables:
-  workingDirectory: "ts"
-  agentsdk_folder: "ts/packages/agentSdk"
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: agentsdk_folder
+    value: $(buildDirectory)/packages/agentSdk
 
 jobs:
   - job: build_ts
@@ -26,29 +28,11 @@ jobs:
         node_22:
           nodeVersion: "22"
     steps:
-      - script: |
-          sudo apt install libsecret-1-0
-        displayName: "Install libsecret-1-0"
-        condition: eq(variables['Agent.OS'], 'Linux')
-
-      - checkout: self
-        displayName: "Checkout TypeAgent Repository"
-        path: "typeagent"
-
-      - task: UseNode@1
-        displayName: "Setup Node.js"
-        inputs:
-          version: $(nodeVersion)
-          checkLatest: true
-
-      - template: include-install-pnpm.yml
+      - template: include-prepare-repo.yml
         parameters:
-          buildDirectory: $(Build.SourcesDirectory)/ts
-
-      - script: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies
-        displayName: "Install dependencies"
-        workingDirectory: $(workingDirectory)
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
 
       - template: include-update-package-version.yml
         parameters:
@@ -58,17 +42,22 @@ jobs:
       - script: |
           npm run build
         displayName: "Build"
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
+
+      - script: |
+          sudo apt install libsecret-1-0
+        displayName: "Install libsecret-1-0"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
       - script: |
           npm run test:local
         displayName: "Run Tests (Local)"
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
 
       - script: |
           npm run lint
         displayName: "Lint"
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
 
       - script: |
           echo $(ADO_REGISTRY)
@@ -84,7 +73,6 @@ jobs:
         displayName: "Authenticate with Azure Artifacts"
 
       - script: |
-          cd $(Build.SourcesDirectory)/$(agentsdk_folder)
           npm publish --registry=$(ADO_REGISTRY)
         displayName: "Pack and Publish agent-sdk Module"
-        condition: succeeded()
+        workingDirectory: $(agentsdk_folder)
