@@ -1468,7 +1468,7 @@ export async function runChatMemory(): Promise<void> {
             newMessage.knowledge = extractedKnowledgeToResponse(
                 await knowledgeStore.get(messageId),
             );
-            await destCm.addMessage(newMessage);
+            await destCm.addMessage(newMessage, false);
             progress.advance();
         }
         progress.complete();
