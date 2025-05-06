@@ -19,6 +19,10 @@
     "request": "Lookup duke result on the web",
     "action": "dispatcher.lookup.lookupAndAnswer"
   },
+  {
+    "request": "lookup snowdrop flowers",
+    "action": "dispatcher.lookup.lookupAndAnswer"
+  },
   { "request": "add play to the To do list", "action": "list.addItems" },
   { "request": "add homework to To do list", "action": "list.addItems" },
   { "request": "add plan holiday to To do list.", "action": "list.addItems" },
