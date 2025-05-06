@@ -55,6 +55,7 @@ export type PlanCompleted = {
     actionName: "planCompleted";
 };
 
+// IMPORTANT: the actionName values for these types are case-sensitive, so selected actions should match case exactly.
 export type ShoppingPlanActions =
     | AddToCart
     | ViewShoppingCart

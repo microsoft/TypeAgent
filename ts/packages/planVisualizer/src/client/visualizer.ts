@@ -98,6 +98,10 @@ class Visualizer {
                 nodeData.screenshot = node.screenshot;
                 nodeData.hasScreenshot = true;
             }
+            if (node.label && node.label.startsWith("__")) {
+                // set to empty string for display
+                nodeData.label = " ";
+            }
 
             elements.push({
                 data: nodeData,

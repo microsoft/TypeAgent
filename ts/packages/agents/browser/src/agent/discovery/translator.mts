@@ -78,7 +78,11 @@ function getScreenshotPromptSection(
     fragments: HtmlFragments[] | undefined,
 ) {
     let screenshotSection = [];
-    if (screenshots) {
+    if (
+        screenshots !== undefined &&
+        Array.isArray(screenshots) &&
+        screenshots.length > 0
+    ) {
         screenshots.forEach((screenshot) => {
             screenshotSection.push({
                 type: "text",

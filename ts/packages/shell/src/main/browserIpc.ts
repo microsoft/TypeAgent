@@ -55,20 +55,22 @@ export class BrowserAgentIpc {
 
             this.webSocket.onmessage = async (event: any) => {
                 const text = event.data.toString();
-                const data = JSON.parse(text) as WebSocketMessageV2;
-                if (data.method) {
-                    let schema = data.method?.split("/")[0];
-                    schema = schema || "browser";
+                try {
+                    const data = JSON.parse(text) as WebSocketMessageV2;
+                    if (data.method) {
+                        let schema = data.method?.split("/")[0];
+                        schema = schema || "browser";
 
-                    if (
-                        (schema == "browser" ||
-                            schema == "webAgent" ||
-                            schema.startsWith("browser.")) &&
-                        this.onMessageReceived
-                    ) {
-                        this.onMessageReceived(data);
+                        if (
+                            (schema == "browser" ||
+                                schema == "webAgent" ||
+                                schema.startsWith("browser.")) &&
+                            this.onMessageReceived
+                        ) {
+                            this.onMessageReceived(data);
+                        }
                     }
-                }
+                } catch {}
             };
 
             this.webSocket.onclose = () => {

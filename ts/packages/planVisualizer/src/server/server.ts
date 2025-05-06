@@ -58,6 +58,7 @@ const staticPlanData: WebPlanData = {
         { id: "checkout", label: "Checkout", type: "action" },
         { id: "payment", label: "Payment", type: "action" },
         { id: "confirmation", label: "Order Confirmation", type: "end" },
+        { id: "stopOrder", label: "Abandon order", type: "end" },
     ],
     links: [
         {
@@ -74,11 +75,11 @@ const staticPlanData: WebPlanData = {
         {
             source: "addToCart",
             target: "orderCheck",
-            label: "Is Order Complete?",
+            label: "Evaluate order state",
         },
         { source: "orderCheck", target: "checkout", label: "Yes" },
         { source: "orderCheck", target: "userCheck", label: "No" },
-        { source: "userCheck", target: "searchResults", label: "Add Items" },
+        { source: "userCheck", target: "stopOrder", label: "Drop order" },
         { source: "userCheck", target: "checkout", label: "Approve Partial" },
         { source: "checkout", target: "payment" },
         { source: "payment", target: "confirmation" },
