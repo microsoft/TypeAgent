@@ -1424,6 +1424,7 @@ export async function runChatMemory(): Promise<void> {
             },
             options: {
                 timestamps: argBool("Include original timestamps", false),
+                maxMessages: argNum("Maximum messages to copy"),
             },
         };
     }
@@ -1452,8 +1453,11 @@ export async function runChatMemory(): Promise<void> {
 
         const messageStore = srcCm.conversation.messages;
         const knowledgeStore = srcCm.conversation.knowledge;
-        const messages: NameValue<dateTime.Timestamped<string>>[] =
+        let messages: NameValue<dateTime.Timestamped<string>>[] =
             await asyncArray.toArray(messageStore.all());
+        if (namedArgs.maxMessages) {
+            messages = messages.slice(0, namedArgs.maxMessages);
+        }
         const progress = new ProgressBar(context.printer, messages.length);
         for (let i = 0; i < messages.length; ++i) {
             const messageInfo = messages[i]!;
