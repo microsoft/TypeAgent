@@ -159,8 +159,8 @@ export function startBackgroundUpdateCheck(
         schedule(intervalMs);
     };
 
-    const schedule = (intervalMs: number) => {
-        if (isProd && intervalMs < minIntervalMs) {
+    const schedule = (intervalMs: number, initial: boolean = false) => {
+        if (isProd && !initial && intervalMs < minIntervalMs) {
             // Guard against too small intervals unless we are in dev build.
             debugBackgroundUpdateError(
                 `Interval too small.  Minimum is ${getElapsedString(minIntervalMs)}`,
@@ -170,7 +170,7 @@ export function startBackgroundUpdateCheck(
         debugBackgroundUpdate(`Scheduled: ${getElapsedString(intervalMs)}`);
         timer = setTimeout(f, intervalMs);
     };
-    schedule(initialIntervalMs);
+    schedule(initialIntervalMs, true);
 
     state.stop = () => {
         state.stop = undefined;
@@ -352,7 +352,9 @@ export class ShellUpdateCheckCommand implements CommandHandler {
 
             if (!params.flags.restart) {
                 displaySuccess(
-                    ["Restart the app, or specify --restart to update."],
+                    [
+                        "Close the app, or restart the app with `@shell restart` to update.",
+                    ],
                     context,
                 );
                 return;
