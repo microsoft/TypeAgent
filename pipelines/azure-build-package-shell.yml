@@ -101,7 +101,7 @@ jobs:
       - task: Cache@2
         displayName: Cache Electron Builder
         inputs:
-          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(shell_folder)/package.json | $(Build.SourcesDirectory)/ts/pnpm-lock.yaml
+          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(Build.SourcesDirectory)/ts/pnpm-lock.yaml
           path: $(ELECTRON_CACHE_DIR)
           restoreKeys: |
             electron | $(Agent.OS) | $(Agent.OSArchitecture)
@@ -115,7 +115,7 @@ jobs:
 
       # For backward compat, can be remove in the future
       - script: |
-          copy %ELECTRON_BUILDER_CHANNEL%-x64.xml %ELECTRON_BUILDER_CHANNEL%.yml
+          copy %ELECTRON_BUILDER_CHANNEL%-x64.yml %ELECTRON_BUILDER_CHANNEL%.yml
         displayName: Copy windows x64 to default channel file
         condition: eq(variables['Agent.OS'], 'Windows_NT')
         workingDirectory: $(shell_folder)/dist
