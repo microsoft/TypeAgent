@@ -59,7 +59,7 @@ jobs:
     steps:
       - template: include-prepare-repo.yml
         parameters:
-          workingDirectory: $(buildDirectory)
+          buildDirectory: $(buildDirectory)
           nodeVersion: $(nodeVersion)
           registry: $(REGISTRY)
 
