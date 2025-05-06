@@ -11,6 +11,9 @@ const url =
     account && container
         ? `https://${account}.blob.core.windows.net/${container}/`
         : "";
+const channel = process.env.ELECTRON_BUILDER_CHANNEL;
+const arch = process.env.ELECTRON_BUILDER_ARCH?.trim();
+const channelName = channel && arch? `${channel}-${arch}` : undefined;
 
 export default {
     extraMetadata: {
@@ -64,8 +67,9 @@ export default {
         // electron-builder missed the `.so.42` suffix as binary files.
         asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
     },
-    publish: {
+    publish: channelName? {
         provider: "generic",
+        channel: channelName,
         url,
-    },
+    } : null,
 };
