@@ -18,6 +18,7 @@ import {
     StopWatch,
     NamedArgs,
     millisecondsToString,
+    ProgressBar,
 } from "interactive-app";
 import {
     asyncArray,
@@ -27,6 +28,7 @@ import {
     readAllText,
     SearchOptions,
     mathLib,
+    NameValue,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
@@ -40,6 +42,7 @@ import {
     argMinScore,
     argSourceFile,
     getMessagesAndCount,
+    extractedKnowledgeToResponse,
 } from "./common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { createImageMemory } from "./imageMemory.js";
@@ -338,6 +341,7 @@ export async function runChatMemory(): Promise<void> {
         makeTestSet,
         runTestSet,
         tokenLog,
+        copyConversation,
     };
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
@@ -1409,6 +1413,65 @@ export async function runChatMemory(): Promise<void> {
         const namedArgs = parseNamedArguments(args, tokenLogDef());
         showTokenStats =
             namedArgs.enable !== undefined ? namedArgs.enable : showTokenStats;
+    }
+
+    function copyConversationDef(): CommandMetadata {
+        return {
+            description: "Copy conversations",
+            args: {
+                srcPath: arg("Source path"),
+                destPath: arg("Dest path"),
+            },
+            options: {
+                timestamps: argBool("Include original timestamps", false),
+            },
+        };
+    }
+    commands.copyConversation.metadata = copyConversationDef();
+    async function copyConversation(args: string[]) {
+        const namedArgs = parseNamedArguments(args, copyConversationDef());
+        let srcPath = namedArgs.srcPath;
+        let srcName = getFileName(srcPath);
+        let srcDir = path.dirname(srcPath);
+        let destPath = namedArgs.destPath;
+        let destName = getFileName(destPath);
+        let destDir = path.dirname(destPath);
+        const srcCm = await conversation.createConversationManager(
+            {},
+            srcName,
+            srcDir,
+            false,
+        );
+
+        const destCm = await conversation.createConversationManager(
+            {},
+            destName,
+            destDir,
+            false,
+        );
+
+        const messageStore = srcCm.conversation.messages;
+        const knowledgeStore = srcCm.conversation.knowledge;
+        const messages: NameValue<dateTime.Timestamped<string>>[] =
+            await asyncArray.toArray(messageStore.all());
+        const progress = new ProgressBar(context.printer, messages.length);
+        for (let i = 0; i < messages.length; ++i) {
+            const messageInfo = messages[i]!;
+            const messageId = messageInfo.name;
+            const messageText = messageInfo.value.value;
+            let newMessage: knowLib.conversation.ConversationMessage = {
+                text: messageText,
+            };
+            if (namedArgs.timestamps) {
+                newMessage.timestamp = messageInfo.value.timestamp;
+            }
+            newMessage.knowledge = extractedKnowledgeToResponse(
+                await knowledgeStore.get(messageId),
+            );
+            await destCm.addMessage(newMessage);
+            progress.advance();
+        }
+        progress.complete();
     }
 
     //--------------------

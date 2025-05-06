@@ -26,6 +26,7 @@ import {
     argPause,
     argSourceFileOrFolder,
     argToDate,
+    extractedKnowledgeToResponse,
     findThread,
     manageConversationAlias,
 } from "./common.js";
@@ -261,13 +262,14 @@ export function createPodcastCommands(
             options: {
                 destDirPath: arg("Destination directory"),
                 clean: argBool("Clean dest dir", true),
+                name: arg("conversation name"),
             },
         };
     }
     commands.podcastExport.metadata = podcastExportDef();
     async function podcastExport(args: string[]) {
         const namedArgs = parseNamedArguments(args, podcastExportDef());
-        const destDirPath =
+        let destDirPath =
             namedArgs.destDirPath ??
             path.join(context.storePath, "conversations/export");
 
@@ -275,9 +277,10 @@ export function createPodcastCommands(
             await removeDir(destDirPath);
         }
         await ensureDir(destDirPath);
+        let name = namedArgs.name ?? context.podcastMemory.conversationName;
         const destCm = await conversation.createConversationManager(
             {},
-            context.podcastMemory.conversationName,
+            name,
             destDirPath,
             false,
         );
@@ -994,7 +997,6 @@ function podcastMessageFromEmailText(text: string) {
 function conversationMessageFromEmailText(
     text: string,
 ): conversation.ConversationMessage {
-    let messageText = "";
     let sender: string | undefined;
     let recipients: string[] | undefined;
     let lines = knowLib.splitIntoLines(text);
@@ -1009,41 +1011,12 @@ function conversationMessageFromEmailText(
                 trim: true,
                 removeEmpty: true,
             });
-            messageText += line;
-            messageText += "\n";
         } else {
-            messageText += line;
-            messageText += "\n";
         }
     }
     return {
-        text: messageText,
+        text,
         sender,
         recipients,
-    };
-}
-
-function extractedKnowledgeToResponse(
-    extractedKnowledge: conversation.ExtractedKnowledge | undefined,
-): conversation.KnowledgeResponse {
-    if (extractedKnowledge) {
-        const entities: conversation.ConcreteEntity[] =
-            extractedKnowledge.entities?.map((e) => e.value) ?? [];
-        const actions: conversation.Action[] =
-            extractedKnowledge.actions?.map((a) => a.value) ?? [];
-        const topics: conversation.Topic[] =
-            extractedKnowledge.topics?.map((t) => t.value) ?? [];
-        return {
-            entities,
-            actions,
-            topics,
-            inverseActions: [],
-        };
-    }
-    return {
-        entities: [],
-        actions: [],
-        topics: [],
-        inverseActions: [],
     };
 }

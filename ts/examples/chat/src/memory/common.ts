@@ -296,3 +296,28 @@ export async function findThread(
     }
     return undefined;
 }
+
+export function extractedKnowledgeToResponse(
+    extractedKnowledge: conversation.ExtractedKnowledge | undefined,
+): conversation.KnowledgeResponse {
+    if (extractedKnowledge) {
+        const entities: conversation.ConcreteEntity[] =
+            extractedKnowledge.entities?.map((e) => e.value) ?? [];
+        const actions: conversation.Action[] =
+            extractedKnowledge.actions?.map((a) => a.value) ?? [];
+        const topics: conversation.Topic[] =
+            extractedKnowledge.topics?.map((t) => t.value) ?? [];
+        return {
+            entities,
+            actions,
+            topics,
+            inverseActions: [],
+        };
+    }
+    return {
+        entities: [],
+        actions: [],
+        topics: [],
+        inverseActions: [],
+    };
+}
