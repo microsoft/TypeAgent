@@ -29,6 +29,7 @@ import {
     SearchOptions,
     mathLib,
     NameValue,
+    removeDir,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
@@ -1425,6 +1426,7 @@ export async function runChatMemory(): Promise<void> {
             options: {
                 timestamps: argBool("Include original timestamps", false),
                 maxMessages: argNum("Maximum messages to copy"),
+                clean: argBool("Make a clean copy", false),
             },
         };
     }
@@ -1437,6 +1439,11 @@ export async function runChatMemory(): Promise<void> {
         let destPath = namedArgs.destPath;
         let destName = getFileName(destPath);
         let destDir = path.dirname(destPath);
+        if (namedArgs.clean) {
+            await removeDir(destPath);
+            await ensureDir(destPath);
+        }
+
         const srcCm = await conversation.createConversationManager(
             {},
             srcName,
