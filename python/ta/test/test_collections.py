@@ -9,11 +9,9 @@ from typeagent.knowpro.collections import (
     TextRangesInScope,
 )
 from typeagent.knowpro.interfaces import (
-    Knowledge,
     TextRange,
     ScoredSemanticRefOrdinal,
     SemanticRef,
-    KnowledgeType,
     TextLocation,
     Term,
     ISemanticRefCollection,
