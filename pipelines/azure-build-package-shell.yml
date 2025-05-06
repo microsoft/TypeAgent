@@ -115,10 +115,10 @@ jobs:
 
       # For backward compat, can be remove in the future
       - script: |
-          copy dist/%ELECTRON_BUILDER_CHANNEL%-x64.xml dist/%ELECTRON_BUILDER_CHANNEL%.yml
+          copy %ELECTRON_BUILDER_CHANNEL%-x64.xml %ELECTRON_BUILDER_CHANNEL%.yml
         displayName: Copy windows x64 to default channel file
         condition: eq(variables['Agent.OS'], 'Windows_NT')
-        workingDirectory: $(shell_folder)
+        workingDirectory: $(shell_folder)/dist
         env:
           ELECTRON_BUILDER_CHANNEL: $(channel)
 
