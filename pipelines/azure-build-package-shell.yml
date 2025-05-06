@@ -97,14 +97,6 @@ jobs:
           pnpm run build:shell
         displayName: Build Shell
         workingDirectory: $(workingDirectory)
-        env:
-          ELECTRON_BUILDER_CHANNEL: $(channel)
-
-      # For backward compat, can be remove in the future
-      - script: |
-          copy $(shell_folder)/dist/$(channel)-x64.xml $(shell_folder)/dist/$(channel).yml
-        displayName: Copy windows x64 to default channel file
-        condition: eq(variables['Agent.OS'], 'Windows_NT')
 
       - task: Cache@2
         displayName: Cache Electron Builder
@@ -114,10 +106,21 @@ jobs:
           restoreKeys: |
             electron | $(Agent.OS) | $(Agent.OSArchitecture)
 
-      - bash: |
+      - script: |
           pnpm run shell:package
         displayName: Package - shell
         workingDirectory: $(workingDirectory)
+        env:
+          ELECTRON_BUILDER_CHANNEL: $(channel)
+
+      # For backward compat, can be remove in the future
+      - script: |
+          copy dist/%ELECTRON_BUILDER_CHANNEL%-x64.xml dist/%ELECTRON_BUILDER_CHANNEL%.yml
+        displayName: Copy windows x64 to default channel file
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        workingDirectory: $(shell_folder)
+        env:
+          ELECTRON_BUILDER_CHANNEL: $(channel)
 
       - publish: $(shell_folder)/dist
         displayName: Upload Artifact
