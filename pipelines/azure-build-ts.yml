@@ -73,7 +73,6 @@ jobs:
         displayName: "Authenticate with Azure Artifacts"
 
       - script: |
-          cd $(agentsdk_folder)
           npm publish --registry=$(ADO_REGISTRY)
         displayName: "Pack and Publish agent-sdk Module"
-        condition: succeeded()
+        workingDirectory: $(agentsdk_folder)
