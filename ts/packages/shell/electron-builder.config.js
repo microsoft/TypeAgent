@@ -43,7 +43,7 @@ export default {
     },
     mac: {
         appId: `com.microsoft.typeagentshell`,
-        artifactName: name + "-${version}-${arch}.${ext}",
+        artifactName: name + "-${version}.${ext}",
         entitlementsInherit: "build/entitlements.mac.plist",
         extendInfo: {
             NSCameraUsageDescription:
