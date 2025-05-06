@@ -15,6 +15,7 @@
   "scripts": {
     "api": "pnpm -C packages/api exec npm run start",
     "build": "fluid-build . -t build",
+    "build:sdk": "fluid-build @typeagent/agent-sdk -t build --dep",
     "build:shell": "fluid-build agent-shell -t build --dep",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
     "check:policy": "node tools/scripts/repo-policy-check.mjs",

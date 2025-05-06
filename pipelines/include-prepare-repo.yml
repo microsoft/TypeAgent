@@ -1,0 +1,42 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+parameters:
+  - name: buildDirectory
+    type: string
+  - name: nodeVersion
+    type: string
+  - name: registry
+    type: string
+
+steps:
+  - checkout: self
+    displayName: "Checkout TypeAgent Repository"
+    path: typeagent
+
+  - bash: |
+      echo "registry=${{ parameters.registry }}" > .npmrc
+      echo "always-auth=true" >> .npmrc
+      cat .npmrc
+    displayName: Set npm registry
+    workingDirectory: ${{ parameters.buildDirectory }}
+
+  - task: npmAuthenticate@0
+    displayName: Authenticate to npm registry
+    inputs:
+      workingFile: ${{ parameters.buildDirectory }}/.npmrc
+
+  - task: UseNode@1
+    displayName: Setup Node.js v${{ parameters.nodeVersion }}
+    inputs:
+      version: ${{ parameters.nodeVersion }}
+      checkLatest: true
+
+  - template: include-install-pnpm.yml
+    parameters:
+      buildDirectory: ${{ parameters.buildDirectory }}
+
+  - script: |
+      pnpm install --frozen-lockfile --strict-peer-dependencies
+    displayName: "Install dependencies"
+    workingDirectory: ${{ parameters.buildDirectory }}
