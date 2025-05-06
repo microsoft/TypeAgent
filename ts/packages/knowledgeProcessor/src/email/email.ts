@@ -289,10 +289,13 @@ export function emailToActions(email: EmailHeader): Action[] {
     }
 }
 
-export function emailToKnowledge(email: EmailHeader): KnowledgeResponse {
+export function emailToKnowledge(
+    email: EmailHeader,
+    includeSubject: boolean = true,
+): KnowledgeResponse {
     return {
         entities: emailToEntities(email),
-        topics: email.subject ? [email.subject] : [],
+        topics: includeSubject && email.subject ? [email.subject] : [],
         actions: emailToActions(email),
         inverseActions: [],
     };

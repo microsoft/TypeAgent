@@ -75,15 +75,6 @@ export function getCharCountOfMessages(messages: Iterable<IMessage>) {
     return total;
 }
 
-/*
-export function getCountOfChunksInMessages(messages: IMessage[]): number {
-    return messages.reduce<number>(
-        (total, message) => total + message.textChunks.length,
-        0,
-    );
-}
-*/
-
 /**
  * Given a set of message ordinals, returns the count of messages whose cumulative
  * text length is < than the given character budget
