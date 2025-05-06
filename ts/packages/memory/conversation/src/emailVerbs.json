@@ -36,7 +36,9 @@
       "uttering",
       "articulate",
       "articulated",
-      "articulating"
+      "articulating",
+      "announce",
+      "announced"
     ]
   },
   { "term": "receive", "relatedTerms": ["got"] }
