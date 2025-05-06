@@ -159,7 +159,7 @@ export function startBackgroundUpdateCheck(
         schedule(intervalMs);
     };
 
-    const schedule = (intervalMs: number) => {
+    const schedule = (intervalMs: number, initial: boolean = false) => {
         if (isProd && intervalMs < minIntervalMs) {
             // Guard against too small intervals unless we are in dev build.
             debugBackgroundUpdateError(
@@ -170,7 +170,7 @@ export function startBackgroundUpdateCheck(
         debugBackgroundUpdate(`Scheduled: ${getElapsedString(intervalMs)}`);
         timer = setTimeout(f, intervalMs);
     };
-    schedule(initialIntervalMs);
+    schedule(initialIntervalMs, true);
 
     state.stop = () => {
         state.stop = undefined;
