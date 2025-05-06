@@ -74,7 +74,6 @@ export function createSearchOptionsTypical(): SearchOptions {
         ...createSearchOptions(),
         maxKnowledgeMatches: 50,
         maxMessageMatches: 25,
-        maxMessageCharsInBudget: 1024 * 8,
     };
 }
 
