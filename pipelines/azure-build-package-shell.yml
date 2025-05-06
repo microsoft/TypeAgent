@@ -107,9 +107,7 @@ jobs:
             electron | $(Agent.OS) | $(Agent.OSArchitecture)
 
       - bash: |
-          echo $ELECTRON_BUILDER_CACHE
-          echo $ELECTRON_CACHE
-          pnpm run shell:package:$(platform)
+          pnpm run shell:package
         displayName: Package - shell
         workingDirectory: $(workingDirectory)
 

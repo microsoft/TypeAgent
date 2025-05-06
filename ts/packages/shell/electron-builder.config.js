@@ -30,20 +30,20 @@ export default {
     ],
     // Don't need to install
     npmRebuild: false,
+    artifactName: name + "-${version}-${platform}-${arch}.${ext}",
     win: {
         appId: `Microsoft.TypeAgentShell`,
         executableName: name,
         icon: "build/win/icon.png",
     },
     nsis: {
-        artifactName: name + "-${version}-setup.${ext}",
+        artifactName: name + "-${version}-${platform}-${arch}-setup.${ext}",
         shortcutName: "${productName}",
         uninstallDisplayName: "${productName}",
         createDesktopShortcut: "always",
     },
     mac: {
         appId: `com.microsoft.typeagentshell`,
-        artifactName: name + "-${version}.${ext}",
         entitlementsInherit: "build/entitlements.mac.plist",
         extendInfo: {
             NSCameraUsageDescription:
@@ -63,9 +63,6 @@ export default {
         category: "Utility",
         // electron-builder missed the `.so.42` suffix as binary files.
         asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
-    },
-    appImage: {
-        artifactName: name + "-${version}.${ext}",
     },
     publish: {
         provider: "generic",
