@@ -147,7 +147,7 @@ class TextRangeData(TypedDict):
 
 
 # A text range within a session.
-@dataclass(order=True)
+@dataclass
 class TextRange:
     # The start of the range.
     start: TextLocation
@@ -159,6 +159,22 @@ class TextRange:
             return f"{self.__class__.__name__}({self.start})"
         else:
             return f"{self.__class__.__name__}({self.start}, {self.end})"
+
+    def __lt__(self, other: Self) -> bool:
+        if self.start != other.start:
+            return self.start < other.start
+        self_end = self.end or self.start
+        other_end = other.end or other.start
+        return self_end < other_end
+
+    def __gt__(self, other: Self) -> bool:
+        return other.__lt__(self)
+
+    def __ge__(self, other: Self) -> bool:
+        return not self.__lt__(other)
+
+    def __le__(self, other: Self) -> bool:
+        return not other.__lt__(self)
 
     def __contains__(self, other: Self) -> bool:
         otherend = other.end or other.start
@@ -620,7 +636,7 @@ class IReadonlyCollection[T, TOrdinal](Iterable, Protocol):
     def __bool__(self) -> bool:
         return True
 
-    def get(self, index: TOrdinal) -> T:
+    def get(self, ordinal: TOrdinal) -> T:
         raise NotImplementedError
 
     def get_multiple(self, ordinals: list[TOrdinal]) -> list[T]:

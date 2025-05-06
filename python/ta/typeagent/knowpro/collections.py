@@ -260,7 +260,7 @@ class TextRangeCollection(Iterable[TextRange]):
         self._ranges.insert(pos, text_range)
         return True
 
-    def add_ranges(self, text_ranges: list[TextRange] | "TextRangeCollection") -> None:
+    def add_ranges(self, text_ranges: "list[TextRange] | TextRangeCollection") -> None:
         if isinstance(text_ranges, list):
             for text_range in text_ranges:
                 self.add_range(text_range)
@@ -269,15 +269,14 @@ class TextRangeCollection(Iterable[TextRange]):
             for text_range in text_ranges._ranges:
                 self.add_range(text_range)
 
-    def is_in_range(self, range_to_match: TextRange) -> bool:
+    def is_in_range(self, inner_range: TextRange) -> bool:
         if len(self._ranges) == 0:
             return False
-        i = bisect.bisect_left(self._ranges, range_to_match)
-        for i in range(i, len(self._ranges)):
-            r = self._ranges[i]
-            if r.start > range_to_match.start:
+        i = bisect.bisect_left(self._ranges, inner_range)
+        for outer_range in self._ranges[i:]:
+            if outer_range.start > inner_range.start:
                 break
-            if r in range_to_match:
+            if inner_range in outer_range:
                 return True
         return False
 
@@ -297,10 +296,10 @@ class TextRangesInScope:
 
     def is_range_in_scope(self, inner_range: TextRange) -> bool:
         if self.text_ranges is not None:
-            # Since outerRanges come from a set of range selectors, they may overlap, or may not agree.
+            # Since outer ranges come from a set of range selectors, they may overlap, or may not agree.
             # Outer ranges allowed by say a date range selector... may not be allowed by a tag selector.
             # We have a very simple impl: we don't intersect/union ranges yet.
-            # Instead, we ensure that the innerRange is not rejected by any outerRanges.
+            # Instead, we ensure that the inner range is not rejected by any outer ranges.
             for outer_ranges in self.text_ranges:
                 if not outer_ranges.is_in_range(inner_range):
                     return False
