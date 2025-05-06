@@ -293,6 +293,7 @@ export function createPodcastCommands(
         context.printer.writeInColor(chalk.cyan, thread.description);
         const range = conversation.toDateRange(thread.timeRange);
         const messageStore = context.podcastMemory.conversation.messages;
+        const knowledgeStore = context.podcastMemory.conversation.knowledge;
         const messageIds = await messageStore.getIdsInRange(
             range.startDate,
             range.stopDate,
@@ -300,10 +301,14 @@ export function createPodcastCommands(
         const messages = await messageStore.getMultiple(messageIds);
         const progress = new ProgressBar(context.printer, messages.length);
         for (let i = 0; i < messageIds.length; ++i) {
+            const messageId = messageIds[i];
             const message = messages[i]!;
-            const newMessage: conversation.ConversationMessage =
+            let newMessage: conversation.ConversationMessage =
                 conversationMessageFromEmailText(message.value.value);
             newMessage.timestamp = message.timestamp;
+            newMessage.knowledge = extractedKnowledgeToResponse(
+                await knowledgeStore.get(messageId),
+            );
             await destCm.addMessage(newMessage, false);
             progress.advance();
         }
@@ -1004,6 +1009,8 @@ function conversationMessageFromEmailText(
                 trim: true,
                 removeEmpty: true,
             });
+            messageText += line;
+            messageText += "\n";
         } else {
             messageText += line;
             messageText += "\n";
