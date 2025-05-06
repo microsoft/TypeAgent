@@ -70,9 +70,16 @@ debugShell("Is prod", isProd);
 
 // Use single instance lock in prod to make the existing instance focus
 // Allow multiple instance for dev build, with lock for data directory "instanceDir".
-if (isProd && !app.requestSingleInstanceLock()) {
-    debugShellError("Another instance is running");
-    process.exit(0);
+if (isProd) {
+    if (!app.requestSingleInstanceLock()) {
+        debugShellError("Another instance is running");
+        process.exit(0);
+    }
+} else {
+    // dev mode
+    if (process.env.PORT === undefined) {
+        process.env.PORT = "9050";
+    }
 }
 
 // Set app user model id for windows
@@ -496,9 +503,17 @@ async function initialize() {
         });
 
         try {
-            server.listen(pipePath);
-        } catch {
-            debugShellError(`Error creating pipe at ${pipePath}`);
+            const p = Promise.withResolvers<void>();
+            server.on("error", (e) => {
+                p.reject(e);
+            });
+            server.listen(pipePath, () => {
+                debugShell("Listening for pen events on", pipePath);
+                p.resolve();
+            });
+            await p.promise;
+        } catch (e) {
+            debugShellError(`Error creating pipe at ${pipePath}: ${e}`);
         }
     }
     await initializeInstance(instanceDir, shellSettings);

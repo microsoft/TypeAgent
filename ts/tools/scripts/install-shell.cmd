@@ -6,6 +6,7 @@ setlocal
 
 IF "%1" == "" (
     call :Error No storage account specified.
+    call :Usage
     exit /B 1
 )
 
@@ -23,12 +24,12 @@ IF "%3" == "" (
 )
 
 set DEST=%TEMP%\install-shell
+call :Cleanup
 mkdir %DEST% > nul 2>&1
 IF ERRORLEVEL 1 (
     call :Error Failed to create %DEST% directory.
     exit /B 1
 )
-del /Q /S %DEST%\* > nul 2>&1
 IF ERRORLEVEL 1 (
     call :Error Failed to delete files in %DEST% directory.
     exit /B 1
