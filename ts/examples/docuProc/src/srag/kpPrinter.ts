@@ -2,9 +2,10 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-//import * as knowLib from "knowledge-processor";
+import * as knowLib from "knowledge-processor";
 import { AppPrinter } from "../printer.js";
 import chalk from "chalk";
+import { StopWatch } from "interactive-app";
 //import { textLocationToString } from "./knowproCommon.js";
 //import * as cm from "conversation-memory";
 
@@ -128,5 +129,301 @@ export class KPPrinter extends AppPrinter {
             }
         }
         return this;
+    }
+
+    public writeTiming(clock: StopWatch, label?: string) {
+        const color = chalk.magentaBright;
+        const timing = label
+            ? `${label}: ${clock.elapsedString()}`
+            : clock.elapsedString();
+        this.writeInColor(color, timing);
+    }
+
+    public writeSelectExpr(selectExpr: kp.SearchSelectExpr) {
+        this.writeInColor(chalk.gray, () => {
+            this.writeHeading("Compiled query");
+            this.writeJson(selectExpr);
+            this.writeLine();
+        });
+    }
+
+    public writeKnowledgeSearchResults(
+        conversation: kp.IConversation,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
+        maxToDisplay: number,
+        distinct: boolean = false,
+    ) {
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "tag",
+            results,
+            maxToDisplay,
+        );
+        if (distinct) {
+            this.writeResultDistinct(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+        } else {
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+        }
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "action",
+            results,
+            maxToDisplay,
+        );
+        if (distinct) {
+            this.writeResultDistinct(
+                conversation,
+                "entity",
+                results,
+                maxToDisplay,
+            );
+        } else {
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "entity",
+                results,
+                maxToDisplay,
+            );
+        }
+        return this;
+    }
+
+    public writeScoredKnowledge(scoredKnowledge: kp.ScoredKnowledge) {
+        switch (scoredKnowledge.knowledgeType) {
+            default:
+                this.writeLine(scoredKnowledge.knowledgeType);
+                break;
+            case "entity":
+                this.writeEntity(
+                    scoredKnowledge.knowledge as knowLib.conversation.ConcreteEntity,
+                );
+                break;
+            case "action":
+                this.writeAction(
+                    scoredKnowledge.knowledge as knowLib.conversation.Action,
+                );
+                break;
+            case "topic":
+                this.writeTopic(scoredKnowledge.knowledge as kp.Topic);
+                break;
+        }
+        return this;
+    }
+
+    private writeResultDistinct(
+        conversation: kp.IConversation,
+        type: kp.KnowledgeType,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
+        maxToDisplay: number,
+    ) {
+        if (type !== "topic" && type !== "entity") {
+            return;
+        }
+
+        let distinctKnowledge: kp.ScoredKnowledge[] | undefined;
+        switch (type) {
+            default:
+                return;
+
+            case "topic":
+                const topics = results.get("topic");
+                if (topics) {
+                    this.writeTitle(type.toUpperCase());
+                    distinctKnowledge = kp.getDistinctTopicMatches(
+                        conversation.semanticRefs!,
+                        topics.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                }
+                break;
+
+            case "entity":
+                const entities = results.get("entity");
+                if (entities) {
+                    this.writeTitle(type.toUpperCase());
+                    distinctKnowledge = kp.getDistinctEntityMatches(
+                        conversation.semanticRefs!,
+                        entities.semanticRefMatches,
+                        maxToDisplay,
+                    );
+                }
+                break;
+        }
+        if (distinctKnowledge) {
+            for (let i = 0; i < distinctKnowledge.length; ++i) {
+                let pos = this.sortAsc ? distinctKnowledge.length - (i + 1) : i;
+                const knowledge = distinctKnowledge[pos];
+                this.writeInColor(
+                    chalk.green,
+                    `#${pos + 1} / ${distinctKnowledge.length}: [${knowledge.score}]`,
+                );
+                this.writeScoredKnowledge(knowledge);
+                this.writeLine();
+            }
+        }
+
+        return this;
+    }
+
+    private writeKnowledgeSearchResult(
+        conversation: kp.IConversation,
+        type: kp.KnowledgeType,
+        results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
+        maxToDisplay: number,
+    ) {
+        const result = results.get(type);
+        if (result !== undefined) {
+            this.writeTitle(type.toUpperCase());
+            this.writeSemanticRefSearchResult(
+                conversation,
+                result,
+                maxToDisplay,
+            );
+        }
+        return this;
+    }
+
+    public writeSemanticRefSearchResult(
+        conversation: kp.IConversation,
+        result: kp.SemanticRefSearchResult | undefined,
+        maxToDisplay: number,
+    ) {
+        if (result) {
+            this.writeListInColor(chalk.cyanBright, result.termMatches, {
+                title: "Matched terms",
+                type: "ol",
+            });
+            maxToDisplay = Math.min(
+                result.semanticRefMatches.length,
+                maxToDisplay,
+            );
+            this.writeScoredSemanticRefs(
+                result.semanticRefMatches,
+                conversation.semanticRefs!,
+                maxToDisplay,
+            );
+        }
+        return this;
+    }
+
+    public writeEntity(
+        entity: knowLib.conversation.ConcreteEntity | undefined,
+    ): KPPrinter {
+        if (entity !== undefined) {
+            this.writeLine(entity.name.toUpperCase());
+            this.writeList(entity.type, { type: "csv" });
+            if (entity.facets) {
+                const facetList = entity.facets.map((f) =>
+                    knowLib.conversation.facetToString(f),
+                );
+                this.writeList(facetList, { type: "ul" });
+            }
+        }
+        return this;
+    }
+
+    public writeAction(
+        action: knowLib.conversation.Action | undefined,
+    ): KPPrinter {
+        if (action !== undefined) {
+            this.writeLine(knowLib.conversation.actionToString(action));
+        }
+        return this;
+    }
+
+    public writeTopic(topic: kp.Topic | undefined): KPPrinter {
+        if (topic !== undefined) {
+            this.writeLine(topic.text);
+        }
+        return this;
+    }
+
+    public writeTag(tag: kp.Tag | undefined) {
+        if (tag !== undefined) {
+            this.writeLine(tag.text);
+        }
+        return this;
+    }
+
+    public writeSemanticRef(semanticRef: kp.SemanticRef) {
+        switch (semanticRef.knowledgeType) {
+            default:
+                this.writeLine(semanticRef.knowledgeType);
+                break;
+            case "entity":
+                this.writeEntity(
+                    semanticRef.knowledge as knowLib.conversation.ConcreteEntity,
+                );
+                break;
+            case "action":
+                this.writeAction(
+                    semanticRef.knowledge as knowLib.conversation.Action,
+                );
+                break;
+            case "topic":
+                this.writeTopic(semanticRef.knowledge as kp.Topic);
+                break;
+        }
+        return this;
+    }
+
+    public writeSemanticRefs(refs: kp.SemanticRef[] | undefined) {
+        if (refs && refs.length > 0) {
+            for (const ref of refs) {
+                this.writeSemanticRef(ref);
+                this.writeLine();
+            }
+        }
+        return this;
+    }
+
+    public writeScoredSemanticRefs(
+        semanticRefMatches: kp.ScoredSemanticRefOrdinal[],
+        semanticRefs: kp.ISemanticRefCollection,
+        maxToDisplay: number,
+    ) {
+        if (this.sortAsc) {
+            this.writeLine(`Sorted in ascending order (lowest first)`);
+        }
+        const matchesToDisplay = semanticRefMatches.slice(0, maxToDisplay);
+        this.writeLine(
+            `Displaying ${matchesToDisplay.length} matches of total ${semanticRefMatches.length}`,
+        );
+        for (let i = 0; i < matchesToDisplay.length; ++i) {
+            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            this.writeScoredRef(
+                pos,
+                matchesToDisplay.length,
+                matchesToDisplay[pos],
+                semanticRefs,
+            );
+        }
+
+        return this;
+    }
+
+    private writeScoredRef(
+        matchNumber: number,
+        totalMatches: number,
+        scoredRef: kp.ScoredSemanticRefOrdinal,
+        semanticRefs: kp.ISemanticRefCollection,
+    ) {
+        const semanticRef = semanticRefs.get(scoredRef.semanticRefOrdinal);
+        this.writeInColor(
+            chalk.green,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+        );
+        this.writeSemanticRef(semanticRef);
+        this.writeLine();
     }
 }

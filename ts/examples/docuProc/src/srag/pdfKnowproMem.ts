@@ -12,18 +12,27 @@ import {
     parseNamedArguments,
     ProgressBar,
     NamedArgs,
+    StopWatch,
 } from "interactive-app";
-import { ensureDir, getFileName } from "typeagent";
+import { dateTime, ensureDir, getFileName } from "typeagent";
 
 import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
-import { SRAG_MEM_DIR, OUTPUT_DIR } from "../common.js";
-import fs from "fs";
+import {
+    argToDate,
+    SRAG_MEM_DIR,
+    OUTPUT_DIR,
+    parseFreeAndNamedArguments,
+    keyValuesFromNamedArgs,
+} from "../common.js";
 import { AppPrinter } from "../printer.js";
 import { KPPrinter } from "./kpPrinter.js";
 import { importPdf } from "./importPdf.js";
-import path from "path";
 import * as pi from "./pdfDocument.js";
 import { argDestFile, argSourceFile } from "../common.js";
+
+import fs from "fs";
+import path from "path";
+import chalk from "chalk";
 
 export type Models = {
     chatModel: ChatModel;
@@ -147,6 +156,7 @@ export async function createKnowproCommands(
     commands.kpPdfSave = pdfSave;
     commands.kpPdfLoad = pdfLoad;
     commands.kpPdfBuildIndex = pdfBuildIndex;
+    commands.kpSearchTerms = searchTerms;
 
     function pdfImportDef(): CommandMetadata {
         return {
@@ -275,10 +285,15 @@ export async function createKnowproCommands(
             context.printer.writeError("No filepath or name provided");
             return;
         }
+        context.printer.writeLine(`Loading index from fil ${pdfIndexFilePath}`);
+        context.printer.writeLine(pdfIndexFilePath);
+        const clock = new StopWatch();
+        clock.start();
         context.pdfIndex = await pi.PdfKnowproIndex.readFromFile(
             path.dirname(pdfIndexFilePath),
             getFileName(pdfIndexFilePath),
         );
+        clock.stop();
         if (!context.pdfIndex) {
             context.printer.writeLine("Pdf SRAG Index not found");
             return;
@@ -327,6 +342,158 @@ export async function createKnowproCommands(
     function indexFilePathFromName(indexName: string): string {
         return path.join(context.basePath, indexName + IndexFileSuffix);
     }
+
+    function searchTermsDef(
+        description?: string,
+        kType?: kp.KnowledgeType,
+    ): CommandMetadata {
+        const meta: CommandMetadata = {
+            description:
+                description ??
+                "Search current knowPro conversation by manually providing terms as arguments",
+            options: {
+                maxToDisplay: argNum("Maximum matches to display", 25),
+                displayAsc: argBool("Display results in ascending order", true),
+                andTerms: argBool("'And' all terms. Default is 'or", false),
+                exact: argBool("Exact match only. No related terms", false),
+                distinct: argBool("Show distinct results", false),
+            },
+        };
+        if (kType === undefined) {
+            meta.options!.ktype = arg("Knowledge type");
+        }
+
+        return meta;
+    }
+
+    commands.kpSearchTerms.metadata = searchTermsDef();
+    async function searchTerms(args: string[]): Promise<void> {
+        if (args.length === 0) {
+            return;
+        }
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const commandDef = searchTermsDef();
+        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+            args,
+            commandDef,
+        );
+        if (conversation.semanticRefIndex && conversation.semanticRefs) {
+            context.printer.writeInColor(
+                chalk.cyan,
+                `Searching ${conversation.nameTag}...`,
+            );
+
+            const selectExpr: kp.SearchSelectExpr = {
+                searchTermGroup: createSearchGroup(
+                    termArgs,
+                    namedArgs,
+                    commandDef,
+                    namedArgs.andTerms,
+                ),
+                when: whenFilterFromNamedArgs(namedArgs, commandDef),
+            };
+            context.printer.writeSelectExpr(selectExpr);
+            const timer = new StopWatch();
+            timer.start();
+            const matches = await kp.searchConversationKnowledge(
+                conversation,
+                selectExpr.searchTermGroup,
+                selectExpr.when,
+                {
+                    exactMatch: namedArgs.exact,
+                },
+            );
+            timer.stop();
+            if (matches && matches.size > 0) {
+                context.printer.writeLine();
+                context.printer.writeKnowledgeSearchResults(
+                    conversation,
+                    matches,
+                    namedArgs.maxToDisplay,
+                    namedArgs.distinct,
+                );
+            } else {
+                context.printer.writeLine("No matches");
+            }
+            context.printer.writeTiming(timer);
+        } else {
+            context.printer.writeError("Conversation is not indexed");
+        }
+    }
+
+    function ensureConversationLoaded(): kp.IConversation | undefined {
+        if (context.conversation) {
+            return context.conversation;
+        }
+        context.printer.writeError("No conversation loaded");
+        return undefined;
+    }
+
+    function whenFilterFromNamedArgs(
+        namedArgs: NamedArgs,
+        commandDef: CommandMetadata,
+    ): kp.WhenFilter {
+        let filter: kp.WhenFilter = {
+            knowledgeType: namedArgs.ktype,
+        };
+        const conv: kp.IConversation | undefined = context.conversation;
+        const dateRange = kp.getTimeRangeForConversation(conv!);
+        if (dateRange) {
+            let startDate: Date | undefined;
+            let endDate: Date | undefined;
+            // Did they provide an explicit date range?
+            if (namedArgs.startDate || namedArgs.endDate) {
+                startDate = argToDate(namedArgs.startDate) ?? dateRange.start;
+                endDate = argToDate(namedArgs.endDate) ?? dateRange.end;
+            } else {
+                // They may have provided a relative date range
+                if (namedArgs.startMinute >= 0) {
+                    startDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.startMinute,
+                    );
+                }
+                if (namedArgs.endMinute > 0) {
+                    endDate = dateTime.addMinutesToDate(
+                        dateRange.start,
+                        namedArgs.endMinute,
+                    );
+                }
+            }
+            if (startDate) {
+                filter.dateRange = {
+                    start: startDate,
+                    end: endDate,
+                };
+            }
+        }
+        return filter;
+    }
+}
+
+function createSearchGroup(
+    termArgs: string[],
+    namedArgs: NamedArgs,
+    commandDef: CommandMetadata,
+    andTerms: boolean = false,
+): kp.SearchTermGroup {
+    const searchTerms = kp.createSearchTerms(termArgs);
+    const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
+    return {
+        booleanOp: andTerms ? "and" : "or",
+        terms: [...searchTerms, ...propertyTerms],
+    };
+}
+
+function propertyTermsFromNamedArgs(
+    namedArgs: NamedArgs,
+    commandDef: CommandMetadata,
+): kp.PropertySearchTerm[] {
+    const keyValues = keyValuesFromNamedArgs(namedArgs, commandDef);
+    return kp.createPropertySearchTerms(keyValues);
 }
 
 export function createIndexingEventHandler(
