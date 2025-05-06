@@ -2,7 +2,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-
 function download_yml() {
     info "Downloading $1"
     az storage blob download --account-name $STORAGE --container-name $CONTAINER --name $1 --file $DEST/$1 --overwrite --auth-mode login > $DEST/install-shell.log 2>&1
@@ -93,8 +92,6 @@ else
 fi
 
 CHANNEL=$CHANNEL-$ARCH
-
-if [[ ``]]
 
 DEST=/tmp/install-shell
 cleanup
