@@ -11,6 +11,9 @@ const url =
     account && container
         ? `https://${account}.blob.core.windows.net/${container}/`
         : "";
+const channel = process.env.ELECTRON_BUILDER_CHANNEL;
+const arch = process.env.ELECTRON_BUILDER_ARCH?.trim();
+const channelName = channel && arch ? `${channel}-${arch}` : undefined;
 
 export default {
     extraMetadata: {
@@ -30,13 +33,14 @@ export default {
     ],
     // Don't need to install
     npmRebuild: false,
+    artifactName: name + "-${version}-${platform}-${arch}.${ext}",
     win: {
         appId: `Microsoft.TypeAgentShell`,
         executableName: name,
         icon: "build/win/icon.png",
     },
     nsis: {
-        artifactName: name + "-${version}-setup.${ext}",
+        artifactName: name + "-${version}-${platform}-${arch}-setup.${ext}",
         shortcutName: "${productName}",
         uninstallDisplayName: "${productName}",
         createDesktopShortcut: "always",
@@ -56,9 +60,6 @@ export default {
         },
         notarize: false,
     },
-    dmg: {
-        artifactName: name + "-${version}.${ext}",
-    },
     linux: {
         target: ["AppImage", "snap", "deb"],
         maintainer: "Microsoft Corporation",
@@ -66,11 +67,11 @@ export default {
         // electron-builder missed the `.so.42` suffix as binary files.
         asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
     },
-    appImage: {
-        artifactName: name + "-${version}.${ext}",
-    },
-    publish: {
-        provider: "generic",
-        url,
-    },
+    publish: channelName
+        ? {
+              provider: "generic",
+              channel: channelName,
+              url,
+          }
+        : null,
 };

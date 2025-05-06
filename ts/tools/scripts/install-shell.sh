@@ -82,6 +82,20 @@ else
     CHANNEL=$3
 fi
 
+ARCH=$(uname -m)
+if [[ "$ARCH" == "x86_64" ]]; then
+    ARCH=x64
+elif [[ "$ARCH" == "arm64" ]]; then
+    ARCH=arm64
+else
+    error "Unsupported architecture: $ARCH"
+    exit 1
+fi
+
+CHANNEL=$CHANNEL-$ARCH
+
+if [[ ``]]
+
 DEST=/tmp/install-shell
 cleanup
 mkdir -p $DEST > /dev/null 2>&1
@@ -96,7 +110,7 @@ if [[ $? != 0 ]]; then
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-     # Mac OSX
+    # Mac OSX
     YML=$CHANNEL-mac.yml
 else 
     # Linux

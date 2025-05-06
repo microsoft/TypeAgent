@@ -220,7 +220,7 @@ async function checkUpdate(
     }
 
     if (channel !== undefined) {
-        autoUpdater.channel = channel;
+        autoUpdater.channel = `${channel}-${process.arch}`;
     } else {
         // https://github.com/electron-userland/electron-builder/issues/9078
         (autoUpdater as any)._channel = null;

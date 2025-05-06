@@ -84,11 +84,4 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         shell: bash
-        run: |
-          if [[ $RUNNER_OS == 'Linux' ]]; then
-            pnpm run shell:package:linux
-          elif [[ $RUNNER_OS == 'Windows' ]]; then
-            pnpm run shell:package:win
-          elif [[ $RUNNER_OS == 'macOS' ]]; then
-            pnpm run shell:package:mac
-          fi
+        run: pnpm run shell:package

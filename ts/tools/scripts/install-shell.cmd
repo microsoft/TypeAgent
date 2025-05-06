@@ -23,6 +23,19 @@ IF "%3" == "" (
     set CHANNEL=%3
 )
 
+if "%PROCESSOR_ARCHITECTURE%" == "AMD64" (
+    set ARCH=x64
+) else if "%PROCESSOR_ARCHITECTURE%" == "x86" (
+    set ARCH=ia32
+) else if "%PROCESSOR_ARCHITECTURE%" == "ARM64" (
+    set ARCH=arm64
+) else (
+    call :Error Unsupported architecture: %PROCESSOR_ARCHITECTURE%.
+    exit /B 1
+)
+
+set CHANNEL=%CHANNEL%-%ARCH%
+
 set DEST=%TEMP%\install-shell
 call :Cleanup
 mkdir %DEST% > nul 2>&1
