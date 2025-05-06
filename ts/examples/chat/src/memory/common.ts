@@ -291,7 +291,7 @@ export async function findThread(
     let allThreads = await asyncArray.toArray(threadIndex.entries());
     for (const threadEntry of allThreads) {
         if (predicate(threadEntry.value)) {
-            return threadEntry;
+            return threadEntry.value;
         }
     }
     return undefined;

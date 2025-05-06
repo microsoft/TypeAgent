@@ -23,7 +23,6 @@ import {
 } from "interactive-app";
 import {
     argClean,
-    argDestFile,
     argPause,
     argSourceFileOrFolder,
     argToDate,
@@ -115,8 +114,8 @@ export function createPodcastCommands(
     commands.podcastAlias = podcastAlias;
     commands.podcastEntities = podcastEntities;
     commands.podcastSearch = podcastSearch;
+    commands.podcastExportToKp = podcastExportKp;
     commands.podcastExport = podcastExport;
-    commands.podcastCopy = podcastCopyToMemory;
 
     //-----------
     // COMMANDS
@@ -154,7 +153,7 @@ export function createPodcastCommands(
         await podcastIndex(namedArgs);
     }
 
-    function podcastExportDef(): CommandMetadata {
+    function podcastExportToKpDef(): CommandMetadata {
         return {
             description: "Export podcast to knowpro format",
             args: {
@@ -166,9 +165,9 @@ export function createPodcastCommands(
             },
         };
     }
-    commands.podcastExport.metadata = podcastExportDef();
-    async function podcastExport(args: string[]) {
-        const namedArgs = parseNamedArguments(args, podcastExportDef());
+    commands.podcastExportToKp.metadata = podcastExportToKpDef();
+    async function podcastExportKp(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastExportToKpDef());
         const dirName = path.dirname(namedArgs.filePath);
         const baseFileName = getFileName(namedArgs.filePath);
         context.printer.writeLine(
@@ -253,40 +252,62 @@ export function createPodcastCommands(
         await kpPodcast.writeToFile(dirName, baseFileName);
     }
 
-    function podcastCopyToMemoryDef(): CommandMetadata {
+    function podcastExportDef(): CommandMetadata {
         return {
-            description: "Copy podcast messages to session memory",
+            description: "Export podcast messages",
             args: {
                 threadName: arg("Name of thread"),
             },
             options: {
-                sessionDirPath: argDestFile(),
+                destDirPath: arg("Destination directory"),
+                clean: argBool("Clean dest dir", true),
             },
         };
     }
-    commands.podcastCopy.metadata = podcastCopyToMemoryDef();
-    async function podcastCopyToMemory(args: string[]) {
-        const namedArgs = parseNamedArguments(args, podcastCopyToMemoryDef());
-        const sessionDirPath =
-            namedArgs.sessionDirPath ??
-            path.join(context.storePath, "conversations/test");
+    commands.podcastExport.metadata = podcastExportDef();
+    async function podcastExport(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastExportDef());
+        const destDirPath =
+            namedArgs.destDirPath ??
+            path.join(context.storePath, "conversations/export");
 
-        await ensureDir(sessionDirPath);
-        /*
-        const destCm = conversation.createConversationManager(
+        if (namedArgs.clean) {
+            await removeDir(destDirPath);
+        }
+        await ensureDir(destDirPath);
+        const destCm = await conversation.createConversationManager(
             {},
-            "conversation",
-            sessionDirPath,
+            context.podcastMemory.conversationName,
+            destDirPath,
             false,
-        );*/
+        );
         const threadName = namedArgs.threadName.toLowerCase();
         const thread = await findThread(context.podcastMemory, (td) => {
             const descr = td.description.toLowerCase();
             return descr.indexOf(threadName) >= 0;
         });
-        if (thread) {
-            context.printer.writeJson(thread);
+        if (!thread) {
+            context.printer.writeError(`No matching thread for ${threadName}`);
+            return;
         }
+        context.printer.writeInColor(chalk.cyan, thread.description);
+        const range = conversation.toDateRange(thread.timeRange);
+        const messageStore = context.podcastMemory.conversation.messages;
+        const messageIds = await messageStore.getIdsInRange(
+            range.startDate,
+            range.stopDate,
+        );
+        const messages = await messageStore.getMultiple(messageIds);
+        const progress = new ProgressBar(context.printer, messages.length);
+        for (let i = 0; i < messageIds.length; ++i) {
+            const message = messages[i]!;
+            const newMessage: conversation.ConversationMessage =
+                conversationMessageFromEmailText(message.value.value);
+            newMessage.timestamp = message.timestamp;
+            await destCm.addMessage(newMessage, false);
+            progress.advance();
+        }
+        progress.complete();
     }
 
     // -- End Command ---
@@ -963,6 +984,36 @@ function podcastMessageFromEmailText(text: string) {
         [messageText],
         new cm.PodcastMessageMeta(speaker),
     );
+}
+
+function conversationMessageFromEmailText(
+    text: string,
+): conversation.ConversationMessage {
+    let messageText = "";
+    let sender: string | undefined;
+    let recipients: string[] | undefined;
+    let lines = knowLib.splitIntoLines(text);
+    for (let line of lines) {
+        if (line.startsWith("From: ")) {
+            sender = line.replace("From: ", "");
+        } else if (line.startsWith(`"From: `)) {
+            sender = line.replace(`"From: `, "");
+        } else if (line.startsWith("To: ")) {
+            line = line.replace("To: ", "").trim();
+            recipients = knowLib.split(line, ",", {
+                trim: true,
+                removeEmpty: true,
+            });
+        } else {
+            messageText += line;
+            messageText += "\n";
+        }
+    }
+    return {
+        text: messageText,
+        sender,
+        recipients,
+    };
 }
 
 function extractedKnowledgeToResponse(
