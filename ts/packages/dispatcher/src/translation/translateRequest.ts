@@ -123,6 +123,7 @@ export function getTranslatorForSchema(
         ? undefined
         : context.translatorCache.get(schemaName);
     if (translator !== undefined) {
+        debugTranslate(`Using cached translator for '${translatorName}'`);
         return translator;
     }
     const config = context.session.getConfig().translation;
@@ -134,6 +135,13 @@ export function getTranslatorForSchema(
         context.activityContext,
     );
 
+    debugTranslate(
+        `Creating translator for '${translatorName}':\n  schemas: ${actionConfigs
+            .map((actionConfig) => actionConfig.schemaName)
+            .join(",")}\n  switch: ${switchActionConfigs
+            .map((actionConfig) => actionConfig.schemaName)
+            .join(",")}`,
+    );
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
         switchActionConfigs,
@@ -151,6 +159,7 @@ export function getTranslatorForSchema(
     );
     if (!activityContext) {
         context.translatorCache.set(translatorName, newTranslator);
+        debugTranslate(`Cached translator for '${translatorName}'`);
     }
     return newTranslator;
 }
