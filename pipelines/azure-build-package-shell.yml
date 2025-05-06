@@ -101,10 +101,10 @@ jobs:
           ELECTRON_BUILDER_CHANNEL: $(channel)
 
       # For backward compat, can be remove in the future
-      - ${{ if eq(variables['Agent.OS'], 'Windows_NT') }}:
-          - script: |
-              copy $(shell_folder)/dist/$(channel)-x64.xml $(shell_folder)/dist/$(channel).yml
-            displayName: Copy windows x64 to default channel file
+      - script: |
+          copy $(shell_folder)/dist/$(channel)-x64.xml $(shell_folder)/dist/$(channel).yml
+        displayName: Copy windows x64 to default channel file
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
 
       - task: Cache@2
         displayName: Cache Electron Builder

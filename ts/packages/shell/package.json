@@ -33,7 +33,7 @@
     "package:macos:x64": "ELECTRON_BUILDER_ARCH=x64 pnpm run package:default --mac --x64",
     "package:win32": "set ELECTRON_BUILDER_ARCH=x64 && pnpm run package:default --win --x64",
     "postinstall:default": "[[ -n \"$ELECTRON_BUILDER_ARCH\" ]] && electron-builder install-app-deps --arch $ELECTRON_BUILDER_ARCH || electron-builder install-app-deps",
-    "postinstall:win32": "IF \"%ELECTRON_BUILDER_ARCH%\" == \"\" ( electron-builder install-app-deps ) ELSE ( electron-builder install-app-deps --arch %ELECTRON_BUILDER_ARCH%)",
+    "postinstall:win32": "IF defined ELECTRON_BUILDER_ARCH ( electron-builder install-app-deps --arch %ELECTRON_BUILDER_ARCH%) ELSE ( electron-builder install-app-deps ) ",
     "prepare-vite": "concurrently npm:typecheck npm:build:electron:cjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
