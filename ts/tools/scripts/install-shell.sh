@@ -96,8 +96,13 @@ if [[ $? != 0 ]]; then
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-     # Mac OSX
-    YML=$CHANNEL-mac.yml
+    if [[ `uname -m` == "arm64" ]]; then
+        # Mac OSX ARM64
+        YML=$CHANNEL-mac-arm64.yml
+    else
+        # Mac OSX Intel
+        YML=$CHANNEL-mac.yml
+    fi
 else 
     # Linux
     YML=$CHANNEL-linux.yml

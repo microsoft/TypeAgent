@@ -43,6 +43,7 @@ export default {
     },
     mac: {
         appId: `com.microsoft.typeagentshell`,
+        artifactName: name + "-${version}-${arch}.${ext}",
         entitlementsInherit: "build/entitlements.mac.plist",
         extendInfo: {
             NSCameraUsageDescription:
@@ -55,9 +56,6 @@ export default {
                 "Application requests access to the user's Downloads folder.",
         },
         notarize: false,
-    },
-    dmg: {
-        artifactName: name + "-${version}.${ext}",
     },
     linux: {
         target: ["AppImage", "snap", "deb"],
