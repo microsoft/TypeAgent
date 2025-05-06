@@ -23,9 +23,11 @@ import {
 } from "interactive-app";
 import {
     argClean,
+    argDestFile,
     argPause,
     argSourceFileOrFolder,
     argToDate,
+    findThread,
     manageConversationAlias,
 } from "./common.js";
 import path from "path";
@@ -114,6 +116,7 @@ export function createPodcastCommands(
     commands.podcastEntities = podcastEntities;
     commands.podcastSearch = podcastSearch;
     commands.podcastExport = podcastExport;
+    commands.podcastCopy = podcastCopyToMemory;
 
     //-----------
     // COMMANDS
@@ -249,6 +252,44 @@ export function createPodcastCommands(
         context.printer.writeLine("Saving index");
         await kpPodcast.writeToFile(dirName, baseFileName);
     }
+
+    function podcastCopyToMemoryDef(): CommandMetadata {
+        return {
+            description: "Copy podcast messages to session memory",
+            args: {
+                threadName: arg("Name of thread"),
+            },
+            options: {
+                sessionDirPath: argDestFile(),
+            },
+        };
+    }
+    commands.podcastCopy.metadata = podcastCopyToMemoryDef();
+    async function podcastCopyToMemory(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastCopyToMemoryDef());
+        const sessionDirPath =
+            namedArgs.sessionDirPath ??
+            path.join(context.storePath, "conversations/test");
+
+        await ensureDir(sessionDirPath);
+        /*
+        const destCm = conversation.createConversationManager(
+            {},
+            "conversation",
+            sessionDirPath,
+            false,
+        );*/
+        const threadName = namedArgs.threadName.toLowerCase();
+        const thread = await findThread(context.podcastMemory, (td) => {
+            const descr = td.description.toLowerCase();
+            return descr.indexOf(threadName) >= 0;
+        });
+        if (thread) {
+            context.printer.writeJson(thread);
+        }
+    }
+
+    // -- End Command ---
 
     // Eventually we should unite these functions with their
     // counterparts in @entities command in chatMemory.ts but

@@ -1410,6 +1410,7 @@ export async function runChatMemory(): Promise<void> {
         showTokenStats =
             namedArgs.enable !== undefined ? namedArgs.enable : showTokenStats;
     }
+
     //--------------------
     // END COMMANDS
     //--------------------

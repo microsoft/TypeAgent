@@ -282,3 +282,17 @@ export async function manageConversationAlias(
         }
     }
 }
+
+export async function findThread(
+    cm: conversation.ConversationManager,
+    predicate: (threadDef: conversation.ConversationThread) => boolean,
+) {
+    const threadIndex = await cm.conversation.getThreadIndex();
+    let allThreads = await asyncArray.toArray(threadIndex.entries());
+    for (const threadEntry of allThreads) {
+        if (predicate(threadEntry.value)) {
+            return threadEntry;
+        }
+    }
+    return undefined;
+}
