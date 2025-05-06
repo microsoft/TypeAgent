@@ -311,6 +311,8 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
             await trackState(
                 currentState?.pageType ?? "",
                 nextAction.actionName,
+                "action",
+                screenshot,
             );
 
             let actionSucceeded = await runUserAction(nextAction);
