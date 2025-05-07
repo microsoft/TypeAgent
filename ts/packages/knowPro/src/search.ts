@@ -74,7 +74,6 @@ export function createSearchOptionsTypical(): SearchOptions {
         ...createSearchOptions(),
         maxKnowledgeMatches: 50,
         maxMessageMatches: 25,
-        maxMessageCharsInBudget: 1024 * 8,
     };
 }
 
@@ -648,4 +647,21 @@ class QueryCompiler {
         }
         return scoredRef;
     }
+}
+
+export function hasConversationResults(
+    results: ConversationSearchResult[],
+): boolean {
+    if (results.length === 0) {
+        return false;
+    }
+    return results.some((r) => {
+        return r.knowledgeMatches.size > 0 || r.messageMatches.length > 0;
+    });
+}
+
+export function hasConversationResult(
+    result: ConversationSearchResult,
+): boolean {
+    return result.knowledgeMatches.size > 0 || result.messageMatches.length > 0;
 }

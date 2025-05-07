@@ -45,10 +45,15 @@ export default class Schema extends Command {
             allowNo: true,
             default: true,
         }),
+        activity: Flags.boolean({
+            description: "Show activity schema",
+            allowNo: true,
+            default: true,
+        }),
     };
     static args = {
-        translator: Args.string({
-            description: "Translator name",
+        schemaName: Args.string({
+            description: "Schema name",
             required: true,
             options: schemaNames,
         }),
@@ -64,7 +69,7 @@ export default class Schema extends Command {
             if (args.actionName) {
                 const actionSchema = getActionSchema(
                     {
-                        translatorName: args.translator,
+                        translatorName: args.schemaName,
                         actionName: args.actionName,
                     },
                     provider,
@@ -73,7 +78,7 @@ export default class Schema extends Command {
                     console.log(generateSchemaTypeDefinition(actionSchema));
                 } else {
                     console.error(
-                        `Action ${args.actionName} not found in translator ${args.translator}`,
+                        `Action ${args.actionName} not found in translator ${args.schemaName}`,
                     );
                 }
 
@@ -81,12 +86,15 @@ export default class Schema extends Command {
             }
             console.log(
                 getFullSchemaText(
-                    args.translator,
+                    args.schemaName,
                     provider,
                     flags.active,
                     flags.change,
-                    flags.multiple,
-                    flags.generated,
+                    {
+                        activity: flags.activity,
+                        multiple: flags.multiple,
+                    },
+                    flags.generated ? { exact: true } : undefined,
                 ),
             );
         } else {

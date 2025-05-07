@@ -39,12 +39,20 @@ class MailClientLoginCommandHandler implements CommandHandlerNoParams {
             throw new Error("Mail client not initialized");
         }
         if (mailClient.isAuthenticated()) {
-            displayWarn("Already logged in", context);
+            const name = await mailClient.getUserAsync();
+            displayWarn(
+                `Already logged in as ${name.displayName}<${name.mail}>`,
+                context,
+            );
             return;
         }
 
         await mailClient.login((prompt) => displayStatus(prompt, context));
-        displaySuccess("Successfully logged in", context);
+        const name = await mailClient.getUserAsync();
+        displaySuccess(
+            `Successfully logged in as ${name.displayName}<${name.mail}>`,
+            context,
+        );
     }
 }
 

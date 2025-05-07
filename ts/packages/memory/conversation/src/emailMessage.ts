@@ -5,10 +5,9 @@ import * as kp from "knowpro";
 import * as ms from "memory-storage";
 import { conversation as kpLib } from "knowledge-processor";
 import { email as email } from "knowledge-processor";
+import { Message, MessageMetadata } from "./memory.js";
 
-export class EmailMeta
-    implements email.EmailHeader, kp.IMessageMetadata, kp.IKnowledgeSource
-{
+export class EmailMeta extends MessageMetadata {
     public cc?: email.EmailAddress[] | undefined;
     public bcc?: email.EmailAddress[] | undefined;
     public subject?: string | undefined;
@@ -19,9 +18,11 @@ export class EmailMeta
     constructor(
         public from: email.EmailAddress,
         public to: email.EmailAddress[] | undefined = undefined,
-    ) {}
+    ) {
+        super();
+    }
 
-    public get source() {
+    public override get source() {
         return email.emailAddressToString(this.from);
     }
 
@@ -32,7 +33,7 @@ export class EmailMeta
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse {
-        return email.emailToKnowledge(this);
+        return email.emailToKnowledge(this, false);
     }
 
     public copyFrom(meta: email.EmailHeader) {
@@ -47,28 +48,25 @@ export class EmailMeta
     }
 }
 
-export class EmailMessage implements kp.IMessage {
-    public metadata: EmailMeta;
-    public textChunks: string[];
-    public timestamp: string | undefined;
-
+export class EmailMessage extends Message<EmailMeta> {
     constructor(
         metadata: EmailMeta,
         emailBody: string | string[],
-        public tags: string[] = [],
-        public deletionInfo?: kp.DeletionInfo | undefined,
+        tags: string[] = [],
+        deletionInfo?: kp.DeletionInfo | undefined,
+        isNew: boolean = true,
     ) {
-        this.metadata = metadata;
-        if (Array.isArray(emailBody)) {
-            this.textChunks = emailBody;
-        } else {
-            this.textChunks = [emailBody];
+        if (isNew) {
+            emailBody = emailToTextChunks(emailBody, metadata.subject);
         }
-        this.timestamp = metadata.sentOn;
-    }
-
-    public getKnowledge() {
-        return this.metadata.getKnowledge();
+        super(
+            metadata,
+            emailBody,
+            tags,
+            metadata.sentOn,
+            undefined,
+            deletionInfo,
+        );
     }
 }
 
@@ -117,6 +115,26 @@ export class EmailMessageSerializer implements kp.JsonSerializer<EmailMessage> {
             jMsg.textChunks,
             jMsg.tags,
             jMsg.deletionInfo,
+            false,
         );
     }
+}
+
+function emailToTextChunks(
+    emailBody: string | string[],
+    subject?: string,
+): string | string[] {
+    if (Array.isArray(emailBody)) {
+        emailBody[0] = joinSubjectAndBody(emailBody[0], subject);
+        return emailBody;
+    } else {
+        return joinSubjectAndBody(emailBody, subject);
+    }
+}
+
+function joinSubjectAndBody(emailBody: string, subject?: string): string {
+    if (subject) {
+        return `Subject: ${subject}\n\n` + emailBody;
+    }
+    return emailBody;
 }

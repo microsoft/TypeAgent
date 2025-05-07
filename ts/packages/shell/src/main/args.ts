@@ -6,6 +6,7 @@ import { debugShell } from "./debug.js";
 type ShellCommandLineArgs = {
     reset: boolean;
     clean: boolean;
+    test: boolean;
     prod?: boolean;
     update?: string;
     data?: string;
@@ -16,6 +17,7 @@ export function parseShellCommandLine() {
     const result: ShellCommandLineArgs = {
         reset: false,
         clean: false,
+        test: false,
     };
     for (let i = 1; i < process.argv.length; i++) {
         const arg = process.argv[i];
@@ -67,6 +69,11 @@ export function parseShellCommandLine() {
 
             if (arg === "--dev") {
                 result.prod = false;
+                continue;
+            }
+
+            if (arg === "--test") {
+                result.test = true;
                 continue;
             }
         }

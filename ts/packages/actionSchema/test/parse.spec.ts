@@ -4,7 +4,36 @@
 import { parseActionSchemaSource } from "../src/parser.js";
 
 describe("Action Schema Strict Checks", () => {
-    it("Error on entry type not exported", async () =>
+    it("Error on action entry type not found", async () =>
+        expect(async () =>
+            parseActionSchemaSource(
+                `type SomeAction = { actionName: "someAction" }`,
+                "test",
+                "SomeOtherAction",
+                "",
+                undefined,
+                true,
+            ),
+        ).rejects.toThrow(
+            "Error parsing schema 'test': Action type 'SomeOtherAction' not found",
+        ));
+    it("Error on activity entry type not found", async () =>
+        expect(async () =>
+            parseActionSchemaSource(
+                `type SomeAction = { actionName: "someAction" }`,
+                "test",
+                {
+                    action: "SomeAction",
+                    activity: "SomeOtherAction",
+                },
+                "",
+                undefined,
+                true,
+            ),
+        ).rejects.toThrow(
+            "Error parsing schema 'test': Activity type 'SomeOtherAction' not found",
+        ));
+    it("Error on action entry type not exported", async () =>
         expect(async () =>
             parseActionSchemaSource(
                 `type SomeAction = { actionName: "someAction" }`,
@@ -15,10 +44,10 @@ describe("Action Schema Strict Checks", () => {
                 true,
             ),
         ).rejects.toThrow(
-            "Error parsing schema 'test': Schema Error: Type 'SomeAction' must be exported",
+            "Error parsing schema 'test': Schema Error: Action entry type 'SomeAction' must be exported",
         ));
 
-    it("Error on entry type comment", async () =>
+    it("Error on action entry type comment", async () =>
         expect(async () =>
             parseActionSchemaSource(
                 `// comments\nexport type AllActions = SomeAction;\ntype SomeAction = { actionName: "someAction" }`,

@@ -329,7 +329,7 @@ export class KnowProPrinter extends ChatPrinter {
         maxToDisplay: number,
         distinct: boolean,
     ) {
-        if (searchResult && searchResult.messageMatches.length > 0) {
+        if (searchResult && kp.hasConversationResult(searchResult)) {
             if (showKnowledge) {
                 this.writeKnowledgeSearchResults(
                     conversation,
