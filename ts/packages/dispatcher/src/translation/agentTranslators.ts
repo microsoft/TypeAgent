@@ -8,7 +8,7 @@ import {
     JsonTranslatorOptions,
     TypeAgentJsonValidator,
 } from "common-utils";
-import { AppAction } from "@typeagent/agent-sdk";
+import { AppAction, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { Result } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import {
@@ -114,13 +114,41 @@ function getChangeAssistantSchemaDef(
     };
 }
 
+export function getActionSchemaTypeName(schemaType: string | SchemaTypeNames) {
+    return typeof schemaType === "string" ? schemaType : schemaType.action;
+}
+
+export function getActivitySchemaTypeName(
+    schemaType: string | SchemaTypeNames,
+) {
+    return typeof schemaType === "string" ? undefined : schemaType.activity;
+}
+
 function getTranslatorSchemaDef(
     actionConfig: ActionConfig,
 ): TranslatorSchemaDef {
+    const actionTypeName = getActionSchemaTypeName(actionConfig.schemaType);
+    const activityTypeName = getActivitySchemaTypeName(actionConfig.schemaType);
+
+    // Cannot disable activity if we don't regenerate the schema
+    let typeName: string;
+    if (actionTypeName === undefined) {
+        if (activityTypeName === undefined) {
+            throw new Error(
+                `Action config ${actionConfig.schemaName} does not have any action or activity schema type`,
+            );
+        }
+        typeName = activityTypeName;
+    } else {
+        typeName = activityTypeName
+            ? `${actionTypeName} | ${activityTypeName}`
+            : actionTypeName;
+    }
+
     if (typeof actionConfig.schemaFile === "string") {
         return {
             kind: "file",
-            typeName: actionConfig.schemaType,
+            typeName,
             fileName: getPackageFilePath(actionConfig.schemaFile),
         };
     }
@@ -128,7 +156,7 @@ function getTranslatorSchemaDef(
     if (actionConfig.schemaFile.format === "ts") {
         return {
             kind: "inline",
-            typeName: actionConfig.schemaType,
+            typeName,
             schema: actionConfig.schemaFile.content,
         };
     }
@@ -143,10 +171,22 @@ function getTranslatorSchemaDefs(
     switchActionConfigs: ActionConfig[],
     multipleActionOptions: MultipleActionOptions,
 ): TranslatorSchemaDef[] {
+    // Cannot disable activity if we don't regenerate the schema
     const translationSchemaDefs = actionConfigs.map(getTranslatorSchemaDef);
 
     // subAction for multiple action
-    const subActionType = actionConfigs.map((s) => s.schemaType);
+    const subActionType = actionConfigs.flatMap((s) => {
+        const returnTypes: string[] = [];
+        const actionType = getActionSchemaTypeName(s.schemaType);
+        if (actionType) {
+            returnTypes.push(actionType);
+        }
+        const activityType = getActivitySchemaTypeName(s.schemaType);
+        if (activityType) {
+            returnTypes.push(activityType);
+        }
+        return returnTypes;
+    });
 
     // Add change assistant schema if needed
     const changeAssistantSchemaDef =

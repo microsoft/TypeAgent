@@ -29,8 +29,10 @@ export async function startShell(
         `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
     // other related multi-instance variables that need to be modified to ensure we can run multiple shell instances
+    // Assuming less then 50 port is needed.
     process.env["PORT"] = (
-        9001 + parseInt(process.env["TEST_WORKER_INDEX"]!)
+        9001 +
+        parseInt(process.env["TEST_WORKER_INDEX"]!) * 50
     ).toString();
     process.env["WEBSOCKET_HOST"] =
         `ws://localhost:${8080 + parseInt(process.env["TEST_WORKER_INDEX"]!)}`;

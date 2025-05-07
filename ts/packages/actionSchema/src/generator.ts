@@ -133,7 +133,7 @@ function isJsonSchemaEnabled(options?: GenerateSchemaOptions): boolean {
     return options?.jsonSchema === true || options?.jsonSchemaFunction === true;
 }
 export function generateSchemaTypeDefinition(
-    definition: SchemaTypeDefinition,
+    definition: SchemaTypeDefinition | SchemaTypeDefinition[],
     options?: GenerateSchemaOptions,
     order?: Map<string, number>,
 ): string {
@@ -151,7 +151,7 @@ export function generateSchemaTypeDefinition(
         SchemaTypeDefinition,
         { lines: string[]; order: number | undefined; emitOrder: number }
     >();
-    const pending = [definition];
+    const pending = Array.isArray(definition) ? [...definition] : [definition];
 
     while (pending.length > 0) {
         const definition = pending.shift()!;

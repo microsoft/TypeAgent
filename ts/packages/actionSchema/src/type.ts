@@ -135,17 +135,26 @@ type ActionSchemaTypeReference =
 // A union of action schema type definitions.
 export type ActionSchemaUnion = SchemaTypeUnion<ActionSchemaTypeReference>;
 
-export type ActionSchemaGroup = {
+export type ActionSchemaGroup<T = ActionSchemaEntryTypeDefinition> = {
     // The entry type definition for the action schema.
-    entry: ActionSchemaEntryTypeDefinition;
+    entry: T;
     // Map action name to action type definition
     actionSchemas: Map<string, ActionSchemaTypeDefinition>;
     // Order for the type definitions
     order?: Map<string, number>; // for exact regen
 };
 
-// Action schema that is parsed from a file.
-export type ParsedActionSchema = ActionSchemaGroup & {
-    // separate the cache by action name
-    actionNamespace?: boolean; // default to false
+export type SchemaEntryTypeDefinitions<T = SchemaTypeDefinition> = {
+    action?: T | undefined;
+    activity?: T | undefined;
 };
+
+export type ActionSchemaEntryTypeDefinitions =
+    SchemaEntryTypeDefinitions<ActionSchemaEntryTypeDefinition>;
+
+// Action schema that is parsed from a file.
+export type ParsedActionSchema =
+    ActionSchemaGroup<ActionSchemaEntryTypeDefinitions> & {
+        // separate the cache by action name
+        actionNamespace?: boolean; // default to false
+    };

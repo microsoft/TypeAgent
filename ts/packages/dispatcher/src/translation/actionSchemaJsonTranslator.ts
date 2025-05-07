@@ -122,13 +122,22 @@ class ActionSchemaBuilder {
     private readonly files: ActionSchemaFile[] = [];
     private readonly definitions: ActionSchemaEntryTypeDefinition[] = [];
 
-    constructor(private readonly provider: ActionConfigProvider) {}
+    constructor(
+        private readonly provider: ActionConfigProvider,
+        private readonly activity: boolean = true,
+    ) {}
     addActionConfig(...configs: ActionConfig[]) {
         for (const config of configs) {
             const actionSchemaFile =
                 this.provider.getActionSchemaFileForConfig(config);
             this.files.push(actionSchemaFile);
-            this.definitions.push(actionSchemaFile.parsedActionSchema.entry);
+            const entry = actionSchemaFile.parsedActionSchema.entry;
+            if (entry.action) {
+                this.definitions.push(entry.action);
+            }
+            if (this.activity && entry.activity) {
+                this.definitions.push(entry.activity);
+            }
         }
     }
 
