@@ -428,7 +428,7 @@ class IMessageTextIndex[TMessage: IMessage](Protocol):
 
     async def add_messages(
         self,
-        messages: list[TMessage],
+        messages: Iterable[TMessage],
         event_handler: "IndexingEventHandlers | None" = None,
     ) -> "ListIndexingResult":
         raise NotImplementedError

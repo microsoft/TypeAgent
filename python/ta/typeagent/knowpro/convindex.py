@@ -309,14 +309,14 @@ async def build_semantic_ref_index[TM: IMessage](
     if semantic_ref_index is None:
         conversation.semantic_ref_index = semantic_ref_index = ConversationIndex()
 
-    semantic_refs = conversation.semantic_refs
-    if semantic_refs is None:
-        conversation.semantic_refs = semantic_refs = []
+    indexing_result = TextIndexingResult()
+
+    if conversation.semantic_refs is None:
+        return indexing_result
+    semantic_refs = list(conversation.semantic_refs)
 
     if extractor is None:
         extractor = convknowledge.KnowledgeExtractor()
-
-    indexing_result = TextIndexingResult()
 
     for message_ordinal, message in enumerate(conversation.messages):
         if event_handler and event_handler.on_message_started:
