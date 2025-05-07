@@ -1,18 +1,4 @@
-# -------------------------------------
-# Set up environment
-# -------------------------------------
-
-@config agent  browser code desktop
-@config action  browser code desktop
-
-@action list createList --parameters.listName "spring bulbs"
-@action list addItems --parameters.listName "spring bulbs" --parameters.items.0 "Daffodils" --parameters.items.1 "Tulips" --parameters.items.2 "Irises" --parameters.items.3 "Hyacinths"
-
-
-@history clear
 @clear
-
-# @greeting
 
 @pauseForInput
 
@@ -20,7 +6,7 @@
 # Player actions
 # -------------------------------------
 please launch spotify
-set device to computer
+# set device to computer
 
 Please play Nocturne No. 2 by Chopin.
 set the music volume to 40
@@ -85,21 +71,13 @@ what is on the list?
 # Conversation memory  - long-term memory
 #-----------------------------------
 
-in that Kevin Scott podcast we talked about last month, what were the books Adrian and Kevin mentioned?[may need to adjust date/time on index to get the long-term part]
+in that Kevin Scott podcast we talked about last month, what were the books Adrian and Kevin mentioned?
 what did Kevin say about AI in that podcast?
-
-#-----------------------------------
-# Application memory
-#-----------------------------------
-lookup snowdrops on the web
-what was the name of the list we made for the bulb order?
-add snowdrops to that list
-what's on the list?
 
 #-----------------------------------
 # integration with other knowledge sources
 #-----------------------------------
-did the PR about email meory get checked in?
+did the PR about email memory get checked in?
 
 # -------------------------------------
 # Calendar
