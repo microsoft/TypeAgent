@@ -123,25 +123,18 @@ function getInstanceDirName(instanceName: string) {
         return ensureInstanceDirName(instanceName);
     });
 }
-function getInstanceName(prod: boolean) {
-    return (
-        process.env.INSTANCE_NAME ??
-        (prod ? "prod" : `dev:${getPackageFilePath(".")}`)
-    );
+
+function getInstanceName() {
+    return process.env.INSTANCE_NAME ?? `dev:${getPackageFilePath(".")}`;
 }
 
 let instanceDir: string | undefined;
-let instanceMode: boolean | undefined;
-export function getInstanceDir(prod: boolean = false) {
+export function getInstanceDir() {
     if (instanceDir === undefined) {
-        instanceMode = prod;
         instanceDir = path.join(
             getInstancesDir(),
-            getInstanceDirName(getInstanceName(prod)),
+            getInstanceDirName(getInstanceName()),
         );
-    }
-    if (instanceMode !== prod) {
-        throw new Error("Instance mode cannot be changed");
     }
     return instanceDir;
 }
