@@ -78,11 +78,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (msg.parameters.indicies) {
                     for (let i = 0; i < msg.parameters.indicies.length; i++) {
                         mainContainer.children[
-                            msg.parameters.indicies[i] - 1
+                            msg.parameters.indicies[i]
                         ].classList.add("selected");
                         selected.add(
                             mainContainer.children[
-                                msg.parameters.indicies[i] - 1
+                                msg.parameters.indicies[i]
                             ].getAttribute("path"),
                         );
                     }

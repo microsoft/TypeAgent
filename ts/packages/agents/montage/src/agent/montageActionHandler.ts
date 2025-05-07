@@ -61,7 +61,7 @@ const montageFile: string = "montages.json";
 type MontageActionContext = {
     montageIdSeed: number;
     montages: PhotoMontage[];
-    montage: PhotoMontage | undefined;
+    activeMontageId: number;
     imageCollection: im.ImageCollection | undefined;
     viewProcess: ChildProcess | undefined;
     searchSettings: {
@@ -114,7 +114,52 @@ async function initializeMontageContext() {
             minScore: 5, // TODO: tune?
             exactMatch: false,
         },
+
+        getActiveMontage,
     };
+}
+
+/*
+ * Returns the active (i.e. the montage being shown) montage
+ */
+function getActiveMontage(
+    context: MontageActionContext,
+): PhotoMontage | undefined {
+    return context.montages.find((value) => {
+        return value.id === context.activeMontageId;
+    });
+}
+
+/*
+ * Gets the index of the active montage in the montages array
+ */
+function getActiveMontageIndex(context: MontageActionContext): number {
+    let idx = -1;
+
+    context.montages.find((value, index) => {
+        if (value.id === context.activeMontageId) {
+            idx = index;
+        }
+
+        return value.id === context.activeMontageId;
+    });
+
+    return idx;
+}
+
+/*
+ * Gets a unique montage ID
+ */
+function getUniqueMontageId(context: MontageActionContext) {
+    let maxId = -1;
+
+    context.montages.forEach((m) => {
+        if (m.id > maxId) {
+            maxId = m.id;
+        }
+    });
+
+    return maxId + 1;
 }
 
 /**
@@ -134,7 +179,7 @@ async function updateMontageContext(
     if (enable) {
         // Load all montages from disk
         context.agentContext.montages = [];
-        context.agentContext.montageIdSeed = 0;
+        context.agentContext.montageIdSeed = NaN;
         if (await context.sessionStorage?.exists(montageFile)) {
             const data = await context.sessionStorage?.read(
                 montageFile,
@@ -142,25 +187,24 @@ async function updateMontageContext(
             );
             if (data) {
                 const d = JSON.parse(data);
-                context.agentContext.montageIdSeed = d.montageIdSeed
-                    ? d.montageIdSeed
-                    : 0;
+                // context.agentContext.montageIdSeed = d.montageIdSeed
+                //     ? d.montageIdSeed
+                //     : 0;
                 context.agentContext.montages = d.montages;
             }
         }
 
         // if there are montages, load the last one otherwise create a new one
         if (context.agentContext.montages.length > 0) {
-            context.agentContext.montage =
+            context.agentContext.activeMontageId =
                 context.agentContext.montages[
                     context.agentContext.montages.length - 1
-                ];
+                ].id;
+        } else {
+            context.agentContext.activeMontageId = -1;
         }
 
         // Load the image index from disk
-        // TODO: load from sesssion storage/directory
-        // TODO: give the user a way to index their images
-        // TODO: evaluate perf..is this fast enough give a large image index?
         if (!context.agentContext.imageCollection) {
             context.agentContext.indexes = await context.indexes("image");
 
@@ -181,21 +225,29 @@ async function updateMontageContext(
             }
         }
 
+        // Start the montage rendering host
         if (!context.agentContext.viewProcess) {
             context.agentContext.viewProcess = await createViewServiceHost(
                 (montage: PhotoMontage) => {
-                    // harvest the id
-                    if (context.agentContext.montage) {
-                        montage.id = context.agentContext.montage!.id;
+                    // replace the active montage with the one we just got from the client
+                    if (context.agentContext.activeMontageId > -1) {
+                        // remove the active montage
+                        context.agentContext.montages =
+                            context.agentContext.montages.filter(
+                                (value) =>
+                                    value.id !=
+                                    context.agentContext.activeMontageId,
+                            );
 
-                        // overwite the working montage with the updated monage
-                        context.agentContext.montage = montage;
+                        // push the received montage onto the stack
+                        montage.id = context.agentContext.activeMontageId;
+                        context.agentContext.montages.push(montage);
                     }
                 },
             );
 
             // send initial state and allowed folder(s)
-            if (context.agentContext.montage) {
+            if (context.agentContext.activeMontageId > -1) {
                 const folders: string[] = [];
                 context.agentContext.indexes.forEach((idx) => {
                     folders.push(idx.location);
@@ -217,12 +269,12 @@ async function updateMontageContext(
                 });
 
                 context.agentContext.viewProcess?.send(
-                    context.agentContext.montage,
+                    getActiveMontage(context.agentContext)!,
                 );
             }
         }
 
-        // create the embedding model
+        // create the embedding model for fuzzy matching
         if (!context.agentContext.fuzzyMatchingModel) {
             context.agentContext.fuzzyMatchingModel =
                 openai.createEmbeddingModel();
@@ -312,21 +364,18 @@ async function handleMontageAction(
             let selectedCount: number = 0;
             // what is the intersection of the images in the montage and what we found in the search...that is the selection
             // go through the files by name
-
+            const activeMontage = getActiveMontage(
+                actionContext.sessionContext.agentContext,
+            );
             const intersection = action.parameters.files?.filter((item1) =>
-                actionContext.sessionContext.agentContext.montage?.files.some(
-                    (item2) => item1 === item2,
-                ),
+                activeMontage?.files.some((item2) => item1 === item2),
             );
             if (intersection) {
                 selectedCount += intersection?.length;
             }
 
             action.parameters.indicies?.forEach((value) => {
-                const indexedFile =
-                    actionContext.sessionContext.agentContext.montage?.files[
-                        value
-                    ];
+                const indexedFile = activeMontage?.files[value];
 
                 // only count this index if it's not already been identified by file name
                 if (indexedFile && intersection?.indexOf(indexedFile) === -1) {
@@ -373,9 +422,15 @@ async function handleMontageAction(
 
             // TODO: update project state with this action
             // add found files to the montage
-            actionContext.sessionContext.agentContext.montage!.files = [
+            actionContext.sessionContext.agentContext.montages[
+                getActiveMontageIndex(actionContext.sessionContext.agentContext)
+            ].files = [
                 ...new Set([
-                    ...actionContext.sessionContext.agentContext.montage!.files,
+                    ...actionContext.sessionContext.agentContext.montages[
+                        getActiveMontageIndex(
+                            actionContext.sessionContext.agentContext,
+                        )
+                    ].files,
                     ...action.parameters.files!,
                 ]),
             ];
@@ -383,12 +438,16 @@ async function handleMontageAction(
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
 
-            const count: number =
-                actionContext.sessionContext.agentContext.montage!.files
-                    .length - action.parameters.files!.length;
+            const fileCount =
+                actionContext.sessionContext.agentContext.montages[
+                    getActiveMontageIndex(
+                        actionContext.sessionContext.agentContext,
+                    )
+                ].files.length;
+            const count: number = fileCount - action.parameters.files!.length;
             let message = `Found ${action.parameters.files!.length} images. `;
             if (count > 0) {
-                message += `New montage image count: ${actionContext.sessionContext.agentContext.montage!.files.length} images.`;
+                message += `New montage image count: ${fileCount} images.`;
             }
             result = createActionResult(message);
             break;
@@ -427,7 +486,7 @@ async function handleMontageAction(
                 // start the slide show
                 startSlideShow(actionContext.sessionContext.agentContext);
                 result = createActionResult(
-                    `Showing ${actionContext.sessionContext.agentContext.montage?.title}.`,
+                    `Showing ${getActiveMontage(actionContext.sessionContext.agentContext)?.title}.`,
                 );
             } else {
                 result = createActionResultFromError(
@@ -441,7 +500,7 @@ async function handleMontageAction(
         case "createNewMontage": {
             const newMontageAction: CreateMontageAction =
                 action as CreateMontageAction;
-            const newMontage: PhotoMontage = createNewMontage(
+            createNewMontage(
                 actionContext.sessionContext.agentContext,
                 newMontageAction.parameters.title,
             );
@@ -474,32 +533,45 @@ async function handleMontageAction(
 
             // add found files to the montage
             if (action.parameters.files !== undefined) {
-                newMontage.files = [
+                actionContext.sessionContext.agentContext.montages[
+                    getActiveMontageIndex(
+                        actionContext.sessionContext.agentContext,
+                    )
+                ].files = [
                     ...new Set([
-                        ...newMontage.files,
+                        ...actionContext.sessionContext.agentContext.montages[
+                            getActiveMontageIndex(
+                                actionContext.sessionContext.agentContext,
+                            )
+                        ].files,
                         ...action.parameters.files!,
                     ]),
                 ];
             }
 
-            actionContext.sessionContext.agentContext.montages.push(newMontage);
-
             saveMontages(actionContext.sessionContext);
 
             // update montage state
             if (newMontageAction.parameters.focus === true) {
-                actionContext.sessionContext.agentContext.montage = newMontage;
                 actionContext.sessionContext.agentContext.viewProcess?.send(
-                    actionContext.sessionContext.agentContext.montage!,
+                    getActiveMontage(
+                        actionContext.sessionContext.agentContext,
+                    )!,
                 );
                 result = createActionResult("Created new montage", false, [
                     entityFromMontage(
-                        actionContext.sessionContext.agentContext.montage,
+                        getActiveMontage(
+                            actionContext.sessionContext.agentContext,
+                        )!,
                     ),
                 ]);
             } else {
                 result = createActionResultNoDisplay("Created new montage", [
-                    entityFromMontage(newMontage),
+                    entityFromMontage(
+                        getActiveMontage(
+                            actionContext.sessionContext.agentContext,
+                        )!,
+                    ),
                 ]);
             }
             break;
@@ -520,7 +592,7 @@ async function handleMontageAction(
                 deletedCount =
                     actionContext.sessionContext.agentContext.montages.length;
                 actionContext.sessionContext.agentContext.montages = [];
-                actionContext.sessionContext.agentContext.montage = undefined;
+                actionContext.sessionContext.agentContext.activeMontageId = -1;
             } else if (deleteMontageAction.parameters.title !== undefined) {
                 actionContext.sessionContext.agentContext.montages =
                     actionContext.sessionContext.agentContext.montages.filter(
@@ -538,15 +610,18 @@ async function handleMontageAction(
                     );
             } else {
                 // no id/title specified, delete the active montage or the ones with the supplied ids
-                if (actionContext.sessionContext.agentContext.montage) {
+                if (
+                    actionContext.sessionContext.agentContext.activeMontageId >
+                    -1
+                ) {
                     if (
                         montageIds.indexOf(
-                            actionContext.sessionContext.agentContext.montage
-                                ?.id,
+                            actionContext.sessionContext.agentContext
+                                .activeMontageId,
                         ) !== -1
                     ) {
-                        actionContext.sessionContext.agentContext.montage =
-                            undefined;
+                        actionContext.sessionContext.agentContext.activeMontageId =
+                            -1;
                     }
                 }
 
@@ -583,7 +658,8 @@ async function handleMontageAction(
                     );
 
                 if (m) {
-                    actionContext.sessionContext.agentContext.montage = m;
+                    actionContext.sessionContext.agentContext.activeMontageId =
+                        m.id;
                     result = createActionResult(`Switch montage to ${m.title}`);
                 } else {
                     result = createActionResultFromError(
@@ -608,7 +684,8 @@ async function handleMontageAction(
                 }
 
                 if (m) {
-                    actionContext.sessionContext.agentContext.montage = m;
+                    actionContext.sessionContext.agentContext.activeMontageId =
+                        m.id;
                     result = createActionResult(`Switch montage to ${m.title}`);
                 } else {
                     result = createActionResultFromError(
@@ -645,7 +722,7 @@ async function handleMontageAction(
                 action as MergeMontageAction;
 
             // create a new montage
-            const merged = createNewMontage(
+            createNewMontage(
                 actionContext.sessionContext.agentContext,
                 mergeMontageAction.parameters.mergeMontageTitle,
             );
@@ -656,7 +733,18 @@ async function handleMontageAction(
                     actionContext.sessionContext.agentContext.montages.find(
                         (value) => value.id === id,
                     );
-                merged.files = [...merged.files, ...montage!.files];
+                actionContext.sessionContext.agentContext.montages[
+                    getActiveMontageIndex(
+                        actionContext.sessionContext.agentContext,
+                    )
+                ].files = [
+                    ...actionContext.sessionContext.agentContext.montages[
+                        getActiveMontageIndex(
+                            actionContext.sessionContext.agentContext,
+                        )
+                    ].files,
+                    ...montage!.files,
+                ];
                 mergedCount++;
             });
 
@@ -666,7 +754,18 @@ async function handleMontageAction(
                         (value) => value.title === title,
                     );
                 if (montage !== undefined) {
-                    merged.files = [...merged.files, ...montage.files];
+                    actionContext.sessionContext.agentContext.montages[
+                        getActiveMontageIndex(
+                            actionContext.sessionContext.agentContext,
+                        )
+                    ].files = [
+                        ...actionContext.sessionContext.agentContext.montages[
+                            getActiveMontageIndex(
+                                actionContext.sessionContext.agentContext,
+                            )
+                        ].files,
+                        ...montage.files,
+                    ];
                     mergedCount++;
                 } else {
                     displayError(
@@ -676,17 +775,13 @@ async function handleMontageAction(
                 }
             });
 
-            // add the montage
-            actionContext.sessionContext.agentContext.montages.push(merged);
-
             // save montage updates
             saveMontages(actionContext.sessionContext);
 
-            // make this new montage the active montage
-            actionContext.sessionContext.agentContext.montage = merged;
-
             // send select to the visualizer/client
-            actionContext.sessionContext.agentContext.viewProcess!.send(merged);
+            actionContext.sessionContext.agentContext.viewProcess!.send(
+                getActiveMontage(actionContext.sessionContext.agentContext)!,
+            );
 
             result = createActionResultNoDisplay(
                 `Merged ${mergedCount} montages.`,
@@ -703,25 +798,38 @@ async function handleMontageAction(
  * @param context - The agent context
  */
 function updateMontageViewerState(context: MontageActionContext) {
+    const activeMontage = getActiveMontage(context);
+
     // update montage state
-    if (context.montage !== undefined) {
-        context.viewProcess?.send(context.montage!);
+    if (activeMontage !== undefined) {
+        context.viewProcess?.send(activeMontage);
     } else {
         context.viewProcess?.send({ actionName: "reset" });
     }
 }
 
+/*
+ *  Creates a new Montage and adds it to the agent context.
+ */
 function createNewMontage(
     context: MontageActionContext,
     title: string = "",
 ): PhotoMontage {
     // create a new montage
-    return {
-        id: context.montageIdSeed++,
+    const newMontage: PhotoMontage = {
+        id: getUniqueMontageId(context),
         title: title.length == 0 ? "Untitled" : title,
         files: [],
         selected: [],
     };
+
+    // add the montage to the context
+    context.montages.push(newMontage);
+
+    // make this the active montage
+    context.activeMontageId = newMontage.id;
+
+    return newMontage;
 }
 
 /**
@@ -911,24 +1019,10 @@ export async function createViewServiceHost(
     });
 }
 
+/*
+ * Writes the montages to disk.
+ */
 async function saveMontages(context: SessionContext<MontageActionContext>) {
-    // merge the "working montage" into the saved montages
-    if (context.agentContext.montage !== undefined) {
-        const index: number = context.agentContext.montages.findIndex(
-            (value, index) => {
-                return value.id === context.agentContext.montage?.id;
-            },
-        );
-
-        // if we didn't find the montage in the listed montages we add the working montage to the list
-        // or update it if we did find it
-        if (index > -1) {
-            context.agentContext.montages[index] = context.agentContext.montage;
-        } else {
-            context.agentContext.montages.push(context.agentContext.montage);
-        }
-    }
-
     // save the montages for later
     await context.sessionStorage?.write(
         montageFile,
@@ -954,7 +1048,14 @@ function startSlideShow(context: MontageActionContext) {
     mkdirSync(slideShowDir);
 
     // copy images into slideshow dir
-    context.montage?.files.forEach((file) =>
+    const montage = getActiveMontage(context);
+
+    // no montage = no slide show
+    if (montage === undefined) {
+        return;
+    }
+
+    montage.files.forEach((file) =>
         copyFileSync(file, path.join(slideShowDir, path.basename(file))),
     );
 
