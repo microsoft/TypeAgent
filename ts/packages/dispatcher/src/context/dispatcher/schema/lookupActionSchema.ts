@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type LookupAction = LookupAndAnswerAction | StartLookupAction;
+export type LookupAction = LookupAndAnswerAction;
+export type LookupActivity = StartLookupAction;
 export type DateVal = {
     day: number;
     month: number;

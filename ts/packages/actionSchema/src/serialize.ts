@@ -8,8 +8,13 @@ import {
     SchemaTypeDefinition,
 } from "./type.js";
 
+const parsedActionSchemaVersion = 1;
 export type ParsedActionSchemaJSON = {
-    entry: string;
+    version: number;
+    entry: {
+        action?: string | undefined;
+        activity?: string | undefined;
+    };
     types: Record<string, SchemaTypeDefinition>;
     actionNamespace?: boolean; // default to false
     order?: Record<string, number>;
@@ -67,10 +72,24 @@ export function toJSONParsedActionSchema(
     const definitions: Record<string, SchemaTypeDefinition> = {};
     // clone it so we can modified it.
     const entry = structuredClone(parsedActionSchema.entry);
-    definitions[entry.name] = entry;
-    collectTypes(definitions, entry.type);
+    let actionEntryName = undefined;
+    if (entry.action) {
+        actionEntryName = entry.action.name;
+        definitions[actionEntryName] = entry.action;
+        collectTypes(definitions, entry.action.type);
+    }
+    let activityEntryName = undefined;
+    if (entry.activity) {
+        activityEntryName = entry.activity.name;
+        definitions[activityEntryName] = entry.activity;
+        collectTypes(definitions, entry.activity.type);
+    }
     const result: ParsedActionSchemaJSON = {
-        entry: entry.name,
+        version: parsedActionSchemaVersion,
+        entry: {
+            action: actionEntryName,
+            activity: activityEntryName,
+        },
         types: definitions,
     };
     if (parsedActionSchema.actionNamespace) {
@@ -126,10 +145,20 @@ function resolveTypes(
 export function fromJSONParsedActionSchema(
     json: ParsedActionSchemaJSON,
 ): ParsedActionSchema {
+    if (json.version !== parsedActionSchemaVersion) {
+        throw new Error(
+            `Unsupported ParsedActionSchema version: ${json.version}`,
+        );
+    }
     for (const type of Object.values(json.types)) {
         resolveTypes(json.types, type.type);
     }
-    const entry = json.types[json.entry];
+    const entry = {
+        action: json.entry.action ? json.types[json.entry.action] : undefined,
+        activity: json.entry.activity
+            ? json.types[json.entry.activity]
+            : undefined,
+    };
     const order = json.order ? new Map(Object.entries(json.order)) : undefined;
     // paramSpecs are already stored in each action definition.
     const schemaConfig = json.actionNamespace
