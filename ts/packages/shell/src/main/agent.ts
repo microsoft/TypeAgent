@@ -27,9 +27,8 @@ import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { updateHandlerTable } from "./commands/update.js";
 import { app } from "electron";
-import { isProd } from "./index.js";
+import { isProd, portBase } from "./index.js";
 
-const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
 const markdownPortIndex = 0;
 const montagePortIndex = 1;
 const planViewerPortIndex = 2;
