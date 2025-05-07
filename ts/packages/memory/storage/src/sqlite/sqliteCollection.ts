@@ -11,7 +11,7 @@ export class SqliteCollection<T, TOrdinal extends number>
     private db: sqlite.Database;
     private count: number;
     private sql_get: sqlite.Statement;
-    private sql_push: sqlite.Statement;
+    private sql_append: sqlite.Statement;
     private sql_getAll: sqlite.Statement;
     private sql_slice: sqlite.Statement;
 
@@ -30,7 +30,7 @@ export class SqliteCollection<T, TOrdinal extends number>
         }
         this.count = this.loadCount();
         this.sql_get = this.sqlGet();
-        this.sql_push = this.sqlPush();
+        this.sql_append = this.sqlAppend();
         this.sql_getAll = this.sqlGetAll();
         this.sql_slice = this.sqlSlice();
     }
@@ -45,7 +45,7 @@ export class SqliteCollection<T, TOrdinal extends number>
 
     public append(...items: T[]): void {
         for (const item of items) {
-            this.pushObject(item);
+            this.appendObject(item);
         }
     }
 
@@ -115,11 +115,11 @@ export class SqliteCollection<T, TOrdinal extends number>
         return count;
     }
 
-    private pushObject(obj: T): void {
+    private appendObject(obj: T): void {
         const json = this.serializer
             ? this.serializer.serialize(obj)
             : JSON.stringify(obj);
-        this.sql_push.run(json);
+        this.sql_append.run(json);
         this.count++;
     }
 
@@ -150,7 +150,7 @@ export class SqliteCollection<T, TOrdinal extends number>
     private sqlGetAll() {
         return this.db.prepare(`SELECT value FROM ${this.tableName}`);
     }
-    private sqlPush() {
+    private sqlAppend() {
         return this.db.prepare(
             `INSERT INTO ${this.tableName} (value) VALUES (?)`,
         );

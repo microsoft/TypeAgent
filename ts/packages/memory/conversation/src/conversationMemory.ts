@@ -107,7 +107,7 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
 export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
-    extends Memory
+    extends Memory<ConversationMemorySettings>
     implements kp.IConversation<ConversationMessage>
 {
     public messages: kp.MessageCollection<ConversationMessage>;

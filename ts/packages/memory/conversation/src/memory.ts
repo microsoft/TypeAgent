@@ -169,9 +169,24 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 }
 
+export interface IMemory extends kp.IConversation {
+    adjustSearchText(searchText: string): string;
+}
+
+export function isMemory(
+    conversation: kp.IConversation,
+): conversation is IMemory {
+    const cm = conversation as IMemory;
+    return cm.adjustSearchText !== undefined;
+}
+
 //
 // TODO: common, boiler plate and other common memory methods go here
 //
-export class Memory {
+export abstract class Memory<
+    TSettings extends MemorySettings = MemorySettings,
+> {
     constructor() {}
+
+    public abstract get settings(): TSettings;
 }

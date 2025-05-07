@@ -15,14 +15,24 @@ import {
 import { createIndexingState, getIndexingErrors } from "./common.js";
 import { Result, success, error } from "typechat";
 
-export type EmailMemorySettings = MemorySettings;
+export interface EmailMemorySettings extends MemorySettings {
+    userProfile?: EmailUserProfile | undefined;
+}
+
+export interface EmailUserProfile {
+    userName: string;
+    emailAlias: string;
+}
 
 export interface EmailMemoryData
     extends kp.IConversationDataWithIndexes<EmailMessage> {
     indexingState: IndexingState;
 }
 
-export class EmailMemory extends Memory implements kp.IConversation {
+export class EmailMemory
+    extends Memory<EmailMemorySettings>
+    implements kp.IConversation
+{
     public messages: kp.IMessageCollection<EmailMessage>;
     public settings: EmailMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
@@ -217,7 +227,6 @@ export class EmailMemory extends Memory implements kp.IConversation {
     }
 
     private addVerbAliases() {
-        // TODO: load ths from a file
         const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
         addSynonymsFileAsAliases(
             aliases,

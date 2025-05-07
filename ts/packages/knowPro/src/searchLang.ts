@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Result, success } from "typechat";
+import { PromptSection, Result, success } from "typechat";
 import {
     IConversation,
     SearchSelectExpr,
@@ -38,6 +38,7 @@ import {
 
 /*
     APIs for searching with Natural Language
+    Work in progress; frequent improvements/tweaks
 */
 
 export async function searchConversationWithLanguage(
@@ -101,6 +102,7 @@ export async function searchQueryExprFromLanguage(
         conversation,
         translator,
         queryText,
+        options?.standardContext,
     );
     if (queryResult.success) {
         const searchQuery = queryResult.data;
@@ -120,6 +122,7 @@ export async function searchQueryExprFromLanguage(
 
 export type LanguageQueryCompileOptions = {
     exactScope?: boolean | undefined;
+    // Use to ignore noise terms etc.
     termFilter?: (text: string) => boolean;
     // Debug flags
     applyScope?: boolean | undefined;
@@ -132,6 +135,7 @@ export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions
 export interface LanguageSearchOptions extends SearchOptions {
     compileOptions: LanguageQueryCompileOptions;
     fallbackRagOptions?: LanguageSearchRagOptions | undefined;
+    standardContext?: PromptSection[] | undefined;
 }
 
 export function createLanguageSearchOptions(): LanguageSearchOptions {
