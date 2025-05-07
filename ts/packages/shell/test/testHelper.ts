@@ -155,8 +155,18 @@ export function getAppPath(): string {
  */
 export function getLaunchArgs(): string[] {
     const appPath = getAppPath();
-    // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
-    return os.platform() === "linux" ? [appPath, "--no-sandbox"] : [appPath];
+    const args = [
+        appPath,
+        "--test",
+        "--env",
+        path.resolve(appPath, "../../.env"),
+    ];
+    if (os.platform() === "linux") {
+        // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
+        args.push("--no-sandbox");
+    }
+
+    return args;
 }
 
 /**
@@ -397,7 +407,6 @@ export async function testUserRequest(
         const msg = await sendUserRequestAndWaitForCompletion(
             userRequests[i],
             mainWindow,
-            1,
         );
 
         // verify expected result
