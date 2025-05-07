@@ -1,0 +1,844 @@
+/* 
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT License.
+*/
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  color: #333;
+  background-color: #f5f5f5;
+  padding: 20px;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+  color: #2c3e50;
+}
+
+/* New Toolbar Styles */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 8px 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-button {
+  background-color: transparent;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #555;
+}
+
+.icon-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #333;
+}
+
+.icon-button i {
+  font-size: 16px;
+}
+
+.icon-button.active {
+  background-color: #333;
+  color: #fff;
+}
+
+#add-transition-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #e8f5e9;
+  color: #333;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+#add-transition-button:hover {
+  background-color: #c5e1a5;
+}
+
+#reset-button:hover {
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+/* Toggle Switch */
+.toggle-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  margin: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 24px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+  background-color: #c5e1a5;
+}
+
+input:focus + .toggle-slider {
+  box-shadow: 0 0 1px #c5e1a5;
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+.toggle-label {
+  font-size: 16px;
+  color: #555;
+}
+
+/* Node Selector */
+.node-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-selector label {
+  margin-bottom: 0;
+  color: #555;
+}
+
+select {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  min-width: 160px;
+}
+
+/* Flyout Form Styles */
+.form-flyout {
+  position: absolute;
+  top: 70px;
+  right: 20px;
+  width: 400px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  overflow: hidden;
+  display: none; /* Hidden by default */
+  border: 1px solid #ddd;
+  animation: flyout-appear 0.3s ease-out;
+}
+
+@keyframes flyout-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.form-flyout-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+.form-flyout-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #333;
+}
+
+.form-flyout form {
+  padding: 16px;
+}
+
+.form-actions {
+  margin-top: 15px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+#toggle-form-button.active {
+  background-color: #c5e1a5;
+  color: #333;
+}
+
+.form-container {
+  margin-bottom: 20px;
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  display: none; /* Hide the original form container */
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.form-group {
+  margin-bottom: 10px;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+input[type="text"] {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  display: block;
+}
+
+#cy-container {
+  width: 100%;
+  height: 600px;
+  background-color: white;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  overflow: hidden;
+}
+
+/* Tooltip styles */
+.tooltip {
+  background-color: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  position: absolute;
+  z-index: 1000;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+/* Status message styles */
+.status-message {
+  padding: 10px;
+  margin-bottom: 15px;
+  border-radius: 4px;
+  display: none;
+}
+
+.success {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+.error {
+  background-color: #ffebee;
+  color: #c62828;
+  border: 1px solid #ffcdd2;
+}
+
+.plan-title-container {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+#plan-title {
+  font-size: 1.5rem;
+  color: #333;
+  margin: 0;
+  padding: 5px 10px;
+  display: inline-block;
+}
+
+/* Responsiveness */
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .toolbar-group {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dynamic only controls */
+.dynamic-only-control {
+  display: flex; /* Will be toggled by JavaScript */
+}
+
+/* Hidden state */
+.dynamic-only-control.hidden {
+  display: none;
+}
+
+/* Styling for updated transition form with tabs */
+.form-tabs {
+  display: flex;
+  border-bottom: 1px solid #ddd;
+  margin-bottom: 15px;
+}
+
+.form-tab {
+  padding: 8px 15px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.form-tab:hover {
+  color: #333;
+}
+
+.form-tab.active {
+  color: #333;
+  border-bottom-color: #c5e1a5;
+}
+
+.transition-subform {
+  transition: all 0.3s ease;
+}
+
+.form-actions {
+  margin-top: 15px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+#set-state-button,
+#add-action-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #e8f5e9;
+  color: #333;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+#set-state-button:hover,
+#add-action-button:hover {
+  background-color: #c5e1a5;
+}
+
+.current-state-indicator {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #f0f4f8;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#active-state-name {
+  color: #1976d2;
+}
+
+/* Add these styles to your CSS file */
+
+/* Screenshot mode button */
+#screenshot-mode-button.active {
+  background-color: #e8f5e9;
+  color: #333;
+}
+
+/* Modal for screenshot uploads */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal.active {
+  display: flex;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 500px;
+  max-width: 90%;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.modal-actions button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  border: none;
+}
+
+.close-modal,
+.cancel-modal {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #777;
+  font-size: 16px;
+  transition: color 0.2s;
+}
+
+.close-modal:hover,
+.cancel-modal:hover {
+  color: #333;
+}
+
+#upload-screenshot-button {
+  background-color: #e8f5e9;
+  color: #333;
+}
+
+#upload-screenshot-button:hover {
+  background-color: #c5e1a5;
+}
+
+#upload-screenshot-button:disabled {
+  background-color: #f0f0f0;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* File upload area */
+.upload-container {
+  margin: 20px 0;
+}
+
+#screenshot-file {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.drop-area {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  padding: 25px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  min-height: 100px;
+}
+
+.drop-area:hover,
+.drop-area.dragover {
+  border-color: #c5e1a5;
+  background-color: #f9f9f9;
+}
+
+.preview-container {
+  margin-top: 15px;
+  display: none;
+  max-height: 200px;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.preview-container img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+/* Special styles for nodes with screenshots */
+.node-has-screenshot {
+  border: 2px solid #c5e1a5;
+}
+/* CSS for screenshot controls */
+.screenshot-control {
+  margin-top: 15px;
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+}
+
+.screenshot-preview {
+  margin-top: 10px;
+  padding: 5px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.screenshot-preview img {
+  max-width: 100%;
+  max-height: 150px;
+  display: block;
+  margin: 0 auto 10px;
+}
+
+.clear-screenshot {
+  display: block;
+  margin: 0 auto;
+  padding: 3px 8px;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.clear-screenshot:hover {
+  background-color: #d32f2f;
+}
+
+/* Adjust for better node display in screenshot mode */
+.screenshot-mode #cy-container {
+  background-color: #f5f5f5;
+}
+
+node.screenshot-mode {
+  width: 200px !important;
+  height: 120px !important;
+  background-size: cover !important;
+}
+
+/* Add a badge to indicate when screenshot mode is enabled */
+.screenshot-badge {
+  position: absolute;
+  top: 10px;
+  right: 60px;
+  background-color: rgba(0, 150, 136, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: none;
+  z-index: 1000;
+}
+
+.screenshot-badge.active {
+  display: block;
+}
+
+/* Custom styling for the text labels on screenshot nodes (applied via a class) */
+.cy-node-screenshot-label {
+  position: absolute;
+  top: -18px;
+  left: 0; /* Aligned with the left edge of the node */
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Remove any transform that might offset the label */
+  transform: none;
+  /* Ensure left padding is minimal to maintain alignment */
+  padding-left: 3px;
+}
+
+/* Enhanced styling for the screenshot badge */
+.screenshot-badge {
+  position: absolute;
+  top: 10px;
+  right: 60px;
+  background-color: rgba(0, 150, 136, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  display: none;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.screenshot-badge.active {
+  display: block;
+}
+
+/* Specific styling for node labels in screenshot mode */
+.cy-node.screenshot-mode {
+  background-size: cover !important;
+  background-position: center center !important;
+}
+
+/* Ensure perfect alignment within Cytoscape's rendering */
+.cy-node .nodeLabel,
+.cy-node text {
+  text-anchor: start !important; /* For SVG text elements */
+  dominant-baseline: hanging !important; /* For SVG text elements */
+}
+
+/* Make the html and body take full viewport height */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* App wrapper for full-height layout */
+.app-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Update container for flexible layout */
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Toolbar stays at the top */
+.toolbar {
+  flex: 0 0 auto;
+  padding: 10px 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  background-color: white;
+}
+
+/* Main content area will expand to fill available space */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  min-height: 0; /* Important for flex container to respect child's height */
+}
+
+/* Cytoscape container can now expand vertically */
+#cy-container {
+  flex: 1;
+  width: 100%;
+  min-height: 0; /* Important for flex container */
+  position: relative;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  transition: height 0.3s ease-in-out;
+}
+
+/* Make sure tooltips appear above the canvas */
+.tooltip {
+  z-index: 100;
+}
+
+/* Status message positioning */
+.status-message {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  min-width: 200px;
+}
+
+/* Modal and flyout positioning adjustments */
+.modal,
+.form-flyout {
+  position: fixed;
+  z-index: 2000;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-height: 700px) {
+  .toolbar {
+    padding: 5px 10px;
+  }
+
+  .toolbar h1 {
+    font-size: 1.5rem;
+    margin: 0;
+  }
+
+  .toolbar-group {
+    gap: 5px;
+  }
+
+  .icon-button {
+    padding: 5px;
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toolbar-group:last-child {
+    margin-top: 10px;
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .node-selector {
+    width: 100%;
+    margin-top: 5px;
+  }
+}
+
+/* Make sure nodes with screenshots have properly positioned labels */
+.cy-node-screenshot-label {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: none;
+  padding-left: 3px;
+}

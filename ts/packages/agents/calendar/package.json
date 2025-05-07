@@ -34,6 +34,6 @@
     "@types/debug": "^4.1.12",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
-    "typescript": "^5.4.2"
+    "typescript": "~5.4.5"
   }
 }

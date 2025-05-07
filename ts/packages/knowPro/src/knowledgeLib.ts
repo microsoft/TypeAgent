@@ -14,6 +14,7 @@ import {
     ScoredKnowledge,
     KnowledgeType,
     Knowledge,
+    ISemanticRefCollection,
 } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 
@@ -46,12 +47,14 @@ export function getTopKnowledge<T>(
 }
 
 export function* getScoredSemanticRefsFromOrdinals(
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     semanticRefMatches: ScoredSemanticRefOrdinal[],
     knowledgeType: KnowledgeType,
 ): IterableIterator<Scored<SemanticRef>> {
     for (let semanticRefMatch of semanticRefMatches) {
-        const semanticRef = semanticRefs[semanticRefMatch.semanticRefOrdinal];
+        const semanticRef = semanticRefs.get(
+            semanticRefMatch.semanticRefOrdinal,
+        );
         if (semanticRef.knowledgeType === knowledgeType) {
             yield {
                 score: semanticRefMatch.score,

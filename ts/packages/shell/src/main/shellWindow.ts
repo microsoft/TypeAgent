@@ -11,7 +11,6 @@ import {
     WebContentsView,
 } from "electron";
 import path from "node:path";
-import { is } from "@electron-toolkit/utils";
 import { WebSocketMessageV2 } from "common-utils";
 import { runDemo } from "./demo.js";
 import {
@@ -20,6 +19,8 @@ import {
     ShellWindowState,
     ShellSettingManager,
 } from "./shellSettings.js";
+import { debugShellError } from "./debug.js";
+import { isProd } from "./index.js";
 
 const userAgent =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0";
@@ -41,12 +42,12 @@ export class ShellWindow {
     private readonly settings: ShellSettingManager;
     private dispatcherReady: boolean = false;
     private retryCount: number = 0;
-
-    constructor(shellSettings: ShellSettings) {
+    private closing: boolean = false;
+    constructor(shellSettings: ShellSettings, instanceDir: string) {
         if (ShellWindow.instance !== undefined) {
             throw new Error("ShellWindow already created");
         }
-        this.settings = new ShellSettingManager(shellSettings);
+        this.settings = new ShellSettingManager(shellSettings, instanceDir);
 
         this.inlineWidth = shellSettings.window.inlineWidth;
 
@@ -89,7 +90,7 @@ export class ShellWindow {
         const contentLoadP: Promise<void>[] = [];
         // HMR for renderer base on electron-vite cli.
         // Load the remote URL for development or the local html file for production.
-        if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+        if (!isProd && process.env["ELECTRON_RENDERER_URL"]) {
             contentLoadP.push(
                 chatView.webContents.loadURL(
                     process.env["ELECTRON_RENDERER_URL"],
@@ -116,7 +117,23 @@ export class ShellWindow {
     }
 
     public async waitForContentLoaded() {
-        return Promise.all(this.contentLoadP);
+        try {
+            await Promise.all(this.contentLoadP);
+        } catch (e) {
+            if (this.closing) {
+                // Ignore errors if the window is closing
+                return;
+            }
+            throw e;
+        }
+    }
+
+    public showAndFocus() {
+        if (this.closing) {
+            return;
+        }
+        this.mainWindow.show();
+        this.mainWindow.focus();
     }
 
     private ready() {
@@ -136,7 +153,14 @@ export class ShellWindow {
 
         // open the canvas if it was previously open
         if (user.canvas) {
-            this.openInlineBrowser(new URL(user.canvas));
+            try {
+                this.openInlineBrowser(new URL(user.canvas));
+            } catch (e) {
+                // Don't care if this failed.
+                debugShellError(
+                    `Failed to open canvas URL ${user.canvas} on app start: ${e}`,
+                );
+            }
         }
 
         globalShortcut.register("Alt+Right", () => {
@@ -146,7 +170,6 @@ export class ShellWindow {
 
     private setupWebContents(webContents: WebContents) {
         this.setupZoomHandlers(webContents);
-        setupDevToolsHandlers(webContents);
         webContents.setUserAgent(userAgent);
     }
 
@@ -156,6 +179,7 @@ export class ShellWindow {
     }
 
     private cleanup() {
+        this.closing = true;
         for (const [key, handler] of this.handlers) {
             ipcMain.removeListener(key, handler);
         }
@@ -373,6 +397,7 @@ export class ShellWindow {
         // clear the canvas settings
         if (save) {
             this.targetUrl = undefined;
+            this.settings.setUserSettingValue("canvas", undefined);
         }
     }
 
@@ -580,25 +605,4 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
             return false;
         },
     );
-}
-
-function setupDevToolsHandlers(webContents: WebContents) {
-    webContents.on("before-input-event", (_event, input) => {
-        if (input.type === "keyDown") {
-            if (!is.dev) {
-                // Ignore CommandOrControl + R
-                if (input.code === "KeyR" && (input.control || input.meta))
-                    _event.preventDefault();
-            } else {
-                // Toggle devtool(F12)
-                if (input.code === "F12") {
-                    if (webContents.isDevToolsOpened()) {
-                        webContents.closeDevTools();
-                    } else {
-                        webContents.openDevTools({ mode: "undocked" });
-                    }
-                }
-            }
-        }
-    });
 }

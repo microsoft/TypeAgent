@@ -79,8 +79,6 @@ export class ChatView {
     public userGivenName: string = "";
 
     private isScrolling = false;
-    private pendingUpdateScroll = false;
-    private pendingUpdateScrollRequest = false;
     constructor(
         private idGenerator: IdGenerator,
         public agents: Map<string, string>,
@@ -90,14 +88,13 @@ export class ChatView {
         this.topDiv.className = "chat-container";
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
-        this.messageDiv.addEventListener("scroll", () => {
-            this.isScrolling = true;
-        });
         this.messageDiv.addEventListener("scrollend", () => {
-            this.isScrolling = false;
-            if (this.pendingUpdateScroll) {
-                this.pendingUpdateScroll = false;
-                this.updateScroll();
+            if (this.isScrolling) {
+                if (this.messageDiv.scrollTop === 0) {
+                    this.isScrolling = false;
+                    return;
+                }
+                this.messageDiv.scrollTo(0, 0);
             }
         });
         this.chatInput = new ChatInput(
@@ -513,24 +510,22 @@ export class ChatView {
     updateScroll() {
         // REVIEW: electron 35 (chrome 134) scrollIntoView behavior changed compared to electron 30 (chrome 124)
         // Multiple call to scrollIntoView has no effect for the latter call(?)
-        // At logic to delay scroll into view call until animation frame so that scroll event is immediately triggered
-        // and queue scroll into view when scrolling is happening.
-        if (this.isScrolling) {
-            this.pendingUpdateScroll = true;
-            return;
-        }
-        if (this.pendingUpdateScrollRequest) {
-            return;
-        }
-        this.pendingUpdateScrollRequest = true;
-        window.requestAnimationFrame(() => {
-            this.pendingUpdateScrollRequest = false;
-            if (this.messageDiv.firstElementChild) {
-                this.messageDiv.firstElementChild.scrollIntoView(false);
-            }
-        });
-    }
+        // Switch to use scrollTo instead and keep track of progress.
 
+        if (this.isScrolling) {
+            return;
+        }
+        this.isScrolling = true;
+
+        // Add a delay to allow for element animation to start
+        window.setTimeout(() => {
+            if (this.messageDiv.scrollTop === 0) {
+                this.isScrolling = false;
+                return;
+            }
+            this.messageDiv.scrollTo(0, 0);
+        }, 100);
+    }
     private ensureAgentMessage(msg: IAgentMessage, notification = false) {
         return this.getMessageGroup(msg.requestId)?.ensureAgentMessage(
             msg,

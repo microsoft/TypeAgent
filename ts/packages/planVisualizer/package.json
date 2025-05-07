@@ -1,0 +1,48 @@
+{
+  "name": "web-plan-visualizer",
+  "version": "0.0.1",
+  "description": "A dynamic web plan visualizer using Cytoscape.js",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/planVisualizer"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "npm run build:shared && npm run build:server && npm run build:client",
+    "build:client": "vite build",
+    "build:server": "tsc -p src/server/tsconfig.json",
+    "build:shared": "tsc -p src/shared/tsconfig.json",
+    "clean": "rimraf dist public/js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/server/server.js\"",
+    "dev:client": "vite",
+    "dev:server": "tsc -p src/server/tsconfig.json --watch",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "preview:client": "vite preview",
+    "start": "node --experimental-specifier-resolution=node dist/server/server.js"
+  },
+  "dependencies": {
+    "cytoscape": "^3.32.0",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^12.1.2",
+    "@types/cytoscape": "^3.21.9",
+    "@types/cytoscape-dagre": "^2.3.3",
+    "@types/dagre": "^0.7.52",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.10",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "vite": "^6.3.4"
+  }
+}

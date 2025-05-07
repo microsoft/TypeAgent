@@ -37,7 +37,7 @@ export enum CommercePageType {
     ProductDetails,
 }
 
-function getBootstrapPrefixPromptSection() {
+function getPrefixPromptSection() {
     // TODO: update this to use system role
     let prefixSection = [];
     prefixSection.push({
@@ -45,6 +45,17 @@ function getBootstrapPrefixPromptSection() {
         text: "You are a virtual assistant that can help users to complete requests by interacting with the UI of a webpage.",
     });
     return prefixSection;
+}
+
+function getSuffixPromptSection() {
+    let suffixSection = [];
+    suffixSection.push({
+        type: "text",
+        text: `
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+`,
+    });
+    return suffixSection;
 }
 
 function getHtmlPromptSection(fragments: HtmlFragments[] | undefined) {
@@ -166,7 +177,7 @@ export class ECommerceSiteAgent<T extends object> {
             fragments,
         );
         const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
         let requestSection = [];
         if (userRequest) {
             requestSection.push({
@@ -256,7 +267,7 @@ export class ECommerceSiteAgent<T extends object> {
             resultsSchema,
         );
 
-        const prefixSection = getBootstrapPrefixPromptSection();
+        const prefixSection = getPrefixPromptSection();
         const promptSections = [
             ...prefixSection,
             {
@@ -291,6 +302,62 @@ export class ECommerceSiteAgent<T extends object> {
                 role: "user",
                 content: promptSections as MultimodalPromptContent[],
             },
+        ]);
+        return response;
+    }
+
+    async getPageState(
+        userRequest?: string,
+        fragments?: HtmlFragments[],
+        screenshots?: string,
+    ) {
+        const resultsSchema = await getSchemaFileContents("pageStates.mts");
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "PageState",
+            resultsSchema,
+        );
+
+        const screenshotSection = getScreenshotPromptSection(
+            screenshots,
+            fragments,
+        );
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+        let requestSection = [];
+        if (userRequest) {
+            requestSection.push({
+                type: "text",
+                text: `
+               
+            Here is  user request
+            '''
+            ${userRequest}
+            '''
+            `,
+            });
+        }
+        const promptSections = [
+            ...prefixSection,
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+        Examine the layout information provided and determine the content of the page and the actions users can take on it.
+        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+                
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+            },
+            ...requestSection,
+            ...suffixSection,
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            { role: "user", content: JSON.stringify(promptSections) },
         ]);
         return response;
     }
@@ -370,7 +437,7 @@ ${bootstrapTranslator.validator.getSchemaText()}
                 text: `
        
     # Special Actions
-  1. If you believe the user's request has been FULLY completed, you can respond with actionName: "PlanCompleted" and no parameters.
+  1. If you believe the user's request has been FULLY completed, you can respond with actionName: "planCompleted" and no parameters.
   
   
   # Instructions
@@ -381,11 +448,11 @@ ${bootstrapTranslator.validator.getSchemaText()}
   5. Respond with ONLY a JSON object containing the actionName and parameters
   
   Always ensure that:
-- The actionName corresponds to one of the available actions or "PlanCompleted"
+- The actionName corresponds to one of the available actions or "planCompleted"
 - All required parameters for the action are provided
 - Parameter types match what's expected (string, number, boolean)
 - Your reasoning is deliberate and goal-oriented towards completing the user's request
-- You select "PlanCompleted" only when you are certain the user's request has been fully completed
+- You select "planCompleted" only when you are certain the user's request has been fully completed
 
   Think step-by-step before making your decision. Consider what has been done so far and what remains to be done to fulfill the user's request.
     `,

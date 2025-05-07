@@ -1,8 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import registerDebug from "debug";
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
 import {
     defaultUserSettings,
     ShellUserSettings,
@@ -10,7 +9,6 @@ import {
 import { cloneConfig, mergeConfig } from "agent-dispatcher/helpers/config";
 
 import { ReadonlyDeep } from "type-fest";
-import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "path";
 import {
     getObjectProperty,
@@ -20,7 +18,7 @@ import {
 
 export type { ShellUserSettings };
 
-const debugShell = registerDebug("typeagent:shell");
+import { debugShell } from "./debug.js";
 
 export type ShellWindowState = {
     x: number;
@@ -53,12 +51,25 @@ export const defaultSettings: ShellSettings = {
     user: defaultUserSettings,
 };
 
-export function getSettingsPath() {
-    return path.join(getInstanceDir(), "shellSettings.json");
+export function getShellDataDir(instanceDir: string) {
+    return path.join(instanceDir, "shell");
 }
 
-export function loadShellSettings(): ShellSettings {
-    const settingsPath = getSettingsPath();
+export function ensureShellDataDir(instanceDir: string) {
+    const shellDataDir = getShellDataDir(instanceDir);
+    if (!existsSync(shellDataDir)) {
+        debugShell(`Creating shell data directory '${shellDataDir}'`);
+        mkdirSync(shellDataDir, { recursive: true });
+    }
+    return shellDataDir;
+}
+
+export function getSettingsPath(instanceDir: string) {
+    return path.join(getShellDataDir(instanceDir), "shellSettings.json");
+}
+
+export function loadShellSettings(instanceDir: string): ShellSettings {
+    const settingsPath = getSettingsPath(instanceDir);
     debugShell(
         `Loading shell settings from '${settingsPath}'`,
         performance.now(),
@@ -79,7 +90,10 @@ export function loadShellSettings(): ShellSettings {
 }
 
 export class ShellSettingManager {
-    constructor(private readonly settings: ShellSettings) {}
+    constructor(
+        private readonly settings: ShellSettings,
+        private readonly instanceDir: string,
+    ) {}
 
     public get window(): ReadonlyDeep<ShellWindowState> {
         return this.settings.window;
@@ -92,6 +106,15 @@ export class ShellSettingManager {
     }
 
     public setUserSettingValue(name: string, value: unknown) {
+        if (typeof value === "object" && value !== null) {
+            let changed = false;
+            for (const [k, v] of Object.entries(value)) {
+                if (this.setUserSettingValue(`${name}.${k}`, v)) {
+                    changed = true;
+                }
+            }
+            return changed;
+        }
         const names = getObjectPropertyNames(this.settings.user);
         // Only allow setting leaf properties.
         if (!names.includes(name)) {
@@ -104,9 +127,23 @@ export class ShellSettingManager {
             // Coerce the type
             switch (valueType) {
                 case "string":
-                case "undefined": // undefined is assume to be string only
+                    if (value === undefined) {
+                        // use default value to determine if the value is optional
+                        const defaultValue = getObjectProperty(
+                            defaultSettings,
+                            name,
+                        );
+                        if (defaultValue !== undefined) {
+                            throw new Error(
+                                `Invalid undefined for property '${name}`,
+                            );
+                        }
+                        break;
+                    }
+                case "undefined": // only allow optional on string types
                     newValue = String(value);
                     break;
+
                 case "number":
                     newValue = Number(value);
                     if (isNaN(newValue)) {
@@ -146,7 +183,7 @@ export class ShellSettingManager {
     }
 
     public save(windowState: ShellWindowState) {
-        const settingsPath = getSettingsPath();
+        const settingsPath = getSettingsPath(this.instanceDir);
         debugShell(`Saving settings to '${settingsPath}'.`);
 
         const settings = this.settings;

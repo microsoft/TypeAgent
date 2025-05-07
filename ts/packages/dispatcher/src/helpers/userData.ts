@@ -90,6 +90,9 @@ function getInstancesDir() {
 }
 
 function ensureInstanceDirName(instanceName: string) {
+    if (instanceName === "prod") {
+        return "prod";
+    }
     const userConfig = ensureGlobalUserConfig();
     const profileName = userConfig.instances?.[instanceName];
     if (profileName) {
@@ -97,7 +100,7 @@ function ensureInstanceDirName(instanceName: string) {
     }
     const newProfileName = getUniqueFileName(
         getInstancesDir(),
-        process.env["INSTANCE_NAME"] ?? "dev",
+        process.env.INSTANCE_NAME ?? "dev",
     );
     if (userConfig.instances === undefined) {
         userConfig.instances = {};
@@ -122,7 +125,7 @@ function getInstanceDirName(instanceName: string) {
 }
 
 function getInstanceName() {
-    return process.env["INSTANCE_NAME"] ?? `dev:${getPackageFilePath(".")}`;
+    return process.env.INSTANCE_NAME ?? `dev:${getPackageFilePath(".")}`;
 }
 
 let instanceDir: string | undefined;

@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getMessageChunkBatch } from "../src/message.js";
+import { MessageOrdinal } from "../src/interfaces.js";
+import {
+    getCharCountOfMessages,
+    getCountOfMessagesInCharBudget,
+    getMessageChunkBatch,
+} from "../src/message.js";
 import { createTestMessages } from "./testMessage.js";
 
 describe("message", () => {
@@ -24,18 +29,19 @@ describe("message", () => {
         const flatBatch = batches.flat();
         expect(flatBatch).toHaveLength(messages.length);
         for (let i = 0; i < flatBatch.length; ++i) {
-            expect(flatBatch[i].messageOrdinal === messages[i].ordinal);
+            expect(flatBatch[i].messageOrdinal === messages.get(i).ordinal);
         }
     });
     test("messageBatch", () => {
-        const chunkCount = 4;
         const messageCount = 4;
-        const totalChunkCount = messageCount * chunkCount;
+        const chunkCountPerMessage = 4;
+        const totalChunkCount = messageCount * chunkCountPerMessage;
+        // Use a batch size that will cause chunks from a single message to span 2 batches
         const batchSize = 3;
         const numFullBatches = Math.floor(totalChunkCount / batchSize);
         const numBatches = numFullBatches + 1;
 
-        const messages = createTestMessages(messageCount, chunkCount);
+        const messages = createTestMessages(messageCount, chunkCountPerMessage);
         let startAt = 0;
         const batches = [...getMessageChunkBatch(messages, startAt, batchSize)];
         expect(batches).toHaveLength(numBatches);
@@ -44,5 +50,65 @@ describe("message", () => {
             expect(batches[batchOrdinal]).toHaveLength(batchSize);
         }
         expect(batches[batchOrdinal]).toHaveLength(totalChunkCount % batchSize);
+    });
+    test("messageBatch.count", () => {
+        const messageCount = 5;
+        const chunkCountPerMessage = 4;
+        // Use a batch size that will cause chunks from a single message to span 2 batches
+        const batchSize = 3;
+
+        const messages = createTestMessages(messageCount, chunkCountPerMessage);
+        let messageOrdinalStartAt = 1;
+        let messageCountToIndex = 3;
+        let expectedBatchCount = Math.ceil(
+            (messageCountToIndex * chunkCountPerMessage) / batchSize,
+        );
+        let batches = [
+            ...getMessageChunkBatch(
+                messages,
+                messageOrdinalStartAt,
+                batchSize,
+                messageCountToIndex,
+            ),
+        ];
+        expect(batches).toHaveLength(expectedBatchCount);
+        let batchOrdinal = 0;
+        for (; batchOrdinal < messageCountToIndex; ++batchOrdinal) {
+            expect(batches[batchOrdinal]).toHaveLength(batchSize);
+        }
+
+        // Now send in a count that exceeds max ordinal...
+        expectedBatchCount = Math.ceil(
+            ((messageCount - messageOrdinalStartAt) * chunkCountPerMessage) /
+                batchSize,
+        );
+        for (let i = 0; i < 3; ++i) {
+            messageCountToIndex = messageCount + i;
+            let batches = [
+                ...getMessageChunkBatch(
+                    messages,
+                    messageOrdinalStartAt,
+                    batchSize,
+                    messageCountToIndex,
+                ),
+            ];
+            expect(batches).toHaveLength(expectedBatchCount);
+        }
+    });
+    test("message.budget", () => {
+        const messages = createTestMessages(16);
+        let ordinals: MessageOrdinal[] = [];
+        for (let i = 0; i < messages.length; ++i) {
+            ordinals.push(i);
+        }
+        const expectedCount = 8;
+        const partialMessages = messages.getSlice(0, expectedCount);
+        let charBudget = getCharCountOfMessages(partialMessages);
+        let messageCount = getCountOfMessagesInCharBudget(
+            messages,
+            ordinals,
+            charBudget,
+        );
+        expect(messageCount).toEqual(expectedCount);
     });
 });

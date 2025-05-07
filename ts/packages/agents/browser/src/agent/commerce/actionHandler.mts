@@ -16,6 +16,8 @@ import {
 import { ShoppingActions } from "./schema/userActions.mjs";
 import { ShoppingPlanActions } from "./schema/planActions.mjs";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createExecutionTracker } from "../planVisualizationClient.mjs";
+import { PageState } from "./schema/pageStates.mjs";
 
 export async function handleCommerceAction(
     action: ShoppingActions,
@@ -205,27 +207,64 @@ export async function handleCommerceAction(
         let executionHistory: any[] = [];
         let lastAction: any;
 
+        const { trackState, reset } = createExecutionTracker(
+            context.sessionContext.agentContext.planVisualizationEndpoint!,
+            action.parameters.userRequest,
+        );
+
+        await reset(true);
+
         context.actionIO.appendDisplay({
             type: "text",
             speak: true,
             content: "Working on it ...",
         });
 
+        const finalStateQuery = `The user would like to meet the goal: "${action.parameters.userRequest}". 
+        Use your knowledge to predict what the state of the page should be once this goal is achieved.`;
+
+        const desiredState = await agent.getPageState(finalStateQuery);
+
+        let userRequest = action.parameters.userRequest;
+
+        if (desiredState.success) {
+            userRequest = `The user would like to meet the goal: "${action.parameters.userRequest}". 
+        When this goal is met, the page state should be: ${JSON.stringify(desiredState.data)}`;
+        }
+
         while (true) {
             const htmlFragments = await browser.getHtmlFragments();
+            const screenshot = await browser.getCurrentPageScreenshot();
+            const currentStateRequest = await agent.getPageState(
+                undefined,
+                htmlFragments,
+            );
+            let currentState = undefined;
+            if (currentStateRequest.success) {
+                currentState = currentStateRequest.data as PageState;
+
+                await trackState(
+                    currentState?.pageType ?? "",
+                    undefined,
+                    "action",
+                    screenshot,
+                );
+            }
 
             const executionHistoryText =
                 executionHistory.length > 0
                     ? executionHistory
                           .map((entry, index) => {
-                              return `Action ${index + 1}: ${entry.actionName}
-Parameters: ${JSON.stringify(entry.parameters)}`;
+                              return `
+Page State ${index + 1}: ${JSON.stringify(entry.state, null, 2)}
+Action ${index + 1}: ${entry.action.actionName}
+Parameters: ${JSON.stringify(entry.action.parameters)}`;
                           })
                           .join("\n\n")
                     : "No actions executed yet.";
 
             const response = await agent.getNextPageAction(
-                action.parameters.productQuery,
+                userRequest,
                 htmlFragments,
                 undefined,
                 executionHistoryText,
@@ -235,17 +274,20 @@ Parameters: ${JSON.stringify(entry.parameters)}`;
             if (!response.success) {
                 console.error(`Attempt to get next action failed`);
                 console.error(response.message);
+                await trackState("Failed", "", "end", screenshot);
                 break;
             }
 
             const nextAction = response.data as ShoppingPlanActions;
 
-            if (nextAction.actionName === "PlanCompleted") {
+            if (nextAction.actionName === "planCompleted") {
                 context.actionIO.appendDisplay({
                     type: "text",
                     speak: true,
                     content: "Completed ",
                 });
+
+                await trackState("Completed", "", "end", screenshot);
                 break;
             }
 
@@ -266,9 +308,21 @@ Parameters: ${JSON.stringify(entry.parameters)}`;
                 return result;
             }
 
+            await trackState(
+                currentState?.pageType ?? "",
+                nextAction.actionName,
+                "action",
+                screenshot,
+            );
+
             let actionSucceeded = await runUserAction(nextAction);
             console.log(`Succeeded?: ${actionSucceeded}`);
-            executionHistory.push(nextAction);
+
+            executionHistory.push({
+                state: currentState,
+                action: nextAction,
+            });
+
             lastAction = nextAction;
         }
     }

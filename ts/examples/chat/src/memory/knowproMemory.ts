@@ -20,7 +20,6 @@ import { ChatContext } from "./chatMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
 import {
-    addFileNameSuffixToPath,
     argDestFile,
     argSourceFile,
     argToDate,
@@ -35,9 +34,13 @@ import * as cm from "conversation-memory";
 import * as im from "image-memory";
 import {
     createIndexingEventHandler,
+    hasConversationResults,
     matchFilterToConversation,
+    memoryNameToIndexPath,
+    sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
+import { createKnowproEmailCommands } from "./knowproEmail.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -63,14 +66,15 @@ export async function createKnowproCommands(
                 knowledgeModel,
             ),
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
-        answerGenerator: new kp.AnswerGenerator({
-            languageModel: knowledgeModel,
-        }),
+        answerGenerator: new kp.AnswerGenerator(
+            kp.createAnswerGeneratorSettings(knowledgeModel),
+        ),
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproDataFrameCommands(commands, context.printer);
+    await createKnowproDataFrameCommands(context, commands);
+    await createKnowproEmailCommands(context, commands);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;
@@ -82,6 +86,7 @@ export async function createKnowproCommands(
     commands.kpAnswer = answer;
     commands.kpPodcastRag = podcastRag;
     commands.kpEntities = entities;
+    commands.kpTopics = topics;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
     commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
 
@@ -113,7 +118,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showMessagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -161,7 +166,7 @@ export async function createKnowproCommands(
         await podcastBuildIndex(namedArgs);
 
         // Save the index
-        namedArgs.filePath = sourcePathToIndexPath(
+        namedArgs.filePath = sourcePathToMemoryIndexPath(
             namedArgs.filePath,
             namedArgs.indexFilePath,
         );
@@ -212,7 +217,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, podcastLoadDef());
         let podcastFilePath = namedArgs.filePath;
         podcastFilePath ??= namedArgs.name
-            ? podcastNameToFilePath(namedArgs.name)
+            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
             : undefined;
         if (!podcastFilePath) {
             context.printer.writeError("No filepath or name provided");
@@ -254,7 +259,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, showImagesDef());
         const messages =
             namedArgs.maxMessages > 0
-                ? conversation.messages.slice(0, namedArgs.maxMessages)
+                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
                 : conversation.messages;
         context.printer.writeMessages(messages);
     }
@@ -308,7 +313,7 @@ export async function createKnowproCommands(
         await imagesBuildIndex(namedArgs);
 
         // Save the image collection index
-        namedArgs.filePath = sourcePathToIndexPath(
+        namedArgs.filePath = sourcePathToMemoryIndexPath(
             namedArgs.filePath,
             namedArgs.indexFilePath,
         );
@@ -358,7 +363,7 @@ export async function createKnowproCommands(
         const namedArgs = parseNamedArguments(args, imagesLoadDef());
         let imagesFilePath = namedArgs.filePath;
         imagesFilePath ??= namedArgs.name
-            ? podcastNameToFilePath(namedArgs.name)
+            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
             : undefined;
         if (!imagesFilePath) {
             context.printer.writeError("No filepath or name provided");
@@ -395,14 +400,6 @@ export async function createKnowproCommands(
                 endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
-                usePropertyIndex: argBool(
-                    "Use property index while searching",
-                    true,
-                ),
-                useTimestampIndex: argBool(
-                    "Use timestamp index while searching",
-                    true,
-                ),
                 distinct: argBool("Show distinct results", false),
             },
         };
@@ -450,8 +447,6 @@ export async function createKnowproCommands(
                 selectExpr.when,
                 {
                     exactMatch: namedArgs.exact,
-                    usePropertyIndex: namedArgs.usePropertyIndex,
-                    useTimestampIndex: namedArgs.useTimestampIndex,
                 },
             );
             timer.stop();
@@ -541,9 +536,11 @@ export async function createKnowproCommands(
             50,
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
-        def.options.charBudget = argNum("Maximum characters in budget", 8192);
-        def.options.exactScope = argBool("(Future) Exact scope", false);
+        def.options.charBudget = argNum("Maximum characters in budget");
+        def.options.applyScope = argBool("Apply scopes", true);
+        def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
+        def.options.distinct = argBool("Show distinct results", true);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -563,6 +560,8 @@ export async function createKnowproCommands(
             return;
         }
         let exactScope = namedArgs.exactScope;
+        let compileOptions = kp.createLanguageQueryCompileOptions();
+        compileOptions.exactScope = exactScope;
         let retried = !exactScope;
         const searchQuery = result.data;
         context.printer.writeJson(searchQuery, true);
@@ -570,7 +569,10 @@ export async function createKnowproCommands(
             const searchQueryExpressions = kp.compileSearchQuery(
                 context.conversation!,
                 searchQuery,
-                exactScope,
+                {
+                    exactScope,
+                    applyScope: namedArgs.applyScope,
+                },
             );
             let countSelectMatches = 0;
             for (const searchQueryExpr of searchQueryExpressions) {
@@ -607,7 +609,12 @@ export async function createKnowproCommands(
     function answerDefNew(): CommandMetadata {
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
-        def.options!.messages = argBool("Include messages", false);
+        def.options!.messages = argBool("Include messages", true);
+        def.options!.fallback = argBool("Fallback to rag", false);
+        def.options!.fastStop = argBool(
+            "Ignore messages if knowledge produces answers",
+            true,
+        );
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -617,12 +624,25 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, answerDefNew());
         const searchText = namedArgs.query;
-        const debugContext: kp.NaturalLanguageSearchContext = {};
+        const debugContext: kp.LanguageSearchDebugContext = {};
 
-        const options = kp.createDefaultSearchOptions();
+        const options: kp.LanguageSearchOptions = {
+            ...createSearchOptions(namedArgs),
+            compileOptions: {
+                exactScope: namedArgs.exactScope,
+                applyScope: namedArgs.applyScope,
+            },
+        };
         options.exactMatch = namedArgs.exact;
+        if (namedArgs.fallback) {
+            options.fallbackRagOptions = {
+                maxMessageMatches: options.maxMessageMatches,
+                maxCharsInBudget: options.maxMessageCharsInBudget,
+                thresholdScore: 0.8,
+            };
+        }
 
-        const searchResults = await kp.searchConversationWithNaturalLanguage(
+        const searchResults = await kp.searchConversationWithLanguage(
             context.conversation!,
             searchText,
             context.queryTranslator,
@@ -633,24 +653,34 @@ export async function createKnowproCommands(
             context.printer.writeError(searchResults.message);
             return;
         }
+        if (namedArgs.debug) {
+            context.printer.writeInColor(chalk.gray, () => {
+                context.printer.writeLine();
+                context.printer.writeNaturalLanguageContext(debugContext);
+            });
+        }
+        if (!hasConversationResults(searchResults.data)) {
+            context.printer.writeLine();
+            context.printer.writeLine("No matches");
+            return;
+        }
         for (const searchResult of searchResults.data) {
-            const answerContext = kp.answerContextFromSearchResult(
-                context.conversation!,
-                searchResult,
-            );
             if (!namedArgs.messages) {
-                answerContext.messages = undefined;
+                // Don't include raw message text... try answering only with knowledge
+                searchResult.messageMatches = [];
             }
-            if (namedArgs.debug) {
-                context.printer.writeInColor(chalk.gray, () => {
-                    context.printer.writeLine();
-                    context.printer.writeNaturalLanguageContext(debugContext);
-                    context.printer.writeAnswerContext(answerContext);
-                });
-            }
-            const answerResult = await context.answerGenerator.generateAnswer(
+            context.answerGenerator.settings.fastStop = namedArgs.fastStop;
+            const answerResult = await kp.generateAnswer(
+                context.conversation!,
+                context.answerGenerator,
                 searchText,
-                answerContext,
+                searchResult,
+                (chunk, _, result) => {
+                    if (namedArgs.debug) {
+                        context.printer.writeLine();
+                        context.printer.writeJsonInColor(chalk.gray, chunk);
+                    }
+                },
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -675,19 +705,13 @@ export async function createKnowproCommands(
             context.conversation!,
             selectExpr.searchTermGroup,
             selectExpr.when,
-            {
-                exactMatch: namedArgs.exact,
-                maxKnowledgeMatches: namedArgs.knowledgeTopK,
-                maxMessageMatches: namedArgs.messageTopK,
-                maxMessageCharsInBudget: namedArgs.charBudget,
-                usePropertyIndex: true,
-                useTimestampIndex: true,
-            },
+            createSearchOptions(namedArgs),
             searchQueryExpr.rawQuery,
         );
         if (
             searchResults === undefined ||
-            searchResults.messageMatches.length === 0
+            (searchResults.knowledgeMatches.size === 0 &&
+                searchResults.messageMatches.length === 0)
         ) {
             return false;
         }
@@ -765,8 +789,36 @@ export async function createKnowproCommands(
             await searchTerms(args);
         } else {
             if (conversation.semanticRefs !== undefined) {
-                const entities = conversation.semanticRefs?.filter(
+                const entities = kp.filterCollection(
+                    conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
+                );
+                context.printer.writeSemanticRefs(entities);
+            }
+        }
+    }
+
+    function topicsDef(): CommandMetadata {
+        return searchTermsDef(
+            "Search topics only in current conversation",
+            "topic",
+        );
+    }
+    commands.topics.metadata = topicsDef();
+    async function topics(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("topic");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const entities = kp.filterCollection(
+                    conversation.semanticRefs,
+                    (sr) => sr.knowledgeType === "topic",
                 );
                 context.printer.writeSemanticRefs(entities);
             }
@@ -802,10 +854,10 @@ export async function createKnowproCommands(
         let originalMessages = context.podcast.messages;
         try {
             if (maxMessages < messageCount) {
-                context.podcast.messages = context.podcast.messages.slice(
-                    0,
-                    maxMessages,
-                );
+                context.podcast.messages =
+                    new kp.MessageCollection<cm.PodcastMessage>(
+                        context.podcast.messages.getSlice(0, maxMessages),
+                    );
             }
             context.printer.writeLine(`Building Index`);
             let progress = new ProgressBar(context.printer, maxMessages);
@@ -949,7 +1001,7 @@ export async function createKnowproCommands(
             knowledgeType: namedArgs.ktype,
         };
         const conv: kp.IConversation | undefined =
-            context.podcast ?? context.images;
+            context.podcast ?? context.images ?? context.conversation;
         const dateRange = kp.getTimeRangeForConversation(conv!);
         if (dateRange) {
             let startDate: Date | undefined;
@@ -983,26 +1035,20 @@ export async function createKnowproCommands(
         return filter;
     }
 
+    function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
+        let options = kp.createSearchOptions();
+        options.exactMatch = namedArgs.exact;
+        options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
+        options.maxMessageMatches = namedArgs.messageTopK;
+        options.maxMessageCharsInBudget = namedArgs.charBudget;
+        return options;
+    }
+
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
             return context.conversation;
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
-    }
-
-    const IndexFileSuffix = "_index.json";
-    function sourcePathToIndexPath(
-        sourcePath: string,
-        indexFilePath?: string,
-    ): string {
-        return (
-            indexFilePath ??
-            addFileNameSuffixToPath(sourcePath, IndexFileSuffix)
-        );
-    }
-
-    function podcastNameToFilePath(podcastName: string): string {
-        return path.join(context.basePath, podcastName + IndexFileSuffix);
     }
 }

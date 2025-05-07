@@ -1,0 +1,87 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# This workflow will build and package the TypeAgent TypeScript code
+
+name: build-package-shell
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  merge_group:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: read
+  contents: read
+
+env:
+  ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+
+jobs:
+  build_package_shell:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        version: [22]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Setup Git LF
+        run: |
+          git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        continue-on-error: true
+        with:
+          filters: |
+            ts:
+              - "ts/**"
+              - ".github/workflows/build-package-shell.yml"
+      - uses: pnpm/action-setup@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+      - uses: actions/setup-node@v4
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        with:
+          node-version: ${{ matrix.version }}
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+      - name: Build
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        run: |
+          pnpm run build:shell
+      - name: Electron Builder Cache
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        uses: actions/cache@v4
+        with:
+          key: electron | ${{ runner.os }} | ${{ runner.arch }} | ${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: |
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+            ${{ env.ELECTRON_CACHE }}
+          restore-keys: |
+            electron | ${{ runner.os }} | ${{ runner.arch }}
+      - name: Package - shell
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
+        working-directory: ts
+        shell: bash
+        run: pnpm run shell:package

@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+      "target": "ES2020",
+      "module": "ESNext",
+      "moduleResolution": "Node",
+      "esModuleInterop": true,
+      "strict": true,
+      "sourceMap": true,
+      "declaration": true,
+      "removeComments": false,
+      "noImplicitAny": true,
+      "strictNullChecks": true,
+      "forceConsistentCasingInFileNames": true
+    },
+    "exclude": ["node_modules", "dist", "public/js"]
+  }

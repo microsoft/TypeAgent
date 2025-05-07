@@ -4,7 +4,7 @@
 import Database, * as sqlite from "better-sqlite3";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { removeFile } from "../fileSystem.js";
+import { removeFile, ensureDir } from "../fileSystem.js";
 
 function getDbOptions() {
     if (process?.versions?.electron !== undefined) {
@@ -26,6 +26,7 @@ export function createDatabase(
     if (createNew) {
         deleteDatabase(filePath);
     }
+    ensureDir(path.dirname(filePath));
     const db = new Database(filePath, getDbOptions());
     db.pragma("journal_mode = WAL");
     return db;

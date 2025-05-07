@@ -38,7 +38,6 @@ export class ChunkyIndex {
     indexes!: Map<IndexType, knowLib.TextIndex<string, ChunkId>>;
 
     private constructor() {
-        //this.chatModel = openai.createChatModelDefault("DocuProc");
         this.chatModel = openai.createJsonChatModel("GPT_4_O_MINI", [
             "DocuProc",
         ]);

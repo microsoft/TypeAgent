@@ -45,7 +45,7 @@ class AsyncEmbeddingModel:
         m = re.search(r"[?,]api-version=([^,]+)$", self.azure_endpoint)
         if not m:
             raise ValueError(
-                "{endpoint_name}={endpoint} doesn't end in api-version=<version>"
+                f"{endpoint_name}={self.azure_endpoint} doesn't end in api-version=<version>"
             )
         self.azure_api_version = m.group(1)
         if azure_api_key.lower() == "identity":
@@ -133,10 +133,9 @@ class AsyncEmbeddingModel:
             for i, key in enumerate(keys):
                 if embeddings[i] is None:
                     embeddings[i] = self._embedding_cache[key]
-        if len(keys):
-            return np.array(embeddings, dtype=np.float32).reshape((len(keys), -1))
-        else:
-            return np.array([], dtype=np.float32).reshape((0,))
+        return np.array(embeddings, dtype=np.float32).reshape(
+            (len(keys), self.embedding_size)
+        )
 
 
 async def main():

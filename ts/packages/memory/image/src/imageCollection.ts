@@ -1,4 +1,3 @@
-
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -19,11 +18,11 @@ import {
     readConversationDataFromFile,
     buildTransientSecondaryIndexes,
     readConversationDataFromBuffer,
-    hybrid
+    dataFrame,
+    MessageCollection,
+    SemanticRefCollection,
 } from "knowpro";
-import {
-    createEmbeddingCache,
-} from "knowledge-processor";
+import { createEmbeddingCache } from "knowledge-processor";
 import { openai, TextEmbeddingModel } from "aiclient";
 //import registerDebug from "debug";
 import sqlite from "better-sqlite3";
@@ -37,24 +36,30 @@ import path from "node:path";
 export interface ImageCollectionData
     extends IConversationDataWithIndexes<Image> {}
 
-export class ImageCollection implements IConversation, hybrid.IConversationHybrid {
+export class ImageCollection
+    implements IConversation, dataFrame.IConversationWithDataFrame
+{
+    public messages: MessageCollection<Image>;
+    public semanticRefs: SemanticRefCollection;
     public settings: ConversationSettings;
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
 
     // Data frames for typed image meta data
-    public dataFrames: hybrid.DataFrameCollection;
-    public locations: hybrid.IDataFrame;
-    public exposure: hybrid.IDataFrame;
+    public dataFrames: dataFrame.DataFrameCollection;
+    public locations: dataFrame.IDataFrame;
+    public exposure: dataFrame.IDataFrame;
 
     constructor(
         public nameTag: string = "",
-        public messages: Image[] = [],
+        messages: Image[] = [],
         public tags: string[] = [],
-        public semanticRefs: SemanticRef[] = [],
+        semanticRefs: SemanticRef[] = [],
         public dbPath: string = "",
         private db: sqlite.Database | undefined = undefined,
     ) {
+        this.messages = new MessageCollection<Image>(messages);
+        this.semanticRefs = new SemanticRefCollection(semanticRefs);
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.settings = createConversationSettings(model, embeddingSize);
         this.semanticRefIndex = new ConversationIndex();
@@ -62,7 +67,7 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
 
         // create dataFrames (tables)
         if (!dbPath) {
-            dbPath = ":memory:"
+            dbPath = ":memory:";
         }
         this.db = ms.sqlite.createDatabase(dbPath, true);
         this.locations = new GeoTable(this.db);
@@ -71,9 +76,9 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
         // create dataFrames collection
         // TODO: select other Facets/meta data fields
         // TODO: put everything in a single table?
-        this.dataFrames = new Map<string, hybrid.IDataFrame>([
+        this.dataFrames = new Map<string, dataFrame.IDataFrame>([
             [this.locations.name, this.locations],
-            [this.exposure.name, this.exposure]
+            [this.exposure.name, this.exposure],
         ]);
     }
 
@@ -83,55 +88,50 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
 
     public addMetadataToIndex() {
         if (this.semanticRefIndex) {
-            addMessageKnowledgeToSemanticRefIndex(
-                this,
-                0,
-            );
+            addMessageKnowledgeToSemanticRefIndex(this, 0);
         }
     }
 
     /*
-    * Enumerates the messages and adds them to the data frame.
-    */
+     * Enumerates the messages and adds them to the data frame.
+     */
     public addMetadataToDataFrames() {
-
         if (this.semanticRefIndex) {
-            this.messages.forEach(
-                (img: Image, index: number) => {
+            let index = 0;
+            for (const img of this.messages) {
+                const sourceRef: dataFrame.RowSourceRef = {
+                    range: {
+                        start: {
+                            messageOrdinal: index,
+                            chunkOrdinal: 0,
+                        },
+                    },
+                };
 
-                    const sourceRef: hybrid.RowSourceRef =  { 
-                        range: { 
-                            start: { 
-                                messageOrdinal: index, 
-                                chunkOrdinal: 0 
-                            } 
-                        }
-                    }
-
-                    // add image location to dataframe
-                    const latlong = img.metadata.getGeo();
-                    if (this.locations && latlong) {
-                        this.locations.addRows({ sourceRef, record: latlong});
-                    } 
-
-                    // add camera settings to dataframe
-                    if (this.exposure) {
-                        // this.exposure.addRows({ sourceRef, record: {
-                        //     ISO: img.metadata.dataFrameValues.ISO,
-                        //     aperature: img.metadata.dataFrameValues.aperature,
-                        //     shutter: img.metadata.dataFrameValues.shutter
-                        // }})
-                    } 
-
-                    // // add exposure to dataframe
-                    // const exposure = img.metadata.dataFrames[this.exposure.name];
-                    // if (this.exposure && exposure) {
-                    //     this.exposure.addRows(exposure);
-                    // } 
-
-                    // TODO: add additional meta data tables
+                // add image location to dataframe
+                const latlong = img.metadata.getGeo();
+                if (this.locations && latlong) {
+                    this.locations.addRows({ sourceRef, record: latlong });
                 }
-            )
+
+                // add camera settings to dataframe
+                if (this.exposure) {
+                    // this.exposure.addRows({ sourceRef, record: {
+                    //     ISO: img.metadata.dataFrameValues.ISO,
+                    //     aperature: img.metadata.dataFrameValues.aperature,
+                    //     shutter: img.metadata.dataFrameValues.shutter
+                    // }})
+                }
+
+                // // add exposure to dataframe
+                // const exposure = img.metadata.dataFrames[this.exposure.name];
+                // if (this.exposure && exposure) {
+                //     this.exposure.addRows(exposure);
+                // }
+
+                // TODO: add additional meta data tables
+                index++;
+            }
         }
     }
 
@@ -141,7 +141,7 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
         //const result = await buildConversationIndex(this, eventHandler);
         this.semanticRefIndex = new ConversationIndex();
         if (this.semanticRefs === undefined) {
-            this.semanticRefs = [];
+            this.semanticRefs = new SemanticRefCollection();
         }
 
         this.addMetadataToIndex();
@@ -163,9 +163,9 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
     public async serialize(): Promise<ImageCollectionData> {
         const conversationData: ImageCollectionData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -184,8 +184,8 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
             image.timestamp = m.timestamp;
             return image;
         });
-        this.messages = messages;
-        this.semanticRefs = data.semanticRefs;
+        this.messages = new MessageCollection<Image>(messages);
+        this.semanticRefs = new SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
             this.semanticRefIndex = new ConversationIndex(
@@ -201,8 +201,8 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
     }
 
     /*
-    * Writes the index & dataframes to disk
-    */
+     * Writes the index & dataframes to disk
+     */
     public async writeToFile(
         dirPath: string,
         baseFileName: string,
@@ -212,7 +212,9 @@ export class ImageCollection implements IConversation, hybrid.IConversationHybri
 
         // if we have an in-memory database we need to write it out to disk
         if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
-            this.db?.exec(`vacuum main into '${path.join(dirPath, baseFileName)}_dataFrames.sqlite'`);
+            this.db?.exec(
+                `vacuum main into '${path.join(dirPath, baseFileName)}_dataFrames.sqlite'`,
+            );
         }
     }
 

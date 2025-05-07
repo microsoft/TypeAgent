@@ -27,7 +27,7 @@ export function createSchemaAuthoringAgent(
     agent: SchemaDiscoveryAgent<SchemaDiscoveryActions>,
     context: any,
 ): AppAgent {
-    const actionUtils = setupAuthoringActions(browser, agent);
+    const actionUtils = setupAuthoringActions(browser, agent, context);
     let intentInfo: { intentJson: UserIntent; actions: any } | undefined =
         undefined;
 

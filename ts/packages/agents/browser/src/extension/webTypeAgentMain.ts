@@ -8,7 +8,7 @@ import {
 } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
 import { createAgentRpcServer } from "agent-rpc/server";
-import { isWebAgentMessageFromDispatcher } from "../../dist/common/webAgentMessageTypes.mjs";
+import { isWebAgentMessageFromDispatcher } from "../common/webAgentMessageTypes.mjs";
 import {
     WebAgentRegisterMessage,
     WebAgentRpcMessage,

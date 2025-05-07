@@ -4,6 +4,7 @@
 import {
     IConversation,
     IndexingResults,
+    ISemanticRefCollection,
     ITermToSemanticRefIndex,
     ITermToSemanticRefIndexData,
     ITermToSemanticRefIndexItem,
@@ -11,7 +12,6 @@ import {
     KnowledgeType,
     MessageOrdinal,
     ScoredSemanticRefOrdinal,
-    SemanticRef,
     SemanticRefOrdinal,
     TextIndexingResult,
     TextLocation,
@@ -29,6 +29,7 @@ import {
 } from "./secondaryIndexes.js";
 import { ConversationSettings } from "./conversation.js";
 import { getMessageChunkBatch, textRangeFromMessageChunk } from "./message.js";
+import { SemanticRefCollection } from "./storage.js";
 
 function addTermToIndex(
     index: ITermToSemanticRefIndex,
@@ -44,14 +45,14 @@ function addTermToIndex(
 
 function addEntity(
     entity: kpLib.ConcreteEntity,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     semanticRefIndex: ITermToSemanticRefIndex,
     messageOrdinal: MessageOrdinal,
     chunkOrdinal: number,
     termsAdded?: string[],
 ) {
     const semanticRefOrdinal = semanticRefs.length;
-    semanticRefs.push({
+    semanticRefs.append({
         semanticRefOrdinal,
         range: textRangeFromMessageChunk(messageOrdinal, chunkOrdinal),
         knowledgeType: "entity",
@@ -101,14 +102,14 @@ function addFacet(
 
 function addTopic(
     topic: Topic,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     semanticRefIndex: ITermToSemanticRefIndex,
     messageOrdinal: MessageOrdinal,
     chunkOrdinal: number,
     termsAdded?: string[],
 ) {
     const semanticRefOrdinal = semanticRefs.length;
-    semanticRefs.push({
+    semanticRefs.append({
         semanticRefOrdinal,
         range: textRangeFromMessageChunk(messageOrdinal, chunkOrdinal),
         knowledgeType: "topic",
@@ -124,14 +125,14 @@ function addTopic(
 
 function addAction(
     action: kpLib.Action,
-    semanticRefs: SemanticRef[],
+    semanticRefs: ISemanticRefCollection,
     semanticRefIndex: ITermToSemanticRefIndex,
     messageOrdinal: MessageOrdinal,
     chunkOrdinal: number,
     termsAdded?: string[],
 ) {
     const semanticRefOrdinal = semanticRefs.length;
-    semanticRefs.push({
+    semanticRefs.append({
         semanticRefOrdinal,
         range: textRangeFromMessageChunk(messageOrdinal, chunkOrdinal),
         knowledgeType: "action",
@@ -292,8 +293,9 @@ async function addBatchToSemanticRefIndex(
     let indexingResult: TextIndexingResult = {};
 
     const textBatch = batch.map((tl) => {
-        const text =
-            messages[tl.messageOrdinal].textChunks[tl.chunkOrdinal ?? 0];
+        const text = messages.get(tl.messageOrdinal).textChunks[
+            tl.chunkOrdinal ?? 0
+        ];
         return text.trim();
     });
     const knowledgeResults = await extractKnowledgeFromTextBatch(
@@ -332,7 +334,7 @@ function beginIndexing(conversation: IConversation) {
         conversation.semanticRefIndex = new ConversationIndex();
     }
     if (conversation.semanticRefs === undefined) {
-        conversation.semanticRefs = [];
+        conversation.semanticRefs = new SemanticRefCollection();
     }
 }
 
@@ -505,7 +507,7 @@ export async function addToConversationIndex(
         indexingResult.semanticRefs = await addToSemanticRefIndex(
             conversation,
             settings.semanticRefIndexSettings,
-            semanticRefOrdinalStartAt,
+            messageOrdinalStartAt,
             eventHandler,
             termsAdded,
         );
@@ -607,7 +609,7 @@ export function addMessageKnowledgeToSemanticRefIndex(
         messageOrdinal < messages.length;
         messageOrdinal++
     ) {
-        const msg = messages[messageOrdinal];
+        const msg = messages.get(messageOrdinal);
         const chunkOrdinal = 0;
         let knowledge = msg.getKnowledge();
         if (knowledge !== undefined) {

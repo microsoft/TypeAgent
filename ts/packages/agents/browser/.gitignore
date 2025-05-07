@@ -1,4 +1,5 @@
 build/
+deploy/
 dist/
 out/
 node_modules/

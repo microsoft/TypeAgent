@@ -59,6 +59,7 @@ export type BrowserActionContext = {
     browserConnector: BrowserConnector | undefined;
     browserProcess: ChildProcess | undefined;
     tabTitleIndex: TabTitleIndex | undefined;
+    planVisualizationEndpoint: string | undefined;
 };
 
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
@@ -69,8 +70,13 @@ async function initializeBrowserContext(): Promise<BrowserActionContext> {
         browserConnector: undefined,
         browserProcess: undefined,
         tabTitleIndex: undefined,
+        planVisualizationEndpoint: undefined,
     };
 }
+
+const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const planViewerPortIndex = 2;
+const port = portBase + planViewerPortIndex;
 
 async function updateBrowserContext(
     enable: boolean,
@@ -84,6 +90,10 @@ async function updateBrowserContext(
     if (enable) {
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
+        }
+
+        if (!context.agentContext.planVisualizationEndpoint) {
+            context.agentContext.planVisualizationEndpoint = `http://localhost:${port}`;
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {

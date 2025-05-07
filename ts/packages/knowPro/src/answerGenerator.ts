@@ -5,12 +5,17 @@ import { ChatModel, openai } from "aiclient";
 import { conversation as kpLib } from "knowledge-processor";
 import {
     createJsonTranslator,
+    error,
+    PromptSection,
     Result,
+    success,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
 } from "typechat";
 import * as answerSchema from "./answerResponseSchema.js";
-import { loadSchema } from "typeagent";
+import * as contextSchema from "./answerContextSchema.js";
+
+import { asyncArray, loadSchema, rewriteText } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
     IConversation,
@@ -30,12 +35,12 @@ import {
     getEnclosingMetadataForMessages,
     getMessagesFromScoredOrdinals,
 } from "./message.js";
-import {
-    AnswerContext,
-    RelevantKnowledge,
-    RelevantMessage,
-} from "./answerContextSchema.js";
 import { ConversationSearchResult } from "./search.js";
+import {
+    AnswerContextChunkBuilder,
+    answerContextToString,
+} from "./answerContext.js";
+import { flattenResultsArray, trimStringLength } from "./common.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -57,15 +62,157 @@ export function createAnswerTranslator(
 }
 
 export interface IAnswerGenerator {
+    readonly settings: AnswerGeneratorSettings;
     generateAnswer(
         question: string,
-        context: AnswerContext,
+        context: contextSchema.AnswerContext | string,
+    ): Promise<Result<answerSchema.AnswerResponse>>;
+    combinePartialAnswers(
+        question: string,
+        responses: answerSchema.AnswerResponse[],
     ): Promise<Result<answerSchema.AnswerResponse>>;
 }
 
 export type AnswerGeneratorSettings = {
-    languageModel: ChatModel;
+    /**
+     * Model used to generate answers from context
+     */
+    answerGeneratorModel: ChatModel;
+    /**
+     * The Answer Generator can combine multiple partial answers which
+     * can be produced by sending chunks of the relevant context to the model in parallel
+     * These partial answers may be combined using the 'combinePartialAnswers' call.
+     * Implementations use the "rewriteModel"
+     */
+    answerCombinerModel: ChatModel;
+    /**
+     * Maximum number of characters allowed in the context for any given call
+     */
+    maxCharsInBudget: number;
+    /**
+     * When chunking, produce answer in parallel
+     */
+    concurrency: number;
+    /**
+     * Stop processing if answer found using just knowledge
+     */
+    fastStop: boolean;
 };
+
+/**
+ * Generate a natural language answer for question about a queusing the provided search results as context
+ * If the context exceeds the generator.setting.maxCharsInBudget, will break up the context into
+ * chunks, run them in parallel, and then merge the answers found in individual chunks
+ * @param conversation conversation about which this is a question
+ * @param generator answer generator to use
+ * @param question question that was asked
+ * @param searchResult the results of running a search query for the question on the conversation
+ * @param progress Progress callback
+ * @returns Answers
+ */
+export async function generateAnswer(
+    conversation: IConversation,
+    generator: IAnswerGenerator,
+    question: string,
+    searchResult: ConversationSearchResult,
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse>
+    >,
+): Promise<Result<answerSchema.AnswerResponse>> {
+    const context = answerContextFromSearchResult(conversation, searchResult);
+    const contextContent = answerContextToString(context);
+    if (contextContent.length <= generator.settings.maxCharsInBudget) {
+        // Context is small enough
+        return generator.generateAnswer(question, contextContent);
+    }
+    //
+    // Use chunks
+    //
+    const chunks = splitContextIntoChunks(
+        context,
+        generator.settings.maxCharsInBudget,
+    );
+    const chunkResponses = await generateAnswerInChunks(
+        generator,
+        question,
+        chunks,
+        progress,
+    );
+    if (!chunkResponses.success) {
+        return chunkResponses;
+    }
+    // We have partial answers from each chunk... merge and rewrite them into a whole
+    const answer = await generator.combinePartialAnswers(
+        question,
+        chunkResponses.data,
+    );
+    return answer;
+}
+
+export async function generateAnswerInChunks(
+    answerGenerator: IAnswerGenerator,
+    question: string,
+    chunks: contextSchema.AnswerContext[],
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse>
+    >,
+): Promise<Result<answerSchema.AnswerResponse[]>> {
+    if (chunks.length === 0) {
+        return success([]);
+    }
+    if (chunks.length === 1) {
+        return runSingleChunk(chunks[0]);
+    }
+
+    const structuredChunks = chunks.filter(
+        (c) => c.messages === undefined || c.messages.length === 0,
+    );
+    let chunkAnswers: answerSchema.AnswerResponse[] = [];
+    const structuredAnswers = await runGenerateAnswers(
+        answerGenerator,
+        question,
+        structuredChunks,
+        progress,
+    );
+    if (!structuredAnswers.success) {
+        return structuredAnswers;
+    }
+    chunkAnswers.push(...structuredAnswers.data);
+
+    if (!hasAnswer(chunkAnswers) || !answerGenerator.settings.fastStop) {
+        // Generate partial answers from each message chunk
+        const messageChunks = chunks.filter(
+            (c) => c.messages !== undefined && c.messages.length > 0,
+        );
+        const messageAnswers = await runGenerateAnswers(
+            answerGenerator,
+            question,
+            messageChunks,
+        );
+        if (!messageAnswers.success) {
+            return messageAnswers;
+        }
+        chunkAnswers.push(...messageAnswers.data);
+    }
+
+    return success(chunkAnswers);
+
+    async function runSingleChunk(
+        chunk: contextSchema.AnswerContext,
+    ): Promise<Result<answerSchema.AnswerResponse[]>> {
+        const response = await answerGenerator.generateAnswer(question, chunk);
+        if (progress) {
+            progress(chunks[0], 0, response);
+        }
+        return response.success ? success([response.data]) : response;
+    }
+
+    function hasAnswer(answers: answerSchema.AnswerResponse[]): boolean {
+        return answers.some((a) => a.type === "Answered");
+    }
+}
 
 export class AnswerGenerator implements IAnswerGenerator {
     public settings: AnswerGeneratorSettings;
@@ -74,10 +221,9 @@ export class AnswerGenerator implements IAnswerGenerator {
     private contextTypeName: string;
 
     constructor(settings?: AnswerGeneratorSettings) {
-        settings ??= createAnswerGeneratorSettings();
-        this.settings = settings;
+        this.settings = settings ?? createAnswerGeneratorSettings();
         this.answerTranslator = createAnswerTranslator(
-            this.settings.languageModel,
+            this.settings.answerGeneratorModel,
         );
         this.contextSchema = loadSchema(
             ["dateTimeSchema.ts", "answerContextSchema.ts"],
@@ -88,22 +234,86 @@ export class AnswerGenerator implements IAnswerGenerator {
 
     public generateAnswer(
         question: string,
-        context: AnswerContext,
+        context: contextSchema.AnswerContext | string,
     ): Promise<Result<kpLib.AnswerResponse>> {
-        const contextContent = answerContextToString(context);
-        const contextPrompt = createContextPrompt(
-            this.contextTypeName,
-            this.contextSchema,
-            contextContent,
-        );
+        let contextContent =
+            typeof context === "string"
+                ? context
+                : answerContextToString(context);
+        if (contextContent.length > this.settings.maxCharsInBudget) {
+            contextContent = trimStringLength(
+                contextContent,
+                this.settings.maxCharsInBudget,
+            );
+        }
+
+        const contextPrompt = [
+            createContextPrompt(
+                this.contextTypeName,
+                this.contextSchema,
+                contextContent,
+            ),
+        ];
         const questionPrompt = createQuestionPrompt(question);
         return this.answerTranslator.translate(questionPrompt, contextPrompt);
     }
+
+    public async combinePartialAnswers(
+        question: string,
+        partialAnswers: (answerSchema.AnswerResponse | undefined)[],
+    ): Promise<Result<answerSchema.AnswerResponse>> {
+        let answer = "";
+        let whyNoAnswer: string | undefined;
+        let answerCount = 0;
+        for (const partialAnswer of partialAnswers) {
+            if (partialAnswer) {
+                if (partialAnswer.type === "Answered") {
+                    answerCount++;
+                    answer += partialAnswer.answer + "\n";
+                } else {
+                    whyNoAnswer ??= partialAnswer.whyNoAnswer;
+                }
+            }
+        }
+        if (answer.length > 0) {
+            if (answerCount > 1) {
+                answer = trimStringLength(
+                    answer,
+                    this.settings.maxCharsInBudget,
+                );
+                const rewrittenAnswer = await rewriteText(
+                    this.settings.answerCombinerModel,
+                    answer,
+                    question,
+                );
+                if (!rewrittenAnswer) {
+                    return error("rewriteAnswer failed");
+                }
+                answer = rewrittenAnswer;
+            }
+            return success({
+                type: "Answered",
+                answer,
+            });
+        }
+        whyNoAnswer ??= "";
+        return success({
+            type: "NoAnswer",
+            whyNoAnswer,
+        });
+    }
 }
 
-export function createAnswerGeneratorSettings(): AnswerGeneratorSettings {
+export function createAnswerGeneratorSettings(
+    model?: ChatModel,
+): AnswerGeneratorSettings {
     return {
-        languageModel: openai.createChatModelDefault("answerGenerator"),
+        answerGeneratorModel:
+            model ?? openai.createJsonChatModel(undefined, ["answerGenerator"]),
+        answerCombinerModel: openai.createChatModel(),
+        maxCharsInBudget: 4096 * 4, // 4096 tokens * 4 chars per token,
+        concurrency: 2,
+        fastStop: true,
     };
 }
 
@@ -111,7 +321,7 @@ export function answerContextFromSearchResult(
     conversation: IConversation,
     searchResult: ConversationSearchResult,
 ) {
-    let context: AnswerContext = {};
+    let context: contextSchema.AnswerContext = {};
     for (const knowledgeType of searchResult.knowledgeMatches.keys()) {
         switch (knowledgeType) {
             default:
@@ -142,14 +352,14 @@ export function answerContextFromSearchResult(
 export function getRelevantTopicsForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
-): RelevantKnowledge[] {
+): contextSchema.RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
         searchResult.semanticRefMatches,
         "topic",
     );
     const mergedTopics = mergeScoredTopics(scoredEntities, true);
-    const relevantTopics: RelevantKnowledge[] = [];
+    const relevantTopics: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of mergedTopics.values()) {
         let mergedTopic = scoredValue.item;
         const relevantTopic = createRelevantKnowledge(
@@ -165,14 +375,14 @@ export function getRelevantTopicsForAnswer(
 export function getRelevantEntitiesForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
-): RelevantKnowledge[] {
+): contextSchema.RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
         searchResult.semanticRefMatches,
         "entity",
     );
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
-    const relevantEntities: RelevantKnowledge[] = [];
+    const relevantEntities: contextSchema.RelevantKnowledge[] = [];
     for (const scoredValue of mergedEntities.values()) {
         let mergedEntity = scoredValue.item;
         const relevantEntity = createRelevantKnowledge(
@@ -188,14 +398,20 @@ export function getRelevantEntitiesForAnswer(
 export function getRelevantMessagesForAnswer(
     conversation: IConversation,
     messageOrdinals: ScoredMessageOrdinal[],
-): RelevantMessage[] {
-    const relevantMessages: RelevantMessage[] = [];
+): contextSchema.RelevantMessage[] {
+    const relevantMessages: contextSchema.RelevantMessage[] = [];
     for (const message of getMessagesFromScoredOrdinals(
         conversation.messages,
         messageOrdinals,
     )) {
-        const relevantMessage: RelevantMessage = {
-            message: message.textChunks.join("\n"),
+        if (message.textChunks.length === 0) {
+            continue;
+        }
+        const relevantMessage: contextSchema.RelevantMessage = {
+            messageText:
+                message.textChunks.length === 1
+                    ? message.textChunks[0]
+                    : message.textChunks,
         };
         const meta = message.metadata;
         if (meta) {
@@ -210,12 +426,53 @@ export function getRelevantMessagesForAnswer(
     return relevantMessages;
 }
 
+export function splitContextIntoChunks(
+    context: contextSchema.AnswerContext,
+    maxCharsPerChunk: number,
+): contextSchema.AnswerContext[] {
+    const chunkBuilder = new AnswerContextChunkBuilder(
+        context,
+        maxCharsPerChunk,
+    );
+    return [...chunkBuilder.getChunks()];
+}
+
+async function runGenerateAnswers(
+    answerGenerator: IAnswerGenerator,
+    question: string,
+    chunks: contextSchema.AnswerContext[],
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse>
+    >,
+): Promise<Result<answerSchema.AnswerResponse[]>> {
+    if (chunks.length === 0) {
+        return success([]);
+    }
+    const results = await asyncArray.mapAsync(
+        chunks,
+        answerGenerator.settings.concurrency,
+        (chunk) => answerGenerator.generateAnswer(question, chunk),
+        (context, index, response) => {
+            if (progress) {
+                progress(context, index, response);
+            }
+            if (!response.success) {
+                return false;
+            }
+            // Return false if mapAsync should stop
+            return response && response.data.type !== "Answered";
+        },
+    );
+    return flattenResultsArray(results);
+}
+
 function createRelevantKnowledge(
     conversation: IConversation,
     knowledge: Knowledge,
     sourceMessageOrdinals?: Iterable<MessageOrdinal>,
-): RelevantKnowledge {
-    let relevantKnowledge: RelevantKnowledge = {
+): contextSchema.RelevantKnowledge {
+    let relevantKnowledge: contextSchema.RelevantKnowledge = {
         knowledge,
     };
     if (sourceMessageOrdinals) {
@@ -247,6 +504,7 @@ function createQuestionPrompt(question: string): string {
         "Use the name and type of the provided entities to select those highly relevant to answering the question.",
         "List ALL entities if query intent implies that.",
         "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
+        "Include direct quotes where suitable but otherwise answer in your own words.",
     ];
     return prompt.join("\n");
 }
@@ -255,47 +513,15 @@ function createContextPrompt(
     typeName: string,
     schema: string,
     context: string,
-): string {
-    let prompt =
+): PromptSection {
+    let content =
         `Context relevant for answering the question is a JSON objects of type ${typeName} according to the following TypeScript definitions :\n` +
         `\`\`\`\n${schema}\`\`\`\n` +
         `[ANSWER CONTEXT]\n` +
         `"""\n${context}\n"""\n`;
 
-    return prompt;
-}
-
-export function answerContextToString(
-    context: AnswerContext,
-    spaces?: number,
-): string {
-    let json = "{\n";
-    let propertyCount = 0;
-    if (context.entities && context.entities.length > 0) {
-        json += add("entities", context.entities);
-    }
-    if (context.topics && context.topics.length > 0) {
-        json += add("topics", context.topics);
-    }
-    if (context.messages && context.messages.length > 0) {
-        json += add("messages", context.messages);
-    }
-    json += "\n}";
-    return json;
-
-    function add(name: string, value: any): string {
-        let text = "";
-        if (propertyCount > 0) {
-            text += ",\n";
-        }
-        const json = JSON.stringify(
-            value,
-            (key, value) =>
-                value instanceof Date ? value.toISOString() : value,
-            spaces,
-        );
-        text += `"${name}": ${json}`;
-        propertyCount++;
-        return text;
-    }
+    return {
+        role: "user",
+        content,
+    };
 }

@@ -56,7 +56,7 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeScoredMessages(
         messageIndexMatches: kp.ScoredMessageOrdinal[],
-        messages: kp.IMessage[],
+        messages: kp.IMessageCollection,
         maxToDisplay: number,
     ) {
         if (this.sortAsc) {
@@ -83,9 +83,9 @@ export class KnowProPrinter extends ChatPrinter {
         matchNumber: number,
         totalMatches: number,
         scoredMessage: kp.ScoredMessageOrdinal,
-        messages: kp.IMessage[],
+        messages: kp.IMessageCollection,
     ) {
-        const message = messages[scoredMessage.messageOrdinal];
+        const message = messages.get(scoredMessage.messageOrdinal);
         this.writeInColor(
             chalk.green,
             `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageOrdinal}> [${scoredMessage.score}]`,
@@ -169,7 +169,7 @@ export class KnowProPrinter extends ChatPrinter {
 
     public writeScoredSemanticRefs(
         semanticRefMatches: kp.ScoredSemanticRefOrdinal[],
-        semanticRefs: kp.SemanticRef[],
+        semanticRefs: kp.ISemanticRefCollection,
         maxToDisplay: number,
     ) {
         if (this.sortAsc) {
@@ -218,9 +218,9 @@ export class KnowProPrinter extends ChatPrinter {
         matchNumber: number,
         totalMatches: number,
         scoredRef: kp.ScoredSemanticRefOrdinal,
-        semanticRefs: kp.SemanticRef[],
+        semanticRefs: kp.ISemanticRefCollection,
     ) {
-        const semanticRef = semanticRefs[scoredRef.semanticRefOrdinal];
+        const semanticRef = semanticRefs.get(scoredRef.semanticRefOrdinal);
         this.writeInColor(
             chalk.green,
             `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
@@ -258,6 +258,12 @@ export class KnowProPrinter extends ChatPrinter {
         maxToDisplay: number,
         distinct: boolean = false,
     ) {
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "tag",
+            results,
+            maxToDisplay,
+        );
         if (distinct) {
             this.writeResultDistinct(
                 conversation,
@@ -265,6 +271,21 @@ export class KnowProPrinter extends ChatPrinter {
                 results,
                 maxToDisplay,
             );
+        } else {
+            this.writeKnowledgeSearchResult(
+                conversation,
+                "topic",
+                results,
+                maxToDisplay,
+            );
+        }
+        this.writeKnowledgeSearchResult(
+            conversation,
+            "action",
+            results,
+            maxToDisplay,
+        );
+        if (distinct) {
             this.writeResultDistinct(
                 conversation,
                 "entity",
@@ -272,24 +293,6 @@ export class KnowProPrinter extends ChatPrinter {
                 maxToDisplay,
             );
         } else {
-            this.writeKnowledgeSearchResult(
-                conversation,
-                "tag",
-                results,
-                maxToDisplay,
-            );
-            this.writeKnowledgeSearchResult(
-                conversation,
-                "topic",
-                results,
-                maxToDisplay,
-            );
-            this.writeKnowledgeSearchResult(
-                conversation,
-                "action",
-                results,
-                maxToDisplay,
-            );
             this.writeKnowledgeSearchResult(
                 conversation,
                 "entity",
@@ -326,7 +329,7 @@ export class KnowProPrinter extends ChatPrinter {
         maxToDisplay: number,
         distinct: boolean,
     ) {
-        if (searchResult && searchResult.messageMatches.length > 0) {
+        if (searchResult && kp.hasConversationResult(searchResult)) {
             if (showKnowledge) {
                 this.writeKnowledgeSearchResults(
                     conversation,
@@ -511,9 +514,7 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeNaturalLanguageContext(
-        context: kp.NaturalLanguageSearchContext,
-    ) {
+    public writeNaturalLanguageContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
             this.writeJson(context.searchQuery);

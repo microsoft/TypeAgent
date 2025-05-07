@@ -52,18 +52,10 @@ export type ClarifyBuyAction = {
 
 // IMPORTANT: Mark the plan as completed only after you are sure that the user objective has been FULLY met.
 export type PlanCompleted = {
-    actionName: "PlanCompleted";
+    actionName: "planCompleted";
 };
 
-// Ask the user a yes/no question
-export type AskForClarification = {
-    actionName: "askForClarification";
-    parameters: {
-        // The question to ask the user
-        question: string;
-    };
-};
-
+// IMPORTANT: the actionName values for these types are case-sensitive, so selected actions should match case exactly.
 export type ShoppingPlanActions =
     | AddToCart
     | ViewShoppingCart

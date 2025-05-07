@@ -12,12 +12,12 @@ import { MessageTextIndexSettings } from "./messageIndex.js";
 import { RelatedTermIndexSettings } from "./relatedTermsIndex.js";
 import { SemanticRefIndexSettings } from "./conversationIndex.js";
 
-export type ConversationSettings = {
+export interface ConversationSettings {
     relatedTermIndexSettings: RelatedTermIndexSettings;
     threadSettings: TextEmbeddingIndexSettings;
     messageTextIndexSettings: MessageTextIndexSettings;
     semanticRefIndexSettings: SemanticRefIndexSettings;
-};
+}
 
 export function createConversationSettings(
     embeddingModel?: TextEmbeddingModel | undefined,
@@ -65,8 +65,8 @@ export function getTimeRangeForConversation(
 ): DateRange | undefined {
     const messages = conversation.messages;
     if (messages.length > 0) {
-        const start = messages[0].timestamp;
-        const end = messages[messages.length - 1].timestamp;
+        const start = messages.get(0).timestamp;
+        const end = messages.get(messages.length - 1).timestamp;
         if (start !== undefined) {
             return {
                 start: new Date(start),

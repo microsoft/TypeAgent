@@ -23,6 +23,8 @@ import {
     ConversationSecondaryIndexes,
     buildTransientSecondaryIndexes,
 } from "./secondaryIndexes.js";
+import { error, PromptSection, Result, success } from "typechat";
+import { MessageCollection, SemanticRefCollection } from "./storage.js";
 
 export type Scored<T = any> = {
     item: T;
@@ -109,6 +111,53 @@ export function isSearchTermWildcard(searchTerm: SearchTerm): boolean {
     return searchTerm.term.text === "*";
 }
 
+export function isPromptSection(value: any): value is PromptSection {
+    const ps = value as PromptSection;
+    return ps.role && ps.content !== undefined;
+}
+
+export function flattenResultsArray<T>(results: Result<T>[]): Result<T[]> {
+    let data: T[] = [];
+    for (const result of results) {
+        if (!result.success) {
+            return error(result.message);
+        }
+        data.push(result.data);
+    }
+    return success(data);
+}
+
+//
+// String processing
+//
+
+export function trimStringLength(
+    text: string,
+    maxLength: number | undefined,
+    trimWhitespace: boolean = true,
+): string {
+    text = trimWhitespace ? text.trim() : text;
+    if (maxLength && text.length > maxLength) {
+        return text.slice(0, maxLength);
+    }
+    return text;
+}
+
+/**
+ * Ensures that dates are serialized in ISO format, which is more compact
+ * @param value
+ * @param spaces
+ * @returns
+ */
+export function jsonStringifyForPrompt(value: any, spaces?: number): string {
+    const json = JSON.stringify(
+        value,
+        (key, value) => (value instanceof Date ? value.toISOString() : value),
+        spaces,
+    );
+    return json;
+}
+
 export async function createConversationFromData(
     data: IConversationDataWithIndexes,
     conversationSettings: ConversationSettings,
@@ -116,8 +165,8 @@ export async function createConversationFromData(
     const conversation: IConversation = {
         nameTag: data.nameTag,
         tags: data.tags,
-        messages: data.messages,
-        semanticRefs: data.semanticRefs,
+        messages: new MessageCollection(data.messages),
+        semanticRefs: new SemanticRefCollection(data.semanticRefs),
         semanticRefIndex: data.semanticIndexData
             ? new ConversationIndex(data.semanticIndexData)
             : undefined,
@@ -137,3 +186,8 @@ export async function createConversationFromData(
     await buildTransientSecondaryIndexes(conversation, conversationSettings);
     return conversation;
 }
+
+export type Batch<T = any> = {
+    startAt: number;
+    value: T[];
+};

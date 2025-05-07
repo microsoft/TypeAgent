@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import dotenv from "dotenv";
 import {
     ipcMain,
     app,
@@ -10,11 +9,10 @@ import {
     session,
     WebContentsView,
     shell,
+    Notification,
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import { electronApp, optimizer } from "@electron-toolkit/utils";
-import registerDebug from "debug";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     getDefaultAppAgentProviders,
@@ -22,12 +20,12 @@ import {
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 import {
-    getSettingsPath,
+    ensureShellDataDir,
+    getShellDataDir,
     loadShellSettings,
     ShellSettings,
     ShellUserSettings,
 } from "./shellSettings.js";
-import { unlinkSync } from "fs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createShellAgentProvider } from "./agent.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
@@ -44,61 +42,97 @@ import { createClientIORpcClient } from "agent-dispatcher/rpc/clientio/client";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { ShellWindow } from "./shellWindow.js";
 
-const debugShell = registerDebug("typeagent:shell");
-const debugShellError = registerDebug("typeagent:shell:error");
+import { debugShell, debugShellError } from "./debug.js";
+import { loadKeys, loadKeysFromEnvFile } from "./keys.js";
+import { parseShellCommandLine } from "./args.js";
+import {
+    hasPendingUpdate,
+    setPendingUpdateCallback,
+    setUpdateConfigPath,
+    startBackgroundUpdateCheck,
+} from "./commands/update.js";
 
-function getDotEnvPath() {
-    const userDotEnv = path.join(app.getPath("userData"), ".env");
-    if (fs.existsSync(userDotEnv)) {
-        return userDotEnv;
+debugShell("App name", app.getName());
+debugShell("App version", app.getVersion());
+
+if (process.platform === "darwin") {
+    if (fs.existsSync("/opt/homebrew/bin/az")) {
+        // Set the PATH to include homebrew so it have access to Azure CLI
+        process.env.PATH = `/opt/homebrew/bin:${process.env.PATH}`;
     }
-    const appDotEnv = path.join(app.getAppPath(), ".env");
-    if (fs.existsSync(appDotEnv)) {
-        return appDotEnv;
-    }
-    if (import.meta.env.MODE === "development") {
-        const devDotEnv = path.join(app.getAppPath(), "../../.env");
-        if (fs.existsSync(devDotEnv)) {
-            return devDotEnv;
-        }
-    }
-    return undefined;
 }
-
-const envPath = getDotEnvPath();
-if (envPath) {
-    debugShell("Loading environment variables from", envPath);
-    dotenv.config({ path: envPath });
-}
-
 // Make sure we have chalk colors
 process.env.FORCE_COLOR = "true";
 
-// do we need to reset shell settings?
-process.argv.forEach((arg) => {
-    const settingsPath = getSettingsPath();
-    if (arg.toLowerCase() == "--setup" && existsSync(settingsPath)) {
-        unlinkSync(settingsPath);
-    }
-});
+const parsedArgs = parseShellCommandLine();
+export const isProd = parsedArgs.prod ?? app.isPackaged;
+debugShell("Is prod", isProd);
 
-export function runningTests(): boolean {
-    return (
-        process.env["INSTANCE_NAME"] !== undefined &&
-        process.env["INSTANCE_NAME"].startsWith("test_") === true
+// Use single instance lock in prod to make the existing instance focus
+// Allow multiple instance for dev build, with lock for data directory "instanceDir".
+if (isProd) {
+    if (!app.requestSingleInstanceLock()) {
+        debugShellError("Another instance is running");
+        process.exit(0);
+    }
+} else {
+    // dev mode
+    if (process.env.PORT === undefined) {
+        process.env.PORT = "9050";
+    }
+}
+
+// Set app user model id for windows
+if (process.platform === "win32") {
+    app.setAppUserModelId(
+        isProd ? "Microsoft.TypeAgentShell" : process.execPath,
     );
+}
+
+const instanceDir =
+    parsedArgs.data ??
+    (app.isPackaged
+        ? path.join(app.getPath("userData"), "data")
+        : getInstanceDir());
+
+debugShell("Instance Dir", instanceDir);
+
+if (parsedArgs.clean) {
+    // Delete all files in the instance dir.
+    if (fs.existsSync(instanceDir)) {
+        await fs.promises.rm(instanceDir, { recursive: true });
+        debugShell("Cleaned data dir", instanceDir);
+    }
+} else if (parsedArgs.reset) {
+    // Delete shell setting files.
+    const shellDataDir = getShellDataDir(instanceDir);
+    if (fs.existsSync(shellDataDir)) {
+        await fs.promises.rm(shellDataDir, { recursive: true });
+        debugShell("Cleaned shell data dir", shellDataDir);
+    }
+}
+
+ensureShellDataDir(instanceDir);
+
+if (parsedArgs.update) {
+    if (!fs.existsSync(parsedArgs.update)) {
+        throw new Error(
+            `Update config file does not exist: ${parsedArgs.update}`,
+        );
+    }
+    setUpdateConfigPath(parsedArgs.update);
 }
 
 const time = performance.now();
 debugShell("Starting...");
 
-async function createWindow(shellSettings: ShellSettings) {
+function createWindow(shellSettings: ShellSettings) {
     debugShell("Creating window", performance.now() - time);
 
     // Create the browser window.
-    const shellWindow = new ShellWindow(shellSettings);
+    const shellWindow = new ShellWindow(shellSettings, instanceDir);
 
-    await initializeSpeech(shellWindow.chatView);
+    initializeSpeech(shellWindow.chatView);
 
     ipcMain.on("views-resized-by-user", (_, newX: number) => {
         shellWindow.updateContentSize(newX);
@@ -146,12 +180,12 @@ async function triggerRecognitionOnce(chatView: WebContentsView) {
     );
 }
 
-async function initializeSpeech(chatView: WebContentsView) {
+function initializeSpeech(chatView: WebContentsView) {
     const key = process.env["SPEECH_SDK_KEY"];
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
     if (key && region) {
-        await AzureSpeech.initializeAsync({
+        AzureSpeech.initialize({
             azureSpeechSubscriptionKey: key,
             azureSpeechRegion: region,
             azureSpeechEndpoint: endpoint,
@@ -184,6 +218,7 @@ async function initializeSpeech(chatView: WebContentsView) {
 }
 
 async function initializeDispatcher(
+    instanceDir: string,
     shellWindow: ShellWindow,
     updateSummary: (dispatcher: Dispatcher) => void,
 ) {
@@ -202,8 +237,6 @@ async function initializeDispatcher(
                 app.quit();
             },
         };
-
-        const instanceDir = getInstanceDir();
 
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {
@@ -278,17 +311,20 @@ async function initializeDispatcher(
     }
 }
 
-async function initializeInstance(shellSettings: ShellSettings) {
-    const shellWindow = await createWindow(shellSettings);
+async function initializeInstance(
+    instanceDir: string,
+    shellSettings: ShellSettings,
+) {
+    const shellWindow = createWindow(shellSettings);
     const { mainWindow, chatView } = shellWindow;
     let title: string = "";
     function updateTitle(dispatcher: Dispatcher) {
         const newSettingSummary = dispatcher.getSettingSummary();
         const zoomFactor = chatView.webContents.zoomFactor;
-        const newTitle =
-            zoomFactor === 1
-                ? newSettingSummary
-                : `${newSettingSummary} Zoom: ${Math.round(zoomFactor * 100)}%`;
+        const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
+        const zoomFactorTitle =
+            zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
+        const newTitle = `${app.getName()} v${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
         if (newTitle !== title) {
             title = newTitle;
             chatView.webContents.send(
@@ -301,7 +337,12 @@ async function initializeInstance(shellSettings: ShellSettings) {
     }
 
     // Note: Make sure dom ready before using dispatcher.
-    const dispatcherP = initializeDispatcher(shellWindow, updateTitle);
+    const dispatcherP = initializeDispatcher(
+        instanceDir,
+        shellWindow,
+        updateTitle,
+    );
+
     ipcMain.on("dom ready", async () => {
         debugShell("Showing window", performance.now() - time);
 
@@ -312,6 +353,15 @@ async function initializeInstance(shellSettings: ShellSettings) {
             return;
         }
         updateTitle(dispatcher);
+        setPendingUpdateCallback((version, background) => {
+            updateTitle(dispatcher);
+            if (background) {
+                new Notification({
+                    title: `New version ${version.version} available`,
+                    body: `Restart to install the update.`,
+                }).show();
+            }
+        });
 
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {
@@ -354,10 +404,23 @@ async function initializeInstance(shellSettings: ShellSettings) {
 // Some APIs can only be used after this event occurs.
 async function initialize() {
     debugShell("Ready", performance.now() - time);
-    // Set app user model id for windows
-    electronApp.setAppUserModelId("com.electron");
 
     const appPath = app.getAppPath();
+    const envFile = parsedArgs.env
+        ? path.resolve(appPath, parsedArgs.env)
+        : undefined;
+    if (parsedArgs.test) {
+        if (!envFile) {
+            throw new Error("Test mode requires --env argument");
+        }
+        await loadKeysFromEnvFile(envFile);
+    } else {
+        await loadKeys(
+            instanceDir,
+            parsedArgs.reset || parsedArgs.clean,
+            envFile,
+        );
+    }
     const browserExtensionPath = path.join(
         // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
         // Assume we can just replace app.asar with app.asar.unpacked in all cases.
@@ -370,19 +433,16 @@ async function initialize() {
         allowFileAccess: true,
     });
 
-    const shellSettings = loadShellSettings();
+    const shellSettings = loadShellSettings(instanceDir);
     const settings = shellSettings.user;
+    const dataDir = getShellDataDir(instanceDir);
+    const chatHistory: string = path.join(dataDir, "chat_history.html");
     ipcMain.handle("get-chat-history", async () => {
-        // Load chat history if enabled
-        const chatHistory: string = path.join(
-            getInstanceDir(),
-            "chat_history.html",
-        );
-        if (settings.chatHistory && existsSync(chatHistory)) {
-            return readFileSync(
-                path.join(getInstanceDir(), "chat_history.html"),
-                "utf-8",
-            );
+        if (settings.chatHistory) {
+            // Load chat history if enabled
+            if (existsSync(chatHistory)) {
+                return readFileSync(chatHistory, "utf-8");
+            }
         }
         return undefined;
     });
@@ -391,15 +451,17 @@ async function initialize() {
     // this let's us rehydrate the chat when reopening the shell
     ipcMain.on("save-chat-history", async (_, html) => {
         // store the modified DOM contents
-        const file: string = path.join(getInstanceDir(), "chat_history.html");
 
-        debugShell(`Saving chat history to '${file}'.`, performance.now());
+        debugShell(
+            `Saving chat history to '${chatHistory}'.`,
+            performance.now(),
+        );
 
         try {
-            writeFileSync(file, html);
+            writeFileSync(chatHistory, html);
         } catch (e) {
             debugShell(
-                `Unable to save history to '${file}'. Error: ${e}`,
+                `Unable to save history to '${chatHistory}'. Error: ${e}`,
                 performance.now(),
             );
         }
@@ -413,24 +475,17 @@ async function initialize() {
         await BrowserAgentIpc.getinstance().send(data);
     });
 
-    // Default open or close DevTools by F12 in development
-    // and ignore CommandOrControl + R in production.
-    // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-    app.on("browser-window-created", async (_, window) => {
-        optimizer.watchWindowShortcuts(window);
-    });
-
     app.on("activate", async function () {
         // On macOS it's common to re-create a window in the app when the
         // dock icon is clicked and there are no other windows open.
         if (ShellWindow.getInstance() === undefined)
-            await initializeInstance(shellSettings);
+            await initializeInstance(instanceDir, shellSettings);
     });
 
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     // Don't spin this up during testing
-    if (process.platform == "win32" && !runningTests()) {
+    if (process.platform == "win32" && !parsedArgs.test) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {
@@ -450,12 +505,28 @@ async function initialize() {
         });
 
         try {
-            server.listen(pipePath);
-        } catch {
-            debugShellError(`Error creating pipe at ${pipePath}`);
+            const p = Promise.withResolvers<void>();
+            server.on("error", (e) => {
+                p.reject(e);
+            });
+            server.listen(pipePath, () => {
+                debugShell("Listening for pen events on", pipePath);
+                p.resolve();
+            });
+            await p.promise;
+        } catch (e) {
+            debugShellError(`Error creating pipe at ${pipePath}: ${e}`);
         }
     }
-    return initializeInstance(shellSettings);
+    await initializeInstance(instanceDir, shellSettings);
+
+    if (shellSettings.user.autoUpdate.intervalMs !== -1) {
+        startBackgroundUpdateCheck(
+            shellSettings.user.autoUpdate.intervalMs,
+            shellSettings.user.autoUpdate.restart,
+            shellSettings.user.autoUpdate.initialIntervalMs,
+        );
+    }
 }
 
 app.whenReady()
@@ -511,4 +582,35 @@ app.on("window-all-closed", () => {
     if (process.platform !== "darwin") {
         app.quit();
     }
+});
+
+app.on("second-instance", () => {
+    // Someone tried to run a second instance, we should focus our window.
+    debugShell("Second instance");
+    ShellWindow.getInstance()?.showAndFocus();
+});
+
+// Similar to what electron-toolkit does with optimizer.watchWindowShortcuts, but apply to all web contents, not just browser windows.
+// Default open or close DevTools by F12 in development
+// and ignore CommandOrControl + R in production.
+// see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+app.on("web-contents-created", async (_, webContents) => {
+    webContents.on("before-input-event", (_event, input) => {
+        if (input.type === "keyDown") {
+            if (isProd) {
+                // Ignore CommandOrControl + R
+                if (input.code === "KeyR" && (input.control || input.meta))
+                    _event.preventDefault();
+            } else {
+                // Toggle devtool(F12)
+                if (input.code === "F12") {
+                    if (webContents.isDevToolsOpened()) {
+                        webContents.closeDevTools();
+                    } else {
+                        webContents.openDevTools({ mode: "undocked" });
+                    }
+                }
+            }
+        }
+    });
 });

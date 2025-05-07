@@ -2,15 +2,12 @@
 // Licensed under the MIT License.
 
 import {
-    hybrid,
+    dataFrame,
     IKnowledgeSource,
     IMessage,
     IMessageMetadata,
 } from "knowpro";
-import {
-    conversation as kpLib,
-    image,
-} from "knowledge-processor";
+import { conversation as kpLib, image } from "knowledge-processor";
 import path from "node:path";
 import { AddressOutput } from "@azure-rest/maps-search";
 //import registerDebug from "debug";
@@ -33,9 +30,8 @@ export class Image implements IMessage {
 
 // metadata for images
 export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
-
     public imageEntity: kpLib.ConcreteEntity | undefined = undefined;
-    public dataFrameValues: Record<string, hybrid.DataFrameValue> = {};
+    public dataFrameValues: Record<string, dataFrame.DataFrameValue> = {};
 
     constructor(
         public fileName: string,
@@ -62,7 +58,6 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
 
         // EXIF data are facets of this image
         for (let i = 0; i < this.img?.exifData.length; i++) {
-            
             const exifPropertyName = this.img?.exifData[i][0];
             const exifPropertyValue = this.img?.exifData[i][1];
 
@@ -347,40 +342,45 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
         };
     }
 
-    getGeo(): hybrid.DataFrameRecord | undefined {
-
+    getGeo(): dataFrame.DataFrameRecord | undefined {
         // no EXIF data, no geo
-        if (!this.dataFrameValues["GPSLatitude"]
+        if (
+            !this.dataFrameValues["GPSLatitude"] ||
             //&& this.dataFrameValues["GPSLatitudeRef"]
             //&& this.dataFrameValues["GPSLongitudeRef"]
-            || !this.dataFrameValues["GPSLongitude"]) {
-                return undefined;
-        }        
+            !this.dataFrameValues["GPSLongitude"]
+        ) {
+            return undefined;
+        }
 
         // TODO: Ensure localization
-        const latlong: hybrid.DataFrameRecord = { };
-//        if (!this.dataFrameValues["latlong"]) {
-            const latRef: hybrid.DataFrameValue = this.dataFrameValues["GPSLatitudeRef"];
-            const longRef: hybrid.DataFrameValue  = this.dataFrameValues["GPSLongitudeRef"];
-            const lat: hybrid.DataFrameValue = this.dataFrameValues["GPSLatitude"];
-            const long: hybrid.DataFrameValue = this.dataFrameValues["GPSLongitude"];
-                
-            //const latlong: hybrid.DataFrameValue = { ...lat, ...long };
-            //const latlong2: hybrid.DataFrameValue = { lat: lat["lat"], long: long["long"] };
-            if (latRef?.toString().startsWith("South")) {
-                latlong.latitude = parseFloat(`-${lat}`);                
-            } else {
-                latlong.latitude = lat;
-            }
-    
-            if (longRef?.toString().startsWith("West")) {
-                latlong.longitude = parseFloat(`-${long}`);
-            } else {
-                latlong.longitude = long;
-            }
+        const latlong: dataFrame.DataFrameRecord = {};
+        //        if (!this.dataFrameValues["latlong"]) {
+        const latRef: dataFrame.DataFrameValue =
+            this.dataFrameValues["GPSLatitudeRef"];
+        const longRef: dataFrame.DataFrameValue =
+            this.dataFrameValues["GPSLongitudeRef"];
+        const lat: dataFrame.DataFrameValue =
+            this.dataFrameValues["GPSLatitude"];
+        const long: dataFrame.DataFrameValue =
+            this.dataFrameValues["GPSLongitude"];
 
-//            this.dataFrameValues["latlong"] = latlong2;
-//        }
+        //const latlong: dataFrame.DataFrameValue = { ...lat, ...long };
+        //const latlong2: dataFrame.DataFrameValue = { lat: lat["lat"], long: long["long"] };
+        if (latRef?.toString().startsWith("South")) {
+            latlong.latitude = parseFloat(`-${lat}`);
+        } else {
+            latlong.latitude = lat;
+        }
+
+        if (longRef?.toString().startsWith("West")) {
+            latlong.longitude = parseFloat(`-${long}`);
+        } else {
+            latlong.longitude = long;
+        }
+
+        //            this.dataFrameValues["latlong"] = latlong2;
+        //        }
 
         return latlong;
     }

@@ -32,7 +32,6 @@ import {
 import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
-import { Facet } from "../../../../knowledgeProcessor/dist/conversation/knowledgeSchema.js";
 import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
 //import Registry from "winreg";
 import koffi from "koffi";
@@ -42,7 +41,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
 import { spawnSync } from "node:child_process";
-import { createSemanticMap } from "../../../../typeagent/dist/vector/semanticMap.js";
+import { createSemanticMap } from "typeagent";
 import { openai, TextEmbeddingModel } from "aiclient";
 
 const debug = registerDebug("typeagent:agent:montage");
@@ -408,10 +407,11 @@ async function handleMontageAction(
                     );
                 } else {
                     (action as FindPhotosAction).parameters.files =
-                        actionContext.sessionContext.agentContext.imageCollection?.messages.map(
-                            (img) =>
+                        actionContext.sessionContext.agentContext.imageCollection?.messages
+                            .getAll()
+                            .map((img) =>
                                 img.metadata.img.fileName.toLocaleLowerCase(),
-                        );
+                            );
                 }
             } else {
                 result = createActionResultFromError(
@@ -820,8 +820,6 @@ async function findRequestedImages(
                 // options
                 {
                     exactMatch: exactMatch,
-                    usePropertyIndex: true,
-                    useTimestampIndex: true,
                 },
             );
 
@@ -836,9 +834,9 @@ async function findRequestedImages(
                     (value: kp.ScoredSemanticRefOrdinal) => {
                         if (value.score >= context.searchSettings.minScore) {
                             const semanticRef: kp.SemanticRef | undefined =
-                                context.imageCollection!.semanticRefs[
-                                    value.semanticRefOrdinal
-                                ];
+                                context.imageCollection!.semanticRefs.get(
+                                    value.semanticRefOrdinal,
+                                );
                             if (semanticRef) {
                                 if (semanticRef.knowledgeType === "entity") {
                                     const entity: kpLib.ConcreteEntity =
@@ -846,7 +844,7 @@ async function findRequestedImages(
 
                                     // did we get a direct hit on an image?
                                     if (entity.type.includes("image")) {
-                                        const f: Facet | undefined =
+                                        const f: kpLib.Facet | undefined =
                                             entity.facets?.find((v) => {
                                                 return v.name === "File Name";
                                             });
@@ -863,9 +861,9 @@ async function findRequestedImages(
                                         const imgRange: kp.TextLocation =
                                             semanticRef.range.start;
                                         const img: im.Image =
-                                            context.imageCollection!.messages[
-                                                imgRange.messageOrdinal
-                                            ];
+                                            context.imageCollection!.messages.get(
+                                                imgRange.messageOrdinal,
+                                            );
 
                                         imageFiles.add(
                                             img.metadata.fileName.toLocaleLowerCase(),
@@ -877,9 +875,9 @@ async function findRequestedImages(
                                     const imgRange: kp.TextLocation =
                                         semanticRef.range.start;
                                     const img: im.Image =
-                                        context.imageCollection!.messages[
-                                            imgRange.messageOrdinal
-                                        ];
+                                        context.imageCollection!.messages.get(
+                                            imgRange.messageOrdinal,
+                                        );
                                     imageFiles.add(
                                         img.metadata.fileName.toLocaleLowerCase(),
                                     );

@@ -10,6 +10,8 @@ import {
 } from "./interfaces.js";
 import {
     ConversationSearchResult,
+    createSearchOptions,
+    hasConversationResults,
     runSearchQuery,
     SearchOptions,
     SearchQueryExpr,
@@ -29,22 +31,27 @@ import {
     createAndTermGroup,
     createPropertySearchTerm,
 } from "./searchLib.js";
+import {
+    getCountOfMessagesInCharBudget,
+    getMessageOrdinalsFromScored,
+} from "./message.js";
 
 /*
     APIs for searching with Natural Language
 */
 
-export async function searchConversationWithNaturalLanguage(
+export async function searchConversationWithLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
-    options?: SearchOptions,
-    context?: NaturalLanguageSearchContext,
+    options?: LanguageSearchOptions,
+    context?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     const searchQueryExprResult = await searchQueryExprFromLanguage(
         conversation,
         queryTranslator,
         searchText,
+        options,
         context,
     );
     if (!searchQueryExprResult.success) {
@@ -55,12 +62,27 @@ export async function searchConversationWithNaturalLanguage(
     }
     const searchResults: ConversationSearchResult[] = [];
     for (const searchQuery of searchQueryExprResult.data) {
-        const queryResult = await runSearchQuery(
+        let queryResult = await runSearchQuery(
             conversation,
             searchQuery,
             options,
         );
-        searchResults.push(...queryResult);
+        if (
+            !hasConversationResults(queryResult) &&
+            searchQuery.rawQuery &&
+            options?.fallbackRagOptions
+        ) {
+            const ragMatches = await searchConversationRag(
+                conversation,
+                searchQuery.rawQuery,
+                options.fallbackRagOptions,
+            );
+            if (ragMatches) {
+                searchResults.push(ragMatches);
+            }
+        } else {
+            searchResults.push(...queryResult);
+        }
     }
     return success(searchResults);
 }
@@ -68,12 +90,12 @@ export async function searchConversationWithNaturalLanguage(
 /**
  * Functions for compiling natural language queries
  */
-
 export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
     queryText: string,
-    context?: NaturalLanguageSearchContext,
+    options?: LanguageSearchOptions,
+    context?: LanguageSearchDebugContext,
 ): Promise<Result<SearchQueryExpr[]>> {
     const queryResult = await searchQueryFromLanguage(
         conversation,
@@ -85,24 +107,57 @@ export async function searchQueryExprFromLanguage(
         if (context) {
             context.searchQuery = searchQuery;
         }
-        const searchExpr = compileSearchQuery(conversation, searchQuery);
+        options ??= createLanguageSearchOptions();
+        const searchExpr = compileSearchQuery(
+            conversation,
+            searchQuery,
+            options.compileOptions,
+        );
         return success(searchExpr);
     }
     return queryResult;
 }
 
-export type NaturalLanguageSearchContext = {
+export type LanguageQueryCompileOptions = {
+    exactScope?: boolean | undefined;
+    termFilter?: (text: string) => boolean;
+    // Debug flags
+    applyScope?: boolean | undefined;
+};
+
+export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions {
+    return { applyScope: true, exactScope: false };
+}
+
+export interface LanguageSearchOptions extends SearchOptions {
+    compileOptions: LanguageQueryCompileOptions;
+    fallbackRagOptions?: LanguageSearchRagOptions | undefined;
+}
+
+export function createLanguageSearchOptions(): LanguageSearchOptions {
+    return {
+        ...createSearchOptions(),
+        compileOptions: createLanguageQueryCompileOptions(),
+    };
+}
+
+export type LanguageSearchDebugContext = {
+    /**
+     * Query returned by the LLM
+     */
     searchQuery?: querySchema.SearchQuery | undefined;
+    /**
+     * What searchQuery was compiled into
+     */
     searchQueryExpr?: SearchQueryExpr[] | undefined;
 };
 
 export function compileSearchQuery(
     conversation: IConversation,
     query: querySchema.SearchQuery,
-    exactScoping: boolean = true,
+    options?: LanguageQueryCompileOptions,
 ): SearchQueryExpr[] {
-    const queryBuilder = new SearchQueryCompiler(conversation);
-    queryBuilder.exactScoping = exactScoping;
+    const queryBuilder = new SearchQueryCompiler(conversation, options);
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
@@ -111,19 +166,64 @@ export function compileSearchQuery(
 export function compileSearchFilter(
     conversation: IConversation,
     searchFilter: querySchema.SearchFilter,
-    exactScoping: boolean = true,
+    options?: LanguageQueryCompileOptions,
 ): SearchSelectExpr {
-    const queryBuilder = new SearchQueryCompiler(conversation);
-    queryBuilder.exactScoping = exactScoping;
+    const queryBuilder = new SearchQueryCompiler(
+        conversation,
+        options ?? createLanguageQueryCompileOptions(),
+    );
     return queryBuilder.compileSearchFilter(searchFilter);
 }
+
+export async function searchConversationRag(
+    conversation: IConversation,
+    searchText: string,
+    options: LanguageSearchRagOptions,
+): Promise<ConversationSearchResult | undefined> {
+    const messageIndex = conversation.secondaryIndexes?.messageIndex;
+    if (!messageIndex) {
+        return undefined;
+    }
+    let messageMatches = await messageIndex.lookupMessages(
+        searchText,
+        options.maxMessageMatches,
+        options.thresholdScore,
+    );
+    if (messageMatches.length === 0) {
+        return undefined;
+    }
+    if (options.maxCharsInBudget && options.maxCharsInBudget > 0) {
+        const messageCountInBudget = getCountOfMessagesInCharBudget(
+            conversation.messages,
+            getMessageOrdinalsFromScored(conversation.messages, messageMatches),
+            options.maxCharsInBudget,
+        );
+        messageMatches = messageMatches.slice(0, messageCountInBudget);
+    }
+    return {
+        messageMatches,
+        knowledgeMatches: new Map(),
+    };
+}
+
+export type LanguageSearchRagOptions = {
+    maxMessageMatches?: number | undefined;
+    thresholdScore?: number | undefined;
+    maxCharsInBudget?: number | undefined;
+};
+
 class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
     private dedupe: boolean = true;
     public queryExpressions: SearchQueryExpr[];
-    public exactScoping: boolean = false;
+    public compileOptions: LanguageQueryCompileOptions;
 
-    constructor(public conversation: IConversation) {
+    constructor(
+        public conversation: IConversation,
+        compileOptions?: LanguageQueryCompileOptions,
+    ) {
+        this.compileOptions =
+            compileOptions ?? createLanguageQueryCompileOptions();
         this.queryExpressions = [{ selectExpressions: [] }];
         this.entityTermsAdded = new PropertyTermSet();
     }
@@ -181,12 +281,15 @@ class SearchQueryCompiler {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
         }
         if (filter.actionSearchTerm) {
+            /*
             termGroup.terms.push(
-                this.compileActionTerm(filter.actionSearchTerm, false),
+                this.compileActionTerm(filter.actionSearchTerm, false, true),
             );
+            */
             this.compileActionTermAsSearchTerms(
                 filter.actionSearchTerm,
                 termGroup,
+                false,
             );
         }
         if (filter.searchTerms) {
@@ -200,7 +303,11 @@ class SearchQueryCompiler {
 
         let when: WhenFilter | undefined;
         const actionTerm = filter.actionSearchTerm;
-        if (actionTerm) {
+        if (
+            this.compileOptions.applyScope &&
+            actionTerm &&
+            this.shouldAddScope(actionTerm)
+        ) {
             const scopeDefiningTerms = this.compileScope(actionTerm);
             if (scopeDefiningTerms.terms.length > 0) {
                 when ??= {};
@@ -221,17 +328,33 @@ class SearchQueryCompiler {
     ): SearchTermGroup {
         termGroup ??= createOrTermGroup();
         const actionGroup = useOrMax ? createOrMaxTermGroup() : termGroup;
+
         if (actionTerm.actionVerbs !== undefined) {
-            this.compileSearchTerms(actionTerm.actionVerbs.words, actionGroup);
+            for (const verb of actionTerm.actionVerbs.words) {
+                this.addPropertyTermToGroup(
+                    PropertyNames.Topic,
+                    verb,
+                    actionGroup,
+                );
+            }
         }
         if (isEntityTermArray(actionTerm.actorEntities)) {
-            this.compileEntityTerms(actionTerm.actorEntities, actionGroup);
+            this.compileEntityTermsAsSearchTerms(
+                actionTerm.actorEntities,
+                actionGroup,
+            );
         }
         if (isEntityTermArray(actionTerm.targetEntities)) {
-            this.compileEntityTerms(actionTerm.targetEntities, actionGroup);
+            this.compileEntityTermsAsSearchTerms(
+                actionTerm.targetEntities,
+                actionGroup,
+            );
         }
         if (isEntityTermArray(actionTerm.additionalEntities)) {
-            this.compileEntityTerms(actionTerm.additionalEntities, actionGroup);
+            this.compileEntityTermsAsSearchTerms(
+                actionTerm.additionalEntities,
+                actionGroup,
+            );
         }
         if (actionGroup !== termGroup) {
             termGroup.terms.push(actionGroup);
@@ -269,25 +392,49 @@ class SearchQueryCompiler {
                 this.addEntityTermToGroup(term, termGroup);
             }
         }
+        // Also search for topics
+        for (const term of entityTerms) {
+            this.addEntityNameToGroup(term, PropertyNames.Topic, termGroup);
+            if (term.facets) {
+                for (const facet of term.facets) {
+                    if (!isWildcard(facet.facetValue)) {
+                        this.addPropertyTermToGroup(
+                            facet.facetValue,
+                            PropertyNames.Topic,
+                            termGroup,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    private compileEntityTermsAsSearchTerms(
+        entityTerms: querySchema.EntityTerm[],
+        termGroup: SearchTermGroup,
+    ): void {
+        for (const term of entityTerms) {
+            this.addEntityTermAsSearchTermsToGroup(term, termGroup);
+        }
     }
 
     private compileScope(
         actionTerm: querySchema.ActionTerm,
-        includeAdditional: boolean = true,
+        includeAdditionalEntities: boolean = true,
     ): SearchTermGroup {
         const dedupe = this.dedupe;
         this.dedupe = false;
 
-        let termGroup = this.compileActionTerm(actionTerm, true);
+        let termGroup = this.compileActionTerm(actionTerm, true, true);
         if (
-            includeAdditional &&
+            includeAdditionalEntities &&
             isEntityTermArray(actionTerm.additionalEntities)
         ) {
             this.addEntityNamesToGroup(
                 actionTerm.additionalEntities,
                 PropertyNames.EntityName,
                 termGroup,
-                this.exactScoping,
+                this.compileOptions.exactScope,
             );
         }
 
@@ -298,6 +445,7 @@ class SearchQueryCompiler {
     private compileActionTerm(
         actionTerm: querySchema.ActionTerm,
         useAnd: boolean,
+        includeVerbs: boolean,
     ) {
         const dedupe = this.dedupe;
         this.dedupe = false;
@@ -305,26 +453,50 @@ class SearchQueryCompiler {
         if (isEntityTermArray(actionTerm.targetEntities)) {
             termGroup = useAnd ? createAndTermGroup() : createOrTermGroup();
             for (const entity of actionTerm.targetEntities) {
-                const svo = this.compileSubjectVerb(actionTerm);
+                const svoTermGroup = includeVerbs
+                    ? this.compileSubjectAndVerb(actionTerm)
+                    : this.compileSubject(actionTerm);
                 // A target can be the name of an object of an action OR the name of an entity
-                svo.terms.push(this.compileObjectOrEntityName(entity));
-                termGroup.terms.push(svo);
+                const objectTermGroup = this.compileObject(entity);
+                if (objectTermGroup.terms.length > 0) {
+                    svoTermGroup.terms.push(objectTermGroup);
+                }
+                termGroup.terms.push(svoTermGroup);
             }
             if (termGroup.terms.length === 1) {
                 termGroup = termGroup.terms[0] as SearchTermGroup;
             }
         } else {
-            termGroup = this.compileSubjectVerb(actionTerm);
+            termGroup = this.compileSubjectAndVerb(actionTerm);
         }
 
         this.dedupe = dedupe;
         return termGroup;
     }
 
-    private compileSubjectVerb(
+    private compileSubjectAndVerb(
         actionTerm: querySchema.ActionTerm,
     ): SearchTermGroup {
         const termGroup = createAndTermGroup();
+        this.addSubjectToGroup(actionTerm, termGroup);
+        if (actionTerm.actionVerbs !== undefined) {
+            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
+        }
+        return termGroup;
+    }
+
+    private compileSubject(
+        actionTerm: querySchema.ActionTerm,
+    ): SearchTermGroup {
+        const termGroup = createAndTermGroup();
+        this.addSubjectToGroup(actionTerm, termGroup);
+        return termGroup;
+    }
+
+    private addSubjectToGroup(
+        actionTerm: querySchema.ActionTerm,
+        termGroup: SearchTermGroup,
+    ): void {
         if (isEntityTermArray(actionTerm.actorEntities)) {
             this.addEntityNamesToGroup(
                 actionTerm.actorEntities,
@@ -332,16 +504,9 @@ class SearchQueryCompiler {
                 termGroup,
             );
         }
-
-        if (actionTerm.actionVerbs !== undefined) {
-            this.addVerbsToGroup(actionTerm.actionVerbs, termGroup);
-        }
-        return termGroup;
     }
 
-    private compileObjectOrEntityName(
-        entity: querySchema.EntityTerm,
-    ): SearchTermGroup {
+    private compileObject(entity: querySchema.EntityTerm): SearchTermGroup {
         // A target can be the name of an object of an action OR the name of an entity
         const objectTermGroup = createOrTermGroup();
         this.addEntityNameToGroup(
@@ -353,7 +518,13 @@ class SearchQueryCompiler {
             entity,
             PropertyNames.EntityName,
             objectTermGroup,
-            this.exactScoping,
+            this.compileOptions.exactScope,
+        );
+        this.addEntityNameToGroup(
+            entity,
+            PropertyNames.Topic,
+            objectTermGroup,
+            this.compileOptions.exactScope,
         );
         return objectTermGroup;
     }
@@ -477,8 +648,32 @@ class SearchQueryCompiler {
         }
     }
 
+    private addEntityTermAsSearchTermsToGroup(
+        entityTerm: querySchema.EntityTerm,
+        termGroup: SearchTermGroup,
+    ): void {
+        if (entityTerm.isNamePronoun) {
+            return;
+        }
+        termGroup.terms.push(createSearchTerm(entityTerm.name));
+        if (entityTerm.facets && entityTerm.facets.length > 0) {
+            for (const facetTerm of entityTerm.facets) {
+                const valueWildcard = isWildcard(facetTerm.facetValue);
+                if (!valueWildcard) {
+                    termGroup.terms.push(
+                        createSearchTerm(facetTerm.facetValue),
+                    );
+                }
+            }
+        }
+    }
+
     private isSearchableString(value: string): boolean {
-        return !(isEmptyString(value) || isWildcard(value));
+        let isSearchable = !(isEmptyString(value) || isWildcard(value));
+        if (isSearchable && this.compileOptions.termFilter) {
+            isSearchable = this.compileOptions.termFilter(value);
+        }
+        return isSearchable;
     }
 
     private isNoiseTerm(value: string): boolean {
@@ -493,6 +688,18 @@ class SearchQueryCompiler {
             case "entity":
                 return true;
         }
+    }
+
+    private shouldAddScope(actionTerm: querySchema.ActionTerm): boolean {
+        if (!actionTerm || actionTerm.isInformational) {
+            return false;
+        }
+        if (this.compileOptions.exactScope) {
+            return true;
+        }
+        // If the action has no subject, disable scope
+        // isEntityTermArray checks for wildcards etc
+        return isEntityTermArray(actionTerm.actorEntities);
     }
 }
 

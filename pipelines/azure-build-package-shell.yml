@@ -1,0 +1,133 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    exclude:
+      - "*"
+
+parameters:
+  - name: channel
+    type: string
+    default: test
+    values:
+      - test
+      - lkg
+
+variables:
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: shell_folder
+    value: $(buildDirectory)/packages/shell
+  - name: nodeVersion
+    value: 22
+  - name: platforms
+    value: win,linux,mac
+  - name: ELECTRON_CACHE_DIR
+    value: $(Pipeline.Workspace)/cache/
+  - name: ELECTRON_CACHE
+    value: $(ELECTRON_CACHE_DIR)electron
+  - name: ELECTRON_BUILDER_CACHE
+    value: $(ELECTRON_CACHE_DIR)electron-builder-cache
+  - name: channel
+    ${{ if eq(variables['Build.Reason'], 'Manual') }}:
+      value: ${{ parameters.channel }}
+    ${{ if ne(variables['Build.Reason'], 'Manual') }}:
+      value: ci
+
+jobs:
+  - job: build_package_shell
+    displayName: Build TypeAgent Shell
+    strategy:
+      matrix:
+        windows:
+          image: windows-latest
+          platform: win
+        linux:
+          image: ubuntu-latest
+          platform: linux
+        mac:
+          image: macos-latest
+          platform: mac
+    pool:
+      vmImage: $(image)
+    steps:
+      - template: include-prepare-repo.yml
+        parameters:
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
+
+      - template: include-update-package-version.yml
+        parameters:
+          packageFolder: $(shell_folder)
+          prerelease: $(channel).$(Build.BuildNumber)
+
+      - script: |
+          pnpm run build:shell
+        displayName: Build Shell
+        workingDirectory: $(buildDirectory)
+
+      - task: Cache@2
+        displayName: Cache Electron Builder
+        inputs:
+          key: electron | $(Agent.OS) | $(Agent.OSArchitecture) | $(buildDirectory)/pnpm-lock.yaml
+          path: $(ELECTRON_CACHE_DIR)
+          restoreKeys: |
+            electron | $(Agent.OS) | $(Agent.OSArchitecture)
+
+      - script: |
+          pnpm run shell:package
+        displayName: Package - shell
+        workingDirectory: $(buildDirectory)
+        env:
+          ELECTRON_BUILDER_CHANNEL: $(channel)
+
+      # For backward compat, can be remove in the future
+      - script: |
+          copy %ELECTRON_BUILDER_CHANNEL%-x64.yml %ELECTRON_BUILDER_CHANNEL%.yml
+        displayName: Copy windows x64 to default channel file
+        condition: eq(variables['Agent.OS'], 'Windows_NT')
+        workingDirectory: $(shell_folder)/dist
+        env:
+          ELECTRON_BUILDER_CHANNEL: $(channel)
+
+      - publish: $(shell_folder)/dist
+        displayName: Upload Artifact
+        artifact: shell-$(platform)
+
+  - deployment: publish
+    displayName: Publish TypeAgent Shell
+    environment: typeagent-shell-$(channel)
+    dependsOn: build_package_shell
+    pool:
+      # AzureFileCopy requires windows
+      vmImage: windows-latest
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - ${{ each platform in split(variables.platforms, ',') }}:
+                - download: current
+                  artifact: shell-${{ platform }}
+                  displayName: Download shell package - ${{ platform }}
+                  patterns: |
+                    TypeAgent Shell[-_]*
+                    typeagentshell-*
+                    $(channel)*.yml
+                  condition: succeeded()
+
+                - task: AzureFileCopy@6
+                  displayName: Upload Azure Storage - ${{ platform }}
+                  inputs:
+                    SourcePath: $(Pipeline.Workspace)\shell-${{ platform }}\**
+                    Destination: AzureBlob
+                    azureSubscription: $(azureSubscription)
+                    storage: $(azureStorageAccountName)
+                    ContainerName: $(azureStorageContainerName)
+                  condition: succeeded()

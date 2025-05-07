@@ -3,11 +3,21 @@
 
 // Configuration used for 'electron-builder build' step, and not 'install-app-deps' step.
 
-const name = "typeagent-shell";
+const name = "typeagentshell";
+const fullName = "TypeAgent Shell";
+const account = process.env.AZURESTORAGEACCOUNTNAME;
+const container = process.env.AZURESTORAGECONTAINERNAME;
+const url =
+    account && container
+        ? `https://${account}.blob.core.windows.net/${container}/`
+        : "";
+const channel = process.env.ELECTRON_BUILDER_CHANNEL;
+const arch = process.env.ELECTRON_BUILDER_ARCH?.trim();
+const channelName = channel && arch ? `${channel}-${arch}` : undefined;
+
 export default {
-    productName: "TypeAgent Shell",
     extraMetadata: {
-        name,
+        name: fullName,
         author: {
             name: "Microsoft Corporation",
         },
@@ -17,19 +27,26 @@ export default {
         buildResources: "build",
         output: "dist",
     },
-    asarUnpack: ["node_modules/browser-typeagent/dist/electron/**/*"],
+    asarUnpack: [
+        // electron can't load the browser extension from the ASAR
+        "node_modules/browser-typeagent/dist/electron/**/*",
+    ],
     // Don't need to install
     npmRebuild: false,
+    artifactName: name + "-${version}-${platform}-${arch}.${ext}",
     win: {
+        appId: `Microsoft.TypeAgentShell`,
         executableName: name,
+        icon: "build/win/icon.png",
     },
     nsis: {
-        artifactName: "${name}-${version}-setup.${ext}",
+        artifactName: name + "-${version}-${platform}-${arch}-setup.${ext}",
         shortcutName: "${productName}",
         uninstallDisplayName: "${productName}",
         createDesktopShortcut: "always",
     },
     mac: {
+        appId: `com.microsoft.typeagentshell`,
         entitlementsInherit: "build/entitlements.mac.plist",
         extendInfo: {
             NSCameraUsageDescription:
@@ -43,19 +60,18 @@ export default {
         },
         notarize: false,
     },
-    dmg: {
-        artifactName: "${name}-${version}.${ext}",
-    },
     linux: {
         target: ["AppImage", "snap", "deb"],
-        maintainer: "electronjs.org",
+        maintainer: "Microsoft Corporation",
         category: "Utility",
+        // electron-builder missed the `.so.42` suffix as binary files.
+        asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
     },
-    appImage: {
-        artifactName: "${name}-${version}.${ext}",
-    },
-    publish: {
-        provider: "generic",
-        url: "https://example.com/auto-updates",
-    },
+    publish: channelName
+        ? {
+              provider: "generic",
+              channel: channelName,
+              url,
+          }
+        : null,
 };

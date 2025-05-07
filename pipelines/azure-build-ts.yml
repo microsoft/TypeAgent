@@ -1,14 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-resources:
-  repositories:
-    - repository: TypeAgent-GH
-      type: github
-      endpoint: AI_Systems
-      name: microsoft/typeagent
-      ref: refs/heads/main
-
 trigger:
   branches:
     include:
@@ -23,8 +15,10 @@ pool:
   vmImage: "ubuntu-latest"
 
 variables:
-  workingDirectory: "ts"
-  agentsdk_folder: "ts/packages/agentSdk"
+  - name: buildDirectory
+    value: $(Build.SourcesDirectory)/ts
+  - name: agentsdk_folder
+    value: $(buildDirectory)/packages/agentSdk
 
 jobs:
   - job: build_ts
@@ -34,55 +28,36 @@ jobs:
         node_22:
           nodeVersion: "22"
     steps:
-      - script: |
-          sudo apt install libsecret-1-0
-        displayName: "Install libsecret-1-0"
-        condition: eq(variables['Agent.OS'], 'Linux')
-
-      - checkout: TypeAgent-GH
-        displayName: "Checkout TypeAgent Repository"
-        path: "typeagent"
-
-      - task: UseNode@1
-        displayName: "Setup Node.js"
-        inputs:
-          version: $(nodeVersion)
-          checkLatest: true
-
-      - template: include-install-pnpm.yml
+      - template: include-prepare-repo.yml
         parameters:
-          buildDirectory: $(Build.SourcesDirectory)/ts
+          buildDirectory: $(buildDirectory)
+          nodeVersion: $(nodeVersion)
+          registry: $(REGISTRY)
 
-      - script: |
-          pnpm install --frozen-lockfile --strict-peer-dependencies
-        displayName: "Install dependencies"
-        workingDirectory: $(workingDirectory)
-
-      - script: |
-          current_version=$(node -p "require('./package.json').version")
-          new_version="${current_version}-$(Build.BuildId)"
-          echo "##vso[task.setvariable variable=package_version]$new_version"
-          jq ".version=\"$new_version\"" package.json > package.tmp.json
-          mv package.tmp.json package.json
-          echo "Updated package.json to version $new_version"
-          cat package.json
-        displayName: "Update Package Version"
-        workingDirectory: $(agentsdk_folder)
+      - template: include-update-package-version.yml
+        parameters:
+          packageFolder: $(agentsdk_folder)
+          prerelease: $(Build.BuildId)
 
       - script: |
           npm run build
         displayName: "Build"
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
+
+      - script: |
+          sudo apt install libsecret-1-0
+        displayName: "Install libsecret-1-0"
+        condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
       - script: |
           npm run test:local
         displayName: "Run Tests (Local)"
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
 
       - script: |
           npm run lint
         displayName: "Lint"
-        workingDirectory: $(workingDirectory)
+        workingDirectory: $(buildDirectory)
 
       - script: |
           echo $(ADO_REGISTRY)
@@ -98,7 +73,6 @@ jobs:
         displayName: "Authenticate with Azure Artifacts"
 
       - script: |
-          cd $(Build.SourcesDirectory)/$(agentsdk_folder)
           npm publish --registry=$(ADO_REGISTRY)
         displayName: "Pack and Publish agent-sdk Module"
-        condition: succeeded()
+        workingDirectory: $(agentsdk_folder)

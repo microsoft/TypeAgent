@@ -5,7 +5,7 @@ import {
     isWebAgentMessage,
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessageFromDispatcher,
-} from "../../dist/common/webAgentMessageTypes.mjs";
+} from "../common/webAgentMessageTypes.mjs";
 
 // Proxy message between the page content and the extension.
 let port: chrome.runtime.Port | undefined;

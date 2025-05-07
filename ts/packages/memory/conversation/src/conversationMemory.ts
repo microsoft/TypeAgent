@@ -1,36 +1,38 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    conversation as kpLib,
-    TextEmbeddingModelWithCache,
-} from "knowledge-processor";
+import { conversation as kpLib } from "knowledge-processor";
 import * as kp from "knowpro";
-import { createEmbeddingModel } from "./common.js";
 import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
-
 import registerDebug from "debug";
-import { error, Result, success, TypeChatLanguageModel } from "typechat";
-import { openai } from "aiclient";
+import { error, Result, success } from "typechat";
+import {
+    createMemorySettings,
+    Memory,
+    MemorySettings,
+    Message,
+    MessageMetadata,
+} from "./memory.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
-export class ConversationMessageMeta
-    implements kp.IKnowledgeSource, kp.IMessageMetadata
-{
+export class ConversationMessageMeta extends MessageMetadata {
     constructor(
         public sender?: string | undefined,
         public recipients?: string[] | undefined,
-    ) {}
+    ) {
+        super();
+    }
 
-    public get source() {
+    public override get source() {
         return this.sender;
     }
-    public get dest() {
+
+    public override get dest() {
         return this.recipients;
     }
 
-    getKnowledge(): kpLib.KnowledgeResponse | undefined {
+    public getKnowledge(): kpLib.KnowledgeResponse | undefined {
         if (this.sender) {
             const entities: kpLib.ConcreteEntity[] = [];
             const actions: kpLib.Action[] = [];
@@ -78,25 +80,19 @@ export class ConversationMessageMeta
     }
 }
 
-export class ConversationMessage implements kp.IMessage {
-    public textChunks: string[];
-    public timestamp: string;
-    public deletionInfo?: kp.DeletionInfo | undefined;
-
+export class ConversationMessage extends Message<ConversationMessageMeta> {
     constructor(
         messageText: string | string[],
-        public metadata: ConversationMessageMeta,
-        public tags: string[] = [],
+        metadata: ConversationMessageMeta,
+        tags: string[] = [],
         /**
          * Any pre-extracted knowledge for this message.
          */
-        public knowledge?: kpLib.KnowledgeResponse,
+        knowledge?: kpLib.KnowledgeResponse,
         timestamp?: string,
     ) {
-        this.textChunks = Array.isArray(messageText)
-            ? messageText
-            : [messageText];
-        this.timestamp = timestamp ?? new Date().toISOString();
+        timestamp = timestamp ?? new Date().toISOString();
+        super(metadata, messageText, tags, timestamp, knowledge);
     }
 
     public addContent(content: string, chunkOrdinal = 0) {
@@ -106,77 +102,31 @@ export class ConversationMessage implements kp.IMessage {
             this.textChunks[chunkOrdinal] += content;
         }
     }
-
-    public addKnowledge(
-        newKnowledge: kpLib.KnowledgeResponse,
-    ): kpLib.KnowledgeResponse {
-        if (this.knowledge !== undefined) {
-            this.knowledge.entities = kp.mergeConcreteEntities([
-                ...this.knowledge.entities,
-                ...newKnowledge.entities,
-            ]);
-            this.knowledge.topics = kp.mergeTopics([
-                ...this.knowledge.topics,
-                ...newKnowledge.topics,
-            ]);
-            this.knowledge.actions.push(...newKnowledge.actions);
-            this.knowledge.inverseActions.push(...newKnowledge.inverseActions);
-        } else {
-            this.knowledge = newKnowledge;
-        }
-        return this.knowledge;
-    }
-
-    public getKnowledge(): kpLib.KnowledgeResponse | undefined {
-        let metaKnowledge = this.metadata.getKnowledge();
-        if (!metaKnowledge) {
-            return this.knowledge;
-        }
-        if (!this.knowledge) {
-            return metaKnowledge;
-        }
-        const combinedKnowledge: kpLib.KnowledgeResponse = {
-            ...this.knowledge,
-        };
-        combinedKnowledge.entities.push(...metaKnowledge.entities);
-        combinedKnowledge.actions.push(...metaKnowledge.actions);
-        combinedKnowledge.inverseActions.push(...metaKnowledge.inverseActions);
-        combinedKnowledge.topics.push(...metaKnowledge.topics);
-        return combinedKnowledge;
-    }
 }
 
-export type FileSaveSettings = {
-    dirPath: string;
-    baseFileName: string;
-};
-
-export type ConversationMemorySettings = {
-    conversationSettings: kp.ConversationSettings;
-    languageModel: TypeChatLanguageModel;
-    queryTranslator?: kp.SearchQueryTranslator | undefined;
-    fileSaveSettings?: FileSaveSettings | undefined;
-};
+export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
+    extends Memory
     implements kp.IConversation<ConversationMessage>
 {
+    public messages: kp.MessageCollection<ConversationMessage>;
     public settings: ConversationMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
-    public semanticRefs: kp.SemanticRef[];
+    public semanticRefs: kp.SemanticRefCollection;
 
-    private embeddingModel: TextEmbeddingModelWithCache | undefined;
-    private embeddingSize: number | undefined;
     private updatesTaskQueue: QueueObject<ConversationMemoryTasks>;
 
     constructor(
         public nameTag: string = "",
-        public messages: ConversationMessage[] = [],
+        messages: ConversationMessage[] = [],
         public tags: string[] = [],
         settings?: ConversationMemorySettings,
     ) {
-        this.semanticRefs = [];
+        super();
+        this.messages = new kp.MessageCollection<ConversationMessage>(messages);
+        this.semanticRefs = new kp.SemanticRefCollection();
         if (!settings) {
             settings = this.createSettings();
         }
@@ -217,7 +167,7 @@ export class ConversationMemory
         // Now, add the message to memory and index it
         let messageOrdinalStartAt = this.messages.length;
         let semanticRefOrdinalStartAt = this.semanticRefs.length;
-        this.messages.push(message);
+        this.messages.append(message);
         kp.addToConversationIndex(
             this,
             this.settings.conversationSettings,
@@ -249,25 +199,32 @@ export class ConversationMemory
     /**
      * Run a natural language query against this memory
      * @param searchText
-     * @param translator
      * @returns
      */
-    public async searchWithNaturalLanguage(
+    public async search(
         searchText: string,
-        queryTranslator?: kp.SearchQueryTranslator,
     ): Promise<Result<kp.ConversationSearchResult[]>> {
-        queryTranslator ??= this.settings.queryTranslator;
-        if (!queryTranslator) {
-            return error(`No query translator provided for ${this.nameTag}`);
-        }
-        return kp.searchConversationWithNaturalLanguage(
+        return kp.searchConversationWithLanguage(
             this,
             searchText,
-            queryTranslator,
+            this.getQueryTranslator(),
         );
     }
 
-    public async search(
+    public async createSearchQuery(
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+    ): Promise<Result<kp.SearchQueryExpr[]>> {
+        const queryResult = await kp.searchQueryExprFromLanguage(
+            this,
+            this.getQueryTranslator(),
+            searchText,
+            options,
+        );
+        return queryResult;
+    }
+
+    public async selectFromConversation(
         selectExpr: kp.SearchSelectExpr,
     ): Promise<kp.ConversationSearchResult | undefined> {
         return kp.searchConversation(
@@ -284,9 +241,9 @@ export class ConversationMemory
     public async serialize(): Promise<ConversationMemoryData> {
         const data: ConversationMemoryData = {
             nameTag: this.nameTag,
-            messages: this.messages,
+            messages: this.messages.getAll(),
             tags: this.tags,
-            semanticRefs: this.semanticRefs,
+            semanticRefs: this.semanticRefs.getAll(),
             semanticIndexData: this.semanticRefIndex?.serialize(),
             relatedTermsIndexData:
                 this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
@@ -295,31 +252,34 @@ export class ConversationMemory
         return data;
     }
 
-    public async deserialize(
-        podcastData: ConversationMemoryData,
-    ): Promise<void> {
-        this.nameTag = podcastData.nameTag;
-        this.messages = this.deserializeMessages(podcastData);
-        this.semanticRefs = podcastData.semanticRefs;
-        this.tags = podcastData.tags;
-        if (podcastData.semanticIndexData) {
+    public async deserialize(data: ConversationMemoryData): Promise<void> {
+        this.nameTag = data.nameTag;
+        this.messages = this.deserializeMessages(data);
+        this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
+        this.tags = data.tags;
+        if (data.semanticIndexData) {
             this.semanticRefIndex = new kp.ConversationIndex(
-                podcastData.semanticIndexData,
+                data.semanticIndexData,
             );
         }
-        if (podcastData.relatedTermsIndexData) {
+        if (data.relatedTermsIndexData) {
             this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
-                podcastData.relatedTermsIndexData,
+                data.relatedTermsIndexData,
             );
         }
-        if (podcastData.messageIndexData) {
+        if (data.messageIndexData) {
             this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
                 this.settings.conversationSettings.messageTextIndexSettings,
             );
             this.secondaryIndexes.messageIndex.deserialize(
-                podcastData.messageIndexData,
+                data.messageIndexData,
             );
         }
+        // Rebuild transient secondary indexes associated with the conversation
+        await kp.buildTransientSecondaryIndexes(
+            this,
+            this.settings.conversationSettings,
+        );
     }
 
     public async writeToFile(
@@ -364,7 +324,7 @@ export class ConversationMemory
     }
 
     private deserializeMessages(memoryData: ConversationMemoryData) {
-        return memoryData.messages.map((m) => {
+        const messages = memoryData.messages.map((m) => {
             const metadata = new ConversationMessageMeta(m.metadata.sender);
             metadata.recipients = m.metadata.recipients;
             return new ConversationMessage(
@@ -375,6 +335,7 @@ export class ConversationMemory
                 m.timestamp,
             );
         });
+        return new kp.MessageCollection<ConversationMessage>(messages);
     }
 
     private createTaskQueue() {
@@ -428,30 +389,17 @@ export class ConversationMemory
     }
 
     private createSettings(): ConversationMemorySettings {
-        const languageModel =
-            openai.createChatModelDefault("conversationMemory");
-        /**
-         * Our index already has embeddings for every term in the podcast
-         * Create a caching embedding model that can just leverage those embeddings
-         * @returns embedding model, size of embedding
-         */
-        const [model, size] = createEmbeddingModel(
-            64,
+        return createMemorySettings(
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
-        this.embeddingModel = model;
-        this.embeddingSize = size;
-        const conversationSettings = kp.createConversationSettings(
-            this.embeddingModel,
-            this.embeddingSize,
-        );
-        conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
-            kp.createKnowledgeExtractor(languageModel);
-        const memorySettings: ConversationMemorySettings = {
-            conversationSettings,
-            languageModel,
-        };
-        return memorySettings;
+    }
+
+    private getQueryTranslator(): kp.SearchQueryTranslator {
+        const queryTranslator = this.settings.queryTranslator;
+        if (!queryTranslator) {
+            throw new Error(`No query translator provided for ${this.nameTag}`);
+        }
+        return queryTranslator;
     }
 }
 

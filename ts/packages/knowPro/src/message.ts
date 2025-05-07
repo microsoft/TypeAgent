@@ -6,15 +6,19 @@
  */
 
 import { addToSet } from "./collections.js";
+import { Batch } from "./common.js";
 import {
     DateRange,
+    IConversation,
     IMessage,
+    IMessageCollection,
     IMessageMetadata,
     MessageOrdinal,
     ScoredMessageOrdinal,
     TextLocation,
     TextRange,
 } from "./interfaces.js";
+import { getBatchesFromCollection } from "./storage.js";
 
 /**
  * Returns the text range represented by a message (and an optional chunk ordinal)
@@ -63,11 +67,12 @@ export function getMessageCharCount(message: IMessage): number {
     return total;
 }
 
-export function getCountOfChunksInMessages(messages: IMessage[]): number {
-    return messages.reduce<number>(
-        (total, message) => total + message.textChunks.length,
-        0,
-    );
+export function getCharCountOfMessages(messages: Iterable<IMessage>) {
+    let total = 0;
+    for (const message of messages) {
+        total += getMessageCharCount(message);
+    }
+    return total;
 }
 
 /**
@@ -79,21 +84,20 @@ export function getCountOfChunksInMessages(messages: IMessage[]): number {
  * @returns
  */
 export function getCountOfMessagesInCharBudget(
-    messages: IMessage[],
-    messageOrdinals: MessageOrdinal[],
+    messages: IMessageCollection,
+    messageOrdinals: Iterable<MessageOrdinal>,
     maxCharsInBudget: number,
 ): number {
     let i = 0;
     let totalCharCount = 0;
-    // TODO: use batches
-    for (; i < messageOrdinals.length; ++i) {
-        const messageOrdinal = messageOrdinals[i];
-        const message = messages[messageOrdinal];
+    for (const messageOrdinal of messageOrdinals) {
+        const message = messages.get(messageOrdinal);
         const messageCharCount = getMessageCharCount(message);
         if (messageCharCount + totalCharCount > maxCharsInBudget) {
             break;
         }
         totalCharCount += messageCharCount;
+        ++i;
     }
     return i;
 }
@@ -127,18 +131,37 @@ export function textRangesFromMessageOrdinals(
     return ranges;
 }
 
+export function getMaxMessageOrdinal(
+    messages: IMessageCollection,
+    messageOrdinalStartAt: MessageOrdinal,
+    messageCount?: number,
+): number {
+    let maxOrdinal = messageCount
+        ? messageOrdinalStartAt + messageCount
+        : messages.length;
+    maxOrdinal = Math.min(messages.length, maxOrdinal);
+    return maxOrdinal;
+}
+
 export function* getMessageChunkBatch(
-    messages: IMessage[],
-    ordinalStartAt: MessageOrdinal,
+    messages: IMessageCollection,
+    messageOrdinalStartAt: MessageOrdinal,
     batchSize: number,
+    count?: number,
 ): IterableIterator<TextLocation[]> {
     let batch: TextLocation[] = [];
+    let maxOrdinal = getMaxMessageOrdinal(
+        messages,
+        messageOrdinalStartAt,
+        count,
+    );
+    maxOrdinal = Math.min(messages.length, maxOrdinal);
     for (
-        let messageOrdinal = ordinalStartAt;
-        messageOrdinal < messages.length;
+        let messageOrdinal = messageOrdinalStartAt;
+        messageOrdinal < maxOrdinal;
         ++messageOrdinal
     ) {
-        const message = messages[messageOrdinal];
+        const message = messages.get(messageOrdinal);
         for (
             let chunkOrdinal = 0;
             chunkOrdinal < message.textChunks.length;
@@ -169,11 +192,20 @@ export function* getMessagesFromOrdinals(
 }
 
 export function* getMessagesFromScoredOrdinals(
-    messages: IMessage[],
+    messages: IMessageCollection,
     ordinals: Iterable<ScoredMessageOrdinal>,
 ) {
-    for (const scordOrdinal of ordinals) {
-        yield messages[scordOrdinal.messageOrdinal];
+    for (const scoredOrdinal of ordinals) {
+        yield messages.get(scoredOrdinal.messageOrdinal);
+    }
+}
+
+export function* getMessageOrdinalsFromScored(
+    messages: IMessageCollection,
+    ordinals: Iterable<ScoredMessageOrdinal>,
+): IterableIterator<MessageOrdinal> {
+    for (const scoredOrdinal of ordinals) {
+        yield scoredOrdinal.messageOrdinal;
     }
 }
 
@@ -197,7 +229,7 @@ export function getEnclosingTextRange(
 }
 
 export function getEnclosingDateRangeForMessages(
-    messages: IMessage[],
+    messages: IMessageCollection,
     messageOrdinals: Iterable<MessageOrdinal>,
 ): DateRange | undefined {
     const textRange = getEnclosingTextRange(messageOrdinals);
@@ -208,15 +240,15 @@ export function getEnclosingDateRangeForMessages(
 }
 
 export function getEnclosingDateRangeForTextRange(
-    messages: IMessage[],
+    messages: IMessageCollection,
     range: TextRange,
 ): DateRange | undefined {
-    const startTimestamp = messages[range.start.messageOrdinal].timestamp;
+    const startTimestamp = messages.get(range.start.messageOrdinal).timestamp;
     if (!startTimestamp) {
         return undefined;
     }
     const endTimestamp = range.end
-        ? messages[range.end.messageOrdinal].timestamp
+        ? messages.get(range.end.messageOrdinal).timestamp
         : undefined;
     return {
         start: new Date(startTimestamp),
@@ -225,14 +257,14 @@ export function getEnclosingDateRangeForTextRange(
 }
 
 export function getEnclosingMetadataForMessages(
-    messages: IMessage[],
+    messages: IMessageCollection,
     messageOrdinals: Iterable<MessageOrdinal>,
 ): IMessageMetadata {
     let source: Set<string> | undefined;
     let dest: Set<string> | undefined;
 
     for (const ordinal of messageOrdinals) {
-        const metadata = messages[ordinal].metadata;
+        const metadata = messages.get(ordinal).metadata;
         if (!metadata) {
             continue;
         }
@@ -264,4 +296,16 @@ export function getEnclosingMetadataForMessages(
         }
         return set;
     }
+}
+
+export function getMessageBatches(
+    conversation: IConversation,
+    startAtOrdinal: number,
+    batchSize: number,
+): IterableIterator<Batch<IMessage>> {
+    return getBatchesFromCollection<IMessage>(
+        conversation.messages,
+        startAtOrdinal,
+        batchSize,
+    );
 }

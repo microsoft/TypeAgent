@@ -7,7 +7,7 @@ import {
     ConcreteEntity,
     KnowledgeResponse,
 } from "../conversation/knowledgeSchema.js";
-import { Email, EmailAddress } from "./emailSchema.js";
+import { Email, EmailAddress, EmailHeader } from "./emailSchema.js";
 import fs from "fs";
 import path from "path";
 import { removeUndefined } from "../setOperations.js";
@@ -179,7 +179,7 @@ export function emailToTextBlock(
 }
 
 export function emailToEntities(
-    email: Email,
+    email: EmailHeader,
     buffer?: ConcreteEntity[] | undefined,
 ): ConcreteEntity[] {
     const entities = buffer ?? [];
@@ -210,7 +210,7 @@ export function emailToEntities(
     }
 }
 
-enum EmailVerbs {
+export enum EmailVerbs {
     send = "send",
     receive = "receive",
 }
@@ -270,7 +270,7 @@ function createEmailActions(
     }
 }
 
-export function emailToActions(email: Email): Action[] {
+export function emailToActions(email: EmailHeader): Action[] {
     const actions: Action[] = [];
     addActions(email.from, email.to, actions);
     addActions(email.from, email.cc, actions);
@@ -289,10 +289,13 @@ export function emailToActions(email: Email): Action[] {
     }
 }
 
-function emailToKnowledge(email: Email): KnowledgeResponse {
+export function emailToKnowledge(
+    email: EmailHeader,
+    includeSubject: boolean = true,
+): KnowledgeResponse {
     return {
         entities: emailToEntities(email),
-        topics: email.subject ? [email.subject] : [],
+        topics: includeSubject && email.subject ? [email.subject] : [],
         actions: emailToActions(email),
         inverseActions: [],
     };
