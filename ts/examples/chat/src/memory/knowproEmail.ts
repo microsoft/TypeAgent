@@ -15,7 +15,7 @@ import { KnowProContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import path from "path";
-import { ensureDir, getFileName, isFilePath } from "typeagent";
+import { ensureDir, getFileName, isFilePath, readJsonFile } from "typeagent";
 import {
     createIndexingEventHandler,
     memoryNameToIndexPath,
@@ -174,6 +174,11 @@ export async function createKnowproEmailCommands(
                 return;
             }
         }
+        // Load a user profile if one is found
+        const userProfile = await readJsonFile<cm.EmailUserProfile>(
+            path.join(context.basePath, "emailUserProfile.json"),
+        );
+        context.email.settings.userProfile = userProfile;
         kpContext.conversation = context.email;
     }
 

@@ -190,9 +190,10 @@ export abstract class Memory<
      * @param searchText
      * @returns
      */
-    public async search(
+    public async searchWithLanguage(
         searchText: string,
         options?: kp.LanguageSearchOptions,
+        debugContext?: kp.LanguageSearchDebugContext,
     ): Promise<Result<kp.ConversationSearchResult[]>> {
         options = this.adjustLanguageSearchOptions(options);
         return kp.searchConversationWithLanguage(
@@ -200,6 +201,7 @@ export abstract class Memory<
             searchText,
             this.getQueryTranslator(),
             options,
+            debugContext,
         );
     }
 
