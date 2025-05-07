@@ -66,6 +66,20 @@ export class AppPrinter extends ConsoleWriter {
         this._io.writer.writeLine(message);
     }
 
+    public writeJsonInColor(
+        color: ChalkInstance,
+        obj: any,
+        indented?: boolean,
+    ): AppPrinter {
+        const prevColor = this.setForeColor(color);
+        try {
+            super.writeJson(obj, indented);
+        } finally {
+            this.setForeColor(prevColor);
+        }
+        return this;
+    }
+
     public writeNote(message: string): void {
         this.writeColor(chalk.gray, message);
     }

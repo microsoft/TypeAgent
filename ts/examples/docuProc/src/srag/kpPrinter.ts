@@ -147,6 +147,17 @@ export class KPPrinter extends AppPrinter {
         });
     }
 
+    public writeNaturalLanguageContext(context: kp.LanguageSearchDebugContext) {
+        if (context.searchQuery) {
+            this.writeHeading("Search Query");
+            this.writeJson(context.searchQuery);
+        }
+        if (context.searchQueryExpr) {
+            this.writeHeading("Search QueryExpr");
+            this.writeJson(context.searchQueryExpr);
+        }
+    }
+
     public writeKnowledgeSearchResults(
         conversation: kp.IConversation,
         results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
@@ -355,6 +366,77 @@ export class KPPrinter extends AppPrinter {
         return this;
     }
 
+    public writeConversationSearchResult(
+        conversation: kp.IConversation,
+        searchResult: kp.ConversationSearchResult | undefined,
+        showKnowledge: boolean,
+        showMessages: boolean,
+        maxToDisplay: number,
+        distinct: boolean,
+    ) {
+        if (searchResult && searchResult.messageMatches.length > 0) {
+            if (showKnowledge) {
+                this.writeKnowledgeSearchResults(
+                    conversation,
+                    searchResult.knowledgeMatches,
+                    maxToDisplay,
+                    distinct,
+                );
+            }
+            if (showMessages) {
+                this.writeScoredMessages(
+                    searchResult.messageMatches,
+                    conversation.messages,
+                    maxToDisplay,
+                );
+            }
+        } else {
+            this.writeLine("No matches");
+        }
+    }
+
+    public writeScoredMessages(
+        messageIndexMatches: kp.ScoredMessageOrdinal[],
+        messages: kp.IMessageCollection,
+        maxToDisplay: number,
+    ) {
+        if (this.sortAsc) {
+            this.writeLine(`Sorted in ascending order (lowest first)`);
+        }
+        const matchesToDisplay = messageIndexMatches.slice(0, maxToDisplay);
+        this.writeLine(
+            `Displaying ${matchesToDisplay.length} matches of total ${messageIndexMatches.length}`,
+        );
+        for (let i = 0; i < matchesToDisplay.length; ++i) {
+            let pos = this.sortAsc ? matchesToDisplay.length - (i + 1) : i;
+            this.writeScoredMessage(
+                pos,
+                matchesToDisplay.length,
+                matchesToDisplay[pos],
+                messages,
+            );
+        }
+
+        return this;
+    }
+
+    private writeScoredMessage(
+        matchNumber: number,
+        totalMatches: number,
+        scoredMessage: kp.ScoredMessageOrdinal,
+        messages: kp.IMessageCollection,
+    ) {
+        const message = messages.get(scoredMessage.messageOrdinal);
+        this.writeInColor(
+            chalk.green,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredMessage.messageOrdinal}> [${scoredMessage.score}]`,
+        );
+        if (message) {
+            this.writeMessage(message);
+        }
+        this.writeLine();
+    }
+
     public writeSemanticRef(semanticRef: kp.SemanticRef) {
         switch (semanticRef.knowledgeType) {
             default:
@@ -425,5 +507,19 @@ export class KPPrinter extends AppPrinter {
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();
+    }
+
+    public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
+        if (answerResponse) {
+            if (answerResponse.type === "NoAnswer") {
+                this.writeError("No answer");
+            }
+            if (answerResponse.answer) {
+                this.writeInColor(chalk.green, answerResponse.answer);
+            } else if (answerResponse.whyNoAnswer) {
+                this.writeError(answerResponse.whyNoAnswer);
+            }
+        }
+        return this;
     }
 }
