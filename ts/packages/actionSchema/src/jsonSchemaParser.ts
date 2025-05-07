@@ -119,7 +119,7 @@ export function parseToolsJsonSchema(
     }
 
     const entry = sc.type(entryTypeName, sc.union(refs), undefined, true);
-    return createParsedActionSchema(entry, undefined, true);
+    return createParsedActionSchema({ action: entry }, undefined, true);
 }
 
 function validateToolsJsonSchema(schema: unknown): schema is ToolsJsonSchema {

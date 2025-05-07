@@ -142,20 +142,25 @@ export function getTranslatorForSchema(
             .map((actionConfig) => actionConfig.schemaName)
             .join(",")}`,
     );
+    const generateOptions = config.schema.generation.enabled
+        ? {
+              exact: !config.schema.optimize.enabled,
+              jsonSchema: config.schema.generation.jsonSchema,
+              jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
+              jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
+              jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+          }
+        : null;
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
         switchActionConfigs,
         context.agents,
-        config.multiple,
-        config.schema.generation.enabled,
-        config.model,
         {
-            exact: !config.schema.optimize.enabled,
-            jsonSchema: config.schema.generation.jsonSchema,
-            jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
-            jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
-            jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+            activity: context.agents.isSchemaEnabled(DispatcherActivityName),
+            multiple: config.multiple,
         },
+        generateOptions,
+        config.model,
     );
     if (!activityContext) {
         context.translatorCache.set(translatorName, newTranslator);
@@ -201,7 +206,10 @@ async function getTranslatorForSelectedActions(
         actionConfigs,
         switchActionConfigs,
         context.agents,
-        config.multiple,
+        {
+            activity: context.agents.isSchemaEnabled(DispatcherActivityName),
+            multiple: config.multiple,
+        },
         config.model,
     );
 }

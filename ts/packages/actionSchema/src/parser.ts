@@ -12,9 +12,10 @@ import {
     SchemaTypeUnion,
     SchemaTypeDefinition,
     ActionSchemaTypeDefinition,
-    ActionSchemaEntryTypeDefinition,
     SchemaObjectField,
     ParsedActionSchema,
+    SchemaEntryTypeDefinitions,
+    ActionSchemaEntryTypeDefinitions,
 } from "./type.js";
 import ts from "typescript";
 import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
@@ -170,16 +171,28 @@ function checkActionSchema(
 }
 
 export function createParsedActionSchema(
-    entry: SchemaTypeDefinition,
+    entry: SchemaEntryTypeDefinitions,
     order: Map<string, number> | undefined,
     strict: boolean,
     schemaConfig?: SchemaConfig,
 ): ParsedActionSchema {
-    if (strict && !entry.exported) {
-        throw new Error(`Schema Error: Type '${entry.name}' must be exported`);
+    const pending: SchemaTypeDefinition[] = [];
+    if (entry.action) {
+        if (strict && !entry.action.exported) {
+            throw new Error(
+                `Schema Error: Action entry type '${entry.action.name}' must be exported`,
+            );
+        }
+        pending.push(entry.action);
     }
-
-    const pending: SchemaTypeDefinition[] = [entry];
+    if (entry.activity) {
+        if (strict && !entry.activity.exported) {
+            throw new Error(
+                `Schema Error: Activity entry type '${entry.activity.name}' must be exported`,
+            );
+        }
+        pending.push(entry.activity);
+    }
     const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
     while (pending.length > 0) {
         const current = pending.shift()!;
@@ -240,7 +253,7 @@ export function createParsedActionSchema(
         throw new Error("No action schema found");
     }
     const parsedActionSchema: ParsedActionSchema = {
-        entry: entry as ActionSchemaEntryTypeDefinition,
+        entry: entry as ActionSchemaEntryTypeDefinitions,
         actionSchemas,
     };
     if (schemaConfig?.actionNamespace === true) {
@@ -252,15 +265,20 @@ export function createParsedActionSchema(
     return parsedActionSchema;
 }
 
+type SchemaTypeNames = {
+    action?: string;
+    activity?: string;
+};
+
 export function parseActionSchemaSource(
     source: string,
     schemaName: string,
-    typeName: string,
+    typeName: string | SchemaTypeNames,
     fileName: string = "",
     schemaConfig?: SchemaConfig,
     strict: boolean = false,
 ): ParsedActionSchema {
-    debug(`Parsing ${schemaName} for ${typeName}: ${fileName}`);
+    debug(`Parsing ${schemaName} for ${JSON.stringify(typeName)}: ${fileName}`);
     try {
         const sourceFile = ts.createSourceFile(
             fileName,
@@ -283,15 +301,12 @@ export function parseActionSchemaSource(
 class ActionParser {
     static parseSourceFile(
         sourceFile: ts.SourceFile,
-        typeName: string,
+        schemaType: string | SchemaTypeNames,
         schemaConfig: SchemaConfig | undefined,
         strict: boolean,
     ) {
         const parser = new ActionParser();
-        const definition = parser.parseSchema(sourceFile, typeName);
-        if (definition === undefined) {
-            throw new Error(`Type '${typeName}' not found`);
-        }
+        const definition = parser.parseSchema(sourceFile, schemaType);
         const result = createParsedActionSchema(
             definition,
             parser.typeOrder,
@@ -303,8 +318,8 @@ class ActionParser {
     private constructor() {}
     private parseSchema(
         sourceFile: ts.SourceFile,
-        typeName: string,
-    ): SchemaTypeDefinition | undefined {
+        typeName: string | SchemaTypeNames,
+    ): SchemaEntryTypeDefinitions {
         this.fullText = sourceFile.getFullText();
         ts.forEachChild(sourceFile, (node: ts.Node) => {
             this.parseAST(node);
@@ -318,7 +333,27 @@ class ActionParser {
             pending.definition = resolvedType;
         }
 
-        return this.typeMap.get(typeName);
+        const definitions: SchemaEntryTypeDefinitions = {};
+        const actionTypeName =
+            typeof typeName === "string" ? typeName : typeName.action;
+        if (actionTypeName) {
+            definitions.action = this.typeMap.get(actionTypeName);
+            if (definitions.action === undefined) {
+                throw new Error(`Action type '${actionTypeName}' not found`);
+            }
+        }
+
+        const activityTypeName =
+            typeof typeName === "string" ? undefined : typeName.activity;
+        if (activityTypeName) {
+            definitions.activity = this.typeMap.get(activityTypeName);
+            if (definitions.activity === undefined) {
+                throw new Error(
+                    `Activity type '${activityTypeName}' not found`,
+                );
+            }
+        }
+        return definitions;
     }
 
     private fullText = "";

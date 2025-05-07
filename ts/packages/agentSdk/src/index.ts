@@ -14,6 +14,7 @@ export {
     StorageEncoding,
     TokenCachePersistence,
     ActionContext,
+    SchemaTypeNames,
 } from "./agentInterface.js";
 
 export {

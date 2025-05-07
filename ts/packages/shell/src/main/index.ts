@@ -43,7 +43,7 @@ import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { ShellWindow } from "./shellWindow.js";
 
 import { debugShell, debugShellError } from "./debug.js";
-import { loadKeys } from "./keys.js";
+import { loadKeys, loadKeysFromEnvFile } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
 import {
     hasPendingUpdate,
@@ -121,13 +121,6 @@ if (parsedArgs.update) {
         );
     }
     setUpdateConfigPath(parsedArgs.update);
-}
-
-export function runningTests(): boolean {
-    return (
-        process.env["INSTANCE_NAME"] !== undefined &&
-        process.env["INSTANCE_NAME"].startsWith("test_") === true
-    );
 }
 
 const time = performance.now();
@@ -413,12 +406,21 @@ async function initialize() {
     debugShell("Ready", performance.now() - time);
 
     const appPath = app.getAppPath();
-    await loadKeys(
-        instanceDir,
-        parsedArgs.reset || parsedArgs.clean,
-        parsedArgs.env ? path.resolve(appPath, parsedArgs.env) : undefined,
-    );
-
+    const envFile = parsedArgs.env
+        ? path.resolve(appPath, parsedArgs.env)
+        : undefined;
+    if (parsedArgs.test) {
+        if (!envFile) {
+            throw new Error("Test mode requires --env argument");
+        }
+        await loadKeysFromEnvFile(envFile);
+    } else {
+        await loadKeys(
+            instanceDir,
+            parsedArgs.reset || parsedArgs.clean,
+            envFile,
+        );
+    }
     const browserExtensionPath = path.join(
         // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
         // Assume we can just replace app.asar with app.asar.unpacked in all cases.
@@ -483,7 +485,7 @@ async function initialize() {
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     // Don't spin this up during testing
-    if (process.platform == "win32" && !runningTests()) {
+    if (process.platform == "win32" && !parsedArgs.test) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {
