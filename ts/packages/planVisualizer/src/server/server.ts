@@ -12,8 +12,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const isDev =
+    process.argv.includes("--dev") ||
+    process.argv.includes("--mode=development");
 
-const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const portBase = process.env.PORT
+    ? parseInt(process.env.PORT)
+    : isDev
+      ? 9050
+      : 9001;
 const planViewerPortIndex = 2;
 const port = portBase + planViewerPortIndex;
 

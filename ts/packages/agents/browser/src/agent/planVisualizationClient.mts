@@ -70,7 +70,7 @@ export class VisualizerClient {
     private async fetchApi<T>(
         endpoint: string,
         options?: RequestInit,
-    ): Promise<T> {
+    ): Promise<T | null> {
         try {
             const response = await fetch(`${this.baseUrl}${endpoint}`, options);
 
@@ -80,8 +80,8 @@ export class VisualizerClient {
 
             return (await response.json()) as T;
         } catch (error) {
-            console.error(`Error fetching ${endpoint}:`, error);
-            throw error;
+            // console.error(`Error fetching ${endpoint}:`, error);
+            return null;
         }
     }
 
@@ -92,8 +92,13 @@ export class VisualizerClient {
      */
     async getPlan(
         mode: "static" | "dynamic" | "screenshot" = "dynamic",
-    ): Promise<WebPlanData> {
+    ): Promise<WebPlanData | null> {
         const data = await this.fetchApi<WebPlanData>(`/api/plan?mode=${mode}`);
+
+        if (!data) {
+            return null;
+        }
+
         this.currentPlan = data;
         return data;
     }
@@ -103,8 +108,8 @@ export class VisualizerClient {
      * @param data The transition data
      * @returns Promise resolving to the updated plan data
      */
-    async addTransition(data: TransitionData): Promise<WebPlanData> {
-        const updatedPlan = await this.fetchApi<WebPlanData>(
+    async addTransition(data: TransitionData): Promise<WebPlanData | null> {
+        const updatedPlan = await this.fetchApi<WebPlanData | null>(
             "/api/transition",
             {
                 method: "POST",
@@ -114,6 +119,9 @@ export class VisualizerClient {
                 body: JSON.stringify(data),
             },
         );
+        if (!updatedPlan) {
+            return null;
+        }
 
         this.currentPlan = updatedPlan;
         return updatedPlan;
@@ -128,7 +136,7 @@ export class VisualizerClient {
     async uploadScreenshot(
         nodeId: string,
         screenshot: string,
-    ): Promise<WebPlanData> {
+    ): Promise<WebPlanData | null> {
         const updatedPlan = await this.fetchApi<WebPlanData>(
             "/api/screenshot",
             {
@@ -142,7 +150,9 @@ export class VisualizerClient {
                 }),
             },
         );
-
+        if (!updatedPlan) {
+            return null;
+        }
         this.currentPlan = updatedPlan;
         return updatedPlan;
     }
@@ -163,10 +173,14 @@ export class VisualizerClient {
      * Reset the plan to its initial state
      * @returns Promise resolving to the reset plan data
      */
-    async resetPlan(): Promise<WebPlanData> {
+    async resetPlan(): Promise<WebPlanData | null> {
         const resetPlan = await this.fetchApi<WebPlanData>("/api/reset", {
             method: "POST",
         });
+
+        if (!resetPlan) {
+            return null;
+        }
 
         this.currentPlan = resetPlan;
         return resetPlan;
@@ -177,7 +191,7 @@ export class VisualizerClient {
      * @param title The title to set
      * @returns Promise resolving to the updated plan data
      */
-    async setPlanTitle(title: string): Promise<WebPlanData> {
+    async setPlanTitle(title: string): Promise<WebPlanData | null> {
         const updatedPlan = await this.fetchApi<WebPlanData>("/api/title", {
             method: "POST",
             headers: {
@@ -185,6 +199,10 @@ export class VisualizerClient {
             },
             body: JSON.stringify({ title }),
         });
+
+        if (!updatedPlan) {
+            return null;
+        }
 
         this.currentPlan = updatedPlan;
         return updatedPlan;
