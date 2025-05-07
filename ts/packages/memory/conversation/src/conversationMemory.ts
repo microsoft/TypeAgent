@@ -107,7 +107,7 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
 export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
-    extends Memory<ConversationMemorySettings>
+    extends Memory<ConversationMemorySettings, ConversationMessage>
     implements kp.IConversation<ConversationMessage>
 {
     public messages: kp.MessageCollection<ConversationMessage>;
@@ -138,6 +138,10 @@ export class ConversationMemory
             this.settings.conversationSettings,
         );
         this.updatesTaskQueue = this.createTaskQueue();
+    }
+
+    public override get conversation(): kp.IConversation<ConversationMessage> {
+        return this;
     }
 
     public async addMessage(
@@ -194,34 +198,6 @@ export class ConversationMemory
             message,
             callback: completionCallback,
         });
-    }
-
-    /**
-     * Run a natural language query against this memory
-     * @param searchText
-     * @returns
-     */
-    public async search(
-        searchText: string,
-    ): Promise<Result<kp.ConversationSearchResult[]>> {
-        return kp.searchConversationWithLanguage(
-            this,
-            searchText,
-            this.getQueryTranslator(),
-        );
-    }
-
-    public async createSearchQuery(
-        searchText: string,
-        options?: kp.LanguageSearchOptions,
-    ): Promise<Result<kp.SearchQueryExpr[]>> {
-        const queryResult = await kp.searchQueryExprFromLanguage(
-            this,
-            this.getQueryTranslator(),
-            searchText,
-            options,
-        );
-        return queryResult;
     }
 
     public async selectFromConversation(

@@ -9,7 +9,7 @@ import {
     TextEmbeddingCache,
 } from "knowledge-processor";
 import * as ms from "memory-storage";
-import { TypeChatLanguageModel } from "typechat";
+import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
 import { createEmbeddingModelWithCache } from "./common.js";
 
 export interface MemorySettings {
@@ -22,7 +22,8 @@ export interface MemorySettings {
 }
 
 export function createMemorySettings(
-    getCache: () => TextEmbeddingCache | undefined,
+    getPersistentCache?: () => TextEmbeddingCache | undefined,
+    embeddingCacheSize = 64,
 ): MemorySettings {
     const languageModel = openai.createChatModelDefault("conversation-memory");
     /**
@@ -31,9 +32,10 @@ export function createMemorySettings(
      * @returns embedding model, size of embedding
      */
     const [embeddingModel, embeddingSize] = createEmbeddingModelWithCache(
-        64,
-        getCache,
+        embeddingCacheSize,
+        getPersistentCache,
     );
+
     const conversationSettings = kp.createConversationSettings(
         embeddingModel,
         embeddingSize,
@@ -41,11 +43,13 @@ export function createMemorySettings(
     conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
         kp.createKnowledgeExtractor(languageModel);
 
+    const queryTranslator = kp.createSearchQueryTranslator(languageModel);
     const memorySettings: MemorySettings = {
+        languageModel,
         embeddingModel,
         embeddingSize,
         conversationSettings,
-        languageModel,
+        queryTranslator,
     };
     return memorySettings;
 }
@@ -169,32 +173,71 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 }
 
-export interface IMemory extends kp.IConversation {
-    adjustSearchText(searchText: string): string;
-}
-
-export function isMemory(
-    conversation: kp.IConversation,
-): conversation is IMemory {
-    const cm = conversation as IMemory;
-    return cm.adjustSearchText !== undefined;
-}
-
 //
 // TODO: common, boiler plate and other common memory methods go here
 //
 export abstract class Memory<
     TSettings extends MemorySettings = MemorySettings,
+    TMessage extends Message = Message,
 > {
     constructor() {}
 
     public abstract get settings(): TSettings;
+    public abstract get conversation(): kp.IConversation<TMessage>;
 
-    protected getQueryTranslator(): kp.SearchQueryTranslator {
+    /**
+     * Run a natural language query against this memory
+     * @param searchText
+     * @returns
+     */
+    public async search(
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+    ): Promise<Result<kp.ConversationSearchResult[]>> {
+        options = this.adjustLanguageSearchOptions(options);
+        return kp.searchConversationWithLanguage(
+            this.conversation,
+            searchText,
+            this.getQueryTranslator(),
+            options,
+        );
+    }
+
+    public async searchQueryFromLanguage(
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+    ): Promise<Result<kp.querySchema.SearchQuery>> {
+        options = this.adjustLanguageSearchOptions(options);
+        return kp.searchQueryFromLanguage(
+            this.conversation,
+            this.getQueryTranslator(),
+            searchText,
+            this.getSearchInstructions(),
+        );
+    }
+
+    protected getSearchInstructions(): PromptSection[] | undefined {
+        return undefined;
+    }
+
+    private getQueryTranslator(): kp.SearchQueryTranslator {
         const queryTranslator = this.settings.queryTranslator;
         if (!queryTranslator) {
             throw new Error("No query translator provided");
         }
         return queryTranslator;
+    }
+
+    private adjustLanguageSearchOptions(options?: kp.LanguageSearchOptions) {
+        options ??= kp.createLanguageSearchOptions();
+        const instructions = this.getSearchInstructions();
+        if (instructions) {
+            if (options.modelInstructions) {
+                options.modelInstructions.push(...instructions);
+            } else {
+                options.modelInstructions = instructions;
+            }
+        }
+        return options;
     }
 }

@@ -47,11 +47,13 @@ export async function searchQueryFromLanguage(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
     text: string,
-    context?: PromptSection[],
+    promptPreamble?: PromptSection[],
 ): Promise<Result<querySchema.SearchQuery>> {
     const timeRange = getTimeRangePromptSectionForConversation(conversation);
     let queryContext: PromptSection[] =
-        context && context.length > 0 ? [...context, ...timeRange] : timeRange;
+        promptPreamble && promptPreamble.length > 0
+            ? [...promptPreamble, ...timeRange]
+            : timeRange;
     const result = await queryTranslator.translate(text, queryContext);
     return result;
 }

@@ -96,18 +96,18 @@ export async function searchQueryExprFromLanguage(
     translator: SearchQueryTranslator,
     queryText: string,
     options?: LanguageSearchOptions,
-    context?: LanguageSearchDebugContext,
+    debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<SearchQueryExpr[]>> {
     const queryResult = await searchQueryFromLanguage(
         conversation,
         translator,
         queryText,
-        options?.standardContext,
+        options?.modelInstructions,
     );
     if (queryResult.success) {
         const searchQuery = queryResult.data;
-        if (context) {
-            context.searchQuery = searchQuery;
+        if (debugContext) {
+            debugContext.searchQuery = searchQuery;
         }
         options ??= createLanguageSearchOptions();
         const searchExpr = compileSearchQuery(
@@ -125,7 +125,7 @@ export type LanguageQueryCompileOptions = {
     // Use to ignore noise terms etc.
     termFilter?: (text: string) => boolean;
     // Debug flags
-    applyScope?: boolean | undefined;
+    applyScope?: boolean | undefined; // Turn off scope matching entirely
 };
 
 export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions {
@@ -135,7 +135,7 @@ export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions
 export interface LanguageSearchOptions extends SearchOptions {
     compileOptions: LanguageQueryCompileOptions;
     fallbackRagOptions?: LanguageSearchRagOptions | undefined;
-    standardContext?: PromptSection[] | undefined;
+    modelInstructions?: PromptSection[] | undefined;
 }
 
 export function createLanguageSearchOptions(): LanguageSearchOptions {

@@ -13,7 +13,7 @@ import {
     MemorySettings,
 } from "./memory.js";
 import { createIndexingState, getIndexingErrors } from "./common.js";
-import { Result, success, error } from "typechat";
+import { Result, success, error, PromptSection } from "typechat";
 
 export interface EmailMemorySettings extends MemorySettings {
     userProfile?: EmailUserProfile | undefined;
@@ -30,11 +30,11 @@ export interface EmailMemoryData
 }
 
 export class EmailMemory
-    extends Memory<EmailMemorySettings>
+    extends Memory<EmailMemorySettings, EmailMessage>
     implements kp.IConversation
 {
-    public messages: kp.IMessageCollection<EmailMessage>;
     public settings: EmailMemorySettings;
+    public messages: kp.IMessageCollection<EmailMessage>;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.ISemanticRefCollection;
@@ -63,6 +63,10 @@ export class EmailMemory
             this.settings.conversationSettings,
         );
         this.updateStaticAliases();
+    }
+
+    public override get conversation(): kp.IConversation<EmailMessage> {
+        return this;
     }
 
     /**
@@ -208,6 +212,19 @@ export class EmailMemory
         if (this.storageProvider) {
             this.storageProvider.close();
         }
+    }
+
+    protected override getSearchInstructions(): PromptSection[] | undefined {
+        if (this.settings.userProfile) {
+            const instructions: PromptSection[] = [
+                {
+                    role: "system",
+                    content: `You are answering requests about the Email Inbox belonging to:\n${JSON.stringify(this.settings.userProfile)}`,
+                },
+            ];
+            return instructions;
+        }
+        return undefined;
     }
 
     private createSettings(): EmailMemorySettings {

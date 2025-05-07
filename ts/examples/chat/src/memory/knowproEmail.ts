@@ -170,9 +170,7 @@ export async function createKnowproEmailCommands(
                 true,
             );
             if (!context.email) {
-                context.printer.writeError(
-                    "Could not create new email smemory",
-                );
+                context.printer.writeError("Could not create new email memory");
                 return;
             }
         }
