@@ -29,8 +29,10 @@ export async function startShell(
         `test_${process.env["TEST_WORKER_INDEX"]}_${process.env["TEST_PARALLEL_INDEX"]}`;
 
     // other related multi-instance variables that need to be modified to ensure we can run multiple shell instances
+    // Use 3001 as test port and assuming less then 50 port is needed per worker instance
     process.env["PORT"] = (
-        9001 + parseInt(process.env["TEST_WORKER_INDEX"]!)
+        3001 +
+        parseInt(process.env["TEST_WORKER_INDEX"]!) * 50
     ).toString();
     process.env["WEBSOCKET_HOST"] =
         `ws://localhost:${8080 + parseInt(process.env["TEST_WORKER_INDEX"]!)}`;
@@ -153,8 +155,18 @@ export function getAppPath(): string {
  */
 export function getLaunchArgs(): string[] {
     const appPath = getAppPath();
-    // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
-    return os.platform() === "linux" ? [appPath, "--no-sandbox"] : [appPath];
+    const args = [
+        appPath,
+        "--test",
+        "--env",
+        path.resolve(appPath, "../../.env"),
+    ];
+    if (os.platform() === "linux") {
+        // Ubuntu 24.04+ needs --no-sandbox, see https://github.com/electron/electron/issues/18265
+        args.push("--no-sandbox");
+    }
+
+    return args;
 }
 
 /**
@@ -395,7 +407,6 @@ export async function testUserRequest(
         const msg = await sendUserRequestAndWaitForCompletion(
             userRequests[i],
             mainWindow,
-            1,
         );
 
         // verify expected result

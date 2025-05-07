@@ -6,8 +6,9 @@ export type ListAction =
     | RemoveItemsAction
     | CreateListAction
     | GetListAction
-    | ClearListAction
-    | StartEditList;
+    | ClearListAction;
+
+export type ListActivity = StartEditList;
 
 // add one or more items to a list; if the list does not exist, create it
 export type AddItemsAction = {

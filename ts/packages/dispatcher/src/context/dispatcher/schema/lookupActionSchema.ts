@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type LookupAction = LookupAndAnswerAction | StartLookupAction;
+export type LookupAction = LookupAndAnswerAction;
+export type LookupActivity = StartLookupAction;
 export type DateVal = {
     day: number;
     month: number;
@@ -83,7 +84,8 @@ export type StartLookupInternet = {
     site?: string[]; // specific sites to look up in.
 };
 
-// The user want to start looking information for a specific source.
+// The user want to start looking information for a specific source without specifying what to look for.
+// Don't use this action if the request includes what to look for.
 export interface StartLookupAction {
     actionName: "startLookup";
     parameters: {

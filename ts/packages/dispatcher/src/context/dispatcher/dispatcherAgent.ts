@@ -29,6 +29,7 @@ import { loadAgentJsonTranslator } from "../../translation/agentTranslators.js";
 import { lookupAndAnswer } from "../../search/search.js";
 import {
     LookupAction,
+    LookupActivity,
     LookupAndAnswerAction,
 } from "./schema/lookupActionSchema.js";
 import {
@@ -52,6 +53,7 @@ async function executeDispatcherAction(
         | DispatcherActions
         | ClarifyRequestAction
         | LookupAction
+        | LookupActivity
         | ActivityActions
     >,
     context: ActionContext<CommandHandlerContext>,
@@ -154,12 +156,7 @@ async function clarifyWithLookup(
         agents.getActionConfig("dispatcher"),
     ];
     // TODO: cache this?
-    const translator = loadAgentJsonTranslator(
-        actionConfigs,
-        [],
-        agents,
-        false, // no multiple
-    );
+    const translator = loadAgentJsonTranslator(actionConfigs, [], agents);
 
     const question = `What is ${action.parameters.reference}?`;
     const result = await translator.translate(question);
@@ -241,7 +238,10 @@ export const dispatcherManifest: AppAgentManifest = {
                     "Action that helps you look up information to answer user questions.",
                 schemaFile:
                     "./src/context/dispatcher/schema/lookupActionSchema.ts",
-                schemaType: "LookupAction",
+                schemaType: {
+                    action: "LookupAction",
+                    activity: "LookupActivity",
+                },
                 injected: true,
                 cached: false,
             },
