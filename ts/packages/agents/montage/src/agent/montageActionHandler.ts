@@ -111,7 +111,7 @@ async function initializeMontageContext() {
     return {
         // default search settings
         searchSettings: {
-            minScore: 5, // TODO: tune?
+            minScore: 0.5, // TODO tune?
             exactMatch: false,
         },
 
@@ -128,23 +128,6 @@ function getActiveMontage(
     return context.montages.find((value) => {
         return value.id === context.activeMontageId;
     });
-}
-
-/*
- * Gets the index of the active montage in the montages array
- */
-function getActiveMontageIndex(context: MontageActionContext): number {
-    let idx = -1;
-
-    context.montages.find((value, index) => {
-        if (value.id === context.activeMontageId) {
-            idx = index;
-        }
-
-        return value.id === context.activeMontageId;
-    });
-
-    return idx;
 }
 
 /*
@@ -426,28 +409,22 @@ async function handleMontageAction(
 
             // TODO: update project state with this action
             // add found files to the montage
-            actionContext.sessionContext.agentContext.montages[
-                getActiveMontageIndex(actionContext.sessionContext.agentContext)
-            ].files = [
-                ...new Set([
-                    ...actionContext.sessionContext.agentContext.montages[
-                        getActiveMontageIndex(
-                            actionContext.sessionContext.agentContext,
-                        )
-                    ].files,
-                    ...action.parameters.files!,
-                ]),
+            const montage = getActiveMontage(
+                actionContext.sessionContext.agentContext,
+            );
+            if (montage === undefined) {
+                return createActionResultFromError(
+                    "No active montage to add images to.",
+                );
+            }
+            montage.files = [
+                ...new Set([...montage.files, ...action.parameters.files!]),
             ];
 
             // send select to the visualizer/client
             actionContext.sessionContext.agentContext.viewProcess!.send(action);
 
-            const fileCount =
-                actionContext.sessionContext.agentContext.montages[
-                    getActiveMontageIndex(
-                        actionContext.sessionContext.agentContext,
-                    )
-                ].files.length;
+            const fileCount = montage.files.length;
             const count: number = fileCount - action.parameters.files!.length;
             let message = `Found ${action.parameters.files!.length} images. `;
             if (count > 0) {
@@ -504,7 +481,7 @@ async function handleMontageAction(
         case "createNewMontage": {
             const newMontageAction: CreateMontageAction =
                 action as CreateMontageAction;
-            createNewMontage(
+            const montage = createNewMontage(
                 actionContext.sessionContext.agentContext,
                 newMontageAction.parameters.title,
             );
@@ -536,23 +513,19 @@ async function handleMontageAction(
             }
 
             // add found files to the montage
-            if (action.parameters.files !== undefined) {
-                actionContext.sessionContext.agentContext.montages[
-                    getActiveMontageIndex(
-                        actionContext.sessionContext.agentContext,
-                    )
-                ].files = [
-                    ...new Set([
-                        ...actionContext.sessionContext.agentContext.montages[
-                            getActiveMontageIndex(
-                                actionContext.sessionContext.agentContext,
-                            )
-                        ].files,
-                        ...action.parameters.files!,
-                    ]),
+            if (
+                action.parameters.files !== undefined &&
+                action.parameters.files.length > 0
+            ) {
+                debug(
+                    `Adding files to montage '${montage.title}': ${action.parameters.files.join(",")}`,
+                );
+                montage.files = [
+                    ...new Set([...montage.files, ...action.parameters.files]),
                 ];
             }
 
+            debug(montage);
             saveMontages(actionContext.sessionContext);
 
             // update montage state
@@ -732,21 +705,21 @@ async function handleMontageAction(
             );
 
             let mergedCount: number = 0;
+            const activeMontage = getActiveMontage(
+                actionContext.sessionContext.agentContext,
+            );
+            if (activeMontage === undefined) {
+                return createActionResultFromError(
+                    "Unable to merge montages, no active montage.",
+                );
+            }
             mergeMontageAction.parameters.ids?.forEach((id) => {
                 const montage: PhotoMontage | undefined =
                     actionContext.sessionContext.agentContext.montages.find(
                         (value) => value.id === id,
                     );
-                actionContext.sessionContext.agentContext.montages[
-                    getActiveMontageIndex(
-                        actionContext.sessionContext.agentContext,
-                    )
-                ].files = [
-                    ...actionContext.sessionContext.agentContext.montages[
-                        getActiveMontageIndex(
-                            actionContext.sessionContext.agentContext,
-                        )
-                    ].files,
+                activeMontage.files = [
+                    ...activeMontage.files,
                     ...montage!.files,
                 ];
                 mergedCount++;
@@ -758,16 +731,8 @@ async function handleMontageAction(
                         (value) => value.title === title,
                     );
                 if (montage !== undefined) {
-                    actionContext.sessionContext.agentContext.montages[
-                        getActiveMontageIndex(
-                            actionContext.sessionContext.agentContext,
-                        )
-                    ].files = [
-                        ...actionContext.sessionContext.agentContext.montages[
-                            getActiveMontageIndex(
-                                actionContext.sessionContext.agentContext,
-                            )
-                        ].files,
+                    activeMontage.files = [
+                        ...activeMontage.files,
                         ...montage.files,
                     ];
                     mergedCount++;
@@ -892,6 +857,7 @@ async function findRequestedImages(
             matches?.forEach((match: kp.SemanticRefSearchResult) => {
                 match.semanticRefMatches.forEach(
                     (value: kp.ScoredSemanticRefOrdinal) => {
+                        debug(value);
                         if (value.score >= context.searchSettings.minScore) {
                             const semanticRef: kp.SemanticRef | undefined =
                                 context.imageCollection!.semanticRefs.get(
@@ -957,7 +923,10 @@ async function findRequestedImages(
                 );
             });
 
-            action.parameters.files = [...imageFiles];
+            if (imageFiles.size > 0) {
+                debug(`Adding ${imageFiles.size} images to montage.`);
+                action.parameters.files = [...imageFiles];
+            }
         }
     }
 }
