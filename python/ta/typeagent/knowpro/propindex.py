@@ -201,7 +201,7 @@ class PropertyIndex(IPropertyToSemanticRefIndex):
         term_text = make_property_term_text(property_name, value)
         result = self._map.get(self._prepare_term_text(term_text))
         if result is None:
-            return []
+            return None
         else:
             return list(result)  # TODO: Do we need to make a copy?
 

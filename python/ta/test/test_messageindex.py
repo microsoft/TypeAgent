@@ -167,7 +167,7 @@ async def test_build_message_index(needs_auth: None):
         def __init__(self, messages):
             self.name_tag = "test_conversation"
             self.tags = []
-            self.semantic_refs = []
+            self.semantic_refs = None
             self.semantic_ref_index = None
             self.messages = messages
             self.secondary_indexes = ConversationSecondaryIndexes()
