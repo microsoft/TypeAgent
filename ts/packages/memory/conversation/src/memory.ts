@@ -189,4 +189,12 @@ export abstract class Memory<
     constructor() {}
 
     public abstract get settings(): TSettings;
+
+    protected getQueryTranslator(): kp.SearchQueryTranslator {
+        const queryTranslator = this.settings.queryTranslator;
+        if (!queryTranslator) {
+            throw new Error("No query translator provided");
+        }
+        return queryTranslator;
+    }
 }

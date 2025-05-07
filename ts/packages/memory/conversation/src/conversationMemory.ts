@@ -393,14 +393,6 @@ export class ConversationMemory
             () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
         );
     }
-
-    private getQueryTranslator(): kp.SearchQueryTranslator {
-        const queryTranslator = this.settings.queryTranslator;
-        if (!queryTranslator) {
-            throw new Error(`No query translator provided for ${this.nameTag}`);
-        }
-        return queryTranslator;
-    }
 }
 
 export type ConversationTaskCallback =
