@@ -3,7 +3,7 @@
 
 import bisect
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, cast
 
 from .interfaces import (
@@ -371,7 +371,32 @@ class TermSet:
 
 
 @dataclass
-class PropertyTermSet: ...  # TODO
+class PropertyTermSet:
+    """A collection of property terms with support for adding, checking, and clearing."""
+
+    terms: dict[str, Term] = field(default_factory=dict)
+
+    def add(self, property_name: str, property_value: Term) -> None:
+        """Add a property term to the set."""
+        key = self._make_key(property_name, property_value)
+        if key not in self.terms:
+            self.terms[key] = property_value
+
+    def has(self, property_name: str, property_value: Term | str) -> bool:
+        """Check if a property term exists in the set."""
+        key = self._make_key(property_name, property_value)
+        return key in self.terms
+
+    def clear(self) -> None:
+        """Clear all property terms from the set."""
+        self.terms.clear()
+
+    def _make_key(self, property_name: str, property_value: Term | str) -> str:
+        """Create a unique key for a property term."""
+        value = (
+            property_value if isinstance(property_value, str) else property_value.text
+        )
+        return f"{property_name}:{value}"
 
 
 # TODO: unionArrays, union, addToSet, setUnion, setIntersect, getBatches,

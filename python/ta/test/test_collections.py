@@ -4,6 +4,7 @@
 from typeagent.knowpro.kplib import Action, ConcreteEntity
 from typeagent.knowpro.collections import (
     MatchAccumulator,
+    PropertyTermSet,
     SemanticRefAccumulator,
     TermSet,
     TextRangeCollection,
@@ -286,3 +287,59 @@ def test_termset_values():
     assert len(values) == 2
     assert term1 in values
     assert term2 in values
+
+
+def test_property_term_set_add():
+    """Test adding property terms to the PropertyTermSet."""
+    term1 = Term(text="value1", weight=1.0)
+    term2 = Term(text="value2", weight=0.5)
+
+    property_term_set = PropertyTermSet()
+    property_term_set.add("property1", term1)
+    property_term_set.add("property2", term2)
+
+    assert len(property_term_set.terms) == 2
+    assert property_term_set.has("property1", "value1") is True
+    assert property_term_set.has("property2", term2) is True
+
+
+def test_property_term_set_add_duplicate():
+    """Test adding duplicate property terms."""
+    term1 = Term(text="value1", weight=1.0)
+
+    property_term_set = PropertyTermSet()
+    property_term_set.add("property1", term1)
+    property_term_set.add("property1", term1)  # Duplicate
+
+    assert len(property_term_set.terms) == 1  # Should not add duplicate
+    assert property_term_set.has("property1", "value1") is True
+
+
+def test_property_term_set_has():
+    """Test checking for the existence of property terms."""
+    term1 = Term(text="value1", weight=1.0)
+    term2 = Term(text="value2", weight=0.5)
+
+    property_term_set = PropertyTermSet()
+    property_term_set.add("property1", term1)
+
+    assert property_term_set.has("property1", "value1") is True
+    assert property_term_set.has("property1", term1) is True
+    assert property_term_set.has("property2", term2) is False
+    assert property_term_set.has("property3", "value3") is False
+
+
+def test_property_term_set_clear():
+    """Test clearing all property terms from the PropertyTermSet."""
+    term1 = Term(text="value1", weight=1.0)
+    term2 = Term(text="value2", weight=0.5)
+
+    property_term_set = PropertyTermSet()
+    property_term_set.add("property1", term1)
+    property_term_set.add("property2", term2)
+
+    assert len(property_term_set.terms) == 2
+    property_term_set.clear()
+    assert len(property_term_set.terms) == 0
+    assert property_term_set.has("property1", "value1") is False
+    assert property_term_set.has("property2", "value2") is False

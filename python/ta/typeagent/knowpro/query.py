@@ -130,6 +130,7 @@ class QueryEvalContext:
 
     def get_semantic_ref(self, semantic_ref_ordinal: SemanticRefOrdinal) -> SemanticRef:
         """Retrieve a semantic reference by its ordinal."""
+        assert self.conversation.semantic_refs is not None
         return self.conversation.semantic_refs.get(semantic_ref_ordinal)
 
     def get_message_for_ref(self, semantic_ref: SemanticRef) -> IMessage:
