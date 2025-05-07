@@ -17,7 +17,7 @@ export class ExposureTable extends ms.sqlite.SqliteDataFrame {
     constructor(public db: sqlite.Database) {
         super(db, "exposure", [
             ["shutterSpeed", { type: "number" }],
-            ["aperature", { type: "number" }]
+            ["aperature", { type: "number" }],
         ]);
     }
 }
