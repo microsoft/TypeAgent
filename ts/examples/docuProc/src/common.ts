@@ -7,7 +7,13 @@ import * as fsp from "fs/promises";
 import * as fs from "fs";
 import { lock } from "proper-lockfile";
 
-import { ArgDef } from "interactive-app";
+import {
+    ArgDef,
+    CommandMetadata,
+    NamedArgs,
+    parseNamedArguments,
+} from "interactive-app";
+import { dateTime } from "typeagent";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -87,4 +93,51 @@ export function argSourceFile(defaultValue?: string | undefined): ArgDef {
         type: "path",
         defaultValue,
     };
+}
+
+export function argToDate(value: string | undefined): Date | undefined {
+    return value ? dateTime.stringToDate(value) : undefined;
+}
+
+export function parseFreeAndNamedArguments(
+    args: string[],
+    argDefs: CommandMetadata,
+): [string[], NamedArgs] {
+    const namedArgsStartAt = args.findIndex((v) => v.startsWith("--"));
+    if (namedArgsStartAt < 0) {
+        return [args, parseNamedArguments([], argDefs)];
+    }
+    return [
+        args.slice(0, namedArgsStartAt),
+        parseNamedArguments(args.slice(namedArgsStartAt), argDefs),
+    ];
+}
+
+export function keyValuesFromNamedArgs(
+    args: NamedArgs,
+    metadata?: CommandMetadata,
+): Record<string, string> {
+    const record: Record<string, string> = {};
+    const keys = Object.keys(args);
+    for (const key of keys) {
+        const value = args[key];
+        if (typeof value !== "function") {
+            record[key] = value;
+        }
+    }
+    if (metadata !== undefined) {
+        if (metadata.args) {
+            removeKeysFromRecord(record, Object.keys(metadata.args));
+        }
+        if (metadata.options) {
+            removeKeysFromRecord(record, Object.keys(metadata.options));
+        }
+    }
+    return record;
+}
+
+function removeKeysFromRecord(record: Record<string, string>, keys: string[]) {
+    for (const key of keys) {
+        delete record[key];
+    }
 }
