@@ -1,5 +1,54 @@
 [
   {
+    "request": "I am planning a trip to Spain. can you look up some of the cities I should visit.",
+    "action": "dispatcher.lookup.lookupAndAnswer"
+  },
+  {
+    "request": "Look up the ingredients for lemon meringue pie",
+    "action": "dispatcher.lookup.lookupAndAnswer"
+  },
+  {
+    "request": "Did duke win its bball game",
+    "action": "dispatcher.lookup.lookupAndAnswer"
+  },
+  {
+    "request": "Lookup duke result on the web",
+    "action": "dispatcher.lookup.lookupAndAnswer"
+  },
+  {
+    "request": "lookup snowdrop flowers",
+    "action": "dispatcher.lookup.lookupAndAnswer"
+  },
+  {
+    "request": "lookup snowdrops on the web",
+    "action": "dispatcher.lookup.lookupAndAnswer"
+  },
+  {
+    "request": "I'd like to look up something on the web",
+    "action": {
+      "translatorName": "dispatcher.lookup",
+      "actionName": "startLookup",
+      "parameters": {
+        "lookup":{
+          "source": "internet"
+        } 
+      }
+    }
+  },
+  {
+    "request": "I'd like to look up something on https://wikipedia.com",
+    "action": {
+      "translatorName": "dispatcher.lookup",
+      "actionName": "startLookup",
+      "parameters": {
+        "lookup": {
+          "source": "internet",
+          "site": ["https://wikipedia.com"]
+        }
+      }
+    }
+  },
+  {
     "request": "play the song by Bach we talked about yesterday",
     "action": "dispatcher.clarify.clarifyUnresolvedReference"
   },
