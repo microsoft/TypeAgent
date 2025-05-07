@@ -55,7 +55,7 @@ def lookup_term_filtered(
         filtered = [
             sr
             for sr in scored_refs
-            if filter(semantic_refs.get(sr.semantic_ref_ordinal), sr)
+            if filter(semantic_refs[sr.semantic_ref_ordinal], sr)
         ]
         return filtered
     return None
@@ -131,16 +131,16 @@ class QueryEvalContext:
     def get_semantic_ref(self, semantic_ref_ordinal: SemanticRefOrdinal) -> SemanticRef:
         """Retrieve a semantic reference by its ordinal."""
         assert self.conversation.semantic_refs is not None
-        return self.conversation.semantic_refs.get(semantic_ref_ordinal)
+        return self.conversation.semantic_refs[semantic_ref_ordinal]
 
     def get_message_for_ref(self, semantic_ref: SemanticRef) -> IMessage:
         """Retrieve the message associated with a semantic reference."""
         message_index = semantic_ref.range.start.message_ordinal
-        return self.conversation.messages.get(message_index)
+        return self.conversation.messages[message_index]
 
     def get_message(self, message_ordinal: MessageOrdinal) -> IMessage:
         """Retrieve a message by its ordinal."""
-        return self.messages.get(message_ordinal)
+        return self.messages[message_ordinal]
 
     def clear_matched_terms(self) -> None:
         """Clear all matched terms and property terms."""

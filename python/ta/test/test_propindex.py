@@ -2,6 +2,8 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterator
+from typing import Any
+
 import pytest
 
 from typeagent.knowpro.interfaces import (
@@ -206,7 +208,7 @@ class TestMessage(IMessage):
         )
 
 
-class TestBaseCollection[T, TOrdinal: int](ICollection[T, TOrdinal]):
+class TestBaseCollection[T, TOrdinal: int](ICollection[T, int]):
     """Concrete implementation of IMessageCollection for testing."""
 
     def __init__(self, items: list[T] | None = None):
@@ -218,17 +220,25 @@ class TestBaseCollection[T, TOrdinal: int](ICollection[T, TOrdinal]):
     def __iter__(self) -> Iterator[T]:
         return iter(self.items)
 
-    def get(self, ordinal: TOrdinal) -> T:
+    def __getitem__(self, ordinal: Any) -> Any:
+        if isinstance(ordinal, slice):
+            return self._get_slice(ordinal.start, ordinal.stop)
+        if isinstance(ordinal, int):
+            return self._get(ordinal)
+        if isinstance(ordinal, list):
+            return self._get_multiple(ordinal)
+
+    def _get(self, ordinal: int) -> T:
         return self.items[ordinal]
 
-    def get_multiple(self, ordinals: list[TOrdinal]) -> list[T]:
+    def _get_multiple(self, ordinals: list[int]) -> list[T]:
         return [self.items[i] for i in ordinals]
 
     @property
     def is_persistent(self) -> bool:
         return False
 
-    def get_slice(self, start, end) -> list[T]:
+    def _get_slice(self, start, end) -> list[T]:
         return self.items[start:end]
 
     def append(self, *items: T) -> None:

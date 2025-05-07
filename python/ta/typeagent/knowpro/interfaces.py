@@ -12,6 +12,7 @@ from typing import (
     Protocol,
     Self,
     TypedDict,
+    overload,
 )
 
 from ..aitools.embeddings import NormalizedEmbedding, NormalizedEmbeddings
@@ -742,15 +743,13 @@ class IReadonlyCollection[T, TOrdinal](Iterable, Protocol):
     def __len__(self) -> int:
         raise NotImplementedError
 
-    # TODO: Use __getitem__ instead of get and get_slice.
-
-    def get(self, ordinal: TOrdinal) -> T:
-        raise NotImplementedError
-
-    def get_multiple(self, ordinals: list[TOrdinal]) -> list[T]:
-        raise NotImplementedError
-
-    def get_slice(self, start: TOrdinal, end: TOrdinal) -> list[T]:
+    @overload
+    def __getitem__(self, ordinal: TOrdinal) -> T: ...
+    @overload
+    def __getitem__(self, slice: slice) -> list[T]: ...
+    @overload
+    def __getitem__(self, ordinals: list[TOrdinal]) -> list[T]: ...
+    def __getitem__(self, arg: TOrdinal | slice | list[TOrdinal]) -> T | list[T]:  # type: ignore
         raise NotImplementedError
 
 

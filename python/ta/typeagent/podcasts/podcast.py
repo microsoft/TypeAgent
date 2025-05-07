@@ -10,6 +10,10 @@ from ..knowpro.importing import ConversationSettings
 from ..knowpro.interfaces import (
     Datetime,
     ConversationDataWithIndexes,
+    ICollection,
+    IMessageCollection,
+    ISemanticRefCollection,
+    MessageOrdinal,
     SemanticRef,
     Timedelta,
 )
@@ -128,9 +132,13 @@ class Podcast(
     ]
 ):
     name_tag: str = ""
-    messages: list[PodcastMessage] = field(default_factory=list)
+    messages: ICollection[PodcastMessage, MessageOrdinal] = field(
+        default_factory=IMessageCollection
+    )
     tags: list[str] = field(default_factory=list)
-    semantic_refs: list[interfaces.SemanticRef] = field(default_factory=list)  # type: ignore  # TODO
+    semantic_refs: ISemanticRefCollection | None = field(
+        default_factory=ISemanticRefCollection
+    )
     settings: ConversationSettings = field(default_factory=ConversationSettings)
     semantic_ref_index: convindex.ConversationIndex = field(
         default_factory=convindex.ConversationIndex

@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Callable
 
@@ -10,6 +11,7 @@ from .interfaces import (
     # Interfaces.
     IConversation,
     IMessage,
+    ISemanticRefCollection,
     ITermToSemanticRefIndex,
     # Other imports.
     IndexingEventHandlers,
@@ -68,7 +70,7 @@ def default_knowledge_validator(
 
 def add_entity_to_index(
     entity: kplib.ConcreteEntity,
-    semantic_refs: list[SemanticRef],
+    semantic_refs: ISemanticRefCollection,
     semantic_ref_index: ITermToSemanticRefIndex,
     message_ordinal: MessageOrdinal,
     chunk_ordinal: int = 0,
@@ -104,7 +106,7 @@ def add_facet(
 
 def add_topic_to_index(
     topic: Topic | str,
-    semantic_refs: list[SemanticRef],
+    semantic_refs: ISemanticRefCollection,
     semantic_ref_index: ITermToSemanticRefIndex,
     message_ordinal: MessageOrdinal,
     chunk_ordinal: int = 0,
@@ -125,7 +127,7 @@ def add_topic_to_index(
 
 def add_action_to_index(
     action: kplib.Action,
-    semantic_refs: list[SemanticRef],
+    semantic_refs: ISemanticRefCollection,
     semantic_ref_index: ITermToSemanticRefIndex,
     message_ordinal: int,
     chunk_ordinal: int = 0,
@@ -158,7 +160,7 @@ def add_action_to_index(
 
 
 def add_knowledge_to_index(
-    semantic_refs: list[SemanticRef],
+    semantic_refs: ISemanticRefCollection,
     semantic_ref_index: ITermToSemanticRefIndex,
     message_ordinal: MessageOrdinal,
     knowledge: kplib.KnowledgeResponse,
@@ -176,8 +178,8 @@ def add_knowledge_to_index(
 
 
 def add_metadata_to_index[TMessage: IMessage](
-    messages: list[TMessage],
-    semantic_refs: list[SemanticRef],
+    messages: Iterable[TMessage],
+    semantic_refs: ISemanticRefCollection,
     semantic_ref_index: ITermToSemanticRefIndex,
     knowledge_validator: KnowledgeValidator | None = None,
 ) -> None:
@@ -313,7 +315,7 @@ async def build_semantic_ref_index[TM: IMessage](
 
     if conversation.semantic_refs is None:
         return indexing_result
-    semantic_refs = list(conversation.semantic_refs)
+    semantic_refs = ISemanticRefCollection()  # XXX TODO XXX
 
     if extractor is None:
         extractor = convknowledge.KnowledgeExtractor()
@@ -356,13 +358,13 @@ async def build_semantic_ref_index[TM: IMessage](
 
 
 def dump(
-    semantic_ref_index: ConversationIndex, semantic_refs: list[SemanticRef]
+    semantic_ref_index: ConversationIndex, semantic_refs: ISemanticRefCollection
 ) -> None:
     print("semantic_ref_index = {")
     for k, v in semantic_ref_index._map.items():
         print(f"    {k!r}: {v},")
     print("}\n")
-    print("semantic_refs = {")
+    print("semantic_refs = []")
     for semantic_ref in semantic_refs:
         print(f"    {semantic_ref},")
-    print("}\n")
+    print("]\n")

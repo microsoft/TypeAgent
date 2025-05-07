@@ -1,6 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from collections.abc import Iterable
+from typing import Any
+
 from typeagent.knowpro.kplib import Action, ConcreteEntity
 from typeagent.knowpro.collections import (
     MatchAccumulator,
@@ -145,14 +148,25 @@ class MockSemanticRefCollection(ISemanticRefCollection):
             ),
         }
 
-    def get(self, ordinal: int) -> SemanticRef:
+    def _get(self, ordinal: int) -> SemanticRef:
         return self.refs[ordinal]
 
-    def get_multiple(self, ordinals: list[int]) -> list[SemanticRef]:
+    def _get_multiple(self, ordinals: Iterable[int]) -> list[SemanticRef]:
         return [self.refs[o] for o in ordinals if o in self.refs]
 
-    def get_slice(self, start: int, end: int) -> list[SemanticRef]:
+    def _get_slice(self, start: int, end: int) -> list[SemanticRef]:
         return [v for k, v in self.refs.items() if start <= k < end]
+
+    def __getitem__(self, arg: Any) -> Any:
+        if isinstance(arg, int):
+            return self._get(arg)
+        elif isinstance(arg, slice):
+            assert arg.step in (None, 1)
+            return self._get_slice(arg.start, arg.stop)
+        elif isinstance(arg, list):
+            return self._get_multiple(arg)
+        else:
+            raise TypeError("Invalid argument type")
 
     def __len__(self):
         return len(self.refs)
