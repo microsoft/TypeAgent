@@ -14,7 +14,7 @@ import {
     createActionResultFromMarkdownDisplay,
     createActionResult,
 } from "@typeagent/agent-sdk/helpers/action";
-import { ListAction } from "./listSchema.js";
+import { ListAction, ListActivity } from "./listSchema.js";
 
 export function instantiate(): AppAgent {
     return {
@@ -30,7 +30,7 @@ type ListActionContext = {
 };
 
 async function executeListAction(
-    action: TypeAgentAction<ListAction>,
+    action: TypeAgentAction<ListAction | ListActivity>,
     context: ActionContext<ListActionContext>,
 ) {
     let result = await handleListAction(
@@ -101,7 +101,7 @@ function validateWildcardItems(
 }
 
 async function listValidateWildcardMatch(
-    action: ListAction,
+    action: ListAction | ListActivity,
     context: SessionContext<ListActionContext>,
 ) {
     if (action.actionName === "addItems") {
@@ -290,7 +290,7 @@ function getListDisplay(
     );
 }
 async function handleListAction(
-    action: ListAction,
+    action: TypeAgentAction<ListAction | ListActivity>,
     listContext: ListActionContext,
 ) {
     let result: ActionResult | undefined = undefined;

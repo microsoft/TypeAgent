@@ -25,6 +25,7 @@ import { HistoryContext, ParamObjectType } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
 import {
     composeActionSchema,
+    ComposeSchemaOptions,
     composeSelectedActionSchema,
     createActionSchemaJsonValidator,
 } from "./actionSchemaJsonTranslator.js";
@@ -169,7 +170,7 @@ function getTranslatorSchemaDef(
 function getTranslatorSchemaDefs(
     actionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
-    multipleActionOptions: MultipleActionOptions,
+    multipleActionOptions: MultipleActionOptions = false,
 ): TranslatorSchemaDef[] {
     // Cannot disable activity if we don't regenerate the schema
     const translationSchemaDefs = actionConfigs.map(getTranslatorSchemaDef);
@@ -231,17 +232,16 @@ function createTypeAgentValidator<T extends TranslatedAction>(
     actionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
-    generated: boolean = true,
-    generateOptions?: GenerateSchemaOptions,
+    composeOptions?: ComposeSchemaOptions,
+    generateOptions?: GenerateSchemaOptions | null, // null means not generated
 ) {
-    return generated
+    return generateOptions !== null
         ? createActionSchemaJsonValidator<T>(
               composeActionSchema(
                   actionConfigs,
                   switchActionConfigs,
                   provider,
-                  multipleActionOptions,
+                  composeOptions,
               ),
               generateOptions,
           )
@@ -251,7 +251,7 @@ function createTypeAgentValidator<T extends TranslatedAction>(
                   getTranslatorSchemaDefs(
                       actionConfigs,
                       switchActionConfigs,
-                      multipleActionOptions,
+                      composeOptions?.multiple,
                   ),
               ),
               "AllActions",
@@ -306,17 +306,15 @@ export function loadAgentJsonTranslator<
     actionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
-    generated: boolean = true,
+    options?: ComposeSchemaOptions,
+    generateOptions?: GenerateSchemaOptions | null, // null means not generated
     model?: string,
-    generateOptions?: GenerateSchemaOptions,
 ): TypeAgentTranslator<T> {
     const validator = createTypeAgentValidator<T>(
         actionConfigs,
         switchActionConfigs,
         provider,
-        multipleActionOptions,
-        generated,
+        options,
         generateOptions,
     );
     // Collect schema name mapping.
@@ -405,7 +403,7 @@ export function createTypeAgentTranslatorForSelectedActions<
     additionalActionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
+    options?: ComposeSchemaOptions,
     model?: string,
 ) {
     const validator = createActionSchemaJsonValidator<T>(
@@ -415,7 +413,7 @@ export function createTypeAgentTranslatorForSelectedActions<
             additionalActionConfigs,
             switchActionConfigs,
             provider,
-            multipleActionOptions,
+            options,
         ),
     );
     const schemaNameMap = collectSchemaName(
@@ -433,8 +431,8 @@ export function getFullSchemaText(
     provider: ActionConfigProvider,
     activeSchemas: string[] = [],
     changeAgentAction: boolean,
-    multipleActionOptions: MultipleActionOptions,
-    generated: boolean,
+    options?: ComposeSchemaOptions,
+    generateOptions?: GenerateSchemaOptions | null, // null means not generated
 ): string {
     const actionConfigs: ActionConfig[] = [
         provider.getActionConfig(schemaName),
@@ -455,21 +453,21 @@ export function getFullSchemaText(
         }
     }
 
-    if (generated) {
+    if (generateOptions !== null) {
         return generateActionSchema(
             composeActionSchema(
                 actionConfigs,
                 switchActionConfigs,
                 provider,
-                multipleActionOptions,
+                options,
             ),
-            { exact: true },
+            generateOptions,
         );
     }
     const schemaDefs = getTranslatorSchemaDefs(
         actionConfigs,
         switchActionConfigs,
-        multipleActionOptions,
+        options?.multiple,
     );
     return composeTranslatorSchemas("AllActions", schemaDefs);
 }
