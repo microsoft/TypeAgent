@@ -1,8 +1,24 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from collections.abc import Iterator
 import pytest
 
+from typeagent.knowpro.interfaces import (
+    ICollection,
+    IConversation,
+    IMessage,
+    IMessageCollection,
+    ISemanticRefCollection,
+    ITermToSemanticRefIndex,
+    MessageOrdinal,
+    SemanticRef,
+    ListIndexingResult,
+    SemanticRefOrdinal,
+    TextLocation,
+    TextRange,
+)
+from typeagent.knowpro.kplib import Facet, ConcreteEntity, Action, KnowledgeResponse
 from typeagent.knowpro.propindex import (
     PropertyIndex,
     PropertyNames,
@@ -15,13 +31,9 @@ from typeagent.knowpro.propindex import (
     split_property_term_text,
     is_known_property,
 )
-from typeagent.knowpro.kplib import Facet, ConcreteEntity, Action
-from typeagent.knowpro.interfaces import (
-    SemanticRef,
-    ListIndexingResult,
-    TextLocation,
-    TextRange,
-)
+from typeagent.knowpro.secindex import ConversationSecondaryIndexes
+
+from fixtures import needs_auth
 
 
 @pytest.fixture
@@ -136,21 +148,115 @@ def test_build_property_index(mocker):
     assert result.number_completed == 1
 
 
-def test_add_to_property_index(property_index):
-    """Test adding semantic references to the property index."""
-    semantic_refs = [
-        SemanticRef(
-            semantic_ref_ordinal=0,
-            range=TextRange(start=TextLocation(0), end=None),
-            knowledge_type="entity",
-            knowledge=ConcreteEntity(
-                name="ExampleEntity",
-                type=["object"],
-                facets=[Facet(name="color", value="blue")],
-            ),
+class TestMessage(IMessage):
+    """Concrete implementation of IMessage for testing."""
+
+    def __init__(self, text_chunks):
+        self.text_chunks = text_chunks
+        self.text_location = TextLocation(0, 0)
+        self.tags = []
+
+    def get_text(self):
+        return " ".join(self.text_chunks)
+
+    def get_text_location(self):
+        return self.text_location
+
+    def get_knowledge(self):
+        return KnowledgeResponse(
+            entities=[],
+            actions=[],
+            inverse_actions=[],
+            topics=[],
         )
-    ]
-    result = add_to_property_index(property_index, semantic_refs, 0)
+
+
+class TestBaseCollection[T, TOrdinal: int](ICollection[T, TOrdinal]):
+    """Concrete implementation of IMessageCollection for testing."""
+
+    def __init__(self, items: list[T] | None = None):
+        self.items = items or []
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    def __iter__(self) -> Iterator[T]:
+        return iter(self.items)
+
+    def get(self, ordinal: TOrdinal) -> T:
+        return self.items[ordinal]
+
+    def get_multiple(self, ordinals: list[TOrdinal]) -> list[T]:
+        return [self.items[i] for i in ordinals]
+
+    @property
+    def is_persistent(self) -> bool:
+        return False
+
+    def get_slice(self, start, end) -> list[T]:
+        return self.items[start:end]
+
+    def append(self, *items: T) -> None:
+        for item in items:
+            self.items.append(item)
+
+
+class TestMessageCollection(
+    TestBaseCollection[TestMessage, MessageOrdinal], IMessageCollection
+):
+    pass
+
+
+class TestSemanticRefCollection(
+    TestBaseCollection[SemanticRef, SemanticRefOrdinal], ISemanticRefCollection
+):
+    pass
+
+
+class TestConversation[
+    TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
+](IConversation[TMessage, TTermToSemanticRefIndex]):
+    """Concrete implementation of IConversation for testing."""
+
+    def __init__(self):
+        self.name_tag = "test_conversation"
+        self.tags = []
+        self.semantic_refs = TestSemanticRefCollection(
+            [
+                SemanticRef(
+                    semantic_ref_ordinal=0,
+                    range=TextRange(start=TextLocation(0), end=None),
+                    knowledge_type="entity",
+                    knowledge=ConcreteEntity(
+                        name="ExampleEntity",
+                        type=["object"],
+                        facets=[Facet(name="color", value="blue")],
+                    ),
+                )
+            ]
+        )
+        self.semantic_ref_index = None
+        self.messages = TestMessageCollection([TestMessage(["Hello"])])
+        self.secondary_indexes = ConversationSecondaryIndexes()
+
+
+def test_add_to_property_index(property_index, needs_auth):
+    """Test adding semantic references to the property index."""
+    # semantic_refs = [
+    #     SemanticRef(
+    #         semantic_ref_ordinal=0,
+    #         range=TextRange(start=TextLocation(0), end=None),
+    #         knowledge_type="entity",
+    #         knowledge=ConcreteEntity(
+    #             name="ExampleEntity",
+    #             type=["object"],
+    #             facets=[Facet(name="color", value="blue")],
+    #         ),
+    #     )
+    # ]
+    conversation = TestConversation()
+    conversation.semantic_refs = TestSemanticRefCollection()
+    result = add_to_property_index(conversation, 0)
     assert isinstance(result, ListIndexingResult)
     assert result.number_completed == 1
 

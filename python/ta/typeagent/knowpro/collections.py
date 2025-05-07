@@ -307,7 +307,67 @@ class TextRangesInScope:
 
 
 @dataclass
-class TermSet: ...  # TODO
+class TermSet:
+    """A collection of terms with support for adding, updating, and retrieving terms."""
+
+    terms: dict[str, Term]
+
+    def __init__(self, terms: list[Term] | None = None):
+        self.terms = {}
+        self.add_or_union(terms)
+
+    def __len__(self) -> int:
+        """Return the number of terms in the set."""
+        return len(self.terms)
+
+    def add(self, term: Term) -> bool:
+        """Add a term to the set if it doesn't already exist."""
+        if term.text in self.terms:
+            return False
+        self.terms[term.text] = term
+        return True
+
+    def add_or_union(self, terms: Term | list[Term] | None) -> None:
+        """Add a term or merge a list of terms into the set."""
+        if terms is None:
+            return
+        if isinstance(terms, list):
+            for term in terms:
+                self.add_or_union(term)
+        else:
+            existing_term = self.terms.get(terms.text)
+            if existing_term:
+                existing_score = existing_term.weight or 0
+                new_score = terms.weight or 0
+                if new_score > existing_score:
+                    existing_term.weight = new_score
+            else:
+                self.terms[terms.text] = terms
+
+    def get(self, term: str | Term) -> Term | None:
+        """Retrieve a term by its text."""
+        return self.terms.get(term if isinstance(term, str) else term.text)
+
+    def get_weight(self, term: Term) -> float | None:
+        """Retrieve the weight of a term."""
+        t = self.terms.get(term.text)
+        return t.weight if t is not None else None
+
+    def __contains__(self, term: Term) -> bool:
+        """Check if a term exists in the set."""
+        return term.text in self.terms
+
+    def remove(self, term: Term):
+        """Remove a term from the set, if present."""
+        self.terms.pop(term.text, None)
+
+    def clear(self):
+        """Clear all terms from the set."""
+        self.terms.clear()
+
+    def values(self) -> list[Term]:
+        """Retrieve all terms in the set."""
+        return list(self.terms.values())
 
 
 @dataclass

@@ -5,6 +5,7 @@ from typeagent.knowpro.kplib import Action, ConcreteEntity
 from typeagent.knowpro.collections import (
     MatchAccumulator,
     SemanticRefAccumulator,
+    TermSet,
     TextRangeCollection,
     TextRangesInScope,
 )
@@ -178,3 +179,110 @@ def test_semantic_ref_accumulator_group_matches_by_type():
     assert "action" in groups
     assert groups["entity"].get_match(1) is not None
     assert groups["action"].get_match(2) is not None
+
+
+def test_termset_add():
+    """Test adding terms to the TermSet."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example2", weight=0.5)
+
+    term_set = TermSet()
+    assert term_set.add(term1) is True  # Term should be added
+    assert term_set.add(term1) is False  # Duplicate term should not be added
+    assert term_set.add(term2) is True  # Another term should be added
+
+    assert len(term_set) == 2
+    assert term1 in term_set
+    assert term2 in term_set
+
+
+def test_termset_add_or_union_single_term():
+    """Test adding a single term using add_or_union."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example1", weight=2.0)  # Higher weight for the same term
+
+    term_set = TermSet()
+    term_set.add_or_union(term1)
+    assert len(term_set) == 1
+    term = term_set.get(term1)
+    assert term is not None
+    assert term.weight == 1.0
+
+    term_set.add_or_union(term2)  # Should update the weight
+    assert len(term_set) == 1
+    term = term_set.get(term1)
+    assert term is not None
+    assert term.weight == 2.0
+
+
+def test_termset_add_or_union_multiple_terms():
+    """Test adding multiple terms using add_or_union."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example2", weight=0.5)
+    term3 = Term(text="example3", weight=1.5)
+
+    term_set = TermSet()
+    term_set.add_or_union([term1, term2, term3])
+
+    assert len(term_set) == 3
+    assert term1 in term_set
+    assert term2 in term_set
+    assert term3 in term_set
+
+
+def test_termset_get():
+    """Test retrieving terms from the TermSet."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example2", weight=0.5)
+
+    term_set = TermSet([term1, term2])
+    assert term_set.get("example1") == term1
+    assert term_set.get("example2") == term2
+    assert term_set.get("nonexistent") is None
+
+
+def test_termset_get_weight():
+    """Test retrieving the weight of a term."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example2", weight=None)
+
+    term_set = TermSet([term1, term2])
+    assert term_set.get_weight(term1) == 1.0
+    assert term_set.get_weight(term2) is None
+    assert term_set.get_weight(Term(text="nonexistent")) is None
+
+
+def test_termset_remove():
+    """Test removing terms from the TermSet."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example2", weight=0.5)
+
+    term_set = TermSet([term1, term2])
+    assert term1 in term_set
+    term_set.remove(term1)
+    assert term1 not in term_set
+    assert len(term_set) == 1
+
+
+def test_termset_clear():
+    """Test clearing all terms from the TermSet."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example2", weight=0.5)
+
+    term_set = TermSet([term1, term2])
+    assert len(term_set) == 2
+    term_set.clear()
+    assert len(term_set) == 0
+
+
+def test_termset_values():
+    """Test retrieving all terms as a list."""
+    term1 = Term(text="example1", weight=1.0)
+    term2 = Term(text="example2", weight=0.5)
+
+    term_set = TermSet([term1, term2])
+    values = term_set.values()
+
+    assert len(values) == 2
+    assert term1 in values
+    assert term2 in values

@@ -86,7 +86,7 @@ class ITermToSemanticRefIndex(Protocol):
     def remove_term(self, term: str, semantic_ref_ordinal: SemanticRefOrdinal) -> None:
         raise NotImplementedError
 
-    def lookup_term(self, term: str) -> Sequence[ScoredSemanticRefOrdinal] | None:
+    def lookup_term(self, term: str) -> list[ScoredSemanticRefOrdinal] | None:
         raise NotImplementedError
 
 
@@ -473,8 +473,8 @@ class IConversation[
 ](Protocol):
     name_tag: str
     tags: list[str]
-    messages: list[TMessage]
-    semantic_refs: list[SemanticRef] | None
+    messages: "IMessageCollection[TMessage]"
+    semantic_refs: "ISemanticRefCollection | None"
     semantic_ref_index: TTermToSemanticRefIndex | None
     secondary_indexes: IConversationSecondaryIndexes[TMessage] | None
 
@@ -742,8 +742,7 @@ class IReadonlyCollection[T, TOrdinal](Iterable, Protocol):
     def __len__(self) -> int:
         raise NotImplementedError
 
-    def __bool__(self) -> bool:
-        return True
+    # TODO: Use __getitem__ instead of get and get_slice.
 
     def get(self, ordinal: TOrdinal) -> T:
         raise NotImplementedError
