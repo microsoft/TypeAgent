@@ -35,7 +35,7 @@ export type SelectPhotosAction = {
         // any search terms to use indicating the photos to remove
         search_filters?: string[];
         // any indicies provided indicating the photos to remove from the set of available images
-        indicies?: number[];
+        indices?: number[];
         // placeholder for images to be populated later
         files?: string[];
     };

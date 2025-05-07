@@ -374,11 +374,15 @@ async function handleMontageAction(
                 selectedCount += intersection?.length;
             }
 
-            action.parameters.indicies?.forEach((value) => {
+            action.parameters.indices?.forEach((value) => {
                 const indexedFile = activeMontage?.files[value];
-
+                debug(indexedFile);
                 // only count this index if it's not already been identified by file name
-                if (indexedFile && intersection?.indexOf(indexedFile) === -1) {
+                if (
+                    indexedFile &&
+                    (intersection === undefined ||
+                        intersection.indexOf(indexedFile) === -1)
+                ) {
                     selectedCount++;
                 }
             });
