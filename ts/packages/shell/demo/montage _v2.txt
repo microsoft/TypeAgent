@@ -6,16 +6,17 @@
 # Player actions
 # -------------------------------------
 please launch spotify
-# set device to computer
+set playback device to kibo
 
-Please play Nocturne No. 2 by Chopin.
-set the music volume to 40
+Please play Nocturne No. 2 by Frédéric Chopin
+set the music volume to 30
 
 
 # -------------------------------------
 # Code + clarification flow
 # -------------------------------------
-please open vscode
+# please open vscode
+switch to vscode window
 
 split window into two columns
 Revert back to a single column
@@ -23,7 +24,7 @@ Revert back to a single column
 change my code color scheme
 
 # hopefully we get clarification request
-solarized light
+Solarized Light
 
 Actually I want the color to be monokai
 
@@ -58,14 +59,6 @@ clear filters
 # zoom out
 # pan right
 
-#-----------------------------------
-# List management - long-term memory
-#-----------------------------------
-lookup snowdrops on the web
-what was the name of the list we made for the bulb order?
-add snowdrops to that list
-what is on the list?
-
 
 #-----------------------------------
 # Conversation memory  - long-term memory
@@ -74,10 +67,6 @@ what is on the list?
 in that Kevin Scott podcast we talked about last month, what were the books Adrian and Kevin mentioned?
 what did Kevin say about AI in that podcast?
 
-#-----------------------------------
-# integration with other knowledge sources
-#-----------------------------------
-did the PR about email memory get checked in?
 
 # -------------------------------------
 # Calendar
@@ -86,19 +75,32 @@ did the PR about email memory get checked in?
 # Open "https://outlook.office.com/calendar/view/workweek?actSwt=true" in a new tab
 
 Create a code review meeting next Monday at 11:00 AM
-Add Alex to the code review meeting
+Add Isaiah to the code review meeting
 # Add Megan to the code review meeting
 
-Schedule a lunch meeting at noon tomorrow
+# Schedule a lunch meeting at noon tomorrow
 # Add Alex and Megan to the lunch meeting
 
 # Block some time to pick up groceries at 5:00 PM today
+
+#-----------------------------------
+# integration with other knowledge sources
+#-----------------------------------
+did the PR about semanticRefs get checked in?
 
 # -------------------------------------
 # email
 # -------------------------------------
 # Open "https://outlook.office.com/mail/sentitems/" in a new tab
 
-Send email to Megan with the recipe for Lasgna
+# Send email to Megan with the recipe for Lasgna
 Reply to the email from Megan saying you will be happy to meet for coffee
-Forward the mail from Megan to Alex asking if he wants to join us for coffee
+Forward the mail from Megan to Isaiah asking if he wants to join us for coffee
+
+#-----------------------------------
+# List management - long-term memory
+#-----------------------------------
+lookup snowdrops on the web
+what was the name of the list we made for the bulb order?
+add snowdrops to that list
+what is on the list?
