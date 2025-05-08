@@ -1,12 +1,10 @@
 {
-    "extends": "../../../tsconfig.json",
-    "compilerOptions": {
-      "outDir": "../../../dist/view/public/js",
-      "rootDir": ".",
-      "lib": ["DOM", "ES2020", "DOM.Iterable"]
-    },
-    "include": ["./**/*.ts", "../shared/**/*.ts"],
-    "references": [
-      { "path": "../shared" }
-    ]
-  }
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/view/public/js",
+    "rootDir": ".",
+    "lib": ["DOM", "ES2020", "DOM.Iterable"]
+  },
+  "include": ["./**/*.ts", "../shared/**/*.ts"],
+  "references": [{ "path": "../shared" }]
+}
