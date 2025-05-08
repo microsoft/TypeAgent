@@ -25,20 +25,45 @@ public class Outlook : COMObject
         });
     }
 
-    public Email LoadEmail(string filePath)
+    public List<Email> LoadEmail(string filePath)
     {
         Verify.FileExists(filePath);
 
         MailItem mail = (MailItem)_session.OpenSharedItem(filePath);
+        List<Email> emails = new List<Email>();
         try
         {
-            return new Email(mail, filePath);
+            if (mail.IsForward())
+            {
+                string mailText = mail.ToText();
+                string[] emailBodies = BodyParser.Default.SplitForwardedEmail(mailText);
+                for (int i = 0; i < emailBodies.Length; ++i)
+                {
+                    try
+                    {
+                        emails.Add(Email.FromText(emailBodies[i]));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        ConsoleEx.LogError(ex);
+                    }
+                }
+            }
+            else
+            {
+                emails.Add(new Email(mail, filePath));
+            }
+        }
+        catch (System.Exception ex)
+        {
+            ConsoleEx.LogError(ex);
         }
         finally
         {
             COMObject.Release(mail);
             mail = null;
         }
+        return emails;
     }
 
     public void SaveEmailAsText(string filePath, string savePath)

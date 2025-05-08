@@ -49,8 +49,13 @@ public class EmailExporter
         {
             if (format == ExportFormat.Json)
             {
-                Email email = _outlook.LoadEmail(sourcePath);
-                email.Save(destPath);
+                List<Email> emails = _outlook.LoadEmail(sourcePath);
+                for (int i = 0; i < emails.Count; ++i)
+                {
+                    var email = emails[i];
+                    string savePath = (i > 0) ? PathEx.AppendNumber(destPath, i) : destPath;
+                    email.Save(savePath);
+                }
             }
             else
             {
@@ -192,8 +197,12 @@ public class EmailExporter
 
     void PrintFile(string sourcePath)
     {
-        Email email = _outlook.LoadEmail(sourcePath);
-        Console.WriteLine(email.ToString());
+        List<Email> emails = _outlook.LoadEmail(sourcePath);
+        foreach (var email in emails)
+        {
+            Console.WriteLine(email.ToString());
+            Console.WriteLine();
+        }
     }
 
     string EnsureDestJsonFolder(string dirPath)

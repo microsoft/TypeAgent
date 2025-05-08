@@ -51,4 +51,19 @@ public static class StringEx
                select str;
 
     }
+
+    public static int IndexOfMin(this string value, IEnumerable<string> delimiters, int startAt = 0)
+    {
+        int minIndex = -1;
+        foreach (var delimiter in delimiters)
+        {
+            int index = value.IndexOf(delimiter, startAt);
+            if (index >= 0 && (minIndex == -1 || index < minIndex))
+            {
+                minIndex = index;
+            }
+        }
+
+        return minIndex;
+    }
 }

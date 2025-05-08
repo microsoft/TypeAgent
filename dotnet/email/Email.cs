@@ -16,7 +16,7 @@ public class Email
         SourcePath = sourcePath;
     }
 
-    public Email(Email email, string body)
+    public Email(Email email)
     {
         this.Bcc = email.Bcc;
         this.Cc = email.Cc;
@@ -26,6 +26,7 @@ public class Email
         this.SentOn = email.SentOn;
         this.SourcePath = email.SourcePath;
         this.Subject = email.Subject;
+        this.Body = email.Body;
     }
 
     /*
@@ -44,7 +45,7 @@ public class Email
     [JsonPropertyName("sentOn")]
     public DateTime SentOn { get; set; }
     [JsonPropertyName("receivedOn")]
-    public DateTime ReceivedOn { get; set; }
+    public DateTime? ReceivedOn { get; set; }
     [JsonPropertyName("importance")]
     public string Importance { get; set; }
     [JsonPropertyName("threadId")]
@@ -110,6 +111,50 @@ public class Email
             sb.AppendLine(Body);
         }
         return sb.ToString();
+    }
+
+    public static Email FromText(string emailText)
+    {
+        Email email = new Email();
+        foreach (var part in MailParser.Default.ParseParts(emailText))
+        {
+            switch (part.Key.ToLower())
+            {
+                default:
+                    break;
+                case "from":
+                    email.From = EmailAddress.FromString(part.Value);
+                    break;
+                case "to":
+                    email.To = EmailAddress.ListFromString(part.Value);
+                    break;
+                case "cc":
+                    email.Cc = EmailAddress.ListFromString(part.Value);
+                    break;
+                case "bcc":
+                    email.Bcc = EmailAddress.ListFromString(part.Value);
+                    break;
+                case "subject":
+                    email.Subject = part.Value;
+                    break;
+                case "sent":
+                    email.SentOn = DateTime.Parse(part.Value);
+                    break;
+                case "received":
+                    email.ReceivedOn = DateTime.Parse(part.Value);
+                    break;
+                case "body":
+                    email.Body = part.Value;
+                    break;
+                case "importance":
+                    email.Importance = part.Value;
+                    break;
+                case "threadid":
+                    email.ThreadId = part.Value;
+                    break;
+            }
+        }
+        return email;
     }
 
     void Load(MailItem item)

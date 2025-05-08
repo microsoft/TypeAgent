@@ -9,58 +9,7 @@ public class MailParser
 {
     public static readonly MailParser Default = new MailParser();
 
-    Regex _splitBody;
-    Regex _fieldRegex;
-
-    MailParser()
-    {
-        _splitBody = new Regex("(?=From:)", RegexOptions.IgnoreCase);
-        _fieldRegex = new Regex(@"^(?<headerName>[^:]+):(?<headerValue>[^\r\n]+)", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-    }
-
-    public string[] SplitForwardedEmail(string email)
-    {
-        string[] parts = _splitBody.Split(email);
-        return parts.FilterEmpty().ToArray();
-    }
-
-    /*
-    public IEnumerable<KeyValuePair<string, string>> ParseParts(string message)
-    {
-        var matches = _fieldRegex.Matches(message);
-        string curHeader = string.Empty;
-        string curValue = string.Empty;
-        int bodyStartAt = 0;
-        foreach(Match match in matches)
-        {
-            string headerName = match.Groups["headerName"].Value;
-            string headerValue = match.Groups["headerValue"].Value;
-            if (!string.IsNullOrEmpty(headerName))
-            {
-                if (!string.IsNullOrEmpty(curHeader))
-                {
-                    yield return new KeyValuePair<string, string>(curHeader, curValue);
-                }
-                curHeader = headerName;
-                curValue = headerValue;
-            }
-            else
-            {
-                curValue += " " + headerValue.Trim();
-            }
-            bodyStartAt = match.Index + match.Length;
-        }
-        if (!string.IsNullOrEmpty(curHeader))
-        {
-            yield return new KeyValuePair<string, string>(curHeader, curValue);
-        }
-        if (bodyStartAt < message.Length)
-        {
-            bodyStartAt += "\r\n".Length;
-            yield return new KeyValuePair<string, string>("Body", message[bodyStartAt..]);
-        }
-    }
-    */
+    MailParser() { }
 
     public IEnumerable<KeyValuePair<string, string>> ParseParts(string message)
     {
@@ -109,9 +58,17 @@ public class MailParser
         {
             yield return new KeyValuePair<string, string>(curFieldName, curFieldVal);
         }
+        for (; i < lines.Length; ++i)
+        {
+            if (!string.IsNullOrEmpty(lines[i]))
+            {
+                break;
+            }
+        }
         if (i < lines.Length)
         {
-            yield return new KeyValuePair<string, string>("Body", string.Join("\r\n", lines, i, lines.Length - i));
+            string body = string.Join("\r\n", lines, i, lines.Length - i);
+            yield return new KeyValuePair<string, string>("Body", body);
         }
     }
 

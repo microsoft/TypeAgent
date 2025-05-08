@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Net.Mail;
+
 namespace TypeAgent;
 
 public class EmailAddress
@@ -30,6 +32,41 @@ public class EmailAddress
         {
             return string.IsNullOrEmpty(Address) ? DisplayName : $"\"{DisplayName}\" <{Address}>";
         }
+    }
+
+    public static EmailAddress FromString(string address)
+    {
+        EmailAddress emailAddress = new EmailAddress();
+        if (address.Length > 0)
+        {
+            emailAddress.DisplayName = address;
+            try
+            {
+                MailAddress mailAddress = new MailAddress(address);
+                emailAddress.Address = mailAddress.Address;
+                emailAddress.DisplayName = mailAddress.DisplayName;
+            }
+            catch
+            {
+            }
+        }
+        return emailAddress;
+    }
+
+    public static List<EmailAddress> ListFromString(string addresses)
+    {
+        // Outlook interop has a text export bug
+        List<EmailAddress> emailAddresses = new List<EmailAddress>();
+        if (addresses.Length > 0)
+        {
+            var addressParts = addresses.Split(";", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in addressParts)
+            {
+                emailAddresses.Add(FromString(part));
+            }
+
+        }
+        return emailAddresses;
     }
 }
 

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.Core;
+
 namespace TypeAgent;
 
 public static class MailtemEx
@@ -24,5 +26,20 @@ public static class MailtemEx
     public static void SaveAsText(this MailItem item, string savePath)
     {
         item.SaveAs(savePath, OlSaveAsType.olTXT);
+    }
+
+    public static string ToText(this MailItem item)
+    {
+        string textFilePath = Path.GetTempFileName();
+        try
+        {
+            item.SaveAsText(textFilePath);
+            string mailText = File.ReadAllText(textFilePath);
+            return mailText;
+        }
+        finally
+        {
+            FileEx.SafeDelete(textFilePath);
+        }
     }
 }

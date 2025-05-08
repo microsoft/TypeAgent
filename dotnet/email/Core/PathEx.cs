@@ -31,4 +31,9 @@ public static class PathEx
         return Path.GetFileNameWithoutExtension(fileName) + newExt;
     }
 
+    public static string AppendNumber(string filePath, int number)
+    {
+        string newName = $"{Path.GetFileNameWithoutExtension(filePath)}_{number}{Path.GetExtension(filePath)}";
+        return Path.Join(Path.GetDirectoryName(filePath), newName);
+    }
 }
