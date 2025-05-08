@@ -25,8 +25,8 @@
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/view/server/server.js --dev \"",
     "dev:client": "vite ",
     "dev:server": "tsc -p src/view/server/tsconfig.json --watch",
-    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
-    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "preview:client": "vite preview",
     "start": "node --experimental-specifier-resolution=node dist/view/server/server.js"
   },
