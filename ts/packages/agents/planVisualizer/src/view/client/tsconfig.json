@@ -1,9 +1,9 @@
 {
-    "extends": "../../tsconfig.json",
+    "extends": "../../../tsconfig.json",
     "compilerOptions": {
-      "outDir": "../../dist/server",
+      "outDir": "../../../dist/view/public/js",
       "rootDir": ".",
-      "lib": ["ES2020", "DOM"], 
+      "lib": ["DOM", "ES2020", "DOM.Iterable"]
     },
     "include": ["./**/*.ts", "../shared/**/*.ts"],
     "references": [

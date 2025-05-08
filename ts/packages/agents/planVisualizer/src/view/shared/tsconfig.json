@@ -1,7 +1,7 @@
 {
-    "extends": "../../tsconfig.json",
+    "extends": "../../../tsconfig.json",
     "compilerOptions": {
-      "outDir": "../../dist/shared",
+      "outDir": "../../../dist/view/shared",
       "rootDir": ".",
       "composite": true,
       "declaration": true,

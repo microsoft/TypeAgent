@@ -8,15 +8,16 @@ import { resolve } from "path";
 export default defineConfig({
     plugins: [
         typescript({
-            tsconfig: "./src/client/tsconfig.json",
+            tsconfig: "./src/view/client/tsconfig.json",
         }),
     ],
     build: {
-        outDir: "dist/public",
+        outDir: "dist/view/public",
         sourcemap: true,
+        emptyOutDir: false,
         rollupOptions: {
             input: {
-                main: resolve(__dirname, "src/client/app.ts"),
+                main: resolve(__dirname, "src/view/client/app.ts"),
             },
             output: {
                 entryFileNames: "js/[name].js",
