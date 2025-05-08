@@ -43,7 +43,7 @@ goto end
 :build
 if not exist ".venv\" call make.bat venv
 echo Building package...
-.venv\Scripts\python -m build --wheel
+.venv\Scripts\python -m build --wheel --installer uv
 goto end
 
 :venv
@@ -66,10 +66,11 @@ echo    (Sorry, I have no idea how to do that in cmd.exe.)
 goto end
 
 :clean
-echo Sorry, you have to clean up manually.
-echo These are to be deleted: build dist *.egg-info .venv
-echo Delete venv if the requirements have changed.
-echo The others are products of the build step.
+if exist build rmdir /s /q build
+if exist dist rmdir /s /q dist
+if exist typeagent.egg-info rmdir /s /q typeagent.egg-info
+if exist .venv rmdir /s /q .venv
+if exist .pytest_cache rmdir /s /q .pytest_cache
 goto end
 
 :help
