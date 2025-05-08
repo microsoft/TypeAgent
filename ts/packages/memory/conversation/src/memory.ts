@@ -22,8 +22,8 @@ export interface MemorySettings {
 }
 
 export function createMemorySettings(
-    getPersistentCache?: () => TextEmbeddingCache | undefined,
     embeddingCacheSize = 64,
+    getPersistentCache?: () => TextEmbeddingCache | undefined,
 ): MemorySettings {
     const languageModel = openai.createChatModelDefault("conversation-memory");
     /**
@@ -180,9 +180,16 @@ export abstract class Memory<
     TSettings extends MemorySettings = MemorySettings,
     TMessage extends Message = Message,
 > {
-    constructor() {}
+    public settings: TSettings;
+    constructor(settings: TSettings) {
+        this.settings = settings;
+        this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
+            this.settings.languageModel,
+        );
+        this.settings.embeddingModel.getPersistentCache = () =>
+            this.getPersistentEmbeddingCache();
+    }
 
-    public abstract get settings(): TSettings;
     public abstract get conversation(): kp.IConversation<TMessage>;
 
     /**
@@ -218,7 +225,19 @@ export abstract class Memory<
         );
     }
 
+    protected beginIndexing(): void {
+        this.settings.embeddingModel.cacheEnabled = false;
+    }
+
+    protected endIndexing(): void {
+        this.settings.embeddingModel.cacheEnabled = true;
+    }
+
     protected getSearchInstructions(): PromptSection[] | undefined {
+        return undefined;
+    }
+
+    protected getPersistentEmbeddingCache(): TextEmbeddingCache | undefined {
         return undefined;
     }
 

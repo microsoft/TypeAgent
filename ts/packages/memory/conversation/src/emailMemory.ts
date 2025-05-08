@@ -33,7 +33,6 @@ export class EmailMemory
     extends Memory<EmailMemorySettings, EmailMessage>
     implements kp.IConversation
 {
-    public settings: EmailMemorySettings;
     public messages: kp.IMessageCollection<EmailMessage>;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
@@ -47,11 +46,7 @@ export class EmailMemory
         public tags: string[] = [],
         settings?: EmailMemorySettings,
     ) {
-        super();
-        if (!settings) {
-            settings = this.createSettings();
-        }
-        this.settings = settings;
+        super(settings ?? createMemorySettings());
         this.serializer = new EmailMessageSerializer();
         this.indexingState = createIndexingState();
         this.messages = storageProvider.createMessageCollection<EmailMessage>(
@@ -105,25 +100,32 @@ export class EmailMemory
         eventHandler?: kp.IndexingEventHandlers,
         autoSave: boolean = true,
     ): Promise<Result<IndexingState>> {
-        const messageOrdinalStartAt = this.indexingState.lastMessageOrdinal + 1;
-        if (messageOrdinalStartAt < this.messages.length) {
-            const result = await kp.addToConversationIndex(
-                this,
-                this.settings.conversationSettings,
-                messageOrdinalStartAt,
-                this.semanticRefs.length,
-                eventHandler,
-            );
-            const errorMsg = getIndexingErrors(result);
-            if (errorMsg) {
-                return error(errorMsg);
+        try {
+            this.beginIndexing();
+
+            const messageOrdinalStartAt =
+                this.indexingState.lastMessageOrdinal + 1;
+            if (messageOrdinalStartAt < this.messages.length) {
+                const result = await kp.addToConversationIndex(
+                    this,
+                    this.settings.conversationSettings,
+                    messageOrdinalStartAt,
+                    this.semanticRefs.length,
+                    eventHandler,
+                );
+                const errorMsg = getIndexingErrors(result);
+                if (errorMsg) {
+                    return error(errorMsg);
+                }
+                this.updateIndexingState();
+                if (autoSave) {
+                    await this.writeToFile(this.settings.fileSaveSettings);
+                }
             }
-            this.updateIndexingState();
-            if (autoSave) {
-                await this.writeToFile(this.settings.fileSaveSettings);
-            }
+            return success(this.indexingState);
+        } finally {
+            this.endIndexing();
         }
-        return success(this.indexingState);
     }
 
     public async serialize(): Promise<EmailMemoryData> {
@@ -227,10 +229,8 @@ export class EmailMemory
         return undefined;
     }
 
-    private createSettings(): EmailMemorySettings {
-        return createMemorySettings(
-            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-        );
+    protected override getPersistentEmbeddingCache() {
+        return this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
     }
 
     private updateIndexingState(): void {
