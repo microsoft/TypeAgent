@@ -550,11 +550,14 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const textQuery = namedArgs.query;
-        const result = await kp.searchQueryFromLanguage(
-            context.conversation!,
-            context.queryTranslator,
-            textQuery,
-        );
+        const result =
+            context.conversation instanceof cm.Memory
+                ? await context.conversation.searchQueryFromLanguage(textQuery)
+                : await kp.searchQueryFromLanguage(
+                      context.conversation!,
+                      context.queryTranslator,
+                      textQuery,
+                  );
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
@@ -642,13 +645,20 @@ export async function createKnowproCommands(
             };
         }
 
-        const searchResults = await kp.searchConversationWithLanguage(
-            context.conversation!,
-            searchText,
-            context.queryTranslator,
-            options,
-            debugContext,
-        );
+        const searchResults =
+            context.conversation instanceof cm.Memory
+                ? await context.conversation.searchWithLanguage(
+                      searchText,
+                      options,
+                      debugContext,
+                  )
+                : await kp.searchConversationWithLanguage(
+                      context.conversation!,
+                      searchText,
+                      context.queryTranslator,
+                      options,
+                      debugContext,
+                  );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;

@@ -3,6 +3,7 @@
 
 import {
     createJsonTranslator,
+    PromptSection,
     Result,
     TypeChatJsonTranslator,
     TypeChatLanguageModel,
@@ -46,10 +47,13 @@ export async function searchQueryFromLanguage(
     conversation: IConversation,
     queryTranslator: SearchQueryTranslator,
     text: string,
+    promptPreamble?: PromptSection[],
 ): Promise<Result<querySchema.SearchQuery>> {
-    const result = await queryTranslator.translate(
-        text,
-        getTimeRangePromptSectionForConversation(conversation),
-    );
+    const timeRange = getTimeRangePromptSectionForConversation(conversation);
+    let queryContext: PromptSection[] =
+        promptPreamble && promptPreamble.length > 0
+            ? [...promptPreamble, ...timeRange]
+            : timeRange;
+    const result = await queryTranslator.translate(text, queryContext);
     return result;
 }

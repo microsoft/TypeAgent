@@ -646,6 +646,8 @@ export class TextRangeCollection implements Iterable<TextRange> {
     // Maintains ranges sorted by message index
     private ranges: TextRange[];
 
+    // TODO: consider: check if passed in ranges are not sorted?
+    // All usage is internal so far, guarantees sort, but...
     constructor(ranges?: TextRange[] | undefined) {
         this.ranges = ranges ?? [];
     }
@@ -695,7 +697,7 @@ export class TextRangeCollection implements Iterable<TextRange> {
         let i = collections.binarySearchFirst(
             this.ranges,
             rangeToMatch,
-            (x, y) => x.start.messageIndex - y.start.messageIndex,
+            (x, y) => x.start.messageOrdinal - y.start.messageOrdinal,
         );
         if (i < 0) {
             return false;

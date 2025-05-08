@@ -107,11 +107,10 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
 export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
-    extends Memory
+    extends Memory<ConversationMemorySettings, ConversationMessage>
     implements kp.IConversation<ConversationMessage>
 {
     public messages: kp.MessageCollection<ConversationMessage>;
-    public settings: ConversationMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRefCollection;
@@ -124,20 +123,20 @@ export class ConversationMemory
         public tags: string[] = [],
         settings?: ConversationMemorySettings,
     ) {
-        super();
+        super(settings ?? createMemorySettings());
+        this.adjustSettings();
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = new kp.SemanticRefCollection();
-        if (!settings) {
-            settings = this.createSettings();
-        }
-        this.settings = settings;
-        this.adjustSettings();
 
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
         this.updatesTaskQueue = this.createTaskQueue();
+    }
+
+    public override get conversation(): kp.IConversation<ConversationMessage> {
+        return this;
     }
 
     public async addMessage(
@@ -168,21 +167,28 @@ export class ConversationMemory
         let messageOrdinalStartAt = this.messages.length;
         let semanticRefOrdinalStartAt = this.semanticRefs.length;
         this.messages.append(message);
-        kp.addToConversationIndex(
-            this,
-            this.settings.conversationSettings,
-            messageOrdinalStartAt,
-            semanticRefOrdinalStartAt,
-        );
 
-        const saveResult = await this.autoSaveFile();
-        if (!saveResult.success) {
-            return saveResult;
+        try {
+            this.beginIndexing();
+
+            kp.addToConversationIndex(
+                this,
+                this.settings.conversationSettings,
+                messageOrdinalStartAt,
+                semanticRefOrdinalStartAt,
+            );
+
+            const saveResult = await this.autoSaveFile();
+            if (!saveResult.success) {
+                return saveResult;
+            }
+
+            // Clear the knowledge, now that its been indexed
+            message.knowledge = undefined;
+            return success(messageKnowledge!);
+        } finally {
+            this.endIndexing();
         }
-
-        // Clear the knowledge, now that its been indexed
-        message.knowledge = undefined;
-        return success(messageKnowledge!);
     }
 
     public queueAddMessage(
@@ -194,34 +200,6 @@ export class ConversationMemory
             message,
             callback: completionCallback,
         });
-    }
-
-    /**
-     * Run a natural language query against this memory
-     * @param searchText
-     * @returns
-     */
-    public async search(
-        searchText: string,
-    ): Promise<Result<kp.ConversationSearchResult[]>> {
-        return kp.searchConversationWithLanguage(
-            this,
-            searchText,
-            this.getQueryTranslator(),
-        );
-    }
-
-    public async createSearchQuery(
-        searchText: string,
-        options?: kp.LanguageSearchOptions,
-    ): Promise<Result<kp.SearchQueryExpr[]>> {
-        const queryResult = await kp.searchQueryExprFromLanguage(
-            this,
-            this.getQueryTranslator(),
-            searchText,
-            options,
-        );
-        return queryResult;
     }
 
     public async selectFromConversation(
@@ -375,10 +353,11 @@ export class ConversationMemory
         }
     }
 
+    protected override getPersistentEmbeddingCache() {
+        return this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
+    }
+
     private adjustSettings(): void {
-        this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
-            this.settings.languageModel,
-        );
         //
         // Messages can contain prior knowledge extracted during chat responses for example
         // To avoid knowledge duplication, we manually extract message knowledge and merge it
@@ -386,20 +365,6 @@ export class ConversationMemory
         //
         this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
             false;
-    }
-
-    private createSettings(): ConversationMemorySettings {
-        return createMemorySettings(
-            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-        );
-    }
-
-    private getQueryTranslator(): kp.SearchQueryTranslator {
-        const queryTranslator = this.settings.queryTranslator;
-        if (!queryTranslator) {
-            throw new Error(`No query translator provided for ${this.nameTag}`);
-        }
-        return queryTranslator;
     }
 }
 

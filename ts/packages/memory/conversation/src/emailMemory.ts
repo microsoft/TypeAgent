@@ -13,18 +13,27 @@ import {
     MemorySettings,
 } from "./memory.js";
 import { createIndexingState, getIndexingErrors } from "./common.js";
-import { Result, success, error } from "typechat";
+import { Result, success, error, PromptSection } from "typechat";
 
-export type EmailMemorySettings = MemorySettings;
+export interface EmailMemorySettings extends MemorySettings {
+    userProfile?: EmailUserProfile | undefined;
+}
+
+export interface EmailUserProfile {
+    userName: string;
+    emailAlias: string;
+}
 
 export interface EmailMemoryData
     extends kp.IConversationDataWithIndexes<EmailMessage> {
     indexingState: IndexingState;
 }
 
-export class EmailMemory extends Memory implements kp.IConversation {
+export class EmailMemory
+    extends Memory<EmailMemorySettings, EmailMessage>
+    implements kp.IConversation
+{
     public messages: kp.IMessageCollection<EmailMessage>;
-    public settings: EmailMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.ISemanticRefCollection;
@@ -37,11 +46,7 @@ export class EmailMemory extends Memory implements kp.IConversation {
         public tags: string[] = [],
         settings?: EmailMemorySettings,
     ) {
-        super();
-        if (!settings) {
-            settings = this.createSettings();
-        }
-        this.settings = settings;
+        super(settings ?? createMemorySettings());
         this.serializer = new EmailMessageSerializer();
         this.indexingState = createIndexingState();
         this.messages = storageProvider.createMessageCollection<EmailMessage>(
@@ -53,6 +58,10 @@ export class EmailMemory extends Memory implements kp.IConversation {
             this.settings.conversationSettings,
         );
         this.updateStaticAliases();
+    }
+
+    public override get conversation(): kp.IConversation<EmailMessage> {
+        return this;
     }
 
     /**
@@ -91,25 +100,32 @@ export class EmailMemory extends Memory implements kp.IConversation {
         eventHandler?: kp.IndexingEventHandlers,
         autoSave: boolean = true,
     ): Promise<Result<IndexingState>> {
-        const messageOrdinalStartAt = this.indexingState.lastMessageOrdinal + 1;
-        if (messageOrdinalStartAt < this.messages.length) {
-            const result = await kp.addToConversationIndex(
-                this,
-                this.settings.conversationSettings,
-                messageOrdinalStartAt,
-                this.semanticRefs.length,
-                eventHandler,
-            );
-            const errorMsg = getIndexingErrors(result);
-            if (errorMsg) {
-                return error(errorMsg);
+        try {
+            this.beginIndexing();
+
+            const messageOrdinalStartAt =
+                this.indexingState.lastMessageOrdinal + 1;
+            if (messageOrdinalStartAt < this.messages.length) {
+                const result = await kp.addToConversationIndex(
+                    this,
+                    this.settings.conversationSettings,
+                    messageOrdinalStartAt,
+                    this.semanticRefs.length,
+                    eventHandler,
+                );
+                const errorMsg = getIndexingErrors(result);
+                if (errorMsg) {
+                    return error(errorMsg);
+                }
+                this.updateIndexingState();
+                if (autoSave) {
+                    await this.writeToFile(this.settings.fileSaveSettings);
+                }
             }
-            this.updateIndexingState();
-            if (autoSave) {
-                await this.writeToFile(this.settings.fileSaveSettings);
-            }
+            return success(this.indexingState);
+        } finally {
+            this.endIndexing();
         }
-        return success(this.indexingState);
     }
 
     public async serialize(): Promise<EmailMemoryData> {
@@ -200,10 +216,21 @@ export class EmailMemory extends Memory implements kp.IConversation {
         }
     }
 
-    private createSettings(): EmailMemorySettings {
-        return createMemorySettings(
-            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-        );
+    protected override getSearchInstructions(): PromptSection[] | undefined {
+        if (this.settings.userProfile) {
+            const instructions: PromptSection[] = [
+                {
+                    role: "system",
+                    content: `You are answering requests about the Email Inbox belonging to:\n${JSON.stringify(this.settings.userProfile)}`,
+                },
+            ];
+            return instructions;
+        }
+        return undefined;
+    }
+
+    protected override getPersistentEmbeddingCache() {
+        return this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
     }
 
     private updateIndexingState(): void {
@@ -217,7 +244,6 @@ export class EmailMemory extends Memory implements kp.IConversation {
     }
 
     private addVerbAliases() {
-        // TODO: load ths from a file
         const aliases = this.secondaryIndexes.termToRelatedTermsIndex.aliases;
         addSynonymsFileAsAliases(
             aliases,

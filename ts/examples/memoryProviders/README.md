@@ -1,6 +1,7 @@
 ## memory-providers
 
-**Early Stage Sample code** and early ideas on how to implement a backing store for knowledge-processor using sqlite.
+**Early Stage Sample code**
+Early ideas on how to implement a backing store for [knowledge-processor](../../packages/knowledgeProcessor/) using sqlite and elastic.
 
 This code early is rapidly evolving.
 

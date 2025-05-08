@@ -9,14 +9,15 @@ import { IndexingState } from "./memory.js";
 export function createEmbeddingModelWithCache(
     cacheSize: number,
     getCache?: () => kpLib.TextEmbeddingCache | undefined,
+    embeddingSize = 1536,
 ): [kpLib.TextEmbeddingModelWithCache, number] {
     const embeddingModel = kpLib.createEmbeddingCache(
         openai.createEmbeddingModel(),
-        64,
+        cacheSize,
         getCache,
     );
 
-    return [embeddingModel, 1536];
+    return [embeddingModel, embeddingSize];
 }
 
 export function createIndexingState(): IndexingState {
@@ -40,4 +41,22 @@ export function getIndexingErrors(
 
 function getIndexingError(result: kp.TextIndexingResult | undefined) {
     return result?.error ? result.error + "\n" : "";
+}
+
+export function addAliasesForName(
+    aliases: kp.TermToRelatedTermsMap,
+    name: string,
+    addLastName: boolean,
+) {
+    name = name.toLocaleLowerCase();
+    const parsedName = kpLib.conversation.splitParticipantName(name);
+    if (parsedName && parsedName.firstName && parsedName.lastName) {
+        // If participantName is a full name, then associate firstName with the full name
+        aliases.addRelatedTerm(parsedName.firstName, { text: name });
+        aliases.addRelatedTerm(name, { text: parsedName.firstName });
+        if (addLastName) {
+            aliases.addRelatedTerm(parsedName.lastName, { text: name });
+            aliases.addRelatedTerm(name, { text: parsedName.lastName });
+        }
+    }
 }

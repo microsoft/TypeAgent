@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Result, success } from "typechat";
+import { PromptSection, Result, success } from "typechat";
 import {
     IConversation,
     SearchSelectExpr,
@@ -38,6 +38,7 @@ import {
 
 /*
     APIs for searching with Natural Language
+    Work in progress; frequent improvements/tweaks
 */
 
 export async function searchConversationWithLanguage(
@@ -95,17 +96,18 @@ export async function searchQueryExprFromLanguage(
     translator: SearchQueryTranslator,
     queryText: string,
     options?: LanguageSearchOptions,
-    context?: LanguageSearchDebugContext,
+    debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<SearchQueryExpr[]>> {
     const queryResult = await searchQueryFromLanguage(
         conversation,
         translator,
         queryText,
+        options?.modelInstructions,
     );
     if (queryResult.success) {
         const searchQuery = queryResult.data;
-        if (context) {
-            context.searchQuery = searchQuery;
+        if (debugContext) {
+            debugContext.searchQuery = searchQuery;
         }
         options ??= createLanguageSearchOptions();
         const searchExpr = compileSearchQuery(
@@ -120,9 +122,10 @@ export async function searchQueryExprFromLanguage(
 
 export type LanguageQueryCompileOptions = {
     exactScope?: boolean | undefined;
+    // Use to ignore noise terms etc.
     termFilter?: (text: string) => boolean;
     // Debug flags
-    applyScope?: boolean | undefined;
+    applyScope?: boolean | undefined; // Turn off scope matching entirely
 };
 
 export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions {
@@ -132,6 +135,7 @@ export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions
 export interface LanguageSearchOptions extends SearchOptions {
     compileOptions: LanguageQueryCompileOptions;
     fallbackRagOptions?: LanguageSearchRagOptions | undefined;
+    modelInstructions?: PromptSection[] | undefined;
 }
 
 export function createLanguageSearchOptions(): LanguageSearchOptions {

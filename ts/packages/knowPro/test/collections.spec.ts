@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { TextRangeCollection } from "../src/collections.js";
+import { MessageOrdinal, TextRange } from "../src/interfaces.js";
+import { textRangeFromMessageChunk } from "../src/message.js";
 import { getBatchesFromCollection, MessageCollection } from "../src/storage.js";
 import {
     createTestMessages,
@@ -73,3 +76,49 @@ describe("messageCollection", () => {
         }
     });
 });
+
+describe("TextRangeCollection", () => {
+    test("messageOrdinalOnly", () => {
+        const numRanges = 64;
+        const subRangeLength = 4;
+        const ranges = makeMessagesTextRanges(0, numRanges);
+        const subRanges: TextRange[][] = [];
+        for (let i = 0; i < ranges.length; i += subRangeLength) {
+            subRanges.push(ranges.slice(i, i + subRangeLength));
+        }
+        const allowedSubRanges: TextRange[][] = [];
+        const disallowedSubRanges: TextRange[][] = [];
+        // Allow all odd numbered sub ranges
+        for (let i = 0; i < subRanges.length; ++i) {
+            if (i % 2 === 0) {
+                disallowedSubRanges.push(subRanges[i]);
+            } else {
+                allowedSubRanges.push(subRanges[i]);
+            }
+        }
+        const textRangeCollection = new TextRangeCollection();
+        allowedSubRanges.forEach((r) => textRangeCollection.addRanges(r));
+
+        for (const ranges of allowedSubRanges) {
+            for (const range of ranges) {
+                expect(textRangeCollection.isInRange(range)).toBeTruthy();
+            }
+        }
+        for (const ranges of disallowedSubRanges) {
+            for (const range of ranges) {
+                expect(textRangeCollection.isInRange(range)).toBeFalsy();
+            }
+        }
+    });
+});
+
+function makeMessagesTextRanges(
+    ordinalStartAt: MessageOrdinal,
+    count: number,
+): TextRange[] {
+    const ranges: TextRange[] = [];
+    for (let i = 0; i < count; ++i) {
+        ranges.push(textRangeFromMessageChunk(ordinalStartAt + i));
+    }
+    return ranges;
+}
