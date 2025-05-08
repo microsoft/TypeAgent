@@ -9,11 +9,7 @@ import {
 } from "./dispatcher/dispatcherAgent.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import { systemAgent, systemManifest } from "./system/systemAgent.js";
-import {
-    createActionConfigProvider,
-    getSchemaNamesForAppAgentManifests,
-} from "../agentProvider/agentProviderUtils.js";
-import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
+import { createActionConfigProvider } from "../agentProvider/agentProviderUtils.js";
 
 const builtinAgents: Record<string, AppAgent> = {
     dispatcher: dispatcherAgent,
@@ -58,18 +54,17 @@ export function createBuiltinAppAgentProvider(
     };
 }
 
-const builtinSchemaNames =
-    getSchemaNamesForAppAgentManifests(builtinAgentManifest);
-
-export function getAllSchemaNames(provider: ActionConfigProvider): string[] {
-    return [
-        ...builtinSchemaNames,
-        ...provider
+export async function getAllActionConfigProvider(
+    providers: AppAgentProvider[],
+) {
+    const provider = await createActionConfigProvider(
+        providers,
+        builtinAgentManifest,
+    );
+    return {
+        provider,
+        schemaNames: provider
             .getActionConfigs()
             .map((actionConfig) => actionConfig.schemaName),
-    ];
-}
-
-export function getAllActionConfigProvider(providers: AppAgentProvider[]) {
-    return createActionConfigProvider(providers, builtinAgentManifest);
+    };
 }
