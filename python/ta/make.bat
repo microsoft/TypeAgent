@@ -15,6 +15,7 @@ if /I "%~1"=="check" goto check
 if /I "%~1"=="test" goto test
 if /I "%~1"=="build" goto build
 if /I "%~1"=="venv" goto venv
+if /I "%~1"=="install-uv" goto install-uv
 if /I "%~1"=="clean" goto clean
 if /I "%~1"=="help" goto help
 
@@ -22,38 +23,42 @@ echo Unknown command: %~1
 goto help
 
 :format
-if not exist "venv\" call make.bat venv
+if not exist ".venv\" call make.bat venv
 echo Formatting code...
-venv\Scripts\black typeagent test
+.venv\Scripts\black typeagent test
 goto end
 
 :check
-if not exist "venv\" call make.bat venv
+if not exist ".venv\" call make.bat venv
 echo Running checks...
-venv\Scripts\pyright --pythonpath venv\Scripts\python typeagent test
+.venv\Scripts\pyright --pythonpath .venv\Scripts\python typeagent test
 goto end
 
 :test
-if not exist "venv\" call make.bat venv
+if not exist ".venv\" call make.bat venv
 echo Running tests...
-venv\Scripts\python -m pytest test
+.venv\Scripts\python -m pytest test
 goto end
 
 :build
-if not exist "venv\" call make.bat venv
+if not exist ".venv\" call make.bat venv
 echo Building package...
-venv\Scripts\python -m build --wheel
+.venv\Scripts\python -m build --wheel
 goto end
 
 :venv
 echo Creating virtual environment...
-python3.12 -m venv venv
-venv\Scripts\pip -q install -r requirements.txt
-venv\Scripts\python --version
-venv\Scripts\black --version
-venv\Scripts\pyright --version
-venv\Scripts\python -m pytest --version
+uv sync
+.venv\Scripts\pip -q install -r requirements.txt
+.venv\Scripts\python --version
+.venv\Scripts\black --version
+.venv\Scripts\pyright --version
+.venv\Scripts\python -m pytest --version
+goto end
 
+:install-uv
+echo Installing uv...
+powershell -Command "Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression"
 goto end
 
 :clean
