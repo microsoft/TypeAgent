@@ -22,7 +22,8 @@ public class MailParser
         for (; i < lines.Length; ++i)
         {
             var line = lines[i];
-            if (string.IsNullOrEmpty(line))
+            var bodyStart = line.Trim();
+            if (string.IsNullOrEmpty(bodyStart))
             {
                 ++i;
                 break;
@@ -47,7 +48,7 @@ public class MailParser
                     yield return new KeyValuePair<string, string>(curFieldName, curFieldVal);
                 }
                 curFieldName = fieldName;
-                curFieldVal = fieldVal.TrimStart();
+                curFieldVal = !string.IsNullOrEmpty(fieldVal) ? fieldVal.TrimStart() : fieldVal;
             }
             else if (!string.IsNullOrEmpty(fieldVal))
             {
