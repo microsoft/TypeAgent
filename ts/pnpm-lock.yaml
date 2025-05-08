@@ -1476,9 +1476,6 @@ importers:
       express:
         specifier: ^4.18.2
         version: 4.21.2
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
     devDependencies:
       '@rollup/plugin-typescript':
         specifier: ^12.1.2
