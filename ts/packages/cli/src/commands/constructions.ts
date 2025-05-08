@@ -6,7 +6,7 @@ import {
     readExplanationTestData,
     getCacheFactory,
     convertTestDataToExplanationData,
-    createActionConfigProvider,
+    getAllActionConfigProvider,
     createSchemaInfoProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
@@ -16,9 +16,11 @@ import chalk from "chalk";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 
 const schemaInfoProvider = createSchemaInfoProvider(
-    await createActionConfigProvider(
-        getDefaultAppAgentProviders(getInstanceDir()),
-    ),
+    (
+        await getAllActionConfigProvider(
+            getDefaultAppAgentProviders(getInstanceDir()),
+        )
+    ).provider,
 );
 
 export default class ConstructionsCommand extends Command {

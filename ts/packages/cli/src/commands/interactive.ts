@@ -4,9 +4,8 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
-    createActionConfigProvider,
     getCacheFactory,
-    getAllSchemaNames,
+    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
@@ -24,8 +23,8 @@ import {
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const schemaNames = getAllSchemaNames(
-    await createActionConfigProvider(defaultAppAgentProviders),
+const { schemaNames } = await getAllActionConfigProvider(
+    defaultAppAgentProviders,
 );
 export default class Interactive extends Command {
     static description = "Interactive mode";

@@ -6,8 +6,7 @@ import { fromJsonActions, toFullActions, FullAction } from "agent-cache";
 import { createDispatcher } from "agent-dispatcher";
 import {
     readExplanationTestData,
-    getAllSchemaNames,
-    createActionConfigProvider,
+    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
@@ -83,10 +82,10 @@ function summarizeResult(result: TestResultFile) {
 
 const modelNames = await getChatModelNames();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(getInstanceDir());
-const defaultConstructionProvider = getDefaultConstructionProvider();
-const schemaNames = getAllSchemaNames(
-    await createActionConfigProvider(defaultAppAgentProviders),
+const { schemaNames } = await getAllActionConfigProvider(
+    defaultAppAgentProviders,
 );
+const defaultConstructionProvider = getDefaultConstructionProvider();
 const defaultRepeat = 5;
 
 function addTokenUsage(
