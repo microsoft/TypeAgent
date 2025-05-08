@@ -48,8 +48,7 @@ goto end
 
 :venv
 echo Creating virtual environment...
-uv sync
-.venv\Scripts\pip -q install -r requirements.txt
+uv sync -q
 .venv\Scripts\python --version
 .venv\Scripts\black --version
 .venv\Scripts\pyright --version
@@ -57,19 +56,24 @@ uv sync
 goto end
 
 :install-uv
-echo Installing uv...
-powershell -Command "Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression"
+echo Installing uv requires Administrator mode!
+echo 1. Using PowerShell in Administrator mode:
+echo    Invoke-RestMethod https://astral.sh/uv/install.ps1 ^| Invoke-Expression
+echo 2. Add ~/.local/bin to $env:PATH, e.g. by putting
+echo        $env:PATH += ";$HOME\.local\bin
+echo    in your PowerShell profile ($PROFILE) and restarting PowerShell.
+echo    (Sorry, I have no idea how to do that in cmd.exe.)
 goto end
 
 :clean
 echo Sorry, you have to clean up manually.
-echo These are to be deleted: build dist *.egg-info venv
+echo These are to be deleted: build dist *.egg-info .venv
 echo Delete venv if the requirements have changed.
 echo The others are products of the build step.
 goto end
 
 :help
-echo Usage: .\make [format^|check^|test^|build^|venv^|clean^|help]
+echo Usage: .\make [format^|check^|test^|build^|venv^|install-uv^|clean^|help]
 goto end
 
 :end
