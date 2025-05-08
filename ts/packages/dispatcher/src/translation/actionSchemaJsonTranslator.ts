@@ -23,6 +23,7 @@ import {
 } from "common-utils";
 import {
     createChangeAssistantActionSchema,
+    getCombinedSchemaTypeName,
     TranslatedAction,
 } from "./agentTranslators.js";
 import {
@@ -244,7 +245,7 @@ export function composeSelectedActionSchema(
 ) {
     const builder = new ActionSchemaBuilder(provider, options?.activity);
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
-    const typeName = `Partial${actionConfig.schemaType}`;
+    const typeName = `Partial${getCombinedSchemaTypeName(actionConfig.schemaType)}`;
     const comments = `${typeName} is a partial list of actions available in schema group '${actionConfig.schemaName}'.`;
 
     const entry = sc.type(typeName, union, comments);

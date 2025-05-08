@@ -8,7 +8,7 @@ import {
     createSchemaInfoProvider,
     getCacheFactory,
     readExplanationTestData,
-    createActionConfigProvider,
+    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { fromJsonActions, RequestAction } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
@@ -36,8 +36,10 @@ const matchConfig = {
 };
 
 const schemaInfoProvider = createSchemaInfoProvider(
-    await createActionConfigProvider(getDefaultAppAgentProviders(undefined)),
+    (await getAllActionConfigProvider(getDefaultAppAgentProviders(undefined)))
+        .provider,
 );
+
 describe("construction", () => {
     describe("roundtrip", () => {
         it.each(testInput)(

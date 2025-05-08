@@ -43,8 +43,14 @@ function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
     );
 }
 
+/**
+ * Get the default app agent providers.
+ * If instanceDirOrConfigProvider is provided it will load the external app agent provider as well.
+ * @param instanceDirOrConfigProvider - Either a string pointing to the instance directory where external agent config is stored, or a InstanceConfigProvider.
+ * @returns an array containing the default app agent providers and the external app agent provider if instanceDirOrConfigProvider is provided.
+ */
 export function getDefaultAppAgentProviders(
-    instanceDirOrConfigProvider: string | undefined | InstanceConfigProvider,
+    instanceDirOrConfigProvider: string | InstanceConfigProvider | undefined,
 ): AppAgentProvider[] {
     const instanceConfigs =
         typeof instanceDirOrConfigProvider === "string"

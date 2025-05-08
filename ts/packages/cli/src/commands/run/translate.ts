@@ -5,18 +5,15 @@ import { Args, Command, Flags } from "@oclif/core";
 import { ClientIO, createDispatcher } from "agent-dispatcher";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
-import {
-    createActionConfigProvider,
-    getAllSchemaNames,
-} from "agent-dispatcher/internal";
+import { getAllActionConfigProvider } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const schemaNames = getAllSchemaNames(
-    await createActionConfigProvider(defaultAppAgentProviders),
+const { schemaNames } = await getAllActionConfigProvider(
+    defaultAppAgentProviders,
 );
 
 export default class TranslateCommand extends Command {

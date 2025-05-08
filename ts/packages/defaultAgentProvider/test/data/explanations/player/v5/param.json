@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaName": "player",
-  "sourceHash": "e0+5x42s99DZanPOfvIRaWpITnqeTzNTgZdO5O19oko=",
+  "sourceHash": "u48nTdLA+MfQWkaVvrUWQsDODadA8jD7dk/Nb8anBEE=",
   "explainerName": "v5",
   "entries": [
     {
@@ -59,7 +59,7 @@
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play the music"
+                  "play the song"
                 ]
               },
               {
@@ -71,7 +71,13 @@
               {
                 "propertyValue": "player.shuffle",
                 "propertySubPhrases": [
-                  "shuffle the music"
+                  "shuffle the playlist"
+                ]
+              },
+              {
+                "propertyValue": "player.playNext",
+                "propertySubPhrases": [
+                  "play the next track"
                 ]
               }
             ]
@@ -80,14 +86,14 @@
         "politePrefixes": [
           "Would you mind",
           "Could you kindly",
-          "If it's not too much trouble",
+          "If it's not too much trouble,",
           "May I ask you to"
         ],
         "politeSuffixes": [
           "if you don't mind?",
           "when you have a moment.",
-          "if it's convenient for you.",
-          "at your earliest convenience."
+          "please?",
+          "if it's convenient."
         ]
       }
     },
@@ -112,14 +118,14 @@
             "category": "filler",
             "synonyms": [
               "What if",
-              "Maybe",
-              "Suppose"
+              "Why don't",
+              "Let's"
             ],
             "isOptional": true
           },
           {
             "text": "you choose a song to play",
-            "category": "command",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -163,14 +169,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble",
-          "May I kindly ask"
+          "If you don't mind",
+          "May I ask you to"
         ],
         "politeSuffixes": [
-          "if you don't mind?",
+          "if that's okay?",
           "please?",
-          "thank you.",
-          "if that's okay with you."
+          "if you could?",
+          "thank you!"
         ]
       }
     },
@@ -241,13 +247,13 @@
           "Could you please",
           "Would you mind",
           "If you don't mind",
-          "I would appreciate it if you could"
+          "Please"
         ],
         "politeSuffixes": [
-          "thank you",
+          "if you could",
           "please",
-          "if that's okay",
-          "if you could"
+          "thank you",
+          "if that's okay"
         ]
       }
     },
@@ -276,17 +282,7 @@
             ]
           },
           {
-            "text": "some",
-            "category": "filler",
-            "synonyms": [
-              "a few",
-              "any",
-              "several"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "tunes",
+            "text": "some tunes",
             "category": "object",
             "propertyNames": [
               "fullActionName"
@@ -309,28 +305,28 @@
             "propertyValue": "player.playRandom",
             "propertySubPhrases": [
               "Play",
-              "tunes"
+              "some tunes"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.playSpecific",
                 "propertySubPhrases": [
                   "Play",
-                  "specific tunes"
+                  "a specific song"
                 ]
               },
               {
-                "propertyValue": "player.playGenre",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
                   "Play",
-                  "genre tunes"
+                  "a playlist"
                 ]
               },
               {
-                "propertyValue": "player.playFavorites",
+                "propertyValue": "player.playAlbum",
                 "propertySubPhrases": [
                   "Play",
-                  "favorite tunes"
+                  "an album"
                 ]
               }
             ]
@@ -339,14 +335,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If you don't mind",
+          "If it's not too much trouble,",
           "I would appreciate it if you could"
         ],
         "politeSuffixes": [
           "thank you",
           "please",
-          "if that's okay",
-          "if you could"
+          "if you don't mind",
+          "thanks a lot"
         ]
       }
     },
@@ -409,21 +405,21 @@
                 ]
               },
               {
-                "propertyValue": "player.pause",
+                "propertyValue": "player.playPlaylist",
                 "propertySubPhrases": [
-                  "pause the music"
+                  "listen to a playlist"
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.playGenre",
                 "propertySubPhrases": [
-                  "stop the music"
+                  "listen to some jazz"
                 ]
               },
               {
-                "propertyValue": "player.skip",
+                "propertyValue": "player.playArtist",
                 "propertySubPhrases": [
-                  "skip this song"
+                  "listen to some music by Taylor Swift"
                 ]
               }
             ]
@@ -439,7 +435,7 @@
           "if that's okay with you?",
           "please?",
           "if you don't mind?",
-          "if that works for you?"
+          "thank you!"
         ]
       }
     },
@@ -466,7 +462,7 @@
           },
           {
             "text": "my favorite songs",
-            "category": "object",
+            "category": "content",
             "propertyNames": [
               "fullActionName"
             ]
@@ -489,13 +485,19 @@
               {
                 "propertyValue": "player.getRecent",
                 "propertySubPhrases": [
-                  "recently played songs"
+                  "recent songs"
                 ]
               },
               {
                 "propertyValue": "player.getRecommended",
                 "propertySubPhrases": [
                   "recommended songs"
+                ]
+              },
+              {
+                "propertyValue": "player.getPlaylist",
+                "propertySubPhrases": [
+                  "my playlist"
                 ]
               }
             ]
@@ -526,7 +528,7 @@
             "name": "fullActionName",
             "value": "player.playRandom",
             "substrings": [
-              "Start the music"
+              "Start the music, please"
             ]
           }
         ],
@@ -544,7 +546,9 @@
             "synonyms": [
               "kindly",
               "if you would",
-              "if you could"
+              "if you please",
+              "would you mind",
+              "could you"
             ],
             "isOptional": true
           }
@@ -564,37 +568,31 @@
                 ]
               },
               {
-                "propertyValue": "player.resume",
+                "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Resume the music"
+                  "Pause the music"
                 ]
               },
               {
-                "propertyValue": "player.shuffle",
+                "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "Shuffle the music"
-                ]
-              },
-              {
-                "propertyValue": "player.start",
-                "propertySubPhrases": [
-                  "Begin the music"
+                  "Stop the music"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [
-          "Could you kindly",
-          "Would you be so kind as to",
-          "If you don't mind,",
+          "Could you",
+          "Would you mind",
+          "If you don't mind",
           "May I ask you to"
         ],
         "politeSuffixes": [
-          "if you would be so kind.",
-          "thank you.",
-          "please.",
-          "if it's not too much trouble."
+          "if you could",
+          "if it's not too much trouble",
+          "when you have a moment",
+          "if you please"
         ]
       }
     },
@@ -700,7 +698,7 @@
             "synonyms": [
               "Could you please",
               "Do you mind",
-              "Would it be possible"
+              "Can you"
             ],
             "isOptional": true
           },
@@ -721,21 +719,27 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.playSpecific",
+                "propertyValue": "player.playJazz",
                 "propertySubPhrases": [
-                  "playing a specific song"
+                  "playing some jazz music"
                 ]
               },
               {
-                "propertyValue": "player.playPlaylist",
+                "propertyValue": "player.playRock",
                 "propertySubPhrases": [
-                  "playing a playlist"
+                  "playing some rock music"
                 ]
               },
               {
-                "propertyValue": "player.playGenre",
+                "propertyValue": "player.playClassical",
                 "propertySubPhrases": [
-                  "playing some genre music"
+                  "playing some classical music"
+                ]
+              },
+              {
+                "propertyValue": "player.playPop",
+                "propertySubPhrases": [
+                  "playing some pop music"
                 ]
               }
             ]
@@ -827,30 +831,30 @@
             ],
             "alternatives": [
               {
-                "propertyValue": "player.play",
+                "propertyValue": "player.playTopHits",
                 "propertySubPhrases": [
-                  "some music",
+                  "top hits",
                   "playing"
                 ]
               },
               {
-                "propertyValue": "player.shuffle",
+                "propertyValue": "player.playClassics",
                 "propertySubPhrases": [
-                  "some tracks",
-                  "shuffling"
-                ]
-              },
-              {
-                "propertyValue": "player.playFavorites",
-                "propertySubPhrases": [
-                  "favorite songs",
+                  "classic tunes",
                   "playing"
                 ]
               },
               {
-                "propertyValue": "player.playGenre",
+                "propertyValue": "player.playJazz",
                 "propertySubPhrases": [
-                  "some jazz",
+                  "smooth jazz",
+                  "playing"
+                ]
+              },
+              {
+                "propertyValue": "player.playRock",
+                "propertySubPhrases": [
+                  "rock music",
                   "playing"
                 ]
               }
@@ -865,8 +869,8 @@
         ],
         "politeSuffixes": [
           "please?",
+          "thank you!",
           "if you don't mind.",
-          "thank you.",
           "thanks!"
         ]
       }
