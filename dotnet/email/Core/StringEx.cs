@@ -38,4 +38,32 @@ public static class StringEx
         }
         return args[index];
     }
+
+    public static MemoryStream ToMemoryStream(this string text)
+    {
+        return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
+    }
+
+    public static IEnumerable<string> FilterEmpty(this IEnumerable<string> strings)
+    {
+        return from str in strings
+               where !string.IsNullOrEmpty(str)
+               select str;
+
+    }
+
+    public static int IndexOfMin(this string value, IEnumerable<string> delimiters, int startAt = 0)
+    {
+        int minIndex = -1;
+        foreach (var delimiter in delimiters)
+        {
+            int index = value.IndexOf(delimiter, startAt);
+            if (index >= 0 && (minIndex == -1 || index < minIndex))
+            {
+                minIndex = index;
+            }
+        }
+
+        return minIndex;
+    }
 }

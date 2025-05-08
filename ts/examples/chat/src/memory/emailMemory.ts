@@ -143,7 +143,8 @@ export function createEmailCommands(
 
     function emailConvertMsgDef(): CommandMetadata {
         return {
-            description: "Convert msg files in a folder",
+            description:
+                "Convert Outlook .msg files in a folder\nRequires:\n-Windows\n-Outlook (classic) for O365",
             args: {
                 sourcePath: argSourceFileOrFolder(),
             },
@@ -154,20 +155,15 @@ export function createEmailCommands(
         args: string[],
         io: InteractiveIo,
     ): Promise<void> {
-        const namedArgs = parseNamedArguments(args, emailConvertMsgDef());
+        const meta = emailConvertMsgDef();
+        const namedArgs = parseNamedArguments(args, meta);
         let sourcePath: string = namedArgs.sourcePath;
-        /*
-        let isDir = isDirectoryPath(sourcePath);
-        if (isDir) {
-            context.printer.writeInColor(
-                chalk.cyan,
-                "Converting message files",
-            );
-            await convertMsgFiles(sourcePath, io);
-        }
-            */
         context.printer.writeInColor(chalk.cyan, "Converting message files");
-        await convertMsgFiles(sourcePath, io);
+        const result = await convertMsgFiles(sourcePath, io);
+        if (!result.success) {
+            context.printer.writeError(result.message);
+            context.printer.writeLine(meta.description);
+        }
     }
 
     function emailStatsDef(): CommandMetadata {

@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.Core;
+
 namespace TypeAgent;
 
 public class BodyParser
@@ -8,6 +10,8 @@ public class BodyParser
     public static readonly BodyParser Default = new BodyParser();
 
     List<string> _delimiters;
+    Regex _splitBody;
+
     public BodyParser()
     {
         _delimiters = new List<string>
@@ -20,6 +24,8 @@ public class BodyParser
             "----- Forwarded by",
             "________________________________________"
         };
+        _splitBody = new Regex("(?=From:)", RegexOptions.IgnoreCase);
+
     }
 
     public List<string> Delimiters => _delimiters;
@@ -47,4 +53,11 @@ public class BodyParser
 
         return body;
     }
+
+    public string[] SplitForwardedEmail(string email)
+    {
+        string[] parts = _splitBody.Split(email);
+        return parts.FilterEmpty().ToArray();
+    }
+
 }
