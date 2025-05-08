@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using TypeAgent.Core;
+
 namespace TypeAgent;
 
 public class BodyParser

@@ -20,4 +20,9 @@ public static class MailtemEx
         var subject = item.Subject.TrimStart();
         return subject.StartsWith("FW", StringComparison.OrdinalIgnoreCase);
     }
+
+    public static void SaveAsText(this MailItem item, string savePath)
+    {
+        item.SaveAs(savePath, OlSaveAsType.olTXT);
+    }
 }

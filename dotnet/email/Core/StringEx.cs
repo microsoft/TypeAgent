@@ -38,4 +38,17 @@ public static class StringEx
         }
         return args[index];
     }
+
+    public static MemoryStream ToMemoryStream(this string text)
+    {
+        return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
+    }
+
+    public static IEnumerable<string> FilterEmpty(this IEnumerable<string> strings)
+    {
+        return from str in strings
+               where !string.IsNullOrEmpty(str)
+               select str;
+
+    }
 }

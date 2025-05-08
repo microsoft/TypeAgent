@@ -16,6 +16,18 @@ public class Email
         SourcePath = sourcePath;
     }
 
+    public Email(Email email, string body)
+    {
+        this.Bcc = email.Bcc;
+        this.Cc = email.Cc;
+        this.From = email.From;
+        this.Importance = email.Importance;
+        this.ReceivedOn = email.ReceivedOn;
+        this.SentOn = email.SentOn;
+        this.SourcePath = email.SourcePath;
+        this.Subject = email.Subject;
+    }
+
     /*
      * HEADERS
      */

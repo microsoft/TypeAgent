@@ -41,6 +41,21 @@ public class Outlook : COMObject
         }
     }
 
+    public void SaveEmailAsText(string filePath, string savePath)
+    {
+        MailItem mail = (MailItem)_session.OpenSharedItem(filePath);
+        try
+        {
+            mail.SaveAsText(savePath);
+        }
+        finally
+        {
+            COMObject.Release(mail);
+            mail = null;
+        }
+
+    }
+
     public List<T> FilterItems<T>(Filter filter, Func<object, T> gettor) where T : class
     {
         NameSpace ns = null;

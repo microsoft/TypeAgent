@@ -20,4 +20,15 @@ public static class PathEx
 
         return false;
     }
+
+    public static string ReplaceFileNameExtension(string fileName, string newExt)
+    {
+        if (string.IsNullOrEmpty(newExt))
+        {
+            return fileName;
+        }
+
+        return Path.GetFileNameWithoutExtension(fileName) + newExt;
+    }
+
 }
