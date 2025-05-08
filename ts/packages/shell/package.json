@@ -86,12 +86,5 @@
     "typescript": "~5.4.5",
     "vite": "^6.2.7"
   },
-  "pnpm": {
-    "supportedArchitectures": {
-      "cpu": [
-        "arm64"
-      ]
-    }
-  },
   "productName": "TypeAgent Shell"
 }

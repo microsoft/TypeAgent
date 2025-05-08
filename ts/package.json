@@ -62,5 +62,13 @@
     "ignoreMissing": [
       "eslint"
     ]
+  },
+  "pnpm": {
+    "supportedArchitectures": {
+      "cpu": [
+        "x64",
+        "arm64"
+      ]
+    }
   }
 }
