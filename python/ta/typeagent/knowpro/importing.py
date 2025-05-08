@@ -47,7 +47,7 @@ class ConversationSettings:
     related_term_index_settings: RelatedTermIndexSettings
     thread_settings: TextEmbeddingIndexSettings
     message_text_index_settings: MessageTextIndexSettings
-    semanticRefIndexSettings: SemanticRefIndexSettings
+    semantic_ref_index_settings: SemanticRefIndexSettings
 
     def __init__(self):
         # All settings share the same model, so they share the embedding cache.
