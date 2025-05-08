@@ -10,8 +10,11 @@ export type EmailAction =
 // Type for generating the body content of an email based on the user input
 export interface GenerateContent {
     // Flag to indicate if body content needs to be generated using a web search based on the user request.
+    // If the user request can be answered using a web search, set this flag to true and provide the search query.
     // For Ex: If the user input is "Send email to Megan with notes about the RLHF on instruction tuning of LLMs",
     // the flag should be true and the body should be generated using a web search for "RLHF on instruction tuning of LLMs"
+    // Ex: If the user input is something to the effect "sending email to Bob with the recipe for a vanilla cake",
+    // the flag should be true and the body should be generated using a web search for "recipe for a vanilla cake"
     // If the user input is " Send email to Megan asking if she want to meet coffee", the flag should be false
     generateBody?: boolean;
     // search query to generate the body content (optional)
