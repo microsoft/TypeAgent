@@ -32,7 +32,7 @@
     "package:macos:arm64": "ELECTRON_BUILDER_ARCH=arm64 pnpm run package:default --mac --arm64",
     "package:macos:x64": "ELECTRON_BUILDER_ARCH=x64 pnpm run package:default --mac --x64",
     "package:win32": "set ELECTRON_BUILDER_ARCH=x64 && pnpm run package:default --win --x64",
-    "postinstall:default": "[[ -n \"$ELECTRON_BUILDER_ARCH\" ]] && electron-builder install-app-deps --arch $ELECTRON_BUILDER_ARCH || electron-builder install-app-deps",
+    "postinstall:default": "[ -n \"$ELECTRON_BUILDER_ARCH\" ] && electron-builder install-app-deps --arch $ELECTRON_BUILDER_ARCH || electron-builder install-app-deps",
     "postinstall:win32": "IF defined ELECTRON_BUILDER_ARCH ( electron-builder install-app-deps --arch %ELECTRON_BUILDER_ARCH%) ELSE ( electron-builder install-app-deps ) ",
     "prepare-vite": "concurrently npm:typecheck npm:build:electron:cjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
@@ -86,5 +86,12 @@
     "typescript": "~5.4.5",
     "vite": "^6.2.7"
   },
-  "productName": "TypeAgent Shell"
+  "productName": "TypeAgent Shell",
+  "pnpm": {
+    "supportedArchitectures": {
+      "cpu": [
+        "arm64"
+      ]
+    }
+  }
 }
