@@ -173,9 +173,6 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 }
 
-//
-// TODO: common, boiler plate and other common memory methods go here
-//
 export abstract class Memory<
     TSettings extends MemorySettings = MemorySettings,
     TMessage extends Message = Message,
