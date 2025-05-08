@@ -10,7 +10,7 @@ import {
     getCacheFactory,
     convertTestDataToExplanationData,
     readExplanationTestData,
-    createActionConfigProvider,
+    getAllActionConfigProvider,
     createSchemaInfoProvider,
 } from "agent-dispatcher/internal";
 import {
@@ -31,7 +31,8 @@ import { fileURLToPath } from "node:url";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 
 const schemaInfoProvider = createSchemaInfoProvider(
-    await createActionConfigProvider(getDefaultAppAgentProviders(undefined)),
+    (await getAllActionConfigProvider(getDefaultAppAgentProviders(undefined)))
+        .provider,
 );
 
 export async function getImportedCache(

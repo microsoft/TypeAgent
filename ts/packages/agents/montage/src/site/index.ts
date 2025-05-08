@@ -11,6 +11,9 @@ import {
 import { PhotoMontage } from "../agent/montageActionHandler.js";
 import { Photo } from "./photo";
 
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:agent:montage:ui");
 //const eventSource = new EventSource("/events");
 
 export type Message = {
@@ -51,6 +54,8 @@ document.addEventListener("DOMContentLoaded", function () {
      * @param action The action to process
      */
     function processAction(action) {
+        debug(`Processing action: ${JSON.stringify(action)}`);
+
         switch (action.actionName) {
             case "reset": {
                 reset();
@@ -74,29 +79,21 @@ document.addEventListener("DOMContentLoaded", function () {
 
             case "selectPhotos": {
                 const msg: SelectPhotosAction = action as SelectPhotosAction;
-                // select image by indicies first
-                if (msg.parameters.indicies) {
-                    for (let i = 0; i < msg.parameters.indicies.length; i++) {
-                        mainContainer.children[
-                            msg.parameters.indicies[i] - 1
-                        ].classList.add("selected");
-                        selected.add(
-                            mainContainer.children[
-                                msg.parameters.indicies[i] - 1
-                            ].getAttribute("path"),
-                        );
+                // select image by indices first
+                if (msg.parameters.indices) {
+                    for (const index of msg.parameters.indices) {
+                        // User index is based 1
+                        const elm = mainContainer.children[index - 1];
+                        debug("Selected", index, elm.getAttribute("path"));
+                        elm.classList.add("selected");
+                        selected.add(elm.getAttribute("path"));
                     }
 
                     // unselect anything that's not selected
                     for (let i = 0; i < mainContainer.children.length; i++) {
-                        if (
-                            !mainContainer.children[i].classList.contains(
-                                "selected",
-                            )
-                        ) {
-                            mainContainer.children[i].classList.add(
-                                "unselected",
-                            );
+                        const elm = mainContainer.children[i];
+                        if (!elm.classList.contains("selected")) {
+                            elm.classList.add("unselected");
                         }
                     }
                 }
@@ -136,11 +133,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
 
                 // remove by index
-                if (msg.parameters.indicies) {
+                if (msg.parameters.indices) {
                     // reverse index
                     if (msg.parameters.selected === "inverse") {
                         const keep: Set<string> = new Set<string>();
-                        msg.parameters.indicies.forEach((v) => {
+                        msg.parameters.indices.forEach((v) => {
                             keep.add(
                                 mainContainer.children[v - 1].getAttribute(
                                     "path",
@@ -155,11 +152,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     } else {
                         // have to start at the end otherwise indexes will be wrong
                         for (
-                            let i = msg.parameters.indicies.length - 1;
+                            let i = msg.parameters.indices.length - 1;
                             i >= 0;
                             i--
                         ) {
-                            const index = msg.parameters.indicies[i] - 1;
+                            const index = msg.parameters.indices[i] - 1;
                             const file: string | undefined =
                                 mainContainer.children[index].getAttribute(
                                     "path",
@@ -185,7 +182,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 // remove everything
                 if (
-                    msg.parameters.indicies === undefined &&
+                    msg.parameters.indices === undefined &&
                     msg.parameters.files === undefined &&
                     msg.parameters.search_filters === undefined &&
                     msg.parameters.selected === undefined
@@ -281,12 +278,11 @@ document.addEventListener("DOMContentLoaded", function () {
         // remove or add "unselected" as needed
         if (selected.size > 0) {
             for (let i = 0; i < mainContainer.children.length; i++) {
-                if (
-                    selected.has(mainContainer.children[i].getAttribute("path"))
-                ) {
-                    mainContainer.children[i].classList.remove("unselected");
+                const elm = mainContainer.children[i];
+                if (selected.has(elm.getAttribute("path"))) {
+                    elm.classList.remove("unselected");
                 } else {
-                    mainContainer.children[i].classList.add("unselected");
+                    elm.classList.add("unselected");
                 }
             }
         }

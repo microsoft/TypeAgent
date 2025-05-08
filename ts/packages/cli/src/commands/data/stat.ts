@@ -7,8 +7,7 @@ import { CorrectionRecord } from "agent-cache";
 import {
     getCacheFactory,
     readExplanationTestData,
-    getAllSchemaNames,
-    createActionConfigProvider,
+    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "node:path";
@@ -142,13 +141,11 @@ function printStats(
     console.log();
 }
 
-const schemaNames = getAllSchemaNames(
-    await createActionConfigProvider(
-        getDefaultAppAgentProviders(getInstanceDir()),
-    ),
+const { schemaNames } = await getAllActionConfigProvider(
+    getDefaultAppAgentProviders(getInstanceDir()),
 );
 
-export default class ExplanationDataStatCommmand extends Command {
+export default class ExplanationDataStatCommand extends Command {
     static strict = false;
     static args = {
         files: Args.string({
@@ -198,7 +195,7 @@ export default class ExplanationDataStatCommmand extends Command {
         }),
     };
     async run(): Promise<void> {
-        const { flags, argv } = await this.parse(ExplanationDataStatCommmand);
+        const { flags, argv } = await this.parse(ExplanationDataStatCommand);
         const files =
             argv.length !== 0
                 ? (argv as string[])

@@ -125,6 +125,14 @@ export function getActivitySchemaTypeName(
     return typeof schemaType === "string" ? undefined : schemaType.activity;
 }
 
+export function getCombinedSchemaTypeName(
+    schemaType: string | SchemaTypeNames,
+) {
+    return typeof schemaType === "string"
+        ? schemaType
+        : Object.values(schemaType).join("");
+}
+
 function getTranslatorSchemaDef(
     actionConfig: ActionConfig,
 ): TranslatorSchemaDef {

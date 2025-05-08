@@ -71,6 +71,7 @@ export class EmailMessage extends Message<EmailMeta> {
 }
 
 function importEmailMeta(header: email.EmailHeader): EmailMeta {
+    header.bcc;
     const meta = new EmailMeta(header.from);
     meta.copyFrom(header);
     return meta;

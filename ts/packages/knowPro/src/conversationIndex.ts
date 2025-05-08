@@ -37,7 +37,7 @@ function addTermToIndex(
     semanticRefOrdinal: SemanticRefOrdinal,
     termsAdded?: string[],
 ) {
-    index.addTerm(term, semanticRefOrdinal);
+    term = index.addTerm(term, semanticRefOrdinal);
     if (termsAdded) {
         termsAdded.push(term);
     }
@@ -372,9 +372,9 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
     public addTerm(
         term: string,
         semanticRefIndex: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
-    ): void {
+    ): string {
         if (!term) {
-            return;
+            return term;
         }
         if (typeof semanticRefIndex === "number") {
             semanticRefIndex = {
@@ -389,6 +389,7 @@ export class ConversationIndex implements ITermToSemanticRefIndex {
         } else {
             this.map.set(term, [semanticRefIndex]);
         }
+        return term;
     }
 
     lookupTerm(term: string): ScoredSemanticRefOrdinal[] {

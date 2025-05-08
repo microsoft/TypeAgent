@@ -5,9 +5,8 @@ import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import { RequestAction, fromJsonActions } from "agent-cache";
 import {
-    createActionConfigProvider,
     getCacheFactory,
-    getAllSchemaNames,
+    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
@@ -28,9 +27,7 @@ const testRequest = new RequestAction(
 
 const instanceDir = getInstanceDir();
 const defaultAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const schemaNames = getAllSchemaNames(
-    await createActionConfigProvider(defaultAgentProviders),
-);
+const { schemaNames } = await getAllActionConfigProvider(defaultAgentProviders);
 
 export default class ExplainCommand extends Command {
     static args = {

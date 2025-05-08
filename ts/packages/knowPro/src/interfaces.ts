@@ -87,7 +87,7 @@ export interface ITermToSemanticRefIndex {
     addTerm(
         term: string,
         semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
-    ): void;
+    ): string;
     removeTerm(term: string, semanticRefOrdinal: SemanticRefOrdinal): void;
     lookupTerm(term: string): ScoredSemanticRefOrdinal[] | undefined;
 }

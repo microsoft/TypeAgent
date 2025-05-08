@@ -260,3 +260,4 @@ process.on("disconnect", () => {
 
 // Start the server
 app.listen(port);
+debug(`Montage server started on port ${port}`);

@@ -34,6 +34,14 @@ export function lowerAndSort(values: string[] | undefined): void {
     }
 }
 
+export function lowerCase(values: string[] | undefined): void {
+    if (values) {
+        for (let i = 0; i < values.length; ++i) {
+            values[i] = values[i].toLowerCase();
+        }
+    }
+}
+
 const caseInsensitiveOptions: Intl.CollatorOptions = { sensitivity: 'base' };  
 
 export function stringCompare(x: string | undefined, y: string | undefined, caseSensitive: boolean): number {
