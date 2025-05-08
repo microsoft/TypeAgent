@@ -133,11 +133,11 @@ document.addEventListener("DOMContentLoaded", function () {
                 }
 
                 // remove by index
-                if (msg.parameters.indicies) {
+                if (msg.parameters.indices) {
                     // reverse index
                     if (msg.parameters.selected === "inverse") {
                         const keep: Set<string> = new Set<string>();
-                        msg.parameters.indicies.forEach((v) => {
+                        msg.parameters.indices.forEach((v) => {
                             keep.add(
                                 mainContainer.children[v - 1].getAttribute(
                                     "path",
@@ -152,11 +152,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     } else {
                         // have to start at the end otherwise indexes will be wrong
                         for (
-                            let i = msg.parameters.indicies.length - 1;
+                            let i = msg.parameters.indices.length - 1;
                             i >= 0;
                             i--
                         ) {
-                            const index = msg.parameters.indicies[i] - 1;
+                            const index = msg.parameters.indices[i] - 1;
                             const file: string | undefined =
                                 mainContainer.children[index].getAttribute(
                                     "path",
@@ -182,7 +182,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                 // remove everything
                 if (
-                    msg.parameters.indicies === undefined &&
+                    msg.parameters.indices === undefined &&
                     msg.parameters.files === undefined &&
                     msg.parameters.search_filters === undefined &&
                     msg.parameters.selected === undefined

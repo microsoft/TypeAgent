@@ -34,7 +34,7 @@ export type SelectPhotosAction = {
     parameters: {
         // any search terms to use indicating the photos to remove
         search_filters?: string[];
-        // any indicies provided indicating the photos to remove from the set of available images
+        // any indices provided indicating the photos to remove from the set of available images
         indices?: number[];
         // placeholder for images to be populated later
         files?: string[];
@@ -66,8 +66,8 @@ export type RemovePhotosAction = {
     parameters: {
         // any search terms to use indicating the photos to remove
         search_filters?: string[];
-        // any indicies provided indicating the photos to remove from the set of available images
-        indicies?: number[];
+        // any indices provided indicating the photos to remove from the set of available images
+        indices?: number[];
         // flag indicating if we are remove selected images or inverse
         selected?: "selected" | "inverse" | "all";
         // placeholder for images to be populated later
@@ -93,7 +93,7 @@ export type SetSearchParametersAction = {
     parameters: {
         // search score value starts at 0
         minSearchScore?: number;
-        // only return exact maches?
+        // only return exact matches?
         exactMatch?: boolean;
     };
 };
@@ -112,7 +112,7 @@ export type CreateMontageAction = {
         title: string;
         // any search terms to use to seed the montage based off of the title
         search_filters?: string[];
-        // a flag indicating if the UI should imediately switch to this montage, defaults to true
+        // a flag indicating if the UI should immediately switch to this montage, defaults to true
         focus: boolean;
         // placeholder for images to be populated later
         files?: string[];

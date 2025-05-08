@@ -129,7 +129,7 @@ export interface SessionContext<T = unknown> {
 
     removeDynamicAgent(agentName: string): Promise<void>;
 
-    // get the available indexes
+    // Experimental: get the available indexes
     indexes(type: "image" | "email" | "all"): Promise<any[]>;
 }
 
