@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true
+  },
+  "ts-node": {
+    "esm": true
+  },
+  "references": [
+    { "path": "./src/agent" },
+    { "path": "./src/view/client" },
+    { "path": "./src/view/server" },
+    { "path": "./src/view/shared" }
+  ],
+
+  "lib": ["DOM", "ES2020", "DOM.Iterable"],
+  "exclude": ["node_modules", "dist", "public/js"]
+}
