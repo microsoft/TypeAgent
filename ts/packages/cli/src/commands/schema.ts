@@ -7,14 +7,14 @@ import {
     getAssistantSelectionSchemas,
     getFullSchemaText,
     getActionSchema,
-    createActionConfigProvider,
+    getAllActionConfigProvider,
     getAllSchemaNames,
 } from "agent-dispatcher/internal";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import { generateSchemaTypeDefinition } from "action-schema";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 
-const provider = await createActionConfigProvider(
+const provider = await getAllActionConfigProvider(
     getDefaultAppAgentProviders(getInstanceDir()),
 );
 const schemaNames = getAllSchemaNames(provider);
