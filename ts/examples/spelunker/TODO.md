@@ -17,4 +17,3 @@
 - It seems everything in the keywords (etc.) index is close to everything else
 
 - Do we trust vector normalization?
-
