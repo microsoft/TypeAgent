@@ -1,0 +1,104 @@
+@clear
+
+@pauseForInput
+
+# -------------------------------------
+# Player actions
+# -------------------------------------
+please launch spotify
+# set device to computer
+
+Please play Nocturne No. 2 by Chopin.
+set the music volume to 40
+
+
+# -------------------------------------
+# Code + clarification flow
+# -------------------------------------
+please open vscode
+
+split window into two columns
+Revert back to a single column
+
+change my code color scheme
+
+# hopefully we get clarification request
+solarized light
+
+Actually I want the color to be monokai
+
+# -------------------------------------
+# Window management actions
+# -------------------------------------
+Launch edge
+Tile vs code the left and edge to the right
+Maximize Edge
+
+# -------------------------------------
+# Browser actions
+# -------------------------------------
+Go To BBC
+Scroll down
+Scroll up
+Zoom in
+Zoom out
+Follow BBC home link
+
+# -------------------------------------
+# PBDB actions
+# -------------------------------------
+Show PBDB site I saw yesterday
+Set location to Denver
+Zoom in
+Show fossils from 100 million years ago
+Show T-Rex fossils
+clear filters
+# when did whales first evolve?
+# show whale fossils from puget sound from that epoch
+# zoom out
+# pan right
+
+#-----------------------------------
+# List management - long-term memory
+#-----------------------------------
+lookup snowdrops on the web
+what was the name of the list we made for the bulb order?
+add snowdrops to that list
+what is on the list?
+
+
+#-----------------------------------
+# Conversation memory  - long-term memory
+#-----------------------------------
+
+in that Kevin Scott podcast we talked about last month, what were the books Adrian and Kevin mentioned?
+what did Kevin say about AI in that podcast?
+
+#-----------------------------------
+# integration with other knowledge sources
+#-----------------------------------
+did the PR about email memory get checked in?
+
+# -------------------------------------
+# Calendar
+# -------------------------------------
+# Navigate to calendar page
+# Open "https://outlook.office.com/calendar/view/workweek?actSwt=true" in a new tab
+
+Create a code review meeting next Monday at 11:00 AM
+Add Alex to the code review meeting
+# Add Megan to the code review meeting
+
+Schedule a lunch meeting at noon tomorrow
+# Add Alex and Megan to the lunch meeting
+
+# Block some time to pick up groceries at 5:00 PM today
+
+# -------------------------------------
+# email
+# -------------------------------------
+# Open "https://outlook.office.com/mail/sentitems/" in a new tab
+
+Send email to Megan with the recipe for Lasgna
+Reply to the email from Megan saying you will be happy to meet for coffee
+Forward the mail from Megan to Alex asking if he wants to join us for coffee

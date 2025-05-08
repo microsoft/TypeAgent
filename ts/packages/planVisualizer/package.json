@@ -18,7 +18,7 @@
     "build:server": "tsc -p src/server/tsconfig.json",
     "build:shared": "tsc -p src/shared/tsconfig.json",
     "clean": "rimraf dist public/js",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/server/server.js\"",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/server/server.js --dev \"",
     "dev:client": "vite",
     "dev:server": "tsc -p src/server/tsconfig.json --watch",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",

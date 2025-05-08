@@ -17,6 +17,7 @@ import { execFile } from "node:child_process";
 import {
     OUTPUT_DIR,
     CHUNKED_DOCS_DIR,
+    SRAG_MEM_DIR,
     resolveFilePath,
     resolveAndValidateFiles,
 } from "../common.js";
@@ -253,7 +254,7 @@ export async function importPdf(
             verbose,
             results,
         );
-        const idxName = "arxiv-sragindex";
+        const idxName = "arxiv_srag_index";
         log(
             io,
             `Building ${idxName}, with ${messages.length} ...`,
@@ -265,7 +266,7 @@ export async function importPdf(
         const idxResult = await pdfKnowproIndex.buildIndex();
         if (idxResult) {
             log(io, `Index ${idxName} built successfully`, chalk.green);
-            const cachedir = path.join(outputDir, "kpindex");
+            const cachedir = SRAG_MEM_DIR;
             ensureDir(cachedir);
 
             pdfKnowproIndex.writeToFile(cachedir, idxName);

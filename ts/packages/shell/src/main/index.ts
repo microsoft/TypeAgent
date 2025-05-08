@@ -82,6 +82,8 @@ if (isProd) {
     }
 }
 
+export const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+
 // Set app user model id for windows
 if (process.platform === "win32") {
     app.setAppUserModelId(
