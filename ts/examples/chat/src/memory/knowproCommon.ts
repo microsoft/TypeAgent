@@ -4,9 +4,11 @@
 import { ProgressBar } from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
+import * as cm from "conversation-memory";
 import { ChatPrinter } from "../chatPrinter.js";
 import { addFileNameSuffixToPath } from "./common.js";
 import path from "path";
+import { getFileName } from "typeagent";
 
 /**
  * Appends the given messages and their pre-extracted associated knowledge to the conversation index
@@ -222,4 +224,17 @@ export function memoryNameToIndexPath(
     memoryName: string,
 ): string {
     return path.join(basePath, memoryName + IndexFileSuffix);
+}
+
+export async function loadEmailMemory(
+    emailIndexPath: string,
+    createNew: boolean = false,
+) {
+    return cm.createEmailMemory(
+        {
+            dirPath: path.dirname(emailIndexPath),
+            baseFileName: getFileName(emailIndexPath),
+        },
+        createNew,
+    );
 }
