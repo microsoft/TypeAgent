@@ -249,32 +249,6 @@ class ApiService {
             throw error;
         }
     }
-
-    /**
-     * Helper method to handle API errors
-     * @param {Response} response - Fetch response object
-     * @returns {Promise<any>} Parsed response if OK, throws error otherwise
-     * @private
-     */
-    private static async _handleResponse(response: Response): Promise<any> {
-        if (!response.ok) {
-            // Try to parse error details
-            let errorDetails = "Unknown error";
-
-            try {
-                const errorData = await response.json();
-                errorDetails =
-                    errorData.error || errorData.message || "Unknown error";
-            } catch (e) {
-                // If can't parse JSON, use status text
-                errorDetails = response.statusText;
-            }
-
-            throw new Error(`HTTP error: ${response.status} - ${errorDetails}`);
-        }
-
-        return await response.json();
-    }
 }
 
 export default ApiService;

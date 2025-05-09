@@ -16,6 +16,7 @@ import { WebPlanData, SSEEvent } from "../shared/types.js";
 declare global {
     interface Window {
         visualizer?: Visualizer;
+        handleFileSelect?: (files: FileList | null) => void;
     }
 }
 
@@ -75,9 +76,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const viewModeToggle = document.getElementById(
         "view-mode-toggle",
     ) as HTMLInputElement;
-    const formContainer = document.querySelector(
-        ".form-container",
-    ) as HTMLDivElement;
 
     const toggleFormButton = document.getElementById(
         "toggle-form-button",
@@ -99,32 +97,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const activeStateName = document.getElementById(
         "active-state-name",
     ) as HTMLElement;
-
-    const screenshotModeButton = document.getElementById(
-        "screenshot-mode-button",
-    ) as HTMLButtonElement;
-    const screenshotUploadModal = document.getElementById(
-        "screenshot-upload-modal",
-    ) as HTMLDivElement;
-    const uploadNodeName = document.getElementById(
-        "upload-node-name",
-    ) as HTMLElement;
-    const screenshotFile = document.getElementById(
-        "screenshot-file",
-    ) as HTMLInputElement;
-    const dropArea = document.getElementById("drop-area") as HTMLDivElement;
-    const previewContainer = document.getElementById(
-        "preview-container",
-    ) as HTMLDivElement;
-    const previewImage = document.getElementById(
-        "preview-image",
-    ) as HTMLImageElement;
-    const uploadScreenshotButton = document.getElementById(
-        "upload-screenshot-button",
-    ) as HTMLButtonElement;
-    const closeModalButtons = document.querySelectorAll(
-        ".close-modal, .cancel-modal",
-    );
 
     // Add application state for screenshot mode
     let isScreenshotMode = false;
@@ -966,26 +938,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 currentBase64Screenshot = null;
             });
         });
-    }
-
-    /**
-     * Toggle screenshot mode
-     */
-    function toggleScreenshotMode() {
-        isScreenshotMode = !isScreenshotMode;
-
-        if (isScreenshotMode) {
-            screenshotModeButton.classList.add("active");
-            screenshotModeButton.title = "Disable Screenshot Mode";
-        } else {
-            screenshotModeButton.classList.remove("active");
-            screenshotModeButton.title = "Enable Screenshot Mode";
-        }
-
-        // Update visualization to show/hide screenshots
-        if (visualizer) {
-            visualizer.setScreenshotMode(isScreenshotMode);
-        }
     }
 
     /**

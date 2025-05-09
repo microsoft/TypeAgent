@@ -94,10 +94,6 @@ async function updateBrowserContext(
 
         if (!context.agentContext.planVisualizationEndpoint) {
             context.agentContext.planVisualizationEndpoint = `http://localhost:${port}`;
-            console.log(
-                "Plan visualizer: " +
-                    context.agentContext.planVisualizationEndpoint,
-            );
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
