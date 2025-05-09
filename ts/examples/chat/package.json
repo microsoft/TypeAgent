@@ -37,6 +37,7 @@
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
+    "mailparser": "3.7.2",
     "memory-providers": "workspace:*",
     "memory-storage": "workspace:*",
     "typeagent": "workspace:*",
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "7.6.11",
+    "@types/mailparser": "3.4.6",
     "copyfiles": "^2.4.1",
     "rimraf": "^6.0.1"
   },

@@ -47,6 +47,7 @@ import { convertMsgFiles } from "./importer.js";
 import fs from "fs";
 import { error, Result, success } from "typechat";
 import { loadEmailMemory } from "./knowproCommon.js";
+import { importEmailFromText } from "./emailImporter.js";
 
 export async function createEmailMemory(
     models: Models,
@@ -413,7 +414,8 @@ export function createEmailCommands(
         }
         const progress = new ProgressBar(context.printer, messageCount);
         for await (const [message, _] of exportConversation(cm, messageCount)) {
-            context.printer.writeJson(message);
+            const email = await importEmailFromText(message.value.value);
+            context.printer.writeJson(email);
             progress.advance();
         }
     }
