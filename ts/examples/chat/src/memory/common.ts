@@ -15,12 +15,14 @@ import {
     conversation,
     ItemIndexingStats,
     SourceTextBlock,
+    TextBlock,
 } from "knowledge-processor";
 import {
     asyncArray,
     ChatUserInterface,
     dateTime,
     getFileName,
+    NameValue,
 } from "typeagent";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
 import path from "path";
@@ -283,18 +285,28 @@ export async function manageConversationAlias(
     }
 }
 
-export async function findThread(
+export async function findConversationThread(
     cm: conversation.ConversationManager,
     predicate: (threadDef: conversation.ConversationThread) => boolean,
-) {
+): Promise<conversation.ConversationThread | undefined> {
     const threadIndex = await cm.conversation.getThreadIndex();
-    let allThreads = await asyncArray.toArray(threadIndex.entries());
+    let allThreads: NameValue<conversation.ConversationThread>[] =
+        await asyncArray.toArray(threadIndex.entries());
     for (const threadEntry of allThreads) {
         if (predicate(threadEntry.value)) {
             return threadEntry.value;
         }
     }
     return undefined;
+}
+
+export async function getMessageIdsForThread(
+    cm: conversation.ConversationManager,
+    thread: conversation.ConversationThread,
+): Promise<string[]> {
+    const range = conversation.toDateRange(thread.timeRange);
+    const messageStore = cm.conversation.messages;
+    return messageStore.getIdsInRange(range.startDate, range.stopDate);
 }
 
 export function extractedKnowledgeToResponse(
@@ -320,4 +332,55 @@ export function extractedKnowledgeToResponse(
         topics: [],
         inverseActions: [],
     };
+}
+
+export async function* exportConversation(
+    cm: conversation.ConversationManager,
+    maxMessages?: number,
+): AsyncIterableIterator<
+    [dateTime.Timestamped<TextBlock>, conversation.KnowledgeResponse]
+> {
+    const messageStore = cm.conversation.messages;
+    const knowledgeStore = cm.conversation.knowledge;
+    let count = 0;
+    maxMessages ??= await messageStore.size();
+    for await (const messageInfo of messageStore.all()) {
+        const messageId = messageInfo.name;
+        const message = messageInfo.value;
+        const knowledge = extractedKnowledgeToResponse(
+            await knowledgeStore.get(messageId),
+        );
+        yield [message, knowledge];
+        ++count;
+        if (count >= maxMessages) {
+            break;
+        }
+    }
+}
+
+export async function* exportConversationMessages(
+    cm: conversation.ConversationManager,
+    messageIds: string[],
+    maxMessages?: number,
+): AsyncIterableIterator<
+    [dateTime.Timestamped<TextBlock>, conversation.KnowledgeResponse]
+> {
+    const messageStore = cm.conversation.messages;
+    const knowledgeStore = cm.conversation.knowledge;
+    let count = 0;
+    maxMessages ??= await messageStore.size();
+
+    for (const messageId of messageIds) {
+        const message = await messageStore.get(messageId);
+        if (message) {
+            const knowledge = extractedKnowledgeToResponse(
+                await knowledgeStore.get(messageId),
+            );
+            yield [message, knowledge];
+            ++count;
+            if (count >= maxMessages) {
+                break;
+            }
+        }
+    }
 }

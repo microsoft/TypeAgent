@@ -77,7 +77,7 @@ function importEmailMeta(header: email.EmailHeader): EmailMeta {
     return meta;
 }
 
-function importEmailMessage(email: email.Email): EmailMessage {
+export function importEmailMessage(email: email.Email): EmailMessage {
     const meta = importEmailMeta(email);
     return new EmailMessage(meta, email.body);
 }
