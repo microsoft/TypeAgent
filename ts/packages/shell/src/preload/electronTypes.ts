@@ -35,8 +35,8 @@ export type ClientActions =
 // Functions that are called from the renderer process to the main process.
 export interface ClientAPI {
     registerClient: (client: Client) => void;
-    getSpeechToken: () => Promise<SpeechToken | undefined>;
-    getLocalWhisperStatus: () => Promise<boolean | undefined>;
+    getSpeechToken: (silent: boolean) => Promise<SpeechToken | undefined>;
+    getLocalWhisperStatus: () => Promise<boolean>;
     getChatHistory: () => Promise<string | undefined>;
     saveChatHistory: (history: string) => void;
     saveSettings: (settings: ShellUserSettings) => void;
@@ -52,7 +52,7 @@ export interface Client {
     showDialog(key: string): void;
     updateSettings(settings: ShellUserSettings): void;
     fileSelected(fileName: string, fileContent: string): void;
-    listen(name: string, token?: SpeechToken, useLocalWhisper?: boolean): void;
+    listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void;
 }
 
 export interface ElectronWindowFields {

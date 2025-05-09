@@ -12,8 +12,7 @@ import {
 } from "../../preload/electronTypes.js";
 import { ChatView } from "./chatView";
 import { TabView } from "./tabView";
-import { recognizeOnce } from "./speech";
-import { setSpeechToken } from "./speechToken";
+import { getSpeechToken, setSpeechToken } from "./speechToken";
 import { iconHelp, iconMetrics, iconSettings } from "./icon";
 import { SettingsView } from "./settingsView";
 import { HelpView } from "./helpView";
@@ -31,6 +30,10 @@ export function getClientAPI(): ClientAPI {
     } else {
         return getWebSocketAPI();
     }
+}
+
+export function getAndroidAPI() {
+    return globalThis.Android;
 }
 
 export function getDispatcher(): Dispatcher {
@@ -245,23 +248,23 @@ function addEvents(
                         break;
                     }
                     case "set-alarm": {
-                        Android?.setAlarm(d.time);
+                        getAndroidAPI()?.setAlarm(d.time);
                         break;
                     }
                     case "call-phonenumber": {
-                        Android?.callPhoneNumber(d.phoneNumber);
+                        getAndroidAPI()?.callPhoneNumber(d.phoneNumber);
                         break;
                     }
                     case "send-sms": {
-                        Android?.sendSMS(d.phoneNumber, d.message);
+                        getAndroidAPI()?.sendSMS(d.phoneNumber, d.message);
                         break;
                     }
                     case "search-nearby": {
-                        Android?.searchNearby(d.searchTerm);
+                        getAndroidAPI()?.searchNearby(d.searchTerm);
                         break;
                     }
                     case "automate-phone-ui": {
-                        Android.automateUI(d.originalRequest);
+                        getAndroidAPI()?.automateUI(d.originalRequest);
                         break;
                     }
                     case "open-folder": {
@@ -299,40 +302,12 @@ function addEvents(
         fileSelected(fileName: string, fileContent: string): void {
             chatView.chatInput.loadImageContent(fileName, fileContent);
         },
-        listen(
-            name: string,
-            token?: SpeechToken,
-            useLocalWhisper?: boolean,
-        ): void {
-            console.log(`listen event: ${name}`);
-            if (useLocalWhisper) {
-                recognizeOnce(
-                    undefined,
-                    "phraseDiv",
-                    "reco",
-                    (message: string) => {
-                        chatView.addUserMessage(message);
-                    },
-                    useLocalWhisper,
-                );
-            } else {
-                if (token) {
-                    setSpeechToken(token);
-                    if (name === "Alt+M") {
-                        recognizeOnce(
-                            token,
-                            "phraseDiv",
-                            "reco",
-                            (message: string) => {
-                                chatView.addUserMessage(message);
-                            },
-                            useLocalWhisper,
-                        );
-                    }
-                } else {
-                    console.log("no token");
-                }
+        listen(token: SpeechToken | undefined, useLocalWhisper: boolean): void {
+            if (token !== undefined) {
+                setSpeechToken(token);
             }
+
+            chatView.chatInput.recognizeOnce(token, useLocalWhisper);
         },
     };
 
@@ -487,7 +462,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     // get the users's name to show in the chat view
-    let token: SpeechToken | undefined = await getClientAPI().getSpeechToken();
+    let token: SpeechToken | undefined = await getSpeechToken();
     const actualToken = token?.token.substring(token?.token.indexOf("#"));
     if (actualToken) {
         const decoded = jose.decodeJwt(actualToken);

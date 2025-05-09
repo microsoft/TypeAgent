@@ -5,6 +5,7 @@ import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";
 import { SpeechToken } from "../../preload/electronTypes.js";
 import { WhisperRecognizer } from "./localWhisperClient";
 import registerDebug from "debug";
+import { getAndroidAPI } from "./main.js";
 
 const debug = registerDebug("typeagent:shell:speech");
 const debugError = registerDebug("typeagent:shell:speech:error");
@@ -89,13 +90,10 @@ function onRecognizing(
 function onRecognizedResult(
     result: speechSDK.SpeechRecognitionResult,
     inputId: string,
-    buttonId: string,
+    onStop: () => void,
     messageHandler: (message: string) => void,
 ) {
-    const button = document.querySelector<HTMLButtonElement>(`#${buttonId}`)!;
-    button.disabled = false;
-    button.children[0].classList.remove("chat-message-hidden");
-    button.children[1].classList.add("chat-message-hidden");
+    onStop();
 
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
     let message: string;
@@ -108,12 +106,12 @@ function onRecognizedResult(
     } else if (result.reason == speechSDK.ResultReason.NoMatch) {
         errorMessage = "[Speech could not be recognized]";
     } else if (result.reason == speechSDK.ResultReason.Canceled) {
-        const cancelationResult =
+        const cancellationResult =
             speechSDK.CancellationDetails.fromResult(result);
-        if (cancelationResult.reason == speechSDK.CancellationReason.Error) {
-            errorMessage = `[ERROR: ${cancelationResult.errorDetails} (code:${cancelationResult.ErrorCode})]`;
+        if (cancellationResult.reason == speechSDK.CancellationReason.Error) {
+            errorMessage = `[ERROR: ${cancellationResult.errorDetails} (code:${cancellationResult.ErrorCode})]`;
 
-            if (cancelationResult.ErrorCode == 4) {
+            if (cancellationResult.ErrorCode == 4) {
                 errorMessage += `Did you forget to elevate your RBAC role?`;
             }
         } else {
@@ -129,22 +127,20 @@ function onRecognizedResult(
     phraseDiv.scrollTop = phraseDiv.scrollHeight;
 }
 
+export function needSpeechToken(useLocalWhisper: boolean) {
+    return (
+        !useLocalWhisper &&
+        getAndroidAPI()?.isSpeechRecognitionSupported() !== true
+    );
+}
 export function recognizeOnce(
     token: SpeechToken | undefined,
     inputId: string,
-    buttonId: string,
+    onStop: () => void,
     messageHandler: (message: string) => void,
     useLocalWhisper?: boolean,
 ) {
-    const button = document.querySelector<HTMLButtonElement>(`#${buttonId}`)!;
     const phraseDiv = document.querySelector<HTMLDivElement>(`#${inputId}`)!;
-    if (button.disabled) {
-        return;
-    }
-    phraseDiv.innerHTML = "";
-    button.disabled = true;
-    button.children[0].classList.add("chat-message-hidden");
-    button.children[1].classList.remove("chat-message-hidden");
 
     if (useLocalWhisper) {
         const reco = new WhisperRecognizer();
@@ -165,16 +161,13 @@ export function recognizeOnce(
                 speechSDK.ResultReason.RecognizedSpeech,
                 data.text,
             );
-            onRecognizedResult(result, inputId, buttonId, messageHandler);
+            onRecognizedResult(result, inputId, onStop, messageHandler);
         });
 
         reco.initialize().then(() => {
             reco.startRecording();
         });
-    } else if (
-        typeof Android !== "undefined" &&
-        Android?.isSpeechRecognitionSupported()
-    ) {
+    } else if (getAndroidAPI()?.isSpeechRecognitionSupported() === true) {
         // use built-in device speech recognition
         Bridge.interfaces.Android.recognize((text: string | undefined) => {
             let result: speechSDK.SpeechRecognitionResult | undefined;
@@ -193,7 +186,7 @@ export function recognizeOnce(
                 );
             }
 
-            onRecognizedResult(result, inputId, buttonId, messageHandler);
+            onRecognizedResult(result, inputId, onStop, messageHandler);
         });
     } else {
         const audioConfig = getAudioConfig();
@@ -209,7 +202,7 @@ export function recognizeOnce(
         // The 'recognized' event handler can be used in a similar fashion.
         reco.recognizeOnceAsync(
             (result) => {
-                onRecognizedResult(result, inputId, buttonId, messageHandler);
+                onRecognizedResult(result, inputId, onStop, messageHandler);
             },
             function (err) {
                 window.console.log(err);
