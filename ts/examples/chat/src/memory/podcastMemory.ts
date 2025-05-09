@@ -26,8 +26,10 @@ import {
     argPause,
     argSourceFileOrFolder,
     argToDate,
+    exportConversationMessages,
     extractedKnowledgeToResponse,
-    findThread,
+    findConversationThread,
+    getMessageIdsForThread,
     manageConversationAlias,
 } from "./common.js";
 import path from "path";
@@ -285,33 +287,31 @@ export function createPodcastCommands(
             false,
         );
         const threadName = namedArgs.threadName.toLowerCase();
-        const thread = await findThread(context.podcastMemory, (td) => {
-            const descr = td.description.toLowerCase();
-            return descr.indexOf(threadName) >= 0;
-        });
+        const thread = await findConversationThread(
+            context.podcastMemory,
+            (td) => {
+                const descr = td.description.toLowerCase();
+                return descr.indexOf(threadName) >= 0;
+            },
+        );
         if (!thread) {
             context.printer.writeError(`No matching thread for ${threadName}`);
             return;
         }
         context.printer.writeInColor(chalk.cyan, thread.description);
-        const range = conversation.toDateRange(thread.timeRange);
-        const messageStore = context.podcastMemory.conversation.messages;
-        const knowledgeStore = context.podcastMemory.conversation.knowledge;
-        const messageIds = await messageStore.getIdsInRange(
-            range.startDate,
-            range.stopDate,
+        const messageIds = await getMessageIdsForThread(
+            context.podcastMemory,
+            thread,
         );
-        const messages = await messageStore.getMultiple(messageIds);
-        const progress = new ProgressBar(context.printer, messages.length);
-        for (let i = 0; i < messageIds.length; ++i) {
-            const messageId = messageIds[i];
-            const message = messages[i]!;
+        const progress = new ProgressBar(context.printer, messageIds.length);
+        for await (const [message, knowledge] of exportConversationMessages(
+            context.podcastMemory,
+            messageIds,
+        )) {
             let newMessage: conversation.ConversationMessage =
                 conversationMessageFromEmailText(message.value.value);
             newMessage.timestamp = message.timestamp;
-            newMessage.knowledge = extractedKnowledgeToResponse(
-                await knowledgeStore.get(messageId),
-            );
+            newMessage.knowledge = knowledge;
             await destCm.addMessage(newMessage, false);
             progress.advance();
         }
