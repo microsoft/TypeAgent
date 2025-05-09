@@ -786,20 +786,19 @@ export async function executeActions(
 
                 if (result.activityContext === null) {
                     clearActivityContext(systemContext);
-                    return;
+                } else {
+                    // TODO: validation
+                    systemContext.activityContext = {
+                        appAgentName: getAppAgentName(
+                            executableAction.action.schemaName,
+                        ),
+                        ...result.activityContext,
+                    };
+                    systemContext.agents.toggleTransient(
+                        DispatcherActivityName,
+                        true,
+                    );
                 }
-
-                // TODO: validation
-                systemContext.activityContext = {
-                    appAgentName: getAppAgentName(
-                        executableAction.action.schemaName,
-                    ),
-                    ...result.activityContext,
-                };
-                systemContext.agents.toggleTransient(
-                    DispatcherActivityName,
-                    true,
-                );
             }
         }
         actionIndex++;
