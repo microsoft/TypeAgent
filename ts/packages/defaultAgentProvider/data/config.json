@@ -52,6 +52,9 @@
     },
     "spelunker": {
       "name": "spelunker-agent"
+    },
+    "planVisualizer": {
+      "name": "plan-visualizer"
     }
   },
   "mcpServers": {
