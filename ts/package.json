@@ -58,11 +58,6 @@
     "node": ">=20",
     "pnpm": ">=10"
   },
-  "peerDependencyRules": {
-    "ignoreMissing": [
-      "eslint"
-    ]
-  },
   "pnpm": {
     "supportedArchitectures": {
       "cpu": [
@@ -70,5 +65,10 @@
         "arm64"
       ]
     }
+  },
+  "peerDependencyRules": {
+    "ignoreMissing": [
+      "eslint"
+    ]
   }
 }
