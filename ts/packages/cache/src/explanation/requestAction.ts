@@ -2,16 +2,15 @@
 // Licensed under the MIT License.
 
 import { PromptSection } from "typechat";
-import { AppAction, TypeAgentAction, Entity } from "@typeagent/agent-sdk";
+import {
+    AppAction,
+    TypeAgentAction,
+    Entity,
+    ActivityContext,
+} from "@typeagent/agent-sdk";
 
 export type PromptEntity = Entity & {
     sourceAppAgentName: string;
-};
-
-export type ActivityContext = {
-    appAgentName: string;
-    description: string;
-    state: Record<string, unknown>;
 };
 
 export type HistoryContext = {

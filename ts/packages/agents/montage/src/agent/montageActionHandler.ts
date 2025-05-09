@@ -17,12 +17,12 @@ import {
     MontageAction,
     RemovePhotosAction,
     SelectPhotosAction,
+    MontageActivity,
 } from "./montageActionSchema.js";
 import {
     createActionResult,
     createActionResultFromError,
     createActionResultFromMarkdownDisplay,
-    createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import * as im from "image-memory";
 import * as kp from "knowpro";
@@ -76,7 +76,7 @@ export type PhotoMontage = {
 };
 
 async function executeMontageAction(
-    action: TypeAgentAction<MontageAction>,
+    action: TypeAgentAction<MontageAction | MontageActivity>,
     context: ActionContext<MontageActionContext>,
 ) {
     const agentContext = context.sessionContext.agentContext;
@@ -85,6 +85,25 @@ async function executeMontageAction(
     if (activeMontage !== getActiveMontage(agentContext)) {
         // if the active montage has changed, update the viewer
         updateMontageViewerState(agentContext);
+    }
+
+    if (result.error === undefined) {
+        if (
+            action.actionName === "startEditMontage" ||
+            (context.activityContext !== undefined &&
+                context.activityContext.state.title !== activeMontage?.title)
+        ) {
+            result.activityContext =
+                activeMontage !== undefined
+                    ? {
+                          activityName: "edit",
+                          description: `Editing montage ${activeMontage.title}`,
+                          state: {
+                              title: activeMontage.title,
+                          },
+                      }
+                    : null;
+        }
     }
     return result;
 }
@@ -194,13 +213,7 @@ async function updateMontageContext(
             }
         }
 
-        // if there are montages, load the last one otherwise create a new one
-        if (agentContext.montages.length > 0) {
-            agentContext.activeMontageId =
-                agentContext.montages[agentContext.montages.length - 1].id;
-        } else {
-            agentContext.activeMontageId = -1;
-        }
+        agentContext.activeMontageId = -1;
 
         // Load the image index from disk
         if (!agentContext.imageCollection) {
@@ -241,27 +254,24 @@ async function updateMontageContext(
                 },
             );
 
+            const folders: string[] = [];
+            agentContext.indexes.forEach((idx) => {
+                folders.push(idx.location);
+            });
+
+            // send the folder info
+            const indexPath = path.join(agentContext.indexes[0].path, "cache");
+            folders.push(indexPath);
+            agentContext.viewProcess?.send({
+                folders: {
+                    allowedFolders: folders,
+                    indexCachePath: indexPath,
+                    indexedLocation: agentContext.indexes[0].location,
+                },
+            });
+
             // send initial state and allowed folder(s)
             if (agentContext.activeMontageId > -1) {
-                const folders: string[] = [];
-                agentContext.indexes.forEach((idx) => {
-                    folders.push(idx.location);
-                });
-
-                // send the folder info
-                const indexPath = path.join(
-                    agentContext.indexes[0].path,
-                    "cache",
-                );
-                folders.push(indexPath);
-                agentContext.viewProcess?.send({
-                    folders: {
-                        allowedFolders: folders,
-                        indexCachePath: indexPath,
-                        indexedLocation: agentContext.indexes[0].location,
-                    },
-                });
-
                 agentContext.viewProcess?.send(getActiveMontage(agentContext)!);
             }
         }
@@ -279,7 +289,7 @@ async function updateMontageContext(
 }
 
 async function handleMontageAction(
-    action: TypeAgentAction<MontageAction>,
+    action: TypeAgentAction<MontageAction | MontageActivity>,
     actionContext: ActionContext<MontageActionContext>,
 ) {
     let result: ActionResult | undefined = undefined;
@@ -296,7 +306,7 @@ async function handleMontageAction(
 
     const updateViewWithAction = (
         montage: PhotoMontage,
-        action: TypeAgentAction<MontageAction>,
+        action: TypeAgentAction<MontageAction | MontageActivity>,
     ) => {
         if (montage.id === agentContext.activeMontageId) {
             agentContext.viewProcess!.send(action);
@@ -357,7 +367,7 @@ async function handleMontageAction(
 
             const montage = await ensureActionMontage(agentContext, action);
             // if the montage is not the active one, switch to it
-            agentContext.activeMontageId = montage!.id;
+            agentContext.activeMontageId = montage.id;
 
             // search for the images requested by the user
             if (action.parameters.search_filters) {
@@ -576,16 +586,15 @@ async function handleMontageAction(
             break;
         }
 
-        case "switchMontage": {
+        case "startEditMontage": {
             const montage = await ensureActionMontage(agentContext, action);
 
             agentContext.activeMontageId = montage.id;
             result = createActionResult(
-                `Switch montage to ${montage.title}`,
+                `Editing montage ${montage.title}`,
                 false,
                 [entityFromMontage(montage)],
             );
-
             break;
         }
 
@@ -648,10 +657,7 @@ async function handleMontageAction(
             // save montage updates
             saveMontages(actionContext.sessionContext);
 
-            result = createActionResultNoDisplay(
-                `Merged ${mergedCount} montages.`,
-            );
-
+            result = createActionResult(`Merged ${mergedCount} montages.`);
             break;
         }
     }

@@ -13,9 +13,18 @@ export type MontageAction =
     | CreateMontageAction
     | DeleteMontageAction
     | DeleteAllMontageAction
-    | SwitchMontageAction
     | ListMontageAction
     | MergeMontageAction;
+
+export type MontageActivity = StartEditMontageAction;
+
+export type StartEditMontageAction = {
+    actionName: "startEditMontage";
+    parameters: {
+        // title of the montage
+        title: string;
+    };
+};
 
 // Select images in an existing montage
 export type SelectPhotosAction = {
@@ -133,15 +142,6 @@ export type DeleteMontageAction = {
 export type DeleteAllMontageAction = {
     actionName: "deleteAllMontages";
     parameters: {};
-};
-
-// Switches the active montage
-export type SwitchMontageAction = {
-    actionName: "switchMontage";
-    parameters: {
-        // title of the montage to switch to
-        title: string;
-    };
 };
 
 // Lists all montages by name
