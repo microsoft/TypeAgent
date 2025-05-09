@@ -83,7 +83,8 @@ async def add_batch_to_semantic_ref_index(
     indexing_result = TextIndexingResult()
 
     text_batch = [
-        messages[tl.message_ordinal].text_chunks[tl.chunk_ordinal or 0].strip() for tl in batch
+        messages[tl.message_ordinal].text_chunks[tl.chunk_ordinal or 0].strip()
+        for tl in batch
     ]
     knowledge_results = await extract_knowledge_from_text_batch(
         knowledge_extractor,
@@ -96,8 +97,7 @@ async def add_batch_to_semantic_ref_index(
             return indexing_result
         text_location = batch[i]
         knowledge = knowledge_result.data
-        
-        
+
     return indexing_result
 
 
