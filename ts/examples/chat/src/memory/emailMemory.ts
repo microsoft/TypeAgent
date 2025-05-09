@@ -48,6 +48,7 @@ import fs from "fs";
 import { error, Result, success } from "typechat";
 import { loadEmailMemory } from "./knowproCommon.js";
 import { importEmailFromText } from "./emailImporter.js";
+import * as cm from "conversation-memory";
 
 export async function createEmailMemory(
     models: Models,
@@ -402,8 +403,8 @@ export function createEmailCommands(
             namedArgs.name,
         );
 
-        const cm = context.emailMemory;
-        let messageCount = await cm.conversation.messages.size();
+        let messageCount =
+            await context.emailMemory.conversation.messages.size();
         if (namedArgs.maxMessages) {
             messageCount = namedArgs.maxMessages;
         }
@@ -413,11 +414,19 @@ export function createEmailCommands(
             return;
         }
         const progress = new ProgressBar(context.printer, messageCount);
-        for await (const [message, _] of exportConversation(cm, messageCount)) {
+        for await (const [message, knowledge] of exportConversation(
+            context.emailMemory,
+            messageCount,
+        )) {
             const email = await importEmailFromText(message.value.value);
-            context.printer.writeJson(email);
+            if (email) {
+                const emailMessage = cm.importEmailMessage(email);
+                emailMessage.knowledge = knowledge;
+                await kpEmail.addMessages(emailMessage, false);
+            }
             progress.advance();
         }
+        progress.complete();
     }
     //-------------
     // End commands
