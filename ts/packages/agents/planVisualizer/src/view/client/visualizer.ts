@@ -1098,8 +1098,6 @@ class Visualizer {
     updateNodeScreenshot(nodeId: string, screenshot: string): void {
         if (!this.cy) return;
 
-        console.log("Updating screenshot 4")
-
         const node = this.cy.getElementById(nodeId);
         if (node.length > 0) {
             node.data("screenshot", screenshot);
