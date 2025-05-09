@@ -35,6 +35,54 @@ export async function importEmailFromMimeText(
     return email;
 }
 
+export function getLastResponseInEmailThread(emailText: string): string {
+    const delimiters: string[] = [
+        "From:",
+        "Sent:",
+        "To:",
+        "Subject:",
+        "-----Original Message-----",
+        "----- Forwarded by",
+        "________________________________________",
+    ];
+    if (!emailText) {
+        return "";
+    }
+
+    let firstDelimiterAt = -1;
+    for (const delimiter in delimiters) {
+        let index = emailText.indexOf(delimiter);
+        if (
+            index >= 0 &&
+            (firstDelimiterAt == -1 || index < firstDelimiterAt)
+        ) {
+            firstDelimiterAt = index;
+        }
+    }
+
+    if (firstDelimiterAt >= 0) {
+        return emailText.slice(0, firstDelimiterAt).trim();
+    }
+
+    return emailText;
+}
+
+export async function importForwardedEmailsFromMimeText(
+    emailText: string,
+): Promise<email.Email[] | undefined> {
+    const splitDelimiter = /(?=From:)/i;
+    const emailParts = emailText.split(splitDelimiter);
+    let emails: email.Email[] | undefined;
+    for (const part of emailParts) {
+        const email = await importEmailFromMimeText(part);
+        if (email) {
+            emails ??= [];
+            emails.push(email);
+        }
+    }
+    return emails;
+}
+
 function importAddresses(
     addresses: AddressObject | AddressObject[] | undefined,
 ): email.EmailAddress[] | undefined {
