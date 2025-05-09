@@ -2,9 +2,8 @@
 // Licensed under the MIT License.
 
 export type MontageAction =
-    | FindPhotosAction
     | SelectPhotosAction
-    | ListPhotosAction
+    | AddPhotosAction
     | ChangeTitleAction
     | RemovePhotosAction
     | ClearSelectionAction
@@ -13,25 +12,17 @@ export type MontageAction =
     | StartSlideShowAction
     | CreateMontageAction
     | DeleteMontageAction
+    | DeleteAllMontageAction
     | SwitchMontageAction
     | ListMontageAction
     | MergeMontageAction;
 
-// Find images to add to the montage.
-export type FindPhotosAction = {
-    actionName: "findPhotos";
-    parameters: {
-        // any search terms to use indicating the photos to remove
-        search_filters: string[];
-        // placeholder for images to be populated later
-        files?: string[];
-    };
-};
-
-// Selects images in the UI that have already been found
+// Select images in an existing montage
 export type SelectPhotosAction = {
     actionName: "selectPhotos";
     parameters: {
+        // title of the montage
+        title: string;
         // any search terms to use indicating the photos to remove
         search_filters?: string[];
         // any indices provided indicating the photos to remove from the set of available images
@@ -41,10 +32,12 @@ export type SelectPhotosAction = {
     };
 };
 
-// Lists/adds all available photos
-export type ListPhotosAction = {
-    actionName: "listPhotos";
+// add photos to the montage
+export type AddPhotosAction = {
+    actionName: "addPhotos";
     parameters: {
+        // title of the montage
+        title: string;
         // placeholder for images to be populated later
         files?: string[];
         // always empty
@@ -56,7 +49,9 @@ export type ListPhotosAction = {
 export type ChangeTitleAction = {
     actionName: "changeTitle";
     parameters: {
+        // current title of the montage to change
         title: string;
+        newTitle: string;
     };
 };
 
@@ -64,6 +59,8 @@ export type ChangeTitleAction = {
 export type RemovePhotosAction = {
     actionName: "removePhotos";
     parameters: {
+        // title of the montage
+        title: string;
         // any search terms to use indicating the photos to remove
         search_filters?: string[];
         // any indices provided indicating the photos to remove from the set of available images
@@ -78,7 +75,10 @@ export type RemovePhotosAction = {
 // Clears the currently selected images
 export type ClearSelectionAction = {
     actionName: "clearSelectedPhotos";
-    parameters: {};
+    parameters: {
+        // title of the montage
+        title: string;
+    };
 };
 
 // Shows search parameters
@@ -101,7 +101,9 @@ export type SetSearchParametersAction = {
 // Starts a slide show with the images in the active montage
 export type StartSlideShowAction = {
     actionName: "startSlideShow";
-    parameters: {};
+    parameters: {
+        title: string;
+    };
 };
 
 // Creates a new montage
@@ -124,22 +126,21 @@ export type DeleteMontageAction = {
     actionName: "deleteMontage";
     parameters: {
         // The title of the montage to delete
-        title?: string;
-        // The ids (if known) of the montage to delete
-        id?: number[];
-        // A flag indicating to remove all montages
-        deleteAll?: boolean;
+        title: string;
     };
+};
+
+export type DeleteAllMontageAction = {
+    actionName: "deleteAllMontages";
+    parameters: {};
 };
 
 // Switches the active montage
 export type SwitchMontageAction = {
     actionName: "switchMontage";
     parameters: {
-        // The title of the montage to switch to
-        title?: string;
-        // The id (if known) of the montage to switch to
-        id?: number;
+        // title of the montage to switch to
+        title: string;
     };
 };
 
@@ -153,7 +154,7 @@ export type MergeMontageAction = {
     actionName: "mergeMontages";
     parameters: {
         // The title of the merged montage
-        mergeMontageTitle: string;
+        mergedMontageTitle: string;
         // The titles of the montages to merge
         titles?: string[];
         // THe ids of the montages to merge

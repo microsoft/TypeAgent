@@ -78,15 +78,15 @@ export function createActionResultFromHtmlDisplayWithScript(
 }
 
 export function createActionResultFromMarkdownDisplay(
-    literalText: string,
+    markdownText: string,
     entities: Entity[] = [],
     resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
-        literalText,
+        literalText: markdownText,
         entities,
         resultEntity,
-        displayContent: { type: "markdown", content: literalText },
+        displayContent: { type: "markdown", content: markdownText },
     };
 }
 
