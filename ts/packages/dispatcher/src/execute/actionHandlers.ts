@@ -778,6 +778,12 @@ export async function executeActions(
                         `Cannot start an activity when there are pending actions.`,
                     );
                 }
+
+                if (result.activityContext === null) {
+                    clearActivityContext(systemContext);
+                    return;
+                }
+
                 // TODO: validation
                 systemContext.activityContext = {
                     appAgentName: getAppAgentName(
@@ -793,6 +799,13 @@ export async function executeActions(
         }
         actionIndex++;
     }
+}
+
+export function clearActivityContext(
+    systemContext: CommandHandlerContext,
+): void {
+    systemContext.activityContext = undefined;
+    systemContext.agents.toggleTransient(DispatcherActivityName, false);
 }
 
 function getAdditionalExecutableActions(

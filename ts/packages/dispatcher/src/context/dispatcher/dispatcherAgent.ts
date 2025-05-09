@@ -37,7 +37,7 @@ import {
     translateRequest,
 } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
-import { DispatcherActivityName } from "./dispatcherUtils.js";
+import { clearActivityContext } from "../../execute/actionHandlers.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -102,11 +102,7 @@ async function executeDispatcherAction(
             switch (action.actionName) {
                 case "exitActivity":
                     const systemContext = context.sessionContext.agentContext;
-                    systemContext.activityContext = undefined;
-                    systemContext.agents.toggleTransient(
-                        DispatcherActivityName,
-                        false,
-                    );
+                    clearActivityContext(systemContext);
                     return createActionResultFromTextDisplay(
                         "Ok.  What's next?",
                     );

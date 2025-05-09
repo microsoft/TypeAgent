@@ -30,7 +30,7 @@ export type ActionResultSuccess = {
         activity: string;
         description: string;
         state: Record<string, unknown>;
-    };
+    } | null; // Null to clear the activity context
 };
 
 export type ActionResultSuccessNoDisplay = Omit<
