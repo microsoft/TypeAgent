@@ -1,7 +1,7 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true
+    "composite": true,
   },
   "ts-node": {
     "esm": true
@@ -12,7 +12,5 @@
     { "path": "./src/view/server" },
     { "path": "./src/view/shared" }
   ],
-
-  "lib": ["DOM", "ES2020", "DOM.Iterable"],
   "exclude": ["node_modules", "dist", "public/js"]
 }

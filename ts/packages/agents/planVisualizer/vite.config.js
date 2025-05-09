@@ -6,19 +6,17 @@ import typescript from "@rollup/plugin-typescript";
 import { resolve } from "path";
 
 export default defineConfig({
+    root: resolve(__dirname, "src/view/client"),
     plugins: [
         typescript({
             tsconfig: "./src/view/client/tsconfig.json",
         }),
     ],
     build: {
-        outDir: "dist/view/public",
+        outDir: resolve(__dirname, "dist/view/public"),
         sourcemap: true,
         emptyOutDir: false,
         rollupOptions: {
-            input: {
-                main: resolve(__dirname, "src/view/client/app.ts"),
-            },
             output: {
                 entryFileNames: "js/[name].js",
             },
@@ -26,12 +24,22 @@ export default defineConfig({
     },
     logLevel: "error",
     server: {
+        hmr: true,
         proxy: {
-            // Forward API requests to your Express server
+            // Forward API requests to Express server
             "/api": {
-                target: "http://localhost:9015",
+                target: "http://localhost:9052",
                 changeOrigin: true,
             },
+        },
+        fs: {
+            allow: [resolve(__dirname, "src")],
+        },
+    },
+    resolve: {
+        extensions: [".ts", ".js"],
+        alias: {
+            "@": resolve(__dirname, "src/view/client"),
         },
     },
 });

@@ -3,6 +3,9 @@
   "compilerOptions": {
     "outDir": "../../../dist/view/public/js",
     "rootDir": ".",
+    "declarationMap": false,
+    "moduleResolution": "bundler",
+      "module": "ESNext",
     "lib": ["DOM", "ES2020", "DOM.Iterable"]
   },
   "include": ["./**/*.ts", "../shared/**/*.ts"],
