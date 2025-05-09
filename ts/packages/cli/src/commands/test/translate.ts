@@ -57,7 +57,7 @@ function summarizeResult(result: TestResultFile) {
         }
         const actionNames = entry.actions.map((actions) =>
             actions
-                ?.map((a) => a.translatorName + "." + a.actionName)
+                ?.map((a) => a.schemaName + "." + a.actionName)
                 .join(",")
                 .padEnd(20),
         );
@@ -474,13 +474,12 @@ export default class TestTranslateCommand extends Command {
                     }
                     for (let i = 0; i < actual.length; i++) {
                         if (
-                            actual[i].translatorName !==
-                                expected[i].translatorName ||
+                            actual[i].schemaName !== expected[i].schemaName ||
                             actual[i].actionName !== expected[i].actionName
                         ) {
                             print(
                                 chalk.red(
-                                    `Failed (${actual[i].translatorName}.${actual[i].actionName}) !== (${expected[i].translatorName}.${expected[i].actionName})`,
+                                    `Failed (${actual[i].schemaName}.${actual[i].actionName}) !== (${expected[i].schemaName}.${expected[i].actionName})`,
                                 ),
                             );
                             failedTotal++;

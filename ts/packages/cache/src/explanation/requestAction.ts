@@ -64,7 +64,7 @@ export type ParamObjectType = {
 };
 
 export interface FullAction extends AppAction {
-    translatorName: string;
+    schemaName: string;
     parameters?: ParamObjectType;
 }
 
@@ -80,13 +80,13 @@ export interface ExecutableAction {
 }
 
 export function createExecutableAction(
-    translatorName: string,
+    schemaName: string,
     actionName: string,
     parameters?: ParamObjectType,
     resultEntityId?: string,
 ): ExecutableAction {
     const action: TypeAgentAction<FullAction> = {
-        translatorName,
+        schemaName,
         actionName,
     };
     if (parameters !== undefined) {
@@ -178,7 +178,7 @@ function parseActions(actionStr: string) {
 }
 
 export function getFullActionName(action: ExecutableAction) {
-    return `${action.action.translatorName}.${action.action.actionName}`;
+    return `${action.action.schemaName}.${action.action.actionName}`;
 }
 
 function parseExecutableActionsString(actions: string): ExecutableAction[] {
@@ -196,11 +196,11 @@ function executableActionsToString(actions: ExecutableAction[]): string {
 }
 
 function fromJsonAction(actionJSON: JSONAction) {
-    const { schemaName: translatorName, actionName } = parseFullActionNameParts(
+    const { schemaName, actionName } = parseFullActionNameParts(
         actionJSON.fullActionName,
     );
     return createExecutableAction(
-        translatorName,
+        schemaName,
         actionName,
         actionJSON.parameters,
         actionJSON.resultEntityId,
@@ -245,9 +245,7 @@ export function toFullActions(actions: ExecutableAction[]): FullAction[] {
 export function getTranslationNamesForActions(
     actions: ExecutableAction[],
 ): string[] {
-    return Array.from(
-        new Set(actions.map((a) => a.action.translatorName)),
-    ).sort();
+    return Array.from(new Set(actions.map((a) => a.action.schemaName))).sort();
 }
 
 export class RequestAction {

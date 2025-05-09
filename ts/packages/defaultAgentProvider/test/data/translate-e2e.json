@@ -9,7 +9,7 @@
   {
     "request": "play some EDM please",
     "action": {
-      "translatorName": "player",
+      "schemaName": "player",
       "actionName": "playGenre",
       "parameters": {
         "genre": "EDM"
@@ -19,7 +19,7 @@
   {
     "request": "play some Symphony by Beethoven please",
     "action": {
-      "translatorName": "player",
+      "schemaName": "player",
       "actionName": "playTrack",
       "parameters": {
         "trackName": "Symphony",
@@ -30,7 +30,7 @@
   {
     "request": "play Hello by Adele",
     "action": {
-      "translatorName": "player",
+      "schemaName": "player",
       "actionName": "playTrack",
       "parameters": {
         "trackName": "Hello",
@@ -75,7 +75,7 @@
     {
       "request": "grocery",
       "action": {
-        "translatorName": "list",
+        "schemaName": "list",
         "actionName": "addItems",
         "parameters": {
           "items": ["ham"],

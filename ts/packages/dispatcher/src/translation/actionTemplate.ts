@@ -48,7 +48,7 @@ function getDefaultActionTemplate(
     const template: TemplateSchema = {
         type: "object",
         fields: {
-            translatorName: {
+            schemaName: {
                 type: schemaNames,
             },
         },
@@ -117,14 +117,14 @@ function toTemplate(
     action: ExecutableAction,
 ) {
     const actionSchemaFile = context.agents.tryGetActionSchemaFile(
-        action.action.translatorName,
+        action.action.schemaName,
     );
     if (actionSchemaFile === undefined) {
         return getDefaultActionTemplate(schemas);
     }
     const template = getDefaultActionTemplate(
         schemas,
-        action.action.translatorName,
+        action.action.schemaName,
     );
     const actionSchemas = actionSchemaFile.parsedActionSchema.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
@@ -195,8 +195,8 @@ export async function getSystemTemplateSchema(
 
     // check user input to make sure it is an action
 
-    if (typeof data.translatorName !== "string") {
-        data.translatorName = "";
+    if (typeof data.schemaName !== "string") {
+        data.schemaName = "";
     }
 
     if (typeof data.actionName !== "string") {
@@ -253,7 +253,7 @@ export async function getActionCompletion(
     if (actionSchema === undefined) {
         return [];
     }
-    const appAgentName = getAppAgentName(action.translatorName!);
+    const appAgentName = getAppAgentName(action.schemaName!);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
     if (appAgent.getActionCompletion === undefined) {
         return [];

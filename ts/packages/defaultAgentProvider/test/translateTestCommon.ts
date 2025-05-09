@@ -124,7 +124,7 @@ export async function defineTranslateTest(
                                 const action = actions![i];
                                 const expected = expectedValues[i];
                                 if (typeof expected === "string") {
-                                    const actualFullActionName = `${action.translatorName}.${action.actionName}`;
+                                    const actualFullActionName = `${action.schemaName}.${action.actionName}`;
                                     if (match === "partial") {
                                         expect(actualFullActionName).toContain(
                                             expected,

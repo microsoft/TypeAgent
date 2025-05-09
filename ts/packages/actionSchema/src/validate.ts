@@ -176,7 +176,7 @@ export function validateAction(
     action: any,
     coerce: boolean = false,
 ) {
-    validateObject("", actionSchema.type, action, coerce, ["translatorName"]);
+    validateObject("", actionSchema.type, action, coerce, ["schemaName"]);
 }
 
 export function validateType(type: SchemaType, value: any) {

@@ -26,7 +26,7 @@
   {
     "request": "I'd like to look up something on the web",
     "action": {
-      "translatorName": "dispatcher.lookup",
+      "schemaName": "dispatcher.lookup",
       "actionName": "startLookup",
       "parameters": {
         "lookup":{
@@ -38,7 +38,7 @@
   {
     "request": "I'd like to look up something on https://wikipedia.com",
     "action": {
-      "translatorName": "dispatcher.lookup",
+      "schemaName": "dispatcher.lookup",
       "actionName": "startLookup",
       "parameters": {
         "lookup": {

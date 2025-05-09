@@ -118,9 +118,9 @@ export class MessageContainer {
             if (Array.isArray(this.action)) {
                 return `${this.source} ${this.action.join(" ")}`;
             } else if (
-                (this.action as TypeAgentAction).translatorName !== undefined
+                (this.action as TypeAgentAction).schemaName !== undefined
             ) {
-                return `${this.action.translatorName}.${this.action.actionName}`;
+                return `${this.action.schemaName}.${this.action.actionName}`;
             }
         }
         return this.defaultSource;

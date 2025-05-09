@@ -834,7 +834,7 @@ export async function translateRequest(
         if (!systemContext.batchMode) {
             systemContext.logger?.logEvent("translation", {
                 elapsedMs,
-                translatorName: schemaName,
+                schemaName,
                 request,
                 actions: requestAction.actions,
                 replacedAction,

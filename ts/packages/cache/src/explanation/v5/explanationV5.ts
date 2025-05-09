@@ -303,7 +303,7 @@ function getPropertyTransformInfo(
         propertyName,
         actions,
     );
-    const schemaName = action.translatorName;
+    const schemaName = action.schemaName;
     if (schemaName === undefined) {
         throw new Error("Action without translator name");
     }

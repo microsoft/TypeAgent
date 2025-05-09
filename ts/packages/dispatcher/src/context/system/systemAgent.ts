@@ -90,7 +90,7 @@ function executeSystemAction(
         | TypeAgentAction<HistoryAction, "system.history">,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    switch (action.translatorName) {
+    switch (action.schemaName) {
         case "system.session":
             return executeSessionAction(action, context);
         case "system.config":
@@ -101,7 +101,7 @@ function executeSystemAction(
             return executeHistoryAction(action, context);
         default:
             throw new Error(
-                `Invalid system sub-translator: ${(action as TypeAgentAction).translatorName}`,
+                `Invalid system sub-translator: ${(action as TypeAgentAction).schemaName}`,
             );
     }
 }

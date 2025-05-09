@@ -76,8 +76,8 @@ async function canTranslateWithoutContext(
 
         let index = 0;
         for (const { action } of requestAction.actions) {
-            const translatorName = action.translatorName;
-            const newTranslatedActions = translations.get(translatorName)!;
+            const schemaName = action.schemaName;
+            const newTranslatedActions = translations.get(schemaName)!;
             let newAction: TranslatedAction;
             if (isMultipleAction(newTranslatedActions)) {
                 const entry = newTranslatedActions.parameters.requests[index];
@@ -88,17 +88,17 @@ async function canTranslateWithoutContext(
             } else {
                 newAction = newTranslatedActions;
             }
-            const schemaName = usedTranslators
-                .get(translatorName)!
+            const newSchemaName = usedTranslators
+                .get(schemaName)!
                 .getSchemaName(newAction.actionName);
-            if (schemaName === undefined) {
+            if (newSchemaName === undefined) {
                 // Should not happen
                 throw new Error(
                     `Internal Error: Unable to match schema name for action '${newAction.actionName}'`,
                 );
             }
             newActions.push({
-                translatorName: schemaName,
+                schemaName: newSchemaName,
                 ...newAction,
             });
         }
@@ -189,7 +189,7 @@ function getExplainerOptions(
             return undefined;
         }
 
-        const schemaName = action.translatorName;
+        const schemaName = action.schemaName;
         if (context.agents.getActionConfig(schemaName).cached === false) {
             // explanation disable at the translator level
             return undefined;

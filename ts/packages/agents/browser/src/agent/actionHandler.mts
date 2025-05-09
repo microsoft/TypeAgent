@@ -243,13 +243,13 @@ async function executeBrowserAction(
             context.actionIO.setDisplay("Running remote action.");
 
             let schemaName = "browser";
-            if (action.translatorName === "browser.crossword") {
+            if (action.schemaName === "browser.crossword") {
                 const crosswordResult = await handleCrosswordAction(
                     action,
                     context.sessionContext,
                 );
                 return createActionResult(crosswordResult);
-            } else if (action.translatorName === "browser.commerce") {
+            } else if (action.schemaName === "browser.commerce") {
                 const commerceResult = await handleCommerceAction(
                     action,
                     context,
@@ -263,7 +263,7 @@ async function executeBrowserAction(
                         return commerceResult as ActionResult;
                     }
                 }
-            } else if (action.translatorName === "browser.instacart") {
+            } else if (action.schemaName === "browser.instacart") {
                 const instacartResult = await handleInstacartAction(
                     action,
                     context.sessionContext,
@@ -276,7 +276,7 @@ async function executeBrowserAction(
                 );
 
                 // return createActionResult(instacartResult);
-            } else if (action.translatorName === "browser.actionDiscovery") {
+            } else if (action.schemaName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
                     action,
                     context.sessionContext,
