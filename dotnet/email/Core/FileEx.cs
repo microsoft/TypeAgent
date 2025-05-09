@@ -37,4 +37,17 @@ public static class FileEx
 
         return sanitizedFileName.ToString();
     }
+
+    public static bool SafeDelete(string filePath)
+    {
+        try
+        {
+            File.Delete(filePath);
+            return true;
+        }
+        catch
+        {
+        }
+        return false;
+    }
 }

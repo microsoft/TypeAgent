@@ -51,9 +51,6 @@ export class AzureSpeech {
     };
 
     public static getInstance = (): AzureSpeech => {
-        if (!AzureSpeech.instance) {
-            throw new Error("AzureSpeech: not initialized");
-        }
         return AzureSpeech.instance;
     };
 

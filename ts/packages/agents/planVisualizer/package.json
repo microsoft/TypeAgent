@@ -1,35 +1,41 @@
 {
-  "name": "web-plan-visualizer",
+  "name": "plan-visualizer",
   "version": "0.0.1",
   "description": "A dynamic web plan visualizer using Cytoscape.js",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/planVisualizer"
+    "directory": "ts/packages/agents/planVisualizer"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
-  "main": "dist/server.js",
+  "exports": {
+    "./agent/manifest": "./src/agent/planViewManifest.json",
+    "./agent/handlers": "./dist/agent/planViewActionHandler.js"
+  },
   "scripts": {
-    "build": "npm run build:shared && npm run build:server && npm run build:client",
+    "build": "npm run build:shared && npm run build:server && npm run build:agent && npm run build:client",
+    "build:agent": "tsc -p src/agent/tsconfig.json",
     "build:client": "vite build",
-    "build:server": "tsc -p src/server/tsconfig.json",
-    "build:shared": "tsc -p src/shared/tsconfig.json",
+    "build:server": "tsc -p src/view/server/tsconfig.json",
+    "build:shared": "tsc -p src/view/shared/tsconfig.json",
     "clean": "rimraf dist public/js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/view/server/server.js --dev \"",
     "dev:client": "vite dev",
     "dev:server": "tsc -p src/view/server/tsconfig.json --watch",
-    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
-    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "preview:client": "vite preview",
-    "start": "node --experimental-specifier-resolution=node dist/server/server.js"
+    "start": "node --experimental-specifier-resolution=node dist/view/server/server.js"
   },
   "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
     "cytoscape": "^3.32.0",
     "cytoscape-dagre": "^2.5.0",
     "dagre": "^0.8.5",
+    "debug": "^4.4.0",
     "express": "^4.18.2"
   },
   "devDependencies": {
@@ -37,6 +43,7 @@
     "@types/cytoscape": "^3.21.9",
     "@types/cytoscape-dagre": "^2.3.3",
     "@types/dagre": "^0.7.52",
+    "@types/debug": "^4.1.12",
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.10",
     "concurrently": "^9.1.2",

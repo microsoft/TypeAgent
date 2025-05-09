@@ -7,6 +7,12 @@ namespace TypeAgent;
 
 public class EmailExporter
 {
+    public enum ExportFormat
+    {
+        Json,
+        Txt
+    }
+
     const int MaxFileNameLength = 64;
 
     Outlook _outlook;
@@ -30,7 +36,7 @@ public class EmailExporter
         }
     }
 
-    public void ExportFile(string sourcePath, string? destPath)
+    public void ExportFile(string sourcePath, string? destPath, ExportFormat format = ExportFormat.Json)
     {
         Verify.FileExists(sourcePath);
         if (string.IsNullOrEmpty(destPath))
@@ -41,8 +47,21 @@ public class EmailExporter
 
         try
         {
-            Email email = _outlook.LoadEmail(sourcePath);
-            email.Save(destPath);
+            if (format == ExportFormat.Json)
+            {
+                List<Email> emails = _outlook.LoadEmail(sourcePath);
+                for (int i = 0; i < emails.Count; ++i)
+                {
+                    var email = emails[i];
+                    string savePath = (i > 0) ? PathEx.AppendNumber(destPath, i) : destPath;
+                    email.Save(savePath);
+                }
+            }
+            else
+            {
+                string txtFilePath = PathEx.ReplaceFileNameExtension(destPath, ".txt");
+                _outlook.SaveEmailAsText(sourcePath, txtFilePath);
+            }
         }
         catch (System.Exception ex)
         {
@@ -63,7 +82,7 @@ public class EmailExporter
         {
             ++count;
             Console.WriteLine($"{count}: {Path.GetFileName(sourceFilePath)}");
-            ExportFile(sourceFilePath, DestFilePath(sourceFilePath, destPath));
+            ExportFile(sourceFilePath, DestFilePath(sourceFilePath, destPath), ExportFormat.Json);
         }
     }
 
@@ -81,7 +100,7 @@ public class EmailExporter
             try
             {
                 bool isForward = item.IsForward();
-                if (item.IsForward())
+                if (isForward)
                 {
                     // Todo: need to parse Forwards
                     continue;
@@ -102,7 +121,7 @@ public class EmailExporter
                     email.Save(jsonFilePath);
                 }
             }
-            catch(System.Exception ex)
+            catch (System.Exception ex)
             {
                 ConsoleEx.LogError(ex);
             }
@@ -116,13 +135,13 @@ public class EmailExporter
     public void ExportAllEmailBySizeJson(string rootPath)
     {
         int counter = 0;
-        foreach(MailItem item in _outlook.ForEachMailItem())
+        foreach (MailItem item in _outlook.ForEachMailItem())
         {
             ++counter;
             try
             {
                 bool isForward = item.IsForward();
-                if (item.IsForward())
+                if (isForward)
                 {
                     continue;
                 }
@@ -178,8 +197,12 @@ public class EmailExporter
 
     void PrintFile(string sourcePath)
     {
-        Email email = _outlook.LoadEmail(sourcePath);
-        Console.WriteLine(email.ToString());
+        List<Email> emails = _outlook.LoadEmail(sourcePath);
+        foreach (var email in emails)
+        {
+            Console.WriteLine(email.ToString());
+            Console.WriteLine();
+        }
     }
 
     string EnsureDestJsonFolder(string dirPath)

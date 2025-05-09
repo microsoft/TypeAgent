@@ -9,6 +9,8 @@ import {
 } from "knowledge-processor";
 import { dateTime, getAbsolutePath, WorkQueue } from "typeagent";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import { existsSync } from "node:fs";
+import { error, Result, success } from "typechat";
 
 export function* timestampBlocks(
     blocks: Iterable<TextBlock>,
@@ -33,15 +35,19 @@ export function* timestampBlocks(
 export async function convertMsgFiles(
     sourcePath: string,
     io: InteractiveIo,
-): Promise<void> {
-    await runExe(
-        getAbsolutePath(
-            `../../../../../dotnet/email/bin/Debug/net8.0-windows7.0/outlookEmail.exe`,
-            import.meta.url,
-        ),
-        [sourcePath],
-        io,
+): Promise<Result<boolean>> {
+    const converterPath = getAbsolutePath(
+        `../../../../../dotnet/email/bin/Debug/net8.0-windows7.0/outlookEmail.exe`,
+        import.meta.url,
     );
+    if (!existsSync(converterPath)) {
+        return error(
+            "Please compile dotnet/email solution on Windows before running this command",
+        );
+    }
+
+    await runExe(converterPath, [sourcePath], io);
+    return success(true);
 }
 
 export async function runImportQueue(

@@ -10,7 +10,6 @@ declare global {
         webPlanData?: any;
         showScreenshotUploadModal?: (nodeId: string, nodeLabel: string) => void;
         uploadScreenshot?: () => void;
-        handleFileSelect?: (files: FileList | null) => void;
     }
 }
 
@@ -43,7 +42,7 @@ export interface TransitionFormData {
     currentState: string;
     action: string;
     nodeType: string;
-    screenshot?: string;
+    screenshot?: string | undefined;
 }
 
 // API transition response

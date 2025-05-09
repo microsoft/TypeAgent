@@ -1456,6 +1456,64 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/planVisualizer:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      cytoscape:
+        specifier: ^3.32.0
+        version: 3.32.0
+      cytoscape-dagre:
+        specifier: ^2.5.0
+        version: 2.5.0(cytoscape@3.32.0)
+      dagre:
+        specifier: ^0.8.5
+        version: 0.8.5
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.0(supports-color@8.1.1)
+      express:
+        specifier: ^4.18.2
+        version: 4.21.2
+    devDependencies:
+      '@rollup/plugin-typescript':
+        specifier: ^12.1.2
+        version: 12.1.2(rollup@4.39.0)(tslib@2.8.1)(typescript@5.4.5)
+      '@types/cytoscape':
+        specifier: ^3.21.9
+        version: 3.21.9
+      '@types/cytoscape-dagre':
+        specifier: ^2.3.3
+        version: 2.3.3
+      '@types/dagre':
+        specifier: ^0.7.52
+        version: 0.7.52
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.21
+      '@types/node':
+        specifier: ^20.11.10
+        version: 20.17.28
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.17.28)(typescript@5.4.5)
+      typescript:
+        specifier: ^5.3.3
+        version: 5.4.5
+      vite:
+        specifier: ^6.3.4
+        version: 6.3.5(@types/node@20.17.28)(less@4.2.0)(terser@5.27.0)(yaml@2.7.0)
+
   packages/agents/player:
     dependencies:
       '@typeagent/agent-sdk':
@@ -2501,6 +2559,9 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
+      mailparser:
+        specifier: 3.7.2
+        version: 3.7.2
       memory-storage:
         specifier: workspace:*
         version: link:../storage
@@ -2520,6 +2581,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.7
+      '@types/mailparser':
+        specifier: 3.4.6
+        version: 3.4.6
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -2648,55 +2712,6 @@ importers:
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
-
-  packages/planVisualizer:
-    dependencies:
-      cytoscape:
-        specifier: ^3.32.0
-        version: 3.32.0
-      cytoscape-dagre:
-        specifier: ^2.5.0
-        version: 2.5.0(cytoscape@3.32.0)
-      dagre:
-        specifier: ^0.8.5
-        version: 0.8.5
-      express:
-        specifier: ^4.18.2
-        version: 4.21.2
-    devDependencies:
-      '@rollup/plugin-typescript':
-        specifier: ^12.1.2
-        version: 12.1.2(rollup@4.39.0)(tslib@2.8.1)(typescript@5.4.5)
-      '@types/cytoscape':
-        specifier: ^3.21.9
-        version: 3.21.9
-      '@types/cytoscape-dagre':
-        specifier: ^2.3.3
-        version: 2.3.3
-      '@types/dagre':
-        specifier: ^0.7.52
-        version: 0.7.52
-      '@types/express':
-        specifier: ^4.17.21
-        version: 4.17.21
-      '@types/node':
-        specifier: ^20.11.10
-        version: 20.17.28
-      concurrently:
-        specifier: ^9.1.2
-        version: 9.1.2
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      ts-node:
-        specifier: ^10.9.2
-        version: 10.9.2(@types/node@20.17.28)(typescript@5.4.5)
-      typescript:
-        specifier: ^5.3.3
-        version: 5.4.5
-      vite:
-        specifier: ^6.3.4
-        version: 6.3.5(@types/node@20.17.28)(less@4.2.0)(terser@5.27.0)(yaml@2.7.0)
 
   packages/schemaAuthor:
     dependencies:
@@ -5085,6 +5100,9 @@ packages:
   '@types/linkify-it@5.0.0':
     resolution: {integrity: sha512-sVDA58zAw4eWAffKOaQH5/5j3XeayukzDk+ewSsnv3p4yJEZHCCzMDiZM8e0OUrRvmpGZ85jf4yDHkHsgBNr9Q==}
 
+  '@types/mailparser@3.4.6':
+    resolution: {integrity: sha512-wVV3cnIKzxTffaPH8iRnddX1zahbYB1ZEoAxyhoBo3TBCBuK6nZ8M8JYO/RhsCuuBVOw/DEN/t/ENbruwlxn6Q==}
+
   '@types/markdown-it@14.1.2':
     resolution: {integrity: sha512-promo4eFwuiW+TfGxhi+0x3czqTYJkG8qB17ZUJiVF10Xm7NLVRSLUsfRTU/6h1e24VvRnXCx+hG7li58lkzog==}
 
@@ -6715,6 +6733,10 @@ packages:
     resolution: {integrity: sha512-Q0n9HRi4m6JuGIV1eFlmvJB7ZEVxu93IrMyiMsGC0lrMJMWzRgx6WGquyfQgZVb31vhGgXnfmPNNXmxnOkRBrg==}
     engines: {node: '>= 0.8'}
 
+  encoding-japanese@2.2.0:
+    resolution: {integrity: sha512-EuJWwlHPZ1LbADuKTClvHtwbaFn4rOD+dRAbWysqEOXRc2Uui0hJInNJrsdH0c+OhJA4nrCBdSkW4DD5YxAo6A==}
+    engines: {node: '>=8.10.0'}
+
   encoding@0.1.13:
     resolution: {integrity: sha512-ETBauow1T35Y/WZMkio9jiM0Z5xjHHmJ4XmjZOq1l/dXz3lr2sRn87nJy20RupqSh1F2m3HHPSp8ShIPQJrJ3A==}
 
@@ -6988,14 +7010,6 @@ packages:
 
   fd-slicer@1.1.0:
     resolution: {integrity: sha512-cE1qsB/VwyQozZ+q1dGxR8LBYNZeofhEdUNGSMbQD3Gw2lAzX9Zb3uIU6Ebc/Fmyjo9AWWfnn0AUCHqtevs/8g==}
-
-  fdir@6.4.3:
-    resolution: {integrity: sha512-PMXmW2y1hDDfTSRc9gaXIuCCRpuoz3Kaz8cUelp3smouvfT632ozg2vrT6lJsHKKOF59YLbOGfAWGUcKEfRMQw==}
-    peerDependencies:
-      picomatch: ^3 || ^4
-    peerDependenciesMeta:
-      picomatch:
-        optional: true
 
   fdir@6.4.4:
     resolution: {integrity: sha512-1NZP+GK4GfuAv3PqKvxQRDMjdSRZjnkq7KfhlNrCNNlZ0ygQFpebfrnfnq/W7fpUnAv9aGWmY1zKx7FYL3gwhg==}
@@ -8028,6 +8042,15 @@ packages:
     resolution: {integrity: sha512-0OO4y2iOHix2W6ujICbKIaEQXvFQHue65vUG3pb5EUomzPI90z9hsA1VsO/dbIIpC53J8gxM9Q4Oho0jrCM/yA==}
     engines: {node: '>= 0.8.0'}
 
+  libbase64@1.3.0:
+    resolution: {integrity: sha512-GgOXd0Eo6phYgh0DJtjQ2tO8dc0IVINtZJeARPeiIJqge+HdsWSuaDTe8ztQ7j/cONByDZ3zeB325AHiv5O0dg==}
+
+  libmime@5.3.6:
+    resolution: {integrity: sha512-j9mBC7eiqi6fgBPAGvKCXJKJSIASanYF4EeA4iBzSG0HxQxmXnR3KbyWqTn4CwsKSebqCv2f5XZfAO6sKzgvwA==}
+
+  libqp@2.1.1:
+    resolution: {integrity: sha512-0Wd+GPz1O134cP62YU2GTOPNA7Qgl09XwCqM5zpBv87ERCXdfDtyKXvV7c9U22yWJh44QZqBocFnXN11K96qow==}
+
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
 
@@ -8145,6 +8168,12 @@ packages:
 
   magic-string@0.30.17:
     resolution: {integrity: sha512-sNPKHvyjVf7gyjwS4xGTaW/mCnF8wnjtifKBEhxfZ7E/S8tQ0rssrwGNn6q8JH/ohItJfSQp9mBtQYuTlH5QnA==}
+
+  mailparser@3.7.2:
+    resolution: {integrity: sha512-iI0p2TCcIodR1qGiRoDBBwboSSff50vQAWytM5JRggLfABa4hHYCf3YVujtuzV454xrOP352VsAPIzviqMTo4Q==}
+
+  mailsplit@5.4.2:
+    resolution: {integrity: sha512-4cczG/3Iu3pyl8JgQ76dKkisurZTmxMrA4dj/e8d2jKYcFTZ7MxOzg1gTioTDMPuFXwTrVuN/gxhkrO7wLg7qA==}
 
   make-dir@2.1.0:
     resolution: {integrity: sha512-LS9X+dc8KLxXCb8dni79fLIIUA5VyZoyjSMCwTluaXA0o27cCK0bhXkpgw+sTXVpPy/lSO57ilRixqk0vDmtRA==}
@@ -8537,6 +8566,10 @@ packages:
 
   node-rsa@1.1.1:
     resolution: {integrity: sha512-Jd4cvbJMryN21r5HgxQOpMEqv+ooke/korixNNK3mGqfGJmy0M77WDDzo/05969+OkMy3XW1UuZsSmW9KQm7Fw==}
+
+  nodemailer@6.9.16:
+    resolution: {integrity: sha512-psAuZdTIRN08HKVd/E8ObdV6NO7NTBY3KsC30F7M4H1OnmLCUNaS56FpYxyb26zWLSyYF9Ozch9KYHhHegsiOQ==}
+    engines: {node: '>=6.0.0'}
 
   noms@0.0.0:
     resolution: {integrity: sha512-lNDU9VJaOPxUmXcLb+HQFeUgQQPtMI24Gt6hgfuMHRJgMRHMF/qZ4HJD3GDru4sSw9IQl2jPjAYnQrdIeLbwow==}
@@ -9747,6 +9780,10 @@ packages:
   tinyglobby@0.2.13:
     resolution: {integrity: sha512-mEwzpUgrLySlveBwEVDMKk5B57bhLPYovRfPAXD5gA/98Opn0rCDj3GtLwFvCvH5RK9uPCExUROW5NjDwvqkxw==}
     engines: {node: '>=12.0.0'}
+
+  tlds@1.255.0:
+    resolution: {integrity: sha512-tcwMRIioTcF/FcxLev8MJWxCp+GUALRhFEqbDoZrnowmKSGqPrl5pqS+Sut2m8BgJ6S4FExCSSpGffZ0Tks6Aw==}
+    hasBin: true
 
   tldts-core@5.7.112:
     resolution: {integrity: sha512-mutrEUgG2sp0e/MIAnv9TbSLR0IPbvmAImpzqul5O/HJ2XM1/I1sajchQ/fbj0fPdA31IiuWde8EUhfwyldY1Q==}
@@ -13235,6 +13272,11 @@ snapshots:
 
   '@types/linkify-it@5.0.0': {}
 
+  '@types/mailparser@3.4.6':
+    dependencies:
+      '@types/node': 20.17.28
+      iconv-lite: 0.6.3
+
   '@types/markdown-it@14.1.2':
     dependencies:
       '@types/linkify-it': 5.0.0
@@ -15219,6 +15261,8 @@ snapshots:
 
   encodeurl@2.0.0: {}
 
+  encoding-japanese@2.2.0: {}
+
   encoding@0.1.13:
     dependencies:
       iconv-lite: 0.6.3
@@ -15611,10 +15655,6 @@ snapshots:
   fd-slicer@1.1.0:
     dependencies:
       pend: 1.2.0
-
-  fdir@6.4.3(picomatch@4.0.2):
-    optionalDependencies:
-      picomatch: 4.0.2
 
   fdir@6.4.4(picomatch@4.0.2):
     optionalDependencies:
@@ -16995,6 +17035,17 @@ snapshots:
       prelude-ls: 1.1.2
       type-check: 0.3.2
 
+  libbase64@1.3.0: {}
+
+  libmime@5.3.6:
+    dependencies:
+      encoding-japanese: 2.2.0
+      iconv-lite: 0.6.3
+      libbase64: 1.3.0
+      libqp: 2.1.1
+
+  libqp@2.1.1: {}
+
   lie@3.3.0:
     dependencies:
       immediate: 3.0.6
@@ -17095,6 +17146,25 @@ snapshots:
   magic-string@0.30.17:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.0
+
+  mailparser@3.7.2:
+    dependencies:
+      encoding-japanese: 2.2.0
+      he: 1.2.0
+      html-to-text: 9.0.5
+      iconv-lite: 0.6.3
+      libmime: 5.3.6
+      linkify-it: 5.0.0
+      mailsplit: 5.4.2
+      nodemailer: 6.9.16
+      punycode.js: 2.3.1
+      tlds: 1.255.0
+
+  mailsplit@5.4.2:
+    dependencies:
+      libbase64: 1.3.0
+      libmime: 5.3.6
+      libqp: 2.1.1
 
   make-dir@2.1.0:
     dependencies:
@@ -17456,6 +17526,8 @@ snapshots:
   node-rsa@1.1.1:
     dependencies:
       asn1: 0.2.6
+
+  nodemailer@6.9.16: {}
 
   noms@0.0.0:
     dependencies:
@@ -18845,13 +18917,15 @@ snapshots:
 
   tinyglobby@0.2.12:
     dependencies:
-      fdir: 6.4.3(picomatch@4.0.2)
+      fdir: 6.4.4(picomatch@4.0.2)
       picomatch: 4.0.2
 
   tinyglobby@0.2.13:
     dependencies:
       fdir: 6.4.4(picomatch@4.0.2)
       picomatch: 4.0.2
+
+  tlds@1.255.0: {}
 
   tldts-core@5.7.112: {}
 

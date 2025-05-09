@@ -9,12 +9,13 @@ export default defineConfig({
     root: resolve(__dirname, 'src/view/client'),
     plugins: [
         typescript({
-            tsconfig: "./src/client/tsconfig.json",
+            tsconfig: "./src/view/client/tsconfig.json",
         }),
     ],
     build: {
         outDir: resolve(__dirname, 'dist/view/public'),
         sourcemap: true,
+        emptyOutDir: false,
         rollupOptions: {
             output: {
                 entryFileNames: "js/[name].js",

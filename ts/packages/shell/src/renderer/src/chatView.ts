@@ -99,7 +99,6 @@ export class ChatView {
         });
         this.chatInput = new ChatInput(
             "phraseDiv",
-            "reco",
             (messageHtml) => {
                 // message from chat input are from innerHTML
                 this.addUserMessage({
