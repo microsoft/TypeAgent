@@ -157,29 +157,47 @@ let speechToken:
     | { token: string; expire: number; region: string; endpoint: string }
     | undefined;
 
-async function getSpeechToken() {
-    if (speechToken === undefined || speechToken.expire <= Date.now()) {
+async function getSpeechToken(silent: boolean) {
+    const instance = AzureSpeech.getInstance();
+    if (instance === undefined) {
+        if (!silent) {
+            dialog.showErrorBox(
+                "Azure Speech Service: Missing configuration",
+                "Environment variable SPEECH_SDK_KEY or SPEECH_SDK_REGION is missing.  Switch to local whisper or provide the configuration and restart.",
+            );
+        }
+        return undefined;
+    }
+
+    if (speechToken !== undefined && speechToken.expire > Date.now()) {
+        return speechToken;
+    }
+    try {
         debugShell("Getting speech token");
-        const tokenResponse = await AzureSpeech.getInstance().getTokenAsync();
+        const tokenResponse = await instance.getTokenAsync();
         speechToken = {
             token: tokenResponse.token,
             expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
             region: tokenResponse.region,
             endpoint: tokenResponse.endpoint,
         };
+        return speechToken;
+    } catch (e: any) {
+        debugShellError("Error getting speech token", e);
+        if (!silent) {
+            dialog.showErrorBox(
+                "Azure Speech Service: Error getting token",
+                e.message,
+            );
+        }
+        return undefined;
     }
-    return speechToken;
 }
 
 async function triggerRecognitionOnce(chatView: WebContentsView) {
-    const speechToken = await getSpeechToken();
+    const speechToken = await getSpeechToken(false);
     const useLocalWhisper = isLocalWhisperEnabled();
-    chatView.webContents.send(
-        "listen-event",
-        "Alt+M",
-        speechToken,
-        useLocalWhisper,
-    );
+    chatView.webContents.send("listen-event", speechToken, useLocalWhisper);
 }
 
 function initializeSpeech(chatView: WebContentsView) {
@@ -192,19 +210,13 @@ function initializeSpeech(chatView: WebContentsView) {
             azureSpeechRegion: region,
             azureSpeechEndpoint: endpoint,
         });
-        ipcMain.handle("get-speech-token", async () => {
-            return getSpeechToken();
-        });
     } else {
-        ipcMain.handle("get-speech-token", async () => {
-            dialog.showErrorBox(
-                "Azure Speech Service: Missing configuration",
-                "Environment variable SPEECH_SDK_KEY or SPEECH_SDK_REGION is missing.  Switch to local whisper or provide the configuration and restart.",
-            );
-        });
         debugShellError("Speech: no key or region");
     }
 
+    ipcMain.handle("get-speech-token", async (_, silent: boolean) => {
+        return getSpeechToken(silent);
+    });
     const ret = globalShortcut.register("Alt+M", () => {
         triggerRecognitionOnce(chatView);
     });
