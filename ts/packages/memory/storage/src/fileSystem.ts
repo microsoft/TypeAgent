@@ -63,3 +63,14 @@ export function readJsonFile<T>(
     }
     return defaultValue ?? undefined;
 }
+
+export function readAllText(filePath: string): string | undefined {
+    try {
+        return fs.readFileSync(filePath, "utf-8");
+    } catch (err: any) {
+        if (err.code !== "ENOENT") {
+            throw err;
+        }
+    }
+    return undefined;
+}

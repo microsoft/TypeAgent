@@ -66,14 +66,14 @@ export async function createKnowproEmailCommands(
         const namedArgs = parseNamedArguments(args, emailAddDef());
         let emailsToAdd: cm.EmailMessage[] = [];
         if (isFilePath(namedArgs.filePath)) {
-            const emailMessage = cm.loadEmailMessageFromFile(
+            const emailMessage = await cm.loadEmailMessageFromFile(
                 namedArgs.filePath,
             );
             if (emailMessage) {
                 emailsToAdd.push(emailMessage);
             }
         } else {
-            emailsToAdd = cm.loadEmailMessagesFromDir(namedArgs.filePath);
+            emailsToAdd = await cm.loadEmailMessagesFromDir(namedArgs.filePath);
         }
         if (emailsToAdd.length === 0) {
             context.printer.writeError(
