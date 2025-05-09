@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ExecutableAction } from "agent-cache";
+import { ExecutableAction, FullAction } from "agent-cache";
 import { getActionSchema } from "./actionSchemaFileCache.js";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import {
@@ -114,18 +114,15 @@ function toTemplateType(type: ActionParamType): TemplateType | undefined {
 function toTemplate(
     context: CommandHandlerContext,
     schemas: string[],
-    action: ExecutableAction,
+    action: FullAction,
 ) {
     const actionSchemaFile = context.agents.tryGetActionSchemaFile(
-        action.action.schemaName,
+        action.schemaName,
     );
     if (actionSchemaFile === undefined) {
         return getDefaultActionTemplate(schemas);
     }
-    const template = getDefaultActionTemplate(
-        schemas,
-        action.action.schemaName,
-    );
+    const template = getDefaultActionTemplate(schemas, action.schemaName);
     const actionSchemas = actionSchemaFile.parsedActionSchema.actionSchemas;
     const actionName: TemplateFieldStringUnion = {
         type: "string-union",
@@ -136,11 +133,11 @@ function toTemplate(
         type: actionName,
     };
 
-    const actionSchema = actionSchemas.get(action.action.actionName);
+    const actionSchema = actionSchemas.get(action.actionName);
     if (actionSchema === undefined) {
         return template;
     }
-    actionName.discriminator = action.action.actionName;
+    actionName.discriminator = action.actionName;
 
     const parameterType = actionSchema.type.fields.parameters?.type;
     if (parameterType) {
@@ -166,7 +163,7 @@ export function getActionTemplateEditConfig(
     const schemas = context.agents.getActiveSchemas();
     for (const action of actions) {
         templateData.push({
-            schema: toTemplate(context, schemas, action),
+            schema: toTemplate(context, schemas, action.action),
             data: action.action,
         });
     }
@@ -182,9 +179,23 @@ export function getActionTemplateEditConfig(
     };
 }
 
+function coerceToFullAction(data: unknown): FullAction {
+    if (typeof data !== "object" || data === null) {
+        return { schemaName: "", actionName: "" };
+    }
+    const result = data as FullAction;
+    if (typeof result.schemaName !== "string") {
+        result.schemaName = "";
+    }
+    if (typeof result.actionName !== "string") {
+        result.actionName = "";
+    }
+    return result;
+}
+
 export async function getSystemTemplateSchema(
     templateName: string,
-    data: any,
+    data: unknown,
     context: SessionContext<CommandHandlerContext>,
 ): Promise<TemplateSchema> {
     if (templateName !== "action") {
@@ -192,19 +203,8 @@ export async function getSystemTemplateSchema(
     }
 
     const systemContext = context.agentContext;
-
-    // check user input to make sure it is an action
-
-    if (typeof data.schemaName !== "string") {
-        data.schemaName = "";
-    }
-
-    if (typeof data.actionName !== "string") {
-        data.actionName = "";
-    }
-
     const schemas = systemContext.agents.getActiveSchemas();
-    return toTemplate(systemContext, schemas, data);
+    return toTemplate(systemContext, schemas, coerceToFullAction(data));
 }
 
 export async function getSystemTemplateCompletion(
