@@ -36,26 +36,28 @@ describeIf(
                 for (const query of queries) {
                     const cmd = parseCommandArgs(query);
                     if (cmd.namedArgs?.query) {
-                        const sqResult = await searchQueryExprFromLanguage(
+                        const result = await searchQueryExprFromLanguage(
                             conversation,
                             translator,
                             cmd.namedArgs.query,
                         );
-                        expect(sqResult.success).toBeTruthy();
-                        if (sqResult.success) {
-                            for (const searchQuery of sqResult.data) {
-                                for (const expr of searchQuery.selectExpressions) {
-                                    const searchResults =
-                                        await runSearchConversation(
-                                            conversation,
-                                            expr.searchTermGroup,
-                                            expr.when,
-                                        );
-                                    resolveAndVerifyKnowledgeMatches(
+                        expect(result.success).toBeTruthy();
+                        if (!result.success) {
+                            return;
+                        }
+                        for (const searchQuery of result.data
+                            .queryExpressions) {
+                            for (const expr of searchQuery.selectExpressions) {
+                                const searchResults =
+                                    await runSearchConversation(
                                         conversation,
-                                        searchResults,
+                                        expr.searchTermGroup,
+                                        expr.when,
                                     );
-                                }
+                                resolveAndVerifyKnowledgeMatches(
+                                    conversation,
+                                    searchResults,
+                                );
                             }
                         }
                     }
