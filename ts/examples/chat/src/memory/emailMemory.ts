@@ -26,6 +26,7 @@ import {
     millisecondsToString,
     NamedArgs,
     parseNamedArguments,
+    ProgressBar,
     StopWatch,
 } from "interactive-app";
 import {
@@ -36,6 +37,7 @@ import {
     argPause,
     argSourceFileOrFolder,
     createChatUx,
+    exportConversation,
     getSearchQuestion,
     indexingStatsToCsv,
     pause,
@@ -44,6 +46,7 @@ import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
 import fs from "fs";
 import { error, Result, success } from "typechat";
+import { loadEmailMemory } from "./knowproCommon.js";
 
 export async function createEmailMemory(
     models: Models,
@@ -101,6 +104,7 @@ export function createEmailCommands(
     commands.emailNameAlias = emailNameAlias;
     commands.emailActionItems = emailActionItems;
     commands.emailInteractiveSearch = emailInteractiveSearch;
+    commands.emailExportToKp = emailExportKp;
 
     //--------
     // Commands
@@ -380,6 +384,39 @@ export function createEmailCommands(
         }
     }
 
+    function emailExportToKpDef(): CommandMetadata {
+        return {
+            description: "Export emails to knowpro format",
+            args: { name: arg("Name of email memory") },
+            options: {
+                maxMessages: argNum("Max messages"),
+            },
+        };
+    }
+    commands.emailExportToKp.metadata = emailExportToKpDef();
+    async function emailExportKp(args: string[]) {
+        const namedArgs = parseNamedArguments(args, emailExportToKpDef());
+        let emailIndexPath = path.join(
+            "/data/testChat/knowpro/email",
+            namedArgs.name,
+        );
+
+        const cm = context.emailMemory;
+        let messageCount = await cm.conversation.messages.size();
+        if (namedArgs.maxMessages) {
+            messageCount = namedArgs.maxMessages;
+        }
+        const kpEmail = await loadEmailMemory(emailIndexPath, false);
+        if (!kpEmail) {
+            context.printer.writeError("Email memory not found");
+            return;
+        }
+        const progress = new ProgressBar(context.printer, messageCount);
+        for await (const [message, _] of exportConversation(cm, messageCount)) {
+            context.printer.writeJson(message);
+            progress.advance();
+        }
+    }
     //-------------
     // End commands
     //-------------

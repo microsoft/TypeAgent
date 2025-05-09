@@ -15,9 +15,10 @@ import { KnowProContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import path from "path";
-import { ensureDir, getFileName, isFilePath, readJsonFile } from "typeagent";
+import { ensureDir, isFilePath, readJsonFile } from "typeagent";
 import {
     createIndexingEventHandler,
+    loadEmailMemory,
     memoryNameToIndexPath,
 } from "./knowproCommon.js";
 import chalk from "chalk";
@@ -154,22 +155,13 @@ export async function createKnowproEmailCommands(
             return;
         }
         closeEmail();
-        context.email = await cm.createEmailMemory(
-            {
-                dirPath: path.dirname(emailIndexPath),
-                baseFileName: getFileName(emailIndexPath),
-            },
+        context.email = await loadEmailMemory(
+            emailIndexPath,
             namedArgs.createNew,
         );
         if (!context.email) {
             // Memory not found. Create a new one
-            context.email = await cm.createEmailMemory(
-                {
-                    dirPath: path.dirname(emailIndexPath),
-                    baseFileName: getFileName(emailIndexPath),
-                },
-                true,
-            );
+            context.email = await loadEmailMemory(emailIndexPath, true);
             if (!context.email) {
                 context.printer.writeError("Could not create new email memory");
                 return;
