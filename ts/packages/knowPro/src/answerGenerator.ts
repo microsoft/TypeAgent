@@ -97,6 +97,10 @@ export type AnswerGeneratorSettings = {
      * Stop processing if answer found using just knowledge
      */
     fastStop: boolean;
+    /**
+     * Additional instructions for the model
+     */
+    modelInstructions?: PromptSection[] | undefined;
 };
 
 /**
@@ -247,13 +251,17 @@ export class AnswerGenerator implements IAnswerGenerator {
             );
         }
 
-        const contextPrompt = [
+        let contextPrompt: PromptSection[] = [];
+        if (this.settings.modelInstructions) {
+            contextPrompt.push(...this.settings.modelInstructions);
+        }
+        contextPrompt.push(
             createContextPrompt(
                 this.contextTypeName,
                 this.contextSchema,
                 contextContent,
             ),
-        ];
+        );
         const questionPrompt = createQuestionPrompt(question);
         return this.answerTranslator.translate(questionPrompt, contextPrompt);
     }
