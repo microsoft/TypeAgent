@@ -15,6 +15,7 @@ export {
     TokenCachePersistence,
     ActionContext,
     SchemaTypeNames,
+    ActivityContext,
 } from "./agentInterface.js";
 
 export {

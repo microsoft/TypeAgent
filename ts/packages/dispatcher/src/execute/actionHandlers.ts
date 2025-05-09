@@ -128,6 +128,11 @@ function getActionContext(
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,
+        activityContext:
+            // Only make activityContext available if the action is from the same agent.
+            context.activityContext?.appAgentName === appAgentName
+                ? structuredClone(context.activityContext)
+                : undefined,
         get sessionContext() {
             return sessionContext;
         },

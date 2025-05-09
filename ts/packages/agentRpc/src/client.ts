@@ -19,6 +19,7 @@ import {
     StorageEncoding,
 } from "@typeagent/agent-sdk";
 import {
+    ActionContextParams,
     AgentCallFunctions,
     AgentContextCallFunctions,
     AgentContextInvokeFunctions,
@@ -108,11 +109,12 @@ export async function createAgentRpcClient(
     const actionContextMap = createContextMap<ActionContext<ShimContext>>();
     function withActionContext<T>(
         actionContext: ActionContext<ShimContext>,
-        fn: (contextParams: { actionContextId: number }) => T,
+        fn: (contextParams: ActionContextParams) => T,
     ) {
         try {
             return fn({
                 actionContextId: actionContextMap.getId(actionContext),
+                activityContext: actionContext.activityContext,
                 ...getContextParam(actionContext.sessionContext),
             });
         } finally {

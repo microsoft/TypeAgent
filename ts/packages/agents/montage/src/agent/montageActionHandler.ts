@@ -85,17 +85,24 @@ async function executeMontageAction(
     if (activeMontage !== getActiveMontage(agentContext)) {
         // if the active montage has changed, update the viewer
         updateMontageViewerState(agentContext);
+    }
 
-        if (result.error === undefined) {
-            result.activityContext = activeMontage
-                ? {
-                      activity: "editMontage",
-                      description: `Editing montage ${activeMontage.title}`,
-                      state: {
-                          title: activeMontage.title,
-                      },
-                  }
-                : null;
+    if (result.error === undefined) {
+        if (
+            action.actionName === "startEditMontage" ||
+            (context.activityContext !== undefined &&
+                context.activityContext.state.title !== activeMontage?.title)
+        ) {
+            result.activityContext =
+                activeMontage !== undefined
+                    ? {
+                          activityName: "edit",
+                          description: `Editing montage ${activeMontage.title}`,
+                          state: {
+                              title: activeMontage.title,
+                          },
+                      }
+                    : null;
         }
     }
     return result;
@@ -247,27 +254,24 @@ async function updateMontageContext(
                 },
             );
 
+            const folders: string[] = [];
+            agentContext.indexes.forEach((idx) => {
+                folders.push(idx.location);
+            });
+
+            // send the folder info
+            const indexPath = path.join(agentContext.indexes[0].path, "cache");
+            folders.push(indexPath);
+            agentContext.viewProcess?.send({
+                folders: {
+                    allowedFolders: folders,
+                    indexCachePath: indexPath,
+                    indexedLocation: agentContext.indexes[0].location,
+                },
+            });
+
             // send initial state and allowed folder(s)
             if (agentContext.activeMontageId > -1) {
-                const folders: string[] = [];
-                agentContext.indexes.forEach((idx) => {
-                    folders.push(idx.location);
-                });
-
-                // send the folder info
-                const indexPath = path.join(
-                    agentContext.indexes[0].path,
-                    "cache",
-                );
-                folders.push(indexPath);
-                agentContext.viewProcess?.send({
-                    folders: {
-                        allowedFolders: folders,
-                        indexCachePath: indexPath,
-                        indexedLocation: agentContext.indexes[0].location,
-                    },
-                });
-
                 agentContext.viewProcess?.send(getActiveMontage(agentContext)!);
             }
         }

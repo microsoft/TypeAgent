@@ -89,7 +89,7 @@ async function executeDispatcherAction(
                     );
                     // TODO: formalize the schema for activityContext
                     result.activityContext = {
-                        activity: "lookup",
+                        activityName: "lookup",
                         description: `Looking up ${location}`,
                         state: {
                             ...action.parameters.lookup,
