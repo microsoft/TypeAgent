@@ -109,9 +109,6 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../packages/knowPro
-      mailparser:
-        specifier: 3.7.2
-        version: 3.7.2
       memory-providers:
         specifier: workspace:*
         version: link:../memoryProviders
@@ -131,9 +128,6 @@ importers:
       '@types/better-sqlite3':
         specifier: 7.6.11
         version: 7.6.11
-      '@types/mailparser':
-        specifier: 3.4.6
-        version: 3.4.6
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -2507,6 +2501,9 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../knowPro
+      mailparser:
+        specifier: 3.7.2
+        version: 3.7.2
       memory-storage:
         specifier: workspace:*
         version: link:../storage
@@ -2526,6 +2523,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.7
+      '@types/mailparser':
+        specifier: 3.4.6
+        version: 3.4.6
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1

@@ -43,6 +43,7 @@ export async function createKnowproEmailCommands(
     commands.kpEmailsLoad = emailsLoad;
     commands.kpEmailsBuildIndex = emailsBuildIndex;
     commands.kpEmailNameAlias = emailNameAlias;
+    commands.kpEmailsClose = emailsClose;
 
     function emailAddDef(): CommandMetadata {
         return {
@@ -102,6 +103,9 @@ export async function createKnowproEmailCommands(
     function emailsBuildIndexDef(): CommandMetadata {
         return {
             description: "Update the email index with any pending items",
+            options: {
+                knowledge: argBool("Extract knowledge", true),
+            },
         };
     }
     commands.kpEmailsBuildIndex.metadata = emailsBuildIndexDef();
@@ -110,26 +114,37 @@ export async function createKnowproEmailCommands(
         if (!emailMemory) {
             return;
         }
+        const namedArgs = parseNamedArguments(args, emailsBuildIndexDef());
         context.printer.writeLine(`Building email index`);
+        const ordinalStartAt = emailMemory.indexingState.lastMessageOrdinal;
+        const countToIndex = emailMemory.messages.length - ordinalStartAt;
         context.printer.writeLine(
-            `OrdinalStartAt: ${emailMemory.indexingState.lastMessageOrdinal + 1}`,
+            `OrdinalStartAt: ${ordinalStartAt + 1} / ${countToIndex}`,
         );
 
-        let progress = new ProgressBar(context.printer, 1);
+        let progress = new ProgressBar(context.printer, countToIndex);
         const eventHandler = createIndexingEventHandler(
             context.printer,
             progress,
             1,
         );
-        const clock = new StopWatch();
-        clock.start();
-        const result = await emailMemory.buildIndex(eventHandler);
-        clock.stop();
-        progress.complete();
-        context.printer.writeTiming(chalk.gray, clock, "Build index");
-        if (!result.success) {
-            context.printer.writeError(result.message);
-            return;
+        const indexSettings =
+            emailMemory.settings.conversationSettings.semanticRefIndexSettings;
+        const autoIndex = indexSettings.autoExtractKnowledge;
+        indexSettings.autoExtractKnowledge = namedArgs.knowledge;
+        try {
+            const clock = new StopWatch();
+            clock.start();
+            const result = await emailMemory.buildIndex(eventHandler);
+            clock.stop();
+            progress.complete();
+            context.printer.writeTiming(chalk.gray, clock, "Build index");
+            if (!result.success) {
+                context.printer.writeError(result.message);
+                return;
+            }
+        } finally {
+            indexSettings.autoExtractKnowledge = autoIndex;
         }
     }
 
@@ -203,6 +218,10 @@ export async function createKnowproEmailCommands(
                 context.printer.writeTerms(names);
             }
         }
+    }
+
+    async function emailsClose() {
+        closeEmail();
     }
 
     function ensureMemoryLoaded() {

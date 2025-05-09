@@ -46,8 +46,7 @@ import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
 import fs from "fs";
 import { error, Result, success } from "typechat";
-import { loadEmailMemory } from "./knowproCommon.js";
-import { importEmailFromText } from "./emailImporter.js";
+import { loadEmailMemory, memoryNameToIndexPath } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
 
 export async function createEmailMemory(
@@ -398,7 +397,7 @@ export function createEmailCommands(
     commands.emailExportToKp.metadata = emailExportToKpDef();
     async function emailExportKp(args: string[]) {
         const namedArgs = parseNamedArguments(args, emailExportToKpDef());
-        let emailIndexPath = path.join(
+        let emailIndexPath = memoryNameToIndexPath(
             "/data/testChat/knowpro/email",
             namedArgs.name,
         );
@@ -413,20 +412,26 @@ export function createEmailCommands(
             context.printer.writeError("Email memory not found");
             return;
         }
-        const progress = new ProgressBar(context.printer, messageCount);
-        for await (const [message, knowledge] of exportConversation(
-            context.emailMemory,
-            messageCount,
-        )) {
-            const email = await importEmailFromText(message.value.value);
-            if (email) {
-                const emailMessage = cm.importEmailMessage(email);
-                emailMessage.knowledge = knowledge;
-                await kpEmail.addMessages(emailMessage, false);
+        try {
+            const progress = new ProgressBar(context.printer, messageCount);
+            for await (const [message, knowledge] of exportConversation(
+                context.emailMemory,
+                messageCount,
+            )) {
+                const email = await cm.importEmailFromMimeText(
+                    message.value.value,
+                );
+                if (email) {
+                    const emailMessage = cm.importEmailMessage(email);
+                    emailMessage.knowledge = knowledge;
+                    await kpEmail.addMessages(emailMessage, false);
+                }
+                progress.advance();
             }
-            progress.advance();
+            progress.complete();
+        } finally {
+            kpEmail.close();
         }
-        progress.complete();
     }
     //-------------
     // End commands

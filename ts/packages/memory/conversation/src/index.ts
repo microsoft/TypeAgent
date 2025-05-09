@@ -8,3 +8,4 @@ export * from "./memory.js";
 export * from "./conversationMemory.js";
 export * from "./emailMemory.js";
 export * from "./emailMessage.js";
+export * from "./emailImporter.js";

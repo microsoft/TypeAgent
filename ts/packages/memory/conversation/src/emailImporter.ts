@@ -12,10 +12,10 @@ export async function importEmlFile(
     if (!text) {
         return undefined;
     }
-    return importEmailFromText(text);
+    return importEmailFromMimeText(text);
 }
 
-export async function importEmailFromText(
+export async function importEmailFromMimeText(
     emailText: string,
 ): Promise<email.Email | undefined> {
     const mimeMail = await simpleParser(emailText);
