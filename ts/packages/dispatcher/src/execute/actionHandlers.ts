@@ -306,7 +306,7 @@ async function executeAction(
         );
     }
 
-    const schemaName = action.translatorName;
+    const schemaName = action.schemaName;
     const systemContext = context.sessionContext.agentContext;
     const appAgentName = getAppAgentName(schemaName);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
@@ -337,7 +337,7 @@ async function executeAction(
             action,
         );
 
-    const prefix = getSchemaNamePrefix(action.translatorName, systemContext);
+    const prefix = getSchemaNamePrefix(action.schemaName, systemContext);
     displayStatus(
         `${prefix}Executing action ${getFullActionName(executableAction)}`,
         context,
@@ -430,10 +430,10 @@ async function canExecute(
             unknown.push(action);
         }
         if (
-            action.translatorName &&
-            !systemContext.agents.isActionActive(action.translatorName)
+            action.schemaName &&
+            !systemContext.agents.isActionActive(action.schemaName)
         ) {
-            disabled.add(action.translatorName);
+            disabled.add(action.schemaName);
         }
     }
 
@@ -656,7 +656,7 @@ function resolveEntities(
     }
     const result = duplicateAction ? { ...action } : action;
     const entities = getParameterObjectEntities(
-        getAppAgentName(action.translatorName),
+        getAppAgentName(action.schemaName),
         action.parameters!,
         resultEntityMap,
         promptEntityMap,
@@ -733,7 +733,7 @@ export async function executeActions(
             );
             continue;
         }
-        const appAgentName = getAppAgentName(action.translatorName);
+        const appAgentName = getAppAgentName(action.schemaName);
         resolveEntities(
             action,
             resultEntityMap,
@@ -758,7 +758,7 @@ export async function executeActions(
                 try {
                     const actions = getAdditionalExecutableActions(
                         result.additionalActions,
-                        action.translatorName,
+                        action.schemaName,
                         systemContext,
                     );
                     // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
@@ -767,7 +767,7 @@ export async function executeActions(
                     );
                 } catch (e) {
                     throw new Error(
-                        `${action.translatorName}.${action.actionName} returned an invalid action: ${e}`,
+                        `${action.schemaName}.${action.actionName} returned an invalid action: ${e}`,
                     );
                 }
             }
@@ -781,7 +781,7 @@ export async function executeActions(
                 // TODO: validation
                 systemContext.activityContext = {
                     appAgentName: getAppAgentName(
-                        executableAction.action.translatorName,
+                        executableAction.action.schemaName,
                     ),
                     ...result.activityContext,
                 };
@@ -804,19 +804,17 @@ function getAdditionalExecutableActions(
     const executableActions: ExecutableAction[] = [];
     for (const newAction of actions) {
         const fullAction = (
-            newAction.translatorName !== undefined
+            newAction.schemaName !== undefined
                 ? newAction
                 : {
                       ...newAction,
-                      translatorName: sourceSchemaName,
+                      schemaName: sourceSchemaName,
                   }
         ) as FullAction;
 
         if (appAgentName !== DispatcherName) {
             // For non-dispatcher, action can only be trigger within the same agent.
-            const actionAppAgentName = getAppAgentName(
-                fullAction.translatorName,
-            );
+            const actionAppAgentName = getAppAgentName(fullAction.schemaName);
             if (actionAppAgentName !== appAgentName) {
                 throw new Error(
                     `Cannot invoke actions from other agent '${actionAppAgentName}'.`,
@@ -827,7 +825,7 @@ function getAdditionalExecutableActions(
         const actionInfo = getActionSchema(fullAction, context.agents);
         if (actionInfo === undefined) {
             throw new Error(
-                `Action not found ${fullAction.translatorName}.${fullAction.actionName}`,
+                `Action not found ${fullAction.schemaName}.${fullAction.actionName}`,
             );
         }
         validateAction(actionInfo, fullAction);
@@ -843,7 +841,7 @@ export async function validateWildcardMatch(
 ) {
     const actions = match.match.actions;
     for (const { action } of actions) {
-        const schemaName = action.translatorName;
+        const schemaName = action.schemaName;
         if (schemaName === undefined) {
             continue;
         }
@@ -866,12 +864,12 @@ export async function validateWildcardMatch(
 }
 
 export function startStreamPartialAction(
-    translatorName: string,
+    schemaName: string,
     actionName: string,
     context: CommandHandlerContext,
     actionIndex: number,
 ): IncrementalJsonValueCallBack {
-    const appAgentName = getAppAgentName(translatorName);
+    const appAgentName = getAppAgentName(schemaName);
     const appAgent = context.agents.getAppAgent(appAgentName);
     if (appAgent.streamPartialAction === undefined) {
         // The config declared that there are streaming action, but the agent didn't implement it.
@@ -886,7 +884,7 @@ export function startStreamPartialAction(
         context.requestId!,
         actionIndex,
         {
-            translatorName,
+            schemaName,
             actionName,
         },
     );

@@ -18,7 +18,7 @@ export function isPendingRequestAction(
     action: AppAction,
 ): action is PendingRequestAction {
     return (
-        action.translatorName === DispatcherName &&
+        action.schemaName === DispatcherName &&
         action.actionName === "pendingRequestAction"
     );
 }

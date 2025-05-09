@@ -67,7 +67,7 @@ export default class Schema extends Command {
             if (args.actionName) {
                 const actionSchema = getActionSchema(
                     {
-                        translatorName: args.schemaName,
+                        schemaName: args.schemaName,
                         actionName: args.actionName,
                     },
                     provider,

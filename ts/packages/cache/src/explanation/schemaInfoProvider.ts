@@ -27,7 +27,7 @@ export function doCacheAction(
     schemaInfoProvider?: SchemaInfoProvider,
 ) {
     return schemaInfoProvider?.getActionCacheEnabled(
-        action.action.translatorName,
+        action.action.schemaName,
         action.action.actionName,
     );
 }
@@ -38,7 +38,7 @@ export function getParamSpec(
     schemaInfoProvider?: SchemaInfoProvider,
 ): ParamSpec | undefined {
     return schemaInfoProvider?.getActionParamSpec(
-        action.translatorName,
+        action.schemaName,
         action.actionName,
         paramName,
     );

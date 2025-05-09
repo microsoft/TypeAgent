@@ -3,7 +3,7 @@
     {
       "request": "play Soruwienf from album Wxifiel by artist Bnefisoe",
       "action": {
-        "translatorName": "player",
+        "schemaName": "player",
         "actionName": "playTrack",
         "parameters": {
           "trackName": "Soruwienf",
@@ -36,7 +36,7 @@
     {
       "request": "play that song again",
       "action": {
-        "translatorName": "player",
+        "schemaName": "player",
         "actionName": "playTrack",
         "parameters": {
           "trackName": "Soruwienf",
@@ -72,7 +72,7 @@
     {
       "request": "look up the ingredient for shepherd's pie for me please",
       "action": {
-        "translatorName": "dispatcher.lookup",
+        "schemaName": "dispatcher.lookup",
         "actionName": "lookupAndAnswer",
         "parameters": {
           "originalRequest": "look up the ingredient for shepherd's pie for me please",
@@ -133,7 +133,7 @@
     {
       "request": "add them to the grocery list",
       "action": {
-        "translatorName": "list",
+        "schemaName": "list",
         "actionName": "addItems",
         "parameters": {
           "items": [
@@ -196,7 +196,7 @@
     {
       "request": "don't need the potatoes",
       "action": {
-        "translatorName": "list",
+        "schemaName": "list",
         "actionName": "removeItems",
         "parameters": {
           "items": ["Mashed potatoes"],
@@ -223,7 +223,7 @@
     {
       "request": "add eggs to the grocery list",
       "action": {
-        "translatorName": "list",
+        "schemaName": "list",
         "actionName": "addItems",
         "parameters": {
           "items": ["eggs"],
@@ -248,7 +248,7 @@
     {
       "request": "add cheese",
       "action": {
-        "translatorName": "list",
+        "schemaName": "list",
         "actionName": "addItems",
         "parameters": {
           "items": ["cheese"],

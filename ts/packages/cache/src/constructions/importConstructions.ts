@@ -72,9 +72,9 @@ function createConstructions(
         try {
             const actions = requestAction.actions;
             for (const { action } of actions) {
-                if (!dataSchemaNames.has(action.translatorName)) {
+                if (!dataSchemaNames.has(action.schemaName)) {
                     throw new Error(
-                        `Schema name '${action.translatorName}' not found in data header`,
+                        `Schema name '${action.schemaName}' not found in data header`,
                     );
                 }
             }

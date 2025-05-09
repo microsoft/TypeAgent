@@ -88,7 +88,7 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     ): Promise<string[]>;
     // For action template
     getActionCompletion?(
-        partialAction: AppAction, // action translatorName and actionName are validated by the dispatcher.
+        partialAction: AppAction, // action schemaName and actionName are validated by the dispatcher.
         propertyName: string,
         context: SessionContext,
     ): Promise<string[]>;

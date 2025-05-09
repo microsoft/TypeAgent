@@ -51,7 +51,7 @@ function toEntities(actions: ExecutableAction[]): PromptEntity[] {
                 entities.push({
                     name: value,
                     type: [key],
-                    sourceAppAgentName: getAppAgentName(action.translatorName),
+                    sourceAppAgentName: getAppAgentName(action.schemaName),
                 });
             }
         }

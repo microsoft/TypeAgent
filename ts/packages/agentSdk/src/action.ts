@@ -6,7 +6,7 @@ import { Entity } from "./memory.js";
 
 export interface AppAction {
     actionName: string;
-    translatorName?: string;
+    schemaName?: string;
     parameters?: Record<string, unknown> | undefined; // the type of the parameters are defined by the AppAgent
 }
 
@@ -65,7 +65,7 @@ export type TypeAgentAction<
     Name extends string = string,
 > = T extends AppAction
     ? T & {
-          translatorName: Name;
+          schemaName: Name;
           entities?: ActionEntities<T>;
       }
     : never;

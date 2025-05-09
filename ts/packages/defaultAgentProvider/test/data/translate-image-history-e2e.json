@@ -4,7 +4,7 @@
       "request": "Tell me what images are in our chat history.",
       "match": "partial",
       "action": {
-        "translatorName": "dispatcher.lookup",
+        "schemaName": "dispatcher.lookup",
         "actionName": "lookupAndAnswer",
         "parameters": {
           "originalRequest": "Tell me what images are in our chat history.",
@@ -37,7 +37,7 @@
       "request": "show me attachment__0.png",
       "question": "show me attachment__0.png",
       "action": {
-        "translatorName": "chat",
+        "schemaName": "chat",
         "actionName": "showImageFile",
         "parameters": {
           "files": ["attachment__0.png"]

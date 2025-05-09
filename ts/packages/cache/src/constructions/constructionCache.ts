@@ -6,16 +6,8 @@ import {
     Construction,
     ConstructionJSON,
     MatchResult,
-    convertConstructionV2ToV3,
 } from "./constructions.js";
-import {
-    MatchPart,
-    MatchSet,
-    MatchSetJSON,
-    MatchSetJSONV2,
-    convertMatchSetV2ToV3,
-    isMatchPart,
-} from "./matchPart.js";
+import { MatchPart, MatchSet, MatchSetJSON, isMatchPart } from "./matchPart.js";
 import { Transforms, TransformsJSON } from "./transforms.js";
 
 import registerDebug from "debug";
@@ -361,9 +353,7 @@ export class ConstructionCache {
         };
     }
 
-    public static fromJSON(
-        originalJSON: ConstructionCacheJSON | ConstructionCacheJSONV2,
-    ) {
+    public static fromJSON(originalJSON: ConstructionCacheJSON) {
         const json = ensureVersion(originalJSON);
         const store = new ConstructionCache(json.explainerName);
 
@@ -424,60 +414,12 @@ export class ConstructionCache {
     }
 }
 
-const constructionCacheJSONVersion2 = 2;
-type ConstructionCacheJSONV2 = {
-    version: number;
-    explainerName: string;
-    matchSets: MatchSetJSONV2[];
-    translators: {
-        name: string;
-        transforms: TransformsJSON;
-        constructions: ConstructionJSON[];
-    }[];
-};
-
-function ensureVersion(
-    json: ConstructionCacheJSONV2 | ConstructionCacheJSON,
-): ConstructionCacheJSON {
+function ensureVersion(json: any): ConstructionCacheJSON {
     if (json.version === constructionCacheJSONVersion) {
         return json as ConstructionCacheJSON;
     }
-    if (json.version !== constructionCacheJSONVersion2) {
-        throw new Error(
-            `Unsupported version of ConstructionCache: ${json.version}`,
-        );
-    }
 
-    // Convert from V2 to V3
-    const jsonV2 = json as ConstructionCacheJSONV2;
-
-    const { matchSets, matchSetToTransformInfo } = convertMatchSetV2ToV3(
-        jsonV2.matchSets,
+    throw new Error(
+        `Unsupported version of ConstructionCache: ${json.version}`,
     );
-    const constructionNamespaces = new Map<string, ConstructionJSON[]>();
-
-    for (const { name, constructions } of jsonV2.translators) {
-        convertConstructionV2ToV3(constructions, matchSetToTransformInfo);
-
-        // v3 only use the translator name as the namespaces for constructions.
-        const namespace = name.split(".")[0];
-        const existing = constructionNamespaces.get(namespace) ?? [];
-        existing.push(...constructions);
-        constructionNamespaces.set(namespace, existing);
-    }
-    const jsonV3: ConstructionCacheJSON = {
-        version: constructionCacheJSONVersion,
-        explainerName: jsonV2.explainerName,
-        matchSets,
-        constructionNamespaces: Array.from(
-            constructionNamespaces.entries(),
-        ).map(([name, constructions]) => ({
-            name,
-            constructions,
-        })),
-        transformNamespaces: jsonV2.translators.map(({ name, transforms }) => {
-            return { name, transforms };
-        }),
-    };
-    return jsonV3;
 }

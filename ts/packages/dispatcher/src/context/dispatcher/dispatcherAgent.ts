@@ -58,7 +58,7 @@ async function executeDispatcherAction(
     >,
     context: ActionContext<CommandHandlerContext>,
 ) {
-    switch (action.translatorName) {
+    switch (action.schemaName) {
         case "dispatcher.clarify":
             switch (action.actionName) {
                 case "clarifyMultiplePossibleActionName":
@@ -115,7 +115,7 @@ async function executeDispatcherAction(
     }
 
     throw new Error(
-        `Unknown dispatcher action: ${action.translatorName}.${action.actionName}`,
+        `Unknown dispatcher action: ${action.schemaName}.${action.actionName}`,
     );
 }
 

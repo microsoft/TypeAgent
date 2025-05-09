@@ -61,7 +61,7 @@ export class ActionCommandHandler implements CommandHandler {
         }
 
         const action: AppAction = {
-            translatorName: schemaName,
+            schemaName: schemaName,
             actionName,
         };
 
@@ -85,7 +85,7 @@ export class ActionCommandHandler implements CommandHandler {
         const systemContext = context.agentContext;
         const completions: string[] = [];
         for (const name of names) {
-            if (name === "translatorName") {
+            if (name === "schemaName") {
                 const schemaNames = systemContext.agents.getActiveSchemas();
                 completions.push(...schemaNames);
                 continue;
@@ -110,7 +110,7 @@ export class ActionCommandHandler implements CommandHandler {
             if (name === "--parameters.") {
                 // complete the flag name for json properties
                 const action = {
-                    translatorName: params.args?.schemaName,
+                    schemaName: params.args?.schemaName,
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };
@@ -140,7 +140,7 @@ export class ActionCommandHandler implements CommandHandler {
                 // complete the flag values for json properties
 
                 const action = {
-                    translatorName: params.args?.schemaName,
+                    schemaName: params.args?.schemaName,
                     actionName: params.args?.actionName,
                     parameters: params.flags?.parameters,
                 };

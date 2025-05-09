@@ -294,11 +294,11 @@ export function getActionSchema(
     action: DeepPartialUndefined<AppAction>,
     provider: ActionConfigProvider,
 ): ActionSchemaTypeDefinition | undefined {
-    const { translatorName, actionName } = action;
-    if (translatorName === undefined || actionName === undefined) {
+    const { schemaName, actionName } = action;
+    if (schemaName === undefined || actionName === undefined) {
         return undefined;
     }
-    const config = provider.tryGetActionConfig(translatorName);
+    const config = provider.tryGetActionConfig(schemaName);
     if (config === undefined) {
         return undefined;
     }
