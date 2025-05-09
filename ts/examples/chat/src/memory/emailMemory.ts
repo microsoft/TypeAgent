@@ -418,9 +418,9 @@ export function createEmailCommands(
                 context.emailMemory,
                 messageCount,
             )) {
-                const email = await cm.importEmailFromMimeText(
-                    message.value.value,
-                );
+                let messageText = message.value.value;
+                messageText = messageText.replace("Sent:", "Date:");
+                const email = await cm.importEmailFromMimeText(messageText);
                 if (email) {
                     const emailMessage = cm.importEmailMessage(email);
                     emailMessage.knowledge = knowledge;

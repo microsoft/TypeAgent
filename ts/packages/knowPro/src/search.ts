@@ -80,6 +80,7 @@ export function createSearchOptionsTypical(): SearchOptions {
 export type ConversationSearchResult = {
     messageMatches: ScoredMessageOrdinal[];
     knowledgeMatches: Map<KnowledgeType, SemanticRefSearchResult>;
+    rawSearchQuery?: string | undefined;
 };
 
 /**
@@ -125,6 +126,7 @@ export async function searchConversation(
     return {
         messageMatches,
         knowledgeMatches,
+        rawSearchQuery,
     };
 }
 

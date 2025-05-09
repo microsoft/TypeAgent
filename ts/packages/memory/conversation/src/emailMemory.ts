@@ -216,7 +216,7 @@ export class EmailMemory
         }
     }
 
-    protected override getSearchInstructions(): PromptSection[] | undefined {
+    public override getModelInstructions(): PromptSection[] | undefined {
         if (this.settings.userProfile) {
             const instructions: PromptSection[] = [
                 {

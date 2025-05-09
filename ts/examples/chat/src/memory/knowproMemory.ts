@@ -683,7 +683,7 @@ export async function createKnowproCommands(
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
-                searchText,
+                searchResult.rawSearchQuery ?? searchText,
                 searchResult,
                 (chunk, _, result) => {
                     if (namedArgs.debug) {

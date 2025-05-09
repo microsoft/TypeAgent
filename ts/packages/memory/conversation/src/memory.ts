@@ -18,6 +18,7 @@ export interface MemorySettings {
     embeddingSize: number;
     conversationSettings: kp.ConversationSettings;
     queryTranslator?: kp.SearchQueryTranslator | undefined;
+    answerGenerator?: kp.IAnswerGenerator | undefined;
     fileSaveSettings?: IndexFileSettings | undefined;
 }
 
@@ -218,7 +219,7 @@ export abstract class Memory<
             this.conversation,
             this.getQueryTranslator(),
             searchText,
-            this.getSearchInstructions(),
+            this.getModelInstructions(),
         );
     }
 
@@ -230,7 +231,7 @@ export abstract class Memory<
         this.settings.embeddingModel.cacheEnabled = true;
     }
 
-    protected getSearchInstructions(): PromptSection[] | undefined {
+    public getModelInstructions(): PromptSection[] | undefined {
         return undefined;
     }
 
@@ -248,7 +249,7 @@ export abstract class Memory<
 
     private adjustLanguageSearchOptions(options?: kp.LanguageSearchOptions) {
         options ??= kp.createLanguageSearchOptions();
-        const instructions = this.getSearchInstructions();
+        const instructions = this.getModelInstructions();
         if (instructions) {
             if (options.modelInstructions) {
                 options.modelInstructions.push(...instructions);

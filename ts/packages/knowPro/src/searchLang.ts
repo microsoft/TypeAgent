@@ -48,26 +48,45 @@ export async function searchConversationWithLanguage(
     options?: LanguageSearchOptions,
     context?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
-    const searchQueryExprResult = await searchQueryExprFromLanguage(
+    options ??= createLanguageSearchOptions();
+    const langQueryResult = await searchQueryExprFromLanguage(
         conversation,
         queryTranslator,
         searchText,
         options,
         context,
     );
-    if (!searchQueryExprResult.success) {
-        return searchQueryExprResult;
+    if (!langQueryResult.success) {
+        return langQueryResult;
     }
+    const searchQueryExprs = langQueryResult.data.queryExpressions;
     if (context) {
-        context.searchQueryExpr = searchQueryExprResult.data;
+        context.searchQueryExpr = searchQueryExprs;
     }
+    let fallbackQueryExpr = compileFallbackQuery(
+        langQueryResult.data.query,
+        options.compileOptions,
+    );
+
     const searchResults: ConversationSearchResult[] = [];
-    for (const searchQuery of searchQueryExprResult.data) {
+    for (let i = 0; i < searchQueryExprs.length; ++i) {
+        const searchQuery = searchQueryExprs[i];
         let queryResult = await runSearchQuery(
             conversation,
             searchQuery,
             options,
         );
+        if (!hasConversationResults(queryResult) && fallbackQueryExpr) {
+            // Rerun the query but with verb matching turned off for scopes
+            queryResult = await runSearchQuery(
+                conversation,
+                fallbackQueryExpr[i],
+                options,
+            );
+        }
+        //
+        // If no matches and classic RAG fallback enabled
+        //
         if (
             !hasConversationResults(queryResult) &&
             searchQuery.rawQuery &&
@@ -86,7 +105,30 @@ export async function searchConversationWithLanguage(
         }
     }
     return success(searchResults);
+
+    function compileFallbackQuery(
+        query: querySchema.SearchQuery,
+        compileOptions: LanguageQueryCompileOptions,
+    ): SearchQueryExpr[] | undefined {
+        const verbScope = compileOptions.verbScope;
+        if (
+            !compileOptions.exactScope &&
+            (verbScope == undefined || verbScope)
+        ) {
+            return compileSearchQuery(conversation, query, {
+                ...compileOptions,
+                verbScope: false,
+            });
+        }
+        return undefined;
+    }
 }
+
+export type LanguageQueryExpr = {
+    queryText: string;
+    query: querySchema.SearchQuery;
+    queryExpressions: SearchQueryExpr[];
+};
 
 /**
  * Functions for compiling natural language queries
@@ -97,7 +139,7 @@ export async function searchQueryExprFromLanguage(
     queryText: string,
     options?: LanguageSearchOptions,
     debugContext?: LanguageSearchDebugContext,
-): Promise<Result<SearchQueryExpr[]>> {
+): Promise<Result<LanguageQueryExpr>> {
     const queryResult = await searchQueryFromLanguage(
         conversation,
         translator,
@@ -105,23 +147,31 @@ export async function searchQueryExprFromLanguage(
         options?.modelInstructions,
     );
     if (queryResult.success) {
-        const searchQuery = queryResult.data;
+        const query = queryResult.data;
         if (debugContext) {
-            debugContext.searchQuery = searchQuery;
+            debugContext.searchQuery = query;
         }
         options ??= createLanguageSearchOptions();
-        const searchExpr = compileSearchQuery(
+        const queryExpressions = compileSearchQuery(
             conversation,
-            searchQuery,
+            query,
             options.compileOptions,
         );
-        return success(searchExpr);
+        return success({
+            queryText,
+            query,
+            queryExpressions,
+        });
     }
     return queryResult;
 }
 
 export type LanguageQueryCompileOptions = {
+    /**
+     * Is fuzzy matching enabled when applying scope?
+     */
     exactScope?: boolean | undefined;
+    verbScope?: boolean | undefined;
     // Use to ignore noise terms etc.
     termFilter?: (text: string) => boolean;
     // Debug flags
@@ -129,7 +179,7 @@ export type LanguageQueryCompileOptions = {
 };
 
 export function createLanguageQueryCompileOptions(): LanguageQueryCompileOptions {
-    return { applyScope: true, exactScope: false };
+    return { applyScope: true, exactScope: false, verbScope: true };
 }
 
 export interface LanguageSearchOptions extends SearchOptions {
@@ -219,6 +269,7 @@ export type LanguageSearchRagOptions = {
 class SearchQueryCompiler {
     private entityTermsAdded: PropertyTermSet;
     private dedupe: boolean = true;
+
     public queryExpressions: SearchQueryExpr[];
     public compileOptions: LanguageQueryCompileOptions;
 
@@ -312,7 +363,11 @@ class SearchQueryCompiler {
             actionTerm &&
             this.shouldAddScope(actionTerm)
         ) {
-            const scopeDefiningTerms = this.compileScope(actionTerm);
+            const scopeDefiningTerms = this.compileScope(
+                actionTerm,
+                true,
+                this.compileOptions.verbScope ?? true,
+            );
             if (scopeDefiningTerms.terms.length > 0) {
                 when ??= {};
                 when.scopeDefiningTerms = scopeDefiningTerms;
@@ -425,11 +480,12 @@ class SearchQueryCompiler {
     private compileScope(
         actionTerm: querySchema.ActionTerm,
         includeAdditionalEntities: boolean = true,
+        includeVerbs: boolean = true,
     ): SearchTermGroup {
         const dedupe = this.dedupe;
         this.dedupe = false;
 
-        let termGroup = this.compileActionTerm(actionTerm, true, true);
+        let termGroup = this.compileActionTerm(actionTerm, true, includeVerbs);
         if (
             includeAdditionalEntities &&
             isEntityTermArray(actionTerm.additionalEntities)
