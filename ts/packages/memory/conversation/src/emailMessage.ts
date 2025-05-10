@@ -35,7 +35,7 @@ export class EmailMeta extends MessageMetadata {
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse {
-        return email.emailToKnowledge(this, false);
+        return email.emailToKnowledge(this, false, false);
     }
 
     public copyFrom(meta: email.EmailHeader) {

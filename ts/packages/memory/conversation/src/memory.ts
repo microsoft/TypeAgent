@@ -179,13 +179,18 @@ export abstract class Memory<
     TMessage extends Message = Message,
 > {
     public settings: TSettings;
+    public noiseTerms: Set<string>;
+
     constructor(settings: TSettings) {
         this.settings = settings;
+        this.noiseTerms = new Set<string>();
         this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
             this.settings.languageModel,
         );
         this.settings.embeddingModel.getPersistentCache = () =>
             this.getPersistentEmbeddingCache();
+
+        this.addStandardNoiseTerms();
     }
 
     public abstract get conversation(): kp.IConversation<TMessage>;
@@ -257,6 +262,18 @@ export abstract class Memory<
                 options.modelInstructions = instructions;
             }
         }
+        options.compileOptions.termFilter = (t) =>
+            !this.noiseTerms.has(t.toLowerCase());
         return options;
+    }
+
+    protected addStandardNoiseTerms() {
+        this.noiseTerms.add("a");
+        this.noiseTerms.add("an");
+        this.noiseTerms.add("the");
+        this.noiseTerms.add("is");
+        this.noiseTerms.add("are");
+        this.noiseTerms.add("and");
+        this.noiseTerms.add("or");
     }
 }

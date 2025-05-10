@@ -365,7 +365,7 @@ class SearchQueryCompiler {
         ) {
             const scopeDefiningTerms = this.compileScope(
                 actionTerm,
-                true,
+                false,
                 this.compileOptions.verbScope ?? true,
             );
             if (scopeDefiningTerms.terms.length > 0) {
@@ -715,16 +715,18 @@ class SearchQueryCompiler {
         if (entityTerm.isNamePronoun) {
             return;
         }
-        termGroup.terms.push(createSearchTerm(entityTerm.name));
+        this.addSearchTermToGroup(entityTerm.name, termGroup);
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
-                const valueWildcard = isWildcard(facetTerm.facetValue);
-                if (!valueWildcard) {
-                    termGroup.terms.push(
-                        createSearchTerm(facetTerm.facetValue),
-                    );
-                }
+                this.addSearchTermToGroup(facetTerm.facetName, termGroup);
+                this.addSearchTermToGroup(facetTerm.facetValue, termGroup);
             }
+        }
+    }
+
+    private addSearchTermToGroup(term: string, termGroup: SearchTermGroup) {
+        if (this.isSearchableString(term)) {
+            termGroup.terms.push(createSearchTerm(term));
         }
     }
 
