@@ -49,7 +49,10 @@ import { collections, NormalizedEmbedding } from "typeagent";
 import { facetValueToString } from "./knowledgeLib.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
-import { textRangesFromMessageOrdinals } from "./message.js";
+import {
+    textRangeFromMessageChunk,
+    textRangesFromMessageOrdinals,
+} from "./message.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -472,8 +475,8 @@ export class QueryEvalContext {
     }
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
-        const messageIndex = semanticRef.range.start.messageOrdinal;
-        return this.conversation.messages.get(messageIndex);
+        const messageOrdinal = semanticRef.range.start.messageOrdinal;
+        return this.conversation.messages.get(messageOrdinal);
     }
 
     public getMessage(messageOrdinal: MessageOrdinal): IMessage {
@@ -1483,6 +1486,46 @@ export class MatchMessagesOrMaxExpr extends MatchMessagesOrExpr {
             matches.selectWithHitCount(maxHitCount);
         }
         return matches;
+    }
+}
+
+export class MatchMessagesBySimilarityExpr extends QueryOpExpr<
+    ScoredMessageOrdinal[]
+> {
+    constructor(
+        public embedding: NormalizedEmbedding,
+        public maxMessages?: number | undefined,
+        public thresholdScore?: number | undefined,
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
+        const messageIndex =
+            context.conversation.secondaryIndexes?.messageIndex;
+        const rangesInScope = context.textRangesInScope;
+        const predicate =
+            rangesInScope !== undefined
+                ? (messageOrdinal: MessageOrdinal) =>
+                      this.isInScope(rangesInScope, messageOrdinal)
+                : undefined;
+
+        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
+            return messageIndex.lookupByEmbedding(
+                this.embedding,
+                this.maxMessages,
+                this.thresholdScore,
+                predicate,
+            );
+        }
+        return [];
+    }
+
+    private isInScope(
+        scope: TextRangesInScope,
+        messageOrdinal: MessageOrdinal,
+    ): boolean {
+        return scope.isRangeInScope(textRangeFromMessageChunk(messageOrdinal));
     }
 }
 

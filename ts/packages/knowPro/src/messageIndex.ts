@@ -32,6 +32,12 @@ export interface IMessageTextIndexData {
 export interface IMessageTextEmbeddingIndex extends IMessageTextIndex {
     readonly size: number;
     generateEmbedding(text: string): Promise<NormalizedEmbedding>;
+    lookupByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        maxMatches?: number,
+        thresholdScore?: number,
+        predicate?: (messageOrdinal: MessageOrdinal) => boolean,
+    ): ScoredMessageOrdinal[];
     lookupInSubsetByEmbedding(
         textEmbedding: NormalizedEmbedding,
         ordinalsToSearch: MessageOrdinal[],
@@ -115,6 +121,21 @@ export class MessageTextIndex implements IMessageTextEmbeddingIndex {
             this.settings.embeddingIndexSettings.embeddingModel,
             text,
         );
+    }
+
+    public lookupByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        maxMatches?: number,
+        thresholdScore?: number,
+        predicate?: (messageOrdinal: MessageOrdinal) => boolean,
+    ): ScoredMessageOrdinal[] {
+        const scoredTextLocations = this.textLocationIndex.lookupByEmbedding(
+            textEmbedding,
+            maxMatches,
+            thresholdScore,
+            predicate,
+        );
+        return this.toScoredMessageOrdinals(scoredTextLocations);
     }
 
     public lookupInSubsetByEmbedding(
@@ -210,6 +231,11 @@ export async function addToMessageIndex(
 export function isMessageTextEmbeddingIndex(
     messageIndex: IMessageTextIndex,
 ): messageIndex is IMessageTextEmbeddingIndex {
-    const fn = typeof (messageIndex as any).generateEmbedding;
-    return fn !== undefined;
+    const textIndex: IMessageTextEmbeddingIndex =
+        messageIndex as IMessageTextEmbeddingIndex;
+    return (
+        textIndex.generateEmbedding !== undefined &&
+        textIndex.lookupByEmbedding !== undefined &&
+        textIndex.lookupInSubsetByEmbedding !== undefined
+    );
 }

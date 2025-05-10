@@ -20,7 +20,6 @@ import { SearchTerm } from "./interfaces.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
-    IEmbeddingIndex,
     serializeEmbedding,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
@@ -304,7 +303,6 @@ export class TermEmbeddingIndex
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
-        embeddingIndex?: IEmbeddingIndex,
         data?: ITextEmbeddingIndexData,
     ) {
         this.embeddingIndex = new TextEmbeddingIndex(settings);
