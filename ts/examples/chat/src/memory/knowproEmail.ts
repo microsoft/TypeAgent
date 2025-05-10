@@ -170,11 +170,17 @@ export async function createKnowproEmailCommands(
             return;
         }
         closeEmail();
+
+        const clock = new StopWatch();
+        clock.start();
         context.email = await loadEmailMemory(
             emailIndexPath,
             namedArgs.createNew,
         );
-        if (!context.email) {
+        clock.stop();
+        if (context.email) {
+            context.printer.writeTiming(chalk.gray, clock);
+        } else {
             // Memory not found. Create a new one
             context.email = await loadEmailMemory(emailIndexPath, true);
             if (!context.email) {
