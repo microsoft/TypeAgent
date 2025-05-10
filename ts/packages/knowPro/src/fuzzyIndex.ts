@@ -17,6 +17,11 @@ import { Scored } from "./common.js";
 import { ListIndexingResult, IndexingEventHandlers } from "./interfaces.js";
 import { error, Result, success } from "typechat";
 
+export interface IEmbeddingIndex {
+    readonly size: number;
+    push(embeddings: NormalizedEmbedding | NormalizedEmbedding[]): void;
+}
+
 export class EmbeddingIndex {
     private embeddings: NormalizedEmbedding[];
 
@@ -268,8 +273,11 @@ export async function indexesOfNearestTextBatchInIndex(
 export class TextEmbeddingIndex {
     private embeddingIndex: EmbeddingIndex;
 
-    constructor(public settings: TextEmbeddingIndexSettings) {
-        this.embeddingIndex = new EmbeddingIndex();
+    constructor(
+        public settings: TextEmbeddingIndexSettings,
+        embeddingIndex?: EmbeddingIndex,
+    ) {
+        this.embeddingIndex = embeddingIndex ?? new EmbeddingIndex();
     }
 
     public get size(): number {

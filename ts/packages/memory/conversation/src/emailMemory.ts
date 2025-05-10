@@ -57,7 +57,7 @@ export class EmailMemory
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
-        this.updateStaticAliases();
+        this.updateStaticMaps();
     }
 
     public override get conversation(): kp.IConversation<EmailMessage> {
@@ -170,7 +170,7 @@ export class EmailMemory
             this,
             this.settings.conversationSettings,
         );
-        this.updateStaticAliases();
+        this.updateStaticMaps();
     }
 
     public async writeToFile(
@@ -221,7 +221,7 @@ export class EmailMemory
             const instructions: PromptSection[] = [
                 {
                     role: "system",
-                    content: `You are answering requests about the Email Inbox belonging to:\n${JSON.stringify(this.settings.userProfile)}`,
+                    content: `You are answering requests about the Email Inbox belonging to:\n'''${JSON.stringify(this.settings.userProfile)}\n'''`,
                 },
             ];
             return instructions;
@@ -239,8 +239,11 @@ export class EmailMemory
             this.semanticRefs.length - 1;
     }
 
-    private updateStaticAliases() {
+    private updateStaticMaps() {
         this.addVerbAliases();
+
+        this.noiseTerms.add("email");
+        this.noiseTerms.add("message");
     }
 
     private addVerbAliases() {

@@ -423,6 +423,9 @@ export function createEmailCommands(
                 const email = await cm.importEmailFromMimeText(messageText);
                 if (email) {
                     const emailMessage = cm.importEmailMessage(email);
+                    // Remove duplicate actions, since these will come from metadata
+                    knowledge.actions = [];
+                    knowledge.inverseActions = [];
                     emailMessage.knowledge = knowledge;
                     await kpEmail.addMessages(emailMessage, false);
                 }

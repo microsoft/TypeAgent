@@ -225,23 +225,31 @@ export function isEmailVerb(verbs: string[]): boolean {
 function createEmailActions(
     sender: EmailAddress,
     recipient: EmailAddress,
+    useIndirect: boolean,
     buffer?: Action[] | undefined,
 ): Action[] {
     const actions = buffer ?? [];
-    addAction(EmailVerbs.send, sender, recipient);
-    addAction(EmailVerbs.receive, recipient, sender);
+    addAction(EmailVerbs.send, sender, recipient, useIndirect);
+    addAction(EmailVerbs.receive, recipient, sender, useIndirect);
     return actions;
 
     function addAction(
         verb: string,
         sender: EmailAddress,
         recipient: EmailAddress,
+        useIndirect: boolean,
     ) {
         if (sender.displayName) {
-            addActions(verb, sender.displayName, recipient, actions);
+            addActions(
+                verb,
+                sender.displayName,
+                recipient,
+                actions,
+                useIndirect,
+            );
         }
         if (sender.address) {
-            addActions(verb, sender.address, recipient, actions);
+            addActions(verb, sender.address, recipient, actions, useIndirect);
         }
     }
 
@@ -250,41 +258,65 @@ function createEmailActions(
         sender: string,
         recipient: EmailAddress,
         actions: Action[],
+        useIndirect: boolean,
     ) {
         if (recipient.displayName) {
-            actions.push(createAction(verb, sender, recipient.displayName));
+            actions.push(
+                createAction(verb, sender, recipient.displayName, useIndirect),
+            );
         }
         if (recipient.address) {
-            actions.push(createAction(verb, sender, recipient.address));
+            actions.push(
+                createAction(verb, sender, recipient.address, useIndirect),
+            );
         }
     }
 
-    function createAction(verb: string, from: string, to: string): Action {
-        return {
-            verbs: [verb],
-            verbTense: "past",
-            subjectEntityName: from,
-            objectEntityName: "email",
-            indirectObjectEntityName: to,
-        };
+    function createAction(
+        verb: string,
+        from: string,
+        to: string,
+        useIndirect: boolean,
+    ): Action {
+        return useIndirect
+            ? {
+                  verbs: [verb],
+                  verbTense: "past",
+                  subjectEntityName: from,
+                  objectEntityName: "email",
+                  indirectObjectEntityName: to,
+              }
+            : {
+                  verbs: [verb],
+                  verbTense: "past",
+                  subjectEntityName: from,
+                  objectEntityName: to,
+                  indirectObjectEntityName: "none",
+              };
     }
 }
 
-export function emailToActions(email: EmailHeader): Action[] {
+export function emailToActions(
+    email: EmailHeader,
+    useIndirect: boolean,
+): Action[] {
     const actions: Action[] = [];
-    addActions(email.from, email.to, actions);
-    addActions(email.from, email.cc, actions);
-    addActions(email.from, email.bcc, actions);
+    addActions(email.from, email.to, useIndirect, actions);
+    addActions(email.from, email.cc, useIndirect, actions);
+    addActions(email.from, email.bcc, useIndirect, actions);
 
     return actions;
 
     function addActions(
         sender: EmailAddress,
         recipients: EmailAddress[] | undefined,
+        useIndirect: boolean,
         buffer: Action[],
     ) {
         if (recipients) {
-            recipients.forEach((r) => createEmailActions(sender, r, buffer));
+            recipients.forEach((r) =>
+                createEmailActions(sender, r, useIndirect, buffer),
+            );
         }
     }
 }
@@ -292,11 +324,12 @@ export function emailToActions(email: EmailHeader): Action[] {
 export function emailToKnowledge(
     email: EmailHeader,
     includeSubject: boolean = true,
+    useIndirectObject: boolean = true,
 ): KnowledgeResponse {
     return {
         entities: emailToEntities(email),
         topics: includeSubject && email.subject ? [email.subject] : [],
-        actions: emailToActions(email),
+        actions: emailToActions(email, useIndirectObject),
         inverseActions: [],
     };
 }

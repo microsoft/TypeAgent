@@ -46,7 +46,7 @@ export async function searchConversationWithLanguage(
     searchText: string,
     queryTranslator: SearchQueryTranslator,
     options?: LanguageSearchOptions,
-    context?: LanguageSearchDebugContext,
+    debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     options ??= createLanguageSearchOptions();
     const langQueryResult = await searchQueryExprFromLanguage(
@@ -54,14 +54,16 @@ export async function searchConversationWithLanguage(
         queryTranslator,
         searchText,
         options,
-        context,
+        debugContext,
     );
     if (!langQueryResult.success) {
         return langQueryResult;
     }
     const searchQueryExprs = langQueryResult.data.queryExpressions;
-    if (context) {
-        context.searchQueryExpr = searchQueryExprs;
+    if (debugContext) {
+        debugContext.searchQueryExpr = searchQueryExprs;
+        debugContext.usedRag = new Array<boolean>(searchQueryExprs.length);
+        debugContext.usedRag.fill(false);
     }
     let fallbackQueryExpr = compileFallbackQuery(
         langQueryResult.data.query,
@@ -99,6 +101,9 @@ export async function searchConversationWithLanguage(
             );
             if (ragMatches) {
                 searchResults.push(ragMatches);
+                if (debugContext?.usedRag) {
+                    debugContext.usedRag![i] = true;
+                }
             }
         } else {
             searchResults.push(...queryResult);
@@ -204,6 +209,7 @@ export type LanguageSearchDebugContext = {
      * What searchQuery was compiled into
      */
     searchQueryExpr?: SearchQueryExpr[] | undefined;
+    usedRag?: boolean[] | undefined;
 };
 
 export function compileSearchQuery(
@@ -331,6 +337,7 @@ class SearchQueryCompiler {
         filter: querySchema.SearchFilter,
     ): SearchTermGroup {
         const termGroup = createOrTermGroup();
+
         this.entityTermsAdded.clear();
         if (isEntityTermArray(filter.entitySearchTerms)) {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
@@ -348,7 +355,14 @@ class SearchQueryCompiler {
             );
         }
         if (filter.searchTerms) {
-            this.compileSearchTerms(filter.searchTerms, termGroup);
+            if (filter.searchTerms.length > 0) {
+                this.compileSearchTerms(filter.searchTerms, termGroup);
+            } else if (termGroup.terms.length === 0) {
+                // Summary
+                termGroup.terms.push(
+                    createPropertySearchTerm(PropertyNames.Topic, Wildcard),
+                );
+            }
         }
         return termGroup;
     }
@@ -365,7 +379,7 @@ class SearchQueryCompiler {
         ) {
             const scopeDefiningTerms = this.compileScope(
                 actionTerm,
-                true,
+                false,
                 this.compileOptions.verbScope ?? true,
             );
             if (scopeDefiningTerms.terms.length > 0) {
@@ -715,16 +729,18 @@ class SearchQueryCompiler {
         if (entityTerm.isNamePronoun) {
             return;
         }
-        termGroup.terms.push(createSearchTerm(entityTerm.name));
+        this.addSearchTermToGroup(entityTerm.name, termGroup);
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
-                const valueWildcard = isWildcard(facetTerm.facetValue);
-                if (!valueWildcard) {
-                    termGroup.terms.push(
-                        createSearchTerm(facetTerm.facetValue),
-                    );
-                }
+                this.addSearchTermToGroup(facetTerm.facetName, termGroup);
+                this.addSearchTermToGroup(facetTerm.facetValue, termGroup);
             }
+        }
+    }
+
+    private addSearchTermToGroup(term: string, termGroup: SearchTermGroup) {
+        if (this.isSearchableString(term)) {
+            termGroup.terms.push(createSearchTerm(term));
         }
     }
 

@@ -641,7 +641,7 @@ export async function createKnowproCommands(
             options.fallbackRagOptions = {
                 maxMessageMatches: options.maxMessageMatches,
                 maxCharsInBudget: options.maxMessageCharsInBudget,
-                thresholdScore: 0.8,
+                thresholdScore: 0.7,
             };
         }
 
@@ -672,9 +672,14 @@ export async function createKnowproCommands(
         if (!hasConversationResults(searchResults.data)) {
             context.printer.writeLine();
             context.printer.writeLine("No matches");
+            context.printer.writeInColor(
+                chalk.gray,
+                `--fallback ${namedArgs.fallback}`,
+            );
             return;
         }
-        for (const searchResult of searchResults.data) {
+        for (let i = 0; i < searchResults.data.length; ++i) {
+            const searchResult = searchResults.data[i];
             if (!namedArgs.messages) {
                 // Don't include raw message text... try answering only with knowledge
                 searchResult.messageMatches = [];
@@ -694,7 +699,10 @@ export async function createKnowproCommands(
             );
             context.printer.writeLine();
             if (answerResult.success) {
-                context.printer.writeAnswer(answerResult.data);
+                context.printer.writeAnswer(
+                    answerResult.data,
+                    debugContext.usedRag![i],
+                );
             } else {
                 context.printer.writeError(answerResult.message);
             }

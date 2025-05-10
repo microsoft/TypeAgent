@@ -92,6 +92,16 @@ export function addSynonymsFileAsAliases(
     }
 }
 
+export function addNoiseWordsFromFile(
+    noise: Set<string>,
+    filePath: string,
+): void {
+    const words = ms.readAllLines(filePath);
+    if (words) {
+        words.forEach((word) => noise.add(word));
+    }
+}
+
 export class MessageMetadata
     implements kp.IMessageMetadata, kp.IKnowledgeSource
 {
@@ -167,9 +177,14 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
             ...this.knowledge,
         };
         combinedKnowledge.entities.push(...metaKnowledge.entities);
+        combinedKnowledge.entities = kp.mergeConcreteEntities(
+            combinedKnowledge.entities,
+        );
+        combinedKnowledge.topics.push(...metaKnowledge.topics);
+        combinedKnowledge.topics = kp.mergeTopics(combinedKnowledge.topics);
+
         combinedKnowledge.actions.push(...metaKnowledge.actions);
         combinedKnowledge.inverseActions.push(...metaKnowledge.inverseActions);
-        combinedKnowledge.topics.push(...metaKnowledge.topics);
         return combinedKnowledge;
     }
 }
@@ -179,13 +194,18 @@ export abstract class Memory<
     TMessage extends Message = Message,
 > {
     public settings: TSettings;
+    public noiseTerms: Set<string>;
+
     constructor(settings: TSettings) {
         this.settings = settings;
+        this.noiseTerms = new Set<string>();
         this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
             this.settings.languageModel,
         );
         this.settings.embeddingModel.getPersistentCache = () =>
             this.getPersistentEmbeddingCache();
+
+        this.addStandardNoiseTerms();
     }
 
     public abstract get conversation(): kp.IConversation<TMessage>;
@@ -257,6 +277,15 @@ export abstract class Memory<
                 options.modelInstructions = instructions;
             }
         }
+        options.compileOptions.termFilter = (t) =>
+            !this.noiseTerms.has(t.toLowerCase());
         return options;
+    }
+
+    protected addStandardNoiseTerms() {
+        addNoiseWordsFromFile(
+            this.noiseTerms,
+            ms.getAbsolutePathFromUrl(import.meta.url, "noiseTerms.txt"),
+        );
     }
 }

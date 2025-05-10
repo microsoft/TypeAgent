@@ -354,11 +354,20 @@ export function lookupTerm(
     term: Term,
     semanticRefs: ISemanticRefCollection,
     rangesInScope?: TextRangesInScope,
+    ktype?: KnowledgeType,
 ): ScoredSemanticRefOrdinal[] | undefined {
     if (rangesInScope) {
         // If rangesInScope has no actual text ranges, then lookups can't possibly match
-        return lookupTermFiltered(semanticRefIndex, term, semanticRefs, (sr) =>
-            rangesInScope.isRangeInScope(sr.range),
+        return lookupTermFiltered(
+            semanticRefIndex,
+            term,
+            semanticRefs,
+            (sr) => {
+                if (ktype && sr.knowledgeType !== ktype) {
+                    return false;
+                }
+                return rangesInScope.isRangeInScope(sr.range);
+            },
         );
     }
     return semanticRefIndex.lookupTerm(term.text);
@@ -397,6 +406,17 @@ export function lookupProperty(
             );
         },
     );
+}
+
+export function* lookupKnowledgeType(
+    semanticRefs: ISemanticRefCollection,
+    ktype: KnowledgeType,
+): IterableIterator<ScoredSemanticRefOrdinal> {
+    for (const sr of semanticRefs) {
+        if (sr.knowledgeType === ktype) {
+            yield { semanticRefOrdinal: sr.semanticRefOrdinal, score: 1.0 };
+        }
+    }
 }
 
 // Query eval expressions
@@ -688,23 +708,27 @@ export class MatchSearchTermExpr extends MatchTermExpr {
         if (relatedTerm === undefined) {
             if (!context.matchedTerms.has(term)) {
                 const semanticRefs = this.lookupTerm(context, term);
-                matches.addTermMatches(term, semanticRefs, true);
-                context.matchedTerms.add(term);
+                if (semanticRefs !== undefined) {
+                    matches.addTermMatches(term, semanticRefs, true);
+                    context.matchedTerms.add(term);
+                }
             }
         } else {
             if (!context.matchedTerms.has(relatedTerm)) {
                 // If this related term had not already matched as a related term for some other term
                 // Minimize over counting
                 const semanticRefs = this.lookupTerm(context, relatedTerm);
-                // This will only consider semantic refs that have not already matched this expression. In other words, if a semantic
-                // ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
-                matches.addTermMatchesIfNew(
-                    term,
-                    semanticRefs,
-                    false,
-                    relatedTerm.weight,
-                );
-                context.matchedTerms.add(relatedTerm);
+                if (semanticRefs !== undefined) {
+                    // This will only consider semantic refs that have not already matched this expression. In other words, if a semantic
+                    // ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+                    matches.addTermMatchesIfNew(
+                        term,
+                        semanticRefs,
+                        false,
+                        relatedTerm.weight,
+                    );
+                    context.matchedTerms.add(relatedTerm);
+                }
             }
         }
     }
@@ -871,32 +895,44 @@ export class MatchTagExpr extends MatchSearchTermExpr {
     constructor(public tagTerm: SearchTerm) {
         super(tagTerm);
     }
+
     protected override lookupTerm(
         context: QueryEvalContext,
         term: Term,
     ): ScoredSemanticRefOrdinal[] | undefined {
-        return lookupTermFiltered(
+        if (isSearchTermWildcard(this.tagTerm)) {
+            return [...lookupKnowledgeType(context.semanticRefs, "tag")];
+        }
+
+        return lookupTerm(
             context.semanticRefIndex,
             term,
             context.semanticRefs,
-            (semanticRef) => semanticRef.knowledgeType === "tag",
+            context.textRangesInScope,
+            "tag",
         );
     }
 }
 
 export class MatchTopicExpr extends MatchSearchTermExpr {
-    constructor(public tagTerm: SearchTerm) {
-        super(tagTerm);
+    constructor(public topic: SearchTerm) {
+        super(topic);
     }
+
     protected override lookupTerm(
         context: QueryEvalContext,
         term: Term,
     ): ScoredSemanticRefOrdinal[] | undefined {
-        return lookupTermFiltered(
+        if (isSearchTermWildcard(this.topic)) {
+            return [...lookupKnowledgeType(context.semanticRefs, "topic")];
+        }
+
+        return lookupTerm(
             context.semanticRefIndex,
             term,
             context.semanticRefs,
-            (semanticRef) => semanticRef.knowledgeType === "topic",
+            context.textRangesInScope,
+            "topic",
         );
     }
 }

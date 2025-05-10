@@ -6,6 +6,8 @@ import * as ms from "memory-storage";
 import { conversation as kpLib } from "knowledge-processor";
 import { email as email } from "knowledge-processor";
 import { Message, MessageMetadata } from "./memory.js";
+import path from "path";
+import { importEmlFile } from "./emailImporter.js";
 
 export class EmailMeta extends MessageMetadata {
     public cc?: email.EmailAddress[] | undefined;
@@ -33,7 +35,7 @@ export class EmailMeta extends MessageMetadata {
     }
 
     public getKnowledge(): kpLib.KnowledgeResponse {
-        return email.emailToKnowledge(this, false);
+        return email.emailToKnowledge(this, false, false);
     }
 
     public copyFrom(meta: email.EmailHeader) {
@@ -53,6 +55,7 @@ export class EmailMessage extends Message<EmailMeta> {
         metadata: EmailMeta,
         emailBody: string | string[],
         tags: string[] = [],
+        knowledge?: kpLib.KnowledgeResponse | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
         isNew: boolean = true,
     ) {
@@ -64,7 +67,7 @@ export class EmailMessage extends Message<EmailMeta> {
             emailBody,
             tags,
             metadata.sentOn,
-            undefined,
+            knowledge,
             deletionInfo,
         );
     }
@@ -82,18 +85,24 @@ export function importEmailMessage(email: email.Email): EmailMessage {
     return new EmailMessage(meta, email.body);
 }
 
-export function loadEmailMessageFromFile(
+export async function loadEmailMessageFromFile(
     filePath: string,
-): EmailMessage | undefined {
-    const emailData = ms.readJsonFile<email.Email>(filePath);
+): Promise<EmailMessage | undefined> {
+    const emailData =
+        path.extname(filePath) === "eml"
+            ? await importEmlFile(filePath)
+            : ms.readJsonFile<email.Email>(filePath);
+
     return emailData ? importEmailMessage(emailData) : undefined;
 }
 
-export function loadEmailMessagesFromDir(dirPath: string): EmailMessage[] {
+export async function loadEmailMessagesFromDir(
+    dirPath: string,
+): Promise<EmailMessage[]> {
     const filePaths = ms.getFilePathsInDir(dirPath);
     let emails: EmailMessage[] = [];
     for (const filePath of filePaths) {
-        const email = loadEmailMessageFromFile(filePath);
+        const email = await loadEmailMessageFromFile(filePath);
         if (email) {
             emails.push(email);
         }
@@ -115,6 +124,7 @@ export class EmailMessageSerializer implements kp.JsonSerializer<EmailMessage> {
             meta,
             jMsg.textChunks,
             jMsg.tags,
+            jMsg.knowledge,
             jMsg.deletionInfo,
             false,
         );

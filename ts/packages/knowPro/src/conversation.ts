@@ -44,7 +44,7 @@ export function createConversationSettings(
             embeddingIndexSettings: createTextEmbeddingIndexSettings(
                 embeddingModel,
                 embeddingSize,
-                minCosineSimilarity,
+                0.7,
             ),
         },
         semanticRefIndexSettings: {

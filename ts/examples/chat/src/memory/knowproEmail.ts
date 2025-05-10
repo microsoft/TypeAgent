@@ -66,14 +66,14 @@ export async function createKnowproEmailCommands(
         const namedArgs = parseNamedArguments(args, emailAddDef());
         let emailsToAdd: cm.EmailMessage[] = [];
         if (isFilePath(namedArgs.filePath)) {
-            const emailMessage = cm.loadEmailMessageFromFile(
+            const emailMessage = await cm.loadEmailMessageFromFile(
                 namedArgs.filePath,
             );
             if (emailMessage) {
                 emailsToAdd.push(emailMessage);
             }
         } else {
-            emailsToAdd = cm.loadEmailMessagesFromDir(namedArgs.filePath);
+            emailsToAdd = await cm.loadEmailMessagesFromDir(namedArgs.filePath);
         }
         if (emailsToAdd.length === 0) {
             context.printer.writeError(
@@ -126,7 +126,7 @@ export async function createKnowproEmailCommands(
         const eventHandler = createIndexingEventHandler(
             context.printer,
             progress,
-            1,
+            countToIndex,
         );
         const indexSettings =
             emailMemory.settings.conversationSettings.semanticRefIndexSettings;
@@ -170,11 +170,17 @@ export async function createKnowproEmailCommands(
             return;
         }
         closeEmail();
+
+        const clock = new StopWatch();
+        clock.start();
         context.email = await loadEmailMemory(
             emailIndexPath,
             namedArgs.createNew,
         );
-        if (!context.email) {
+        clock.stop();
+        if (context.email) {
+            context.printer.writeTiming(chalk.gray, clock);
+        } else {
             // Memory not found. Create a new one
             context.email = await loadEmailMemory(emailIndexPath, true);
             if (!context.email) {

@@ -20,6 +20,7 @@ import { SearchTerm } from "./interfaces.js";
 import { isSearchTermWildcard } from "./common.js";
 import { TermSet } from "./collections.js";
 import {
+    IEmbeddingIndex,
     serializeEmbedding,
     TextEditDistanceIndex,
     TextEmbeddingIndex,
@@ -88,7 +89,6 @@ export type RelatedTermIndexSettings = {
 
 export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
     private aliasMap: TermToRelatedTermsMap;
-    private editDistanceIndex: TermEditDistanceIndex | undefined;
     private embeddingIndex: TermEmbeddingIndex | undefined;
 
     constructor(public settings: RelatedTermIndexSettings) {
@@ -102,10 +102,6 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
 
     public get aliases(): TermToRelatedTermsMap {
         return this.aliasMap;
-    }
-
-    public get termEditDistanceIndex() {
-        return this.editDistanceIndex;
     }
 
     public get fuzzyIndex() {
@@ -308,6 +304,7 @@ export class TermEmbeddingIndex
 
     constructor(
         public settings: TextEmbeddingIndexSettings,
+        embeddingIndex?: IEmbeddingIndex,
         data?: ITextEmbeddingIndexData,
     ) {
         this.embeddingIndex = new TextEmbeddingIndex(settings);
