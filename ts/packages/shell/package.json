@@ -21,7 +21,7 @@
     "build:electron:cjs": "electron-vite build src/preload --config electron.vite.preload-cjs.config.mts --logLevel error",
     "build:electron:esm": "electron-vite build",
     "clean": "rimraf --glob out dist deploy *.tsbuildinfo *.done.build.log",
-    "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --config.node-linker=hoisted --legacy",
+    "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --config.node-linker=hoisted --legacy --ignore-scripts && pnpm -C deploy run postinstall ",
     "dev": "npm run prepare-vite && electron-vite dev -- --env ../../.env",
     "dev:noenv": "npm run prepare-vite && electron-vite dev",
     "postinstall": "run-script-os",
