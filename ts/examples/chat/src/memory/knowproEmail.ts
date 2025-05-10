@@ -126,7 +126,7 @@ export async function createKnowproEmailCommands(
         const eventHandler = createIndexingEventHandler(
             context.printer,
             progress,
-            1,
+            countToIndex,
         );
         const indexSettings =
             emailMemory.settings.conversationSettings.semanticRefIndexSettings;

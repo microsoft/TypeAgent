@@ -35,11 +35,11 @@ function addTermToIndex(
     index: ITermToSemanticRefIndex,
     term: string,
     semanticRefOrdinal: SemanticRefOrdinal,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ) {
     term = index.addTerm(term, semanticRefOrdinal);
     if (termsAdded) {
-        termsAdded.push(term);
+        termsAdded.add(term);
     }
 }
 
@@ -49,7 +49,7 @@ function addEntity(
     semanticRefIndex: ITermToSemanticRefIndex,
     messageOrdinal: MessageOrdinal,
     chunkOrdinal: number,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ) {
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.append({
@@ -80,7 +80,7 @@ function addFacet(
     facet: kpLib.Facet | undefined,
     semanticRefOrdinal: SemanticRefOrdinal,
     semanticRefIndex: ITermToSemanticRefIndex,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ) {
     if (facet !== undefined) {
         addTermToIndex(
@@ -106,7 +106,7 @@ function addTopic(
     semanticRefIndex: ITermToSemanticRefIndex,
     messageOrdinal: MessageOrdinal,
     chunkOrdinal: number,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ) {
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.append({
@@ -129,7 +129,7 @@ function addAction(
     semanticRefIndex: ITermToSemanticRefIndex,
     messageOrdinal: MessageOrdinal,
     chunkOrdinal: number,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ) {
     const semanticRefOrdinal = semanticRefs.length;
     semanticRefs.append({
@@ -214,7 +214,7 @@ export function addKnowledgeToSemanticRefIndex(
     messageOrdinal: MessageOrdinal,
     chunkOrdinal: number,
     knowledge: kpLib.KnowledgeResponse,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ): void {
     verifyHasSemanticRefIndex(conversation);
 
@@ -285,7 +285,7 @@ async function addBatchToSemanticRefIndex(
     batch: TextLocation[],
     knowledgeExtractor: kpLib.KnowledgeExtractor,
     eventHandler?: IndexingEventHandlers,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ): Promise<TextIndexingResult> {
     beginIndexing(conversation);
 
@@ -496,7 +496,7 @@ export async function addToConversationIndex(
     eventHandler?: IndexingEventHandlers,
 ): Promise<IndexingResults> {
     const indexingResult: IndexingResults = {};
-    const termsAdded: string[] = [];
+    const termsAdded = new Set<string>();
 
     addMessageKnowledgeToSemanticRefIndex(
         conversation,
@@ -514,12 +514,14 @@ export async function addToConversationIndex(
         );
     }
     if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
+        let relatedTerms = [...termsAdded.values()];
+        termsAdded.clear();
         indexingResult.secondaryIndexResults = await addToSecondaryIndexes(
             conversation,
             settings,
             messageOrdinalStartAt,
             semanticRefOrdinalStartAt,
-            termsAdded,
+            relatedTerms,
             eventHandler,
         );
     }
@@ -560,7 +562,7 @@ export async function addToSemanticRefIndex(
     settings: SemanticRefIndexSettings,
     messageOrdinalStartAt: MessageOrdinal,
     eventHandler?: IndexingEventHandlers,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ): Promise<TextIndexingResult> {
     beginIndexing(conversation);
 
@@ -599,7 +601,7 @@ export function addMessageKnowledgeToSemanticRefIndex(
     conversation: IConversation,
     messageOrdinalStartAt: MessageOrdinal,
     knowledgeValidator?: KnowledgeValidator,
-    termsAdded?: string[],
+    termsAdded?: Set<string>,
 ) {
     if (!conversation.semanticRefIndex) {
         return;
