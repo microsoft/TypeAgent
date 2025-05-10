@@ -163,9 +163,17 @@ export interface Storage {
     getTokenCachePersistence(): Promise<TokenCachePersistence>;
 }
 
+export type ActivityContext<T = Record<string, unknown>> = {
+    appAgentName: string;
+    activityName: string;
+    description: string;
+    state: T;
+};
+
 export interface ActionContext<T = void> {
     profiler?: Profiler | undefined;
     streamingContext: unknown;
+    readonly activityContext: ActivityContext | undefined;
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
 }

@@ -128,6 +128,11 @@ function getActionContext(
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,
+        activityContext:
+            // Only make activityContext available if the action is from the same agent.
+            context.activityContext?.appAgentName === appAgentName
+                ? structuredClone(context.activityContext)
+                : undefined,
         get sessionContext() {
             return sessionContext;
         },
@@ -778,21 +783,33 @@ export async function executeActions(
                         `Cannot start an activity when there are pending actions.`,
                     );
                 }
-                // TODO: validation
-                systemContext.activityContext = {
-                    appAgentName: getAppAgentName(
-                        executableAction.action.schemaName,
-                    ),
-                    ...result.activityContext,
-                };
-                systemContext.agents.toggleTransient(
-                    DispatcherActivityName,
-                    true,
-                );
+
+                if (result.activityContext === null) {
+                    clearActivityContext(systemContext);
+                } else {
+                    // TODO: validation
+                    systemContext.activityContext = {
+                        appAgentName: getAppAgentName(
+                            executableAction.action.schemaName,
+                        ),
+                        ...result.activityContext,
+                    };
+                    systemContext.agents.toggleTransient(
+                        DispatcherActivityName,
+                        true,
+                    );
+                }
             }
         }
         actionIndex++;
     }
+}
+
+export function clearActivityContext(
+    systemContext: CommandHandlerContext,
+): void {
+    systemContext.activityContext = undefined;
+    systemContext.agents.toggleTransient(DispatcherActivityName, false);
 }
 
 function getAdditionalExecutableActions(

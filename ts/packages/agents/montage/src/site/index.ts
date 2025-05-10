@@ -3,8 +3,8 @@
 
 //import { SearchInput } from "./searchInput";
 import {
+    AddPhotosAction,
     ChangeTitleAction,
-    FindPhotosAction,
     RemovePhotosAction,
     SelectPhotosAction,
 } from "../agent/montageActionSchema.js";
@@ -62,9 +62,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 break;
             }
 
-            case "findPhotos":
-            case "listPhotos": {
-                const msg: FindPhotosAction = action as FindPhotosAction;
+            case "addPhotos": {
+                const msg: AddPhotosAction = action as AddPhotosAction;
 
                 addImages(msg.parameters.files);
 
@@ -73,7 +72,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             case "changeTitle": {
                 const msg: ChangeTitleAction = action as ChangeTitleAction;
-                setTitle(msg.parameters.title);
+                setTitle(msg.parameters.newTitle);
                 break;
             }
 

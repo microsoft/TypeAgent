@@ -11,7 +11,7 @@ import {
     createDebugLoggerSink,
     createMongoDBLoggerSink,
 } from "telemetry";
-import { ActivityContext, AgentCache } from "agent-cache";
+import { AgentCache } from "agent-cache";
 import { randomUUID } from "crypto";
 import {
     DispatcherConfig,
@@ -33,7 +33,11 @@ import {
     ensureDirectory,
     lockInstanceDir,
 } from "../utils/fsUtils.js";
-import { ActionContext, AppAgentEvent } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    AppAgentEvent,
+    ActivityContext,
+} from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
 import {

@@ -380,7 +380,7 @@ async function handleListAction(
             );
             // TODO: formalize the schema for activityContext
             result.activityContext = {
-                activity: "edit",
+                activityName: "edit",
                 description: "editing list",
                 state: {
                     listName: action.parameters.listName,

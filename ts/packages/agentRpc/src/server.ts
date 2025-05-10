@@ -489,6 +489,7 @@ export function createAgentRpcServer(
         return {
             // streamingContext is only used by the agent, so it is not mirrored back to the dispatcher.
             streamingContext: undefined,
+            activityContext: param.activityContext,
             get sessionContext() {
                 return sessionContext;
             },

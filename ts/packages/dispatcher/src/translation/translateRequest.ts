@@ -6,9 +6,8 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { ActionContext } from "@typeagent/agent-sdk";
+import { ActionContext, ActivityContext } from "@typeagent/agent-sdk";
 import {
-    ActivityContext,
     createExecutableAction,
     ExecutableAction,
     HistoryContext,

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import express from "express";
+import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 import { WebPlanData, PlanNode, SSEEvent } from "../shared/types.js";
@@ -28,9 +29,7 @@ const planViewerPortIndex = 2;
 const port = portBase + planViewerPortIndex;
 
 // Type definitions for the server
-interface Client extends Response {
-    // Additional properties if needed for SSE clients
-}
+interface Client extends Response {}
 
 interface TransitionRequest {
     currentState: string;
@@ -99,6 +98,12 @@ const staticPlanData: WebPlanData = {
 };
 
 // Middleware
+const limiter = rateLimit({
+    windowMs: 60000,
+    max: 100,
+});
+
+app.use(limiter);
 app.use(express.static(path.join(__dirname, "..", "public")));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
@@ -111,27 +116,21 @@ app.get("/", (req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 });
 
-// SSE endpoint for real-time updates
 app.get("/api/events", (req: Request, res: Response) => {
-    // Set headers for SSE
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
-    // Send initial connection message
     res.write(`data: ${JSON.stringify({ type: "connected" })}\n\n`);
 
-    // Add client to the set
     const client = res as Client;
     clients.add(client);
 
-    // Handle client disconnect
     req.on("close", () => {
         clients.delete(client);
     });
 });
 
-// Function to send an update to all connected clients
 function broadcastUpdate(updateType: string, data: WebPlanData): void {
     const eventData: SSEEvent = {
         type: updateType,
@@ -146,7 +145,6 @@ function broadcastUpdate(updateType: string, data: WebPlanData): void {
     });
 }
 
-// API endpoint to get the current plan data
 app.get("/api/plan", (req: Request, res: Response) => {
     const viewMode = req.query.mode || "dynamic";
     if (viewMode === "static") {
@@ -452,7 +450,6 @@ app.post("/api/screenshot", (req: Request, res: Response) => {
     res.json(currentPlanData);
 });
 
-// Modify your reset endpoint to preserve title if requested
 app.post("/api/reset", (req: Request, res: Response) => {
     const preserveTitle = req.query.preserveTitle === "true";
     const currentTitle = dynamicPlanData.title;
@@ -467,6 +464,14 @@ app.post("/api/reset", (req: Request, res: Response) => {
     broadcastUpdate("reset", dynamicPlanData);
 
     res.json(dynamicPlanData);
+});
+
+process.send?.("Success");
+
+process.on("message", (message: any) => {});
+
+process.on("disconnect", () => {
+    process.exit(1);
 });
 
 app.listen(port, () => {
