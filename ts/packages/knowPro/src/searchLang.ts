@@ -13,6 +13,7 @@ import {
     createSearchOptions,
     hasConversationResults,
     runSearchQuery,
+    runSearchQueryText,
     SearchOptions,
     SearchQueryExpr,
 } from "./search.js";
@@ -62,8 +63,10 @@ export async function searchConversationWithLanguage(
     const searchQueryExprs = langQueryResult.data.queryExpressions;
     if (debugContext) {
         debugContext.searchQueryExpr = searchQueryExprs;
-        debugContext.usedRag = new Array<boolean>(searchQueryExprs.length);
-        debugContext.usedRag.fill(false);
+        debugContext.usedSimilarityFallback = new Array<boolean>(
+            searchQueryExprs.length,
+        );
+        debugContext.usedSimilarityFallback.fill(false);
     }
     let fallbackQueryExpr = compileFallbackQuery(
         langQueryResult.data.query,
@@ -87,22 +90,23 @@ export async function searchConversationWithLanguage(
             );
         }
         //
-        // If no matches and classic RAG fallback enabled
+        // If no matches and fallback enabled... run the raw query
         //
         if (
             !hasConversationResults(queryResult) &&
             searchQuery.rawQuery &&
-            options?.fallbackRagOptions
+            options.fallbackRagOptions
         ) {
-            const ragMatches = await searchConversationRag(
+            const ragOptions = { ...options, ...options.fallbackRagOptions };
+            const ragMatches = await runSearchQueryText(
                 conversation,
-                searchQuery.rawQuery,
-                options.fallbackRagOptions,
+                searchQuery,
+                ragOptions,
             );
             if (ragMatches) {
-                searchResults.push(ragMatches);
-                if (debugContext?.usedRag) {
-                    debugContext.usedRag![i] = true;
+                searchResults.push(...ragMatches);
+                if (debugContext?.usedSimilarityFallback) {
+                    debugContext.usedSimilarityFallback![i] = true;
                 }
             }
         } else {
@@ -209,7 +213,11 @@ export type LanguageSearchDebugContext = {
      * What searchQuery was compiled into
      */
     searchQueryExpr?: SearchQueryExpr[] | undefined;
-    usedRag?: boolean[] | undefined;
+    /**
+     * For each expr in searchQueryExpr, returns if a raw text similarity match
+     * was used
+     */
+    usedSimilarityFallback?: boolean[] | undefined;
 };
 
 export function compileSearchQuery(
@@ -267,9 +275,10 @@ export async function searchConversationRag(
 }
 
 export type LanguageSearchRagOptions = {
+    // Same properties as SearchOptions
     maxMessageMatches?: number | undefined;
-    thresholdScore?: number | undefined;
     maxCharsInBudget?: number | undefined;
+    thresholdScore?: number | undefined;
 };
 
 class SearchQueryCompiler {

@@ -1310,7 +1310,7 @@ export class SelectMessagesInCharBudget extends QueryOpExpr<MessageAccumulator> 
     }
 }
 
-export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
+export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator> {
     constructor(
         public srcExpr: IQueryOpExpr<MessageAccumulator>,
         public embedding: NormalizedEmbedding,
@@ -1318,6 +1318,7 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
          * (Optional): Only select top maxMessages with best rank
          */
         public maxMessages?: number | undefined,
+        public thresholdScore?: number | undefined,
     ) {
         super();
     }
@@ -1339,6 +1340,7 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
                 this.embedding,
                 messageOrdinals,
                 this.maxMessages,
+                this.thresholdScore,
             );
             matches.clearMatches();
             for (const match of rankedMessages) {
@@ -1349,7 +1351,7 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
     }
 }
 
-export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
+export class GetScoredMessagesExpr extends QueryOpExpr<ScoredMessageOrdinal[]> {
     constructor(public srcExpr: IQueryOpExpr<MessageAccumulator>) {
         super();
     }
@@ -1496,11 +1498,15 @@ export class MatchMessagesBySimilarityExpr extends QueryOpExpr<
         public embedding: NormalizedEmbedding,
         public maxMessages?: number | undefined,
         public thresholdScore?: number | undefined,
+        public getScopeExpr?: GetScopeExpr | undefined,
     ) {
         super();
     }
 
     public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
+        if (this.getScopeExpr) {
+            context.textRangesInScope = this.getScopeExpr.eval(context);
+        }
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
         const rangesInScope = context.textRangesInScope;
