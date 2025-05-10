@@ -28,11 +28,11 @@ export class SqliteCollection<T, TOrdinal extends number>
         if (ensureExists) {
             this.ensureDb();
         }
-        this.count = this.loadCount();
         this.sql_get = this.sqlGet();
         this.sql_append = this.sqlAppend();
         this.sql_getAll = this.sqlGetAll();
         this.sql_slice = this.sqlSlice();
+        this.count = this.loadCount();
     }
 
     public get isPersistent(): boolean {

@@ -314,3 +314,32 @@ export class TopNCollection<T = number> {
         this._items[i] = item;
     }
 }
+
+export function createTopNListAll<T>(): TopNList<T> {
+    let items: ScoredItem<T>[] = [];
+
+    return {
+        push,
+        byRank,
+        valuesByRank,
+        reset,
+    };
+
+    function push(item: T, score: number): void {
+        items.push({ item, score });
+    }
+
+    function byRank(): ScoredItem<T>[] {
+        items.sort((x, y) => y.score! - x.score!);
+        return items;
+    }
+
+    function valuesByRank(): T[] {
+        const ranked = byRank();
+        return ranked.map((r) => r.item);
+    }
+
+    function reset(): void {
+        items = [];
+    }
+}
