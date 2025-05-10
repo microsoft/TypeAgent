@@ -89,14 +89,14 @@ export type ConversationSearchResult = {
  * Search a conversation for messages and knowledge that match the supplied search terms
  * @param conversation Conversation to search
  * @param searchTermGroup a group of search terms to match
- * @param filter conditional filter to scope what messages and knowledge are matched
+ * @param whenFilter conditional filter to scope what messages and knowledge are matched
  * @param options search options
  * @returns
  */
 export async function searchConversation(
     conversation: IConversation,
     searchTermGroup: SearchTermGroup,
-    filter?: WhenFilter,
+    whenFilter?: WhenFilter,
     options?: SearchOptions,
     rawSearchQuery?: string,
 ): Promise<ConversationSearchResult | undefined> {
@@ -104,7 +104,7 @@ export async function searchConversation(
     const knowledgeMatches = await searchConversationKnowledge(
         conversation,
         searchTermGroup,
-        filter,
+        whenFilter,
         options,
     );
     if (!knowledgeMatches) {
@@ -136,14 +136,14 @@ export async function searchConversation(
  * Search a conversation for knowledge that matches the given search terms
  * @param conversation Conversation to search
  * @param searchTermGroup a group of search terms to match
- * @param filter conditional filter to scope what messages and knowledge are matched
+ * @param whenFilter conditional filter to scope what messages and knowledge are matched
  * @param options search options
  * @returns
  */
 export async function searchConversationKnowledge(
     conversation: IConversation,
     searchTermGroup: SearchTermGroup,
-    filter?: WhenFilter,
+    whenFilter?: WhenFilter,
     options?: SearchOptions,
 ): Promise<Map<KnowledgeType, SemanticRefSearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
@@ -156,16 +156,26 @@ export async function searchConversationKnowledge(
     );
     const query = await queryBuilder.compileKnowledgeQuery(
         searchTermGroup,
-        filter,
+        whenFilter,
         options,
     );
     return runQuery(conversation, options, query);
 }
 
-export async function searchConversationMessages(
+/**
+ * Search the conversation messages using similarity to the provided text
+ * Found messages can be filtered by date ranges and other scoping provided
+ * in the filter
+ * @param conversation
+ * @param queryText
+ * @param whenFilter
+ * @param options
+ * @returns
+ */
+export async function searchConversationByTextSimilarity(
     conversation: IConversation,
     queryText: string,
-    filter?: WhenFilter,
+    whenFilter?: WhenFilter,
     options?: SearchOptions,
 ): Promise<ConversationSearchResult | undefined> {
     options ??= createSearchOptions();
@@ -176,7 +186,7 @@ export async function searchConversationMessages(
     );
     const query = await queryBuilder.compileMessageSimilarityQuery(
         queryText,
-        filter,
+        whenFilter,
         options,
     );
     const messageMatches: ScoredMessageOrdinal[] =
@@ -225,7 +235,7 @@ export async function runSearchQueryText(
     const results: ConversationSearchResult[] = [];
     for (const expr of query.selectExpressions) {
         if (query.rawQuery) {
-            const searchResults = await searchConversationMessages(
+            const searchResults = await searchConversationByTextSimilarity(
                 conversation,
                 query.rawQuery,
                 expr.when,
