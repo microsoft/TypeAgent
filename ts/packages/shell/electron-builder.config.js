@@ -61,9 +61,10 @@ export default {
         notarize: false,
     },
     linux: {
-        target: ["AppImage", "snap", "deb"],
+        target: ["deb"],
         maintainer: "Microsoft Corporation",
         category: "Utility",
+        executableName: name,
         // electron-builder missed the `.so.42` suffix as binary files.
         asarUnpack: ["node_modules/@img/sharp-libvips-linux*/**/*"],
     },

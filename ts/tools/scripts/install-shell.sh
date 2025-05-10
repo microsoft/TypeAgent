@@ -7,7 +7,7 @@ function download_yml() {
     az storage blob download --account-name $STORAGE --container-name $CONTAINER --name $1 --file $DEST/$1 --overwrite --auth-mode login > $DEST/install-shell.log 2>&1
     if [[ $? != 0 ]]; then
         error "Failed to download $1 from $STORAGE/$CONTAINER"
-        erorr "Ensure you that you are logged into azure cli with 'az login' and have access to the storage account."
+        error "Ensure you that you are logged into azure cli with 'az login' and have access to the storage account."
         cat $DEST/install-shell.log    
         return 1
     fi
@@ -25,7 +25,21 @@ function download_package() {
     return 0
 }
 
-function install_package() {
+function install_package_linux() {
+    info "Installing $1"
+    sudo apt install -y "$DEST/$1" > $DEST/install-shell.log 2>&1
+    if [[ $? != 0 ]]; then
+        error "Failed to install $1"
+        cat $DEST/install-shell.log    
+        return 1
+    fi
+    typeagentshell
+    success "$1 installed successfully."
+    success "TypeAgent Shell will start automatically."
+
+}
+
+function install_package_mac() {
     info "Installing $1"
     unzip -o "$DEST/$1" -d "/Applications" > $DEST/install-shell.log 2>&1
     if [[ $? != 0 ]]; then
@@ -59,7 +73,9 @@ function error() (
 )
 
 function cleanup() {
+    info "Cleaning up..."
     rm -rf $DEST > /dev/null 2>&1
+ 
 }
 
 if [[ "$1" == "" ]]; then
@@ -135,7 +151,12 @@ if [[ $? != 0 ]]; then
     exit 1
 fi
 
-install_package "$PACKAGE"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # Mac OSX
+    install_package_mac "$PACKAGE"
+else
+    install_package_linux "$PACKAGE"
+fi
 if [[ $? != 0 ]]; then
     cleanup
     exit 1
