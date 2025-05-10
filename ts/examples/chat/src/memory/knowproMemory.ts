@@ -613,7 +613,7 @@ export async function createKnowproCommands(
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
-        def.options!.fallback = argBool("Fallback to rag", true);
+        def.options!.fallback = argBool("Fallback to rag", false);
         def.options!.fastStop = argBool(
             "Ignore messages if knowledge produces answers",
             true,
@@ -641,7 +641,7 @@ export async function createKnowproCommands(
             options.fallbackRagOptions = {
                 maxMessageMatches: options.maxMessageMatches,
                 maxCharsInBudget: options.maxMessageCharsInBudget,
-                thresholdScore: 0.8,
+                thresholdScore: 0.7,
             };
         }
 
