@@ -49,7 +49,7 @@ def test_conversation_index_remove_term(conversation_index: ConversationIndex):
     conversation_index.remove_term("example", 1)
     result = conversation_index.lookup_term("example")
     assert result is not None
-    assert len(result) == 1
+    assert len(result) == 0
 
 
 def test_conversation_index_remove_term_if_empty(conversation_index: ConversationIndex):
