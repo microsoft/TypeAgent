@@ -58,7 +58,7 @@ export type SearchFilter = {
     entitySearchTerms?: EntityTerm[];
     // searchTerms:
     // Concepts, topics or other terms that don't fit ActionTerms or EntityTerms
-    // - Remove generic terms like "topic/s", "subject", "discussion" etc
+    // - Do not use noisy searchTerms like "topic", "topics", "subject", "discussion" etc. even if they are mentioned in the user request
     // - Phrases like 'email address' or 'first name' are a single term
     // - use empty searchTerms array when use asks for summaries
     searchTerms?: string[];

@@ -337,6 +337,7 @@ class SearchQueryCompiler {
         filter: querySchema.SearchFilter,
     ): SearchTermGroup {
         const termGroup = createOrTermGroup();
+
         this.entityTermsAdded.clear();
         if (isEntityTermArray(filter.entitySearchTerms)) {
             this.compileEntityTerms(filter.entitySearchTerms, termGroup);
@@ -354,7 +355,14 @@ class SearchQueryCompiler {
             );
         }
         if (filter.searchTerms) {
-            this.compileSearchTerms(filter.searchTerms, termGroup);
+            if (filter.searchTerms.length > 0) {
+                this.compileSearchTerms(filter.searchTerms, termGroup);
+            } else if (termGroup.terms.length === 0) {
+                // Summary
+                termGroup.terms.push(
+                    createPropertySearchTerm(PropertyNames.Topic, Wildcard),
+                );
+            }
         }
         return termGroup;
     }
