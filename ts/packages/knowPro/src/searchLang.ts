@@ -76,16 +76,19 @@ export async function searchConversationWithLanguage(
     const searchResults: ConversationSearchResult[] = [];
     for (let i = 0; i < searchQueryExprs.length; ++i) {
         const searchQuery = searchQueryExprs[i];
+        const fallbackQuery = fallbackQueryExpr
+            ? fallbackQueryExpr[i]
+            : undefined;
         let queryResult = await runSearchQuery(
             conversation,
             searchQuery,
             options,
         );
-        if (!hasConversationResults(queryResult) && fallbackQueryExpr) {
+        if (!hasConversationResults(queryResult) && fallbackQuery) {
             // Rerun the query but with verb matching turned off for scopes
             queryResult = await runSearchQuery(
                 conversation,
-                fallbackQueryExpr[i],
+                fallbackQuery,
                 options,
             );
         }
@@ -97,11 +100,11 @@ export async function searchConversationWithLanguage(
             searchQuery.rawQuery &&
             options.fallbackRagOptions
         ) {
-            const ragOptions = { ...options, ...options.fallbackRagOptions };
+            const textSearchOptions = createTextQueryOptions(options);
             const ragMatches = await runSearchQueryText(
                 conversation,
-                searchQuery,
-                ragOptions,
+                fallbackQuery ?? searchQuery,
+                textSearchOptions,
             );
             if (ragMatches) {
                 searchResults.push(...ragMatches);
@@ -130,6 +133,16 @@ export async function searchConversationWithLanguage(
             });
         }
         return undefined;
+    }
+
+    function createTextQueryOptions(
+        options: LanguageSearchOptions,
+    ): SearchOptions {
+        const ragOptions: SearchOptions = {
+            ...options,
+            ...options.fallbackRagOptions,
+        };
+        return ragOptions;
     }
 }
 
