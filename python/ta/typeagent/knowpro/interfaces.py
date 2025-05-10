@@ -739,17 +739,17 @@ class IndexingResults:
 # --------
 
 
-class IReadonlyCollection[T, TOrdinal](Iterable, Protocol):
+class IReadonlyCollection[T, TOrdinal](Iterable[T], Protocol):
     def __len__(self) -> int:
         raise NotImplementedError
 
     @overload
-    def __getitem__(self, ordinal: TOrdinal) -> T: ...
+    def __getitem__(self, arg: TOrdinal) -> T: ...
     @overload
-    def __getitem__(self, slice: slice) -> list[T]: ...
+    def __getitem__(self, arg: slice) -> list[T]: ...
     @overload
-    def __getitem__(self, ordinals: list[TOrdinal]) -> list[T]: ...
-    def __getitem__(self, arg: TOrdinal | slice | list[TOrdinal]) -> T | list[T]:  # type: ignore
+    def __getitem__(self, arg: list[TOrdinal]) -> list[T]: ...
+    def __getitem__(self, arg: Any) -> Any:
         raise NotImplementedError
 
 

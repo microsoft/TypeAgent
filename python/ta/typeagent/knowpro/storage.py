@@ -14,7 +14,7 @@ from typing import (
 )
 from dataclasses import dataclass
 
-from .interfaces import ICollection, IMessage, SemanticRef
+from .interfaces import ICollection, IMessage, SemanticRef, SemanticRefOrdinal
 
 T = TypeVar("T")
 TOrdinal = TypeVar("TOrdinal", bound=int)
@@ -68,17 +68,19 @@ class Collection[T, TOrdinal: int](ICollection[T, TOrdinal]):
         self.items.extend(items)
 
 
-class SemanticRefCollection(Collection["SemanticRef", int]):
+class SemanticRefCollection(
+    Collection[SemanticRef, SemanticRefOrdinal], ICollection[SemanticRef, int]
+):
     """A collection of semantic references."""
 
-    def __init__(self, semantic_refs: Optional[list["SemanticRef"]] = None):
+    def __init__(self, semantic_refs: list[SemanticRef] | None = None):
         super().__init__(semantic_refs)
 
 
 class MessageCollection(Collection["IMessage", int]):
     """A collection of messages."""
 
-    def __init__(self, messages: Optional[list["IMessage"]] = None):
+    def __init__(self, messages: list[IMessage] | None = None):
         super().__init__(messages)
 
 

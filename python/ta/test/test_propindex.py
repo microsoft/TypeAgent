@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, overload
 
 import pytest
 
@@ -220,13 +220,15 @@ class TestBaseCollection[T, TOrdinal: int](ICollection[T, int]):
     def __iter__(self) -> Iterator[T]:
         return iter(self.items)
 
-    def __getitem__(self, ordinal: Any) -> Any:
-        if isinstance(ordinal, slice):
-            return self._get_slice(ordinal.start, ordinal.stop)
-        if isinstance(ordinal, int):
-            return self._get(ordinal)
-        if isinstance(ordinal, list):
-            return self._get_multiple(ordinal)
+    def __getitem__(self, arg: Any) -> Any:
+        if isinstance(arg, int):
+            return self._get(arg)
+        if isinstance(arg, slice):
+            assert arg.step in (None, 1)
+            return self._get_slice(arg.start, arg.stop)
+        if isinstance(arg, list):
+            return self._get_multiple(arg)
+        raise TypeError(f"Invalid argument type for __getitem__: {type(arg)}")
 
     def _get(self, ordinal: int) -> T:
         return self.items[ordinal]
@@ -238,7 +240,7 @@ class TestBaseCollection[T, TOrdinal: int](ICollection[T, int]):
     def is_persistent(self) -> bool:
         return False
 
-    def _get_slice(self, start, end) -> list[T]:
+    def _get_slice(self, start: int, end: int) -> list[T]:
         return self.items[start:end]
 
     def append(self, *items: T) -> None:
