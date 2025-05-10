@@ -84,7 +84,8 @@ export async function createKnowproCommands(
     commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
-    commands.kpPodcastRag = podcastRag;
+    commands.kpSearchRag = searchRag;
+    commands.kpAnswerRag = answerRag;
     commands.kpEntities = entities;
     commands.kpTopics = topics;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
@@ -613,7 +614,10 @@ export async function createKnowproCommands(
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
-        def.options!.fallback = argBool("Fallback to rag", false);
+        def.options!.fallback = argBool(
+            "Fallback to text similarity matching",
+            true,
+        );
         def.options!.fastStop = argBool(
             "Ignore messages if knowledge produces answers",
             true,
@@ -640,7 +644,7 @@ export async function createKnowproCommands(
         if (namedArgs.fallback) {
             options.fallbackRagOptions = {
                 maxMessageMatches: options.maxMessageMatches,
-                maxCharsInBudget: options.maxMessageCharsInBudget,
+                maxCharsInBudget: options.maxCharsInBudget,
                 thresholdScore: 0.7,
             };
         }
@@ -701,7 +705,7 @@ export async function createKnowproCommands(
             if (answerResult.success) {
                 context.printer.writeAnswer(
                     answerResult.data,
-                    debugContext.usedRag![i],
+                    debugContext.usedSimilarityFallback![i],
                 );
             } else {
                 context.printer.writeError(answerResult.message);
@@ -747,43 +751,82 @@ export async function createKnowproCommands(
         return true;
     }
 
-    function ragDef(): CommandMetadata {
+    function searchRagDef(): CommandMetadata {
         return {
-            description: "Classic rag",
+            description: "Text similarity search",
             args: {
                 query: arg("Search query"),
             },
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
-                minScore: argNum("Min threshold score"),
+                minScore: argNum("Min threshold score", 0.7),
             },
         };
     }
-    commands.kpPodcastRag.metadata = ragDef();
-    async function podcastRag(args: string[]): Promise<void> {
+    commands.kpSearchRag.metadata = searchRagDef();
+    async function searchRag(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
-        const messageIndex =
-            context.conversation?.secondaryIndexes?.messageIndex;
-        if (!messageIndex) {
-            context.printer.writeError(
-                "No message text index. Run kpPodcastBuildMessageIndex",
+        const namedArgs = parseNamedArguments(args, searchRagDef());
+        const matches = await kp.searchConversationRag(
+            context.conversation!,
+            namedArgs.query,
+            {
+                thresholdScore: namedArgs.minScore,
+            },
+        );
+        if (matches !== undefined) {
+            context.printer.writeConversationSearchResult(
+                context.conversation!,
+                matches,
+                false,
+                true,
+                namedArgs.maxToDisplay,
+                true,
             );
+        } else {
+            context.printer.writeLine("No matches");
+        }
+    }
+
+    function answerRagDef(): CommandMetadata {
+        const def = searchRagDef();
+        def.description = "Answer using classic RAG";
+        return def;
+    }
+    commands.kpAnswerRag.metadata = answerRagDef();
+    async function answerRag(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, ragDef());
-        const matches = await messageIndex.lookupMessages(
+        const namedArgs = parseNamedArguments(args, answerRagDef());
+        const searchResult = await kp.searchConversationRag(
+            context.conversation!,
             namedArgs.query,
-            undefined,
-            namedArgs.minScore,
+            {
+                thresholdScore: namedArgs.minScore,
+            },
         );
-        if (matches.length > 0) {
-            context.printer.writeScoredMessages(
-                matches,
-                context.conversation?.messages!,
-                namedArgs.maxToDisplay,
+        if (searchResult !== undefined) {
+            const answerResult = await kp.generateAnswer(
+                context.conversation!,
+                context.answerGenerator,
+                searchResult.rawSearchQuery ?? namedArgs.query,
+                searchResult,
+                (chunk, _, result) => {
+                    if (namedArgs.debug) {
+                        context.printer.writeLine();
+                        context.printer.writeJsonInColor(chalk.gray, chunk);
+                    }
+                },
             );
+            context.printer.writeLine();
+            if (answerResult.success) {
+                context.printer.writeAnswer(answerResult.data, true);
+            } else {
+                context.printer.writeError(answerResult.message);
+            }
         } else {
             context.printer.writeLine("No matches");
         }
@@ -1058,7 +1101,7 @@ export async function createKnowproCommands(
         options.exactMatch = namedArgs.exact;
         options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
-        options.maxMessageCharsInBudget = namedArgs.charBudget;
+        options.maxCharsInBudget = namedArgs.charBudget;
         return options;
     }
 

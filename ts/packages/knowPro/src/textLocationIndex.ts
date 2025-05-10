@@ -12,6 +12,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { NormalizedEmbedding } from "typeagent";
+import { Scored } from "./common.js";
 
 export type ScoredTextLocation = {
     score: number;
@@ -151,6 +152,21 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         });
     }
 
+    public lookupByEmbedding(
+        textEmbedding: NormalizedEmbedding,
+        maxMatches?: number,
+        thresholdScore?: number,
+        predicate?: (messageOrdinal: number) => boolean,
+    ): ScoredTextLocation[] {
+        const matches = this.embeddingIndex.getIndexesOfNearest(
+            textEmbedding,
+            maxMatches,
+            thresholdScore,
+            predicate,
+        );
+        return this.toScoredLocations(matches);
+    }
+
     public lookupInSubsetByEmbedding(
         textEmbedding: NormalizedEmbedding,
         ordinalsToSearch: number[],
@@ -163,12 +179,7 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
             maxMatches,
             thresholdScore,
         );
-        return matches.map((m) => {
-            return {
-                textLocation: this.textLocations[m.item],
-                score: m.score,
-            };
-        });
+        return this.toScoredLocations(matches);
     }
 
     public clear(): void {
@@ -191,6 +202,15 @@ export class TextToTextLocationIndex implements ITextToTextLocationIndex {
         }
         this.textLocations = data.textLocations;
         this.embeddingIndex.deserialize(data.embeddings);
+    }
+
+    private toScoredLocations(matches: Scored[]): ScoredTextLocation[] {
+        return matches.map((m) => {
+            return {
+                textLocation: this.textLocations[m.item],
+                score: m.score,
+            };
+        });
     }
 }
 

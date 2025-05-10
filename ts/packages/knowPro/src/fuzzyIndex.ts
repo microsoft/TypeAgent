@@ -6,15 +6,18 @@ import {
     generateTextEmbeddingsWithRetry,
     generateEmbedding,
     generateTextEmbeddings,
-    indexesOfNearest,
-    SimilarityType,
-    indexesOfAllNearest,
     createTopNList,
+    createTopNListAll,
+    dotProduct,
 } from "typeagent";
 import { TextEmbeddingModel } from "aiclient";
 import * as levenshtein from "fast-levenshtein";
 import { Scored } from "./common.js";
-import { ListIndexingResult, IndexingEventHandlers } from "./interfaces.js";
+import {
+    ListIndexingResult,
+    IndexingEventHandlers,
+    MessageOrdinal,
+} from "./interfaces.js";
 import { error, Result, success } from "typechat";
 
 export interface IEmbeddingIndex {
@@ -60,12 +63,14 @@ export class EmbeddingIndex {
         embedding: NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
+        predicate?: (messageOrdinal: number) => boolean,
     ): Scored[] {
         return this.indexesOfNearest(
             this.embeddings,
             embedding,
             maxMatches,
             minScore,
+            predicate,
         );
     }
 
@@ -127,25 +132,55 @@ export class EmbeddingIndex {
         embedding: NormalizedEmbedding,
         maxMatches?: number,
         minScore?: number,
+        predicate?: (messageOrdinal: number) => boolean,
     ): Scored[] {
-        let matches: Scored[];
-        if (maxMatches && maxMatches > 0) {
-            matches = indexesOfNearest(
-                embeddingsToSearch,
-                embedding,
-                maxMatches,
-                SimilarityType.Dot,
-                minScore,
-            );
-        } else {
-            matches = indexesOfAllNearest(
-                embeddingsToSearch,
-                embedding,
-                SimilarityType.Dot,
-                minScore,
-            );
-        }
+        minScore ??= 0;
+        const matches = this.indexesOfNearestFiltered(
+            embeddingsToSearch,
+            embedding,
+            maxMatches,
+            minScore,
+            predicate,
+        );
         return matches;
+    }
+
+    private indexesOfNearestFiltered(
+        list: NormalizedEmbedding[],
+        other: NormalizedEmbedding,
+        maxMatches?: number,
+        minScore?: number,
+        predicate?: (messageOrdinal: number) => boolean,
+    ): Scored[] {
+        minScore ??= 0;
+        const matches =
+            maxMatches && maxMatches > 0
+                ? createTopNList<MessageOrdinal>(maxMatches)
+                : createTopNListAll<MessageOrdinal>();
+        if (predicate !== undefined) {
+            for (
+                let messageOrdinal = 0;
+                messageOrdinal < list.length;
+                ++messageOrdinal
+            ) {
+                const score: number = dotProduct(list[messageOrdinal], other);
+                if (score >= minScore && predicate(messageOrdinal)) {
+                    matches.push(messageOrdinal, score);
+                }
+            }
+        } else {
+            for (
+                let messageOrdinal = 0;
+                messageOrdinal < list.length;
+                ++messageOrdinal
+            ) {
+                const score: number = dotProduct(list[messageOrdinal], other);
+                if (score >= minScore) {
+                    matches.push(messageOrdinal, score);
+                }
+            }
+        }
+        return matches.byRank();
     }
 }
 

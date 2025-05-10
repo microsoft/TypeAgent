@@ -39,6 +39,7 @@ import {
     isPropertyTerm,
     isSearchGroupTerm,
 } from "./compileLib.js";
+import { NormalizedEmbedding } from "typeagent";
 
 /**
  * A Search Query expr consists:
@@ -60,7 +61,8 @@ export interface SearchOptions {
      * The query processor will ensure that the cumulative character count of message matches
      * is less than this number
      */
-    maxMessageCharsInBudget?: number | undefined;
+    maxCharsInBudget?: number | undefined;
+    thresholdScore?: number | undefined;
 }
 
 export function createSearchOptions(): SearchOptions {
@@ -87,14 +89,14 @@ export type ConversationSearchResult = {
  * Search a conversation for messages and knowledge that match the supplied search terms
  * @param conversation Conversation to search
  * @param searchTermGroup a group of search terms to match
- * @param filter conditional filter to scope what messages and knowledge are matched
+ * @param whenFilter conditional filter to scope what messages and knowledge are matched
  * @param options search options
  * @returns
  */
 export async function searchConversation(
     conversation: IConversation,
     searchTermGroup: SearchTermGroup,
-    filter?: WhenFilter,
+    whenFilter?: WhenFilter,
     options?: SearchOptions,
     rawSearchQuery?: string,
 ): Promise<ConversationSearchResult | undefined> {
@@ -102,7 +104,7 @@ export async function searchConversation(
     const knowledgeMatches = await searchConversationKnowledge(
         conversation,
         searchTermGroup,
-        filter,
+        whenFilter,
         options,
     );
     if (!knowledgeMatches) {
@@ -134,14 +136,14 @@ export async function searchConversation(
  * Search a conversation for knowledge that matches the given search terms
  * @param conversation Conversation to search
  * @param searchTermGroup a group of search terms to match
- * @param filter conditional filter to scope what messages and knowledge are matched
+ * @param whenFilter conditional filter to scope what messages and knowledge are matched
  * @param options search options
  * @returns
  */
 export async function searchConversationKnowledge(
     conversation: IConversation,
     searchTermGroup: SearchTermGroup,
-    filter?: WhenFilter,
+    whenFilter?: WhenFilter,
     options?: SearchOptions,
 ): Promise<Map<KnowledgeType, SemanticRefSearchResult> | undefined> {
     if (!q.isConversationSearchable(conversation)) {
@@ -154,10 +156,46 @@ export async function searchConversationKnowledge(
     );
     const query = await queryBuilder.compileKnowledgeQuery(
         searchTermGroup,
-        filter,
+        whenFilter,
         options,
     );
     return runQuery(conversation, options, query);
+}
+
+/**
+ * Search the conversation messages using similarity to the provided text
+ * Found messages can be filtered by date ranges and other scoping provided
+ * in the filter
+ * @param conversation
+ * @param queryText
+ * @param whenFilter
+ * @param options
+ * @returns
+ */
+export async function searchConversationByTextSimilarity(
+    conversation: IConversation,
+    queryText: string,
+    whenFilter?: WhenFilter,
+    options?: SearchOptions,
+): Promise<ConversationSearchResult | undefined> {
+    options ??= createSearchOptions();
+    // Future: Combine knowledge and message queries into single query tree
+    const queryBuilder = new QueryCompiler(
+        conversation,
+        conversation.secondaryIndexes ?? {},
+    );
+    const query = await queryBuilder.compileMessageSimilarityQuery(
+        queryText,
+        whenFilter,
+        options,
+    );
+    const messageMatches: ScoredMessageOrdinal[] =
+        query !== undefined ? runQuery(conversation, options, query) : [];
+    return {
+        messageMatches,
+        knowledgeMatches: new Map(),
+        rawSearchQuery: queryText,
+    };
 }
 
 /**
@@ -183,6 +221,29 @@ export async function runSearchQuery(
         );
         if (searchResults) {
             results.push(searchResults);
+        }
+    }
+    return results;
+}
+
+export async function runSearchQueryText(
+    conversation: IConversation,
+    query: SearchQueryExpr,
+    options?: SearchOptions,
+): Promise<ConversationSearchResult[]> {
+    options ??= createSearchOptions();
+    const results: ConversationSearchResult[] = [];
+    for (const expr of query.selectExpressions) {
+        if (query.rawQuery) {
+            const searchResults = await searchConversationByTextSimilarity(
+                conversation,
+                query.rawQuery,
+                expr.when,
+                options,
+            );
+            if (searchResults) {
+                results.push(searchResults);
+            }
         }
     }
     return results;
@@ -280,20 +341,30 @@ class QueryCompiler {
             query = await this.compileMessageReRank(
                 query,
                 rawQueryText,
-                options.maxMessageMatches,
+                options,
             );
-            if (
-                options.maxMessageCharsInBudget &&
-                options.maxMessageCharsInBudget > 0
-            ) {
+            if (options.maxCharsInBudget && options.maxCharsInBudget > 0) {
                 query = new q.SelectMessagesInCharBudget(
                     query,
-                    options.maxMessageCharsInBudget,
+                    options.maxCharsInBudget,
                 );
             }
         }
-        query = new q.GetScoredMessages(query);
+        query = new q.GetScoredMessagesExpr(query);
         return query;
+    }
+
+    public async compileMessageSimilarityQuery(
+        query: string | NormalizedEmbedding,
+        whenFilter?: WhenFilter,
+        options?: SearchOptions,
+    ): Promise<IQueryOpExpr | undefined> {
+        const messageIndex = this.conversation.secondaryIndexes?.messageIndex;
+        if (messageIndex !== undefined) {
+            const scopeExpr = await this.compileScope(undefined, whenFilter);
+            return this.compileMessageSimilarity(query, scopeExpr, options);
+        }
+        return undefined;
     }
 
     private async compileQuery(
@@ -433,7 +504,7 @@ class QueryCompiler {
     }
 
     private async compileScope(
-        searchGroup: SearchTermGroup,
+        termGroup?: SearchTermGroup,
         filter?: WhenFilter | undefined,
     ): Promise<q.GetScopeExpr | undefined> {
         let scopeSelectors: q.IQueryTextRangeSelector[] | undefined;
@@ -454,10 +525,10 @@ class QueryCompiler {
                 filter.scopeDefiningTerms,
                 scopeSelectors,
             );
-        } else {
+        } else if (termGroup) {
             // Treat any actions as inherently scope selecting.
             let actionTermsGroup =
-                this.getActionTermsFromSearchGroup(searchGroup);
+                this.getActionTermsFromSearchGroup(termGroup);
             if (actionTermsGroup !== undefined) {
                 scopeSelectors ??= [];
                 this.addTermsScopeSelector(actionTermsGroup, scopeSelectors);
@@ -516,30 +587,58 @@ class QueryCompiler {
 
     private async compileMessageReRank(
         srcExpr: IQueryOpExpr<MessageAccumulator>,
-        rawQueryText?: string | undefined,
-        maxMessageMatches?: number | undefined,
+        rawQueryText?: string,
+        options?: SearchOptions,
     ): Promise<IQueryOpExpr> {
         const messageIndex = this.conversation.secondaryIndexes?.messageIndex;
         if (
             messageIndex &&
             rawQueryText &&
-            maxMessageMatches &&
-            maxMessageMatches > 0 &&
             isMessageTextEmbeddingIndex(messageIndex)
         ) {
             // If embeddings supported, and there are too many matches, try to re-rank using similarity matching
             const embedding =
                 await messageIndex.generateEmbedding(rawQueryText);
-            return new q.RankMessagesBySimilarity(
+            return new q.RankMessagesBySimilarityExpr(
                 srcExpr,
                 embedding,
-                maxMessageMatches,
+                options?.maxMessageMatches,
+                options?.thresholdScore,
             );
-        } else if (maxMessageMatches && maxMessageMatches > 0) {
-            return new q.SelectTopNExpr(srcExpr, maxMessageMatches);
+        } else if (
+            options?.maxMessageMatches !== undefined &&
+            options.maxMessageMatches > 0
+        ) {
+            return new q.SelectTopNExpr(srcExpr, options.maxMessageMatches);
         } else {
             return new q.NoOpExpr(srcExpr);
         }
+    }
+
+    private async compileMessageSimilarity(
+        query: string | NormalizedEmbedding,
+        scopeExpr?: q.GetScopeExpr,
+        options?: SearchOptions,
+    ): Promise<IQueryOpExpr | undefined> {
+        const messageIndex = this.conversation.secondaryIndexes?.messageIndex;
+        if (messageIndex !== undefined) {
+            // If embeddings supported, and there are too many matches, try to re-rank using similarity matching
+            const embedding =
+                typeof query === "string"
+                    ? isMessageTextEmbeddingIndex(messageIndex)
+                        ? await messageIndex.generateEmbedding(query)
+                        : undefined
+                    : query;
+            if (embedding) {
+                return new q.MatchMessagesBySimilarityExpr(
+                    embedding,
+                    options?.maxMessageMatches,
+                    options?.thresholdScore,
+                    scopeExpr,
+                );
+            }
+        }
+        return undefined;
     }
 
     private getActionTermsFromSearchGroup(

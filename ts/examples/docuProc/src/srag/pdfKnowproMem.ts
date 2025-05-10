@@ -554,7 +554,7 @@ export async function createKnowproCommands(
         if (namedArgs.fallback) {
             options.fallbackRagOptions = {
                 maxMessageMatches: options.maxMessageMatches,
-                maxCharsInBudget: options.maxMessageCharsInBudget,
+                maxCharsInBudget: options.maxCharsInBudget,
                 thresholdScore: 0.8,
             };
         }
@@ -650,7 +650,7 @@ export async function createKnowproCommands(
         options.exactMatch = namedArgs.exact;
         options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
-        options.maxMessageCharsInBudget = namedArgs.charBudget;
+        options.maxCharsInBudget = namedArgs.charBudget;
         return options;
     }
 

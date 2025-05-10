@@ -49,7 +49,10 @@ import { collections, NormalizedEmbedding } from "typeagent";
 import { facetValueToString } from "./knowledgeLib.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
 import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
-import { textRangesFromMessageOrdinals } from "./message.js";
+import {
+    textRangeFromMessageChunk,
+    textRangesFromMessageOrdinals,
+} from "./message.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
     return (
@@ -472,8 +475,8 @@ export class QueryEvalContext {
     }
 
     public getMessageForRef(semanticRef: SemanticRef): IMessage {
-        const messageIndex = semanticRef.range.start.messageOrdinal;
-        return this.conversation.messages.get(messageIndex);
+        const messageOrdinal = semanticRef.range.start.messageOrdinal;
+        return this.conversation.messages.get(messageOrdinal);
     }
 
     public getMessage(messageOrdinal: MessageOrdinal): IMessage {
@@ -1307,7 +1310,7 @@ export class SelectMessagesInCharBudget extends QueryOpExpr<MessageAccumulator> 
     }
 }
 
-export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
+export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator> {
     constructor(
         public srcExpr: IQueryOpExpr<MessageAccumulator>,
         public embedding: NormalizedEmbedding,
@@ -1315,6 +1318,7 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
          * (Optional): Only select top maxMessages with best rank
          */
         public maxMessages?: number | undefined,
+        public thresholdScore?: number | undefined,
     ) {
         super();
     }
@@ -1336,6 +1340,7 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
                 this.embedding,
                 messageOrdinals,
                 this.maxMessages,
+                this.thresholdScore,
             );
             matches.clearMatches();
             for (const match of rankedMessages) {
@@ -1346,7 +1351,7 @@ export class RankMessagesBySimilarity extends QueryOpExpr<MessageAccumulator> {
     }
 }
 
-export class GetScoredMessages extends QueryOpExpr<ScoredMessageOrdinal[]> {
+export class GetScoredMessagesExpr extends QueryOpExpr<ScoredMessageOrdinal[]> {
     constructor(public srcExpr: IQueryOpExpr<MessageAccumulator>) {
         super();
     }
@@ -1483,6 +1488,50 @@ export class MatchMessagesOrMaxExpr extends MatchMessagesOrExpr {
             matches.selectWithHitCount(maxHitCount);
         }
         return matches;
+    }
+}
+
+export class MatchMessagesBySimilarityExpr extends QueryOpExpr<
+    ScoredMessageOrdinal[]
+> {
+    constructor(
+        public embedding: NormalizedEmbedding,
+        public maxMessages?: number | undefined,
+        public thresholdScore?: number | undefined,
+        public getScopeExpr?: GetScopeExpr | undefined,
+    ) {
+        super();
+    }
+
+    public override eval(context: QueryEvalContext): ScoredMessageOrdinal[] {
+        if (this.getScopeExpr) {
+            context.textRangesInScope = this.getScopeExpr.eval(context);
+        }
+        const messageIndex =
+            context.conversation.secondaryIndexes?.messageIndex;
+        const rangesInScope = context.textRangesInScope;
+        const predicate =
+            rangesInScope !== undefined
+                ? (messageOrdinal: MessageOrdinal) =>
+                      this.isInScope(rangesInScope, messageOrdinal)
+                : undefined;
+
+        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
+            return messageIndex.lookupByEmbedding(
+                this.embedding,
+                this.maxMessages,
+                this.thresholdScore,
+                predicate,
+            );
+        }
+        return [];
+    }
+
+    private isInScope(
+        scope: TextRangesInScope,
+        messageOrdinal: MessageOrdinal,
+    ): boolean {
+        return scope.isRangeInScope(textRangeFromMessageChunk(messageOrdinal));
     }
 }
 
