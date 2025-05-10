@@ -5,8 +5,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Callable
 
-import typechat
-
 from .interfaces import (
     # Interfaces.
     IConversation,
@@ -43,15 +41,15 @@ def text_range_from_message_chunk(
     )
 
 
-# TODO: Doesn't exist any more
-# def text_range_from_location(
-#     message_ordinal: MessageOrdinal,
-#     chunk_ordinal: int = 0,
-# ) -> TextRange:
-#     return TextRange(
-#         start=TextLocation(message_ordinal, chunk_ordinal),
-#         end=None,
-#     )
+def text_range_from_location(
+    message_ordinal: MessageOrdinal,
+    chunk_ordinal: int = 0,
+) -> TextRange:
+    return TextRange(
+        start=TextLocation(message_ordinal, chunk_ordinal),
+        end=None,
+    )
+
 
 type KnowledgeValidator = Callable[
     [
@@ -70,8 +68,14 @@ def default_knowledge_validator(
     return True
 
 
-async def add_batch_to_semantic_ref_index(
-    conversation: IConversation,
+async def add_batch_to_semantic_ref_index[
+    TMessage: IMessage,
+    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
+](
+    conversation: IConversation[
+        TMessage,
+        TTermToSemanticRefIndex,
+    ],
     batch: list[TextLocation],
     knowledge_extractor: convknowledge.KnowledgeExtractor,
     event_handler: IndexingEventHandlers | None = None,
@@ -86,17 +90,19 @@ async def add_batch_to_semantic_ref_index(
         messages[tl.message_ordinal].text_chunks[tl.chunk_ordinal or 0].strip()
         for tl in batch
     ]
-    knowledge_results = await extract_knowledge_from_text_batch(
-        knowledge_extractor,
-        text_batch,
-        len(text_batch),
-    )
-    for i, knowledge_result in enumerate(knowledge_results):
-        if not knowledge_result.success:
-            indexing_result.error = knowledge_result.error
-            return indexing_result
-        text_location = batch[i]
-        knowledge = knowledge_result.data
+
+    # TODO: extract_knowledge_from_text_batch
+    # knowledge_results = await extract_knowledge_from_text_batch(
+    #     knowledge_extractor,
+    #     text_batch,
+    #     len(text_batch),
+    # )
+    # for i, knowledge_result in enumerate(knowledge_results):
+    #     if not knowledge_result.success:
+    #         indexing_result.error = knowledge_result.error
+    #         return indexing_result
+    #     text_location = batch[i]
+    #     knowledge = knowledge_result.data
 
     return indexing_result
 
@@ -359,18 +365,20 @@ async def add_to_semantic_ref_index(
         settings.knowledge_extractor or convknowledge.KnowledgeExtractor()
     )
     indexing_result: TextIndexingResult | None = None
-    for text_location_batch in get_message_chunk_batch(
-        conversation.messages,
-        message_ordinal_start_at,
-        settings.batch_size,
-    ):
-        indexing_result = await add_batch_to_semantic_ref_index(
-            conversation,
-            text_location_batch,
-            knowledge_extractor,
-            event_handler,
-            terms_added,
-        )
+
+    # TODO: get_message_chunk_batch
+    # for text_location_batch in get_message_chunk_batch(
+    #     conversation.messages,
+    #     message_ordinal_start_at,
+    #     settings.batch_size,
+    # ):
+    #     indexing_result = await add_batch_to_semantic_ref_index(
+    #         conversation,
+    #         text_location_batch,
+    #         knowledge_extractor,
+    #         event_handler,
+    #         terms_added,
+    #     )
 
     return indexing_result or TextIndexingResult()
 
