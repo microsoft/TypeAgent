@@ -12,6 +12,7 @@ import { PlanViewAction } from "./planViewActionSchema.js";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 
 export function instantiate(): AppAgent {
     return {
@@ -73,6 +74,8 @@ async function handlePlanViewAction(
         // TODO: Handle plan visualization actions
     ) {
     }
+
+    result = createActionResult("Updated plan");
     return result;
 }
 
