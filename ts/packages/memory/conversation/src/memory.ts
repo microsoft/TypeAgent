@@ -92,6 +92,16 @@ export function addSynonymsFileAsAliases(
     }
 }
 
+export function addNoiseWordsFromFile(
+    noise: Set<string>,
+    filePath: string,
+): void {
+    const words = ms.readAllLines(filePath);
+    if (words) {
+        words.forEach((word) => noise.add(word));
+    }
+}
+
 export class MessageMetadata
     implements kp.IMessageMetadata, kp.IKnowledgeSource
 {
@@ -167,9 +177,14 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
             ...this.knowledge,
         };
         combinedKnowledge.entities.push(...metaKnowledge.entities);
+        combinedKnowledge.entities = kp.mergeConcreteEntities(
+            combinedKnowledge.entities,
+        );
+        combinedKnowledge.topics.push(...metaKnowledge.topics);
+        combinedKnowledge.topics = kp.mergeTopics(combinedKnowledge.topics);
+
         combinedKnowledge.actions.push(...metaKnowledge.actions);
         combinedKnowledge.inverseActions.push(...metaKnowledge.inverseActions);
-        combinedKnowledge.topics.push(...metaKnowledge.topics);
         return combinedKnowledge;
     }
 }
@@ -268,12 +283,9 @@ export abstract class Memory<
     }
 
     protected addStandardNoiseTerms() {
-        this.noiseTerms.add("a");
-        this.noiseTerms.add("an");
-        this.noiseTerms.add("the");
-        this.noiseTerms.add("is");
-        this.noiseTerms.add("are");
-        this.noiseTerms.add("and");
-        this.noiseTerms.add("or");
+        addNoiseWordsFromFile(
+            this.noiseTerms,
+            ms.getAbsolutePathFromUrl(import.meta.url, "noiseTerms.txt"),
+        );
     }
 }

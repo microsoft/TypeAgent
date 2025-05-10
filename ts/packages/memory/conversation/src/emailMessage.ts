@@ -55,6 +55,7 @@ export class EmailMessage extends Message<EmailMeta> {
         metadata: EmailMeta,
         emailBody: string | string[],
         tags: string[] = [],
+        knowledge?: kpLib.KnowledgeResponse | undefined,
         deletionInfo?: kp.DeletionInfo | undefined,
         isNew: boolean = true,
     ) {
@@ -66,7 +67,7 @@ export class EmailMessage extends Message<EmailMeta> {
             emailBody,
             tags,
             metadata.sentOn,
-            undefined,
+            knowledge,
             deletionInfo,
         );
     }
@@ -123,6 +124,7 @@ export class EmailMessageSerializer implements kp.JsonSerializer<EmailMessage> {
             meta,
             jMsg.textChunks,
             jMsg.tags,
+            jMsg.knowledge,
             jMsg.deletionInfo,
             false,
         );

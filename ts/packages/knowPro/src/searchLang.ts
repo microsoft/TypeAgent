@@ -46,7 +46,7 @@ export async function searchConversationWithLanguage(
     searchText: string,
     queryTranslator: SearchQueryTranslator,
     options?: LanguageSearchOptions,
-    context?: LanguageSearchDebugContext,
+    debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     options ??= createLanguageSearchOptions();
     const langQueryResult = await searchQueryExprFromLanguage(
@@ -54,14 +54,16 @@ export async function searchConversationWithLanguage(
         queryTranslator,
         searchText,
         options,
-        context,
+        debugContext,
     );
     if (!langQueryResult.success) {
         return langQueryResult;
     }
     const searchQueryExprs = langQueryResult.data.queryExpressions;
-    if (context) {
-        context.searchQueryExpr = searchQueryExprs;
+    if (debugContext) {
+        debugContext.searchQueryExpr = searchQueryExprs;
+        debugContext.usedRag = new Array<boolean>(searchQueryExprs.length);
+        debugContext.usedRag.fill(false);
     }
     let fallbackQueryExpr = compileFallbackQuery(
         langQueryResult.data.query,
@@ -99,6 +101,9 @@ export async function searchConversationWithLanguage(
             );
             if (ragMatches) {
                 searchResults.push(ragMatches);
+                if (debugContext?.usedRag) {
+                    debugContext.usedRag![i] = true;
+                }
             }
         } else {
             searchResults.push(...queryResult);
@@ -204,6 +209,7 @@ export type LanguageSearchDebugContext = {
      * What searchQuery was compiled into
      */
     searchQueryExpr?: SearchQueryExpr[] | undefined;
+    usedRag?: boolean[] | undefined;
 };
 
 export function compileSearchQuery(

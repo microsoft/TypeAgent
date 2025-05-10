@@ -74,3 +74,19 @@ export function readAllText(filePath: string): string | undefined {
     }
     return undefined;
 }
+
+export function readAllLines(
+    filePath: string,
+    trim: boolean = true,
+): string[] | undefined {
+    let fileText = readAllText(filePath);
+    if (!fileText) {
+        return undefined;
+    }
+    let lines = fileText.split(/\r?\n/);
+    if (trim) {
+        lines = lines.map((l) => l.trim());
+    }
+    lines = lines.filter((l) => l.length > 0);
+    return lines;
+}

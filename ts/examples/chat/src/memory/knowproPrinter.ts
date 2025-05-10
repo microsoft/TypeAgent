@@ -546,13 +546,19 @@ export class KnowProPrinter extends ChatPrinter {
         return this;
     }
 
-    public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
+    public writeAnswer(
+        answerResponse: kp.AnswerResponse | undefined,
+        isFallback: boolean = false,
+    ) {
         if (answerResponse) {
             if (answerResponse.type === "NoAnswer") {
                 this.writeError("No answer");
             }
             if (answerResponse.answer) {
-                this.writeInColor(chalk.green, answerResponse.answer);
+                this.writeInColor(
+                    isFallback ? chalk.green : chalk.greenBright,
+                    answerResponse.answer,
+                );
             } else if (answerResponse.whyNoAnswer) {
                 this.writeError(answerResponse.whyNoAnswer);
             }

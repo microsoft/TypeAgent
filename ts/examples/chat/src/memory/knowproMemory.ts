@@ -613,7 +613,7 @@ export async function createKnowproCommands(
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
-        def.options!.fallback = argBool("Fallback to rag", false);
+        def.options!.fallback = argBool("Fallback to rag", true);
         def.options!.fastStop = argBool(
             "Ignore messages if knowledge produces answers",
             true,
@@ -678,7 +678,8 @@ export async function createKnowproCommands(
             );
             return;
         }
-        for (const searchResult of searchResults.data) {
+        for (let i = 0; i < searchResults.data.length; ++i) {
+            const searchResult = searchResults.data[i];
             if (!namedArgs.messages) {
                 // Don't include raw message text... try answering only with knowledge
                 searchResult.messageMatches = [];
@@ -698,7 +699,10 @@ export async function createKnowproCommands(
             );
             context.printer.writeLine();
             if (answerResult.success) {
-                context.printer.writeAnswer(answerResult.data);
+                context.printer.writeAnswer(
+                    answerResult.data,
+                    debugContext.usedRag![i],
+                );
             } else {
                 context.printer.writeError(answerResult.message);
             }
