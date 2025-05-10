@@ -16,7 +16,7 @@ check: venv
 
 .PHONY: test
 test: venv
-	venv/bin/python -m pytest test -W ignore::pytest.PytestCollectionWarning
+	venv/bin/python -m pytest test
 
 .PHONY: build
 build: venv

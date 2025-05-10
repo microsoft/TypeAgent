@@ -164,7 +164,7 @@ def test_build_property_index(needs_auth):
         ),
     ]
 
-    conversation = TestConversation(semantic_refs)
+    conversation = FakeConversation(semantic_refs)
 
     # Call the function
     result = build_property_index(conversation)
@@ -185,7 +185,7 @@ def test_build_property_index(needs_auth):
     assert property_index.lookup_property("tag", "Tag1") is not None
 
 
-class TestMessage(IMessage):
+class FakeMessage(IMessage):
     """Concrete implementation of IMessage for testing."""
 
     def __init__(self, text_chunks):
@@ -208,7 +208,7 @@ class TestMessage(IMessage):
         )
 
 
-class TestBaseCollection[T, TOrdinal: int](ICollection[T, int]):
+class FakeBaseCollection[T, TOrdinal: int](ICollection[T, int]):
     """Concrete implementation of IMessageCollection for testing."""
 
     def __init__(self, items: list[T] | None = None):
@@ -248,19 +248,19 @@ class TestBaseCollection[T, TOrdinal: int](ICollection[T, int]):
             self.items.append(item)
 
 
-class TestMessageCollection(
-    TestBaseCollection[TestMessage, MessageOrdinal], IMessageCollection
+class FakeMessageCollection(
+    FakeBaseCollection[FakeMessage, MessageOrdinal], IMessageCollection
 ):
     pass
 
 
-class TestSemanticRefCollection(
-    TestBaseCollection[SemanticRef, SemanticRefOrdinal], ISemanticRefCollection
+class FakeSemanticRefCollection(
+    FakeBaseCollection[SemanticRef, SemanticRefOrdinal], ISemanticRefCollection
 ):
     pass
 
 
-class TestConversation[
+class FakeConversation[
     TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](IConversation[TMessage, TTermToSemanticRefIndex]):
     """Concrete implementation of IConversation for testing."""
@@ -268,9 +268,9 @@ class TestConversation[
     def __init__(self, semantic_refs: list[SemanticRef] | None = None):
         self.name_tag = "test_conversation"
         self.tags = []
-        self.semantic_refs = TestSemanticRefCollection(semantic_refs or [])
+        self.semantic_refs = FakeSemanticRefCollection(semantic_refs or [])
         self.semantic_ref_index = None
-        self.messages = TestMessageCollection([TestMessage(["Hello"])])
+        self.messages = FakeMessageCollection([FakeMessage(["Hello"])])
         self.secondary_indexes = ConversationSecondaryIndexes()
 
 
@@ -288,7 +288,7 @@ def test_add_to_property_index(property_index, needs_auth):
             ),
         )
     ]
-    conversation = TestConversation(semantic_refs)
+    conversation = FakeConversation(semantic_refs)
     result = add_to_property_index(conversation, 0)
     assert isinstance(result, ListIndexingResult)
     assert result.number_completed == 1
