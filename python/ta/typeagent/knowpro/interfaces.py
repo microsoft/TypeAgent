@@ -418,10 +418,10 @@ class IConversationThreads(Protocol):
     ) -> Sequence[ScoredThreadOrdinal] | None:
         raise NotImplementedError
 
-    def serialize(self) -> "ConversationThreadData":
+    def serialize(self) -> "ConversationThreadData[ThreadDataItem]":
         raise NotImplementedError
 
-    def deserialize(self, data: "ConversationThreadData") -> None:
+    def deserialize(self, data: "ConversationThreadData[ThreadDataItem]") -> None:
         raise NotImplementedError
 
 
@@ -661,7 +661,7 @@ class MessageTextIndexData(TypedDict):
 
 class ConversationDataWithIndexes[TMessageData](ConversationData[TMessageData]):
     relatedTermsIndexData: NotRequired[TermsToRelatedTermsIndexData | None]
-    threadData: NotRequired[ConversationThreadData | None]
+    threadData: NotRequired[ConversationThreadData[ThreadDataItem] | None]
     messageIndexData: NotRequired[MessageTextIndexData | None]
 
 
