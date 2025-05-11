@@ -171,14 +171,6 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         """Add term matches if they are new"""
         raise NotImplementedError("TODO: add_term_matches_if_new")
 
-    # TODO: Do we need this? And why the `| None` in the return type?
-    # def get_sorted_by_score(
-    #         self, min_hit_count: int | None
-    # ) -> list[Match[SemanticRefOrdinal]] | None:
-    #     return super().get_sorted_by_score(min_hit_count)
-
-    # TODO: Do we need get_top_n_scoring if it just passes on to super?
-
     def get_semantic_refs(
         self,
         semantic_refs: ISemanticRefCollection,
