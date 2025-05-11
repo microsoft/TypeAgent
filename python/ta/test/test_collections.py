@@ -4,7 +4,6 @@
 from collections.abc import Iterable
 from typing import Any
 
-from typeagent.knowpro.kplib import Action, ConcreteEntity
 from typeagent.knowpro.collections import (
     MatchAccumulator,
     PropertyTermSet,
@@ -19,8 +18,9 @@ from typeagent.knowpro.interfaces import (
     SemanticRef,
     TextLocation,
     Term,
-    ISemanticRefCollection,
 )
+from typeagent.knowpro.kplib import Action, ConcreteEntity
+from typeagent.knowpro.storage import SemanticRefCollection
 
 
 def test_match_accumulator_add_and_get():
@@ -129,71 +129,33 @@ def test_text_ranges_in_scope():
     assert not ranges_in_scope.is_range_in_scope(range4)
 
 
-class MockSemanticRefCollection(ISemanticRefCollection):
-    """Mock implementation of ISemanticRefCollection."""
-
-    def __init__(self):
-        self.refs = {
-            1: SemanticRef(
-                1,
-                range=TextRange(TextLocation(0)),
-                knowledge_type="entity",
-                knowledge=ConcreteEntity("ref1", ["ref"]),
-            ),
-            2: SemanticRef(
-                1,
-                range=TextRange(TextLocation(2)),
-                knowledge_type="action",
-                knowledge=Action(["go"], "past"),
-            ),
-        }
-
-    def _get(self, ordinal: int) -> SemanticRef:
-        return self.refs[ordinal]
-
-    def _get_multiple(self, ordinals: Iterable[int]) -> list[SemanticRef]:
-        return [self.refs[o] for o in ordinals if o in self.refs]
-
-    def _get_slice(self, start: int, end: int) -> list[SemanticRef]:
-        return [v for k, v in self.refs.items() if start <= k < end]
-
-    def __getitem__(self, arg: Any) -> Any:
-        if isinstance(arg, int):
-            return self._get(arg)
-        elif isinstance(arg, slice):
-            assert arg.step in (None, 1)
-            return self._get_slice(arg.start, arg.stop)
-        elif isinstance(arg, list):
-            return self._get_multiple(arg)
-        else:
-            raise TypeError("Invalid argument type")
-
-    def __len__(self):
-        return len(self.refs)
-
-    def __iter__(self):
-        return iter(self.refs.values())
-
-    @property
-    def is_persistent(self) -> bool:
-        return False
-
-    def append(self, *items: SemanticRef) -> None:
-        raise NotImplementedError
-
-
 def test_semantic_ref_accumulator_group_matches_by_type():
     """Test grouping matches by knowledge type in SemanticRefAccumulator."""
     accumulator = SemanticRefAccumulator()
-    accumulator.add(1, score=0.8)
-    accumulator.add(2, score=0.6)
+    accumulator.add(0, score=0.8)
+    accumulator.add(1, score=0.6)
 
-    groups = accumulator.group_matches_by_type(MockSemanticRefCollection())
+    refs = [
+        SemanticRef(
+            0,
+            range=TextRange(TextLocation(0)),
+            knowledge_type="entity",
+            knowledge=ConcreteEntity("ref1", ["ref"]),
+        ),
+        SemanticRef(
+            1,
+            range=TextRange(TextLocation(2)),
+            knowledge_type="action",
+            knowledge=Action(["go"], "past"),
+        ),
+    ]
+
+    groups = accumulator.group_matches_by_type(SemanticRefCollection(refs))
     assert len(groups) == 2
     assert "entity" in groups
     assert "action" in groups
-    assert groups["entity"].get_match(1) is not None
-    assert groups["action"].get_match(2) is not None
+    assert groups["entity"].get_match(0) is not None
+    assert groups["action"].get_match(1) is not None
 
 
 def test_termset_add():
