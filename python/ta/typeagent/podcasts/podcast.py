@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass, field
-from typing import Optional, Sequence, TypedDict
+from typing import Optional, TypedDict
 
 from ..knowpro import convindex, interfaces, kplib, secindex
 from ..knowpro.convthreads import ConversationThreads
@@ -22,6 +22,7 @@ from ..knowpro.serialization import (
     write_conversation_data_to_file,
     read_conversation_data_from_file,
 )
+from ..knowpro.storage import MessageCollection
 
 
 @dataclass
@@ -132,8 +133,8 @@ class Podcast(
     ]
 ):
     name_tag: str = ""
-    messages: ICollection[PodcastMessage, MessageOrdinal] = field(
-        default_factory=IMessageCollection
+    messages: IMessageCollection[PodcastMessage] = field(
+        default_factory=MessageCollection[PodcastMessage]
     )
     tags: list[str] = field(default_factory=list)
     semantic_refs: ISemanticRefCollection | None = field(
@@ -216,7 +217,7 @@ class Podcast(
     ) -> None:
         self.name_tag = podcast_data["nameTag"]
 
-        self.messages = []
+        self.messages = MessageCollection[PodcastMessage]()
         for message_data in podcast_data["messages"]:
             msg = PodcastMessage.deserialize(message_data)
             self.messages.append(msg)
@@ -318,7 +319,7 @@ class Podcast(
 # However, timestamps for individual blocks are not available.
 # Assigns individual timestamps to blocks proportional to their lengths.
 def timestamp_messages(
-    messages: Sequence[interfaces.IMessage],
+    messages: ICollection[PodcastMessage, MessageOrdinal],
     start_time: Datetime,
     end_time: Datetime,
 ) -> None:
