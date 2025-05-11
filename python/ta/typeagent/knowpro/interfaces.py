@@ -760,8 +760,14 @@ class ICollection[T, TOrdinal](IReadonlyCollection[T, TOrdinal], Protocol):
     def is_persistent(self) -> bool:
         raise NotImplementedError
 
-    def append(self, *items: T) -> None:
+    def append(self, item: T) -> None:
         raise NotImplementedError
+
+    def extend(self, items: Iterable[T]) -> None:
+        """Append multiple items to the collection."""
+        # The default implementation just calls append for each item.
+        for item in items:
+            self.append(item)
 
 
 class IMessageCollection[TMessage: IMessage](

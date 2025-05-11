@@ -61,8 +61,12 @@ class Collection[T, TOrdinal: int](ICollection[T, TOrdinal]):
     def is_persistent(self) -> bool:
         return False
 
-    def append(self, *items: T) -> None:
+    def append(self, item: T) -> None:
         """Append items to the collection."""
+        self.items.append(item)
+
+    def extend(self, items: Iterable[T]) -> None:
+        """Extend the collection with multiple items."""
         self.items.extend(items)
 
 
@@ -72,22 +76,13 @@ class SemanticRefCollection(
 ):
     """A collection of semantic references."""
 
-    def __init__(self, semantic_refs: list[SemanticRef] | None = None):
-        super().__init__(semantic_refs)
-
 
 class MessageCollection[TMessage: IMessage](Collection[TMessage, MessageOrdinal]):
     """A collection of messages."""
 
-    def __init__(self, messages: list[TMessage] | None = None):
-        super().__init__(messages)
-
 
 class MemoryStorageProvider[TMessage: IMessage]:
     """A storage provider that operates in memory."""
-
-    def __init__(self):
-        pass
 
     def create_message_collection(self) -> MessageCollection[TMessage]:
         """Create a new message collection."""
