@@ -15,6 +15,22 @@ export class KnowProPrinter extends ChatPrinter {
         super();
     }
 
+    public writeTerm(term: kp.Term): KnowProPrinter {
+        if (term.weight) {
+            this.writeLine(`${term.text} [${term.weight}]`);
+        } else {
+            this.writeLine(term.text);
+        }
+        return this;
+    }
+
+    public writeTerms(terms: kp.Term[]): KnowProPrinter {
+        for (const term of terms) {
+            this.writeTerm(term);
+        }
+        return this;
+    }
+
     public writeDateRange(dateTime: kp.DateRange): KnowProPrinter {
         this.writeLine(`Started: ${dateTime.start}`);
         if (dateTime.end) {
@@ -329,7 +345,7 @@ export class KnowProPrinter extends ChatPrinter {
         maxToDisplay: number,
         distinct: boolean,
     ) {
-        if (searchResult && searchResult.messageMatches.length > 0) {
+        if (searchResult && kp.hasConversationResult(searchResult)) {
             if (showKnowledge) {
                 this.writeKnowledgeSearchResults(
                     conversation,

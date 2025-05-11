@@ -12,6 +12,7 @@ onlyBuiltDependencies:
   - "@azure/msal-node-runtime"
   - "@vscode/vsce-sign"
   - better-sqlite3
+  - canvas
   - electron
   - electron-winstaller
   - esbuild

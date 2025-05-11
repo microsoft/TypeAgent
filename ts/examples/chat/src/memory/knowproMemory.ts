@@ -86,6 +86,7 @@ export async function createKnowproCommands(
     commands.kpAnswer = answer;
     commands.kpPodcastRag = podcastRag;
     commands.kpEntities = entities;
+    commands.kpTopics = topics;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
     commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
 
@@ -535,7 +536,7 @@ export async function createKnowproCommands(
             50,
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
-        def.options.charBudget = argNum("Maximum characters in budget", 8192);
+        def.options.charBudget = argNum("Maximum characters in budget");
         def.options.applyScope = argBool("Apply scopes", true);
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
@@ -549,16 +550,21 @@ export async function createKnowproCommands(
         }
         const namedArgs = parseNamedArguments(args, searchDefNew());
         const textQuery = namedArgs.query;
-        const result = await kp.searchQueryFromLanguage(
-            context.conversation!,
-            context.queryTranslator,
-            textQuery,
-        );
+        const result =
+            context.conversation instanceof cm.Memory
+                ? await context.conversation.searchQueryFromLanguage(textQuery)
+                : await kp.searchQueryFromLanguage(
+                      context.conversation!,
+                      context.queryTranslator,
+                      textQuery,
+                  );
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
         }
         let exactScope = namedArgs.exactScope;
+        let compileOptions = kp.createLanguageQueryCompileOptions();
+        compileOptions.exactScope = exactScope;
         let retried = !exactScope;
         const searchQuery = result.data;
         context.printer.writeJson(searchQuery, true);
@@ -566,8 +572,10 @@ export async function createKnowproCommands(
             const searchQueryExpressions = kp.compileSearchQuery(
                 context.conversation!,
                 searchQuery,
-                exactScope,
-                namedArgs.applyScope,
+                {
+                    exactScope,
+                    applyScope: namedArgs.applyScope,
+                },
             );
             let countSelectMatches = 0;
             for (const searchQueryExpr of searchQueryExpressions) {
@@ -621,11 +629,14 @@ export async function createKnowproCommands(
         const searchText = namedArgs.query;
         const debugContext: kp.LanguageSearchDebugContext = {};
 
-        const options: kp.LanguageSearchOptions =
-            createSearchOptions(namedArgs);
+        const options: kp.LanguageSearchOptions = {
+            ...createSearchOptions(namedArgs),
+            compileOptions: {
+                exactScope: namedArgs.exactScope,
+                applyScope: namedArgs.applyScope,
+            },
+        };
         options.exactMatch = namedArgs.exact;
-        options.exactScope = namedArgs.exactScope;
-        options.applyScope = namedArgs.applyScope;
         if (namedArgs.fallback) {
             options.fallbackRagOptions = {
                 maxMessageMatches: options.maxMessageMatches,
@@ -634,13 +645,20 @@ export async function createKnowproCommands(
             };
         }
 
-        const searchResults = await kp.searchConversationWithLanguage(
-            context.conversation!,
-            searchText,
-            context.queryTranslator,
-            options,
-            debugContext,
-        );
+        const searchResults =
+            context.conversation instanceof cm.Memory
+                ? await context.conversation.searchWithLanguage(
+                      searchText,
+                      options,
+                      debugContext,
+                  )
+                : await kp.searchConversationWithLanguage(
+                      context.conversation!,
+                      searchText,
+                      context.queryTranslator,
+                      options,
+                      debugContext,
+                  );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -702,7 +720,8 @@ export async function createKnowproCommands(
         );
         if (
             searchResults === undefined ||
-            searchResults.messageMatches.length === 0
+            (searchResults.knowledgeMatches.size === 0 &&
+                searchResults.messageMatches.length === 0)
         ) {
             return false;
         }
@@ -783,6 +802,33 @@ export async function createKnowproCommands(
                 const entities = kp.filterCollection(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
+                );
+                context.printer.writeSemanticRefs(entities);
+            }
+        }
+    }
+
+    function topicsDef(): CommandMetadata {
+        return searchTermsDef(
+            "Search topics only in current conversation",
+            "topic",
+        );
+    }
+    commands.topics.metadata = topicsDef();
+    async function topics(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("topic");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const entities = kp.filterCollection(
+                    conversation.semanticRefs,
+                    (sr) => sr.knowledgeType === "topic",
                 );
                 context.printer.writeSemanticRefs(entities);
             }

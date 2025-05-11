@@ -20,4 +20,20 @@ public static class PathEx
 
         return false;
     }
+
+    public static string ReplaceFileNameExtension(string fileName, string newExt)
+    {
+        if (string.IsNullOrEmpty(newExt))
+        {
+            return fileName;
+        }
+
+        return Path.GetFileNameWithoutExtension(fileName) + newExt;
+    }
+
+    public static string AppendNumber(string filePath, int number)
+    {
+        string newName = $"{Path.GetFileNameWithoutExtension(filePath)}_{number}{Path.GetExtension(filePath)}";
+        return Path.Join(Path.GetDirectoryName(filePath), newName);
+    }
 }

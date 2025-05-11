@@ -5,20 +5,15 @@
  * Class for handling the visualization of the web plan
  */
 import cytoscape from "cytoscape";
-import dagre from "dagre";
+
 import cytoscapeDagre from "cytoscape-dagre";
 
 // Register the extension
 cytoscape.use(cytoscapeDagre as any);
 
-import CONFIG from "./config";
+import CONFIG from "./config.js";
 import CytoscapeConfig from "./cytoscapeConfig.js";
-import {
-    WebPlanData,
-    PlanNode,
-    PlanLink,
-    NodeSelectCallback,
-} from "../shared/types.js";
+import { WebPlanData, PlanLink, NodeSelectCallback } from "../shared/types.js";
 
 class Visualizer {
     private container: HTMLElement;
@@ -97,6 +92,10 @@ class Visualizer {
             if (node.screenshot) {
                 nodeData.screenshot = node.screenshot;
                 nodeData.hasScreenshot = true;
+            }
+            if (node.label && node.label.startsWith("__")) {
+                // set to empty string for display
+                nodeData.label = " ";
             }
 
             elements.push({
@@ -923,7 +922,7 @@ class Visualizer {
         if (!this.cy) return;
 
         // First check if we need to fit - only do it if nodes are outside the viewport
-        const extent = this.cy.extent();
+        this.cy.extent();
         const nodes = this.cy.nodes();
 
         if (nodes.length === 0) return;
@@ -1044,13 +1043,9 @@ class Visualizer {
 
         if (!this.cy) return;
 
-        // Get two collections: nodes with screenshots and nodes without
         const nodesWithScreenshots = this.cy
             .nodes()
             .filter((node) => node.data("hasScreenshot"));
-        const nodesWithoutScreenshots = this.cy
-            .nodes()
-            .filter((node) => !node.data("hasScreenshot"));
 
         if (enabled) {
             // Add screenshot-mode class to all nodes

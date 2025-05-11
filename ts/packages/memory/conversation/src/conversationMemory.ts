@@ -7,25 +7,32 @@ import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";
 import { error, Result, success } from "typechat";
-import { createMemorySettings, Memory, MemorySettings } from "./memory.js";
+import {
+    createMemorySettings,
+    Memory,
+    MemorySettings,
+    Message,
+    MessageMetadata,
+} from "./memory.js";
 const debugLogger = registerDebug("conversation-memory.podcast");
 
-export class ConversationMessageMeta
-    implements kp.IKnowledgeSource, kp.IMessageMetadata
-{
+export class ConversationMessageMeta extends MessageMetadata {
     constructor(
         public sender?: string | undefined,
         public recipients?: string[] | undefined,
-    ) {}
+    ) {
+        super();
+    }
 
-    public get source() {
+    public override get source() {
         return this.sender;
     }
-    public get dest() {
+
+    public override get dest() {
         return this.recipients;
     }
 
-    getKnowledge(): kpLib.KnowledgeResponse | undefined {
+    public getKnowledge(): kpLib.KnowledgeResponse | undefined {
         if (this.sender) {
             const entities: kpLib.ConcreteEntity[] = [];
             const actions: kpLib.Action[] = [];
@@ -73,25 +80,19 @@ export class ConversationMessageMeta
     }
 }
 
-export class ConversationMessage implements kp.IMessage {
-    public textChunks: string[];
-    public timestamp: string;
-    public deletionInfo?: kp.DeletionInfo | undefined;
-
+export class ConversationMessage extends Message<ConversationMessageMeta> {
     constructor(
         messageText: string | string[],
-        public metadata: ConversationMessageMeta,
-        public tags: string[] = [],
+        metadata: ConversationMessageMeta,
+        tags: string[] = [],
         /**
          * Any pre-extracted knowledge for this message.
          */
-        public knowledge?: kpLib.KnowledgeResponse,
+        knowledge?: kpLib.KnowledgeResponse,
         timestamp?: string,
     ) {
-        this.textChunks = Array.isArray(messageText)
-            ? messageText
-            : [messageText];
-        this.timestamp = timestamp ?? new Date().toISOString();
+        timestamp = timestamp ?? new Date().toISOString();
+        super(metadata, messageText, tags, timestamp, knowledge);
     }
 
     public addContent(content: string, chunkOrdinal = 0) {
@@ -101,54 +102,15 @@ export class ConversationMessage implements kp.IMessage {
             this.textChunks[chunkOrdinal] += content;
         }
     }
-
-    public addKnowledge(
-        newKnowledge: kpLib.KnowledgeResponse,
-    ): kpLib.KnowledgeResponse {
-        if (this.knowledge !== undefined) {
-            this.knowledge.entities = kp.mergeConcreteEntities([
-                ...this.knowledge.entities,
-                ...newKnowledge.entities,
-            ]);
-            this.knowledge.topics = kp.mergeTopics([
-                ...this.knowledge.topics,
-                ...newKnowledge.topics,
-            ]);
-            this.knowledge.actions.push(...newKnowledge.actions);
-            this.knowledge.inverseActions.push(...newKnowledge.inverseActions);
-        } else {
-            this.knowledge = newKnowledge;
-        }
-        return this.knowledge;
-    }
-
-    public getKnowledge(): kpLib.KnowledgeResponse | undefined {
-        let metaKnowledge = this.metadata.getKnowledge();
-        if (!metaKnowledge) {
-            return this.knowledge;
-        }
-        if (!this.knowledge) {
-            return metaKnowledge;
-        }
-        const combinedKnowledge: kpLib.KnowledgeResponse = {
-            ...this.knowledge,
-        };
-        combinedKnowledge.entities.push(...metaKnowledge.entities);
-        combinedKnowledge.actions.push(...metaKnowledge.actions);
-        combinedKnowledge.inverseActions.push(...metaKnowledge.inverseActions);
-        combinedKnowledge.topics.push(...metaKnowledge.topics);
-        return combinedKnowledge;
-    }
 }
 
 export type ConversationMemorySettings = MemorySettings;
 
 export class ConversationMemory
-    extends Memory
+    extends Memory<ConversationMemorySettings, ConversationMessage>
     implements kp.IConversation<ConversationMessage>
 {
     public messages: kp.MessageCollection<ConversationMessage>;
-    public settings: ConversationMemorySettings;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRefCollection;
@@ -161,20 +123,20 @@ export class ConversationMemory
         public tags: string[] = [],
         settings?: ConversationMemorySettings,
     ) {
-        super();
+        super(settings ?? createMemorySettings());
+        this.adjustSettings();
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = new kp.SemanticRefCollection();
-        if (!settings) {
-            settings = this.createSettings();
-        }
-        this.settings = settings;
-        this.adjustSettings();
 
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
         this.updatesTaskQueue = this.createTaskQueue();
+    }
+
+    public override get conversation(): kp.IConversation<ConversationMessage> {
+        return this;
     }
 
     public async addMessage(
@@ -205,21 +167,28 @@ export class ConversationMemory
         let messageOrdinalStartAt = this.messages.length;
         let semanticRefOrdinalStartAt = this.semanticRefs.length;
         this.messages.append(message);
-        kp.addToConversationIndex(
-            this,
-            this.settings.conversationSettings,
-            messageOrdinalStartAt,
-            semanticRefOrdinalStartAt,
-        );
 
-        const saveResult = await this.autoSaveFile();
-        if (!saveResult.success) {
-            return saveResult;
+        try {
+            this.beginIndexing();
+
+            kp.addToConversationIndex(
+                this,
+                this.settings.conversationSettings,
+                messageOrdinalStartAt,
+                semanticRefOrdinalStartAt,
+            );
+
+            const saveResult = await this.autoSaveFile();
+            if (!saveResult.success) {
+                return saveResult;
+            }
+
+            // Clear the knowledge, now that its been indexed
+            message.knowledge = undefined;
+            return success(messageKnowledge!);
+        } finally {
+            this.endIndexing();
         }
-
-        // Clear the knowledge, now that its been indexed
-        message.knowledge = undefined;
-        return success(messageKnowledge!);
     }
 
     public queueAddMessage(
@@ -231,34 +200,6 @@ export class ConversationMemory
             message,
             callback: completionCallback,
         });
-    }
-
-    /**
-     * Run a natural language query against this memory
-     * @param searchText
-     * @returns
-     */
-    public async search(
-        searchText: string,
-    ): Promise<Result<kp.ConversationSearchResult[]>> {
-        return kp.searchConversationWithLanguage(
-            this,
-            searchText,
-            this.getQueryTranslator(),
-        );
-    }
-
-    public async createSearchQuery(
-        searchText: string,
-        options?: kp.LanguageSearchOptions,
-    ): Promise<Result<kp.SearchQueryExpr[]>> {
-        const queryResult = await kp.searchQueryExprFromLanguage(
-            this,
-            this.getQueryTranslator(),
-            searchText,
-            options,
-        );
-        return queryResult;
     }
 
     public async selectFromConversation(
@@ -412,10 +353,11 @@ export class ConversationMemory
         }
     }
 
+    protected override getPersistentEmbeddingCache() {
+        return this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex;
+    }
+
     private adjustSettings(): void {
-        this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
-            this.settings.languageModel,
-        );
         //
         // Messages can contain prior knowledge extracted during chat responses for example
         // To avoid knowledge duplication, we manually extract message knowledge and merge it
@@ -423,20 +365,6 @@ export class ConversationMemory
         //
         this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
             false;
-    }
-
-    private createSettings(): ConversationMemorySettings {
-        return createMemorySettings(
-            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-        );
-    }
-
-    private getQueryTranslator(): kp.SearchQueryTranslator {
-        const queryTranslator = this.settings.queryTranslator;
-        if (!queryTranslator) {
-            throw new Error(`No query translator provided for ${this.nameTag}`);
-        }
-        return queryTranslator;
     }
 }
 

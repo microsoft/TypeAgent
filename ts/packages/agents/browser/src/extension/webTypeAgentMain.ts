@@ -116,7 +116,9 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     return manager;
 }
 
-global.registerTypeAgent = async (
+const actualGlobal = globalThis ?? global;
+
+actualGlobal.registerTypeAgent = async (
     name: string,
     manifest: AppAgentManifest,
     agent: AppAgent,

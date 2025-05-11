@@ -15,7 +15,7 @@ import { KnowProContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import path from "path";
-import { ensureDir, getFileName, isFilePath } from "typeagent";
+import { ensureDir, getFileName, isFilePath, readJsonFile } from "typeagent";
 import {
     createIndexingEventHandler,
     memoryNameToIndexPath,
@@ -41,6 +41,7 @@ export async function createKnowproEmailCommands(
     commands.kpEmailAdd = emailAdd;
     commands.kpEmailsLoad = emailsLoad;
     commands.kpEmailsBuildIndex = emailsBuildIndex;
+    commands.kpEmailNameAlias = emailNameAlias;
 
     function emailAddDef(): CommandMetadata {
         return {
@@ -170,13 +171,46 @@ export async function createKnowproEmailCommands(
                 true,
             );
             if (!context.email) {
-                context.printer.writeError(
-                    "Could not create new email smemory",
-                );
+                context.printer.writeError("Could not create new email memory");
                 return;
             }
         }
+        // Load a user profile if one is found
+        const userProfile = await readJsonFile<cm.EmailUserProfile>(
+            path.join(context.basePath, "emailUserProfile.json"),
+        );
+        context.email.settings.userProfile = userProfile;
         kpContext.conversation = context.email;
+    }
+
+    function emailNameAliasDef(): CommandMetadata {
+        return {
+            description: "Add an alias for a person's name",
+            options: {
+                name: arg("Person's name"),
+                alias: arg("Alias"),
+            },
+        };
+    }
+    commands.kpEmailNameAlias.metadata = emailNameAliasDef();
+    async function emailNameAlias(args: string[]): Promise<void> {
+        const emailMemory = ensureMemoryLoaded();
+        if (!emailMemory) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, emailNameAliasDef());
+        const aliases =
+            context.email!.secondaryIndexes.termToRelatedTermsIndex.aliases;
+        if (namedArgs.name && namedArgs.alias) {
+            aliases.addRelatedTerm(namedArgs.alias, namedArgs.name);
+            await context.email!.writeToFile();
+        } else if (namedArgs.alias) {
+            const names = aliases.lookupTerm(namedArgs.alias);
+            if (names) {
+                context.printer.writeTerms(names);
+            }
+        }
     }
 
     function ensureMemoryLoaded() {

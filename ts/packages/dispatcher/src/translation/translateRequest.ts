@@ -123,6 +123,7 @@ export function getTranslatorForSchema(
         ? undefined
         : context.translatorCache.get(schemaName);
     if (translator !== undefined) {
+        debugTranslate(`Using cached translator for '${translatorName}'`);
         return translator;
     }
     const config = context.session.getConfig().translation;
@@ -134,23 +135,36 @@ export function getTranslatorForSchema(
         context.activityContext,
     );
 
+    debugTranslate(
+        `Creating translator for '${translatorName}':\n  schemas: ${actionConfigs
+            .map((actionConfig) => actionConfig.schemaName)
+            .join(",")}\n  switch: ${switchActionConfigs
+            .map((actionConfig) => actionConfig.schemaName)
+            .join(",")}`,
+    );
+    const generateOptions = config.schema.generation.enabled
+        ? {
+              exact: !config.schema.optimize.enabled,
+              jsonSchema: config.schema.generation.jsonSchema,
+              jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
+              jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
+              jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+          }
+        : null;
     const newTranslator = loadAgentJsonTranslator(
         actionConfigs,
         switchActionConfigs,
         context.agents,
-        config.multiple,
-        config.schema.generation.enabled,
-        config.model,
         {
-            exact: !config.schema.optimize.enabled,
-            jsonSchema: config.schema.generation.jsonSchema,
-            jsonSchemaFunction: config.schema.generation.jsonSchemaFunction,
-            jsonSchemaWithTs: config.schema.generation.jsonSchemaWithTs,
-            jsonSchemaValidate: config.schema.generation.jsonSchemaValidate,
+            activity: context.agents.isSchemaEnabled(DispatcherActivityName),
+            multiple: config.multiple,
         },
+        generateOptions,
+        config.model,
     );
     if (!activityContext) {
         context.translatorCache.set(translatorName, newTranslator);
+        debugTranslate(`Cached translator for '${translatorName}'`);
     }
     return newTranslator;
 }
@@ -192,7 +206,10 @@ async function getTranslatorForSelectedActions(
         actionConfigs,
         switchActionConfigs,
         context.agents,
-        config.multiple,
+        {
+            activity: context.agents.isSchemaEnabled(DispatcherActivityName),
+            multiple: config.multiple,
+        },
         config.model,
     );
 }

@@ -23,6 +23,7 @@ import {
 } from "common-utils";
 import {
     createChangeAssistantActionSchema,
+    getCombinedSchemaTypeName,
     TranslatedAction,
 } from "./agentTranslators.js";
 import {
@@ -122,13 +123,22 @@ class ActionSchemaBuilder {
     private readonly files: ActionSchemaFile[] = [];
     private readonly definitions: ActionSchemaEntryTypeDefinition[] = [];
 
-    constructor(private readonly provider: ActionConfigProvider) {}
+    constructor(
+        private readonly provider: ActionConfigProvider,
+        private readonly activity: boolean = true,
+    ) {}
     addActionConfig(...configs: ActionConfig[]) {
         for (const config of configs) {
             const actionSchemaFile =
                 this.provider.getActionSchemaFileForConfig(config);
             this.files.push(actionSchemaFile);
-            this.definitions.push(actionSchemaFile.parsedActionSchema.entry);
+            const entry = actionSchemaFile.parsedActionSchema.entry;
+            if (entry.action) {
+                this.definitions.push(entry.action);
+            }
+            if (this.activity && entry.activity) {
+                this.definitions.push(entry.activity);
+            }
         }
     }
 
@@ -206,18 +216,22 @@ class ActionSchemaBuilder {
     }
 }
 
+export type ComposeSchemaOptions = {
+    activity?: boolean; // default true
+    multiple?: MultipleActionOptions; // default false
+};
 export function composeActionSchema(
     actionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
+    options?: ComposeSchemaOptions,
 ) {
-    const builder = new ActionSchemaBuilder(provider);
+    const builder = new ActionSchemaBuilder(provider, options?.activity);
     builder.addActionConfig(...actionConfigs);
     return finalizeActionSchemaBuilder(
         builder,
         switchActionConfigs,
-        multipleActionOptions,
+        options?.multiple,
     );
 }
 
@@ -227,11 +241,11 @@ export function composeSelectedActionSchema(
     additionalActionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
+    options?: ComposeSchemaOptions,
 ) {
-    const builder = new ActionSchemaBuilder(provider);
+    const builder = new ActionSchemaBuilder(provider, options?.activity);
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
-    const typeName = `Partial${actionConfig.schemaType}`;
+    const typeName = `Partial${getCombinedSchemaTypeName(actionConfig.schemaType)}`;
     const comments = `${typeName} is a partial list of actions available in schema group '${actionConfig.schemaName}'.`;
 
     const entry = sc.type(typeName, union, comments);
@@ -240,14 +254,14 @@ export function composeSelectedActionSchema(
     return finalizeActionSchemaBuilder(
         builder,
         switchActionConfigs,
-        multipleActionOptions,
+        options?.multiple,
     );
 }
 
 function finalizeActionSchemaBuilder(
     builder: ActionSchemaBuilder,
     switchActionConfigs: ActionConfig[],
-    multipleActionOptions: MultipleActionOptions,
+    multipleActionOptions: MultipleActionOptions = false,
 ) {
     if (switchActionConfigs.length > 0) {
         builder.addTypeDefinition(

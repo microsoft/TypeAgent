@@ -4,6 +4,7 @@
 import {
     ConsoleWriter,
     getInteractiveIO,
+    ListOptions,
     InteractiveIo,
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
@@ -65,6 +66,20 @@ export class AppPrinter extends ConsoleWriter {
         this._io.writer.writeLine(message);
     }
 
+    public writeJsonInColor(
+        color: ChalkInstance,
+        obj: any,
+        indented?: boolean,
+    ): AppPrinter {
+        const prevColor = this.setForeColor(color);
+        try {
+            super.writeJson(obj, indented);
+        } finally {
+            this.setForeColor(prevColor);
+        }
+        return this;
+    }
+
     public writeNote(message: string): void {
         this.writeColor(chalk.gray, message);
     }
@@ -107,6 +122,31 @@ export class AppPrinter extends ConsoleWriter {
             } else {
                 writable();
             }
+        } finally {
+            this.setForeColor(prevColor);
+        }
+    }
+
+    public writeUnderline(text: string): AppPrinter {
+        this.writeLine(chalk.underline(text));
+        return this;
+    }
+
+    public writeTitle(title: string | undefined) {
+        if (title) {
+            this.writeUnderline(title);
+        }
+        return this;
+    }
+
+    public writeListInColor(
+        color: ChalkInstance,
+        list?: string | string[] | (string | undefined)[] | Set<string>,
+        options?: ListOptions,
+    ) {
+        const prevColor = this.setForeColor(color);
+        try {
+            this.writeList(list, options);
         } finally {
             this.setForeColor(prevColor);
         }

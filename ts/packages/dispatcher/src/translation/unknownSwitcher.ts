@@ -12,7 +12,7 @@ import {
     generateSchemaTypeDefinition,
     ActionSchemaCreator as sc,
 } from "action-schema";
-
+import { getCombinedSchemaTypeName } from "./agentTranslators.js";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(
@@ -44,7 +44,7 @@ function createSelectionActionTypeDefinition(
         return undefined;
     }
 
-    const typeName = `${actionConfig.schemaType}Assistant`;
+    const typeName = `${getCombinedSchemaTypeName(actionConfig.schemaType)}Assistant`;
 
     const schema = sc.type(
         typeName,

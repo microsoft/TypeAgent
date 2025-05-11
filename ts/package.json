@@ -36,10 +36,8 @@
     "rebuild": "fluid-build . -t build --rebuild",
     "regen": "pnpm -C packages/cli run regen",
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
-    "shell": "pnpm -C packages/shell run dev",
-    "shell:package:linux": "pnpm -C packages/shell run package:linux",
-    "shell:package:mac": "pnpm -C packages/shell run package:mac",
-    "shell:package:win": "pnpm -C packages/shell run package:win",
+    "shell": "pnpm -C packages/shell run start",
+    "shell:package": "pnpm -C packages/shell run package",
     "shell:start:linux": "pnpm -C packages/shell run start:linux",
     "shell:start:mac": "pnpm -C packages/shell run start:mac",
     "shell:start:win": "pnpm -C packages/shell run start:win",
@@ -59,6 +57,14 @@
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"
+  },
+  "pnpm": {
+    "supportedArchitectures": {
+      "cpu": [
+        "x64",
+        "arm64"
+      ]
+    }
   },
   "peerDependencyRules": {
     "ignoreMissing": [

@@ -439,3 +439,6 @@ FodyWeavers.xsd
 # Python virtual env
 .venv
 android/samples/mobile/.idea/deploymentTargetSelector.xml
+
+# Mac OS files
+.DS_Store

@@ -282,3 +282,42 @@ export async function manageConversationAlias(
         }
     }
 }
+
+export async function findThread(
+    cm: conversation.ConversationManager,
+    predicate: (threadDef: conversation.ConversationThread) => boolean,
+) {
+    const threadIndex = await cm.conversation.getThreadIndex();
+    let allThreads = await asyncArray.toArray(threadIndex.entries());
+    for (const threadEntry of allThreads) {
+        if (predicate(threadEntry.value)) {
+            return threadEntry.value;
+        }
+    }
+    return undefined;
+}
+
+export function extractedKnowledgeToResponse(
+    extractedKnowledge: conversation.ExtractedKnowledge | undefined,
+): conversation.KnowledgeResponse {
+    if (extractedKnowledge) {
+        const entities: conversation.ConcreteEntity[] =
+            extractedKnowledge.entities?.map((e) => e.value) ?? [];
+        const actions: conversation.Action[] =
+            extractedKnowledge.actions?.map((a) => a.value) ?? [];
+        const topics: conversation.Topic[] =
+            extractedKnowledge.topics?.map((t) => t.value) ?? [];
+        return {
+            entities,
+            actions,
+            topics,
+            inverseActions: [],
+        };
+    }
+    return {
+        entities: [],
+        actions: [],
+        topics: [],
+        inverseActions: [],
+    };
+}

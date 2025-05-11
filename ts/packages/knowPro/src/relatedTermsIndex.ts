@@ -100,7 +100,7 @@ export class RelatedTermsIndex implements ITermToRelatedTermsIndex {
         }
     }
 
-    public get aliases() {
+    public get aliases(): TermToRelatedTermsMap {
         return this.aliasMap;
     }
 
@@ -459,6 +459,7 @@ export class TermEditDistanceIndex
  * Note: TEMPORARY. Experimental. May eventually replace ITermToRelatedTermsIndex
  * Work in progress; Simplifying related terms
  */
+/*
 export interface ITermToRelatedTermsIndex2 {
     addTerms(
         termTexts: string[],
@@ -509,3 +510,4 @@ export class TermToRelatedTermsIndex2 implements ITermToRelatedTermsIndex2 {
         );
     }
 }
+*/

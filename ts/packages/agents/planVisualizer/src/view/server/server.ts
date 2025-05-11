@@ -4,16 +4,26 @@
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { WebPlanData, PlanNode, PlanLink, SSEEvent } from "../shared/types";
+import { WebPlanData, PlanNode, SSEEvent } from "../shared/types.js";
 import { Request, Response } from "express";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:agent:planVisualizer:server");
 
 // Get the directory name in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const isDev =
+    process.argv.includes("--dev") ||
+    process.argv.includes("--mode=development");
 
-const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
+const portBase = process.env.PORT
+    ? parseInt(process.env.PORT)
+    : isDev
+      ? 9050
+      : 9001;
 const planViewerPortIndex = 2;
 const port = portBase + planViewerPortIndex;
 
@@ -58,6 +68,7 @@ const staticPlanData: WebPlanData = {
         { id: "checkout", label: "Checkout", type: "action" },
         { id: "payment", label: "Payment", type: "action" },
         { id: "confirmation", label: "Order Confirmation", type: "end" },
+        { id: "stopOrder", label: "Abandon order", type: "end" },
     ],
     links: [
         {
@@ -74,11 +85,11 @@ const staticPlanData: WebPlanData = {
         {
             source: "addToCart",
             target: "orderCheck",
-            label: "Is Order Complete?",
+            label: "Evaluate order state",
         },
         { source: "orderCheck", target: "checkout", label: "Yes" },
         { source: "orderCheck", target: "userCheck", label: "No" },
-        { source: "userCheck", target: "searchResults", label: "Add Items" },
+        { source: "userCheck", target: "stopOrder", label: "Drop order" },
         { source: "userCheck", target: "checkout", label: "Approve Partial" },
         { source: "checkout", target: "payment" },
         { source: "payment", target: "confirmation" },
@@ -170,7 +181,8 @@ app.post("/api/transition", (req: Request, res: Response) => {
     if (currentState && !action) {
         // Case 1.1: Check if the state already exists
         const existingNode = dynamicPlanData.nodes.find(
-            (node) => node.label === currentState && !node.isTemporary,
+            (node: PlanNode) =>
+                node.label === currentState && !node.isTemporary,
         );
 
         if (existingNode) {
@@ -188,7 +200,7 @@ app.post("/api/transition", (req: Request, res: Response) => {
 
         // Case 1.2: If there's a temporary node, replace it with this state
         const tempNodeIndex = dynamicPlanData.nodes.findIndex(
-            (node) => node.isTemporary,
+            (node: PlanNode) => node.isTemporary,
         );
 
         if (tempNodeIndex >= 0) {
@@ -252,7 +264,7 @@ app.post("/api/transition", (req: Request, res: Response) => {
         // Update screenshot on source node if provided
         if (screenshot) {
             const sourceNode = dynamicPlanData.nodes.find(
-                (n) => n.id === sourceNodeId,
+                (n: PlanNode) => n.id === sourceNodeId,
             );
             if (sourceNode) {
                 sourceNode.screenshot = screenshot;
@@ -294,7 +306,7 @@ app.post("/api/transition", (req: Request, res: Response) => {
     // Case 3: Both currentState and action are provided (original behavior)
     // Case 3.1: Replacing a temporary node
     const tempNodeIndex = dynamicPlanData.nodes.findIndex(
-        (node) => node.isTemporary,
+        (node: PlanNode) => node.isTemporary,
     );
 
     if (tempNodeIndex >= 0) {
@@ -315,7 +327,9 @@ app.post("/api/transition", (req: Request, res: Response) => {
     } else {
         // Case 3.2: No temporary node to replace, use/create the current state
         const existingNode = currentState
-            ? dynamicPlanData.nodes.find((node) => node.label === currentState)
+            ? dynamicPlanData.nodes.find(
+                  (node: PlanNode) => node.label === currentState,
+              )
             : null;
 
         if (existingNode) {
@@ -412,9 +426,11 @@ app.post("/api/screenshot", (req: Request, res: Response) => {
 
     // Find the node in both dynamic and static plan data
     const dynamicNode = dynamicPlanData.nodes.find(
-        (node) => node.id === nodeId,
+        (node: PlanNode) => node.id === nodeId,
     );
-    const staticNode = staticPlanData.nodes.find((node) => node.id === nodeId);
+    const staticNode = staticPlanData.nodes.find(
+        (node: PlanNode) => node.id === nodeId,
+    );
 
     // Update the node if found
     if (dynamicNode) {
@@ -454,7 +470,5 @@ app.post("/api/reset", (req: Request, res: Response) => {
 });
 
 app.listen(port, () => {
-    console.log(
-        `Web Plan Visualizer server running at http://localhost:${port}`,
-    );
+    debug(`Web Plan Visualizer server running at http://localhost:${port}`);
 });

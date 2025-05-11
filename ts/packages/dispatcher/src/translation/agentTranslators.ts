@@ -8,7 +8,7 @@ import {
     JsonTranslatorOptions,
     TypeAgentJsonValidator,
 } from "common-utils";
-import { AppAction } from "@typeagent/agent-sdk";
+import { AppAction, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { Result } from "typechat";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import {
@@ -25,6 +25,7 @@ import { HistoryContext, ParamObjectType } from "agent-cache";
 import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
 import {
     composeActionSchema,
+    ComposeSchemaOptions,
     composeSelectedActionSchema,
     createActionSchemaJsonValidator,
 } from "./actionSchemaJsonTranslator.js";
@@ -114,13 +115,49 @@ function getChangeAssistantSchemaDef(
     };
 }
 
+export function getActionSchemaTypeName(schemaType: string | SchemaTypeNames) {
+    return typeof schemaType === "string" ? schemaType : schemaType.action;
+}
+
+export function getActivitySchemaTypeName(
+    schemaType: string | SchemaTypeNames,
+) {
+    return typeof schemaType === "string" ? undefined : schemaType.activity;
+}
+
+export function getCombinedSchemaTypeName(
+    schemaType: string | SchemaTypeNames,
+) {
+    return typeof schemaType === "string"
+        ? schemaType
+        : Object.values(schemaType).join("");
+}
+
 function getTranslatorSchemaDef(
     actionConfig: ActionConfig,
 ): TranslatorSchemaDef {
+    const actionTypeName = getActionSchemaTypeName(actionConfig.schemaType);
+    const activityTypeName = getActivitySchemaTypeName(actionConfig.schemaType);
+
+    // Cannot disable activity if we don't regenerate the schema
+    let typeName: string;
+    if (actionTypeName === undefined) {
+        if (activityTypeName === undefined) {
+            throw new Error(
+                `Action config ${actionConfig.schemaName} does not have any action or activity schema type`,
+            );
+        }
+        typeName = activityTypeName;
+    } else {
+        typeName = activityTypeName
+            ? `${actionTypeName} | ${activityTypeName}`
+            : actionTypeName;
+    }
+
     if (typeof actionConfig.schemaFile === "string") {
         return {
             kind: "file",
-            typeName: actionConfig.schemaType,
+            typeName,
             fileName: getPackageFilePath(actionConfig.schemaFile),
         };
     }
@@ -128,7 +165,7 @@ function getTranslatorSchemaDef(
     if (actionConfig.schemaFile.format === "ts") {
         return {
             kind: "inline",
-            typeName: actionConfig.schemaType,
+            typeName,
             schema: actionConfig.schemaFile.content,
         };
     }
@@ -141,12 +178,24 @@ function getTranslatorSchemaDef(
 function getTranslatorSchemaDefs(
     actionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
-    multipleActionOptions: MultipleActionOptions,
+    multipleActionOptions: MultipleActionOptions = false,
 ): TranslatorSchemaDef[] {
+    // Cannot disable activity if we don't regenerate the schema
     const translationSchemaDefs = actionConfigs.map(getTranslatorSchemaDef);
 
     // subAction for multiple action
-    const subActionType = actionConfigs.map((s) => s.schemaType);
+    const subActionType = actionConfigs.flatMap((s) => {
+        const returnTypes: string[] = [];
+        const actionType = getActionSchemaTypeName(s.schemaType);
+        if (actionType) {
+            returnTypes.push(actionType);
+        }
+        const activityType = getActivitySchemaTypeName(s.schemaType);
+        if (activityType) {
+            returnTypes.push(activityType);
+        }
+        return returnTypes;
+    });
 
     // Add change assistant schema if needed
     const changeAssistantSchemaDef =
@@ -191,17 +240,16 @@ function createTypeAgentValidator<T extends TranslatedAction>(
     actionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
-    generated: boolean = true,
-    generateOptions?: GenerateSchemaOptions,
+    composeOptions?: ComposeSchemaOptions,
+    generateOptions?: GenerateSchemaOptions | null, // null means not generated
 ) {
-    return generated
+    return generateOptions !== null
         ? createActionSchemaJsonValidator<T>(
               composeActionSchema(
                   actionConfigs,
                   switchActionConfigs,
                   provider,
-                  multipleActionOptions,
+                  composeOptions,
               ),
               generateOptions,
           )
@@ -211,7 +259,7 @@ function createTypeAgentValidator<T extends TranslatedAction>(
                   getTranslatorSchemaDefs(
                       actionConfigs,
                       switchActionConfigs,
-                      multipleActionOptions,
+                      composeOptions?.multiple,
                   ),
               ),
               "AllActions",
@@ -266,17 +314,15 @@ export function loadAgentJsonTranslator<
     actionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
-    generated: boolean = true,
+    options?: ComposeSchemaOptions,
+    generateOptions?: GenerateSchemaOptions | null, // null means not generated
     model?: string,
-    generateOptions?: GenerateSchemaOptions,
 ): TypeAgentTranslator<T> {
     const validator = createTypeAgentValidator<T>(
         actionConfigs,
         switchActionConfigs,
         provider,
-        multipleActionOptions,
-        generated,
+        options,
         generateOptions,
     );
     // Collect schema name mapping.
@@ -365,7 +411,7 @@ export function createTypeAgentTranslatorForSelectedActions<
     additionalActionConfigs: ActionConfig[],
     switchActionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
-    multipleActionOptions: MultipleActionOptions,
+    options?: ComposeSchemaOptions,
     model?: string,
 ) {
     const validator = createActionSchemaJsonValidator<T>(
@@ -375,7 +421,7 @@ export function createTypeAgentTranslatorForSelectedActions<
             additionalActionConfigs,
             switchActionConfigs,
             provider,
-            multipleActionOptions,
+            options,
         ),
     );
     const schemaNameMap = collectSchemaName(
@@ -393,8 +439,8 @@ export function getFullSchemaText(
     provider: ActionConfigProvider,
     activeSchemas: string[] = [],
     changeAgentAction: boolean,
-    multipleActionOptions: MultipleActionOptions,
-    generated: boolean,
+    options?: ComposeSchemaOptions,
+    generateOptions?: GenerateSchemaOptions | null, // null means not generated
 ): string {
     const actionConfigs: ActionConfig[] = [
         provider.getActionConfig(schemaName),
@@ -415,21 +461,21 @@ export function getFullSchemaText(
         }
     }
 
-    if (generated) {
+    if (generateOptions !== null) {
         return generateActionSchema(
             composeActionSchema(
                 actionConfigs,
                 switchActionConfigs,
                 provider,
-                multipleActionOptions,
+                options,
             ),
-            { exact: true },
+            generateOptions,
         );
     }
     const schemaDefs = getTranslatorSchemaDefs(
         actionConfigs,
         switchActionConfigs,
-        multipleActionOptions,
+        options?.multiple,
     );
     return composeTranslatorSchemas("AllActions", schemaDefs);
 }

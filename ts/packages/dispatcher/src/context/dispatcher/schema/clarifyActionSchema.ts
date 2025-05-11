@@ -19,7 +19,8 @@ export interface ClarifyMultiplePossibleActionName {
     };
 }
 
-// Ask the user for clarification for request is missing parameter of an known action. Don't clarify unknown action.
+// The user request is for an action, but some of the parameter is not specified or cannot be infer from the context.
+// Ask the user for clarification for the missing parameter of an known action. Don't clarify unknown action.
 export interface ClarifyMissingParameter {
     actionName: "clarifyMissingParameter";
     parameters: {

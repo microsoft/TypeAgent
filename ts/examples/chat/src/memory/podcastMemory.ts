@@ -26,6 +26,8 @@ import {
     argPause,
     argSourceFileOrFolder,
     argToDate,
+    extractedKnowledgeToResponse,
+    findThread,
     manageConversationAlias,
 } from "./common.js";
 import path from "path";
@@ -113,6 +115,7 @@ export function createPodcastCommands(
     commands.podcastAlias = podcastAlias;
     commands.podcastEntities = podcastEntities;
     commands.podcastSearch = podcastSearch;
+    commands.podcastExportToKp = podcastExportKp;
     commands.podcastExport = podcastExport;
 
     //-----------
@@ -151,7 +154,7 @@ export function createPodcastCommands(
         await podcastIndex(namedArgs);
     }
 
-    function podcastExportDef(): CommandMetadata {
+    function podcastExportToKpDef(): CommandMetadata {
         return {
             description: "Export podcast to knowpro format",
             args: {
@@ -163,9 +166,9 @@ export function createPodcastCommands(
             },
         };
     }
-    commands.podcastExport.metadata = podcastExportDef();
-    async function podcastExport(args: string[]) {
-        const namedArgs = parseNamedArguments(args, podcastExportDef());
+    commands.podcastExportToKp.metadata = podcastExportToKpDef();
+    async function podcastExportKp(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastExportToKpDef());
         const dirName = path.dirname(namedArgs.filePath);
         const baseFileName = getFileName(namedArgs.filePath);
         context.printer.writeLine(
@@ -249,6 +252,73 @@ export function createPodcastCommands(
         context.printer.writeLine("Saving index");
         await kpPodcast.writeToFile(dirName, baseFileName);
     }
+
+    function podcastExportDef(): CommandMetadata {
+        return {
+            description: "Export podcast messages",
+            args: {
+                threadName: arg("Name of thread"),
+            },
+            options: {
+                destDirPath: arg("Destination directory"),
+                clean: argBool("Clean dest dir", true),
+                name: arg("conversation name"),
+            },
+        };
+    }
+    commands.podcastExport.metadata = podcastExportDef();
+    async function podcastExport(args: string[]) {
+        const namedArgs = parseNamedArguments(args, podcastExportDef());
+        let destDirPath =
+            namedArgs.destDirPath ??
+            path.join(context.storePath, "conversations/export");
+
+        if (namedArgs.clean) {
+            await removeDir(destDirPath);
+        }
+        await ensureDir(destDirPath);
+        let name = namedArgs.name ?? context.podcastMemory.conversationName;
+        const destCm = await conversation.createConversationManager(
+            {},
+            name,
+            destDirPath,
+            false,
+        );
+        const threadName = namedArgs.threadName.toLowerCase();
+        const thread = await findThread(context.podcastMemory, (td) => {
+            const descr = td.description.toLowerCase();
+            return descr.indexOf(threadName) >= 0;
+        });
+        if (!thread) {
+            context.printer.writeError(`No matching thread for ${threadName}`);
+            return;
+        }
+        context.printer.writeInColor(chalk.cyan, thread.description);
+        const range = conversation.toDateRange(thread.timeRange);
+        const messageStore = context.podcastMemory.conversation.messages;
+        const knowledgeStore = context.podcastMemory.conversation.knowledge;
+        const messageIds = await messageStore.getIdsInRange(
+            range.startDate,
+            range.stopDate,
+        );
+        const messages = await messageStore.getMultiple(messageIds);
+        const progress = new ProgressBar(context.printer, messages.length);
+        for (let i = 0; i < messageIds.length; ++i) {
+            const messageId = messageIds[i];
+            const message = messages[i]!;
+            let newMessage: conversation.ConversationMessage =
+                conversationMessageFromEmailText(message.value.value);
+            newMessage.timestamp = message.timestamp;
+            newMessage.knowledge = extractedKnowledgeToResponse(
+                await knowledgeStore.get(messageId),
+            );
+            await destCm.addMessage(newMessage, false);
+            progress.advance();
+        }
+        progress.complete();
+    }
+
+    // -- End Command ---
 
     // Eventually we should unite these functions with their
     // counterparts in @entities command in chatMemory.ts but
@@ -924,27 +994,29 @@ function podcastMessageFromEmailText(text: string) {
     );
 }
 
-function extractedKnowledgeToResponse(
-    extractedKnowledge: conversation.ExtractedKnowledge | undefined,
-): conversation.KnowledgeResponse {
-    if (extractedKnowledge) {
-        const entities: conversation.ConcreteEntity[] =
-            extractedKnowledge.entities?.map((e) => e.value) ?? [];
-        const actions: conversation.Action[] =
-            extractedKnowledge.actions?.map((a) => a.value) ?? [];
-        const topics: conversation.Topic[] =
-            extractedKnowledge.topics?.map((t) => t.value) ?? [];
-        return {
-            entities,
-            actions,
-            topics,
-            inverseActions: [],
-        };
+function conversationMessageFromEmailText(
+    text: string,
+): conversation.ConversationMessage {
+    let sender: string | undefined;
+    let recipients: string[] | undefined;
+    let lines = knowLib.splitIntoLines(text);
+    for (let line of lines) {
+        if (line.startsWith("From: ")) {
+            sender = line.replace("From: ", "");
+        } else if (line.startsWith(`"From: `)) {
+            sender = line.replace(`"From: `, "");
+        } else if (line.startsWith("To: ")) {
+            line = line.replace("To: ", "").trim();
+            recipients = knowLib.split(line, ",", {
+                trim: true,
+                removeEmpty: true,
+            });
+        } else {
+        }
     }
     return {
-        entities: [],
-        actions: [],
-        topics: [],
-        inverseActions: [],
+        text,
+        sender,
+        recipients,
     };
 }

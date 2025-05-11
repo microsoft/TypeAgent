@@ -29,8 +29,8 @@ function registerClient(client: Client) {
     });
     createClientIORpcServer(client.clientIO, clientIOChannel.channel);
 
-    ipcRenderer.on("listen-event", (_, name, token, useLocalWhisper) => {
-        client.listen(name, token, useLocalWhisper);
+    ipcRenderer.on("listen-event", (_, token, useLocalWhisper) => {
+        client.listen(token, useLocalWhisper);
     });
     ipcRenderer.on("setting-summary-changed", (_, updatedAgents) => {
         client.updateRegisterAgents(updatedAgents);
@@ -58,8 +58,8 @@ function registerClient(client: Client) {
 
 const api: ClientAPI = {
     registerClient,
-    getSpeechToken: () => {
-        return ipcRenderer.invoke("get-speech-token");
+    getSpeechToken: (silent: boolean) => {
+        return ipcRenderer.invoke("get-speech-token", silent);
     },
     getLocalWhisperStatus: () => {
         return ipcRenderer.invoke("get-localWhisper-status");

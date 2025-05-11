@@ -26,8 +26,9 @@ import { ShellAction } from "./shellActionSchema.js";
 import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { updateHandlerTable } from "./commands/update.js";
+import { app } from "electron";
+import { isProd, portBase } from "./index.js";
 
-const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
 const markdownPortIndex = 0;
 const montagePortIndex = 1;
 const planViewerPortIndex = 2;
@@ -303,6 +304,18 @@ const handlers: CommandHandlerTable = {
         localWhisper: getLocalWhisperCommandHandlers(),
         theme: getThemeCommandHandlers(),
         update: updateHandlerTable,
+        restart: {
+            description: "Restart the shell",
+            run: async () => {
+                if (!isProd && process.env["ELECTRON_RENDERER_URL"]) {
+                    throw new Error(
+                        "Unable to restart running under vite with HMR.",
+                    );
+                }
+                app.relaunch();
+                app.exit(0);
+            },
+        },
     },
 };
 

@@ -10,10 +10,11 @@ import {
     fromJSONParsedActionSchema,
 } from "../src/serialize.js";
 import { fileURLToPath } from "node:url";
-import { generateActionSchema } from "../src/generator.js";
+import { generateSchemaTypeDefinition } from "../src/generator.js";
 
 import prettier from "prettier";
 import { SchemaConfig } from "../src/schemaConfig.js";
+import { ParsedActionSchema } from "../src/type.js";
 
 const defaultAgentProviderPath = fileURLToPath(
     new URL("../../../defaultAgentProvider", import.meta.url),
@@ -105,6 +106,28 @@ async function compare(original: string, regenerated: string) {
     expect(regen).toEqual(orig);
 }
 
+function generateParsedActionSchema(
+    parsedActionSchema: ParsedActionSchema,
+    exact?: boolean,
+) {
+    const entry = [];
+    if (parsedActionSchema.entry.action) {
+        entry.push(parsedActionSchema.entry.action);
+    }
+    if (parsedActionSchema.entry.activity) {
+        entry.push(parsedActionSchema.entry.activity);
+    }
+    return generateSchemaTypeDefinition(
+        entry,
+        exact
+            ? {
+                  exact: true,
+              }
+            : undefined,
+        parsedActionSchema.order,
+    );
+}
+
 describe("Action Schema Regeneration", () => {
     //
     // There are a couple of tests that fail because of minor difference in regenerating
@@ -124,9 +147,10 @@ describe("Action Schema Regeneration", () => {
                 schemaConfig,
                 true,
             );
-            const regenerated = await generateActionSchema(actionSchemaFile, {
-                exact: true,
-            });
+            const regenerated = await generateParsedActionSchema(
+                actionSchemaFile,
+                true,
+            );
             await compare(source, regenerated);
         },
     );
@@ -140,14 +164,15 @@ describe("Action Schema Regeneration", () => {
                 typeName,
                 fileName,
             );
-            const regenerated = await generateActionSchema(actionSchemaFile);
+            const regenerated =
+                await generateParsedActionSchema(actionSchemaFile);
 
             const roundtrip = parseActionSchemaSource(
                 regenerated,
                 schemaName,
                 typeName,
             );
-            const schema2 = await generateActionSchema(roundtrip);
+            const schema2 = await generateParsedActionSchema(roundtrip);
             expect(schema2).toEqual(regenerated);
         },
     );

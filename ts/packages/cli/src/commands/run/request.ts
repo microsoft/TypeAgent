@@ -4,9 +4,8 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { createDispatcher } from "agent-dispatcher";
 import {
-    createActionConfigProvider,
     getCacheFactory,
-    getAllSchemaNames,
+    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
@@ -17,8 +16,8 @@ import { readFileSync, existsSync } from "fs";
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
 const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const schemaNames = getAllSchemaNames(
-    await createActionConfigProvider(defaultAppAgentProviders),
+const { schemaNames } = await getAllActionConfigProvider(
+    defaultAppAgentProviders,
 );
 export default class RequestCommand extends Command {
     static args = {

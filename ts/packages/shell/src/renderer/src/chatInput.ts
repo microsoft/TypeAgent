@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { SpeechToken } from "../../preload/electronTypes";
 import {
     iconMicrophone,
     iconMicrophoneListening,
@@ -10,7 +11,7 @@ import {
     iconSend,
 } from "./icon";
 import { getClientAPI } from "./main";
-import { recognizeOnce } from "./speech";
+import { needSpeechToken, recognizeOnce } from "./speech";
 import { getSpeechToken } from "./speechToken";
 import { uint8ArrayToBase64 } from "common-utils";
 
@@ -173,9 +174,13 @@ export class ChatInput {
     public sendButton: HTMLButtonElement;
     private separator: HTMLDivElement;
     private separatorContainer: HTMLDivElement;
+    public readonly recognizeOnce: (
+        token: SpeechToken | undefined,
+        useLocalWhisper: boolean,
+    ) => void;
+
     constructor(
         inputId: string,
-        buttonId: string,
         messageHandler: (message: string) => void,
         onChange?: (eta: ExpandableTextarea) => void,
         onKeydown?: (eta: ExpandableTextarea, event: KeyboardEvent) => boolean,
@@ -268,38 +273,96 @@ export class ChatInput {
             e.preventDefault();
         };
 
-        this.micButton = document.createElement("button");
-        this.micButton.appendChild(iconMicrophone());
-        this.micButton.id = buttonId;
-        this.micButton.className = "chat-input-button";
-        this.micButton.addEventListener("click", async () => {
-            const useLocalWhisper =
-                await getClientAPI().getLocalWhisperStatus();
-            if (useLocalWhisper) {
-                recognizeOnce(
-                    undefined,
-                    inputId,
-                    buttonId,
-                    messageHandler,
-                    useLocalWhisper,
-                );
-            } else {
-                recognizeOnce(
-                    await getSpeechToken(),
-                    inputId,
-                    buttonId,
-                    messageHandler,
-                );
-            }
-        });
+        const micButton = document.createElement("button");
+        micButton.disabled = false;
+
+        const micIcon = iconMicrophone();
+        micIcon.className = "chat-message-hidden";
+
+        micButton.appendChild(micIcon);
+        micButton.className = "chat-input-button";
+        micButton.disabled = true;
 
         const listeningMic = iconMicrophoneListening();
         listeningMic.className = "chat-message-hidden";
-        this.micButton.appendChild(listeningMic);
+        micButton.appendChild(listeningMic);
 
         const disabledMic = iconMicrophoneDisabled();
         disabledMic.className = "chat-message-hidden";
-        this.micButton.appendChild(disabledMic);
+        micButton.appendChild(disabledMic);
+
+        this.micButton = micButton;
+
+        const micReady = () => {
+            micButton.disabled = false;
+            micIcon.classList.remove("chat-message-hidden");
+            listeningMic.classList.add("chat-message-hidden");
+            disabledMic.classList.add("chat-message-hidden");
+        };
+        const micListening = () => {
+            micButton.disabled = true;
+            micIcon.classList.add("chat-message-hidden");
+            listeningMic.classList.remove("chat-message-hidden");
+            disabledMic.classList.add("chat-message-hidden");
+        };
+        const micNotReady = () => {
+            micButton.disabled = false;
+            micIcon.classList.add("chat-message-hidden");
+            listeningMic.classList.add("chat-message-hidden");
+            disabledMic.classList.remove("chat-message-hidden");
+        };
+
+        getClientAPI()
+            .getLocalWhisperStatus()
+            .then((useLocalWhisper) => {
+                if (needSpeechToken(useLocalWhisper)) {
+                    getSpeechToken().then((token) => {
+                        if (token === undefined) {
+                            micNotReady();
+                        } else {
+                            micReady();
+                        }
+                    });
+                }
+            });
+
+        this.recognizeOnce = (
+            token: SpeechToken | undefined,
+            useLocalWhisper: boolean,
+        ) => {
+            if (micButton.disabled) {
+                // Listening already.
+                return;
+            }
+
+            if (needSpeechToken(useLocalWhisper) && token === undefined) {
+                micNotReady();
+                return;
+            }
+            micListening();
+            recognizeOnce(
+                token,
+                "phraseDiv",
+                micReady,
+                messageHandler,
+                useLocalWhisper,
+            );
+        };
+        micButton.addEventListener("click", async () => {
+            if (micButton.disabled) {
+                // Listening already.
+                return;
+            }
+
+            const useLocalWhisper =
+                await getClientAPI().getLocalWhisperStatus();
+            this.recognizeOnce(
+                needSpeechToken(useLocalWhisper)
+                    ? await getSpeechToken(false)
+                    : undefined,
+                useLocalWhisper,
+            );
+        });
 
         this.camButton = document.createElement("button");
         this.camButton.appendChild(iconCamera());
@@ -309,22 +372,6 @@ export class ChatInput {
         //this.attachButton.htmlFor = this.fileInput.id;
         this.attachButton.appendChild(iconAttach());
         this.attachButton.className = "chat-input-button";
-
-        getSpeechToken().then((result) => {
-            if (
-                result == undefined &&
-                typeof Android !== "undefined" &&
-                !Android?.isSpeechRecognitionSupported()
-            ) {
-                const button = document.querySelector<HTMLButtonElement>(
-                    `#${buttonId}`,
-                )!;
-                button.disabled = true;
-                button.children[0].classList.add("chat-message-hidden");
-                button.children[1].classList.add("chat-message-hidden");
-                button.children[2].classList.remove("chat-message-hidden");
-            }
-        });
 
         this.separatorContainer = document.createElement("div");
         this.separatorContainer.className =

@@ -6,10 +6,12 @@ import { getClientAPI } from "./main";
 
 // globally share a token cache
 let speechToken: SpeechToken | undefined;
-export async function getSpeechToken(): Promise<SpeechToken | undefined> {
+export async function getSpeechToken(
+    silent: boolean = true,
+): Promise<SpeechToken | undefined> {
     if (getClientAPI() != undefined) {
         if (speechToken === undefined || speechToken.expire <= Date.now()) {
-            speechToken = await getClientAPI().getSpeechToken();
+            speechToken = await getClientAPI().getSpeechToken(silent);
         }
     }
     return speechToken;

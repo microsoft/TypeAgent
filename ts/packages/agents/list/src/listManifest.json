@@ -4,6 +4,9 @@
   "schema": {
     "description": "List agent with actions to create lists, show list items, add and remove list items",
     "schemaFile": "./listSchema.ts",
-    "schemaType": "ListAction"
+    "schemaType": {
+      "action": "ListAction",
+      "activity": "ListActivity"
+    }
   }
 }

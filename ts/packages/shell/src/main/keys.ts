@@ -31,8 +31,14 @@ async function createPersistence(dir: string) {
 
 async function loadKeysFromPersistence(dir: string) {
     debugShell("Loading keys persistence from directory", dir);
-    const persistence = await createPersistence(dir);
-    return persistence.load();
+    try {
+        const persistence = await createPersistence(dir);
+        return await persistence.load();
+    } catch (e) {
+        // Ignore load error and return null as if we don't have the keys.
+        debugShellError("Failed to load keys persistence", e);
+        return null;
+    }
 }
 
 async function saveKeysToPersistence(dir: string, keys: string) {
@@ -100,6 +106,15 @@ async function getKeys(
         }
     }
     return keys;
+}
+
+export async function loadKeysFromEnvFile(envFile: string) {
+    if (!fs.existsSync(envFile)) {
+        throw new Error(`Env file ${envFile} not found`);
+    }
+    debugShell("Loading service keys from file", envFile);
+    const keys = await fs.promises.readFile(envFile, "utf-8");
+    populateKeys(keys);
 }
 
 export async function loadKeys(

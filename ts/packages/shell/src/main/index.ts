@@ -43,7 +43,7 @@ import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import { ShellWindow } from "./shellWindow.js";
 
 import { debugShell, debugShellError } from "./debug.js";
-import { loadKeys } from "./keys.js";
+import { loadKeys, loadKeysFromEnvFile } from "./keys.js";
 import { parseShellCommandLine } from "./args.js";
 import {
     hasPendingUpdate,
@@ -81,6 +81,8 @@ if (isProd) {
         process.env.PORT = "9050";
     }
 }
+
+export const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
 
 // Set app user model id for windows
 if (process.platform === "win32") {
@@ -123,13 +125,6 @@ if (parsedArgs.update) {
     setUpdateConfigPath(parsedArgs.update);
 }
 
-export function runningTests(): boolean {
-    return (
-        process.env["INSTANCE_NAME"] !== undefined &&
-        process.env["INSTANCE_NAME"].startsWith("test_") === true
-    );
-}
-
 const time = performance.now();
 debugShell("Starting...");
 
@@ -162,29 +157,47 @@ let speechToken:
     | { token: string; expire: number; region: string; endpoint: string }
     | undefined;
 
-async function getSpeechToken() {
-    if (speechToken === undefined || speechToken.expire <= Date.now()) {
+async function getSpeechToken(silent: boolean) {
+    const instance = AzureSpeech.getInstance();
+    if (instance === undefined) {
+        if (!silent) {
+            dialog.showErrorBox(
+                "Azure Speech Service: Missing configuration",
+                "Environment variable SPEECH_SDK_KEY or SPEECH_SDK_REGION is missing.  Switch to local whisper or provide the configuration and restart.",
+            );
+        }
+        return undefined;
+    }
+
+    if (speechToken !== undefined && speechToken.expire > Date.now()) {
+        return speechToken;
+    }
+    try {
         debugShell("Getting speech token");
-        const tokenResponse = await AzureSpeech.getInstance().getTokenAsync();
+        const tokenResponse = await instance.getTokenAsync();
         speechToken = {
             token: tokenResponse.token,
             expire: Date.now() + 9 * 60 * 1000, // 9 minutes (token expires in 10 minutes)
             region: tokenResponse.region,
             endpoint: tokenResponse.endpoint,
         };
+        return speechToken;
+    } catch (e: any) {
+        debugShellError("Error getting speech token", e);
+        if (!silent) {
+            dialog.showErrorBox(
+                "Azure Speech Service: Error getting token",
+                e.message,
+            );
+        }
+        return undefined;
     }
-    return speechToken;
 }
 
 async function triggerRecognitionOnce(chatView: WebContentsView) {
-    const speechToken = await getSpeechToken();
+    const speechToken = await getSpeechToken(false);
     const useLocalWhisper = isLocalWhisperEnabled();
-    chatView.webContents.send(
-        "listen-event",
-        "Alt+M",
-        speechToken,
-        useLocalWhisper,
-    );
+    chatView.webContents.send("listen-event", speechToken, useLocalWhisper);
 }
 
 function initializeSpeech(chatView: WebContentsView) {
@@ -197,19 +210,13 @@ function initializeSpeech(chatView: WebContentsView) {
             azureSpeechRegion: region,
             azureSpeechEndpoint: endpoint,
         });
-        ipcMain.handle("get-speech-token", async () => {
-            return getSpeechToken();
-        });
     } else {
-        ipcMain.handle("get-speech-token", async () => {
-            dialog.showErrorBox(
-                "Azure Speech Service: Missing configuration",
-                "Environment variable SPEECH_SDK_KEY or SPEECH_SDK_REGION is missing.  Switch to local whisper or provide the configuration and restart.",
-            );
-        });
         debugShellError("Speech: no key or region");
     }
 
+    ipcMain.handle("get-speech-token", async (_, silent: boolean) => {
+        return getSpeechToken(silent);
+    });
     const ret = globalShortcut.register("Alt+M", () => {
         triggerRecognitionOnce(chatView);
     });
@@ -413,12 +420,21 @@ async function initialize() {
     debugShell("Ready", performance.now() - time);
 
     const appPath = app.getAppPath();
-    await loadKeys(
-        instanceDir,
-        parsedArgs.reset || parsedArgs.clean,
-        parsedArgs.env ? path.resolve(appPath, parsedArgs.env) : undefined,
-    );
-
+    const envFile = parsedArgs.env
+        ? path.resolve(appPath, parsedArgs.env)
+        : undefined;
+    if (parsedArgs.test) {
+        if (!envFile) {
+            throw new Error("Test mode requires --env argument");
+        }
+        await loadKeysFromEnvFile(envFile);
+    } else {
+        await loadKeys(
+            instanceDir,
+            parsedArgs.reset || parsedArgs.clean,
+            envFile,
+        );
+    }
     const browserExtensionPath = path.join(
         // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
         // Assume we can just replace app.asar with app.asar.unpacked in all cases.
@@ -483,7 +499,7 @@ async function initialize() {
     // On windows, we will spin up a local end point that listens
     // for pen events which will trigger speech reco
     // Don't spin this up during testing
-    if (process.platform == "win32" && !runningTests()) {
+    if (process.platform == "win32" && !parsedArgs.test) {
         const pipePath = path.join("\\\\.\\pipe\\TypeAgent", "speech");
         const server = net.createServer((stream) => {
             stream.on("data", (c) => {

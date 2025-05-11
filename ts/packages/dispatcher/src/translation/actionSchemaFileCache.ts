@@ -15,13 +15,18 @@ import {
     ActionSchemaFile,
 } from "./actionConfigProvider.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
-import { AppAction, SchemaFormat } from "@typeagent/agent-sdk";
+import { AppAction, SchemaFormat, SchemaTypeNames } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined, simpleStarRegex } from "common-utils";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import registerDebug from "debug";
 import { readSchemaConfig } from "../utils/loadSchemaConfig.js";
 import { SchemaInfoProvider } from "agent-cache";
+import {
+    getActionSchemaTypeName,
+    getActivitySchemaTypeName,
+    getCombinedSchemaTypeName,
+} from "./agentTranslators.js";
 
 const debug = registerDebug("typeagent:dispatcher:schema:cache");
 const debugError = registerDebug("typeagent:dispatcher:schema:cache:error");
@@ -48,7 +53,7 @@ type ActionSchemaFileCacheJSON = {
 
 function loadParsedActionSchema(
     schemaName: string,
-    schemaType: string,
+    schemaType: string | SchemaTypeNames,
     sourceHash: string,
     source: string,
 ): ActionSchemaFile {
@@ -63,9 +68,16 @@ function loadParsedActionSchema(
         const parsedActionSchema = fromJSONParsedActionSchema(
             parsedActionSchemaJSON,
         );
-        if (parsedActionSchema.entry.name !== schemaType) {
+        const actionTypeName = getActionSchemaTypeName(schemaType);
+        if (parsedActionSchema.entry.action?.name !== actionTypeName) {
             throw new Error(
-                `Schema type mismatch: actual: ${parsedActionSchema.entry.name}, expected:${schemaType}`,
+                `Schema type mismatch: actual: ${parsedActionSchema.entry.action?.name}, expected:${actionTypeName}`,
+            );
+        }
+        const activityTypeName = getActivitySchemaTypeName(schemaType);
+        if (parsedActionSchema.entry.activity?.name !== activityTypeName) {
+            throw new Error(
+                `Schema type mismatch: actual: ${parsedActionSchema.entry.action?.name}, expected:${activityTypeName}`,
             );
         }
         return {
@@ -80,14 +92,23 @@ function loadParsedActionSchema(
     }
 }
 
-function loadActionSchemaFile(record: ActionSchemaFileJSON): ActionSchemaFile {
-    return {
-        schemaName: record.schemaName,
-        sourceHash: record.sourceHash,
-        parsedActionSchema: fromJSONParsedActionSchema(
-            record.parsedActionSchema,
-        ),
-    };
+function loadCachedActionSchemaFile(
+    record: ActionSchemaFileJSON,
+): ActionSchemaFile | undefined {
+    try {
+        return {
+            schemaName: record.schemaName,
+            sourceHash: record.sourceHash,
+            parsedActionSchema: fromJSONParsedActionSchema(
+                record.parsedActionSchema,
+            ),
+        };
+    } catch (e: any) {
+        debugError(
+            `Failed to load cached action schema '${record.schemaName}': ${e.message}`,
+        );
+        return undefined;
+    }
 }
 
 function saveActionSchemaFile(
@@ -169,22 +190,27 @@ export class ActionSchemaFileCache {
             this.getSchemaSource(actionConfig);
 
         const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const cacheKey = `${format}|${actionConfig.schemaName}|${actionConfig.schemaType}|${fullPath ?? ""}`;
+        const typeKey = getCombinedSchemaTypeName(actionConfig.schemaType);
+
+        const cacheKey = `${format}|${actionConfig.schemaName}|${typeKey}|${fullPath ?? ""}`;
 
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {
             this.prevSaved.delete(cacheKey);
             if (lastCached.sourceHash === hash) {
                 debug(`Cached action schema used: ${actionConfig.schemaName}`);
-                // Add and save the cache first before convert it back (which will modify the data)
-                this.addToCache(cacheKey, lastCached);
-                const cached = loadActionSchemaFile(lastCached);
-                this.actionSchemaFiles.set(actionConfig.schemaName, cached);
-                return cached;
+                const cached = loadCachedActionSchemaFile(lastCached);
+                if (cached !== undefined) {
+                    // Add and save the cache first before convert it back (which will modify the data)
+                    this.addToCache(cacheKey, lastCached);
+                    this.actionSchemaFiles.set(actionConfig.schemaName, cached);
+                    return cached;
+                }
+            } else {
+                debugError(
+                    `Cached action schema hash mismatch: ${actionConfig.schemaName}`,
+                );
             }
-            debugError(
-                `Cached action schema hash mismatch: ${actionConfig.schemaName}`,
-            );
         }
 
         const schemaConfig: SchemaConfig | undefined = config

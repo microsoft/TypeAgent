@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schemaName": "player",
-  "sourceHash": "e0+5x42s99DZanPOfvIRaWpITnqeTzNTgZdO5O19oko=",
+  "sourceHash": "u48nTdLA+MfQWkaVvrUWQsDODadA8jD7dk/Nb8anBEE=",
   "explainerName": "v5",
   "entries": [
     {
@@ -96,7 +96,9 @@
           {
             "text": "Bounce",
             "category": "command",
-            "propertyNames": []
+            "propertyNames": [
+              "fullActionName"
+            ]
           },
           {
             "text": "to the",
@@ -110,7 +112,7 @@
           },
           {
             "text": "next track",
-            "category": "action",
+            "category": "object",
             "propertyNames": [
               "fullActionName"
             ]
@@ -121,24 +123,28 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
+              "Bounce",
               "next track"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
+                  "Bounce",
                   "previous track"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
+                  "Bounce",
                   "pause track"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
+                  "Bounce",
                   "play track"
                 ]
               }
@@ -148,8 +154,8 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "Please",
-          "If you don't mind"
+          "If you don't mind",
+          "Please"
         ],
         "politeSuffixes": [
           "thank you",
@@ -176,115 +182,12 @@
         ],
         "subPhrases": [
           {
-            "text": "Can we",
+            "text": "Can we get to",
             "category": "politeness",
             "synonyms": [
-              "Could we",
-              "May we",
-              "Would we"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "get to the",
-            "category": "filler",
-            "synonyms": [
-              "move to the",
-              "switch to the",
-              "advance to the"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "next track",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          }
-        ],
-        "propertyAlternatives": [
-          {
-            "propertyName": "fullActionName",
-            "propertyValue": "player.next",
-            "propertySubPhrases": [
-              "next track"
-            ],
-            "alternatives": [
-              {
-                "propertyValue": "player.previous",
-                "propertySubPhrases": [
-                  "previous track"
-                ]
-              },
-              {
-                "propertyValue": "player.pause",
-                "propertySubPhrases": [
-                  "pause track"
-                ]
-              },
-              {
-                "propertyValue": "player.play",
-                "propertySubPhrases": [
-                  "play track"
-                ]
-              },
-              {
-                "propertyValue": "player.stop",
-                "propertySubPhrases": [
-                  "stop track"
-                ]
-              }
-            ]
-          }
-        ],
-        "politePrefixes": [
-          "Could you please",
-          "Would you mind",
-          "If it's not too much trouble",
-          "May I kindly ask"
-        ],
-        "politeSuffixes": [
-          "if you don't mind?",
-          "please?",
-          "thank you.",
-          "if that's okay?"
-        ]
-      }
-    },
-    {
-      "request": "Can we hop to the next track?",
-      "action": {
-        "fullActionName": "player.next"
-      },
-      "explanation": {
-        "properties": [
-          {
-            "name": "fullActionName",
-            "value": "player.next",
-            "substrings": [
-              "next track"
-            ]
-          }
-        ],
-        "subPhrases": [
-          {
-            "text": "Can we",
-            "category": "politeness",
-            "synonyms": [
-              "Could we",
-              "May we",
-              "Would we"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "hop to",
-            "category": "confirmation",
-            "synonyms": [
-              "skip to",
-              "move to",
-              "jump to"
+              "Could we go to",
+              "May we proceed to",
+              "Shall we move to"
             ],
             "isOptional": true
           },
@@ -338,8 +241,101 @@
           "May I kindly ask"
         ],
         "politeSuffixes": [
-          "if you don't mind?",
+          "thank you",
+          "please",
+          "if you don't mind",
+          "I'd appreciate it"
+        ]
+      }
+    },
+    {
+      "request": "Can we hop to the next track?",
+      "action": {
+        "fullActionName": "player.next"
+      },
+      "explanation": {
+        "properties": [
+          {
+            "name": "fullActionName",
+            "value": "player.next",
+            "substrings": [
+              "next track"
+            ]
+          }
+        ],
+        "subPhrases": [
+          {
+            "text": "Can we",
+            "category": "politeness",
+            "synonyms": [
+              "Could we",
+              "May we",
+              "Shall we"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "hop to",
+            "category": "preposition",
+            "synonyms": [
+              "jump to",
+              "move to",
+              "skip to"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "the next track",
+            "category": "action",
+            "propertyNames": [
+              "fullActionName"
+            ]
+          }
+        ],
+        "propertyAlternatives": [
+          {
+            "propertyName": "fullActionName",
+            "propertyValue": "player.next",
+            "propertySubPhrases": [
+              "the next track"
+            ],
+            "alternatives": [
+              {
+                "propertyValue": "player.previous",
+                "propertySubPhrases": [
+                  "the previous track"
+                ]
+              },
+              {
+                "propertyValue": "player.pause",
+                "propertySubPhrases": [
+                  "pause the track"
+                ]
+              },
+              {
+                "propertyValue": "player.play",
+                "propertySubPhrases": [
+                  "play the track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop the track"
+                ]
+              }
+            ]
+          }
+        ],
+        "politePrefixes": [
+          "Could you please",
+          "Would you mind",
+          "If it's not too much trouble",
+          "May I kindly ask"
+        ],
+        "politeSuffixes": [
           "please?",
+          "if you don't mind?",
           "thank you.",
           "if that's okay?"
         ]
@@ -356,7 +352,7 @@
             "name": "fullActionName",
             "value": "player.next",
             "substrings": [
-              "change to the next song"
+              "next song"
             ]
           }
         ],
@@ -372,7 +368,17 @@
             "isOptional": true
           },
           {
-            "text": "change to the next song",
+            "text": "change to the",
+            "category": "preposition",
+            "synonyms": [
+              "switch to the",
+              "move to the",
+              "go to the"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "next song",
             "category": "action",
             "propertyNames": [
               "fullActionName"
@@ -384,47 +390,47 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "change to the next song"
+              "next song"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "change to the previous song"
+                  "previous song"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause the song"
+                  "pause song"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play the song"
+                  "play song"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop the song"
+                  "stop song"
                 ]
               }
             ]
           }
         ],
         "politePrefixes": [
-          "Please",
-          "Would you mind",
           "Could you please",
-          "If you don't mind"
+          "Would you mind",
+          "If it's not too much trouble",
+          "May I kindly ask"
         ],
         "politeSuffixes": [
-          "please",
-          "if you could",
-          "thank you",
-          "if that's okay"
+          "please?",
+          "if you don't mind.",
+          "thank you.",
+          "if it's okay."
         ]
       }
     },
@@ -510,14 +516,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If you don't mind",
-          "May I ask you to"
+          "If it's not too much trouble",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "please?",
-          "if that's okay?",
+          "if you don't mind.",
           "thank you.",
-          "if you could."
+          "if that's okay."
         ]
       }
     },
@@ -613,8 +619,8 @@
         "politeSuffixes": [
           "please?",
           "if that's okay?",
-          "thank you!",
-          "if you could?"
+          "thank you.",
+          "if you could."
         ]
       }
     },
@@ -688,16 +694,16 @@
           }
         ],
         "politePrefixes": [
-          "Please",
           "Would you mind",
           "If it's not too much trouble",
-          "May I kindly ask"
+          "May I kindly ask",
+          "Could you please"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "If you don't mind",
-          "Please",
-          "Thanks"
+          "please?",
+          "if you don't mind.",
+          "thank you.",
+          "if that's okay."
         ]
       }
     },
@@ -815,8 +821,8 @@
             "category": "filler",
             "synonyms": [
               "Move to the",
-              "Skip to the",
-              "Jump to the"
+              "Switch to the",
+              "Change to the"
             ],
             "isOptional": true
           },
@@ -870,14 +876,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "May I ask you to",
-          "If you don't mind"
+          "If you don't mind",
+          "Please"
         ],
         "politeSuffixes": [
+          "if you could",
           "thank you",
           "please",
-          "if that's okay",
-          "if you could"
+          "if that's okay"
         ]
       }
     },
@@ -904,7 +910,7 @@
           },
           {
             "text": "next",
-            "category": "action",
+            "category": "property",
             "propertyNames": [
               "fullActionName"
             ]
@@ -947,14 +953,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If you don't mind",
+          "Can you kindly",
           "Please"
         ],
         "politeSuffixes": [
-          "for me?",
-          "if that's okay.",
+          "if you don't mind.",
           "please.",
-          "thank you."
+          "thank you.",
+          "if that's okay."
         ]
       }
     },
@@ -1019,14 +1025,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "Can you kindly",
-          "Please"
+          "Please",
+          "Kindly"
         ],
         "politeSuffixes": [
-          "thank you",
-          "if you don't mind",
-          "please",
-          "thanks"
+          "if you don't mind.",
+          "please.",
+          "thank you.",
+          "if that's okay."
         ]
       }
     },
@@ -1115,13 +1121,13 @@
           "Could you please",
           "Would you mind",
           "If possible,",
-          "May I kindly"
+          "May I kindly request"
         ],
         "politeSuffixes": [
           "thank you.",
           "please.",
           "if you don't mind.",
-          "if that's okay."
+          "I would appreciate it."
         ]
       }
     },
@@ -1147,8 +1153,7 @@
             "synonyms": [
               "please",
               "kindly",
-              "if you could",
-              "would you mind"
+              "if you could"
             ],
             "isOptional": true
           },
@@ -1158,8 +1163,7 @@
             "synonyms": [
               "a",
               "an",
-              "this",
-              "that"
+              "this"
             ],
             "isOptional": true
           },
@@ -1216,6 +1220,12 @@
                 "propertySubPhrases": [
                   "play"
                 ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop"
+                ]
               }
             ]
           }
@@ -1224,13 +1234,13 @@
           "Could you please",
           "Would you mind",
           "If it's not too much trouble",
-          "May I kindly ask"
+          "May I kindly request"
         ],
         "politeSuffixes": [
-          "thank you",
-          "if you don't mind",
-          "please",
-          "thanks a lot"
+          "if you don't mind.",
+          "please.",
+          "thank you.",
+          "if that's okay."
         ]
       }
     },
@@ -1251,27 +1261,17 @@
         ],
         "subPhrases": [
           {
-            "text": "I'd like to",
+            "text": "I'd like to hear",
             "category": "politeness",
             "synonyms": [
-              "I would like to",
-              "I want to",
-              "I wish to"
+              "I would like to hear",
+              "I want to hear",
+              "I wish to hear"
             ],
             "isOptional": true
           },
           {
-            "text": "hear the",
-            "category": "filler",
-            "synonyms": [
-              "listen to",
-              "play",
-              "put on"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "next track",
+            "text": "the next track",
             "category": "action",
             "propertyNames": [
               "fullActionName"
@@ -1283,31 +1283,31 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "next track"
+              "the next track"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "previous track"
+                  "the previous track"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause track"
+                  "pause the track"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play track"
+                  "play the track"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop track"
+                  "stop the track"
                 ]
               }
             ]
@@ -1400,7 +1400,7 @@
           "Could you please",
           "Would you mind",
           "If it's not too much trouble",
-          "May I kindly request"
+          "May I kindly ask"
         ],
         "politeSuffixes": [
           "thank you",
@@ -1421,7 +1421,7 @@
             "name": "fullActionName",
             "value": "player.next",
             "substrings": [
-              "next track"
+              "next"
             ]
           }
         ],
@@ -1438,7 +1438,7 @@
           },
           {
             "text": "the next track",
-            "category": "action",
+            "category": "property",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1482,14 +1482,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If it's not too much trouble",
-          "May I kindly ask"
+          "If possible,",
+          "May I request"
         ],
         "politeSuffixes": [
-          "thank you",
-          "please",
-          "if you don't mind",
-          "I'd appreciate it"
+          "thank you.",
+          "please.",
+          "if you don't mind.",
+          "if that's okay."
         ]
       }
     },
@@ -1514,27 +1514,17 @@
             "category": "filler",
             "synonyms": [
               "I am prepared for",
-              "I am set for",
-              "I am ready to"
+              "I am ready to",
+              "I am set for"
             ],
             "isOptional": true
           },
           {
-            "text": "the next",
+            "text": "the next song",
             "category": "property",
             "propertyNames": [
               "fullActionName"
             ]
-          },
-          {
-            "text": "song",
-            "category": "filler",
-            "synonyms": [
-              "track",
-              "tune",
-              "music"
-            ],
-            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -1542,31 +1532,31 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "the next"
+              "the next song"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "the previous"
+                  "the previous song"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause"
+                  "pause the song"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play"
+                  "play the song"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop"
+                  "stop the song"
                 ]
               }
             ]
@@ -1597,7 +1587,7 @@
             "name": "fullActionName",
             "value": "player.next",
             "substrings": [
-              "Jump to the next track."
+              "next track"
             ]
           }
         ],
@@ -1605,13 +1595,21 @@
           {
             "text": "Jump to",
             "category": "command",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "propertyNames": []
           },
           {
-            "text": "the next track",
-            "category": "object",
+            "text": "the",
+            "category": "preposition",
+            "synonyms": [
+              "a",
+              "this",
+              "that"
+            ],
+            "isOptional": true
+          },
+          {
+            "text": "next track",
+            "category": "action",
             "propertyNames": [
               "fullActionName"
             ]
@@ -1622,36 +1620,25 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "Jump to",
-              "the next track"
+              "next track"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "Jump to",
-                  "the previous track"
+                  "previous track"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Pause",
-                  "the track"
+                  "pause track"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Play",
-                  "the track"
-                ]
-              },
-              {
-                "propertyValue": "player.stop",
-                "propertySubPhrases": [
-                  "Stop",
-                  "the track"
+                  "play track"
                 ]
               }
             ]
@@ -1699,13 +1686,13 @@
           },
           {
             "text": "take us to the",
-            "category": "preposition",
+            "category": "filler",
             "synonyms": [
               "move to",
               "go to",
               "switch to"
             ],
-            "isOptional": false
+            "isOptional": true
           },
           {
             "text": "next track",
@@ -1747,14 +1734,14 @@
         "politePrefixes": [
           "Please",
           "Would you mind",
-          "Could you kindly",
+          "Could you please",
           "If you don't mind"
         ],
         "politeSuffixes": [
-          "please",
-          "if you could",
           "thank you",
-          "if that's okay"
+          "please",
+          "if that's okay",
+          "if you could"
         ]
       }
     },
@@ -1778,9 +1765,9 @@
             "text": "Let's go to the",
             "category": "filler",
             "synonyms": [
-              "let's proceed to the",
-              "let's move to the",
-              "let's advance to the"
+              "let us proceed to",
+              "let's move to",
+              "let's head to"
             ],
             "isOptional": true
           },
@@ -1828,10 +1815,10 @@
           "Please"
         ],
         "politeSuffixes": [
-          "if that's okay.",
-          "thank you.",
-          "please.",
-          "if you could."
+          "thank you",
+          "if that's okay",
+          "please",
+          "thanks"
         ]
       }
     },
@@ -1862,14 +1849,17 @@
             "isOptional": true
           },
           {
-            "text": "hear",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
+            "text": "hear the",
+            "category": "filler",
+            "synonyms": [
+              "listen to",
+              "play",
+              "put on"
+            ],
+            "isOptional": true
           },
           {
-            "text": "the next one",
+            "text": "next one",
             "category": "action",
             "propertyNames": [
               "fullActionName"
@@ -1881,36 +1871,31 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "hear",
-              "the next one"
+              "next one"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "hear",
-                  "the previous one"
+                  "previous one"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause",
-                  "the current one"
+                  "pause"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play",
-                  "the current one"
+                  "play"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop",
-                  "the current one"
+                  "stop"
                 ]
               }
             ]
@@ -2008,13 +1993,13 @@
           "Could you please",
           "Would you mind",
           "If you don't mind",
-          "Please"
+          "May I ask you to"
         ],
         "politeSuffixes": [
-          "if that's okay.",
-          "please.",
-          "if you could.",
-          "thank you."
+          "if that's okay?",
+          "please?",
+          "if you could?",
+          "thank you!"
         ]
       }
     },
@@ -2036,16 +2021,16 @@
         "subPhrases": [
           {
             "text": "Let's",
-            "category": "filler",
+            "category": "confirmation",
             "synonyms": [
-              "Let us",
-              "We should",
-              "We can"
+              "okay",
+              "alright",
+              "sure"
             ],
             "isOptional": true
           },
           {
-            "text": "proceed to",
+            "text": "proceed to the",
             "category": "filler",
             "synonyms": [
               "move to",
@@ -2055,7 +2040,7 @@
             "isOptional": true
           },
           {
-            "text": "the next song",
+            "text": "next song",
             "category": "action",
             "propertyNames": [
               "fullActionName"
@@ -2067,31 +2052,31 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "the next song"
+              "next song"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "the previous song"
+                  "previous song"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause the song"
+                  "pause song"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play the song"
+                  "play song"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop the song"
+                  "stop song"
                 ]
               }
             ]
@@ -2101,13 +2086,13 @@
           "Could you please",
           "Would you mind",
           "If you don't mind",
-          "Please"
+          "May I kindly ask"
         ],
         "politeSuffixes": [
           "thank you",
-          "if that's okay",
           "please",
-          "thanks"
+          "if that's okay",
+          "if you could"
         ]
       }
     },
@@ -2188,13 +2173,13 @@
           "Could you please",
           "Would you mind",
           "If you don't mind",
-          "May I ask you to"
+          "Please"
         ],
         "politeSuffixes": [
-          "please?",
-          "if that's okay?",
-          "thank you!",
-          "if you could?"
+          "thank you",
+          "if that's okay",
+          "please",
+          "thanks"
         ]
       }
     },
@@ -2226,7 +2211,7 @@
           },
           {
             "text": "skip this track",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -2292,37 +2277,37 @@
             "name": "fullActionName",
             "value": "player.next",
             "substrings": [
-              "next song"
+              "next"
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Move on to",
+            "text": "Move on to the",
             "category": "filler",
             "synonyms": [
-              "proceed to",
-              "go to",
-              "advance to"
+              "Proceed to",
+              "Go to",
+              "Advance to"
             ],
             "isOptional": true
           },
           {
-            "text": "the",
-            "category": "preposition",
-            "synonyms": [
-              "a",
-              "this",
-              "that"
-            ],
-            "isOptional": true
-          },
-          {
-            "text": "next song",
-            "category": "action",
+            "text": "next",
+            "category": "property",
             "propertyNames": [
               "fullActionName"
             ]
+          },
+          {
+            "text": "song",
+            "category": "filler",
+            "synonyms": [
+              "track",
+              "music",
+              "tune"
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -2330,31 +2315,31 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "next song"
+              "next"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "previous song"
+                  "previous"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause song"
+                  "pause"
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "play song"
+                  "play"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop song"
+                  "stop"
                 ]
               }
             ]
@@ -2367,10 +2352,10 @@
           "Please"
         ],
         "politeSuffixes": [
-          "thank you",
-          "if that's okay",
-          "please",
-          "thanks"
+          "if that's okay.",
+          "thank you.",
+          "please.",
+          "if you could."
         ]
       }
     },
@@ -2401,9 +2386,9 @@
             "text": "hit",
             "category": "filler",
             "synonyms": [
-              "strike",
-              "blow",
-              "shot"
+              "song",
+              "track",
+              "item"
             ],
             "isOptional": true
           },
@@ -2412,8 +2397,8 @@
             "category": "politeness",
             "synonyms": [
               "kindly",
-              "if you would",
-              "if you please"
+              "if you could",
+              "would you mind"
             ],
             "isOptional": true
           }
@@ -2443,6 +2428,12 @@
                 "propertySubPhrases": [
                   "Play"
                 ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop"
+                ]
               }
             ]
           }
@@ -2456,8 +2447,8 @@
         "politeSuffixes": [
           "thank you",
           "if that's okay",
-          "please and thank you",
-          "if you could"
+          "please",
+          "thanks"
         ]
       }
     },
@@ -2495,7 +2486,7 @@
             "synonyms": [
               "kindly",
               "if you would",
-              "if you could"
+              "if you please"
             ],
             "isOptional": true
           }
@@ -2554,22 +2545,17 @@
             "name": "fullActionName",
             "value": "player.next",
             "substrings": [
-              "Next"
+              "Next number, please."
             ]
           }
         ],
         "subPhrases": [
           {
-            "text": "Next",
+            "text": "Next number",
             "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
-          },
-          {
-            "text": "number",
-            "category": "object",
-            "propertyNames": []
           },
           {
             "text": "please",
@@ -2587,13 +2573,13 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "Next"
+              "Next number"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "Previous"
+                  "Previous number"
                 ]
               },
               {
@@ -2607,6 +2593,12 @@
                 "propertySubPhrases": [
                   "Play"
                 ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop"
+                ]
               }
             ]
           }
@@ -2614,14 +2606,14 @@
         "politePrefixes": [
           "Could you kindly",
           "Would you mind",
-          "If you don't mind",
+          "If it's not too much trouble",
           "May I request"
         ],
         "politeSuffixes": [
-          "thank you",
-          "if that's okay",
-          "please and thank you",
-          "if you could"
+          "if you don't mind.",
+          "thank you.",
+          "please.",
+          "if that's okay."
         ]
       }
     },
@@ -2651,7 +2643,12 @@
           {
             "text": "on the queue.",
             "category": "context",
-            "propertyNames": []
+            "synonyms": [
+              "in the list.",
+              "in the lineup.",
+              "in the sequence."
+            ],
+            "isOptional": true
           }
         ],
         "propertyAlternatives": [
@@ -2727,6 +2724,7 @@
               "please",
               "if it's okay",
               "if you could",
+              "if you would",
               "if possible"
             ],
             "isOptional": true
@@ -2756,6 +2754,12 @@
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "Play song"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "Stop song"
                 ]
               }
             ]
@@ -2803,8 +2807,8 @@
             "category": "politeness",
             "synonyms": [
               "kindly",
-              "if you could",
-              "would you mind"
+              "if you would",
+              "if you could"
             ],
             "isOptional": true
           }
@@ -2841,14 +2845,14 @@
         "politePrefixes": [
           "Could you",
           "Would you mind",
-          "May I ask",
-          "If you don't mind"
+          "If you don't mind",
+          "May I ask you to"
         ],
         "politeSuffixes": [
           "thank you",
           "if that's okay",
-          "please and thank you",
-          "if you could"
+          "please",
+          "thanks"
         ]
       }
     },
@@ -2926,7 +2930,7 @@
           "please.",
           "if you don't mind.",
           "thank you.",
-          "would you kindly?"
+          "would be appreciated."
         ]
       }
     },
@@ -2955,11 +2959,11 @@
           },
           {
             "text": "up on the playlist.",
-            "category": "context",
+            "category": "filler",
             "synonyms": [
-              "in the playlist",
-              "on the list",
-              "in the queue"
+              "on the playlist next.",
+              "next in the playlist.",
+              "playlist next."
             ],
             "isOptional": true
           }
@@ -2996,14 +3000,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "May I ask you to",
-          "If you don't mind"
+          "If you don't mind",
+          "Please"
         ],
         "politeSuffixes": [
           "thank you",
           "please",
           "if that's okay",
-          "if you could"
+          "thanks"
         ]
       }
     },
@@ -3074,13 +3078,13 @@
           "Could you",
           "Would you mind",
           "If you don't mind",
-          "Please"
+          "May I ask you to"
         ],
         "politeSuffixes": [
-          "Thank you",
-          "Thanks",
-          "If that's okay",
-          "I appreciate it"
+          "Thank you!",
+          "If that's okay.",
+          "Please and thank you.",
+          "I appreciate it."
         ]
       }
     },
@@ -3102,11 +3106,11 @@
         "subPhrases": [
           {
             "text": "On to the",
-            "category": "filler",
+            "category": "preposition",
             "synonyms": [
-              "moving to",
-              "proceeding to",
-              "advancing to"
+              "towards",
+              "onto",
+              "moving to"
             ],
             "isOptional": true
           },
@@ -3158,16 +3162,16 @@
           }
         ],
         "politePrefixes": [
-          "Could you please",
+          "Please",
+          "Could you kindly",
           "Would you mind",
-          "If you don't mind",
-          "Please"
+          "If you don't mind"
         ],
         "politeSuffixes": [
           "thank you",
-          "if that's okay",
           "please",
-          "thanks"
+          "if that's okay",
+          "if you could"
         ]
       }
     },
@@ -3191,9 +3195,9 @@
             "text": "Please",
             "category": "politeness",
             "synonyms": [
-              "kindly",
-              "would you mind",
-              "could you"
+              "Kindly",
+              "Would you mind",
+              "Could you"
             ],
             "isOptional": true
           },
@@ -3279,8 +3283,8 @@
             "category": "politeness",
             "synonyms": [
               "Kindly",
-              "Would you mind",
-              "Could you"
+              "Could you",
+              "Would you mind"
             ],
             "isOptional": true
           },
@@ -3303,7 +3307,7 @@
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "go back to the previous track"
+                  "back to the previous track"
                 ]
               },
               {
@@ -3330,14 +3334,14 @@
         "politePrefixes": [
           "Could you kindly",
           "Would you mind",
-          "If it's not too much trouble",
+          "If you don't mind",
           "May I ask you to"
         ],
         "politeSuffixes": [
-          "Thank you.",
-          "I appreciate it.",
-          "Thanks a lot.",
-          "Much appreciated."
+          "if possible?",
+          "please?",
+          "thank you.",
+          "if you could."
         ]
       }
     },
@@ -3368,15 +3372,8 @@
             "isOptional": true
           },
           {
-            "text": "play",
-            "category": "action",
-            "propertyNames": [
-              "fullActionName"
-            ]
-          },
-          {
-            "text": "the next one",
-            "category": "object",
+            "text": "play the next one",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -3387,36 +3384,31 @@
             "propertyName": "fullActionName",
             "propertyValue": "player.next",
             "propertySubPhrases": [
-              "play",
-              "the next one"
+              "play the next one"
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
-                  "play",
-                  "the previous one"
+                  "play the previous one"
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "pause",
-                  "the current one"
+                  "pause the player"
                 ]
               },
               {
                 "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "stop",
-                  "the current one"
+                  "stop the player"
                 ]
               },
               {
                 "propertyValue": "player.shuffle",
                 "propertySubPhrases": [
-                  "shuffle",
-                  "the playlist"
+                  "shuffle the playlist"
                 ]
               }
             ]
@@ -3425,14 +3417,14 @@
         "politePrefixes": [
           "Could you kindly",
           "Would you mind",
-          "If you don't mind",
+          "If it's not too much trouble",
           "May I ask you to"
         ],
         "politeSuffixes": [
-          "if it's not too much trouble?",
+          "if you don't mind?",
           "please?",
           "thank you.",
-          "if you could."
+          "if that's okay."
         ]
       }
     },
@@ -3496,9 +3488,9 @@
                 ]
               },
               {
-                "propertyValue": "player.play",
+                "propertyValue": "player.stop",
                 "propertySubPhrases": [
-                  "play"
+                  "stop"
                 ]
               }
             ]
@@ -3538,8 +3530,8 @@
             "text": "Proceed to the",
             "category": "filler",
             "synonyms": [
-              "Go to the",
               "Move to the",
+              "Go to the",
               "Advance to the"
             ],
             "isOptional": true
@@ -3559,7 +3551,7 @@
               "music",
               "tune"
             ],
-            "isOptional": true
+            "isOptional": false
           }
         ],
         "propertyAlternatives": [
@@ -3587,6 +3579,12 @@
                 "propertySubPhrases": [
                   "play"
                 ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop"
+                ]
               }
             ]
           }
@@ -3594,14 +3592,14 @@
         "politePrefixes": [
           "Could you please",
           "Would you mind",
-          "If you don't mind",
-          "May I ask you to"
+          "If it's not too much trouble",
+          "May I kindly ask you to"
         ],
         "politeSuffixes": [
           "thank you",
           "please",
-          "if that's okay",
-          "if you could"
+          "if you don't mind",
+          "if that's okay"
         ]
       }
     },
@@ -3629,7 +3627,7 @@
             ]
           },
           {
-            "text": "next",
+            "text": "next.",
             "category": "object",
             "propertyNames": [
               "fullActionName"
@@ -3642,28 +3640,28 @@
             "propertyValue": "player.next",
             "propertySubPhrases": [
               "Push",
-              "next"
+              "next."
             ],
             "alternatives": [
               {
                 "propertyValue": "player.previous",
                 "propertySubPhrases": [
                   "Push",
-                  "previous"
+                  "previous."
                 ]
               },
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
                   "Push",
-                  "pause"
+                  "pause."
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "Push",
-                  "play"
+                  "play."
                 ]
               }
             ]
@@ -3709,8 +3707,8 @@
             "category": "preposition",
             "synonyms": [
               "a",
-              "an",
-              "this"
+              "this",
+              "that"
             ],
             "isOptional": true
           },
@@ -3763,10 +3761,10 @@
           "Please"
         ],
         "politeSuffixes": [
-          "thank you",
-          "if that's okay",
-          "please",
-          "thanks"
+          "if you could.",
+          "please.",
+          "thank you.",
+          "if that's okay."
         ]
       }
     },
@@ -3788,11 +3786,11 @@
         "subPhrases": [
           {
             "text": "Shift to the",
-            "category": "filler",
+            "category": "preposition",
             "synonyms": [
-              "move to",
-              "go to",
-              "switch to"
+              "Move to the",
+              "Go to the",
+              "Switch to the"
             ],
             "isOptional": true
           },
@@ -3828,6 +3826,12 @@
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
                   "play track"
+                ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop track"
                 ]
               }
             ]
@@ -3888,19 +3892,19 @@
               {
                 "propertyValue": "player.pause",
                 "propertySubPhrases": [
-                  "Pause the song."
+                  "Pause the current song."
                 ]
               },
               {
                 "propertyValue": "player.play",
                 "propertySubPhrases": [
-                  "Play the song."
+                  "Play the current song."
                 ]
               },
               {
-                "propertyValue": "player.stop",
+                "propertyValue": "player.shuffle",
                 "propertySubPhrases": [
-                  "Stop the song."
+                  "Shuffle the playlist."
                 ]
               }
             ]
@@ -4006,10 +4010,10 @@
           "Please"
         ],
         "politeSuffixes": [
+          "if you could",
           "thank you",
-          "if that's okay",
           "please",
-          "thanks"
+          "if that's okay"
         ]
       }
     },
@@ -4039,8 +4043,8 @@
             "category": "preposition",
             "synonyms": [
               "towards",
-              "for",
-              "in direction of"
+              "in direction of",
+              "heading to"
             ],
             "isOptional": true
           },
@@ -4160,12 +4164,6 @@
                 "propertySubPhrases": [
                   "play the track"
                 ]
-              },
-              {
-                "propertyValue": "player.stop",
-                "propertySubPhrases": [
-                  "stop the track"
-                ]
               }
             ]
           }
@@ -4204,15 +4202,15 @@
             "text": "Yo",
             "category": "greeting",
             "synonyms": [
+              "Hey",
               "Hi",
-              "Hello",
-              "Hey"
+              "Hello"
             ],
             "isOptional": true
           },
           {
             "text": "next track",
-            "category": "action",
+            "category": "command",
             "propertyNames": [
               "fullActionName"
             ]
@@ -4243,6 +4241,12 @@
                 "propertySubPhrases": [
                   "play track"
                 ]
+              },
+              {
+                "propertyValue": "player.stop",
+                "propertySubPhrases": [
+                  "stop track"
+                ]
               }
             ]
           }
@@ -4254,9 +4258,9 @@
           "Kindly"
         ],
         "politeSuffixes": [
+          "thank you",
           "please",
           "if you don't mind",
-          "thank you",
           "thanks"
         ]
       }

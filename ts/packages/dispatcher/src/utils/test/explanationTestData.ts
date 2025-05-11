@@ -287,8 +287,8 @@ function getSafeTranslateFn(
         ],
         [],
         provider,
-        false, // multiple
-        true, // generated
+        undefined, // activity/no multiple
+        undefined, // generated
         model,
     );
     return async (request: string): Promise<Result<TranslatedAction>> => {

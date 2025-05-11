@@ -207,6 +207,11 @@ export async function handleCommerceAction(
         let executionHistory: any[] = [];
         let lastAction: any;
 
+        console.log(
+            "Plan visualizer: " +
+                context.sessionContext.agentContext.planVisualizationEndpoint,
+        );
+
         const { trackState, reset } = createExecutionTracker(
             context.sessionContext.agentContext.planVisualizationEndpoint!,
             action.parameters.userRequest,
@@ -311,6 +316,8 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
             await trackState(
                 currentState?.pageType ?? "",
                 nextAction.actionName,
+                "action",
+                screenshot,
             );
 
             let actionSucceeded = await runUserAction(nextAction);

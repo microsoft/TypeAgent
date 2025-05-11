@@ -1,0 +1,16 @@
+# -------------------------------------
+# Set up environment
+# -------------------------------------
+
+@config agent  browser code desktop email
+@config action  browser code desktop email
+
+@action list createList --parameters.listName "bulbs25"
+@action list addItems --parameters.listName "spring bulbs" --parameters.items.0 "Daffodils" --parameters.items.1 "Tulips" --parameters.items.2 "Irises" --parameters.items.3 "Hyacinths"
+
+
+@history clear
+@clear
+
+# @greeting
+

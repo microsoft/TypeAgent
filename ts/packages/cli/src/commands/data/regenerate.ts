@@ -35,7 +35,7 @@ import {
     getDefaultConstructionProvider,
 } from "default-agent-provider";
 
-const provider = await getAllActionConfigProvider(
+const { provider } = await getAllActionConfigProvider(
     getDefaultAppAgentProviders(getInstanceDir()),
 );
 const schemaInfoProvider = createSchemaInfoProvider(provider);

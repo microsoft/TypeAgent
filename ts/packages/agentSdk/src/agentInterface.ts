@@ -16,10 +16,15 @@ export type AppAgentManifest = {
     commandDefaultEnabled?: boolean;
 } & ActionManifest;
 
+export type SchemaTypeNames = {
+    action?: string;
+    activity?: string;
+};
+
 export type SchemaFormat = "ts" | "pas";
 export type SchemaManifest = {
     description: string;
-    schemaType: string;
+    schemaType: string | SchemaTypeNames; // string if there are only action schemas
     schemaFile: string | { format: SchemaFormat; content: string };
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
@@ -124,7 +129,7 @@ export interface SessionContext<T = unknown> {
 
     removeDynamicAgent(agentName: string): Promise<void>;
 
-    // get the available indexes
+    // Experimental: get the available indexes
     indexes(type: "image" | "email" | "all"): Promise<any[]>;
 }
 
