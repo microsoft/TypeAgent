@@ -77,22 +77,22 @@ class SemanticRefCollection(
         super().__init__(semantic_refs)
 
 
-class MessageCollection(Collection["IMessage", int]):
+class MessageCollection[TMessage: IMessage](Collection[TMessage, int]):
     """A collection of messages."""
 
-    def __init__(self, messages: list[IMessage] | None = None):
+    def __init__(self, messages: list[TMessage] | None = None):
         super().__init__(messages)
 
 
-class MemoryStorageProvider:
+class MemoryStorageProvider[TMessage: IMessage]:
     """A storage provider that operates in memory."""
 
     def __init__(self):
         pass
 
-    def create_message_collection(self) -> MessageCollection:
+    def create_message_collection(self) -> MessageCollection[TMessage]:
         """Create a new message collection."""
-        return MessageCollection()
+        return MessageCollection[TMessage]()
 
     def create_semantic_ref_collection(self) -> SemanticRefCollection:
         """Create a new semantic reference collection."""
