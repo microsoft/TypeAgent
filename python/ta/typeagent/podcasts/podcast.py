@@ -22,7 +22,7 @@ from ..knowpro.serialization import (
     write_conversation_data_to_file,
     read_conversation_data_from_file,
 )
-from ..knowpro.storage import MessageCollection
+from ..knowpro.storage import MessageCollection, SemanticRefCollection
 
 
 @dataclass
@@ -138,7 +138,7 @@ class Podcast(
     )
     tags: list[str] = field(default_factory=list)
     semantic_refs: ISemanticRefCollection | None = field(
-        default_factory=ISemanticRefCollection
+        default_factory=SemanticRefCollection
     )
     settings: ConversationSettings = field(default_factory=ConversationSettings)
     semantic_ref_index: convindex.ConversationIndex = field(
@@ -224,9 +224,9 @@ class Podcast(
 
         semantic_refs_data = podcast_data.get("semanticRefs")
         if semantic_refs_data is not None:
-            self.semantic_refs[:] = [  # type: ignore  # TODO
-                SemanticRef.deserialize(r) for r in semantic_refs_data
-            ]
+            self.semantic_refs = SemanticRefCollection()
+            for r in semantic_refs_data:
+                self.semantic_refs.append(SemanticRef.deserialize(r))
 
         self.tags = podcast_data["tags"]
 

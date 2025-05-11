@@ -7,10 +7,6 @@ import os
 import textwrap
 import time
 
-import pytest
-
-pytestmark = pytest.mark.skip(reason="broken – enable when fixed")
-
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
 from typeagent.knowpro.importing import ConversationSettings
 from typeagent.knowpro.interfaces import ScoredSemanticRefOrdinal

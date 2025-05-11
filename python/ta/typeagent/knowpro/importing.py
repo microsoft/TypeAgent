@@ -60,3 +60,7 @@ class ConversationSettings:
         self.message_text_index_settings = MessageTextIndexSettings(
             TextEmbeddingIndexSettings(model, min_score=min_score)
         )
+        self.semantic_ref_index_settings = SemanticRefIndexSettings(
+            batch_size=10,
+            auto_extract_knowledge=False,
+        )

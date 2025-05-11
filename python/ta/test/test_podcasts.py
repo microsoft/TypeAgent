@@ -4,10 +4,6 @@
 import asyncio
 import os
 
-import pytest
-
-pytestmark = pytest.mark.skip(reason="broken – enable when fixed")
-
 from fixtures import needs_auth, temp_dir
 
 from typeagent.podcasts.podcast import Podcast
