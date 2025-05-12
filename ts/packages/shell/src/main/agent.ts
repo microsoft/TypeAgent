@@ -25,8 +25,7 @@ import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js"
 import { ShellAction } from "./shellActionSchema.js";
 import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
-import { updateHandlerTable } from "./commands/update.js";
-import { app } from "electron";
+import { installAndRestart, updateHandlerTable } from "./commands/update.js";
 import { isProd, portBase } from "./index.js";
 
 const markdownPortIndex = 0;
@@ -312,8 +311,7 @@ const handlers: CommandHandlerTable = {
                         "Unable to restart running under vite with HMR.",
                     );
                 }
-                app.relaunch();
-                app.exit(0);
+                installAndRestart();
             },
         },
     },

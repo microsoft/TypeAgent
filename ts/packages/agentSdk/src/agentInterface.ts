@@ -14,6 +14,7 @@ export type AppAgentManifest = {
     emojiChar: string;
     description: string;
     commandDefaultEnabled?: boolean;
+    localView?: boolean; // whether the agent serve a local view, default is false
 } & ActionManifest;
 
 export type SchemaTypeNames = {
