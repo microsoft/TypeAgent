@@ -296,6 +296,9 @@ importers:
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
+      knowpro:
+        specifier: workspace:*
+        version: link:../../packages/knowPro
       typeagent:
         specifier: workspace:*
         version: link:../../packages/typeagent

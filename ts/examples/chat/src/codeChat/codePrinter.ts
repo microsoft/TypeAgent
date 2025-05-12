@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { InteractiveIo } from "interactive-app";
-import { ChatPrinter } from "../chatPrinter.js";
+import { MemoryConsoleWriter } from "../memoryWriter.js";
 import {
     BreakPointSuggestions,
     Breakpoint,
@@ -17,7 +17,7 @@ import {
 import chalk from "chalk";
 import { pathToFileURL } from "url";
 
-export class CodePrinter extends ChatPrinter {
+export class CodePrinter extends MemoryConsoleWriter {
     constructor(io: InteractiveIo) {
         super(io);
     }
