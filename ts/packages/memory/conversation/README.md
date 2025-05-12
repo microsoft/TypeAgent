@@ -1,23 +1,20 @@
 # conversation-memory
 
-**Experimental prototype**:
+**conversation-memory** is an **experimental prototype** and **sample code** with ongoing and _frequent_ changes.
 
-- Working toward a shared understanding of implementing different memory types using **Structured RAG** and the [knowpro](../../knowPro) experimental library.
-- Work in progress; **_frequent changes_**.
-- Structured RAG leverages [**knowledge extraction**](../../knowledgeProcessor/src/conversation/knowledgeSchema.ts) and other techniques to create index structures over source text. This allows for more precise querying as well as direct access to the **salient information** encoded in text.
-- This is **sample code** only.
+- Explores how to impolement different memory [types](#memory-types) using **Structured RAG** and the [knowpro](../../knowPro) experimental library.
+- Structured RAG uses [**knowledge extraction**](../../knowledgeProcessor/src/conversation/knowledgeSchema.ts) and other techniques to extract **salient information** from text. This salient information includes **structured** objects such as Entities, Actions and Topics and other data. It stores these objects and creates suitable indexes that allow them to be retrieved using **structured queries**. The retrieved objects can be also be used to retrieve the text they were found in.
 
-## Memory being explored
+## Memory types
 
 ### Conversational
 
-The following treat text as conversations: a sequence of **messages**.
+Conversational memory treats text in the following domains like conversations. Conversations are defined as a sequence of timestamped **messages**.
 
-- Podcast or Transcript
-  - Treat a podcast transcript like a conversation
-- Conversations
+- [Podcast Memory](./src/podcast.ts): Treat a podcast transcript like a conversation.
+- [EmailMemory](./src//emailMemory.ts): Treat emails as messages in a conversation.
+- [ConversationMemory](./src/conversationMemory.ts): conversational memory such as one used by chats
   - See [conversationManager](../../knowledgeProcessor/src/conversation/conversationManager.ts) in the [knowledgeProcessor](../../knowledgeProcessor) package for existing conversation memory implemented with structured RAG.
-- Emails
 
 ### Image
 
