@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
@@ -162,7 +163,7 @@ class QueryOpExpr[T](IQueryOpExpr[T]):
         raise NotImplementedError
 
 
-class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None]):
+class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):
     """Expression for matching terms in a query.
 
     This class evaluates a query expression to accumulate matches
@@ -172,16 +173,16 @@ class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None]):
 
     def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator | None:
         matches = SemanticRefAccumulator()
-        self._accumulate_matches(context, matches)
+        self.accumulate_matches(context, matches)
         if len(matches) > 0:
             return matches
         return None
 
-    # Subclass can override.
-    def _accumulate_matches(
+    @abstractmethod
+    def accumulate_matches(
         self, context: QueryEvalContext, matches: SemanticRefAccumulator
     ) -> None:
-        return
+        raise NotImplementedError("Subclass must implement accumulate_matches")
 
 
 class MatchSearchTermExpr(MatchTermExpr):
