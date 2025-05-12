@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
 from .collections import (
+    MatchAccumulator,
     PropertyTermSet,
     SemanticRefAccumulator,
     TermSet,
@@ -41,7 +42,7 @@ def is_conversation_searchable(conversation: IConversation) -> bool:
     )
 
 
-# TODO: Lots of other functions, from getTextRangeForDateRange to matchPropertySearchTermToTag
+# TODO: getTextRangeForDateRange ... matchPropertySearchTermToSemanticRef
 
 
 def lookup_term_filtered(
@@ -78,6 +79,9 @@ def lookup_term(
             lambda sr, _: ranges_in_scope.is_range_in_scope(sr.range),
         )
     return semantic_ref_index.lookup_term(term.text)
+
+
+# TODO: lookupProperty, lookupTermFiltered, lookupKnowledgeType
 
 
 @dataclass
@@ -136,8 +140,8 @@ class QueryEvalContext:
 
     def get_message_for_ref(self, semantic_ref: SemanticRef) -> IMessage:
         """Retrieve the message associated with a semantic reference."""
-        message_index = semantic_ref.range.start.message_ordinal
-        return self.conversation.messages[message_index]
+        message_ordinal = semantic_ref.range.start.message_ordinal
+        return self.conversation.messages[message_ordinal]
 
     def get_message(self, message_ordinal: MessageOrdinal) -> IMessage:
         """Retrieve a message by its ordinal."""
@@ -161,6 +165,21 @@ class QueryOpExpr[T](IQueryOpExpr[T]):
 
     def eval(self, context: QueryEvalContext) -> T:
         raise NotImplementedError
+
+
+@dataclass
+class SelectTopNExpr[T: MatchAccumulator](QueryOpExpr[T]):
+    """Expression for selecting the top N matches from a query."""
+
+    source_expr: IQueryOpExpr[T]
+    max_matches: int | None = None
+    min_hit_count: int | None = None
+
+    def eval(self, context: QueryEvalContext) -> T:
+        """Evaluate the expression and return the top N matches."""
+        matches = self.source_expr.eval(context)
+        matches.select_top_n_scoring(self.max_matches, self.min_hit_count)
+        return matches
 
 
 class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):
@@ -190,12 +209,13 @@ type ScoreBoosterType = Callable[
     ScoredSemanticRefOrdinal,
 ]
 
+
 class MatchSearchTermExpr(MatchTermExpr):
     def __init__(
         self,
         search_term: SearchTerm,
         score_booster: ScoreBoosterType | None = None,
-) -> None:
+    ) -> None:
         super().__init__()
         self.search_term = search_term
         self.score_booster = score_booster
