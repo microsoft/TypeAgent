@@ -60,6 +60,7 @@ def merge_concrete_entities(
 
 def merge_topics(topics: list[str]) -> list[str]:
     """Merge a list of topics into a unique list of topics."""
+    # TODO: Preserve order of first occurrence?
     merged_topics = set(topics)
     return list(merged_topics)
 
