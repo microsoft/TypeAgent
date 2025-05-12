@@ -185,18 +185,17 @@ class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):
         raise NotImplementedError("Subclass must implement accumulate_matches")
 
 
+type ScoreBoosterType = Callable[
+    [SearchTerm, SemanticRef, ScoredSemanticRefOrdinal],
+    ScoredSemanticRefOrdinal,
+]
+
 class MatchSearchTermExpr(MatchTermExpr):
     def __init__(
         self,
         search_term: SearchTerm,
-        score_booster: (
-            Callable[
-                [SearchTerm, SemanticRef, ScoredSemanticRefOrdinal],
-                ScoredSemanticRefOrdinal,
-            ]
-            | None
-        ) = None,
-    ) -> None:
+        score_booster: ScoreBoosterType | None = None,
+) -> None:
         super().__init__()
         self.search_term = search_term
         self.score_booster = score_booster
