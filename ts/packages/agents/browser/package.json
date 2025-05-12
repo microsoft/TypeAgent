@@ -75,6 +75,6 @@
     "rollup-plugin-copy": "^3.5.0",
     "ts-loader": "^9.5.1",
     "typescript": "~5.4.5",
-    "vite": "^5.4.19"
+    "vite": "^6.3.4"
   }
 }
