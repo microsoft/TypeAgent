@@ -1,25 +1,24 @@
 # conversation-memory
 
-**conversation-memory** is an **experimental prototype** and **sample code** with ongoing and _frequent_ changes.
+**conversation-memory** is an **experimental prototype and sample code** with ongoing and _frequent_ changes.
 
-- Explores how to impolement different memory [types](#memory-types) using **Structured RAG** and the [knowpro](../../knowPro) experimental library.
-- Structured RAG uses [**knowledge extraction**](../../knowledgeProcessor/src/conversation/knowledgeSchema.ts) and other techniques to extract **salient information** from text. This salient information includes **structured** objects such as Entities, Actions and Topics and other data. It stores these objects and creates suitable indexes that allow them to be retrieved using **structured queries**. The retrieved objects can be also be used to retrieve the text they were found in.
+It explores how to implement different memory [types](#memory-types) using [**Structured RAG**](../../knowPro/README.md) implemented by the [knowpro](../../knowPro) library.
 
 ## Memory types
 
 ### Conversational
 
-Conversational memory treats text in the following domains like conversations. Conversations are defined as a sequence of timestamped **messages**.
+Conversational memory treats the following domains like conversations: a sequence of timestamped **messages** between senders and receivers.
 
-- [Podcast Memory](./src/podcast.ts): Treat a podcast transcript like a conversation.
-- [EmailMemory](./src//emailMemory.ts): Treat emails as messages in a conversation.
-- [ConversationMemory](./src/conversationMemory.ts): conversational memory such as one used by chats
+- [Podcast](./src/podcast.ts)
+- [Email](./src/emailMemory.ts)
+- [Conversation](./src/conversationMemory.ts) such as chats
   - See [conversationManager](../../knowledgeProcessor/src/conversation/conversationManager.ts) in the [knowledgeProcessor](../../knowledgeProcessor) package for existing conversation memory implemented with structured RAG.
 
 ### Image
 
 Images can treated as memory and retrieved using both their knowledge content as well their metadata.
-[ImageMemory](../image/)
+[Image](../image/)
 
 ## Trademarks
 

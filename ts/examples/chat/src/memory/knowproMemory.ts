@@ -41,6 +41,7 @@ import {
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
+import { createKnowproChatCommands } from "./knowproChat.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -75,6 +76,7 @@ export async function createKnowproCommands(
     await ensureDir(context.basePath);
     await createKnowproDataFrameCommands(context, commands);
     await createKnowproEmailCommands(context, commands);
+    await createKnowproChatCommands(context, commands);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;

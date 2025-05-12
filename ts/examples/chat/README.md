@@ -1,6 +1,6 @@
 ## Chat test app
 
-This sample app is used to interactively test the following packages:
+This **test app** is used to interactively test the following packages:
 
 - [code-processor](../../packages/codeProcessor/)
 - [knowledge-processor](../../packages/knowledgeProcessor/)
