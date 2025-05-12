@@ -380,10 +380,14 @@ export async function createConversationMemory(
             fileSettings.baseFileName,
         );
     }
+    cm = await ConversationMemory.readFromFile(
+        fileSettings.dirPath,
+        fileSettings.baseFileName,
+    );
     if (!cm) {
         cm = new ConversationMemory();
-        cm.settings.fileSaveSettings = fileSettings;
     }
+    cm.settings.fileSaveSettings = fileSettings;
     return cm;
 }
 

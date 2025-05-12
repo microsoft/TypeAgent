@@ -4,6 +4,7 @@
 import {
     arg,
     argBool,
+    argNum,
     CommandHandler,
     CommandMetadata,
     InteractiveIo,
@@ -39,6 +40,7 @@ export async function createKnowproChatCommands(
 
     commands.kpChatLoad = chatLoad;
     commands.kpChat = chat;
+    commands.kpChatHistory = chatHistory;
 
     async function chat(args: string[], io: InteractiveIo) {
         const chat = await ensureLoaded();
@@ -71,6 +73,25 @@ export async function createKnowproChatCommands(
         clock.stop();
         context.printer.writeTiming(chalk.gray, clock);
         kpContext.conversation = context.chat;
+    }
+
+    function chatHistoryDef(): CommandMetadata {
+        return {
+            description: "Show chat history",
+            options: {
+                numMessages: argNum("# of latest messages to display", 10),
+            },
+        };
+    }
+    commands.kpChatHistory.metadata = chatHistoryDef();
+    async function chatHistory(args: string[]) {
+        const namedArgs = parseNamedArguments(args, chatHistoryDef());
+        const messages = context.chat?.messages!;
+        const numMessages = Math.min(namedArgs.numMessages, messages.length);
+        for (let i = numMessages - 1; i >= 0; --i) {
+            const message = await messages.get(i);
+            context.printer.writeMessage(message);
+        }
     }
 
     async function ensureLoaded() {
