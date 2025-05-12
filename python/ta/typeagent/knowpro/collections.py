@@ -4,7 +4,9 @@
 import bisect
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, cast
+import heapq
+import sys
+from typing import Any, Callable, Iterator, Protocol, cast
 
 from .interfaces import (
     ISemanticRefCollection,
@@ -100,7 +102,22 @@ class MatchAccumulator[T]:
         matches.sort(key=lambda m: m.score, reverse=True)
         return matches
 
-    # def get_top_n_scoring...
+    def get_top_n_scoring(
+        self,
+        max_matches: int | None = None,
+        min_hit_count: int | None = None,
+    ) -> list[Match[T]]:
+        """Get the top N scoring matches."""
+        if not self._matches:
+            return []
+        if max_matches and max_matches > 0:
+            top_list = TopNList(max_matches)
+            for match in self._matches_with_min_hit_count(min_hit_count):
+                top_list.push(match.value, match.score)
+            ranked = top_list.by_rank()
+            return [self._matches[match.item] for match in ranked]
+        else:
+            return self.get_sorted_by_score(min_hit_count)
 
     # def get_with_hit_count...
 
@@ -120,7 +137,15 @@ class MatchAccumulator[T]:
     def clear_matches(self):
         self._matches.clear()
 
-    # de select_top_n_scoring...
+    def select_top_n_scoring(
+        self,
+        max_matches: int | None = None,
+        min_hit_count: int | None = None,
+    ) -> int:
+        """Retain only the top N matches sorted by score."""
+        top_n = self.get_top_n_scoring(max_matches, min_hit_count)
+        self.set_matches(top_n, clear=True)
+        return len(top_n)
 
     # def select_with_hit_count...
 
@@ -392,3 +417,77 @@ class PropertyTermSet:
 
 
 # TODO: unionArrays, union, addToSet, setUnion, setIntersect, getBatches,
+
+
+@dataclass
+class ScoredItem[T]:
+    item: T
+    score: float
+
+    def __lt__(self, other: "ScoredItem") -> bool:
+        return self.score < other.score
+
+    def __gt__(self, other: "ScoredItem") -> bool:
+        return self.score > other.score
+
+    def __le__(self, other: "ScoredItem") -> bool:
+        return self.score <= other.score
+
+    def __ge__(self, other: "ScoredItem") -> bool:
+        return self.score >= other.score
+
+
+# Implementation change compared to TS version: Use heapq; no sentinel.
+# API change: pop/top are not properties.
+class TopNCollection[T]:
+    """A collection that maintains the top N items based on their scores."""
+
+    def __init__(self, max_count: int):
+        self._max_count = max_count
+        self._heap: list[ScoredItem[T]] = []
+
+    def __len__(self) -> int:
+        return len(self._heap)
+
+    def reset(self) -> None:
+        self._heap = []
+
+    def pop(self) -> ScoredItem[T]:
+        return heapq.heappop(self._heap)
+
+    def top(self) -> ScoredItem[T]:
+        return self._heap[0]
+
+    def push(self, item: T, score: float) -> None:
+        if len(self._heap) < self._max_count:
+            heapq.heappush(self._heap, ScoredItem(item, score))
+        else:
+            heapq.heappushpop(self._heap, ScoredItem(item, score))
+
+    def by_rank(self) -> list[ScoredItem[T]]:
+        return sorted(self._heap, reverse=True)
+
+    def values_by_rank(self) -> list[T]:
+        return [item.item for item in self.by_rank()]
+
+
+class TopNList[T](TopNCollection[T]):
+    """Alias for TopNCollection."""
+
+
+class TopNListAll[T](TopNList[T]):
+    """A Top N list for N = infinity (approximated by sys.maxsize)."""
+
+    def __init__(self):
+        super().__init__(sys.maxsize)
+
+
+def get_top_k[T](
+    scored_items: Iterable[ScoredItem[T]],
+    top_k: int,
+) -> list[ScoredItem[T]]:
+    """A function to get the top K of an unsorted list of scored items."""
+    top_n_list = TopNCollection[T](top_k)
+    for scored_item in scored_items:
+        top_n_list.push(scored_item.item, scored_item.score)
+    return top_n_list.by_rank()
