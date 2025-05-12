@@ -2,19 +2,19 @@
 // Licensed under the MIT License.
 
 import * as knowLib from "knowledge-processor";
-import { conversation } from "knowledge-processor";
+import { conversation, IndexingStats } from "knowledge-processor";
 import {
     InteractiveIo,
     millisecondsToString,
     StopWatch,
 } from "interactive-app";
 import { collections, dateTime } from "typeagent";
-import { ChatPrinter } from "../chatPrinter.js";
+import { MemoryConsoleWriter } from "../memoryWriter.js";
 import chalk, { ChalkInstance } from "chalk";
 import { pathToFileURL } from "url";
 import { getSearchQuestion } from "./common.js";
 
-export class ChatMemoryPrinter extends ChatPrinter {
+export class ChatMemoryPrinter extends MemoryConsoleWriter {
     constructor(io: InteractiveIo) {
         super(io);
     }
@@ -358,5 +358,15 @@ export class ChatMemoryPrinter extends ChatPrinter {
     ): void {
         const status = `[${timing.elapsedString()}, ${millisecondsToString(stats!.totalStats.timeMs, "m")} for ${totalItems} items]`;
         this.writeInColor(chalk.green, status);
+    }
+
+    public writeIndexingStats(stats: IndexingStats) {
+        this.writeInColor(chalk.cyan, `Chars: ${stats.totalStats.charCount}`);
+        this.writeInColor(
+            chalk.green,
+            `Time: ${millisecondsToString(stats.totalStats.timeMs, "m")}`,
+        );
+        this.writeCompletionStats(stats.totalStats.tokenStats);
+        return this;
     }
 }

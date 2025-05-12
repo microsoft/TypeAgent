@@ -1,0 +1,41 @@
+{
+  "name": "examples-lib",
+  "version": "0.0.1",
+  "description": "Shared library for implementing examples.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/examplesLib"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "aiclient": "workspace:*",
+    "chalk": "^5.4.1",
+    "dotenv": "^16.3.1",
+    "interactive-app": "workspace:*",
+    "knowpro": "workspace:*",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1"
+  },
+  "devDependencies": {
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

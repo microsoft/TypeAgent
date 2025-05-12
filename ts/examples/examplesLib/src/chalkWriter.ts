@@ -8,6 +8,7 @@ import {
     StopWatch,
 } from "interactive-app";
 import chalk, { ChalkInstance } from "chalk";
+import { Result } from "typechat";
 
 export type ChalkColor = {
     foreColor?: ChalkInstance | undefined;
@@ -68,12 +69,6 @@ export class ChalkWriter extends ConsoleWriter {
     public writeLine(text?: string, isStyled: boolean = false): ChalkWriter {
         this.write(text, isStyled);
         this.write("\n");
-        return this;
-    }
-
-    public log(text: string): ChalkWriter {
-        super.write(text);
-        super.write("\n");
         return this;
     }
 
@@ -155,5 +150,40 @@ export class ChalkWriter extends ConsoleWriter {
         } finally {
             this.setForeColor(prevColor);
         }
+    }
+
+    public writeTranslation<T>(result: Result<T>) {
+        this.writeLine();
+        if (result.success) {
+            this.writeJson(result.data);
+        } else {
+            this.writeError(result.message);
+        }
+        return this;
+    }
+
+    public writeTitle(title: string | undefined) {
+        if (title) {
+            this.writeUnderline(title);
+        }
+        return this;
+    }
+
+    public writeLog(value: string) {
+        if (value) {
+            this.writeLine(chalk.gray(value));
+        }
+        return this;
+    }
+
+    public writeProgress(
+        curCount: number,
+        total: number,
+        label?: string | undefined,
+    ) {
+        label = label ? label + " " : "";
+        const text = `[${label}${curCount} / ${total}]`;
+        this.writeInColor(chalk.gray, text);
+        return this;
     }
 }

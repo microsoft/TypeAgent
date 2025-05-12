@@ -3,13 +3,13 @@
 
 import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
-import { ChatPrinter } from "../chatPrinter.js";
+import { MemoryConsoleWriter } from "../memoryWriter.js";
 import chalk from "chalk";
 import { IMessageMetadata, textLocationToString } from "./knowproCommon.js";
 import * as cm from "conversation-memory";
 import * as im from "image-memory";
 
-export class KnowProPrinter extends ChatPrinter {
+export class KnowProPrinter extends MemoryConsoleWriter {
     public sortAsc: boolean = true;
     constructor(public conversation: kp.IConversation | undefined = undefined) {
         super();

@@ -5,7 +5,7 @@ import { ProgressBar } from "interactive-app";
 import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
-import { ChatPrinter } from "../chatPrinter.js";
+import { MemoryConsoleWriter } from "../memoryWriter.js";
 import { addFileNameSuffixToPath } from "./common.js";
 import path from "path";
 import { getFileName } from "typeagent";
@@ -159,7 +159,7 @@ export interface IMessageMetadata<TMeta = any> {
 }
 
 export function createIndexingEventHandler(
-    printer: ChatPrinter,
+    printer: MemoryConsoleWriter,
     progress: ProgressBar,
     maxMessages: number,
 ): kp.IndexingEventHandlers {
