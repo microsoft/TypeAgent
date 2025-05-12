@@ -527,7 +527,10 @@ export async function createKnowproCommands(
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
-        def.options!.fallback = argBool("Fallback to rag", false);
+        def.options!.fallback = argBool(
+            "Fallback to text similarity matching",
+            true,
+        );
         def.options!.fastStop = argBool(
             "Ignore messages if knowledge produces answers",
             true,
