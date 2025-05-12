@@ -28,6 +28,9 @@ export function createClientIORpcServer(
                 params.source,
             );
         },
+        openLocalView: async (params) => {
+            return clientIO.openLocalView(params.port);
+        },
     };
 
     const clientIOCallFunctions: ClientIOCallFunctions = {

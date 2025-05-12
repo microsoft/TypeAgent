@@ -17,6 +17,7 @@ import {
     AppAction,
     TypeAgentAction,
     StorageEncoding,
+    AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 import {
     ActionContextParams,
@@ -184,6 +185,13 @@ export async function createAgentRpcClient(
             await context.removeDynamicAgent(param.name);
             channelProvider.deleteChannel(param.name);
         },
+        getSharedLocalHostPort: async (param: {
+            contextId: number;
+            agentName: string;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return context.getSharedLocalHostPort(param.agentName);
+        },
         indexes: async (param: { contextId: number; type: string }) => {
             const context = contextMap.get(param.contextId);
             return context.indexes(param.type as any);
@@ -325,8 +333,8 @@ export async function createAgentRpcClient(
     // The shim needs to implement all the APIs regardless whether the actual agent
     // has that API.  We remove remove it the one that is not necessary below.
     const agent: Required<AppAgent> = {
-        initializeAgentContext() {
-            return rpc.invoke("initializeAgentContext", undefined);
+        initializeAgentContext(settings?: AppAgentInitSettings) {
+            return rpc.invoke("initializeAgentContext", settings);
         },
         updateAgentContext(
             enable,

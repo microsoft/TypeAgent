@@ -16,17 +16,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const isDev =
-    process.argv.includes("--dev") ||
-    process.argv.includes("--mode=development");
 
-const portBase = process.env.PORT
-    ? parseInt(process.env.PORT)
-    : isDev
-      ? 9050
-      : 9001;
-const planViewerPortIndex = 2;
-const port = portBase + planViewerPortIndex;
+const port = parseInt(process.argv[2]);
+if (isNaN(port)) {
+    throw new Error("Port must be a number");
+}
 
 // Type definitions for the server
 interface Client extends Response {}

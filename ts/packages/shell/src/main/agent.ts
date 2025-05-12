@@ -26,11 +26,7 @@ import { ShellAction } from "./shellActionSchema.js";
 import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { installAndRestart, updateHandlerTable } from "./commands/update.js";
-import { isProd, portBase } from "./index.js";
-
-const markdownPortIndex = 0;
-const montagePortIndex = 1;
-const planViewerPortIndex = 2;
+import { isProd } from "./index.js";
 
 export type ShellContext = {
     shellWindow: ShellWindow;
@@ -209,8 +205,9 @@ class ShellOpenWebContentView implements CommandHandler {
         context: ActionContext<ShellContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
+        const agentContext = context.sessionContext.agentContext;
         let targetUrl: URL;
-        switch (params.args.site.toString().toLowerCase()) {
+        switch (params.args.site.toLowerCase()) {
             case "paleobiodb":
                 targetUrl = new URL("https://paleobiodb.org/navigator/");
 
@@ -223,49 +220,27 @@ class ShellOpenWebContentView implements CommandHandler {
                 break;
             case "commerce":
                 targetUrl = new URL("https://www.target.com/");
-
                 break;
-            case "markdown":
-                targetUrl = new URL(
-                    `http://localhost:${portBase + markdownPortIndex}/`,
-                );
 
-                break;
-            case "montage":
-                // TODO: agents should publish their port #s in manifests
-                targetUrl = new URL(
-                    `http://localhost:${portBase + montagePortIndex}/`,
-                );
-
-                break;
-            case "planviewer":
-                targetUrl = new URL(
-                    `http://localhost:${portBase + planViewerPortIndex}/`,
-                );
-
-                break;
             default:
                 try {
-                    targetUrl = new URL(params.args.site);
-                } catch (e) {
-                    // if the URL is invalid let's try to open the last used canvas item if we have one
-                    // if we don't, then we've tried our best
-                    return this.run(context, {
-                        args: {
-                            site: {
-                                description: "",
-                                value: context.sessionContext.agentContext.shellWindow.getUserSettings()
-                                    .canvas,
-                            },
-                        },
-                    } as any);
+                    const port =
+                        await context.sessionContext.getSharedLocalHostPort(
+                            params.args.site,
+                        );
+                    targetUrl = new URL(`http://localhost:${port}`);
+                } catch {
+                    try {
+                        targetUrl = new URL(params.args.site);
+                    } catch (e) {
+                        throw new Error(
+                            `Unable to open '${params.args.site}': ${e}`,
+                        );
+                    }
                 }
-
                 break;
         }
-        context.sessionContext.agentContext.shellWindow.openInlineBrowser(
-            targetUrl,
-        );
+        agentContext.shellWindow.openInlineBrowser(targetUrl);
     }
 }
 
