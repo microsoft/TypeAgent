@@ -9,6 +9,7 @@ import registerDebug from "debug";
 import { error, Result, success } from "typechat";
 import {
     createMemorySettings,
+    IndexFileSettings,
     Memory,
     MemorySettings,
     Message,
@@ -83,7 +84,7 @@ export class ConversationMessageMeta extends MessageMetadata {
 export class ConversationMessage extends Message<ConversationMessageMeta> {
     constructor(
         messageText: string | string[],
-        metadata: ConversationMessageMeta,
+        metadata: ConversationMessageMeta = new ConversationMessageMeta(),
         tags: string[] = [],
         /**
          * Any pre-extracted knowledge for this message.
@@ -366,6 +367,28 @@ export class ConversationMemory
         this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
             false;
     }
+}
+
+export async function createConversationMemory(
+    fileSettings: IndexFileSettings,
+    createNew: boolean,
+): Promise<ConversationMemory> {
+    let cm: ConversationMemory | undefined;
+    if (createNew) {
+        await kp.removeConversationData(
+            fileSettings.dirPath,
+            fileSettings.baseFileName,
+        );
+    }
+    cm = await ConversationMemory.readFromFile(
+        fileSettings.dirPath,
+        fileSettings.baseFileName,
+    );
+    if (!cm) {
+        cm = new ConversationMemory();
+    }
+    cm.settings.fileSaveSettings = fileSettings;
+    return cm;
 }
 
 export type ConversationTaskCallback =

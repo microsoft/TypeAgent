@@ -166,6 +166,7 @@ export async function createKnowproDataFrameCommands(
         );
         clock.stop();
         printer.writeTiming(chalk.gray, clock, "Read file");
+        context.conversation = restaurantIndex?.conversation;
     }
 
     function listDataFrameDef(): CommandMetadata {
