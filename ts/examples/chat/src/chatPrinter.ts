@@ -8,7 +8,7 @@ import {
 } from "interactive-app";
 import { Result } from "typechat";
 import chalk from "chalk";
-import { ChalkWriter } from "./chalkWriter.js";
+import { ChalkWriter } from "examples-lib";
 import { openai } from "aiclient";
 import { IndexingStats } from "knowledge-processor";
 

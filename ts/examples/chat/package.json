@@ -32,6 +32,7 @@
     "common-utils": "workspace:*",
     "conversation-memory": "workspace:*",
     "dotenv": "^16.3.1",
+    "examples-lib": "workspace:*",
     "exifreader": "4.23.5",
     "image-memory": "workspace:*",
     "interactive-app": "workspace:*",

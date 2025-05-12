@@ -94,6 +94,9 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
+      examples-lib:
+        specifier: workspace:*
+        version: link:../examplesLib
       exifreader:
         specifier: 4.23.5
         version: 4.23.5
@@ -278,6 +281,40 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
+
+  examples/examplesLib:
+    dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../packages/aiclient
+      chalk:
+        specifier: ^5.4.1
+        version: 5.4.1
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      interactive-app:
+        specifier: workspace:*
+        version: link:../../packages/interactiveApp
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
+    devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   examples/memoryProviders:
     dependencies:
