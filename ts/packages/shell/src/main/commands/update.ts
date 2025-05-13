@@ -59,6 +59,15 @@ export function hasPendingUpdate() {
     return state.updateInfo !== undefined;
 }
 
+export function installAndRestart() {
+    if (state.updateInfo) {
+        autoUpdater.quitAndInstall(false, true);
+    } else {
+        app.relaunch();
+        app.exit(0);
+    }
+}
+
 let pendingUpdateCallback:
     | ((version: electronUpdater.UpdateInfo, background: boolean) => void)
     | undefined;

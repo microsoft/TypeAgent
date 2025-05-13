@@ -30,6 +30,7 @@ export type ActionResultSuccess = {
         activityName: string;
         description: string;
         state: Record<string, unknown>;
+        openLocalView?: boolean;
     } | null; // Null to clear the activity context
 };
 

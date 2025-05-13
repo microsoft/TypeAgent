@@ -183,6 +183,9 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     explanationAsynchronousMode?: boolean; // default to false
     collectCommandResult?: boolean; // default to false
 
+    allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
+    portBase?: number; // default to 9001
+
     // Use for tests so that embedding can be cached without 'persistDir'
     embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
 };
@@ -385,7 +388,12 @@ export async function initializeCommandHandlerContext(
         if (embeddingCacheDir) {
             ensureDirectory(embeddingCacheDir);
         }
-        const agents = new AppAgentManager(cacheDir);
+        const portBase = options?.portBase ?? 9001;
+        const agents = new AppAgentManager(
+            cacheDir,
+            portBase,
+            options?.allowSharedLocalView,
+        );
         const constructionProvider = options?.constructionProvider;
         const context: CommandHandlerContext = {
             agents,

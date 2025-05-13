@@ -237,6 +237,9 @@ function addEvents(
                 // ignore
             }
         },
+        openLocalView: () => {
+            throw new Error("Main process should have handled openLocalView");
+        },
         takeAction: (action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
             try {

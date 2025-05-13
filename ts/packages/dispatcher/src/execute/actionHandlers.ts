@@ -257,6 +257,18 @@ export function createSessionContext<T = unknown>(
         },
         addDynamicAgent,
         removeDynamicAgent,
+        getSharedLocalHostPort: async (agentName: string) => {
+            const localHostPort = await context.agents.getSharedLocalHostPort(
+                name,
+                agentName,
+            );
+            if (localHostPort === undefined) {
+                throw new Error(
+                    `Agent '${agentName}' does not have a shared local host port.`,
+                );
+            }
+            return localHostPort;
+        },
         indexes(type: string): Promise<any[]> {
             return new Promise<IndexData[]>((resolve, reject) => {
                 const iidx: IndexData[] =
@@ -788,16 +800,25 @@ export async function executeActions(
                     clearActivityContext(systemContext);
                 } else {
                     // TODO: validation
+                    const { activityName, description, state } =
+                        result.activityContext;
                     systemContext.activityContext = {
-                        appAgentName: getAppAgentName(
-                            executableAction.action.schemaName,
-                        ),
-                        ...result.activityContext,
+                        appAgentName,
+                        activityName,
+                        description,
+                        state,
                     };
                     systemContext.agents.toggleTransient(
                         DispatcherActivityName,
                         true,
                     );
+                    if (result.activityContext.openLocalView) {
+                        const port =
+                            systemContext.agents.getLocalHostPort(appAgentName);
+                        if (port !== undefined) {
+                            await systemContext.clientIO.openLocalView(port);
+                        }
+                    }
                 }
             }
         }

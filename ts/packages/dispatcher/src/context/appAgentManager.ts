@@ -47,6 +47,7 @@ type AppAgentRecord = {
     sessionContext?: SessionContext | undefined;
     sessionContextP?: Promise<SessionContext> | undefined;
     schemaErrors: Map<string, Error>;
+    port?: number | undefined;
 };
 
 export type AppAgentStateSettings = Partial<AppAgentStateConfig>;
@@ -96,8 +97,12 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
-
-    public constructor(cacheDir: string | undefined) {
+    private nextPortIndex = 0;
+    public constructor(
+        cacheDir: string | undefined,
+        private readonly portBase: number,
+        private readonly allowSharedLocalView?: string[],
+    ) {
         this.actionSchemaFileCache = new ActionSchemaFileCache(
             cacheDir
                 ? path.join(cacheDir, "actionSchemaFileCache.json")
@@ -119,6 +124,37 @@ export class AppAgentManager implements ActionConfigProvider {
     public getAppAgentDescription(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         return record.manifest.description;
+    }
+    public getLocalHostPort(appAgentName: string) {
+        const record = this.getRecord(appAgentName);
+        return record.port;
+    }
+
+    public getSharedLocalHostPort(requester: string, target: string) {
+        const record = this.agents.get(target);
+
+        // Denied access if it is not a valid agent name to avoid leaking information
+        // about whether agent exists or not.
+        if (
+            record === undefined ||
+            (!this.allowSharedLocalView?.includes(requester) &&
+                record.manifest.sharedLocalView?.includes(requester) !== true)
+        ) {
+            throw new Error(
+                `Agent '${requester}' is not allowed to access '${target}' local view.`,
+            );
+        }
+
+        if (record.port === undefined) {
+            throw new Error(`Local view not available for agent '${target}'.`);
+        }
+
+        if (record.appAgent === undefined) {
+            throw new Error(
+                `Agent '${target}' is not initialized. Local view not available.`,
+            );
+        }
+        return record.port;
     }
 
     public isAppAgentName(appAgentName: string) {
@@ -223,7 +259,7 @@ export class AppAgentManager implements ActionConfigProvider {
         provider?: AppAgentProvider,
         actionEmbeddingCache?: EmbeddingCache,
     ) {
-        if (this.agents.get(appAgentName) !== undefined) {
+        if (this.isAppAgentName(appAgentName)) {
             throw new Error(`Conflicting app agents name '${appAgentName}'`);
         }
         const actionConfigs = convertToActionConfig(appAgentName, manifest);
@@ -258,6 +294,14 @@ export class AppAgentManager implements ActionConfigProvider {
 
         this.emojis[appAgentName] = manifest.emojiChar;
 
+        const port = manifest.localView
+            ? this.portBase + this.nextPortIndex++
+            : undefined;
+
+        if (port !== undefined) {
+            debug(`Port ${port} assigned to ${appAgentName}`);
+        }
+
         const record: AppAgentRecord = {
             name: appAgentName,
             provider,
@@ -266,6 +310,7 @@ export class AppAgentManager implements ActionConfigProvider {
             schemaErrors,
             commands: false,
             manifest,
+            port,
         };
 
         this.agents.set(appAgentName, record);
@@ -589,9 +634,19 @@ export class AppAgentManager implements ActionConfigProvider {
         context: CommandHandlerContext,
     ) {
         const appAgent = await this.ensureAppAgent(record);
-        const agentContext = await callEnsureError(() =>
-            appAgent.initializeAgentContext?.(),
-        );
+        let agentContext: unknown | undefined;
+        if (appAgent.initializeAgentContext !== undefined) {
+            let settings =
+                record.port !== undefined
+                    ? {
+                          localHostPort: record.port,
+                      }
+                    : undefined;
+
+            agentContext = await callEnsureError(() =>
+                appAgent.initializeAgentContext!(settings),
+            );
+        }
         record.sessionContext = createSessionContext(
             record.name,
             agentContext,
