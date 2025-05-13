@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai } from "aiclient";
+import { ChatModel, openai } from "aiclient";
 import * as kp from "knowpro";
 import {
     conversation as kpLib,
@@ -9,11 +9,11 @@ import {
     TextEmbeddingCache,
 } from "knowledge-processor";
 import * as ms from "memory-storage";
-import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
+import { error, PromptSection, Result, success } from "typechat";
 import { createEmbeddingModelWithCache } from "./common.js";
 
 export interface MemorySettings {
-    languageModel: TypeChatLanguageModel;
+    languageModel: ChatModel;
     embeddingModel: TextEmbeddingModelWithCache;
     embeddingSize: number;
     conversationSettings: kp.ConversationSettings;
@@ -117,6 +117,9 @@ export class MessageMetadata
     }
 }
 
+/**
+ * A Message in a Memory {@link Memory}
+ */
 export class Message<TMeta extends MessageMetadata = MessageMetadata>
     implements kp.IMessage
 {
@@ -189,6 +192,10 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 }
 
+/**
+ * A memory containing a sequence of messages {@link Message}
+ * Memory is modeled as a conversation {@link kp.IConversation}
+ */
 export abstract class Memory<
     TSettings extends MemorySettings = MemorySettings,
     TMessage extends Message = Message,
@@ -208,12 +215,52 @@ export abstract class Memory<
         this.addStandardNoiseTerms();
     }
 
+    /**
+     * The conversation representing this memory
+     */
     public abstract get conversation(): kp.IConversation<TMessage>;
 
     /**
-     * Run a natural language query against this memory
-     * @param searchText
-     * @returns
+     * Search memory using a select expression. Searches for and returns both conversation knowledge and messages
+     * @param {kp.SearchSelectExpr} selectExpr - The select expression to use for searching.
+     * @returns {Promise<kp.ConversationSearchResult | undefined>} - The search result or undefined if not found.
+     */
+    public async search(
+        selectExpr: kp.SearchSelectExpr,
+        options?: kp.SearchOptions,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        return kp.searchConversation(
+            this.conversation,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+            options,
+        );
+    }
+
+    /**
+     * Search knowledge extracted from this conversation
+     * @param selectExpr
+     * @param options
+     * @returns {Promise<Map<kp.KnowledgeType, kp.SemanticRefSearchResult> | undefined>} - knowledge matches or undefined if none
+     */
+    public async searchKnowledge(
+        selectExpr: kp.SearchSelectExpr,
+        options?: kp.SearchOptions,
+    ): Promise<Map<kp.KnowledgeType, kp.SemanticRefSearchResult> | undefined> {
+        return kp.searchConversationKnowledge(
+            this.conversation,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+            options,
+        );
+    }
+
+    /***
+     * Run a natural language query against this memory.
+     * @param {string} searchText - The natural language query text.
+     * @param {kp.LanguageSearchOptions} [options] - Optional search options.
+     * @param {kp.LanguageSearchDebugContext} [debugContext] - Optional debug context.
+     * @returns {Promise<Result<kp.ConversationSearchResult[]>>} - The search results.
      */
     public async searchWithLanguage(
         searchText: string,
@@ -230,6 +277,12 @@ export abstract class Memory<
         );
     }
 
+    /**
+     * Translate a natural language query into a query expression.
+     * @param {string} searchText - The natural language query text.
+     * @param {kp.LanguageSearchOptions} [options] - Optional search options.
+     * @returns {Promise<Result<kp.querySchema.SearchQuery>>} - The translated query expression.
+     */
     public async searchQueryFromLanguage(
         searchText: string,
         options?: kp.LanguageSearchOptions,
@@ -240,6 +293,82 @@ export abstract class Memory<
             this.getQueryTranslator(),
             searchText,
             this.getModelInstructions(),
+        );
+    }
+
+    /**
+     * Get an answer from a natural language question.
+     * @param {string} question - The natural language question.
+     * @param {kp.LanguageSearchOptions} [searchOptions] - Optional search options.
+     * @param progress - Optional progress callback.
+     * @returns {Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>>} - Search Results and the answers generated for them.
+     */
+    public async getAnswerFromLanguage(
+        question: string,
+        searchOptions?: kp.LanguageSearchOptions,
+        progress?: (
+            searchResult: kp.ConversationSearchResult,
+            chunk: kp.AnswerContext,
+            index: number,
+            result: Result<kp.AnswerResponse>,
+        ) => void,
+    ): Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>> {
+        const searchResults = await this.searchWithLanguage(
+            question,
+            searchOptions,
+        );
+        if (!searchResults.success) {
+            return searchResults;
+        }
+
+        const answers: [kp.ConversationSearchResult, kp.AnswerResponse][] = [];
+        for (let i = 0; i < searchResults.data.length; ++i) {
+            const searchResult = searchResults.data[i];
+            const answerResult = await this.getAnswerFromSearchResults(
+                searchResult,
+                searchResult.rawSearchQuery,
+                progress !== undefined
+                    ? (chunk, index, result) => {
+                          progress(searchResult, chunk, index, result);
+                      }
+                    : undefined,
+            );
+            if (!answerResult.success) {
+                return answerResult;
+            }
+            answers.push([searchResult, answerResult.data]);
+        }
+
+        return success(answers);
+    }
+
+    /**
+     * Get an answer from search results.
+     * @param {kp.ConversationSearchResult} searchResult - The search result.
+     * @param {string} [question] - Optional question text.
+     * @param progress - Optional progress callback.
+     * @returns {Promise<Result<kp.AnswerResponse>>} - The answer response.
+     */
+    public async getAnswerFromSearchResults(
+        searchResult: kp.ConversationSearchResult,
+        question?: string,
+        progress?: (
+            chunk: kp.AnswerContext,
+            index: number,
+            result: Result<kp.AnswerResponse>,
+        ) => void,
+    ): Promise<Result<kp.AnswerResponse>> {
+        question ??= searchResult.rawSearchQuery;
+        if (!question) {
+            return error("No searchResult.rawSearchQuery or question provided");
+        }
+        const answerGenerator = this.ensureAnswerGenerator();
+        return kp.generateAnswer(
+            this.conversation,
+            answerGenerator,
+            question,
+            searchResult,
+            progress,
         );
     }
 
@@ -268,7 +397,10 @@ export abstract class Memory<
     }
 
     private adjustLanguageSearchOptions(options?: kp.LanguageSearchOptions) {
-        options ??= kp.createLanguageSearchOptions();
+        options ??= {
+            ...kp.createSearchOptionsTypical(),
+            compileOptions: kp.createLanguageQueryCompileOptions(),
+        };
         const instructions = this.getModelInstructions();
         if (instructions) {
             if (options.modelInstructions) {
@@ -287,5 +419,14 @@ export abstract class Memory<
             this.noiseTerms,
             ms.getAbsolutePathFromUrl(import.meta.url, "noiseTerms.txt"),
         );
+    }
+
+    protected ensureAnswerGenerator(): kp.IAnswerGenerator {
+        if (this.settings.answerGenerator === undefined) {
+            this.settings.answerGenerator = new kp.AnswerGenerator(
+                kp.createAnswerGeneratorSettings(this.settings.languageModel),
+            );
+        }
+        return this.settings.answerGenerator;
     }
 }

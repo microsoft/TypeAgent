@@ -48,7 +48,10 @@ import { conversation as kpLib } from "knowledge-processor";
 import { collections, NormalizedEmbedding } from "typeagent";
 import { facetValueToString } from "./knowledgeLib.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
-import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
+import {
+    IMessageTextEmbeddingIndex,
+    isMessageTextEmbeddingIndex,
+} from "./messageIndex.js";
 import {
     textRangeFromMessageChunk,
     textRangesFromMessageOrdinals,
@@ -1328,26 +1331,51 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
         if (this.maxMessages && matches.size <= this.maxMessages) {
             return matches;
         }
+        //
+        // If the messageIndex supports re-ranking by similarity, we will try that as
+        // a secondary way of picking relevant messages
+        //
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
-        if (
-            messageIndex &&
-            isMessageTextEmbeddingIndex(messageIndex) &&
-            messageIndex.size > 0
-        ) {
-            const messageOrdinals = [...matches.getMatchedValues()];
-            const rankedMessages = messageIndex.lookupInSubsetByEmbedding(
-                this.embedding,
-                messageOrdinals,
-                this.maxMessages,
-                this.thresholdScore,
+        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
+            let messageOrdinals = this.getMessageOrdinalsInIndex(
+                messageIndex,
+                matches,
             );
-            matches.clearMatches();
-            for (const match of rankedMessages) {
-                matches.add(match.messageOrdinal, match.score);
+            if (messageOrdinals.length === matches.size) {
+                matches.clearMatches();
+                const rankedMessages = messageIndex.lookupInSubsetByEmbedding(
+                    this.embedding,
+                    messageOrdinals,
+                    this.maxMessages,
+                    this.thresholdScore,
+                );
+                for (const match of rankedMessages) {
+                    matches.add(match.messageOrdinal, match.score);
+                }
+                return matches;
             }
         }
+        if (this.maxMessages) {
+            // Can't re rank, so just take the top K from what we already have
+            matches.selectTopNScoring(this.maxMessages);
+        }
         return matches;
+    }
+
+    // Its possible that the index does not have all messages
+    private getMessageOrdinalsInIndex(
+        messageIndex: IMessageTextEmbeddingIndex,
+        matches: MessageAccumulator,
+    ) {
+        let messageOrdinals: MessageOrdinal[] = [];
+        const indexSize = messageIndex.size;
+        for (const messageOrdinal of matches.getMatchedValues()) {
+            if (messageOrdinal < indexSize) {
+                messageOrdinals.push(messageOrdinal);
+            }
+        }
+        return messageOrdinals;
     }
 }
 

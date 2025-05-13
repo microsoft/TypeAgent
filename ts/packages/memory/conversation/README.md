@@ -11,9 +11,9 @@ It explores how to implement different memory [types](#memory-types) using [**St
 Conversational memory treats the following domains like conversations: a sequence of timestamped **messages** between senders and receivers.
 
 - [Podcast](./src/podcast.ts)
-- [Email](./src/emailMemory.ts)
 - [Conversation](./src/conversationMemory.ts) such as chats
   - See [conversationManager](../../knowledgeProcessor/src/conversation/conversationManager.ts) in the [knowledgeProcessor](../../knowledgeProcessor) package for existing conversation memory implemented with structured RAG.
+- [Email](./src/emailMemory.ts)
 
 ### Image
 
