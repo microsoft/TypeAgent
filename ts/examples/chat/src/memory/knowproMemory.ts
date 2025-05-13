@@ -16,7 +16,7 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { ChatContext } from "./chatMemory.js";
+import { KnowledgeProcessorContext } from "./knowledgeProcessorMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
 import {
@@ -56,7 +56,7 @@ export type KnowProContext = {
 };
 
 export async function createKnowproCommands(
-    chatContext: ChatContext,
+    chatContext: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
     const knowledgeModel = chatContext.models.chatModel;

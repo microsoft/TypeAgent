@@ -1,6 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * ===============================================
+ * Early experiments with code-processor package
+ * ===============================================
+ */
+
 import { openai } from "aiclient";
 import {
     CodeBlockName,
@@ -47,7 +53,7 @@ import ts from "typescript";
 import chalk from "chalk";
 import { createCommandTransformer } from "./commandTransformer.js";
 
-export async function runCodeMemory(): Promise<void> {
+export async function runCodeMemoryCommands(): Promise<void> {
     const model = openai.createChatModelDefault("codeMemory");
     const memoryFolderPath = "/data/code/memory";
     const codeReviewer = createCodeReviewer(model);
