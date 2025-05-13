@@ -226,7 +226,7 @@ async function updateMontageContext(
                 agentContext.montages = d.montages;
             }
         }
-        
+
         // Load the image index from disk
         if (!agentContext.imageCollection) {
             agentContext.indexes = await context.indexes("image");
