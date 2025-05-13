@@ -214,6 +214,7 @@ async function updateMontageContext(
         // Load all montages from disk
         agentContext.montages = [];
         agentContext.montageIdSeed = NaN;
+        agentContext.activeMontageId = -1;
         if (await context.sessionStorage?.exists(montageFile)) {
             const data = await context.sessionStorage?.read(
                 montageFile,
@@ -221,15 +222,11 @@ async function updateMontageContext(
             );
             if (data) {
                 const d = JSON.parse(data);
-                // context.agentContext.montageIdSeed = d.montageIdSeed
-                //     ? d.montageIdSeed
-                //     : 0;
+                agentContext.activeMontageId = d.activeMontageId;
                 agentContext.montages = d.montages;
             }
         }
-
-        agentContext.activeMontageId = -1;
-
+        
         // Load the image index from disk
         if (!agentContext.imageCollection) {
             agentContext.indexes = await context.indexes("image");
@@ -977,6 +974,7 @@ async function saveMontages(context: SessionContext<MontageActionContext>) {
         montageFile,
         JSON.stringify({
             montageIdSeed: context.agentContext.montageIdSeed,
+            activeMontageId: context.agentContext.activeMontageId,
             montages: context.agentContext.montages,
         }),
     );

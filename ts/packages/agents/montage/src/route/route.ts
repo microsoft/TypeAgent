@@ -194,10 +194,12 @@ app.get("/events", (req, res) => {
     clients.push(res);
 
     // drain any messages in the message queue
-    while (messageQueue.length > 0) {
-        sendDataToClients(messageQueue.shift());
-    }
-
+    setTimeout(() => {
+        while (messageQueue.length > 0) {
+            sendDataToClients(messageQueue.shift());
+        }    
+    }, 1500);
+    
     req.on("close", () => {
         clients = clients.filter((client) => client !== res);
     });
