@@ -53,30 +53,17 @@ export function instantiate(): AppAgent {
 }
 
 export type BrowserActionContext = {
-    webSocket: WebSocket | undefined;
-    webAgentChannels: WebAgentChannels | undefined;
-    crossWordState: Crossword | undefined;
-    browserConnector: BrowserConnector | undefined;
-    browserProcess: ChildProcess | undefined;
-    tabTitleIndex: TabTitleIndex | undefined;
-    planVisualizationEndpoint: string | undefined;
+    webSocket?: WebSocket | undefined;
+    webAgentChannels?: WebAgentChannels | undefined;
+    crossWordState?: Crossword | undefined;
+    browserConnector?: BrowserConnector | undefined;
+    browserProcess?: ChildProcess | undefined;
+    tabTitleIndex?: TabTitleIndex | undefined;
 };
 
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
-    return {
-        webSocket: undefined,
-        webAgentChannels: undefined,
-        crossWordState: undefined,
-        browserConnector: undefined,
-        browserProcess: undefined,
-        tabTitleIndex: undefined,
-        planVisualizationEndpoint: undefined,
-    };
+    return {};
 }
-
-const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
-const planViewerPortIndex = 2;
-const port = portBase + planViewerPortIndex;
 
 async function updateBrowserContext(
     enable: boolean,
@@ -90,10 +77,6 @@ async function updateBrowserContext(
     if (enable) {
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
-        }
-
-        if (!context.agentContext.planVisualizationEndpoint) {
-            context.agentContext.planVisualizationEndpoint = `http://localhost:${port}`;
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {

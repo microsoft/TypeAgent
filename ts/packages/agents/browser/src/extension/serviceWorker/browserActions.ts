@@ -7,8 +7,6 @@ import {
     getTabByTitle,
     awaitPageLoad,
     awaitPageIncrementalUpdates,
-    downloadStringAsFile,
-    downloadImageAsFile,
 } from "./tabManager";
 import {
     getTabScreenshot,

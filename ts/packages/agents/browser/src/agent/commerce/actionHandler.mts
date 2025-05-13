@@ -45,7 +45,6 @@ export async function handleCommerceAction(
             break;
         case "buyProduct":
             return await handleShoppingRequest(action);
-            break;
     }
 
     async function getComponentFromPage(
@@ -207,13 +206,17 @@ export async function handleCommerceAction(
         let executionHistory: any[] = [];
         let lastAction: any;
 
-        console.log(
-            "Plan visualizer: " +
-                context.sessionContext.agentContext.planVisualizationEndpoint,
-        );
+        const planVisualizationEndpoint = `http://localhost:${context.sessionContext.getSharedLocalHostPort("planVisualizer")}`;
+
+        if (!planVisualizationEndpoint) {
+            throw new Error(
+                "Plan visualization endpoint not assigned. Please check your configuration.",
+            );
+        }
+        console.log("Plan visualizer: " + planVisualizationEndpoint);
 
         const { trackState, reset } = createExecutionTracker(
-            context.sessionContext.agentContext.planVisualizationEndpoint!,
+            planVisualizationEndpoint,
             action.parameters.userRequest,
         );
 

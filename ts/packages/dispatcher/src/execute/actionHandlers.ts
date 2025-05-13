@@ -257,6 +257,18 @@ export function createSessionContext<T = unknown>(
         },
         addDynamicAgent,
         removeDynamicAgent,
+        getSharedLocalHostPort: async (agentName: string) => {
+            const localHostPort = await context.agents.getSharedLocalHostPort(
+                name,
+                agentName,
+            );
+            if (localHostPort === undefined) {
+                throw new Error(
+                    `Agent '${agentName}' does not have a shared local host port.`,
+                );
+            }
+            return localHostPort;
+        },
         indexes(type: string): Promise<any[]> {
             return new Promise<IndexData[]>((resolve, reject) => {
                 const iidx: IndexData[] =
@@ -788,16 +800,28 @@ export async function executeActions(
                     clearActivityContext(systemContext);
                 } else {
                     // TODO: validation
+                    const { activityName, description, state, openLocalView } =
+                        result.activityContext;
+                    const prevOpenLocalView =
+                        systemContext.activityContext?.openLocalView;
                     systemContext.activityContext = {
-                        appAgentName: getAppAgentName(
-                            executableAction.action.schemaName,
-                        ),
-                        ...result.activityContext,
+                        appAgentName,
+                        activityName,
+                        description,
+                        state,
+                        openLocalView: prevOpenLocalView || openLocalView,
                     };
                     systemContext.agents.toggleTransient(
                         DispatcherActivityName,
                         true,
                     );
+                    if (openLocalView) {
+                        const port =
+                            systemContext.agents.getLocalHostPort(appAgentName);
+                        if (port !== undefined) {
+                            await systemContext.clientIO.openLocalView(port);
+                        }
+                    }
                 }
             }
         }
@@ -805,11 +829,20 @@ export async function executeActions(
     }
 }
 
-export function clearActivityContext(
-    systemContext: CommandHandlerContext,
-): void {
-    systemContext.activityContext = undefined;
-    systemContext.agents.toggleTransient(DispatcherActivityName, false);
+export async function clearActivityContext(
+    context: CommandHandlerContext,
+): Promise<void> {
+    const activityContext = context.activityContext;
+    if (activityContext?.openLocalView) {
+        const port = context.agents.getLocalHostPort(
+            activityContext.appAgentName,
+        );
+        if (port !== undefined) {
+            await context.clientIO.closeLocalView(port);
+        }
+    }
+    context.activityContext = undefined;
+    context.agents.toggleTransient(DispatcherActivityName, false);
 }
 
 function getAdditionalExecutableActions(

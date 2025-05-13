@@ -75,14 +75,7 @@ if (isProd) {
         debugShellError("Another instance is running");
         process.exit(0);
     }
-} else {
-    // dev mode
-    if (process.env.PORT === undefined) {
-        process.env.PORT = "9050";
-    }
 }
-
-export const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
 
 // Set app user model id for windows
 if (process.platform === "win32") {
@@ -247,6 +240,21 @@ async function initializeDispatcher(
         const newClientIO = createClientIORpcClient(clientIOChannel.channel);
         const clientIO = {
             ...newClientIO,
+            openLocalView: (port: number) => {
+                debugShell(`Opening local view on port ${port}`);
+                return shellWindow.openInlineBrowser(
+                    new URL(`http://localhost:${port}/`),
+                );
+            },
+            closeLocalView: (port: number) => {
+                const current = shellWindow.inlineBrowserUrl;
+                debugShell(
+                    `Closing local view on port ${port}, current url: ${current}`,
+                );
+                if (current === `http://localhost:${port}/`) {
+                    shellWindow.closeInlineBrowser();
+                }
+            },
             exit: () => {
                 app.quit();
             },
@@ -268,6 +276,8 @@ async function initializeDispatcher(
             clientId: getClientId(),
             clientIO,
             constructionProvider: getDefaultConstructionProvider(),
+            allowSharedLocalView: ["shell"],
+            portBase: isProd ? 9001 : 9050,
         });
 
         async function processShellRequest(
