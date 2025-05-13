@@ -71,7 +71,7 @@ def lookup_term(
     ranges_in_scope: TextRangesInScope | None = None,
 ) -> list[ScoredSemanticRefOrdinal] | None:
     """Look up a term in the semantic reference index, optionally filtering by ranges in scope."""
-    if ranges_in_scope:
+    if ranges_in_scope is not None:
         # If ranges_in_scope has no actual text ranges, lookups can't possibly match
         return lookup_term_filtered(
             semantic_ref_index,
@@ -249,7 +249,7 @@ class MatchTermsAndExpr(MatchTermsBooleanExpr):
         for match_expr in self.term_expressions:
             term_matches = match_expr.eval(context)
             if not term_matches:
-                if all_matches:
+                if all_matches is not None:
                     all_matches.clear_matches()
                 break
             if all_matches is None:
