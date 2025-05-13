@@ -56,12 +56,16 @@ export async function createKnowproChatCommands(
         const namedArgs = parseNamedArguments(args, cmRememberDef());
         const memory = await ensureLoaded();
         const msgText = namedArgs.text;
+
+        context.printer.writeLine("Remembering");
         const result = await memory.addMessage(
             new cm.ConversationMessage(msgText),
         );
         if (!result.success) {
             context.printer.writeError(result.message);
+            return;
         }
+        context.printer.writeLine("Done");
     }
 
     function cmRecallDef(): CommandMetadata {
