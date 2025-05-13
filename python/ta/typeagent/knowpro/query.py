@@ -11,6 +11,7 @@ from .collections import (
     PropertyTermSet,
     SemanticRefAccumulator,
     TermSet,
+    TextRangeCollection,
     TextRangesInScope,
 )
 from .interfaces import (
@@ -182,6 +183,40 @@ class SelectTopNExpr[T: MatchAccumulator](QueryOpExpr[T]):
         return matches
 
 
+@dataclass
+class MatchTermsBooleanExpr(QueryOpExpr[SemanticRefAccumulator]):
+    """Expression for matching terms in a boolean query."""
+
+    get_scope_expr: "GetScopeExpr | None" = None
+
+    def begin_match(self, context: QueryEvalContext) -> None:
+        """Prepare for matching terms in the context by resetting some things."""
+        if self.get_scope_expr is not None:
+            context.text_ranges_in_scope = self.get_scope_expr.eval(context)
+        context.clear_matched_terms()
+
+
+@dataclass
+class MatchTermsOrExpr(MatchTermsBooleanExpr):
+    """Expression for matching terms with an OR condition."""
+
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = []
+
+    def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
+        self.begin_match(context)
+        all_matches: SemanticRefAccumulator | None = None
+        for match_expr in self.term_expressions:
+            term_matches = match_expr.eval(context)
+            if term_matches:
+                if all_matches is None:
+                    all_matches = term_matches
+                else:
+                    all_matches.add_union(term_matches)
+        if all_matches is not None:
+            all_matches.calculate_total_score()
+        return all_matches or SemanticRefAccumulator()
+
+
 class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):
     """Expression for matching terms in a query.
 
@@ -278,3 +313,31 @@ class MatchSearchTermExpr(MatchTermExpr):
                     term, semantic_refs, False, related_term.weight
                 )
                 context.matched_terms.add(related_term)
+
+
+class IQueryTextRangeSelector(Protocol):
+    """Protocol for a selector that can evaluate to a text range."""
+
+    def eval(
+        self,
+        context: QueryEvalContext,
+        semantic_refs: SemanticRefAccumulator | None = None,
+    ) -> TextRangeCollection | None:
+        """Evaluate the selector and return the text range."""
+        raise NotImplementedError
+
+
+@dataclass
+class GetScopeExpr(QueryOpExpr[TextRangesInScope]):
+    """Expression for getting the scope of a query."""
+
+    range_selectors: list[IQueryTextRangeSelector]
+
+    def eval(self, context: QueryEvalContext) -> TextRangesInScope:
+        """Evaluate the expression and return the text ranges in scope."""
+        ranges_in_scope = TextRangesInScope()
+        for selector in self.range_selectors:
+            range_collection = selector.eval(context)
+            if range_collection is not None:
+                ranges_in_scope.add_text_ranges(range_collection)
+        return ranges_in_scope

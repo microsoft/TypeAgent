@@ -2,11 +2,12 @@
 # Licensed under the MIT License.
 
 import bisect
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 import heapq
+import math
 import sys
-from typing import Any, Callable, Iterator, Protocol, cast
+from typing import cast
 
 from .interfaces import (
     ISemanticRefCollection,
@@ -39,8 +40,8 @@ class MatchAccumulator[T]:
     def __len__(self) -> int:
         return len(self._matches)
 
-    def __bool__(self) -> bool:
-        return True
+    def __iter__(self) -> Iterator[Match[T]]:
+        return iter(self._matches.values())
 
     def __contains__(self, value: T) -> bool:
         return value in self._matches
@@ -82,17 +83,34 @@ class MatchAccumulator[T]:
                 )
             )
 
-    def add_union(self, other: Iterable["MatchAccumulator"]) -> None:
-        raise NotImplementedError  # TODO
+    def add_union(self, other: "MatchAccumulator[T]") -> None:
+        """Add matches from another collection of matches."""
+        for other_match in other:
+            existing_match = self.get_match(other_match.value)
+            if existing_match is None:
+                self.set_match(other_match)
+            else:
+                self.combine_matches(existing_match, other_match)
 
     def intersect(
         self, other: "MatchAccumulator", intersection: "MatchAccumulator | None"
     ) -> None:
         raise NotImplementedError  # TODO
 
-    # def combine_matches...
+    def combine_matches(self, match: Match, other: Match) -> None:
+        """Combine the other match into the first."""
+        match.hit_count += other.hit_count
+        match.score += other.score
+        match.related_hit_count += other.related_hit_count
+        match.related_score += other.related_score
 
-    # def calculate_total_score...
+    def calculate_total_score(
+        self, scorer: Callable[[Match[T]], None] | None = None
+    ) -> None:
+        if scorer is None:
+            scorer = add_smooth_related_score_to_match_score
+        for match in self:
+            scorer(match)
 
     def get_sorted_by_score(self, min_hit_count: int | None = None) -> list[Match[T]]:
         """Get matches sorted by score"""
@@ -123,16 +141,16 @@ class MatchAccumulator[T]:
 
     def get_matches(
         self, predicate: Callable[[Match[T]], bool] | None = None
-    ) -> Iterable[Match[T]]:
-        """Iterate over all matches"""
-        for match in self._matches.values():
-            if predicate is None or predicate(match):
-                yield match
+    ) -> Iterator[Match[T]]:
+        """Iterate over all matches."""
+        if predicate is None:
+            return iter(self._matches.values())
+        else:
+            return filter(predicate, self._matches.values())
 
-    def get_matched_values(self) -> Iterable[T]:
-        """Iterate over all matched values"""
-        for value in self._matches:
-            yield value
+    def get_matched_values(self) -> Iterator[T]:
+        """Iterate over all matched values."""
+        return iter(self._matches)
 
     def clear_matches(self):
         self._matches.clear()
@@ -159,7 +177,30 @@ class MatchAccumulator[T]:
             return self._matches.values()
 
 
-# TODO: getSmoothScore, addSmoothRelatedScoreToMatchScore
+def get_smooth_score(
+    total_score: float,
+    hit_count: int,
+) -> float:
+    """See the long comment in collections.ts for an explanation."""
+    if hit_count > 0:
+        if hit_count == 1:
+            return total_score
+        avg = total_score / hit_count
+        smooth_avg = math.log(hit_count + 1) * avg
+        return smooth_avg
+    else:
+        return 0.0
+
+
+def add_smooth_related_score_to_match_score(match: Match) -> None:
+    """Add the smooth related score to the match score."""
+    if match.related_hit_count > 0:
+        # Related term matches can be noisy and duplicative.
+        # See the comment on getSmoothScore  in collections.ts.
+        smooth_related_score = get_smooth_score(
+            match.related_score, match.related_hit_count
+        )
+        match.score += smooth_related_score
 
 
 type KnowledgePredicate[T: Knowledge] = Callable[[T], bool]
@@ -201,7 +242,7 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         semantic_refs: ISemanticRefCollection,
         predicate: Callable[[SemanticRef], bool],
     ) -> Iterable[SemanticRef]:
-        for match in self.get_matches():
+        for match in self:
             semantic_ref = semantic_refs[match.value]
             if predicate is None or predicate(semantic_ref):
                 yield semantic_ref
@@ -212,7 +253,7 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         knowledgeType: KnowledgeType,
         predicate: KnowledgePredicate[T] | None = None,
     ) -> Iterable[Match[SemanticRefOrdinal]]:
-        for match in self.get_matches():
+        for match in self:
             semantic_ref = semantic_refs[match.value]
             if predicate is None or predicate(cast(T, semantic_ref.knowledge)):
                 yield match
@@ -222,7 +263,7 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         semantic_refs: ISemanticRefCollection,
     ) -> dict[KnowledgeType, "SemanticRefAccumulator"]:
         groups: dict[KnowledgeType, SemanticRefAccumulator] = {}
-        for match in self.get_matches():
+        for match in self:
             semantic_ref = semantic_refs[match.value]
             group = groups.get(semantic_ref.knowledge_type)
             if group is None:
@@ -238,10 +279,22 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         ranges_in_scope: "TextRangesInScope",
     ) -> "SemanticRefAccumulator":
         accumulator = SemanticRefAccumulator(self.search_term_matches)
-        for match in self.get_matches():
+        for match in self:
             if ranges_in_scope.is_range_in_scope(semantic_refs[match.value].range):
                 accumulator.set_match(match)
         return accumulator
+
+    def add_union(self, other: "SemanticRefAccumulator") -> None:  # type: ignore
+        """Add matches from another SemanticRefAccumulator"""
+        assert isinstance(
+            other, SemanticRefAccumulator
+        )  # Runtime check b/c other's type mismatch
+        super().add_union(other)
+        self.search_term_matches.update(other.search_term_matches)
+
+    # def intersect ...
+
+    # def to_scored_semantic_refs ...
 
 
 # TODO: MessageAccumulator, intersectScoredMessageOrdinals
