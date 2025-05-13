@@ -186,6 +186,9 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
         async openLocalView(port: number): Promise<void> {
             await open(`http://localhost:${port}`);
         },
+        closeLocalView(port: number): void {
+            // TODO: Ignored
+        },
         // Host specific (TODO: Formalize the API)
         takeAction(action: string, data: unknown): void {
             if (action === "open-folder") {

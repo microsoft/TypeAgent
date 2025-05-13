@@ -282,6 +282,9 @@ export class ShellWindow {
         this.chatView.webContents.send("show-dialog", dialogName);
     }
 
+    public get inlineBrowserUrl(): string | undefined {
+        return this.targetUrl;
+    }
     // ================================================================
     // Inline browser
     // ================================================================
@@ -324,6 +327,7 @@ export class ShellWindow {
                     );
                 });
 
+            this.targetUrl = targetUrl.toString();
             // indicate in the settings which canvas is open
             this.settings.setUserSettingValue("canvas", targetUrl.toString());
         }

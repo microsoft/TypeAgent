@@ -87,6 +87,8 @@ export interface ClientIO {
     ): void;
 
     openLocalView(port: number): void;
+    closeLocalView(port: number): void;
+
     // Host specific (TODO: Formalize the API)
     takeAction(action: string, data: unknown): void;
 }
@@ -147,6 +149,7 @@ export const nullClientIO: ClientIO = {
     proposeAction: async () => undefined,
     notify: () => {},
     openLocalView: () => {},
+    closeLocalView: () => {},
     takeAction: (action: string) => {
         throw new Error(`Action ${action} not supported`);
     },
