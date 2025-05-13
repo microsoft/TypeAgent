@@ -26,7 +26,7 @@ export type KnowProChatContext = {
     defaultName: string;
 };
 
-export async function createKnowproChatCommands(
+export async function createKnowproConversationCommands(
     kpContext: KnowProContext,
     commands: Record<string, CommandHandler>,
 ) {
@@ -70,7 +70,7 @@ export async function createKnowproChatCommands(
 
     function cmRecallDef(): CommandMetadata {
         return {
-            description: "Recall a conversation memory",
+            description: "Recall information from conversation memory",
             args: {
                 query: arg("Recall with this natural language query"),
             },
@@ -100,7 +100,7 @@ export async function createKnowproChatCommands(
         return {
             description: "Load or Create a conversation memory",
             options: {
-                name: arg("Chat name", context.defaultName),
+                name: arg("Conversation name", context.defaultName),
                 createNew: argBool("Create new", false),
             },
         };

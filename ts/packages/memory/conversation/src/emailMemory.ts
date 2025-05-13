@@ -29,6 +29,12 @@ export interface EmailMemoryData
     indexingState: IndexingState;
 }
 
+/**
+ * A memory containing Email Messages {@link EmailMessage}
+ * Extends the {@link Memory} class with functionality specific to Emails
+ *
+ * @see {@link Memory} for base methods such as search and answer
+ */
 export class EmailMemory
     extends Memory<EmailMemorySettings, EmailMessage>
     implements kp.IConversation

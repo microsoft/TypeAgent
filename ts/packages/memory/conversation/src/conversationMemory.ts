@@ -108,6 +108,8 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
 export type ConversationMemorySettings = MemorySettings;
 
 /**
+ * A memory of conversation messages {@link ConversationMessage}
+ * Extends the {@link Memory} class with functionality specific to Conversations
  * @see {@link Memory} for base methods such as search and answer.
  */
 export class ConversationMemory
