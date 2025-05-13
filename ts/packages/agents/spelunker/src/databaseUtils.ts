@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 import * as fs from "fs";
-import * as path from "path";
-import { createRequire } from "module";
 
 import Database, * as sqlite from "better-sqlite3";
 
@@ -43,19 +41,6 @@ CREATE TABLE IF NOT EXISTS ChunkEmbeddings (
 );
 `;
 
-function getDbOptions() {
-    if (process?.versions?.electron !== undefined) {
-        return undefined;
-    }
-    const r = createRequire(import.meta.url);
-    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
-    const nativeBinding = path.join(
-        betterSqlitePath,
-        "../build/Release-Node/better_sqlite3.node",
-    );
-    return { nativeBinding };
-}
-
 export function createDatabase(context: SpelunkerContext): void {
     if (!context.queryContext) {
         throw new Error(
@@ -72,7 +57,7 @@ export function createDatabase(context: SpelunkerContext): void {
     } else {
         console_log(`[Creating database at ${loc}]`);
     }
-    const db = new Database(loc, getDbOptions());
+    const db = new Database(loc);
     // Write-Ahead Logging, improving concurrency and performance
     db.pragma("journal_mode = WAL");
     // Fix permissions to be read/write only by the owner
