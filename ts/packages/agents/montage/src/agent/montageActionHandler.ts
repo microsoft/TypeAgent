@@ -91,8 +91,18 @@ async function executeMontageAction(
     }
 
     if (result.error === undefined) {
+
+        let activityName = "edit";
+        let verb = "Editing";
+
+        if (action.actionName === "createNewMontage") {
+            activityName = "create";
+            verb = "Created new"
+        }
+
         if (
             action.actionName === "startEditMontage" ||
+            action.actionName === "createNewMontage" ||
             (context.activityContext !== undefined &&
                 context.activityContext.state.title !==
                     currentActiveMontage?.title)
@@ -100,8 +110,8 @@ async function executeMontageAction(
             result.activityContext =
                 currentActiveMontage !== undefined
                     ? {
-                          activityName: "edit",
-                          description: `Editing montage ${currentActiveMontage.title}`,
+                          activityName: activityName,
+                          description: `${verb} montage ${currentActiveMontage.title}`,
                           state: {
                               title: currentActiveMontage.title,
                           },
@@ -560,6 +570,7 @@ async function handleMontageAction(
                 agentContext.activeMontageId = montage.id;
             }
 
+            
             result = createActionResult("Created new montage", false, [
                 entityFromMontage(montage),
             ]);

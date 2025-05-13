@@ -10,13 +10,12 @@ export type MontageAction =
     | ShowSearchParametersAction
     | SetSearchParametersAction
     | StartSlideShowAction
-    | CreateMontageAction
     | DeleteMontageAction
     | DeleteAllMontageAction
     | ListMontageAction
     | MergeMontageAction;
 
-export type MontageActivity = StartEditMontageAction;
+export type MontageActivity = StartEditMontageAction | CreateMontageAction;
 
 export type StartEditMontageAction = {
     actionName: "startEditMontage";

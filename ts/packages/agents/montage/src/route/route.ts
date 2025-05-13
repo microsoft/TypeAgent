@@ -198,7 +198,7 @@ app.get("/events", (req, res) => {
         while (messageQueue.length > 0) {
             sendDataToClients(messageQueue.shift());
         }
-    }, 1500);
+    }, 100);
 
     req.on("close", () => {
         clients = clients.filter((client) => client !== res);
