@@ -3,8 +3,8 @@
 **knowpro** is an **experimental sample code and prototype** working toward a shared understanding of the MVP for **Structured RAG**. knowpro is in active development with very frequent changes.
 
 - knowpro implements **Structured RAG**.
-  - Structured RAG uses [**knowledge extraction**](../../knowledgeProcessor/src/conversation/knowledgeSchema.ts) and other techniques to extract **salient information** from text.
-  - This salient information includes **structured** information such as entities, actions, topics, and tabular data in data frames.
+  - Structured RAG first extracts **dense information** from text.
+  - This dense information includes **structured** information such as entities, actions, topics, and tabular data in data frames.
   - This structured information is stored with suitable indexes that allow it to be:
     - Searched and retrieved using **structured queries**.
     - Enumerated and filtered using API calls

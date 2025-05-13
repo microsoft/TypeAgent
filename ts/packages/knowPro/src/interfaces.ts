@@ -284,7 +284,7 @@ export type KnowledgePropertyName =
 
 export type PropertySearchTerm = {
     /**
-     * PropertySearch terms let you matched named property, values
+     * PropertySearch terms let you match named property, values
      * - You can  match a well known property name (name("Bach") type("book"))
      * - Or you can provide a SearchTerm as a propertyName.
      *   E.g. to match hue(red)
@@ -293,6 +293,9 @@ export type PropertySearchTerm = {
      *    We also want hue(red) to match any facets called color(red)
      * SearchTerms can included related terms
      *   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
+     *
+     * See {@link KnowledgePropertyName} for well known property names
+     *
      * The the query processor can also related terms using a related terms secondary index, if one is available
      */
     propertyName: KnowledgePropertyName | SearchTerm;
