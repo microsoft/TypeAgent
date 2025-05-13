@@ -1331,36 +1331,39 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
         if (this.maxMessages && matches.size <= this.maxMessages) {
             return matches;
         }
+        //
+        // If the messageIndex supports re-ranking by similarity, we will try that as
+        // a secondary way of picking relevant messages
+        //
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
-        if (
-            messageIndex &&
-            isMessageTextEmbeddingIndex(messageIndex) &&
-            messageIndex.size > 0
-        ) {
+        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
             let messageOrdinals = this.getMessageOrdinalsInIndex(
                 messageIndex,
                 matches,
             );
-            if (messageOrdinals.length > 0) {
+            if (messageOrdinals.length === matches.size) {
                 matches.clearMatches();
-                if (messageOrdinals.length > 0) {
-                    const rankedMessages =
-                        messageIndex.lookupInSubsetByEmbedding(
-                            this.embedding,
-                            messageOrdinals,
-                            this.maxMessages,
-                            this.thresholdScore,
-                        );
-                    for (const match of rankedMessages) {
-                        matches.add(match.messageOrdinal, match.score);
-                    }
+                const rankedMessages = messageIndex.lookupInSubsetByEmbedding(
+                    this.embedding,
+                    messageOrdinals,
+                    this.maxMessages,
+                    this.thresholdScore,
+                );
+                for (const match of rankedMessages) {
+                    matches.add(match.messageOrdinal, match.score);
                 }
+                return matches;
             }
+        }
+        if (this.maxMessages) {
+            // Can't re rank, so just take the top K from what we already have
+            matches.selectTopNScoring(this.maxMessages);
         }
         return matches;
     }
 
+    // Its possible that the index does not have all messages
     private getMessageOrdinalsInIndex(
         messageIndex: IMessageTextEmbeddingIndex,
         matches: MessageAccumulator,

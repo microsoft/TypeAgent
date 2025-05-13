@@ -180,7 +180,7 @@ export class ConversationMemory
         try {
             this.beginIndexing();
 
-            kp.addToConversationIndex(
+            await kp.addToConversationIndex(
                 this,
                 this.settings.conversationSettings,
                 messageOrdinalStartAt,
