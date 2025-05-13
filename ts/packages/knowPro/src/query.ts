@@ -48,7 +48,10 @@ import { conversation as kpLib } from "knowledge-processor";
 import { collections, NormalizedEmbedding } from "typeagent";
 import { facetValueToString } from "./knowledgeLib.js";
 import { isInDateRange, isSearchTermWildcard } from "./common.js";
-import { isMessageTextEmbeddingIndex } from "./messageIndex.js";
+import {
+    IMessageTextEmbeddingIndex,
+    isMessageTextEmbeddingIndex,
+} from "./messageIndex.js";
 import {
     textRangeFromMessageChunk,
     textRangesFromMessageOrdinals,
@@ -1330,15 +1333,16 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
         }
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
-        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
-            const indexSize = messageIndex.size;
-            if (indexSize > 0) {
-                let messageOrdinals: MessageOrdinal[] = [];
-                for (const messageOrdinal of matches.getMatchedValues()) {
-                    if (messageOrdinal < indexSize) {
-                        messageOrdinals.push(messageOrdinal);
-                    }
-                }
+        if (
+            messageIndex &&
+            isMessageTextEmbeddingIndex(messageIndex) &&
+            messageIndex.size > 0
+        ) {
+            let messageOrdinals = this.getMessageOrdinalsInIndex(
+                messageIndex,
+                matches,
+            );
+            if (messageOrdinals.length > 0) {
                 matches.clearMatches();
                 if (messageOrdinals.length > 0) {
                     const rankedMessages =
@@ -1355,6 +1359,20 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
             }
         }
         return matches;
+    }
+
+    private getMessageOrdinalsInIndex(
+        messageIndex: IMessageTextEmbeddingIndex,
+        matches: MessageAccumulator,
+    ) {
+        let messageOrdinals: MessageOrdinal[] = [];
+        const indexSize = messageIndex.size;
+        for (const messageOrdinal of matches.getMatchedValues()) {
+            if (messageOrdinal < indexSize) {
+                messageOrdinals.push(messageOrdinal);
+            }
+        }
+        return messageOrdinals;
     }
 }
 

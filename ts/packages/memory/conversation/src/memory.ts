@@ -351,7 +351,10 @@ export abstract class Memory<
     }
 
     private adjustLanguageSearchOptions(options?: kp.LanguageSearchOptions) {
-        options ??= kp.createLanguageSearchOptions();
+        options ??= {
+            ...kp.createSearchOptionsTypical(),
+            compileOptions: kp.createLanguageQueryCompileOptions(),
+        };
         const instructions = this.getModelInstructions();
         if (instructions) {
             if (options.modelInstructions) {
