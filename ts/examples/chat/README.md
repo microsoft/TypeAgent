@@ -1,11 +1,31 @@
 ## Chat test app
 
-This **test app** is used to interactively test the following packages:
+This **test app and sample code** is used to interactively test and play with several packages as they are being developed.
 
-- [code-processor](../../packages/codeProcessor/)
-- [knowledge-processor](../../packages/knowledgeProcessor/)
+**Frequent changes**
+
+Testing is accomplished using a set of commands. Type @help for a list.
+All commands must be prefixed with @
+
+## knowpro and memory
+
 - [knowpro](../../packages/knowPro/)
 - [memory](../../packages/memory/)
+
+All commands prefixed with @**kp**. Features explored:
+
+| Feature Area                                               | Command Prefix             |
+| ---------------------------------------------------------- | -------------------------- |
+| [Podcast Memory](./src/memory/knowproMemory.ts)            | @kpPodcast...              |
+| [Image Memory](./src/memory/knowproMemory.ts)              | @kpImage...                |
+| [knowpro Search/Answer](./src/memory/knowproMemory.ts)     | @kpSearch..., @kpAnswer... |
+| [Email](./src/memory/knowproEmail.ts)                      | @kpPodEmail...             |
+| [Conversation Memory](./src/memory/knowproConversation.ts) | @kpCm...                   |
+
+## Other packages
+
+- [knowledge-processor](../../packages/knowledgeProcessor/)
+- [code-processor](../../packages/codeProcessor/)
 
 ### Notes
 
