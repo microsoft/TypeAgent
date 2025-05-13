@@ -200,14 +200,10 @@ class PropertyIndex(IPropertyToSemanticRefIndex):
         value: str,
     ) -> list[ScoredSemanticRefOrdinal] | None:
         term_text = make_property_term_text(property_name, value)
-        result = self._map.get(self._prepare_term_text(term_text))
-        if result is None:
-            return None
-        else:
-            return list(result)  # TODO: Do we need to make a copy?
+        return self._map.get(self._prepare_term_text(term_text))
 
     def _prepare_term_text(self, term_text: str) -> str:
-        # Do any pre-processing of the term.
+        """Do any pre-processing of the term."""
         return term_text.lower()
 
 
@@ -231,7 +227,7 @@ def lookup_property_in_property_index(
             )
         ]
 
-    return scored_refs
+    return scored_refs or None  # Return None if no results
 
 
 def is_known_property(
