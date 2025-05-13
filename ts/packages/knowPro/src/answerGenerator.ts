@@ -512,7 +512,7 @@ function createQuestionPrompt(question: string): string {
         "Use the name and type of the provided entities to select those highly relevant to answering the question.",
         "List ALL entities if query intent implies that.",
         "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
-        "Include direct quotes when asked but otherwise answer in your own words.",
+        "Use direct quotes only when needed or asked. Otherwise answer in your own words.",
     ];
     return prompt.join("\n");
 }
