@@ -1,83 +1,90 @@
-// test/serviceWorker/websocket.test.ts
-import { MockWebSocket } from '../mock-chrome-api';
+const { MockWebSocket } = require("../mock-chrome-api");
 
-// Mock dependencies
-jest.mock('../../src/extension/serviceWorker/storage', () => ({
-  getSettings: jest.fn().mockImplementation(() => Promise.resolve({
-    websocketHost: 'ws://localhost:8080/'
-  }))
+jest.mock("../../src/extension/serviceWorker/storage", () => ({
+    getSettings: jest.fn().mockImplementation(() =>
+        Promise.resolve({
+            websocketHost: "ws://localhost:8080/",
+        }),
+    ),
 }));
 
-jest.mock('../../src/extension/serviceWorker/ui', () => ({
-  showBadgeError: jest.fn(),
-  showBadgeHealthy: jest.fn(),
-  showBadgeBusy: jest.fn()
+jest.mock("../../src/extension/serviceWorker/ui", () => ({
+    showBadgeError: jest.fn(),
+    showBadgeHealthy: jest.fn(),
+    showBadgeBusy: jest.fn(),
 }));
 
-jest.mock('../../src/extension/serviceWorker/browserActions', () => ({
-  runBrowserAction: jest.fn().mockImplementation(() => Promise.resolve({ message: 'OK' }))
+jest.mock("../../src/extension/serviceWorker/browserActions", () => ({
+    runBrowserAction: jest
+        .fn()
+        .mockImplementation(() => Promise.resolve({ message: "OK" })),
 }));
 
-// Import these AFTER mocks are set up to avoid issues
-let websocketModule: any;
+let websocketModule;
 
-describe('WebSocket Module', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Reset the module for each test
-    jest.isolateModules(() => {
-      websocketModule = require('../../src/extension/serviceWorker/websocket');
+describe("WebSocket Module", () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+
+        jest.useFakeTimers();
+
+        websocketModule = require("../../src/extension/serviceWorker/websocket");
     });
-  });
 
-  describe('createWebSocket', () => {
-    it('should create a WebSocket connection', async () => {
-      const createWebSocket = websocketModule.createWebSocket;
-      const socket = await createWebSocket();
-      
-      expect(socket).toBeDefined();
-      expect(socket.url).toContain('ws://localhost:8080/');
-      expect(socket.url).toContain('channel=browser');
+    afterEach(() => {
+        jest.useRealTimers();
     });
-  });
 
-  describe('ensureWebsocketConnected', () => {
-    it('should create a new connection if none exists', async () => {
-      const ensureWebsocketConnected = websocketModule.ensureWebsocketConnected;
-      const getWebSocket = websocketModule.getWebSocket;
-      
-      const socket = await ensureWebsocketConnected();
-      expect(socket).toBeDefined();
-      expect(getWebSocket()).toBe(socket);
-    });
-  });
+    describe("createWebSocket", () => {
+        it("should create a WebSocket connection", async () => {
+            const createWebSocket = websocketModule.createWebSocket;
+            const socket = await createWebSocket();
 
-  describe('reconnectWebSocket', () => {
-    it('should set up a reconnection interval', () => {
-      // Mock setInterval
-      jest.useFakeTimers();
-      
-      const reconnectWebSocket = websocketModule.reconnectWebSocket;
-      reconnectWebSocket();
-      
-      // Verify setInterval was called
-      expect(setInterval).toHaveBeenCalled();
-      
-      jest.useRealTimers();
-    });
-  });
-
-  describe('sendActionToAgent', () => {
-    it('should throw error if no websocket connection', async () => {
-      const sendActionToAgent = websocketModule.sendActionToAgent;
-      
-      await expect(async () => {
-        await sendActionToAgent({
-          actionName: 'testAction',
-          parameters: { test: true }
+            expect(socket).toBeDefined();
+            expect(socket.url).toContain("ws://localhost:8080/");
+            expect(socket.url).toContain("channel=browser");
         });
-      }).rejects.toThrow();
     });
-  });
+
+    describe("ensureWebsocketConnected", () => {
+        it("should create a new connection if none exists", async () => {
+            const ensureWebsocketConnected =
+                websocketModule.ensureWebsocketConnected;
+            const getWebSocket = websocketModule.getWebSocket;
+
+            const socket = await ensureWebsocketConnected();
+            expect(socket).toBeDefined();
+            expect(getWebSocket()).toBe(socket);
+        });
+    });
+
+    describe("reconnectWebSocket", () => {
+        it("should set up a reconnection interval", () => {
+            // Make sure setInterval is properly mocked
+            jest.spyOn(global, "setInterval");
+
+            const reconnectWebSocket = websocketModule.reconnectWebSocket;
+            reconnectWebSocket();
+
+            // Verify setInterval was called
+            expect(setInterval).toHaveBeenCalled();
+
+            // Test if the callback works correctly
+            // by advancing timers and checking what happens
+            jest.advanceTimersByTime(5000); // Advance 5 seconds
+        });
+    });
+
+    describe("sendActionToAgent", () => {
+        it("should throw error if no websocket connection", async () => {
+            const sendActionToAgent = websocketModule.sendActionToAgent;
+
+            await expect(async () => {
+                await sendActionToAgent({
+                    actionName: "testAction",
+                    parameters: { test: true },
+                });
+            }).rejects.toThrow();
+        });
+    });
 });

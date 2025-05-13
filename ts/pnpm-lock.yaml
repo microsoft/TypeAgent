@@ -985,6 +985,9 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@20.17.28)(ts-node@10.9.2(@types/node@20.17.28)(typescript@5.4.5))
+      jest-chrome:
+        specifier: ^0.8.0
+        version: 0.8.0(jest@29.7.0(@types/node@20.17.28)(ts-node@10.9.2(@types/node@20.17.28)(typescript@5.4.5)))
       jest-environment-jsdom:
         specifier: ^29.7.0
         version: 29.7.0
@@ -4910,6 +4913,9 @@ packages:
   '@types/cacheable-request@6.0.3':
     resolution: {integrity: sha512-IQ3EbTzGxIigb1I3qPZc1rWJnH0BmSKv5QYTalEwweFvyBDLSAe24zP0le/hyi7ecGfZVlIVAg4BZqb8WBwKqw==}
 
+  '@types/chrome@0.0.114':
+    resolution: {integrity: sha512-i7qRr74IrxHtbnrZSKUuP5Uvd5EOKwlwJq/yp7+yTPihOXnPhNQO4Z5bqb1XTnrjdbUKEJicaVVbhcgtRijmLA==}
+
   '@types/chrome@0.0.256':
     resolution: {integrity: sha512-NleTQw4DNzhPwObLNuQ3i3nvX1rZ1mgnx5FNHc2KP+Cj1fgd3BrT5yQ6Xvs+7H0kNsYxCY+lxhiCwsqq3JwtEg==}
 
@@ -7767,6 +7773,11 @@ packages:
   jest-changed-files@29.7.0:
     resolution: {integrity: sha512-fEArFiwf1BpQ+4bXSprcDc3/x4HSzL4al2tozwVpDFpsxALjLYdyiIK4e5Vz66GQJIbXJ82+35PtysofptNX2w==}
     engines: {node: ^14.15.0 || ^16.10.0 || >=18.0.0}
+
+  jest-chrome@0.8.0:
+    resolution: {integrity: sha512-39RR1GT9nI4e4jsuH1vIf4l5ApxxkcstjGJr+GsOURL8f4Db0UlbRnsZaM+ZRniaGtokqklUH5VFKGZZ6YztUg==}
+    peerDependencies:
+      jest: ^26.0.1 || ^27.0.0
 
   jest-circus@29.7.0:
     resolution: {integrity: sha512-3E1nCMgipcTkCocFwM90XXQab9bS+GMsjdpmPrlelaxwD93Ad8iVEjX/vvHPdLPnFf+L40u+5+iutRdA1N9myw==}
@@ -13183,6 +13194,11 @@ snapshots:
       '@types/node': 20.17.28
       '@types/responselike': 1.0.3
 
+  '@types/chrome@0.0.114':
+    dependencies:
+      '@types/filesystem': 0.0.35
+      '@types/har-format': 1.2.15
+
   '@types/chrome@0.0.256':
     dependencies:
       '@types/filesystem': 0.0.35
@@ -16571,6 +16587,11 @@ snapshots:
       execa: 5.1.1
       jest-util: 29.7.0
       p-limit: 3.1.0
+
+  jest-chrome@0.8.0(jest@29.7.0(@types/node@20.17.28)(ts-node@10.9.2(@types/node@20.17.28)(typescript@5.4.5))):
+    dependencies:
+      '@types/chrome': 0.0.114
+      jest: 29.7.0(@types/node@20.17.28)(ts-node@10.9.2(@types/node@20.17.28)(typescript@5.4.5))
 
   jest-circus@29.7.0:
     dependencies:
