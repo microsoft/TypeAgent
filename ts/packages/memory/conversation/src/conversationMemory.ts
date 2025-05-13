@@ -107,6 +107,9 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
 
 export type ConversationMemorySettings = MemorySettings;
 
+/**
+ * @see {@link Memory} for base methods such as search and answer.
+ */
 export class ConversationMemory
     extends Memory<ConversationMemorySettings, ConversationMessage>
     implements kp.IConversation<ConversationMessage>
@@ -140,6 +143,11 @@ export class ConversationMemory
         return this;
     }
 
+    /**
+     * Add a new conversation message to this conversation memory
+     * @param {ConversationMessage} message
+     * @returns
+     */
     public async addMessage(
         message: ConversationMessage,
     ): Promise<Result<kpLib.KnowledgeResponse>> {
@@ -201,16 +209,6 @@ export class ConversationMemory
             message,
             callback: completionCallback,
         });
-    }
-
-    public async selectFromConversation(
-        selectExpr: kp.SearchSelectExpr,
-    ): Promise<kp.ConversationSearchResult | undefined> {
-        return kp.searchConversation(
-            this,
-            selectExpr.searchTermGroup,
-            selectExpr.when,
-        );
     }
 
     public async waitForPendingTasks(): Promise<void> {

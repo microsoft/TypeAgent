@@ -41,7 +41,7 @@ import {
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
-import { createKnowproChatCommands } from "./knowproChat.js";
+import { createKnowproChatCommands } from "./knowproConversation.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;

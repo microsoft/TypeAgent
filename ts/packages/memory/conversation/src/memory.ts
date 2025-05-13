@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai } from "aiclient";
+import { ChatModel, openai } from "aiclient";
 import * as kp from "knowpro";
 import {
     conversation as kpLib,
@@ -9,11 +9,11 @@ import {
     TextEmbeddingCache,
 } from "knowledge-processor";
 import * as ms from "memory-storage";
-import { PromptSection, Result, TypeChatLanguageModel } from "typechat";
+import { error, PromptSection, Result, success } from "typechat";
 import { createEmbeddingModelWithCache } from "./common.js";
 
 export interface MemorySettings {
-    languageModel: TypeChatLanguageModel;
+    languageModel: ChatModel;
     embeddingModel: TextEmbeddingModelWithCache;
     embeddingSize: number;
     conversationSettings: kp.ConversationSettings;
@@ -211,6 +211,21 @@ export abstract class Memory<
     public abstract get conversation(): kp.IConversation<TMessage>;
 
     /**
+     * Search memory contents using a select expression
+     * @param {kp.SearchSelectExpr} selectExpr
+     * @returns
+     */
+    public async search(
+        selectExpr: kp.SearchSelectExpr,
+    ): Promise<kp.ConversationSearchResult | undefined> {
+        return kp.searchConversation(
+            this.conversation,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+        );
+    }
+
+    /**
      * Run a natural language query against this memory
      * @param searchText
      * @returns
@@ -230,6 +245,12 @@ export abstract class Memory<
         );
     }
 
+    /**
+     * Translate a natural language query into a query expression
+     * @param searchText
+     * @param options
+     * @returns
+     */
     public async searchQueryFromLanguage(
         searchText: string,
         options?: kp.LanguageSearchOptions,
@@ -240,6 +261,68 @@ export abstract class Memory<
             this.getQueryTranslator(),
             searchText,
             this.getModelInstructions(),
+        );
+    }
+
+    public async getAnswerFromLanguage(
+        question: string,
+        searchOptions?: kp.LanguageSearchOptions,
+        progress?: (
+            searchResult: kp.ConversationSearchResult,
+            chunk: kp.AnswerContext,
+            index: number,
+            result: Result<kp.AnswerResponse>,
+        ) => void,
+    ): Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>> {
+        const searchResults = await this.searchWithLanguage(
+            question,
+            searchOptions,
+        );
+        if (!searchResults.success) {
+            return searchResults;
+        }
+
+        const answers: [kp.ConversationSearchResult, kp.AnswerResponse][] = [];
+        for (let i = 0; i < searchResults.data.length; ++i) {
+            const searchResult = searchResults.data[i];
+            const answerResult = await this.getAnswerFromSearchResults(
+                searchResult,
+                searchResult.rawSearchQuery,
+                progress !== undefined
+                    ? (chunk, index, result) => {
+                          progress(searchResult, chunk, index, result);
+                      }
+                    : undefined,
+            );
+            if (!answerResult.success) {
+                return answerResult;
+            }
+            answers.push([searchResult, answerResult.data]);
+        }
+
+        return success(answers);
+    }
+
+    public async getAnswerFromSearchResults(
+        searchResult: kp.ConversationSearchResult,
+        question?: string,
+        progress?: (
+            chunk: kp.AnswerContext,
+            index: number,
+            result: Result<kp.AnswerResponse>,
+        ) => void,
+    ): Promise<Result<kp.AnswerResponse>> {
+        question ??= searchResult.rawSearchQuery;
+        if (!question) {
+            return error("No searchResult.rawSearchQuery or question provided");
+        }
+        const answerGenerator = this.ensureAnswerGenerator();
+        return kp.generateAnswer(
+            this.conversation,
+            answerGenerator,
+            question,
+            searchResult,
+            progress,
         );
     }
 
@@ -287,5 +370,14 @@ export abstract class Memory<
             this.noiseTerms,
             ms.getAbsolutePathFromUrl(import.meta.url, "noiseTerms.txt"),
         );
+    }
+
+    protected ensureAnswerGenerator(): kp.IAnswerGenerator {
+        if (this.settings.answerGenerator === undefined) {
+            this.settings.answerGenerator = new kp.AnswerGenerator(
+                kp.createAnswerGeneratorSettings(this.settings.languageModel),
+            );
+        }
+        return this.settings.answerGenerator;
     }
 }

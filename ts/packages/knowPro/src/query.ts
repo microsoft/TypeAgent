@@ -1330,21 +1330,28 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
         }
         const messageIndex =
             context.conversation.secondaryIndexes?.messageIndex;
-        if (
-            messageIndex &&
-            isMessageTextEmbeddingIndex(messageIndex) &&
-            messageIndex.size > 0
-        ) {
-            const messageOrdinals = [...matches.getMatchedValues()];
-            const rankedMessages = messageIndex.lookupInSubsetByEmbedding(
-                this.embedding,
-                messageOrdinals,
-                this.maxMessages,
-                this.thresholdScore,
-            );
-            matches.clearMatches();
-            for (const match of rankedMessages) {
-                matches.add(match.messageOrdinal, match.score);
+        if (messageIndex && isMessageTextEmbeddingIndex(messageIndex)) {
+            const indexSize = messageIndex.size;
+            if (indexSize > 0) {
+                let messageOrdinals: MessageOrdinal[] = [];
+                for (const messageOrdinal of matches.getMatchedValues()) {
+                    if (messageOrdinal < indexSize) {
+                        messageOrdinals.push(messageOrdinal);
+                    }
+                }
+                matches.clearMatches();
+                if (messageOrdinals.length > 0) {
+                    const rankedMessages =
+                        messageIndex.lookupInSubsetByEmbedding(
+                            this.embedding,
+                            messageOrdinals,
+                            this.maxMessages,
+                            this.thresholdScore,
+                        );
+                    for (const match of rankedMessages) {
+                        matches.add(match.messageOrdinal, match.score);
+                    }
+                }
             }
         }
         return matches;
