@@ -6,10 +6,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "emitDecoratorMetadata": false,
+    "allowSyntheticDefaultImports": true,
     "lib": ["dom", "es2021"],
-    "outDir": "../dist-test",
-    "typeRoots": ["../node_modules/@types", "../test"],
-    "types": ["jest", "chrome", "node"],
+    "outDir": "../dist/test",
+    "typeRoots": ["../node_modules/@types", "./test/types"],
+    "types": ["jest", "node"],
     "allowJs": true,
     "resolveJsonModule": true,
     "isolatedModules": true
@@ -17,7 +18,7 @@
   "include": [
     "../test/**/*.ts",
     "../src/**/*.ts",
-    "../node_modules/jest-chrome/types.d.ts"
+    "../test/types/*.d.ts"
   ],
   "exclude": ["node_modules"]
 }

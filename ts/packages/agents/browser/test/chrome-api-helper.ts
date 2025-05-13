@@ -1,19 +1,17 @@
+/// <reference path="types/jest-chrome-extensions.d.ts" />
+
 /**
  * Initializes Chrome API mocks with default behaviors for testing
  */
 function setupChromeApiMocks() {
     // Setup action API
-    chrome.action.setBadgeText.mockImplementation(({ text }, callback) => {
-        if (callback) callback();
+    chrome.action.setBadgeText.mockImplementation(({ text }) => {
         return Promise.resolve();
     });
 
-    chrome.action.setBadgeBackgroundColor.mockImplementation(
-        ({ color }, callback) => {
-            if (callback) callback();
-            return Promise.resolve();
-        },
-    );
+    chrome.action.setBadgeBackgroundColor.mockImplementation(({ color }) => {
+        return Promise.resolve();
+    });
 
     chrome.action.getBadgeText.mockImplementation(() => Promise.resolve(""));
 
@@ -36,7 +34,7 @@ function setupChromeApiMocks() {
     );
     chrome.runtime.getManifest.mockReturnValue({ version: "1.0.0" });
     chrome.runtime.sendMessage.mockImplementation(() => Promise.resolve({}));
-    chrome.runtime.id = "test-extension-id";
+    // chrome.runtime.id = "test-extension-id";
 
     chrome.runtime.connect.mockImplementation(() => ({
         postMessage: jest.fn(),
@@ -55,7 +53,7 @@ function setupChromeApiMocks() {
 
     // Setup scripting API
     chrome.scripting.executeScript.mockImplementation(() =>
-        Promise.resolve([{ result: "result" }]),
+        Promise.resolve([{ frameId: 0, result: "result" }]),
     );
 
     // Setup search API
@@ -106,7 +104,7 @@ function setupChromeApiMocks() {
 
     // Setup tts API
     chrome.tts.speak.mockImplementation((text, options, callback) => {
-        if (callback) callback();
+        if (callback && typeof callback === "function") callback();
     });
     chrome.tts.stop.mockImplementation(() => {});
 
@@ -138,7 +136,7 @@ function setupChromeApiMocks() {
     chrome.windows.create.mockImplementation(() => Promise.resolve({ id: 1 }));
     chrome.windows.update.mockImplementation(() => Promise.resolve({ id: 1 }));
     chrome.windows.remove.mockImplementation(() => Promise.resolve());
-    chrome.windows.WINDOW_ID_NONE = -1;
+    // chrome.windows.WINDOW_ID_NONE = -1;
 }
 
 module.exports = { setupChromeApiMocks };

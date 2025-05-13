@@ -1,8 +1,8 @@
 import {
-    showBadgeError,
+    // showBadgeError,
     showBadgeHealthy,
 } from "../../src/extension/serviceWorker/ui";
-import { initializeContextMenu } from "../../src/extension/serviceWorker/contextMenu";
+// import { initializeContextMenu } from "../../src/extension/serviceWorker/contextMenu";
 import { toggleSiteTranslator } from "../../src/extension/serviceWorker/siteTranslator";
 
 jest.mock("../../src/extension/serviceWorker/websocket", () => {

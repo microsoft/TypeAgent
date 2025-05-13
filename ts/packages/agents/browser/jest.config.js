@@ -4,7 +4,6 @@ module.exports = {
     testEnvironment: "jsdom",
     roots: ["<rootDir>/src/", "<rootDir>/test/"],
     testMatch: ["<rootDir>/test/**/*.test.ts"],
-    setupFiles: ["<rootDir>/test/mock-chrome-api.ts"],
     setupFilesAfterEnv: ["<rootDir>/test/jest-setup.js"],
     transform: {
         "^.+\\.tsx?$": [
@@ -17,6 +16,7 @@ module.exports = {
             },
         ],
     },
+    transformIgnorePatterns: ["/node_modules/(?!jest-chrome).+\\.js$"],
     collectCoverage: false,
     collectCoverageFrom: [
         "<rootDir>/src/extension/serviceWorker/**/*.ts",

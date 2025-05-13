@@ -1,5 +1,3 @@
-const { MockWebSocket } = require("../mock-chrome-api");
-
 jest.mock("../../src/extension/serviceWorker/storage", () => ({
     getSettings: jest.fn().mockImplementation(() =>
         Promise.resolve({
@@ -20,7 +18,7 @@ jest.mock("../../src/extension/serviceWorker/browserActions", () => ({
         .mockImplementation(() => Promise.resolve({ message: "OK" })),
 }));
 
-let websocketModule;
+let websocketModule: any;
 
 describe("WebSocket Module", () => {
     beforeEach(() => {

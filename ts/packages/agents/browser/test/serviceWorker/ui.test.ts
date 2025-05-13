@@ -1,8 +1,10 @@
-import {
+/// <reference path="../types/jest-chrome-extensions.d.ts" />
+
+const {
     showBadgeError,
     showBadgeHealthy,
     showBadgeBusy,
-} from "../../src/extension/serviceWorker/ui";
+} = require("../../src/extension/serviceWorker/ui");
 
 describe("UI Module", () => {
     beforeEach(() => {
@@ -15,16 +17,12 @@ describe("UI Module", () => {
         it('should set badge background color to red and text to "!"', () => {
             showBadgeError();
 
-            expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
-                { color: "#F00" },
-                expect.any(Function),
-            );
+            // Check that setBadgeBackgroundColor was called with the right color
+            expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
+                color: "#F00",
+            });
 
-            // Trigger the callback directly to simulate Chrome API behavior
-            const callback =
-                chrome.action.setBadgeBackgroundColor.mock.calls[0][1];
-            if (callback) callback();
-
+            // Check that setBadgeText was called with the right text
             expect(chrome.action.setBadgeText).toHaveBeenCalledWith({
                 text: "!",
             });
@@ -45,18 +43,9 @@ describe("UI Module", () => {
         it('should set badge background color to blue and text to "..."', () => {
             showBadgeBusy();
 
-            expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
-                { color: "#0000FF" },
-                expect.any(Function),
-            );
-
-            // Find the callback function that was passed
-            const callback =
-                chrome.action.setBadgeBackgroundColor.mock.calls[0][1];
-
-            // Call the callback to simulate completion
-            if (callback) callback();
-
+            expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
+                color: "#0000FF",
+            });
             expect(chrome.action.setBadgeText).toHaveBeenCalledWith({
                 text: "...",
             });
