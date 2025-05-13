@@ -91,13 +91,12 @@ async function executeMontageAction(
     }
 
     if (result.error === undefined) {
-
         let activityName = "edit";
         let verb = "Editing";
 
         if (action.actionName === "createNewMontage") {
             activityName = "create";
-            verb = "Created new"
+            verb = "Created new";
         }
 
         if (
@@ -570,7 +569,6 @@ async function handleMontageAction(
                 agentContext.activeMontageId = montage.id;
             }
 
-            
             result = createActionResult("Created new montage", false, [
                 entityFromMontage(montage),
             ]);
