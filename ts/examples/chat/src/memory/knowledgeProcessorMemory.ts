@@ -331,6 +331,7 @@ export async function loadConversation(
     return exists;
 }
 
+// This creates both (knowledge-processor) and know-pro commands
 export async function runMemoryCommands(): Promise<void> {
     let context = await createKnowledgeProcessorContext(captureTokenStats);
     let showTokenStats = false;
@@ -359,9 +360,13 @@ export async function runMemoryCommands(): Promise<void> {
         tokenLog,
         copyConversation,
     };
+
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
     createImageCommands(context, commands);
+    //
+    // AND ALSO SET UP knowpro test commands
+    //
     await createKnowproCommands(context, commands);
     addStandardHandlers(commands);
 

@@ -7,8 +7,9 @@
 
 Interaction is via a set of commands.
 
-- Enter @**help** for a list.
-- All commands must be prefixed with @
+- Enter @**help** for a list of commands
+- Command names must be prefixed with @ to run. E.g. @kpCmRemember
+- Get help for any command like this: @kpEmailsLoad --?
 
 ## knowpro and memory
 

@@ -1,6 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import {
+    importEmlFile,
+    importForwardedEmailsFromMimeText,
+} from "../src/emailImporter.js";
 import { createEmailMemory, EmailMemory } from "../src/emailMemory.js";
 import { EmailMeta, EmailMessage } from "../src/emailMessage.js";
 import { IndexFileSettings } from "../src/memory.js";
@@ -90,6 +94,20 @@ describeIf(
         }
     },
 );
+
+describe("email.offline", () => {
+    test("importEmail_Fw", async () => {
+        const filePath = "./test/data/email_fw.txt";
+        const email = await importEmlFile(filePath);
+        expect(email).toBeDefined();
+        if (!email) {
+            return;
+        }
+        const innerEmails = await importForwardedEmailsFromMimeText(email.body);
+        expect(innerEmails).toBeDefined();
+        expect(innerEmails).toHaveLength(2);
+    });
+});
 
 function createEmails(count: number, from?: string): EmailMessage[] {
     const messages: EmailMessage[] = [];
