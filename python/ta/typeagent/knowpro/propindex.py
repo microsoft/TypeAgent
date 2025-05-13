@@ -4,17 +4,18 @@
 import enum
 from typing import cast
 
-from . import kplib
-
+from .collections import TextRangesInScope
 from .interfaces import (
     IConversation,
     IPropertyToSemanticRefIndex,
+    ISemanticRefCollection,
     ListIndexingResult,
     ScoredSemanticRefOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
     Tag,
 )
+from . import kplib
 
 
 class PropertyNames(enum.Enum):
@@ -214,11 +215,23 @@ def lookup_property_in_property_index(
     property_index: IPropertyToSemanticRefIndex,
     property_name: str,
     property_value: str,
-    semantic_refs: list[SemanticRef],
-    ranges_in_scope: None = None,  # TODO: TextRangesInScope | None
+    semantic_refs: ISemanticRefCollection,
+    ranges_in_scope: TextRangesInScope | None = None,
 ) -> list[ScoredSemanticRefOrdinal] | None:
-    # TODO: See lookupPropertyInPropertyIndex.
-    raise NotImplementedError
+    scored_refs = property_index.lookup_property(
+        property_name,
+        property_value,
+    )
+    if ranges_in_scope is not None and scored_refs:
+        scored_refs = [
+            sr
+            for sr in scored_refs
+            if ranges_in_scope.is_range_in_scope(
+                semantic_refs[sr.semantic_ref_ordinal].range,
+            )
+        ]
+
+    return scored_refs
 
 
 def is_known_property(
