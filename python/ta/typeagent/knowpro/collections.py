@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import heapq
 import math
 import sys
-from typing import cast
+from typing import Set, cast
 
 from .interfaces import (
     ISemanticRefCollection,
@@ -93,9 +93,15 @@ class MatchAccumulator[T]:
                 self.combine_matches(existing_match, other_match)
 
     def intersect(
-        self, other: "MatchAccumulator", intersection: "MatchAccumulator | None"
-    ) -> None:
-        raise NotImplementedError  # TODO
+        self, other: "MatchAccumulator", intersection: "MatchAccumulator"
+    ) -> "MatchAccumulator":
+        """Intersect with another collection of matches."""
+        for self_match in self:
+            other_match = other.get_match(self_match.value)
+            if other_match is not None:
+                self.combine_matches(self_match, other_match)
+                intersection.set_match(self_match)
+        return intersection
 
     def combine_matches(self, match: Match, other: Match) -> None:
         """Combine the other match into the first."""
@@ -299,14 +305,24 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         return accumulator
 
     def add_union(self, other: "SemanticRefAccumulator") -> None:  # type: ignore
-        """Add matches from another SemanticRefAccumulator"""
+        """Add matches from another SemanticRefAccumulator."""
         assert isinstance(
             other, SemanticRefAccumulator
         )  # Runtime check b/c other's type mismatch
         super().add_union(other)
         self.search_term_matches.update(other.search_term_matches)
 
-    # def intersect ...
+    def intersect(self, other: "SemanticRefAccumulator") -> "SemanticRefAccumulator":  # type: ignore
+        """Intersect with another SemanticRefAccumulator."""
+        assert isinstance(
+            other, SemanticRefAccumulator
+        )  # Runtime check b/c other's type mismatch
+        intersection = SemanticRefAccumulator()
+        super().intersect(other, intersection)
+        if len(intersection) > 0:
+            intersection.search_term_matches.update(self.search_term_matches.values())
+            intersection.search_term_matches.update(other.search_term_matches.values())
+        return intersection
 
     # def to_scored_semantic_refs ...
 
@@ -558,3 +574,11 @@ def get_top_k[T](
     for scored_item in scored_items:
         top_n_list.push(scored_item.item, scored_item.score)
     return top_n_list.by_rank()
+
+
+def add_to_set[T](
+    set: Set[T],
+    values: Iterable[T],
+) -> None:
+    """Add values to a set."""
+    set.update(values)

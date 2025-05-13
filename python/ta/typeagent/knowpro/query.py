@@ -236,6 +236,34 @@ class MatchTermsOrMaxExpr(MatchTermsOrExpr):
         return matches
 
 
+@dataclass
+class MatchTermsAndExpr(MatchTermsBooleanExpr):
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
+        default_factory=list
+    )
+    get_scope_expr: "GetScopeExpr | None" = None
+
+    def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
+        self.begin_match(context)
+        all_matches: SemanticRefAccumulator | None = None
+        for match_expr in self.term_expressions:
+            term_matches = match_expr.eval(context)
+            if not term_matches:
+                if all_matches:
+                    all_matches.clear_matches()
+                break
+            if all_matches is None:
+                all_matches = term_matches
+            else:
+                all_matches.intersect(term_matches)
+        if all_matches is not None:
+            all_matches.calculate_total_score()
+            all_matches.select_with_hit_count(len(self.term_expressions))
+        else:
+            all_matches = SemanticRefAccumulator()
+        return all_matches
+
+
 class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):
     """Expression for matching terms in a query.
 
