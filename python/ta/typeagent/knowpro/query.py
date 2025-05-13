@@ -200,7 +200,9 @@ class MatchTermsBooleanExpr(QueryOpExpr[SemanticRefAccumulator]):
 class MatchTermsOrExpr(MatchTermsBooleanExpr):
     """Expression for matching terms with an OR condition."""
 
-    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = []
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
+        default_factory=list
+    )
 
     def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
         self.begin_match(context)
@@ -215,6 +217,23 @@ class MatchTermsOrExpr(MatchTermsBooleanExpr):
         if all_matches is not None:
             all_matches.calculate_total_score()
         return all_matches or SemanticRefAccumulator()
+
+
+@dataclass
+class MatchTermsOrMaxExpr(MatchTermsOrExpr):
+    """Expression for matching terms with an OR condition and a maximum score."""
+
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
+        default_factory=list
+    )
+    get_scope_expr: "GetScopeExpr | None" = None
+
+    def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
+        matches = super().eval(context)
+        max_hit_count = matches.get_max_hit_count()
+        if max_hit_count > 1:
+            matches.select_with_hit_count(max_hit_count)
+        return matches
 
 
 class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):

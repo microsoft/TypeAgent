@@ -53,7 +53,7 @@ class MatchAccumulator[T]:
         self._matches[match.value] = match
 
     # TODO: Maybe make the callers call clear_matches()?
-    def set_matches(self, matches: Iterable[Match[T]], clear=False) -> None:
+    def set_matches(self, matches: Iterable[Match[T]], *, clear=False) -> None:
         if clear:
             self.clear_matches()
         for match in matches:
@@ -137,7 +137,9 @@ class MatchAccumulator[T]:
         else:
             return self.get_sorted_by_score(min_hit_count)
 
-    # def get_with_hit_count...
+    def get_with_hit_count(self, min_hit_count: int) -> list[Match[T]]:
+        """Get matches with a minimum hit count."""
+        return list(self.matches_with_min_hit_count(min_hit_count))
 
     def get_matches(
         self, predicate: Callable[[Match[T]], bool] | None = None
@@ -165,7 +167,11 @@ class MatchAccumulator[T]:
         self.set_matches(top_n, clear=True)
         return len(top_n)
 
-    # def select_with_hit_count...
+    def select_with_hit_count(self, min_hit_count: int) -> int:
+        """Retain only matches with a minimum hit count."""
+        matches = self.get_with_hit_count(min_hit_count)
+        self.set_matches(matches, clear=True)
+        return len(matches)
 
     def _matches_with_min_hit_count(
         self, min_hit_count: int | None
@@ -173,6 +179,14 @@ class MatchAccumulator[T]:
         """Get matches with a minimum hit count"""
         if min_hit_count is not None and min_hit_count > 0:
             return self.get_matches(lambda m: m.hit_count >= min_hit_count)
+        else:
+            return self._matches.values()
+
+    def matches_with_min_hit_count(
+        self, min_hit_count: int | None
+    ) -> Iterable[Match[T]]:
+        if min_hit_count is not None and min_hit_count > 0:
+            return filter(lambda m: m.hit_count >= min_hit_count, self.get_matches())
         else:
             return self._matches.values()
 
