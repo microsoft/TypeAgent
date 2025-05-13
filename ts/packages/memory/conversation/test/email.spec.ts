@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 import {
+    getLastResponseInEmailThread,
     importEmlFile,
     importForwardedEmailsFromMimeText,
 } from "../src/emailImporter.js";
 import { createEmailMemory, EmailMemory } from "../src/emailMemory.js";
 import { EmailMeta, EmailMessage } from "../src/emailMessage.js";
 import { IndexFileSettings } from "../src/memory.js";
-import { verifyMessagesEqual } from "./verify.js";
+import { verifyEmail, verifyMessagesEqual, verifyString } from "./verify.js";
 import { describeIf, ensureOutputDir, hasTestKeys } from "test-lib";
 
 describeIf(
@@ -103,9 +104,19 @@ describe("email.offline", () => {
         if (!email) {
             return;
         }
+        verifyEmail(email);
         const innerEmails = await importForwardedEmailsFromMimeText(email.body);
         expect(innerEmails).toBeDefined();
         expect(innerEmails).toHaveLength(2);
+        innerEmails?.forEach((e) => verifyEmail(e));
+    });
+    test("importEmail_Last", async () => {
+        const filePath = "./test/data/email_fw.txt";
+        const email = await importEmlFile(filePath);
+
+        const latestText = getLastResponseInEmailThread(email!.body);
+        verifyString(latestText);
+        expect(latestText.includes("From:")).toBeFalsy();
     });
 });
 

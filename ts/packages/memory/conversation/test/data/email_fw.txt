@@ -1,5 +1,5 @@
 From:  from1 <from1@zyx>
-Sent:	Monday, September 23, 2024 9:10 AM
+Date:	Monday, September 23, 2024 9:10 AM
 To: To1 <to1@zyx>;  To2 <to2@zyx>
 Subject: FW: Testing
 
@@ -9,7 +9,7 @@ Cheers,
 From 1
 
 From:  from3 <from3@zyx>
-Sent:	Monday, September 23, 2024 9:10 AM
+Date:	Monday, September 23, 2024 9:10 AM
 To: To3 <to3@zyx>;  To4 <to4@zyx>
 Subject: Re: English Authors
 
@@ -22,7 +22,7 @@ Love it!
 From3
 
 From:  To3 <to3@zyx>
-Sent:	Monday, September 23, 2024 9:10 AM
+Date:	Monday, September 23, 2024 9:10 AM
 To: From3 <from3@zyx>;  To4 <to2@zyx>
 Subject: English Authors
 
