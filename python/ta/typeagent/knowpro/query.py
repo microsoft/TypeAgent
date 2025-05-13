@@ -164,9 +164,6 @@ class IQueryOpExpr[T](Protocol):
 class QueryOpExpr[T](IQueryOpExpr[T]):
     """Base class for query operation expressions."""
 
-    def eval(self, context: QueryEvalContext) -> T:
-        raise NotImplementedError
-
 
 @dataclass
 class SelectTopNExpr[T: MatchAccumulator](QueryOpExpr[T]):
@@ -497,7 +494,7 @@ class IQueryTextRangeSelector(Protocol):
         semantic_refs: SemanticRefAccumulator | None = None,
     ) -> TextRangeCollection | None:
         """Evaluate the selector and return the text range."""
-        raise NotImplementedError
+        raise NotImplementedError("Subclass must implement eval")
 
 
 @dataclass
