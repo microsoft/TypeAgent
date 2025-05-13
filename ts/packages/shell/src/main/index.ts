@@ -241,9 +241,19 @@ async function initializeDispatcher(
         const clientIO = {
             ...newClientIO,
             openLocalView: (port: number) => {
+                debugShell(`Opening local view on port ${port}`);
                 return shellWindow.openInlineBrowser(
-                    new URL(`http://localhost:${port}`),
+                    new URL(`http://localhost:${port}/`),
                 );
+            },
+            closeLocalView: (port: number) => {
+                const current = shellWindow.inlineBrowserUrl;
+                debugShell(
+                    `Closing local view on port ${port}, current url: ${current}`,
+                );
+                if (current === `http://localhost:${port}/`) {
+                    shellWindow.closeInlineBrowser();
+                }
             },
             exit: () => {
                 app.quit();

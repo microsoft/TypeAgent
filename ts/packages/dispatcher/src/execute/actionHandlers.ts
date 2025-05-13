@@ -800,19 +800,22 @@ export async function executeActions(
                     clearActivityContext(systemContext);
                 } else {
                     // TODO: validation
-                    const { activityName, description, state } =
+                    const { activityName, description, state, openLocalView } =
                         result.activityContext;
+                    const prevOpenLocalView =
+                        systemContext.activityContext?.openLocalView;
                     systemContext.activityContext = {
                         appAgentName,
                         activityName,
                         description,
                         state,
+                        openLocalView: prevOpenLocalView || openLocalView,
                     };
                     systemContext.agents.toggleTransient(
                         DispatcherActivityName,
                         true,
                     );
-                    if (result.activityContext.openLocalView) {
+                    if (openLocalView) {
                         const port =
                             systemContext.agents.getLocalHostPort(appAgentName);
                         if (port !== undefined) {
@@ -826,11 +829,20 @@ export async function executeActions(
     }
 }
 
-export function clearActivityContext(
-    systemContext: CommandHandlerContext,
-): void {
-    systemContext.activityContext = undefined;
-    systemContext.agents.toggleTransient(DispatcherActivityName, false);
+export async function clearActivityContext(
+    context: CommandHandlerContext,
+): Promise<void> {
+    const activityContext = context.activityContext;
+    if (activityContext?.openLocalView) {
+        const port = context.agents.getLocalHostPort(
+            activityContext.appAgentName,
+        );
+        if (port !== undefined) {
+            await context.clientIO.closeLocalView(port);
+        }
+    }
+    context.activityContext = undefined;
+    context.agents.toggleTransient(DispatcherActivityName, false);
 }
 
 function getAdditionalExecutableActions(

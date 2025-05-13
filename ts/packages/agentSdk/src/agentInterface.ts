@@ -176,6 +176,7 @@ export type ActivityContext<T = Record<string, unknown>> = {
     activityName: string;
     description: string;
     state: T;
+    openLocalView?: boolean | undefined;
 };
 
 export interface ActionContext<T = void> {

@@ -94,6 +94,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         openLocalView(port: number): Promise<void> {
             return rpc.invoke("openLocalView", { port });
         },
+        closeLocalView(port: number): Promise<void> {
+            return rpc.invoke("closeLocalView", { port });
+        },
         takeAction(action: string, data: unknown): void {
             return rpc.send("takeAction", { action, data });
         },

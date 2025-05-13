@@ -17,6 +17,7 @@ export type ClientIOInvokeFunctions = {
         source: string;
     }): Promise<unknown>;
     openLocalView(params: { port: number }): Promise<void>;
+    closeLocalView(params: { port: number }): Promise<void>;
 };
 
 export type ClientIOCallFunctions = {
