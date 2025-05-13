@@ -14,6 +14,7 @@ from .collections import (
     TextRangeCollection,
     TextRangesInScope,
 )
+from .common import is_search_term_wildcard
 from .interfaces import (
     IConversation,
     IMessage,
@@ -23,12 +24,14 @@ from .interfaces import (
     ITermToSemanticRefIndex,
     ITimestampToTextRangeIndex,
     MessageOrdinal,
+    PropertySearchTerm,
     ScoredSemanticRefOrdinal,
     SearchTerm,
     SemanticRef,
     SemanticRefOrdinal,
     Term,
 )
+from .propindex import PropertyNames, lookup_property_in_property_index
 
 
 def is_conversation_searchable(conversation: IConversation) -> bool:
@@ -119,19 +122,16 @@ class QueryEvalContext:
 
     @property
     def semantic_ref_index(self) -> ITermToSemanticRefIndex:
-        """Return the semantic reference index."""
         assert self.conversation.semantic_ref_index is not None
         return self.conversation.semantic_ref_index
 
     @property
     def semantic_refs(self) -> ISemanticRefCollection:
-        """Return the semantic references."""
         assert self.conversation.semantic_refs is not None
         return self.conversation.semantic_refs
 
     @property
     def messages(self) -> IMessageCollection:
-        """Return the messages in the conversation."""
         return self.conversation.messages
 
     def get_semantic_ref(self, semantic_ref_ordinal: SemanticRefOrdinal) -> SemanticRef:
@@ -185,7 +185,10 @@ class SelectTopNExpr[T: MatchAccumulator](QueryOpExpr[T]):
 
 @dataclass
 class MatchTermsBooleanExpr(QueryOpExpr[SemanticRefAccumulator]):
-    """Expression for matching terms in a boolean query."""
+    """Expression for matching terms in a boolean query.
+
+    Subclasses implement 'OR', 'OR MAX' and 'AND' logic.
+    """
 
     get_scope_expr: "GetScopeExpr | None" = None
 
@@ -360,6 +363,129 @@ class MatchSearchTermExpr(MatchTermExpr):
                     term, semantic_refs, False, related_term.weight
                 )
                 context.matched_terms.add(related_term)
+
+
+class MatchPropertySearchTermExpr(MatchTermExpr):
+
+    def __init__(
+        self,
+        property_search_term: PropertySearchTerm,
+    ):
+        super().__init__()
+        self.property_search_term = property_search_term
+
+    def accumulate_matches(
+        self, context: QueryEvalContext, matches: SemanticRefAccumulator
+    ) -> None:
+        if isinstance(self.property_search_term.property_name, str):
+            self.accumulate_matches_for_property(
+                context,
+                self.property_search_term.property_name,
+                self.property_search_term.property_value,
+                matches,
+            )
+        else:
+            self.accumulate_matches_for_facets(
+                context,
+                self.property_search_term.property_name,
+                self.property_search_term.property_value,
+                matches,
+            )
+
+    def accumulate_matches_for_facets(
+        self,
+        context: QueryEvalContext,
+        property_name: SearchTerm,
+        property_value: SearchTerm,
+        matches: SemanticRefAccumulator,
+    ):
+        self.accumulate_matches_for_property(
+            context,
+            PropertyNames.FacetName.value,
+            property_name,
+            matches,
+        )
+        if not is_search_term_wildcard(property_value):
+            self.accumulate_matches_for_property(
+                context,
+                PropertyNames.FacetValue.value,
+                property_value,
+                matches,
+            )
+
+    def accumulate_matches_for_property(
+        self,
+        context: QueryEvalContext,
+        property_name: str,
+        property_value: SearchTerm,
+        matches: SemanticRefAccumulator,
+    ):
+        self.accumulate_matches_for_property_value(
+            context,
+            matches,
+            property_name,
+            property_value.term,
+        )
+        if property_value.related_terms:
+            for related_property_value in property_value.related_terms:
+                self.accumulate_matches_for_property_value(
+                    context,
+                    matches,
+                    property_name,
+                    property_value.term,
+                    related_property_value,
+                )
+
+    def accumulate_matches_for_property_value(
+        self,
+        context: QueryEvalContext,
+        matches: SemanticRefAccumulator,
+        property_name: str,
+        property_value: Term,
+        related_prop_val: Term | None = None,
+    ) -> None:
+        if related_prop_val is None:
+            if not context.matched_property_terms.has(property_name, property_value):
+                semantic_refs = self.lookup_property(
+                    context,
+                    property_name,
+                    property_value.text,
+                )
+                matches.add_term_matches(property_value, semantic_refs, True)
+                context.matched_property_terms.add(property_name, property_value)
+        else:
+            # To prevent over-counting, ensure this related_prop_val was not already used to match terms earlier
+            if not context.matched_property_terms.has(property_name, related_prop_val):
+                semantic_refs = self.lookup_property(
+                    context,
+                    property_name,
+                    related_prop_val.text,
+                )
+                # This will only consider semantic refs that were not already matched by this expression.
+                # In other words, if a semantic ref already matched due to the term 'novel',
+                # don't also match it because it matched the related term 'book'
+                matches.add_term_matches_if_new(
+                    property_value,
+                    semantic_refs,
+                    False,
+                    related_prop_val.weight,
+                )
+                context.matched_property_terms.add(property_name, related_prop_val)
+
+    def lookup_property(
+        self,
+        context: QueryEvalContext,
+        property_name: str,
+        property_value: str,
+    ) -> list[ScoredSemanticRefOrdinal] | None:
+        if context.property_index is not None:
+            return lookup_property_in_property_index(
+                context.property_index,
+                property_name,
+                property_value,
+                context.semantic_refs,
+                context.text_ranges_in_scope,
+            )
 
 
 class IQueryTextRangeSelector(Protocol):
