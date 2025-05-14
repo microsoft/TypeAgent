@@ -11,7 +11,7 @@
        "noEmitOnError": true,
        "typeRoots": [ "node_modules/@types" ]
     },
-    "exclude": ["dist/*.ts", "dist/extension/sites/*.mts","src/agent/*.ts"],
+    "exclude": ["dist/*.ts", "dist/extension/sites/*.mts","src/agent/*.ts", "test/*"],
     "ts-node": {
       "esm": true
     }
