@@ -2899,8 +2899,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       mongodb:
-        specifier: ^6.3.0
-        version: 6.3.0(socks@2.8.3)
+        specifier: ^6.15.0
+        version: 6.15.0(socks@2.8.3)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -4271,9 +4271,6 @@ packages:
     resolution: {integrity: sha512-WjJYa2OAAf0fpslyxjzJK3JUeEk10IaDukLOc4NSoJtNptvJONd4NMC6U3Xr04VOb++2iNfM7Vp6Ac7o94Pv6g==}
     hasBin: true
 
-  '@mongodb-js/saslprep@1.1.4':
-    resolution: {integrity: sha512-8zJ8N1x51xo9hwPh6AWnKdLGEC5N3lDa6kms1YHmFBoRhTpJR6HG8wWk0td1MVCu9cD4YBrvjZEtd5Obw0Fbnw==}
-
   '@mongodb-js/saslprep@1.2.2':
     resolution: {integrity: sha512-EB0O3SCSNRUFk66iRCpI+cXzIjdswfCs7F6nOC3RAGJ7xr5YhaicvsRwJ9eyzYvYRlCSDUO/c7g4yNulxKC1WA==}
 
@@ -5607,10 +5604,6 @@ packages:
 
   bson@6.10.3:
     resolution: {integrity: sha512-MTxGsqgYTwfshYWTRdmZRC+M7FnG1b4y7RO7p2k3X24Wq0yv1m77Wsj0BzlPzd/IowgESfsruQCUToa7vbOpPQ==}
-    engines: {node: '>=16.20.1'}
-
-  bson@6.2.0:
-    resolution: {integrity: sha512-ID1cI+7bazPDyL9wYy9GaQ8gEEohWvcUl/Yf0dIdutJxnmInEEyCsb4awy/OiBfall7zBA179Pahi3vCdFze3Q==}
     engines: {node: '>=16.20.1'}
 
   buffer-crc32@0.2.13:
@@ -8208,33 +8201,6 @@ packages:
     peerDependencies:
       '@aws-sdk/credential-providers': ^3.188.0
       '@mongodb-js/zstd': ^1.1.0 || ^2.0.0
-      gcp-metadata: ^5.2.0
-      kerberos: ^2.0.1
-      mongodb-client-encryption: '>=6.0.0 <7'
-      snappy: ^7.2.2
-      socks: ^2.7.1
-    peerDependenciesMeta:
-      '@aws-sdk/credential-providers':
-        optional: true
-      '@mongodb-js/zstd':
-        optional: true
-      gcp-metadata:
-        optional: true
-      kerberos:
-        optional: true
-      mongodb-client-encryption:
-        optional: true
-      snappy:
-        optional: true
-      socks:
-        optional: true
-
-  mongodb@6.3.0:
-    resolution: {integrity: sha512-tt0KuGjGtLUhLoU263+xvQmPHEGTw5LbcNC73EoFRYgSHwZt5tsoJC110hDyO1kjQzpgNrpdcSza9PknWN4LrA==}
-    engines: {node: '>=16.20.1'}
-    peerDependencies:
-      '@aws-sdk/credential-providers': ^3.188.0
-      '@mongodb-js/zstd': ^1.1.0
       gcp-metadata: ^5.2.0
       kerberos: ^2.0.1
       mongodb-client-encryption: '>=6.0.0 <7'
@@ -11995,10 +11961,6 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
-  '@mongodb-js/saslprep@1.1.4':
-    dependencies:
-      sparse-bitfield: 3.0.3
-
   '@mongodb-js/saslprep@1.2.2':
     dependencies:
       sparse-bitfield: 3.0.3
@@ -13658,8 +13620,6 @@ snapshots:
       node-int64: 0.4.0
 
   bson@6.10.3: {}
-
-  bson@6.2.0: {}
 
   buffer-crc32@0.2.13: {}
 
@@ -16875,14 +16835,6 @@ snapshots:
     dependencies:
       '@mongodb-js/saslprep': 1.2.2
       bson: 6.10.3
-      mongodb-connection-string-url: 3.0.0
-    optionalDependencies:
-      socks: 2.8.3
-
-  mongodb@6.3.0(socks@2.8.3):
-    dependencies:
-      '@mongodb-js/saslprep': 1.1.4
-      bson: 6.2.0
       mongodb-connection-string-url: 3.0.0
     optionalDependencies:
       socks: 2.8.3
