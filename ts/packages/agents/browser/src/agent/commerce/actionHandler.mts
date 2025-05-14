@@ -182,16 +182,12 @@ export async function handleCommerceAction(
         return createActionResult(message);
     }
 
-    async function runUserAction(action: any) {
-        console.log(
-            `Running: ${action.actionName} with parameters ${JSON.stringify(action.parameters)}`,
-        );
+    async function runUserAction(action: ShoppingPlanActions) {
         switch (action.actionName) {
-            case "searchOnWebsite":
+            case "searchForProduct":
                 await searchOnWebsite(action.parameters.productName);
                 break;
             case "goToProductPage":
-            case "selectSearchResult":
                 if (action.parameters.productName === undefined) {
                     throw new Error("Missing product name");
                 }
