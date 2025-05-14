@@ -33,6 +33,8 @@ export default {
         {
             filter: [
                 "**/*",
+                "!**/*.tsbuildinfo",
+                "!**/*.done.build.log",
                 "!node_modules/koffi/build/koffi",
                 "node_modules/koffi/build/koffi/${platform}_${arch}",
                 `!node_modules/@azure/msal-node-runtime/dist/${arch === "ia32" ? "x64" : "x86"}`,
