@@ -34,7 +34,7 @@ export type SearchForReservation = {
         // translate this into a correspodning AM or PM time.
         time: string;
         // default value is 1
-        numberOfPeople:number;
+        numberOfPeople: number;
     };
 };
 
