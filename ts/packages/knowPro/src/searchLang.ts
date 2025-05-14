@@ -78,6 +78,7 @@ export async function searchConversationWithLanguage(
     let fallbackQueryExpr = compileFallbackQuery(
         langQueryResult.data.query,
         options.compileOptions,
+        langSearchFilter,
     );
 
     const searchResults: ConversationSearchResult[] = [];
@@ -128,16 +129,22 @@ export async function searchConversationWithLanguage(
     function compileFallbackQuery(
         query: querySchema.SearchQuery,
         compileOptions: LanguageQueryCompileOptions,
+        langSearchFilter?: LanguageSearchFilter,
     ): SearchQueryExpr[] | undefined {
         const verbScope = compileOptions.verbScope;
         if (
             !compileOptions.exactScope &&
             (verbScope == undefined || verbScope)
         ) {
-            return compileSearchQuery(conversation, query, {
-                ...compileOptions,
-                verbScope: false,
-            });
+            return compileSearchQuery(
+                conversation,
+                query,
+                {
+                    ...compileOptions,
+                    verbScope: false,
+                },
+                langSearchFilter,
+            );
         }
         return undefined;
     }

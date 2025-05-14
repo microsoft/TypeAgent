@@ -833,8 +833,13 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
                     propertyName,
                     propertyValue.text,
                 );
-                matches.addTermMatches(propertyValue, semanticRefs, true);
-                context.matchedPropertyTerms.add(propertyName, propertyValue);
+                if (semanticRefs && semanticRefs.length > 0) {
+                    matches.addTermMatches(propertyValue, semanticRefs, true);
+                    context.matchedPropertyTerms.add(
+                        propertyName,
+                        propertyValue,
+                    );
+                }
             }
         } else {
             // To prevent over-counting, ensure this relatedPropValue was not already used to match
@@ -847,15 +852,20 @@ export class MatchPropertySearchTermExpr extends MatchTermExpr {
                     propertyName,
                     relatedPropVal.text,
                 );
-                // This will only consider semantic refs that were not already matched by this expression.
-                // In other words, if a semantic ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
-                matches.addTermMatchesIfNew(
-                    propertyValue,
-                    semanticRefs,
-                    false,
-                    relatedPropVal.weight,
-                );
-                context.matchedPropertyTerms.add(propertyName, relatedPropVal);
+                if (semanticRefs && semanticRefs.length > 0) {
+                    // This will only consider semantic refs that were not already matched by this expression.
+                    // In other words, if a semantic ref already matched due to the term 'novel', don't also match it because it matched the related term 'book'
+                    matches.addTermMatchesIfNew(
+                        propertyValue,
+                        semanticRefs,
+                        false,
+                        relatedPropVal.weight,
+                    );
+                    context.matchedPropertyTerms.add(
+                        propertyName,
+                        relatedPropVal,
+                    );
+                }
             }
         }
     }
@@ -1011,6 +1021,9 @@ export class WhereSemanticRefExpr extends QueryOpExpr<SemanticRefAccumulator> {
 
     public override eval(context: QueryEvalContext): SemanticRefAccumulator {
         const accumulator = this.sourceExpr.eval(context);
+        if (accumulator.size === 0) {
+            return accumulator;
+        }
         const filtered = new SemanticRefAccumulator(
             accumulator.searchTermMatches,
         );
