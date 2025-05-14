@@ -26,7 +26,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.726.0",
     "@aws-sdk/lib-storage": "^3.726.0",
-    "@azure/identity": "4.2.1",
+    "@azure/identity": "^4.9.1",
     "@azure/storage-blob": "^12.26.0",
     "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
