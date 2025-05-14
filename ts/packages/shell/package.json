@@ -14,7 +14,8 @@
   "main": "./out/main/index.js",
   "files": [
     "out",
-    "package.json"
+    "package.json",
+    "src/**/*ActionSchema*"
   ],
   "scripts": {
     "build": "concurrently npm:prepare-vite npm:build:electron:esm",
@@ -52,7 +53,6 @@
     "@azure/identity": "^4.9.1",
     "@azure/msal-node-extensions": "^1.5.0",
     "@electron-toolkit/preload": "^3.0.2",
-    "@fontsource/lato": "^5.2.5",
     "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "agent-rpc": "workspace:*",
@@ -73,6 +73,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@fontsource/lato": "^5.2.5",
     "@playwright/test": "^1.52.0",
     "@types/debug": "^4.1.12",
     "concurrently": "^9.1.2",
