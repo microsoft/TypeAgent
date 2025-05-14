@@ -91,8 +91,17 @@ async function executeMontageAction(
     }
 
     if (result.error === undefined) {
+        let activityName = "edit";
+        let verb = "Editing";
+
+        if (action.actionName === "createNewMontage") {
+            activityName = "create";
+            verb = "Created new";
+        }
+
         if (
             action.actionName === "startEditMontage" ||
+            action.actionName === "createNewMontage" ||
             (context.activityContext !== undefined &&
                 context.activityContext.state.title !==
                     currentActiveMontage?.title)
@@ -100,8 +109,8 @@ async function executeMontageAction(
             result.activityContext =
                 currentActiveMontage !== undefined
                     ? {
-                          activityName: "edit",
-                          description: `Editing montage ${currentActiveMontage.title}`,
+                          activityName: activityName,
+                          description: `${verb} montage ${currentActiveMontage.title}`,
                           state: {
                               title: currentActiveMontage.title,
                           },
@@ -214,6 +223,7 @@ async function updateMontageContext(
         // Load all montages from disk
         agentContext.montages = [];
         agentContext.montageIdSeed = NaN;
+        agentContext.activeMontageId = -1;
         if (await context.sessionStorage?.exists(montageFile)) {
             const data = await context.sessionStorage?.read(
                 montageFile,
@@ -221,14 +231,10 @@ async function updateMontageContext(
             );
             if (data) {
                 const d = JSON.parse(data);
-                // context.agentContext.montageIdSeed = d.montageIdSeed
-                //     ? d.montageIdSeed
-                //     : 0;
+                agentContext.activeMontageId = d.activeMontageId;
                 agentContext.montages = d.montages;
             }
         }
-
-        agentContext.activeMontageId = -1;
 
         // Load the image index from disk
         if (!agentContext.imageCollection) {
@@ -977,6 +983,7 @@ async function saveMontages(context: SessionContext<MontageActionContext>) {
         montageFile,
         JSON.stringify({
             montageIdSeed: context.agentContext.montageIdSeed,
+            activeMontageId: context.agentContext.activeMontageId,
             montages: context.agentContext.montages,
         }),
     );

@@ -25,7 +25,7 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
-    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && pnpm exec prebuild-install && shx mkdir -p build/Release-Node && shx cp build/Release/better_sqlite3.node build/Release-Node",
+    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && shx rm -rf ./build && pnpm exec prebuild-install && shx cp build/Release/better_sqlite3.node build/better_sqlite3.node",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
@@ -38,9 +38,7 @@
     "regen:builtin": "pnpm -C packages/cli run regen:builtin",
     "shell": "pnpm -C packages/shell run start",
     "shell:package": "pnpm -C packages/shell run package",
-    "shell:start:linux": "pnpm -C packages/shell run start:linux",
-    "shell:start:mac": "pnpm -C packages/shell run start:mac",
-    "shell:start:win": "pnpm -C packages/shell run start:win",
+    "shell:start:package": "pnpm -C packages/shell run start:package",
     "shell:test": "npx --prefix packages/shell playwright test simple.spec.ts",
     "test": "pnpm run test:local && pnpm run test:live",
     "test:live": "pnpm -r --no-sort --stream --workspace-concurrency=1 run test:live",
@@ -53,7 +51,7 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.10.0",
+  "packageManager": "pnpm@10.11.0",
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"
