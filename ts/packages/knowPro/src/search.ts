@@ -74,7 +74,7 @@ export function createSearchOptions(): SearchOptions {
 export function createSearchOptionsTypical(): SearchOptions {
     return {
         ...createSearchOptions(),
-        maxKnowledgeMatches: 50,
+        maxKnowledgeMatches: 100,
         maxMessageMatches: 25,
     };
 }
@@ -594,7 +594,8 @@ class QueryCompiler {
         if (
             messageIndex &&
             rawQueryText &&
-            isMessageTextEmbeddingIndex(messageIndex)
+            isMessageTextEmbeddingIndex(messageIndex) &&
+            messageIndex.size > 0
         ) {
             // If embeddings supported, and there are too many matches, try to re-rank using similarity matching
             const embedding =

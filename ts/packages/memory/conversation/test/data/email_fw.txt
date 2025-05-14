@@ -1,0 +1,35 @@
+From:  from1 <from1@zyx>
+Date:	Monday, September 23, 2024 9:10 AM
+To: To1 <to1@zyx>;  To2 <to2@zyx>
+Subject: FW: Testing
+
+Here is that mail thread I mentioned:
+
+Cheers,
+From 1
+
+From:  from3 <from3@zyx>
+Date:	Monday, September 23, 2024 9:10 AM
+To: To3 <to3@zyx>;  To4 <to4@zyx>
+Subject: Re: English Authors
+
+- Jane Austen
+- William Shakespeare
+- Charles Dickens
+- Mary Shelley
+
+Love it!
+From3
+
+From:  To3 <to3@zyx>
+Date:	Monday, September 23, 2024 9:10 AM
+To: From3 <from3@zyx>;  To4 <to2@zyx>
+Subject: English Authors
+
+- Arthur Conan Doyle
+- Oscar Wilde
+- Agatha Christie
+
+Any others?
+Thanks
+- To3

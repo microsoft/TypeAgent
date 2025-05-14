@@ -54,7 +54,6 @@
     "cors": "^2.8.5",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
-    "open": "^7.0.4",
     "ws": "^8.17.1"
   },
   "devDependencies": {

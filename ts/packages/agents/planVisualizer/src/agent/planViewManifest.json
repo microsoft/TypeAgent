@@ -1,6 +1,8 @@
 {
   "emojiChar": "🕸",
   "description": "Agent to visualize static and dynamic Plans",
+  "localView": true,
+  "sharedLocalView": "browser",
   "schema": {
     "description": "A webPlan visualization agent, that handles static and dynamic plans.",
     "schemaFile": "./planViewActionSchema.ts",

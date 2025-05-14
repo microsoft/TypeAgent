@@ -2,9 +2,12 @@
 # Licensed under the MIT License.
 
 import bisect
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, cast
+import heapq
+import math
+import sys
+from typing import Set, cast
 
 from .interfaces import (
     ISemanticRefCollection,
@@ -37,8 +40,8 @@ class MatchAccumulator[T]:
     def __len__(self) -> int:
         return len(self._matches)
 
-    def __bool__(self) -> bool:
-        return True
+    def __iter__(self) -> Iterator[Match[T]]:
+        return iter(self._matches.values())
 
     def __contains__(self, value: T) -> bool:
         return value in self._matches
@@ -50,7 +53,7 @@ class MatchAccumulator[T]:
         self._matches[match.value] = match
 
     # TODO: Maybe make the callers call clear_matches()?
-    def set_matches(self, matches: Iterable[Match[T]], clear=False) -> None:
+    def set_matches(self, matches: Iterable[Match[T]], *, clear=False) -> None:
         if clear:
             self.clear_matches()
         for match in matches:
@@ -80,17 +83,40 @@ class MatchAccumulator[T]:
                 )
             )
 
-    def add_union(self, other: Iterable["MatchAccumulator"]) -> None:
-        raise NotImplementedError  # TODO
+    def add_union(self, other: "MatchAccumulator[T]") -> None:
+        """Add matches from another collection of matches."""
+        for other_match in other:
+            existing_match = self.get_match(other_match.value)
+            if existing_match is None:
+                self.set_match(other_match)
+            else:
+                self.combine_matches(existing_match, other_match)
 
     def intersect(
-        self, other: "MatchAccumulator", intersection: "MatchAccumulator | None"
+        self, other: "MatchAccumulator", intersection: "MatchAccumulator"
+    ) -> "MatchAccumulator":
+        """Intersect with another collection of matches."""
+        for self_match in self:
+            other_match = other.get_match(self_match.value)
+            if other_match is not None:
+                self.combine_matches(self_match, other_match)
+                intersection.set_match(self_match)
+        return intersection
+
+    def combine_matches(self, match: Match, other: Match) -> None:
+        """Combine the other match into the first."""
+        match.hit_count += other.hit_count
+        match.score += other.score
+        match.related_hit_count += other.related_hit_count
+        match.related_score += other.related_score
+
+    def calculate_total_score(
+        self, scorer: Callable[[Match[T]], None] | None = None
     ) -> None:
-        raise NotImplementedError  # TODO
-
-    # def combine_matches...
-
-    # def calculate_total_score...
+        if scorer is None:
+            scorer = add_smooth_related_score_to_match_score
+        for match in self:
+            scorer(match)
 
     def get_sorted_by_score(self, min_hit_count: int | None = None) -> list[Match[T]]:
         """Get matches sorted by score"""
@@ -100,29 +126,58 @@ class MatchAccumulator[T]:
         matches.sort(key=lambda m: m.score, reverse=True)
         return matches
 
-    # def get_top_n_scoring...
+    def get_top_n_scoring(
+        self,
+        max_matches: int | None = None,
+        min_hit_count: int | None = None,
+    ) -> list[Match[T]]:
+        """Get the top N scoring matches."""
+        if not self._matches:
+            return []
+        if max_matches and max_matches > 0:
+            top_list = TopNList(max_matches)
+            for match in self._matches_with_min_hit_count(min_hit_count):
+                top_list.push(match.value, match.score)
+            ranked = top_list.by_rank()
+            return [self._matches[match.item] for match in ranked]
+        else:
+            return self.get_sorted_by_score(min_hit_count)
 
-    # def get_with_hit_count...
+    def get_with_hit_count(self, min_hit_count: int) -> list[Match[T]]:
+        """Get matches with a minimum hit count."""
+        return list(self.matches_with_min_hit_count(min_hit_count))
 
     def get_matches(
         self, predicate: Callable[[Match[T]], bool] | None = None
-    ) -> Iterable[Match[T]]:
-        """Iterate over all matches"""
-        for match in self._matches.values():
-            if predicate is None or predicate(match):
-                yield match
+    ) -> Iterator[Match[T]]:
+        """Iterate over all matches."""
+        if predicate is None:
+            return iter(self._matches.values())
+        else:
+            return filter(predicate, self._matches.values())
 
-    def get_matched_values(self) -> Iterable[T]:
-        """Iterate over all matched values"""
-        for value in self._matches:
-            yield value
+    def get_matched_values(self) -> Iterator[T]:
+        """Iterate over all matched values."""
+        return iter(self._matches)
 
     def clear_matches(self):
         self._matches.clear()
 
-    # de select_top_n_scoring...
+    def select_top_n_scoring(
+        self,
+        max_matches: int | None = None,
+        min_hit_count: int | None = None,
+    ) -> int:
+        """Retain only the top N matches sorted by score."""
+        top_n = self.get_top_n_scoring(max_matches, min_hit_count)
+        self.set_matches(top_n, clear=True)
+        return len(top_n)
 
-    # def select_with_hit_count...
+    def select_with_hit_count(self, min_hit_count: int) -> int:
+        """Retain only matches with a minimum hit count."""
+        matches = self.get_with_hit_count(min_hit_count)
+        self.set_matches(matches, clear=True)
+        return len(matches)
 
     def _matches_with_min_hit_count(
         self, min_hit_count: int | None
@@ -133,8 +188,39 @@ class MatchAccumulator[T]:
         else:
             return self._matches.values()
 
+    def matches_with_min_hit_count(
+        self, min_hit_count: int | None
+    ) -> Iterable[Match[T]]:
+        if min_hit_count is not None and min_hit_count > 0:
+            return filter(lambda m: m.hit_count >= min_hit_count, self.get_matches())
+        else:
+            return self._matches.values()
 
-# TODO: getSmoothScore, addSmoothRelatedScoreToMatchScore
+
+def get_smooth_score(
+    total_score: float,
+    hit_count: int,
+) -> float:
+    """See the long comment in collections.ts for an explanation."""
+    if hit_count > 0:
+        if hit_count == 1:
+            return total_score
+        avg = total_score / hit_count
+        smooth_avg = math.log(hit_count + 1) * avg
+        return smooth_avg
+    else:
+        return 0.0
+
+
+def add_smooth_related_score_to_match_score(match: Match) -> None:
+    """Add the smooth related score to the match score."""
+    if match.related_hit_count > 0:
+        # Related term matches can be noisy and duplicative.
+        # See the comment on getSmoothScore  in collections.ts.
+        smooth_related_score = get_smooth_score(
+            match.related_score, match.related_hit_count
+        )
+        match.score += smooth_related_score
 
 
 type KnowledgePredicate[T: Knowledge] = Callable[[T], bool]
@@ -176,7 +262,7 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         semantic_refs: ISemanticRefCollection,
         predicate: Callable[[SemanticRef], bool],
     ) -> Iterable[SemanticRef]:
-        for match in self.get_matches():
+        for match in self:
             semantic_ref = semantic_refs[match.value]
             if predicate is None or predicate(semantic_ref):
                 yield semantic_ref
@@ -187,7 +273,7 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         knowledgeType: KnowledgeType,
         predicate: KnowledgePredicate[T] | None = None,
     ) -> Iterable[Match[SemanticRefOrdinal]]:
-        for match in self.get_matches():
+        for match in self:
             semantic_ref = semantic_refs[match.value]
             if predicate is None or predicate(cast(T, semantic_ref.knowledge)):
                 yield match
@@ -197,7 +283,7 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         semantic_refs: ISemanticRefCollection,
     ) -> dict[KnowledgeType, "SemanticRefAccumulator"]:
         groups: dict[KnowledgeType, SemanticRefAccumulator] = {}
-        for match in self.get_matches():
+        for match in self:
             semantic_ref = semantic_refs[match.value]
             group = groups.get(semantic_ref.knowledge_type)
             if group is None:
@@ -213,10 +299,32 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         ranges_in_scope: "TextRangesInScope",
     ) -> "SemanticRefAccumulator":
         accumulator = SemanticRefAccumulator(self.search_term_matches)
-        for match in self.get_matches():
+        for match in self:
             if ranges_in_scope.is_range_in_scope(semantic_refs[match.value].range):
                 accumulator.set_match(match)
         return accumulator
+
+    def add_union(self, other: "SemanticRefAccumulator") -> None:  # type: ignore
+        """Add matches from another SemanticRefAccumulator."""
+        assert isinstance(
+            other, SemanticRefAccumulator
+        )  # Runtime check b/c other's type mismatch
+        super().add_union(other)
+        self.search_term_matches.update(other.search_term_matches)
+
+    def intersect(self, other: "SemanticRefAccumulator") -> "SemanticRefAccumulator":  # type: ignore
+        """Intersect with another SemanticRefAccumulator."""
+        assert isinstance(
+            other, SemanticRefAccumulator
+        )  # Runtime check b/c other's type mismatch
+        intersection = SemanticRefAccumulator()
+        super().intersect(other, intersection)
+        if len(intersection) > 0:
+            intersection.search_term_matches.update(self.search_term_matches.values())
+            intersection.search_term_matches.update(other.search_term_matches.values())
+        return intersection
+
+    # def to_scored_semantic_refs ...
 
 
 # TODO: MessageAccumulator, intersectScoredMessageOrdinals
@@ -392,3 +500,85 @@ class PropertyTermSet:
 
 
 # TODO: unionArrays, union, addToSet, setUnion, setIntersect, getBatches,
+
+
+@dataclass
+class ScoredItem[T]:
+    item: T
+    score: float
+
+    def __lt__(self, other: "ScoredItem") -> bool:
+        return self.score < other.score
+
+    def __gt__(self, other: "ScoredItem") -> bool:
+        return self.score > other.score
+
+    def __le__(self, other: "ScoredItem") -> bool:
+        return self.score <= other.score
+
+    def __ge__(self, other: "ScoredItem") -> bool:
+        return self.score >= other.score
+
+
+# Implementation change compared to TS version: Use heapq; no sentinel.
+# API change: pop/top are not properties.
+class TopNCollection[T]:
+    """A collection that maintains the top N items based on their scores."""
+
+    def __init__(self, max_count: int):
+        self._max_count = max_count
+        self._heap: list[ScoredItem[T]] = []
+
+    def __len__(self) -> int:
+        return len(self._heap)
+
+    def reset(self) -> None:
+        self._heap = []
+
+    def pop(self) -> ScoredItem[T]:
+        return heapq.heappop(self._heap)
+
+    def top(self) -> ScoredItem[T]:
+        return self._heap[0]
+
+    def push(self, item: T, score: float) -> None:
+        if len(self._heap) < self._max_count:
+            heapq.heappush(self._heap, ScoredItem(item, score))
+        else:
+            heapq.heappushpop(self._heap, ScoredItem(item, score))
+
+    def by_rank(self) -> list[ScoredItem[T]]:
+        return sorted(self._heap, reverse=True)
+
+    def values_by_rank(self) -> list[T]:
+        return [item.item for item in self.by_rank()]
+
+
+class TopNList[T](TopNCollection[T]):
+    """Alias for TopNCollection."""
+
+
+class TopNListAll[T](TopNList[T]):
+    """A Top N list for N = infinity (approximated by sys.maxsize)."""
+
+    def __init__(self):
+        super().__init__(sys.maxsize)
+
+
+def get_top_k[T](
+    scored_items: Iterable[ScoredItem[T]],
+    top_k: int,
+) -> list[ScoredItem[T]]:
+    """A function to get the top K of an unsorted list of scored items."""
+    top_n_list = TopNCollection[T](top_k)
+    for scored_item in scored_items:
+        top_n_list.push(scored_item.item, scored_item.score)
+    return top_n_list.by_rank()
+
+
+def add_to_set[T](
+    set: Set[T],
+    values: Iterable[T],
+) -> None:
+    """Add values to a set."""
+    set.update(values)

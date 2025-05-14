@@ -2,22 +2,18 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterator
-from typing import Any, overload
+from typing import Any
 
 import pytest
 
+from typeagent.knowpro.collections import TextRangeCollection, TextRangesInScope
 from typeagent.knowpro.interfaces import (
     ICollection,
     IConversation,
     IMessage,
-    IMessageCollection,
-    ISemanticRefCollection,
     ITermToSemanticRefIndex,
-    MessageOrdinal,
-    ScoredSemanticRefOrdinal,
     SemanticRef,
     ListIndexingResult,
-    SemanticRefOrdinal,
     Tag,
     TextLocation,
     TextRange,
@@ -31,11 +27,13 @@ from typeagent.knowpro.propindex import (
     add_action_properties_to_index,
     build_property_index,
     add_to_property_index,
+    lookup_property_in_property_index,
     make_property_term_text,
     split_property_term_text,
     is_known_property,
 )
 from typeagent.knowpro.secindex import ConversationSecondaryIndexes
+from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
 
 from fixtures import needs_auth
 
@@ -188,7 +186,7 @@ def test_build_property_index(needs_auth):
 class FakeMessage(IMessage):
     """Concrete implementation of IMessage for testing."""
 
-    def __init__(self, text_chunks):
+    def __init__(self, text_chunks: list[str]):
         self.text_chunks = text_chunks
         self.text_location = TextLocation(0, 0)
         self.tags = []
@@ -243,21 +241,8 @@ class FakeBaseCollection[T, TOrdinal: int](ICollection[T, int]):
     def _get_slice(self, start: int, end: int) -> list[T]:
         return self.items[start:end]
 
-    def append(self, *items: T) -> None:
-        for item in items:
-            self.items.append(item)
-
-
-class FakeMessageCollection(
-    FakeBaseCollection[FakeMessage, MessageOrdinal], IMessageCollection
-):
-    pass
-
-
-class FakeSemanticRefCollection(
-    FakeBaseCollection[SemanticRef, SemanticRefOrdinal], ISemanticRefCollection
-):
-    pass
+    def append(self, item: T) -> None:
+        self.items.append(item)
 
 
 class FakeConversation[
@@ -268,9 +253,9 @@ class FakeConversation[
     def __init__(self, semantic_refs: list[SemanticRef] | None = None):
         self.name_tag = "test_conversation"
         self.tags = []
-        self.semantic_refs = FakeSemanticRefCollection(semantic_refs or [])
+        self.semantic_refs = SemanticRefCollection(semantic_refs or [])
         self.semantic_ref_index = None
-        self.messages = FakeMessageCollection([FakeMessage(["Hello"])])
+        self.messages = MessageCollection([FakeMessage(["Hello"])])
         self.secondary_indexes = ConversationSecondaryIndexes()
 
 
@@ -303,3 +288,88 @@ def test_add_to_property_index(property_index, needs_auth):
     assert lookup_result is not None
     assert len(lookup_result) == 1
     assert lookup_result[0].semantic_ref_ordinal == 0
+
+
+def test_lookup_property_in_property_index(property_index):
+    """Test filtering properties based on ranges_in_scope."""
+    property_index.add_property("name", "value1", 0)
+    property_index.add_property("name", "value2", 1)
+
+    semantic_refs = [
+        SemanticRef(
+            semantic_ref_ordinal=0,
+            range=TextRange(start=TextLocation(0), end=TextLocation(10)),
+            knowledge_type="entity",
+            knowledge=ConcreteEntity("name0", ["type"]),
+        ),
+        SemanticRef(
+            semantic_ref_ordinal=1,
+            range=TextRange(start=TextLocation(20), end=TextLocation(30)),
+            knowledge_type="entity",
+            knowledge=ConcreteEntity("name1", ["type"]),
+        ),
+    ]
+    ranges_in_scope = TextRangesInScope(
+        [TextRangeCollection([TextRange(TextLocation(0), TextLocation(15))])]
+    )
+
+    result = lookup_property_in_property_index(
+        property_index,
+        "name",
+        "value1",
+        SemanticRefCollection(semantic_refs),
+        ranges_in_scope,
+    )
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].semantic_ref_ordinal == 0
+
+    result = lookup_property_in_property_index(
+        property_index,
+        "name",
+        "value2",
+        SemanticRefCollection(semantic_refs),
+        ranges_in_scope,
+    )
+    assert result is None
+
+
+def test_property_index_clear(property_index):
+    """Test clearing all properties in the PropertyIndex."""
+    property_index.add_property("name", "value", 0)
+    assert len(property_index) > 0
+
+    property_index.clear()
+    assert len(property_index) == 0
+
+
+def test_property_index_get_values(property_index):
+    """Test retrieving all property values from the PropertyIndex."""
+    property_index.add_property("name", "value1", 0)
+    property_index.add_property("name", "value2", 1)
+
+    values = property_index.get_values()
+    assert len(values) == 2
+    assert "value1" in values
+    assert "value2" in values
+
+
+def test_property_index_prepare_term_text(property_index):
+    """Test preprocessing term text in PropertyIndex."""
+    term_text = "Prop.Name@@Value"
+    prepared_text = property_index._prepare_term_text(term_text)
+    assert prepared_text == "prop.name@@value"  # Should be converted to lowercase
+
+
+def test_property_index_lookup_property_edge_cases(property_index):
+    """Test edge cases for lookup_property in PropertyIndex."""
+    # Case: Property does not exist
+    result = property_index.lookup_property("name", "nonexistent")
+    assert result is None
+
+    # Case: Property exists
+    property_index.add_property("name", "value", 0)
+    result = property_index.lookup_property("name", "value")
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].semantic_ref_ordinal == 0

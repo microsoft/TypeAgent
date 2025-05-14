@@ -8,6 +8,7 @@ import {
     SessionContext,
     ActionResult,
     Storage,
+    AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { MarkdownAction } from "./markdownActionSchema.js";
@@ -26,8 +27,9 @@ export function instantiate(): AppAgent {
 }
 
 type MarkdownActionContext = {
-    currentFileName: string | undefined;
-    viewProcess: ChildProcess | undefined;
+    currentFileName?: string | undefined;
+    viewProcess?: ChildProcess | undefined;
+    localHostPort: number;
 };
 
 async function executeMarkdownAction(
@@ -45,8 +47,16 @@ async function markdownValidateWildcardMatch(
     return true;
 }
 
-async function initializeMarkdownContext() {
-    return {};
+async function initializeMarkdownContext(
+    settings?: AppAgentInitSettings,
+): Promise<MarkdownActionContext> {
+    const localHostPort = settings?.localHostPort;
+    if (localHostPort === undefined) {
+        throw new Error("Local view port not assigned.");
+    }
+    return {
+        localHostPort: localHostPort,
+    };
 }
 
 async function updateMarkdownContext(
@@ -69,8 +79,10 @@ async function updateMarkdownContext(
             const fullPath = await getFullMarkdownFilePath(fileName, storage!);
             if (fullPath) {
                 process.env.MARKDOWN_FILE = fullPath;
-                context.agentContext.viewProcess =
-                    await createViewServiceHost(fullPath);
+                context.agentContext.viewProcess = await createViewServiceHost(
+                    fullPath,
+                    context.agentContext.localHostPort,
+                );
             }
         }
     } else {
@@ -163,7 +175,7 @@ async function handleMarkdownAction(
     return result;
 }
 
-export async function createViewServiceHost(filePath: string) {
+export async function createViewServiceHost(filePath: string, port: number) {
     let timeoutHandle: NodeJS.Timeout;
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
@@ -183,7 +195,7 @@ export async function createViewServiceHost(filePath: string) {
                     ),
                 );
 
-                const childProcess = fork(expressService);
+                const childProcess = fork(expressService, [port.toString()]);
 
                 childProcess.send({
                     type: "setFile",

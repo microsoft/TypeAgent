@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// import ts from "typescript";
+/**
+ * ===============================================
+ * Early experiments with code-processor package
+ * ===============================================
+ */
+
 import { asyncArray, removeDir } from "typeagent";
 import {
     CommandHandler,

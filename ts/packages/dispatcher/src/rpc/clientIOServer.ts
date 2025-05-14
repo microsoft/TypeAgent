@@ -28,6 +28,12 @@ export function createClientIORpcServer(
                 params.source,
             );
         },
+        openLocalView: async (params) => {
+            return clientIO.openLocalView(params.port);
+        },
+        closeLocalView: async (params) => {
+            return clientIO.closeLocalView(params.port);
+        },
     };
 
     const clientIOCallFunctions: ClientIOCallFunctions = {

@@ -7,6 +7,7 @@ import {
     SessionContext,
     ActionResult,
     TypeAgentAction,
+    AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 import { ChildProcess, fork, spawn } from "child_process";
 import { fileURLToPath } from "node:url";
@@ -57,8 +58,9 @@ type MontageActionContext = {
     montageIdSeed: number;
     montages: PhotoMontage[];
     activeMontageId: number;
-    imageCollection: im.ImageCollection | undefined;
-    viewProcess: ChildProcess | undefined;
+    imageCollection?: im.ImageCollection | undefined;
+    viewProcess?: ChildProcess | undefined;
+    localHostPort: number;
     searchSettings: {
         minScore: number;
         exactMatch: boolean;
@@ -80,27 +82,39 @@ async function executeMontageAction(
     context: ActionContext<MontageActionContext>,
 ) {
     const agentContext = context.sessionContext.agentContext;
-    const activeMontage = getActiveMontage(agentContext);
+    const lastActiveMontage = getActiveMontage(agentContext);
     const result = await handleMontageAction(action, context);
-    if (activeMontage !== getActiveMontage(agentContext)) {
+    const currentActiveMontage = getActiveMontage(agentContext);
+    if (lastActiveMontage !== currentActiveMontage) {
         // if the active montage has changed, update the viewer
         updateMontageViewerState(agentContext);
     }
 
     if (result.error === undefined) {
+        let activityName = "edit";
+        let verb = "Editing";
+
+        if (action.actionName === "createNewMontage") {
+            activityName = "create";
+            verb = "Created new";
+        }
+
         if (
             action.actionName === "startEditMontage" ||
+            action.actionName === "createNewMontage" ||
             (context.activityContext !== undefined &&
-                context.activityContext.state.title !== activeMontage?.title)
+                context.activityContext.state.title !==
+                    currentActiveMontage?.title)
         ) {
             result.activityContext =
-                activeMontage !== undefined
+                currentActiveMontage !== undefined
                     ? {
-                          activityName: "edit",
-                          description: `Editing montage ${activeMontage.title}`,
+                          activityName: activityName,
+                          description: `${verb} montage ${currentActiveMontage.title}`,
                           state: {
-                              title: activeMontage.title,
+                              title: currentActiveMontage.title,
                           },
+                          openLocalView: true,
                       }
                     : null;
         }
@@ -142,15 +156,25 @@ const CryptBinaryToStringW = crypt32?.func(
     "bool CryptBinaryToStringW(ITEMIDLIST* pbBinary, uint cbBinary, uint dwFlags, _Inout_ str16 pszString, _Inout_ uint* pcchString)",
 );
 
-async function initializeMontageContext() {
+async function initializeMontageContext(
+    settings?: AppAgentInitSettings,
+): Promise<MontageActionContext> {
+    const localHostPort = settings?.localHostPort;
+    if (localHostPort === undefined) {
+        throw new Error("Local view port not assigned.");
+    }
     return {
         // default search settings
         searchSettings: {
             minScore: 0.5, // TODO tune?
             exactMatch: false,
         },
-
-        getActiveMontage,
+        localHostPort,
+        montageIdSeed: NaN,
+        montages: [],
+        activeMontageId: -1,
+        fuzzyMatchingModel: undefined,
+        indexes: [],
     };
 }
 
@@ -199,6 +223,7 @@ async function updateMontageContext(
         // Load all montages from disk
         agentContext.montages = [];
         agentContext.montageIdSeed = NaN;
+        agentContext.activeMontageId = -1;
         if (await context.sessionStorage?.exists(montageFile)) {
             const data = await context.sessionStorage?.read(
                 montageFile,
@@ -206,14 +231,10 @@ async function updateMontageContext(
             );
             if (data) {
                 const d = JSON.parse(data);
-                // context.agentContext.montageIdSeed = d.montageIdSeed
-                //     ? d.montageIdSeed
-                //     : 0;
+                agentContext.activeMontageId = d.activeMontageId;
                 agentContext.montages = d.montages;
             }
         }
-
-        agentContext.activeMontageId = -1;
 
         // Load the image index from disk
         if (!agentContext.imageCollection) {
@@ -252,6 +273,7 @@ async function updateMontageContext(
                         agentContext.montages.push(montage);
                     }
                 },
+                agentContext.localHostPort,
             );
 
             const folders: string[] = [];
@@ -899,6 +921,7 @@ async function ensureActiveMontage(
 
 export async function createViewServiceHost(
     montageUpdatedCallback: (montage: PhotoMontage) => void,
+    port: number,
 ) {
     let timeoutHandle: NodeJS.Timeout;
 
@@ -919,7 +942,7 @@ export async function createViewServiceHost(
                     ),
                 );
 
-                const childProcess = fork(expressService);
+                const childProcess = fork(expressService, [port.toString()]);
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {
@@ -960,6 +983,7 @@ async function saveMontages(context: SessionContext<MontageActionContext>) {
         montageFile,
         JSON.stringify({
             montageIdSeed: context.agentContext.montageIdSeed,
+            activeMontageId: context.agentContext.activeMontageId,
             montages: context.agentContext.montages,
         }),
     );

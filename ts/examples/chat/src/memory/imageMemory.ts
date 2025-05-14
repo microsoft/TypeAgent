@@ -1,6 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * ===============================================
+ * Image Memory experiments with knowledge-processor package
+ * For knowpro, see {@link ./knowproMemory.ts}
+ * ===============================================
+ */
+
 import {
     ArgDef,
     CommandHandler,
@@ -10,10 +17,10 @@ import {
     StopWatch,
 } from "interactive-app";
 import {
-    ChatContext,
+    KnowledgeProcessorContext,
     Models,
     ReservedConversationNames,
-} from "./chatMemory.js";
+} from "./knowledgeProcessorMemory.js";
 import {
     argDestFile,
     argSourceFileOrFolder,
@@ -106,7 +113,7 @@ export function buildImageCountHistogramDef(): CommandMetadata {
 }
 
 export function createImageCommands(
-    context: ChatContext,
+    context: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): void {
     commands.importImage = importImage;
@@ -171,7 +178,7 @@ export function createImageCommands(
     async function indexImages(
         sourcePath: string,
         cachePath: string,
-        context: ChatContext,
+        context: KnowledgeProcessorContext,
         clock: StopWatch,
     ) {
         // load files from directory
@@ -192,7 +199,7 @@ export function createImageCommands(
     async function indexImage(
         fileName: string,
         cachePath: string,
-        context: ChatContext,
+        context: KnowledgeProcessorContext,
     ) {
         if (!fs.existsSync(fileName)) {
             console.log(`Could not find part of the file path '${fileName}'`);

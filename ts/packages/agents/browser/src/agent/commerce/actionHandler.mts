@@ -6,8 +6,11 @@ import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {
+    BookReservationsModule,
+    BookSelectorButton,
     ProductDetailsHeroTile,
     ProductTile,
+    RestaurantResult,
     SearchInput,
     ShoppingCartButton,
     ShoppingCartDetails,
@@ -15,7 +18,10 @@ import {
 } from "./schema/pageComponents.mjs";
 import { ShoppingActions } from "./schema/userActions.mjs";
 import { ShoppingPlanActions } from "./schema/planActions.mjs";
-import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultNoDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 import { createExecutionTracker } from "../planVisualizationClient.mjs";
 import { PageState } from "./schema/pageStates.mjs";
 
@@ -23,7 +29,6 @@ export async function handleCommerceAction(
     action: ShoppingActions,
     context: ActionContext<BrowserActionContext>,
 ) {
-    let message = "OK";
     if (!context.sessionContext.agentContext.browserConnector) {
         throw new Error("No connection to browser session.");
     }
@@ -35,17 +40,17 @@ export async function handleCommerceAction(
 
     switch (action.actionName) {
         case "getLocationInStore":
-            await handleFindInStore(action);
-            break;
+            return await handleFindInStore(action);
         case "findNearbyStore":
-            await handleFindNearbyStore(action);
-            break;
+            return await handleFindNearbyStore(action);
         case "viewShoppingCart":
-            await handleViewShoppingCart(action);
-            break;
+            return await handleViewShoppingCart(action);
         case "buyProduct":
             return await handleShoppingRequest(action);
-            break;
+        case "searchForReservation":
+            return await handleSearchForReservation(action);
+        case "selectReservation":
+            return await handleSelectReservation(action);
     }
 
     async function getComponentFromPage(
@@ -81,7 +86,7 @@ export async function handleCommerceAction(
         await browser.awaitPageLoad();
     }
 
-    async function searchForProduct(productName: string) {
+    async function searchOnWebsite(productName: string) {
         const selector = (await getComponentFromPage(
             "SearchInput",
         )) as SearchInput;
@@ -120,7 +125,7 @@ export async function handleCommerceAction(
     }
 
     async function handleFindInStore(action: any) {
-        await searchForProduct(action.parameters.productName);
+        await searchOnWebsite(action.parameters.productName);
         await selectSearchResult(
             action.parameters.position,
             action.parameters.productName,
@@ -133,6 +138,8 @@ export async function handleCommerceAction(
             "ProductDetailsHeroTile",
         )) as ProductDetailsHeroTile;
 
+        let message = "OK";
+
         if (targetProduct && targetProduct.physicalLocationInStore) {
             message = `Found ${targetProduct.numberInStock} at ${targetProduct.physicalLocationInStore} in the ${targetProduct.storeName} store`;
             return;
@@ -140,11 +147,12 @@ export async function handleCommerceAction(
             message = `Did not find target product in stock`;
             console.log(targetProduct);
         }
+
+        return createActionResult(message);
     }
 
     async function handleFindNearbyStore(action: any) {
-        //StoreLocation
-
+        let message = "OK";
         const storeInfo = (await getComponentFromPage(
             "StoreLocation",
         )) as StoreLocation;
@@ -152,9 +160,13 @@ export async function handleCommerceAction(
         if (storeInfo.locationName) {
             message = `Nearest store is ${storeInfo.locationName} (${storeInfo.zipCode})`;
         }
+
+        return createActionResult(message);
     }
 
     async function handleViewShoppingCart(action: any) {
+        let message = "OK";
+
         const cartButton = (await getComponentFromPage(
             "ShoppingCartButton",
         )) as ShoppingCartButton;
@@ -166,18 +178,16 @@ export async function handleCommerceAction(
             "ShoppingCartDetails",
         )) as ShoppingCartDetails;
         console.log(cartDetails);
+
+        return createActionResult(message);
     }
 
-    async function runUserAction(action: any) {
-        console.log(
-            `Running: ${action.actionName} with parameters ${JSON.stringify(action.parameters)}`,
-        );
+    async function runUserAction(action: ShoppingPlanActions) {
         switch (action.actionName) {
             case "searchForProduct":
-                await searchForProduct(action.parameters.productName);
+                await searchOnWebsite(action.parameters.productName);
                 break;
             case "goToProductPage":
-            case "selectSearchResult":
                 if (action.parameters.productName === undefined) {
                     throw new Error("Missing product name");
                 }
@@ -207,13 +217,21 @@ export async function handleCommerceAction(
         let executionHistory: any[] = [];
         let lastAction: any;
 
-        console.log(
-            "Plan visualizer: " +
-                context.sessionContext.agentContext.planVisualizationEndpoint,
-        );
+        const port =
+            await context.sessionContext.getSharedLocalHostPort(
+                "planVisualizer",
+            );
+        const planVisualizationEndpoint = `http://localhost:${port}`;
+
+        if (!planVisualizationEndpoint) {
+            console.warn(
+                "Plan visualization endpoint not assigned. Please check your configuration.",
+            );
+        }
+        console.log("Plan visualizer: " + planVisualizationEndpoint);
 
         const { trackState, reset } = createExecutionTracker(
-            context.sessionContext.agentContext.planVisualizationEndpoint!,
+            planVisualizationEndpoint,
             action.parameters.userRequest,
         );
 
@@ -332,5 +350,121 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
         }
     }
 
-    return message;
+    function generateBookingMessage(slots: BookSelectorButton[]): string {
+        const times = slots
+            .map((slot) => slot.time)
+            .filter((time): time is string => Boolean(time));
+
+        if (times.length === 0) {
+            return "Sorry, there are no available tables at the moment.";
+        }
+
+        const timePhrase = formatTimeList(times);
+        const countPhrase = `I found ${times.length} table${times.length > 1 ? "s" : ""} available.`;
+
+        return `${countPhrase} You can dine at ${timePhrase}. Which time should I reserve?`;
+    }
+
+    function formatTimeList(times: string[]): string {
+        if (times.length === 1) {
+            return times[0];
+        } else if (times.length === 2) {
+            return `${times[0]} or ${times[1]}`;
+        } else {
+            const allButLast = times.slice(0, -1).join(", ");
+            const last = times[times.length - 1];
+            return `${allButLast}, or ${last}`;
+        }
+    }
+    async function selectRestaurantSearchResult(restaurantName: string) {
+        let request = `Search result: ${restaurantName}`;
+        const targetRestaurant = (await getComponentFromPage(
+            "RestaurantResult",
+            request,
+        )) as RestaurantResult;
+
+        await browser.clickOn(targetRestaurant.detailsLinkCssSelector);
+        await new Promise((r) => setTimeout(r, 200));
+        await browser.awaitPageLoad();
+    }
+
+    async function handleSearchForReservation(action: any) {
+        await searchOnWebsite(action.parameters.restaurantName);
+        await selectRestaurantSearchResult(action.parameters.restaurantName);
+
+        const reservationDraft = {
+            numberOfPeople: action.parameters.numberOfPeople,
+            time: action.parameters.time,
+            restaurantName: action.parameters.restaurantName,
+        };
+
+        let additionalInstructions = [
+            `Current reservation data: ${JSON.stringify(reservationDraft)}`,
+        ];
+
+        const reservationInfo = (await getComponentFromPage(
+            "BookReservationsModule",
+        )) as BookReservationsModule;
+
+        let confirmationMessage;
+        if (
+            reservationInfo &&
+            reservationInfo.availableTimeSlots &&
+            reservationInfo.availableTimeSlots.length > 0
+        ) {
+            confirmationMessage = generateBookingMessage(
+                reservationInfo.availableTimeSlots,
+            );
+            additionalInstructions.push(
+                `If the user selects a time slot, the next action should be "selectReservation"`,
+            );
+        } else {
+            confirmationMessage =
+                "I did not find an available table at the selected time. Please select a different day or time.";
+        }
+
+        context.actionIO.appendDisplay({
+            type: "text",
+            speak: true,
+            content: confirmationMessage,
+        });
+
+        additionalInstructions.push(
+            `The assistant asked the user: ${confirmationMessage}`,
+        );
+        const result = createActionResultNoDisplay(confirmationMessage);
+        result.additionalInstructions = additionalInstructions;
+
+        result.entities;
+        return result;
+    }
+
+    async function handleSelectReservation(action: any) {
+        await searchOnWebsite(action.parameters.restaurantName);
+        await selectSearchResult(action.parameters.restaurantName);
+
+        const reservationInfo = (await getComponentFromPage(
+            "BookReservationsModule",
+        )) as BookReservationsModule;
+
+        let message = `Did not find target time in available slots`;
+
+        if (
+            reservationInfo &&
+            reservationInfo.availableTimeSlots &&
+            reservationInfo.availableTimeSlots.length > 0
+        ) {
+            const slots = reservationInfo.availableTimeSlots;
+            const targetSlot = slots.find(
+                (slot) => slot.time === action.parameters.time,
+            );
+            if (targetSlot) {
+                await browser.clickOn(targetSlot.cssSelector);
+                await new Promise((r) => setTimeout(r, 200));
+                message = "I made the reservation";
+            }
+        }
+
+        return createActionResult(message);
+    }
 }

@@ -52,6 +52,7 @@ export async function toggleSiteTranslator(
             "www.homedepot.com",
             "www.target.com",
             "www.walmart.com",
+            "www.opentable.com",
         ];
 
         if (commerceHosts.includes(host)) {

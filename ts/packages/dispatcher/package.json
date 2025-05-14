@@ -24,6 +24,11 @@
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"
   },
+  "files": [
+    "dist",
+    "!dist/test",
+    "src/**/*ActionSchema*"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",

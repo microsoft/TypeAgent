@@ -14,6 +14,8 @@ export type AppAgentManifest = {
     emojiChar: string;
     description: string;
     commandDefaultEnabled?: boolean;
+    localView?: boolean; // whether the agent serve a local view, default is false
+    sharedLocalView?: string[]; // the agent to share the local view with, default is none
 } & ActionManifest;
 
 export type SchemaTypeNames = {
@@ -45,9 +47,12 @@ export type ActionManifest = {
 // App Agent
 //==============================================================================
 
+export type AppAgentInitSettings = {
+    localHostPort?: number; // the assigned port to use to serve the view if localHostPort is true in the manifest
+};
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
-    initializeAgentContext?(): Promise<unknown>;
+    initializeAgentContext?(settings?: AppAgentInitSettings): Promise<unknown>;
     updateAgentContext?(
         enable: boolean,
         context: SessionContext,
@@ -129,6 +134,9 @@ export interface SessionContext<T = unknown> {
 
     removeDynamicAgent(agentName: string): Promise<void>;
 
+    // Experimental: get the shared local host port
+    getSharedLocalHostPort(agentName: string): Promise<number>;
+
     // Experimental: get the available indexes
     indexes(type: "image" | "email" | "all"): Promise<any[]>;
 }
@@ -168,6 +176,7 @@ export type ActivityContext<T = Record<string, unknown>> = {
     activityName: string;
     description: string;
     state: T;
+    openLocalView?: boolean | undefined;
 };
 
 export interface ActionContext<T = void> {

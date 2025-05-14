@@ -6,6 +6,7 @@ import {
     ActivityContext,
     AppAction,
     AppAgentEvent,
+    AppAgentInitSettings,
     AppAgentManifest,
     ClientAction,
     CommandDescriptors,
@@ -104,6 +105,10 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         name: string;
     }) => Promise<void>;
+    getSharedLocalHostPort: (param: {
+        contextId: number;
+        agentName: string;
+    }) => Promise<number>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
 };
 
@@ -119,7 +124,9 @@ export type AgentCallFunctions = {
 };
 
 export type AgentInvokeFunctions = {
-    initializeAgentContext: () => Promise<unknown>;
+    initializeAgentContext: (
+        settings?: AppAgentInitSettings,
+    ) => Promise<unknown>;
     updateAgentContext: (
         param: Partial<ContextParams> & {
             enable: boolean;

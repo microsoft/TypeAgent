@@ -1,28 +1,24 @@
 # conversation-memory
 
-**Experimental prototype**:
+**conversation-memory** is an **experimental prototype and sample code** with ongoing and _frequent_ changes.
 
-- Working toward a shared understanding of implementing different memory types using **Structured RAG** and the [knowpro](../../knowPro) experimental library.
-- Work in progress; **_frequent changes_**.
-- Structured RAG leverages [**knowledge extraction**](../../knowledgeProcessor/src/conversation/knowledgeSchema.ts) and other techniques to create index structures over source text. This allows for more precise querying as well as direct access to the **salient information** encoded in text.
-- This is **sample code** only.
+It explores how to implement different memory [types](#memory-types) using [**Structured RAG**](../../knowPro/README.md) implemented by the [knowpro](../../knowPro) library.
 
-## Memory being explored
+## Memory types
 
 ### Conversational
 
-The following treat text as conversations: a sequence of **messages**.
+Conversational memory treats the following domains like conversations: a sequence of timestamped **messages** between senders and receivers.
 
-- Podcast or Transcript
-  - Treat a podcast transcript like a conversation
-- Conversations
+- [Podcast](./src/podcast.ts)
+- [Conversation](./src/conversationMemory.ts) such as chats
   - See [conversationManager](../../knowledgeProcessor/src/conversation/conversationManager.ts) in the [knowledgeProcessor](../../knowledgeProcessor) package for existing conversation memory implemented with structured RAG.
-- Emails
+- [Email](./src/emailMemory.ts)
 
 ### Image
 
 Images can treated as memory and retrieved using both their knowledge content as well their metadata.
-[ImageMemory](../image/)
+[Image](../image/)
 
 ## Trademarks
 

@@ -16,6 +16,7 @@ export {
     ActionContext,
     SchemaTypeNames,
     ActivityContext,
+    AppAgentInitSettings,
 } from "./agentInterface.js";
 
 export {

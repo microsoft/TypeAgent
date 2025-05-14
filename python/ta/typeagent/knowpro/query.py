@@ -1,16 +1,20 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
 from .collections import (
+    MatchAccumulator,
     PropertyTermSet,
     SemanticRefAccumulator,
     TermSet,
+    TextRangeCollection,
     TextRangesInScope,
 )
+from .common import is_search_term_wildcard
 from .interfaces import (
     IConversation,
     IMessage,
@@ -20,12 +24,14 @@ from .interfaces import (
     ITermToSemanticRefIndex,
     ITimestampToTextRangeIndex,
     MessageOrdinal,
+    PropertySearchTerm,
     ScoredSemanticRefOrdinal,
     SearchTerm,
     SemanticRef,
     SemanticRefOrdinal,
     Term,
 )
+from .propindex import PropertyNames, lookup_property_in_property_index
 
 
 def is_conversation_searchable(conversation: IConversation) -> bool:
@@ -40,7 +46,7 @@ def is_conversation_searchable(conversation: IConversation) -> bool:
     )
 
 
-# TODO: Lots of other functions, from getTextRangeForDateRange to matchPropertySearchTermToTag
+# TODO: getTextRangeForDateRange ... matchPropertySearchTermToSemanticRef
 
 
 def lookup_term_filtered(
@@ -68,7 +74,7 @@ def lookup_term(
     ranges_in_scope: TextRangesInScope | None = None,
 ) -> list[ScoredSemanticRefOrdinal] | None:
     """Look up a term in the semantic reference index, optionally filtering by ranges in scope."""
-    if ranges_in_scope:
+    if ranges_in_scope is not None:
         # If ranges_in_scope has no actual text ranges, lookups can't possibly match
         return lookup_term_filtered(
             semantic_ref_index,
@@ -77,6 +83,9 @@ def lookup_term(
             lambda sr, _: ranges_in_scope.is_range_in_scope(sr.range),
         )
     return semantic_ref_index.lookup_term(term.text)
+
+
+# TODO: lookupProperty, lookupTermFiltered, lookupKnowledgeType
 
 
 @dataclass
@@ -113,19 +122,16 @@ class QueryEvalContext:
 
     @property
     def semantic_ref_index(self) -> ITermToSemanticRefIndex:
-        """Return the semantic reference index."""
         assert self.conversation.semantic_ref_index is not None
         return self.conversation.semantic_ref_index
 
     @property
     def semantic_refs(self) -> ISemanticRefCollection:
-        """Return the semantic references."""
         assert self.conversation.semantic_refs is not None
         return self.conversation.semantic_refs
 
     @property
     def messages(self) -> IMessageCollection:
-        """Return the messages in the conversation."""
         return self.conversation.messages
 
     def get_semantic_ref(self, semantic_ref_ordinal: SemanticRefOrdinal) -> SemanticRef:
@@ -135,8 +141,8 @@ class QueryEvalContext:
 
     def get_message_for_ref(self, semantic_ref: SemanticRef) -> IMessage:
         """Retrieve the message associated with a semantic reference."""
-        message_index = semantic_ref.range.start.message_ordinal
-        return self.conversation.messages[message_index]
+        message_ordinal = semantic_ref.range.start.message_ordinal
+        return self.conversation.messages[message_ordinal]
 
     def get_message(self, message_ordinal: MessageOrdinal) -> IMessage:
         """Retrieve a message by its ordinal."""
@@ -158,11 +164,107 @@ class IQueryOpExpr[T](Protocol):
 class QueryOpExpr[T](IQueryOpExpr[T]):
     """Base class for query operation expressions."""
 
+
+@dataclass
+class SelectTopNExpr[T: MatchAccumulator](QueryOpExpr[T]):
+    """Expression for selecting the top N matches from a query."""
+
+    source_expr: IQueryOpExpr[T]
+    max_matches: int | None = None
+    min_hit_count: int | None = None
+
     def eval(self, context: QueryEvalContext) -> T:
-        raise NotImplementedError
+        """Evaluate the expression and return the top N matches."""
+        matches = self.source_expr.eval(context)
+        matches.select_top_n_scoring(self.max_matches, self.min_hit_count)
+        return matches
 
 
-class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None]):
+@dataclass
+class MatchTermsBooleanExpr(QueryOpExpr[SemanticRefAccumulator]):
+    """Expression for matching terms in a boolean query.
+
+    Subclasses implement 'OR', 'OR MAX' and 'AND' logic.
+    """
+
+    get_scope_expr: "GetScopeExpr | None" = None
+
+    def begin_match(self, context: QueryEvalContext) -> None:
+        """Prepare for matching terms in the context by resetting some things."""
+        if self.get_scope_expr is not None:
+            context.text_ranges_in_scope = self.get_scope_expr.eval(context)
+        context.clear_matched_terms()
+
+
+@dataclass
+class MatchTermsOrExpr(MatchTermsBooleanExpr):
+    """Expression for matching terms with an OR condition."""
+
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
+        default_factory=list
+    )
+
+    def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
+        self.begin_match(context)
+        all_matches: SemanticRefAccumulator | None = None
+        for match_expr in self.term_expressions:
+            term_matches = match_expr.eval(context)
+            if term_matches:
+                if all_matches is None:
+                    all_matches = term_matches
+                else:
+                    all_matches.add_union(term_matches)
+        if all_matches is not None:
+            all_matches.calculate_total_score()
+        return all_matches or SemanticRefAccumulator()
+
+
+@dataclass
+class MatchTermsOrMaxExpr(MatchTermsOrExpr):
+    """Expression for matching terms with an OR condition and a maximum score."""
+
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
+        default_factory=list
+    )
+    get_scope_expr: "GetScopeExpr | None" = None
+
+    def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
+        matches = super().eval(context)
+        max_hit_count = matches.get_max_hit_count()
+        if max_hit_count > 1:
+            matches.select_with_hit_count(max_hit_count)
+        return matches
+
+
+@dataclass
+class MatchTermsAndExpr(MatchTermsBooleanExpr):
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
+        default_factory=list
+    )
+    get_scope_expr: "GetScopeExpr | None" = None
+
+    def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
+        self.begin_match(context)
+        all_matches: SemanticRefAccumulator | None = None
+        for match_expr in self.term_expressions:
+            term_matches = match_expr.eval(context)
+            if not term_matches:
+                if all_matches is not None:
+                    all_matches.clear_matches()
+                break
+            if all_matches is None:
+                all_matches = term_matches
+            else:
+                all_matches.intersect(term_matches)
+        if all_matches is not None:
+            all_matches.calculate_total_score()
+            all_matches.select_with_hit_count(len(self.term_expressions))
+        else:
+            all_matches = SemanticRefAccumulator()
+        return all_matches
+
+
+class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):
     """Expression for matching terms in a query.
 
     This class evaluates a query expression to accumulate matches
@@ -172,29 +274,29 @@ class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None]):
 
     def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator | None:
         matches = SemanticRefAccumulator()
-        self._accumulate_matches(context, matches)
+        self.accumulate_matches(context, matches)
         if len(matches) > 0:
             return matches
         return None
 
-    # Subclass can override.
-    def _accumulate_matches(
+    @abstractmethod
+    def accumulate_matches(
         self, context: QueryEvalContext, matches: SemanticRefAccumulator
     ) -> None:
-        return
+        raise NotImplementedError("Subclass must implement accumulate_matches")
+
+
+type ScoreBoosterType = Callable[
+    [SearchTerm, SemanticRef, ScoredSemanticRefOrdinal],
+    ScoredSemanticRefOrdinal,
+]
 
 
 class MatchSearchTermExpr(MatchTermExpr):
     def __init__(
         self,
         search_term: SearchTerm,
-        score_booster: (
-            Callable[
-                [SearchTerm, SemanticRef, ScoredSemanticRefOrdinal],
-                ScoredSemanticRefOrdinal,
-            ]
-            | None
-        ) = None,
+        score_booster: ScoreBoosterType | None = None,
     ) -> None:
         super().__init__()
         self.search_term = search_term
@@ -258,3 +360,154 @@ class MatchSearchTermExpr(MatchTermExpr):
                     term, semantic_refs, False, related_term.weight
                 )
                 context.matched_terms.add(related_term)
+
+
+class MatchPropertySearchTermExpr(MatchTermExpr):
+
+    def __init__(
+        self,
+        property_search_term: PropertySearchTerm,
+    ):
+        super().__init__()
+        self.property_search_term = property_search_term
+
+    def accumulate_matches(
+        self, context: QueryEvalContext, matches: SemanticRefAccumulator
+    ) -> None:
+        if isinstance(self.property_search_term.property_name, str):
+            self.accumulate_matches_for_property(
+                context,
+                self.property_search_term.property_name,
+                self.property_search_term.property_value,
+                matches,
+            )
+        else:
+            self.accumulate_matches_for_facets(
+                context,
+                self.property_search_term.property_name,
+                self.property_search_term.property_value,
+                matches,
+            )
+
+    def accumulate_matches_for_facets(
+        self,
+        context: QueryEvalContext,
+        property_name: SearchTerm,
+        property_value: SearchTerm,
+        matches: SemanticRefAccumulator,
+    ):
+        self.accumulate_matches_for_property(
+            context,
+            PropertyNames.FacetName.value,
+            property_name,
+            matches,
+        )
+        if not is_search_term_wildcard(property_value):
+            self.accumulate_matches_for_property(
+                context,
+                PropertyNames.FacetValue.value,
+                property_value,
+                matches,
+            )
+
+    def accumulate_matches_for_property(
+        self,
+        context: QueryEvalContext,
+        property_name: str,
+        property_value: SearchTerm,
+        matches: SemanticRefAccumulator,
+    ):
+        self.accumulate_matches_for_property_value(
+            context,
+            matches,
+            property_name,
+            property_value.term,
+        )
+        if property_value.related_terms:
+            for related_property_value in property_value.related_terms:
+                self.accumulate_matches_for_property_value(
+                    context,
+                    matches,
+                    property_name,
+                    property_value.term,
+                    related_property_value,
+                )
+
+    def accumulate_matches_for_property_value(
+        self,
+        context: QueryEvalContext,
+        matches: SemanticRefAccumulator,
+        property_name: str,
+        property_value: Term,
+        related_prop_val: Term | None = None,
+    ) -> None:
+        if related_prop_val is None:
+            if not context.matched_property_terms.has(property_name, property_value):
+                semantic_refs = self.lookup_property(
+                    context,
+                    property_name,
+                    property_value.text,
+                )
+                matches.add_term_matches(property_value, semantic_refs, True)
+                context.matched_property_terms.add(property_name, property_value)
+        else:
+            # To prevent over-counting, ensure this related_prop_val was not already used to match terms earlier
+            if not context.matched_property_terms.has(property_name, related_prop_val):
+                semantic_refs = self.lookup_property(
+                    context,
+                    property_name,
+                    related_prop_val.text,
+                )
+                # This will only consider semantic refs that were not already matched by this expression.
+                # In other words, if a semantic ref already matched due to the term 'novel',
+                # don't also match it because it matched the related term 'book'
+                matches.add_term_matches_if_new(
+                    property_value,
+                    semantic_refs,
+                    False,
+                    related_prop_val.weight,
+                )
+                context.matched_property_terms.add(property_name, related_prop_val)
+
+    def lookup_property(
+        self,
+        context: QueryEvalContext,
+        property_name: str,
+        property_value: str,
+    ) -> list[ScoredSemanticRefOrdinal] | None:
+        if context.property_index is not None:
+            return lookup_property_in_property_index(
+                context.property_index,
+                property_name,
+                property_value,
+                context.semantic_refs,
+                context.text_ranges_in_scope,
+            )
+
+
+class IQueryTextRangeSelector(Protocol):
+    """Protocol for a selector that can evaluate to a text range."""
+
+    def eval(
+        self,
+        context: QueryEvalContext,
+        semantic_refs: SemanticRefAccumulator | None = None,
+    ) -> TextRangeCollection | None:
+        """Evaluate the selector and return the text range."""
+        raise NotImplementedError("Subclass must implement eval")
+
+
+@dataclass
+class GetScopeExpr(QueryOpExpr[TextRangesInScope]):
+    """Expression for getting the scope of a query."""
+
+    range_selectors: list[IQueryTextRangeSelector]
+
+    def eval(self, context: QueryEvalContext) -> TextRangesInScope:
+        """Evaluate the expression and return the text ranges in scope."""
+        ranges_in_scope = TextRangesInScope()
+        for selector in self.range_selectors:
+            range_collection = selector.eval(context)
+            if range_collection is not None:
+                ranges_in_scope.add_text_ranges(range_collection)
+        return ranges_in_scope

@@ -1,22 +1,21 @@
 # knowpro
 
-**Experimental prototype**:
+**knowpro** is an **experimental sample code and prototype** working towards a shared understanding of the MVP for **Structured RAG**.
 
-- Working toward a shared understanding of the MVP for **structured RAG**.
-- This exploration takes ideas and issues discovered in previous iterations and applies/solves them holistically.
-- Earlier iterations (as used by current conversation memory and other examples), are in the [knowledge-processor](../knowledgeProcessor) package.
-- In active development with very frequent changes.
+**knowpro** is in **active** development with very _frequent_ changes.
 
-This is **sample code** only.
-
-**Goal**: early ideas that explore how to:
-
-- Use TypeChat to extract **_structured knowledge_** from conversations, transcripts and documents.
-- Implement a **Structured RAG**. The exploration includes ideas on how to:
-  - Index the extracted knowledge and source text for retrieval.
-  - Use TypeChat to generate **structured queries** for structured knowledge.
-  - Use structured objects to **_answer_** questions.
-  - Use structured indices to improve precision.
+- knowpro implements **Structured RAG**.
+  - Structured RAG first extracts **dense information** from text.
+  - This dense information includes **structured** information such as entities, actions, topics, and tabular data in data frames.
+  - This structured information is stored with suitable indexes that allow it to be:
+    - Searched and retrieved using **structured queries**.
+    - Enumerated and filtered using API calls
+    - Retrieved information can also be used to retrieve the source text it was originally found in.
+  - Indexes are updated incrementally, on the fly or in the background.
+- knowpro also explores:
+  - How to translate **natural language user requests** to structured queries.
+  - How to use retrieved structured objects and their source text (as needed) to generate **answers** to user requests.
+- Earlier iterations of structured RAG (as used by current conversation memory and other examples), are in the [knowledge-processor](../knowledgeProcessor) package.
 
 ## Trademarks
 

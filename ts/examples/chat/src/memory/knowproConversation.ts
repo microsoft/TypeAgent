@@ -1,0 +1,171 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import {
+    arg,
+    argBool,
+    argNum,
+    CommandHandler,
+    CommandMetadata,
+    InteractiveIo,
+    parseNamedArguments,
+    StopWatch,
+} from "interactive-app";
+import { KnowProPrinter } from "./knowproPrinter.js";
+import * as cm from "conversation-memory";
+import path from "path";
+
+import { KnowProContext } from "./knowproMemory.js";
+import { ensureDir } from "typeagent";
+import chalk from "chalk";
+
+export type KnowProChatContext = {
+    printer: KnowProPrinter;
+    conversationMemory?: cm.ConversationMemory | undefined;
+    basePath: string;
+    defaultName: string;
+};
+
+export async function createKnowproConversationCommands(
+    kpContext: KnowProContext,
+    commands: Record<string, CommandHandler>,
+) {
+    const context: KnowProChatContext = {
+        printer: kpContext.printer,
+        basePath: path.join(kpContext.basePath, "chat"),
+        defaultName: "default",
+    };
+
+    await ensureDir(context.basePath);
+
+    commands.kpCmLoad = cmLoad;
+    commands.kpCmRemember = cmRemember;
+    commands.kpCmRecall = cmRecall;
+    commands.kpCmHistory = cmHistory;
+
+    function cmRememberDef(): CommandMetadata {
+        return {
+            description: "Add to conversation memory",
+            args: {
+                text: arg("Memory in natural language"),
+            },
+        };
+    }
+    commands.kpCmRemember.metadata = cmRememberDef();
+    async function cmRemember(args: string[], io: InteractiveIo) {
+        const namedArgs = parseNamedArguments(args, cmRememberDef());
+        const memory = await ensureLoaded();
+        const msgText = namedArgs.text;
+
+        context.printer.writeLine("Remembering");
+        const result = await memory.addMessage(
+            new cm.ConversationMessage(msgText),
+        );
+        if (!result.success) {
+            context.printer.writeError(result.message);
+            return;
+        }
+        context.printer.writeLine("Done");
+    }
+
+    function cmRecallDef(): CommandMetadata {
+        return {
+            description: "Recall information from conversation memory",
+            args: {
+                query: arg("Recall with this natural language query"),
+            },
+        };
+    }
+    commands.kpCmRecall.metadata = cmRecallDef();
+    async function cmRecall(args: string[]) {
+        const namedArgs = parseNamedArguments(args, cmRecallDef());
+        const memory = await ensureLoaded();
+        const answerResult = await memory.getAnswerFromLanguage(
+            namedArgs.query,
+        );
+        if (!answerResult.success) {
+            context.printer.writeError(answerResult.message);
+            return;
+        }
+        for (const [searchResult, answerResponse] of answerResult.data) {
+            context.printer.writeInColor(
+                chalk.cyan,
+                searchResult.rawSearchQuery!,
+            );
+            context.printer.writeAnswer(answerResponse);
+        }
+    }
+
+    function loadCmDef(): CommandMetadata {
+        return {
+            description: "Load or Create a conversation memory",
+            options: {
+                name: arg("Conversation name", context.defaultName),
+                createNew: argBool("Create new", false),
+            },
+        };
+    }
+    commands.kpCmLoad.metadata = loadCmDef();
+    async function cmLoad(args: string[]) {
+        const namedArgs = parseNamedArguments(args, loadCmDef());
+
+        const clock = new StopWatch();
+        clock.start();
+        context.conversationMemory = await cm.createConversationMemory(
+            {
+                dirPath: context.basePath,
+                baseFileName: namedArgs.name,
+            },
+            namedArgs.createNew,
+        );
+        clock.stop();
+        context.printer.writeTiming(chalk.gray, clock);
+        kpContext.conversation = context.conversationMemory;
+    }
+
+    function cmHistoryDef(): CommandMetadata {
+        return {
+            description: "Show chat history",
+            options: {
+                numMessages: argNum("# of latest messages to display", 10),
+            },
+        };
+    }
+    commands.kpCmHistory.metadata = cmHistoryDef();
+    async function cmHistory(args: string[]) {
+        const namedArgs = parseNamedArguments(args, cmHistoryDef());
+        const memory = await ensureLoaded();
+        const messages = memory.messages;
+        const numMessages = Math.min(namedArgs.numMessages, messages.length);
+        // Print newest messages first
+        for (let i = numMessages - 1; i >= 0; --i) {
+            const message = await messages.get(i);
+            context.printer.writeMessage(message);
+            context.printer.writeLine();
+        }
+    }
+
+    async function ensureLoaded(): Promise<cm.ConversationMemory> {
+        if (!context.conversationMemory) {
+            context.conversationMemory = await loadChat(
+                context.defaultName,
+                false,
+            );
+        }
+        return context.conversationMemory;
+    }
+
+    async function loadChat(
+        name: string,
+        createNew: boolean,
+    ): Promise<cm.ConversationMemory> {
+        return cm.createConversationMemory(
+            {
+                dirPath: context.basePath,
+                baseFileName: name,
+            },
+            createNew,
+        );
+    }
+    return;
+}

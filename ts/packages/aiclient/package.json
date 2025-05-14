@@ -16,7 +16,8 @@
   },
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/test"
   ],
   "scripts": {
     "build": "npm run tsc",
@@ -29,7 +30,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/identity": "4.2.1",
+    "@azure/identity": "^4.9.1",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "telemetry": "workspace:*",

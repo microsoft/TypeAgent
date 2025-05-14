@@ -7,6 +7,7 @@ import {
     AppAgent,
     SessionContext,
     ActionResult,
+    AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 import { PlanViewAction } from "./planViewActionSchema.js";
 import { ChildProcess, fork } from "child_process";
@@ -24,8 +25,9 @@ export function instantiate(): AppAgent {
 }
 
 type PlanViewActionContext = {
-    currentFileName: string | undefined;
-    viewProcess: ChildProcess | undefined;
+    currentFileName?: string | undefined;
+    viewProcess?: ChildProcess | undefined;
+    localHostPort: number;
 };
 
 async function executePlanViewAction(
@@ -43,8 +45,16 @@ async function PlanViewValidateWildcardMatch(
     return true;
 }
 
-async function initializePlanViewContext() {
-    return {};
+async function initializePlanViewContext(
+    settings?: AppAgentInitSettings,
+): Promise<PlanViewActionContext> {
+    const localHostPort = settings?.localHostPort;
+    if (localHostPort === undefined) {
+        throw new Error("Local view port not assigned.");
+    }
+    return {
+        localHostPort,
+    };
 }
 
 async function updatePlanViewContext(
@@ -53,7 +63,9 @@ async function updatePlanViewContext(
 ): Promise<void> {
     if (enable) {
         if (!context.agentContext.viewProcess) {
-            context.agentContext.viewProcess = await createViewServiceHost();
+            context.agentContext.viewProcess = await createViewServiceHost(
+                context.agentContext.localHostPort,
+            );
         }
     } else {
         // shut down service
@@ -79,7 +91,7 @@ async function handlePlanViewAction(
     return result;
 }
 
-export async function createViewServiceHost() {
+export async function createViewServiceHost(port: number) {
     let timeoutHandle: NodeJS.Timeout;
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
@@ -99,7 +111,7 @@ export async function createViewServiceHost() {
                     ),
                 );
 
-                const childProcess = fork(expressService);
+                const childProcess = fork(expressService, [port.toString()]);
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {

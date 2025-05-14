@@ -17,7 +17,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/test"
   ],
   "scripts": {
     "build": "npm run tsc",
@@ -27,7 +28,7 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "@azure/identity": "4.2.1",
+    "@azure/identity": "^4.9.1",
     "@azure/identity-cache-persistence": "^1.1.1",
     "@azure/logger": "^1.1.0",
     "@microsoft/microsoft-graph-client": "^3.0.7",

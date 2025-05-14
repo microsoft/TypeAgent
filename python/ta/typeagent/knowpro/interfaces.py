@@ -74,7 +74,7 @@ class ScoredMessageOrdinal:
 
 
 class ITermToSemanticRefIndex(Protocol):
-    def get_terms(self) -> Sequence[str]:
+    def get_terms(self) -> list[str]:
         raise NotImplementedError
 
     def add_term(
@@ -303,7 +303,7 @@ class IPropertyToSemanticRefIndex(Protocol):
 
     def lookup_property(
         self, property_name: str, value: str
-    ) -> Sequence[ScoredSemanticRefOrdinal] | None:
+    ) -> list[ScoredSemanticRefOrdinal] | None:
         raise NotImplementedError
 
 
@@ -328,7 +328,7 @@ class ITimestampToTextRangeIndex(Protocol):
 
 
 class ITermToRelatedTerms(Protocol):
-    def lookup_term(self, text: str) -> Sequence[Term] | None:
+    def lookup_term(self, text: str) -> list[Term] | None:
         raise NotImplementedError
 
 
@@ -343,7 +343,7 @@ class ITermToRelatedTermsFuzzy(Protocol):
         text: str,
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> Sequence[Term]:
+    ) -> list[Term]:
         raise NotImplementedError
 
     async def lookup_terms(
@@ -351,7 +351,7 @@ class ITermToRelatedTermsFuzzy(Protocol):
         text_array: Sequence[str],
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> Sequence[Sequence[Term]]:
+    ) -> list[Sequence[Term]]:
         raise NotImplementedError
 
 
@@ -415,13 +415,13 @@ class IConversationThreads(Protocol):
         thread_description: str,
         max_matches: int | None = None,
         threshold_score: float | None = None,
-    ) -> Sequence[ScoredThreadOrdinal] | None:
+    ) -> list[ScoredThreadOrdinal] | None:
         raise NotImplementedError
 
-    def serialize(self) -> "ConversationThreadData":
+    def serialize(self) -> "ConversationThreadData[ThreadDataItem]":
         raise NotImplementedError
 
-    def deserialize(self, data: "ConversationThreadData") -> None:
+    def deserialize(self, data: "ConversationThreadData[ThreadDataItem]") -> None:
         raise NotImplementedError
 
 
@@ -661,7 +661,7 @@ class MessageTextIndexData(TypedDict):
 
 class ConversationDataWithIndexes[TMessageData](ConversationData[TMessageData]):
     relatedTermsIndexData: NotRequired[TermsToRelatedTermsIndexData | None]
-    threadData: NotRequired[ConversationThreadData | None]
+    threadData: NotRequired[ConversationThreadData[ThreadDataItem] | None]
     messageIndexData: NotRequired[MessageTextIndexData | None]
 
 
@@ -760,8 +760,14 @@ class ICollection[T, TOrdinal](IReadonlyCollection[T, TOrdinal], Protocol):
     def is_persistent(self) -> bool:
         raise NotImplementedError
 
-    def append(self, *items: T) -> None:
+    def append(self, item: T) -> None:
         raise NotImplementedError
+
+    def extend(self, items: Iterable[T]) -> None:
+        """Append multiple items to the collection."""
+        # The default implementation just calls append for each item.
+        for item in items:
+            self.append(item)
 
 
 class IMessageCollection[TMessage: IMessage](

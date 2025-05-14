@@ -13,9 +13,11 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:agent:montage:route");
 const app: Express = express();
-const portBase = process.env.PORT ? parseInt(process.env.PORT) : 9001;
-const montagePortIndex = 1;
-const port = portBase + montagePortIndex;
+
+const port = parseInt(process.argv[2]);
+if (isNaN(port)) {
+    throw new Error("Port must be a number");
+}
 
 // configurable folders for securing folder access. Is populated based on available indexes
 // but can be customized further here
@@ -192,9 +194,11 @@ app.get("/events", (req, res) => {
     clients.push(res);
 
     // drain any messages in the message queue
-    while (messageQueue.length > 0) {
-        sendDataToClients(messageQueue.shift());
-    }
+    setTimeout(() => {
+        while (messageQueue.length > 0) {
+            sendDataToClients(messageQueue.shift());
+        }
+    }, 100);
 
     req.on("close", () => {
         clients = clients.filter((client) => client !== res);

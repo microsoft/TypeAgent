@@ -27,6 +27,29 @@ export default {
         buildResources: "build",
         output: "dist",
     },
+    files: [
+        // For some reason, electron-builder only process "!" and FileSet for node modules.
+        {
+            filter: [
+                "**/*",
+                // Ignore all build artifacts
+                "!**/*.tsbuildinfo",
+                "!**/*.done.build.log",
+                // source map doesn't work in asar anyways
+                "!**/*.?(c|m)@(t|j)s.map",
+                // type definitions files is not needed, but keep the .ts files for schemas for now
+                "!**/*.d.?(c|m)ts",
+                // Filter native module for platform and arch.
+                "!node_modules/koffi/build/koffi",
+                "node_modules/koffi/build/koffi/${platform}_${arch}",
+                `!node_modules/@azure/msal-node-runtime/dist/${arch === "ia32" ? "x64" : "x86"}`,
+                "!node_modules/@azure/msal-node-extensions/bin",
+                "node_modules/@azure/msal-node-extensions/bin/${arch}",
+                "!node_modules/@img",
+                "node_modules/@img/sharp*-${platform}*-${arch}/**/*",
+            ],
+        },
+    ],
     asarUnpack: [
         // electron can't load the browser extension from the ASAR
         "node_modules/browser-typeagent/dist/electron/**/*",

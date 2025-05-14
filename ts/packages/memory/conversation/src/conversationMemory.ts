@@ -9,6 +9,7 @@ import registerDebug from "debug";
 import { error, Result, success } from "typechat";
 import {
     createMemorySettings,
+    IndexFileSettings,
     Memory,
     MemorySettings,
     Message,
@@ -83,7 +84,7 @@ export class ConversationMessageMeta extends MessageMetadata {
 export class ConversationMessage extends Message<ConversationMessageMeta> {
     constructor(
         messageText: string | string[],
-        metadata: ConversationMessageMeta,
+        metadata: ConversationMessageMeta = new ConversationMessageMeta(),
         tags: string[] = [],
         /**
          * Any pre-extracted knowledge for this message.
@@ -106,6 +107,11 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
 
 export type ConversationMemorySettings = MemorySettings;
 
+/**
+ * A memory of conversation messages {@link ConversationMessage}
+ * Extends the {@link Memory} class with functionality specific to Conversations
+ * @see {@link Memory} for base methods such as search and answer.
+ */
 export class ConversationMemory
     extends Memory<ConversationMemorySettings, ConversationMessage>
     implements kp.IConversation<ConversationMessage>
@@ -139,6 +145,11 @@ export class ConversationMemory
         return this;
     }
 
+    /**
+     * Add a new conversation message to this conversation memory
+     * @param {ConversationMessage} message
+     * @returns
+     */
     public async addMessage(
         message: ConversationMessage,
     ): Promise<Result<kpLib.KnowledgeResponse>> {
@@ -171,7 +182,7 @@ export class ConversationMemory
         try {
             this.beginIndexing();
 
-            kp.addToConversationIndex(
+            await kp.addToConversationIndex(
                 this,
                 this.settings.conversationSettings,
                 messageOrdinalStartAt,
@@ -200,16 +211,6 @@ export class ConversationMemory
             message,
             callback: completionCallback,
         });
-    }
-
-    public async selectFromConversation(
-        selectExpr: kp.SearchSelectExpr,
-    ): Promise<kp.ConversationSearchResult | undefined> {
-        return kp.searchConversation(
-            this,
-            selectExpr.searchTermGroup,
-            selectExpr.when,
-        );
     }
 
     public async waitForPendingTasks(): Promise<void> {
@@ -366,6 +367,28 @@ export class ConversationMemory
         this.settings.conversationSettings.semanticRefIndexSettings.autoExtractKnowledge =
             false;
     }
+}
+
+export async function createConversationMemory(
+    fileSettings: IndexFileSettings,
+    createNew: boolean,
+): Promise<ConversationMemory> {
+    let cm: ConversationMemory | undefined;
+    if (createNew) {
+        await kp.removeConversationData(
+            fileSettings.dirPath,
+            fileSettings.baseFileName,
+        );
+    }
+    cm = await ConversationMemory.readFromFile(
+        fileSettings.dirPath,
+        fileSettings.baseFileName,
+    );
+    if (!cm) {
+        cm = new ConversationMemory();
+    }
+    cm.settings.fileSaveSettings = fileSettings;
+    return cm;
 }
 
 export type ConversationTaskCallback =

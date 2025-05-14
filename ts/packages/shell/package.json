@@ -14,7 +14,8 @@
   "main": "./out/main/index.js",
   "files": [
     "out",
-    "package.json"
+    "package.json",
+    "src/**/*ActionSchema*"
   ],
   "scripts": {
     "build": "concurrently npm:prepare-vite npm:build:electron:esm",
@@ -40,18 +41,18 @@
     "shell:smoke": "npx playwright test simple.spec.ts",
     "shell:test": "npx playwright test",
     "start": "npm run prepare-vite && electron-vite preview -- --env ../../.env",
-    "start:linux": "./dist/linux-unpacked/typeagentshell",
-    "start:mac": "open ./dist/mac-arm64/TypeAgent\\ Shell.app",
-    "start:win": ".\\dist\\win-unpacked\\typeagentshell.exe",
+    "start:package": "run-script-os",
+    "start:package:linux": "./dist/linux-unpacked/typeagentshell",
+    "start:package:macos": "open ./dist/mac-arm64/TypeAgent\\ Shell.app",
+    "start:package:win32": ".\\dist\\win-unpacked\\typeagentshell.exe",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",
     "typecheck:web": "tsc -p tsconfig.web.json"
   },
   "dependencies": {
-    "@azure/identity": "^4.2.1",
+    "@azure/identity": "^4.9.1",
     "@azure/msal-node-extensions": "^1.5.0",
     "@electron-toolkit/preload": "^3.0.2",
-    "@fontsource/lato": "^5.2.5",
     "@typeagent/agent-sdk": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "agent-rpc": "workspace:*",
@@ -72,6 +73,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@fontsource/lato": "^5.2.5",
     "@playwright/test": "^1.52.0",
     "@types/debug": "^4.1.12",
     "concurrently": "^9.1.2",

@@ -16,6 +16,7 @@ import {
     ClientAction,
     AppAgentManifest,
     TypeAgentAction,
+    AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 
 import {
@@ -41,11 +42,13 @@ export function createAgentRpcServer(
 ) {
     const channel = channelProvider.createChannel(`agent:${name}`);
     const agentInvokeHandlers: AgentInvokeFunctions = {
-        async initializeAgentContext(): Promise<unknown> {
+        async initializeAgentContext(
+            settings?: AppAgentInitSettings,
+        ): Promise<unknown> {
             if (agent.initializeAgentContext === undefined) {
                 throw new Error("Invalid invocation of initializeAgentContext");
             }
-            const agentContext = await agent.initializeAgentContext?.();
+            const agentContext = await agent.initializeAgentContext?.(settings);
             return {
                 contextId: registerAgentContext(agentContext),
             };
@@ -331,6 +334,12 @@ export function createAgentRpcServer(
                     contextId,
                     name,
                     enable,
+                });
+            },
+            getSharedLocalHostPort: async (agentName: string) => {
+                return rpc.invoke("getSharedLocalHostPort", {
+                    contextId,
+                    agentName,
                 });
             },
             addDynamicAgent: async (
