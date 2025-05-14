@@ -6,8 +6,11 @@ import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {
+    BookReservationsModule,
+    BookSelectorButton,
     ProductDetailsHeroTile,
     ProductTile,
+    RestaurantResult,
     SearchInput,
     ShoppingCartButton,
     ShoppingCartDetails,
@@ -15,7 +18,7 @@ import {
 } from "./schema/pageComponents.mjs";
 import { ShoppingActions } from "./schema/userActions.mjs";
 import { ShoppingPlanActions } from "./schema/planActions.mjs";
-import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createActionResult, createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { createExecutionTracker } from "../planVisualizationClient.mjs";
 import { PageState } from "./schema/pageStates.mjs";
 
@@ -45,6 +48,9 @@ export async function handleCommerceAction(
             break;
         case "buyProduct":
             return await handleShoppingRequest(action);
+        case "searchForReservation":
+        case "selectReservation":
+            return await handleRestaurantAction(action, context);
     }
 
     async function getComponentFromPage(
@@ -209,9 +215,7 @@ export async function handleCommerceAction(
         const planVisualizationEndpoint = `http://localhost:${context.sessionContext.getSharedLocalHostPort("planVisualizer")}`;
 
         if (!planVisualizationEndpoint) {
-            throw new Error(
-                "Plan visualization endpoint not assigned. Please check your configuration.",
-            );
+           console.warn("Plan visualization endpoint not assigned. Please check your configuration.");
         }
         console.log("Plan visualizer: " + planVisualizationEndpoint);
 
@@ -336,4 +340,187 @@ Parameters: ${JSON.stringify(entry.action.parameters)}`;
     }
 
     return message;
+}
+
+export async function handleRestaurantAction(
+    action: ShoppingActions,
+    context: ActionContext<BrowserActionContext>,
+) {
+    if (!context.sessionContext.agentContext.browserConnector) {
+        throw new Error("No connection to browser session.");
+    }
+
+    const browser: BrowserConnector =
+        context.sessionContext.agentContext.browserConnector;
+
+    const agent = await createCommercePageTranslator("GPT_4_O_MINI");
+
+    switch (action.actionName) {
+        case "searchForReservation":
+            return await handleSearchForReservation(action);
+            break;
+        case "selectReservation":
+            return await handleSelectReservation(action);
+            break;
+    }
+
+    async function getComponentFromPage(
+        componentType: string,
+        selectionCondition?: string,
+    ) {
+        const htmlFragments = await browser.getHtmlFragments();
+        const timerName = `getting ${componentType} section`;
+
+        console.time(timerName);
+        const response = await agent.getPageComponentSchema(
+            componentType,
+            selectionCondition,
+            htmlFragments,
+            undefined,
+        );
+
+        if (!response.success) {
+            console.error(`Attempt to get ${componentType} failed`);
+            console.error(response.message);
+            return;
+        }
+
+        console.timeEnd(timerName);
+        return response.data;
+    }
+
+    async function searchOnWebsite(productName: string) {
+        const selector = (await getComponentFromPage(
+            "SearchInput",
+        )) as SearchInput;
+        const searchSelector = selector.cssSelector;
+
+        await browser.clickOn(searchSelector);
+        await browser.enterTextIn(productName, searchSelector);
+        await browser.clickOn(selector.submitButtonCssSelector);
+        await new Promise((r) => setTimeout(r, 400));
+        await browser.awaitPageLoad();
+    }
+
+    async function selectSearchResult(restaurantName: string) {
+        let request = `Search result: ${restaurantName}`;
+        const targetRestaurant = (await getComponentFromPage(
+            "RestaurantResult",
+            request,
+        )) as RestaurantResult;
+
+        await browser.clickOn(targetRestaurant.detailsLinkCssSelector);
+        await new Promise((r) => setTimeout(r, 200));
+        await browser.awaitPageLoad();
+    }
+
+
+    function generateBookingMessage(slots: BookSelectorButton[]): string {
+    const times = slots
+        .map(slot => slot.time)
+        .filter((time): time is string => Boolean(time));
+
+    if (times.length === 0) {
+        return "Sorry, there are no available tables at the moment.";
+    }
+
+    const formattedTimes = times.map(formatTime);
+
+    const timePhrase = formatTimeList(formattedTimes);
+    const countPhrase = `I found ${times.length} table${times.length > 1 ? 's' : ''} available.`;
+
+    return `${countPhrase} You can dine at ${timePhrase}. Which time should I reserve?`;
+}
+
+function formatTime(time: string): string {
+    // Assumes input like "18:00" -> "6:00pm"
+    const [hourStr, minuteStr] = time.split(':');
+    let hour = parseInt(hourStr, 10);
+    const minute = minuteStr.padStart(2, '0');
+    //const ampm = hour >= 12 ? 'pm' : 'am';
+    hour = hour % 12 || 12;
+    // return `${hour}:${minute}${ampm}`;
+    return `${hour}:${minute}`;
+}
+
+function formatTimeList(times: string[]): string {
+    if (times.length === 1) {
+        return times[0];
+    } else if (times.length === 2) {
+        return `${times[0]} or ${times[1]}`;
+    } else {
+        const allButLast = times.slice(0, -1).join(', ');
+        const last = times[times.length - 1];
+        return `${allButLast}, or ${last}`;
+    }
+}
+
+    async function handleSearchForReservation(action: any) {
+        await searchOnWebsite(action.parameters.restaurantName);
+        await selectSearchResult(action.parameters.restaurantName);
+
+        const reservationDraft = {
+            numberOfPeople: action.parameters.numberOfPeople,
+            time: action.parameters.time,
+            restaurantName: action.parameters.restaurantName,
+        };
+
+        let additionalInstructions = [
+            `Current reservation data: ${JSON.stringify(reservationDraft)}`,
+        ];
+
+        const reservationInfo = (await getComponentFromPage(
+            "BookReservationsModule",
+        )) as BookReservationsModule;
+
+        let confirmationMessage;
+        if (reservationInfo &&  reservationInfo.availableTimeSlots && reservationInfo.availableTimeSlots.length > 0) {
+            confirmationMessage = generateBookingMessage(reservationInfo.availableTimeSlots);
+              additionalInstructions.push(
+            `If the user selects a time slot, the next action should be "selectReservation"`,
+        );
+        } else {
+            confirmationMessage = "I did not find an available table at the selected time. Please select a different day or time.";
+        }
+
+            context.actionIO.appendDisplay({
+                    type: "text",
+                    speak: true,
+                    content: confirmationMessage,
+                });
+        
+                additionalInstructions.push(
+            `The assistant asked the user: ${confirmationMessage}`,
+        );
+                const result = createActionResultNoDisplay(confirmationMessage);                
+                result.additionalInstructions = additionalInstructions;
+            
+                result.entities;
+                return result;
+    }
+
+    async function handleSelectReservation(action: any) {
+        await searchOnWebsite(action.parameters.restaurantName);
+        await selectSearchResult(action.parameters.restaurantName);
+
+        const reservationInfo = (await getComponentFromPage(
+            "BookReservationsModule",
+        )) as BookReservationsModule;
+
+        let message = `Did not find target time in available slots`;
+
+        if (reservationInfo && reservationInfo.availableTimeSlots && reservationInfo.availableTimeSlots.length >0) {
+            const slots = reservationInfo.availableTimeSlots;
+            const targetSlot = slots.find(slot => slot.time === action.parameters.time);
+            if(targetSlot){
+                await browser.clickOn(targetSlot.cssSelector);
+                await new Promise((r) => setTimeout(r, 200));
+                // await browser.awaitPageLoad();
+
+                message = "Selected booking time";
+            }
+        }
+
+        return createActionResult(message);
+    }
 }
