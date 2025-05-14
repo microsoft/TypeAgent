@@ -26,7 +26,8 @@
   },
   "files": [
     "dist",
-    "!dist/test"
+    "!dist/test",
+    "src/**/*ActionSchema*"
   ],
   "scripts": {
     "build": "npm run tsc",

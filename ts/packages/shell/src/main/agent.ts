@@ -27,6 +27,7 @@ import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { installAndRestart, updateHandlerTable } from "./commands/update.js";
 import { isProd } from "./index.js";
+import { fileURLToPath } from "node:url";
 
 export type ShellContext = {
     shellWindow: ShellWindow;
@@ -37,7 +38,9 @@ const config: AppAgentManifest = {
     description: "Shell",
     schema: {
         description: "Graphical user interface (shell) for the user.",
-        schemaFile: "../shell/src/main/shellActionSchema.ts",
+        schemaFile: fileURLToPath(
+            new URL("../../src/main/shellActionSchema.ts", import.meta.url),
+        ),
         schemaType: "ShellAction",
     },
 };
