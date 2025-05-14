@@ -261,31 +261,77 @@ export interface TextRange {
     end?: TextLocation | undefined;
 }
 
+/**
+ * Represents a date range.
+ */
 export type DateRange = {
+    /**
+     * The start date of the range (inclusive).
+     */
     start: Date;
-    // Inclusive
+    /**
+     * The (optional) end date of the range (inclusive).
+     */
     end?: Date | undefined;
 };
 
+/**
+ * Represents a term with optional weighting.
+ */
 export type Term = {
+    /**
+     * The text of the term.
+     */
     text: string;
     /**
-     * Optional weighting for these matches
+     * Optional weighting for any matches for this term
      */
     weight?: number | undefined;
 };
 
+/**
+ * Represents scored knowledge.
+ * Scored knowledge is typically returned by search APIs
+ */
 export type ScoredKnowledge = {
+    /**
+     * Type of knowledge.
+     */
     knowledgeType: KnowledgeType;
+    /**
+     * The actual knowledge object.
+     */
     knowledge: Knowledge;
+    /**
+     * Score associated with the knowledge.
+     */
     score: number;
 };
 
+/**
+ * Interface for conversation secondary indexes.
+ * {@link IConversation}
+ */
 export interface IConversationSecondaryIndexes {
+    /**
+     * Index mapping properties to semantic references.
+     */
     propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
+    /**
+     * Index mapping timestamps to text ranges.
+     */
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
+    /**
+     * Index mapping terms to related terms.
+     */
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
+    /**
+     * Optional threads in the conversation.
+     */
     threads?: IConversationThreads | undefined;
+    /**
+     * Optional index for message text.
+     */
     messageIndex?: IMessageTextIndex | undefined;
 }
 
@@ -293,48 +339,125 @@ export interface IConversationSecondaryIndexes {
  * Allows for faster retrieval of name, value properties
  */
 export interface IPropertyToSemanticRefIndex {
+    /**
+     * All property values
+     */
     getValues(): string[];
+    /**
+     * Adds a property name, value and the ordinal of the semantic ref this
+     * property was found in (associated with)
+     *
+     * @param propertyName - The name of the property.
+     * @param value - The value of the property.
+     * @param semanticRefOrdinal - The semantic reference ordinal or scored semantic reference ordinal.
+     */
     addProperty(
         propertyName: string,
         value: string,
         semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
+    /**
+     * Looks up a property (name, value) returning the associated scored semantic reference ordinals.
+     *
+     * @param propertyName - The name of the property.
+     * @param value - The value of the property.
+     * @returns An array of scored semantic reference ordinals or undefined if the property is not found.
+     */
     lookupProperty(
         propertyName: string,
         value: string,
     ): ScoredSemanticRefOrdinal[] | undefined;
 }
 
+/**
+ * Represents a timestamped text range.
+ */
 export type TimestampedTextRange = {
+    /**
+     * The timestamp associated with the text range.
+     */
     timestamp: string;
+    /**
+     * The text range.
+     */
     range: TextRange;
 };
 
 /**
- * Return text ranges in the given date range
+ * Interface for timestamp to text range index.
+ * Allows for retrieval of text ranges within a given date range.
  */
 export interface ITimestampToTextRangeIndex {
+    /**
+     * Adds a message ordinal with the given timestamp
+     * The message ordinal represents a {@link TextLocation} {messageOrdinal}
+     * @param messageOrdinal - The ordinal of the message.
+     * @param timestamp - The timestamp to add.
+     * @returns True if the timestamp was added successfully, false otherwise.
+     */
     addTimestamp(messageOrdinal: MessageOrdinal, timestamp: string): boolean;
+    /**
+     * Add multiple {messageOrdinal, timestamp} pairs
+     * @param messageTimestamps
+     */
     addTimestamps(
         messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult;
+    /**
+     * Looks up text ranges within a given date range.
+     *
+     * @param dateRange - The date range to look up.
+     * @returns An array of timestamped text ranges.
+     */
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
+/**
+ * Returns related terms for a given term
+ * This is ideal for local synonym and other tables
+ */
 export interface ITermToRelatedTerms {
+    /**
+     * Lookup terms related to the given term text
+     * @param text
+     */
     lookupTerm(text: string): Term[] | undefined;
 }
 
+/**
+ * An index that maintains fuzzy (approximate) relationships between terms
+ * The fuzzy relationship may be determined dynamically
+ * Given a term, can return terms approximately related to it.
+ */
 export interface ITermToRelatedTermsFuzzy {
+    /**
+     * Add a term to the index.
+     * @param terms
+     * @param eventHandler
+     */
     addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult>;
+    /**
+     * Looks up a term and retrieves related terms
+     *
+     * @param text - The text of the term to look up.
+     * @param maxMatches - Optional maximum number of matches to retrieve.
+     * @param thresholdScore - Optional threshold similarity score for matches.
+     * @returns A promise that resolves to an array of related terms.
+     */
     lookupTerm(
         text: string,
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<Term[]>;
+    /**
+     * Looks up terms in a batch
+     * @param textArray
+     * @param maxMatches
+     * @param thresholdScore
+     */
     lookupTerms(
         textArray: string[],
         maxMatches?: number,
@@ -342,8 +465,17 @@ export interface ITermToRelatedTermsFuzzy {
     ): Promise<Term[][]>;
 }
 
+/**
+ * Interface for term to related terms index.
+ */
 export interface ITermToRelatedTermsIndex {
+    /**
+     * Return the alias index, if available
+     */
     get aliases(): ITermToRelatedTerms | undefined;
+    /**
+     * Return a fuzzy index, if available
+     */
     get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
 }
 
