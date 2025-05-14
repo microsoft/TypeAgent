@@ -1,4 +1,0 @@
-# Copy Episode_53_AdrianTchaikovsky.txt from test\data
-
-# Index
-@kpPodcastImport --filePath "C:\data\testChat\knowpro\Episode_53_AdrianTchaikovsky.txt" --maxMessages 2

@@ -244,5 +244,6 @@ export async function createKnowproEmailCommands(
             context.email = undefined;
         }
     }
+
     return;
 }

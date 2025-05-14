@@ -1,6 +1,13 @@
 // Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
+/**
+ * ===============================================
+ * Memory and other experiments with knowledge-processor package
+ * For knowpro, see {@link ./knowproMemory.ts}
+ * ===============================================
+ */
+
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
 import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
@@ -59,7 +66,11 @@ export type Models = {
     embeddingModelSmall?: TextEmbeddingModel | undefined;
 };
 
-export type ChatContext = {
+/**
+ * Context for knowledge-processor based experiments
+ * See files named knowpro* for new version
+ */
+export type KnowledgeProcessorContext = {
     storePath: string;
     statsPath: string;
     printer: ChatMemoryPrinter;
@@ -76,7 +87,7 @@ export type ChatContext = {
     conversation: knowLib.conversation.Conversation;
     conversationManager: knowLib.conversation.ConversationManager;
     searcher: knowLib.conversation.ConversationSearchProcessor;
-    searchMemory?: knowLib.conversation.ConversationManager;
+    searchMemory?: knowLib.conversation.ConversationManager | undefined;
     emailMemory: knowLib.conversation.ConversationManager;
     podcastMemory: knowLib.conversation.ConversationManager;
     imageMemory: knowLib.conversation.ConversationManager;
@@ -91,7 +102,7 @@ export enum ReservedConversationNames {
     images = "images",
 }
 
-function isReservedConversation(context: ChatContext): boolean {
+function isReservedConversation(context: KnowledgeProcessorContext): boolean {
     return (
         context.conversationName === ReservedConversationNames.transcript ||
         context.conversationName === ReservedConversationNames.play ||
@@ -103,7 +114,7 @@ function isReservedConversation(context: ChatContext): boolean {
 }
 
 function getReservedConversation(
-    context: ChatContext,
+    context: KnowledgeProcessorContext,
     name: string,
 ): conversation.ConversationManager | undefined {
     switch (name) {
@@ -148,9 +159,9 @@ export function createModels(): Models {
     return models;
 }
 
-export async function createChatMemoryContext(
+export async function createKnowledgeProcessorContext(
     completionCallback?: (req: any, resp: any) => void,
-): Promise<ChatContext> {
+): Promise<KnowledgeProcessorContext> {
     const storePath = "/data/testChat";
     const statsPath = path.join(storePath, "stats");
     await ensureDir(storePath);
@@ -182,7 +193,7 @@ export async function createChatMemoryContext(
         );
     const entityTopK = 100;
     const actionTopK = 16;
-    const context: ChatContext = {
+    const context: KnowledgeProcessorContext = {
         storePath,
         statsPath,
         printer: new ChatMemoryPrinter(getInteractiveIO()),
@@ -251,8 +262,10 @@ export function configureSearchProcessor(
 }
 
 export async function createSearchMemory(
-    context: ChatContext,
-): Promise<conversation.ConversationManager> {
+    context: KnowledgeProcessorContext,
+): Promise<conversation.ConversationManager | undefined> {
+    // Disabled by default
+    /*
     const conversationName = "search";
     const memory = await conversation.createConversationManager(
         {
@@ -266,10 +279,12 @@ export async function createSearchMemory(
     memory.searchProcessor.answers.settings.topK.entitiesTopK =
         context.entityTopK;
     return memory;
+    */
+    return undefined;
 }
 
 export async function loadConversation(
-    context: ChatContext,
+    context: KnowledgeProcessorContext,
     name: string,
     rootPath?: string,
 ): Promise<boolean> {
@@ -316,8 +331,9 @@ export async function loadConversation(
     return exists;
 }
 
-export async function runChatMemory(): Promise<void> {
-    let context = await createChatMemoryContext(captureTokenStats);
+// This creates both (knowledge-processor) and know-pro commands
+export async function runMemoryCommands(): Promise<void> {
+    let context = await createKnowledgeProcessorContext(captureTokenStats);
     let showTokenStats = false;
     let printer = context.printer;
     const commands: Record<string, CommandHandler> = {
@@ -344,9 +360,13 @@ export async function runChatMemory(): Promise<void> {
         tokenLog,
         copyConversation,
     };
+
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
     createImageCommands(context, commands);
+    //
+    // AND ALSO SET UP knowpro test commands
+    //
     await createKnowproCommands(context, commands);
     addStandardHandlers(commands);
 
@@ -375,7 +395,7 @@ export async function runChatMemory(): Promise<void> {
                 printer.writeLine("No matches");
             }
         } else {
-            printer.writeLine("No search history");
+            printer.writeLine("Search memory is not enabled");
         }
     }
 
