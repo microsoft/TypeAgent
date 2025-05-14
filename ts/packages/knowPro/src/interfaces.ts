@@ -5,9 +5,13 @@ import { conversation as kpLib } from "knowledge-processor";
 
 /**
  * A Knowledge Source is any object that returns knowledge
- * Knowledge is returned in the form of a KnowledgeResponse
+ * Knowledge is returned in the form of a KnowledgeResponse {@link kpLib.KnowledgeResponse}
  */
 export interface IKnowledgeSource {
+    /**
+     * Retrieves knowledge from the source.
+     * @returns {kpLib.KnowledgeResponse | undefined} The knowledge response or undefined if no knowledge is available.
+     */
     getKnowledge(): kpLib.KnowledgeResponse | undefined;
 }
 
@@ -16,8 +20,17 @@ export interface IKnowledgeSource {
  */
 export type MessageOrdinal = number;
 
+/**
+ * Metadata associated with a message.
+ */
 export interface IMessageMetadata {
+    /**
+     * The source ("sender/s") of the message
+     */
     readonly source?: string | string[] | undefined;
+    /**
+     * The dest ("recipients") of the message
+     */
     readonly dest?: string | string[] | undefined;
 }
 
@@ -26,26 +39,57 @@ export interface IMessageMetadata {
  * A Message contains one or more text chunks
  */
 export interface IMessage extends IKnowledgeSource {
-    // the text of the message, split into chunks
+    /**
+     * The text of the message, split into chunks
+     */
     textChunks: string[];
+    /**
+     * The (optional) timestamp of the message.
+     */
     timestamp?: string | undefined;
+    /**
+     * (Optional) tags associated with the message
+     */
     tags: string[];
+    /**
+     * (Future) Information about the deletion of the message.
+     */
     deletionInfo?: DeletionInfo | undefined;
-
+    /**
+     * Metadata associated with the message such as its source.
+     */
     metadata?: IMessageMetadata | undefined;
 }
 
+/**
+ * Represents a message ordinal with an associated score.
+ */
 export type ScoredMessageOrdinal = {
+    /**
+     * The ordinal number of the message.
+     */
     messageOrdinal: MessageOrdinal;
+    /**
+     * The score associated with the message.
+     */
     score: number;
 };
 
+/**
+ * (Future)
+ */
 export interface DeletionInfo {
     timestamp: string;
     reason?: string;
 }
 
+/**
+ * Types of knowledge objects {@link Knowledge}
+ */
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
+/**
+ * Knowledge objects
+ */
 export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 
 /**
@@ -53,42 +97,130 @@ export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
  */
 export type SemanticRefOrdinal = number;
 
+/**
+ * A semantic reference represents semantic knowledge that was extracted
+ * from a source text range
+ */
 export interface SemanticRef {
     semanticRefOrdinal: SemanticRefOrdinal;
+    /**
+     * Range of text where this semantic reference was found/extracted.
+     */
     range: TextRange;
+    /**
+     * Type of knowledge the reference points to.
+     */
     knowledgeType: KnowledgeType;
+    /**
+     * The actual knowledge object.
+     */
     knowledge: Knowledge;
 }
 
+/**
+ * Knowledge of type "topic"
+ */
 export interface Topic {
+    /**
+     * Text of the topic.
+     */
     text: string;
 }
 
+/**
+ * Tags
+ */
 export interface Tag {
+    /**
+     * Text of the tag.
+     */
     text: string;
 }
 
+/**
+ * A conversation is a sequence of messages
+ * The conversation can also store semantic refs {@link SemanticRef} that was found
+ * in the source text of the messages.
+ *
+ * Messages and semantic refs are indexed for retrieval.
+ *
+ * @template TMessage - Type of the message in the conversation.
+ */
 export interface IConversation<TMessage extends IMessage = IMessage> {
+    /**
+     * Name tag for the conversation.
+     */
     nameTag: string;
+    /**
+     * Array of tags associated with the conversation.
+     */
     tags: string[];
+    /**
+     * Collection of messages in the conversation.
+     */
     messages: IMessageCollection<TMessage>;
+    /**
+     * Collection of semantic references, if any.
+     */
     semanticRefs: ISemanticRefCollection | undefined;
+    /**
+     * Index mapping terms to semantic references.
+     */
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    /**
+     * Secondary indexes for the conversation.
+     */
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
+/**
+ * Represents a scored semantic reference ordinal.
+ */
 export type ScoredSemanticRefOrdinal = {
+    /**
+     * Ordinal number for the semantic reference.
+     */
     semanticRefOrdinal: SemanticRefOrdinal;
+    /**
+     * Score associated with the semantic reference.
+     */
     score: number;
 };
 
+/**
+ * Inverted Index from term to Semantic Refs {@link SemanticRef}
+ */
 export interface ITermToSemanticRefIndex {
+    /**
+     * Retrieves all terms in the index.
+     *
+     * @returns An array of terms.
+     */
     getTerms(): string[];
+    /**
+     * Adds a term with its associated semantic reference ordinal.
+     *
+     * @param term - The term to add.
+     * @param semanticRefOrdinal - The semantic reference ordinal or scored semantic reference ordinal.
+     * @returns The added term.
+     */
     addTerm(
         term: string,
         semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): string;
+    /**
+     * Removes a term with its associated semantic reference ordinal.
+     *
+     * @param term - The term to remove.
+     * @param semanticRefOrdinal - The semantic reference ordinal.
+     */
     removeTerm(term: string, semanticRefOrdinal: SemanticRefOrdinal): void;
+    /**
+     * Looks up a term and retrieves its associated scored semantic reference ordinals.
+     *
+     * @param term - The term to look up.
+     * @returns An array of scored semantic reference ordinals or undefined if the term is not found.
+     */
     lookupTerm(term: string): ScoredSemanticRefOrdinal[] | undefined;
 }
 
@@ -97,13 +229,19 @@ export interface ITermToSemanticRefIndex {
  * A message can contain one or more text chunks
  */
 export interface TextLocation {
-    // the ordinal of the message
+    /**
+     * The ordinal of the message.
+     */
     messageOrdinal: MessageOrdinal;
 
-    // [Optional] The ordinal index of the chunk within the message.
+    /**
+     * [Optional] The ordinal index of the chunk within the message.
+     */
     chunkOrdinal?: number;
 
-    // [Optional] The ordinal index of the character within the chunk.
+    /**
+     * [Optional] The ordinal index of the character within the chunk.
+     */
     charOrdinal?: number;
 }
 
@@ -113,9 +251,13 @@ export interface TextLocation {
  * If 'end' is undefined, the text range represents a point location, identified by 'start'
  */
 export interface TextRange {
-    // the start of the range
+    /**
+     * The start of the range.
+     */
     start: TextLocation;
-    // the (optional)end of the range  (exclusive)
+    /**
+     * The (optional) end of the range (exclusive).
+     */
     end?: TextLocation | undefined;
 }
 

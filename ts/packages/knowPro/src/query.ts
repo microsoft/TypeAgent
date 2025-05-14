@@ -58,6 +58,7 @@ import {
 } from "./message.js";
 
 export function isConversationSearchable(conversation: IConversation): boolean {
+    // TODO: also require secondary indices, once we have removed non-index based retrieval to test
     return (
         conversation.semanticRefIndex !== undefined &&
         conversation.semanticRefs !== undefined
