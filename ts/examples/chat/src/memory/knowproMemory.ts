@@ -395,7 +395,7 @@ export async function createKnowproCommands(
                 description ??
                 "Search current knowPro conversation by manually providing terms as arguments",
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 25),
+                maxToDisplay: argNum("Maximum matches to display", 100),
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
