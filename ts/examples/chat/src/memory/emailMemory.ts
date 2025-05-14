@@ -1,15 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * ===============================================
+ * Email memory experiments with knowledge-processor package
+ * For knowpro, see {@link ./knowproEmail.ts}
+ * ===============================================
+ */
+
 import path from "path";
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
 import { sqlite } from "memory-providers";
 import {
-    ChatContext,
+    KnowledgeProcessorContext,
     Models,
     ReservedConversationNames,
-} from "./chatMemory.js";
+} from "./knowledgeProcessorMemory.js";
 import {
     createWorkQueueFolder,
     dateTime,
@@ -95,7 +102,7 @@ export async function createEmailMemory(
 }
 
 export function createEmailCommands(
-    context: ChatContext,
+    context: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): void {
     commands.importEmail = importEmail;

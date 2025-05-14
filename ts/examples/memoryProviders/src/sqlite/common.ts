@@ -4,27 +4,12 @@
 import Database, * as sqlite from "better-sqlite3";
 import { ValueDataType, ValueType } from "knowledge-processor";
 import { removeFile } from "typeagent";
-import { createRequire } from "node:module";
-import path from "node:path";
 export type AssignedId<T> = {
     id: T;
     isNew: boolean;
 };
 
 export type BooleanRow = {};
-
-function getDbOptions() {
-    if (process?.versions?.electron !== undefined) {
-        return undefined;
-    }
-    const r = createRequire(import.meta.url);
-    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
-    const nativeBinding = path.join(
-        betterSqlitePath,
-        "../build/Release-Node/better_sqlite3.node",
-    );
-    return { nativeBinding };
-}
 
 export async function createDatabase(
     filePath: string,
@@ -33,7 +18,7 @@ export async function createDatabase(
     if (createNew) {
         await deleteDatabase(filePath);
     }
-    const db = new Database(filePath, getDbOptions());
+    const db = new Database(filePath);
     db.pragma("journal_mode = WAL");
     return db;
 }

@@ -2,34 +2,30 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import { runTests } from "./tests/test.js";
 import { runCodeChat } from "./codeChat/codeChat.js";
-import { runChatMemory } from "./memory/chatMemory.js";
-import { runCodeMemory } from "./codeChat/codeMemory.js";
+import { runMemoryCommands } from "./memory/knowledgeProcessorMemory.js";
+import { runCodeMemoryCommands } from "./codeChat/codeMemory.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
-let chatName = process.argv[2];
-if (chatName) {
+let areaName = process.argv[2];
+if (areaName) {
     process.argv.splice(2, 1);
 } else {
-    chatName = "memory";
+    areaName = "memory";
 }
-switch (chatName) {
+switch (areaName) {
     default:
-        console.log("Unknown chat type: " + chatName);
+        console.log("Unknown feature area name: " + areaName);
+        break;
+    case "memory":
+        await runMemoryCommands();
         break;
     case "code":
         await runCodeChat();
         break;
-    case "memory":
-        await runChatMemory();
-        break;
     case "codeMemory":
-        await runCodeMemory();
-        break;
-    case "tests":
-        await runTests();
+        await runCodeMemoryCommands();
         break;
 }

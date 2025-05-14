@@ -93,3 +93,20 @@ export function verifyMessagesEqual(m1: EmailMessage[], m2: EmailMessage[]) {
         verifyEmailHeadersEqual(m1[i].metadata, m2[i].metadata);
     }
 }
+
+export function verifyEmail(e1: email.Email) {
+    // Todo: make this more granular to check every possible field
+
+    expect(e1.from).toBeDefined();
+    verifyString(e1.from.address);
+    expect(e1.to).toBeDefined();
+    expect(e1.to?.length).toBeGreaterThan(0);
+    verifyString(e1.subject);
+    expect(e1.sentOn).toBeDefined();
+    verifyString(e1.body);
+}
+
+export function verifyString(value?: string) {
+    expect(value).toBeDefined();
+    expect(value!.length).toBeGreaterThan(0);
+}

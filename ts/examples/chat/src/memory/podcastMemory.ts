@@ -1,13 +1,20 @@
 // Copyright (c) Microsoft Corporation and Henry Lucco.
 // Licensed under the MIT License.
 
+/**
+ * ===============================================
+ * Podcast memory experiments with knowledge-processor package
+ * For knowpro, see {@link ./knowproMemory.ts}
+ * ===============================================
+ */
+
 import { conversation } from "knowledge-processor";
 import * as knowLib from "knowledge-processor";
 import {
-    ChatContext,
+    KnowledgeProcessorContext,
     Models,
     ReservedConversationNames,
-} from "./chatMemory.js";
+} from "./knowledgeProcessorMemory.js";
 import { sqlite } from "memory-providers";
 import { elastic } from "memory-providers";
 import {
@@ -103,7 +110,7 @@ export async function createPodcastMemory(
 }
 
 export function createPodcastCommands(
-    context: ChatContext,
+    context: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): void {
     commands.importPodcast = importPodcast;

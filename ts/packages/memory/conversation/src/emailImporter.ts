@@ -35,6 +35,12 @@ export async function importEmailFromMimeText(
     return email;
 }
 
+/**
+ * Very simple way to get the last response on a thread
+ * Consider your own if you want something more robust
+ * @param emailText
+ * @returns
+ */
 export function getLastResponseInEmailThread(emailText: string): string {
     const delimiters: string[] = [
         "From:",
@@ -50,7 +56,7 @@ export function getLastResponseInEmailThread(emailText: string): string {
     }
 
     let firstDelimiterAt = -1;
-    for (const delimiter in delimiters) {
+    for (const delimiter of delimiters) {
         let index = emailText.indexOf(delimiter);
         if (
             index >= 0 &&
@@ -60,7 +66,7 @@ export function getLastResponseInEmailThread(emailText: string): string {
         }
     }
 
-    if (firstDelimiterAt >= 0) {
+    if (firstDelimiterAt > 0) {
         return emailText.slice(0, firstDelimiterAt).trim();
     }
 

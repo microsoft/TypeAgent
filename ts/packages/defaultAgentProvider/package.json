@@ -14,6 +14,11 @@
   "exports": {
     ".": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "!dist/test",
+    "data"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
@@ -27,7 +32,6 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/msal-node-extensions": "^1.5.0",
     "@modelcontextprotocol/sdk": "^1.8.0",
     "@modelcontextprotocol/server-filesystem": "2025.1.14",
     "@typeagent/agent-sdk": "workspace:*",

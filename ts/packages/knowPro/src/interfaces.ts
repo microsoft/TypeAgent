@@ -5,9 +5,13 @@ import { conversation as kpLib } from "knowledge-processor";
 
 /**
  * A Knowledge Source is any object that returns knowledge
- * Knowledge is returned in the form of a KnowledgeResponse
+ * Knowledge is returned in the form of a KnowledgeResponse {@link kpLib.KnowledgeResponse}
  */
 export interface IKnowledgeSource {
+    /**
+     * Retrieves knowledge from the source.
+     * @returns {kpLib.KnowledgeResponse | undefined} The knowledge response or undefined if no knowledge is available.
+     */
     getKnowledge(): kpLib.KnowledgeResponse | undefined;
 }
 
@@ -16,8 +20,17 @@ export interface IKnowledgeSource {
  */
 export type MessageOrdinal = number;
 
+/**
+ * Metadata associated with a message.
+ */
 export interface IMessageMetadata {
+    /**
+     * The source ("sender/s") of the message
+     */
     readonly source?: string | string[] | undefined;
+    /**
+     * The dest ("recipients") of the message
+     */
     readonly dest?: string | string[] | undefined;
 }
 
@@ -26,26 +39,57 @@ export interface IMessageMetadata {
  * A Message contains one or more text chunks
  */
 export interface IMessage extends IKnowledgeSource {
-    // the text of the message, split into chunks
+    /**
+     * The text of the message, split into chunks
+     */
     textChunks: string[];
+    /**
+     * The (optional) timestamp of the message.
+     */
     timestamp?: string | undefined;
+    /**
+     * (Optional) tags associated with the message
+     */
     tags: string[];
+    /**
+     * (Future) Information about the deletion of the message.
+     */
     deletionInfo?: DeletionInfo | undefined;
-
+    /**
+     * Metadata associated with the message such as its source.
+     */
     metadata?: IMessageMetadata | undefined;
 }
 
+/**
+ * Represents a message ordinal with an associated score.
+ */
 export type ScoredMessageOrdinal = {
+    /**
+     * The ordinal number of the message.
+     */
     messageOrdinal: MessageOrdinal;
+    /**
+     * The score associated with the message.
+     */
     score: number;
 };
 
+/**
+ * (Future)
+ */
 export interface DeletionInfo {
     timestamp: string;
     reason?: string;
 }
 
+/**
+ * Types of knowledge objects {@link Knowledge}
+ */
 export type KnowledgeType = "entity" | "action" | "topic" | "tag";
+/**
+ * Knowledge objects
+ */
 export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
 
 /**
@@ -53,42 +97,130 @@ export type Knowledge = kpLib.ConcreteEntity | kpLib.Action | Topic | Tag;
  */
 export type SemanticRefOrdinal = number;
 
+/**
+ * A semantic reference represents semantic knowledge that was extracted
+ * from a source text range
+ */
 export interface SemanticRef {
     semanticRefOrdinal: SemanticRefOrdinal;
+    /**
+     * Range of text where this semantic reference was found/extracted.
+     */
     range: TextRange;
+    /**
+     * Type of knowledge the reference points to.
+     */
     knowledgeType: KnowledgeType;
+    /**
+     * The actual knowledge object.
+     */
     knowledge: Knowledge;
 }
 
+/**
+ * Knowledge of type "topic"
+ */
 export interface Topic {
+    /**
+     * Text of the topic.
+     */
     text: string;
 }
 
+/**
+ * Tags
+ */
 export interface Tag {
+    /**
+     * Text of the tag.
+     */
     text: string;
 }
 
+/**
+ * A conversation is a sequence of messages
+ * The conversation can also store semantic refs {@link SemanticRef} that was found
+ * in the source text of the messages.
+ *
+ * Messages and semantic refs are indexed for retrieval.
+ *
+ * @template TMessage - Type of the message in the conversation.
+ */
 export interface IConversation<TMessage extends IMessage = IMessage> {
+    /**
+     * Name tag for the conversation.
+     */
     nameTag: string;
+    /**
+     * Array of tags associated with the conversation.
+     */
     tags: string[];
+    /**
+     * Collection of messages in the conversation.
+     */
     messages: IMessageCollection<TMessage>;
+    /**
+     * Collection of semantic references, if any.
+     */
     semanticRefs: ISemanticRefCollection | undefined;
+    /**
+     * Index mapping terms to semantic references.
+     */
     semanticRefIndex?: ITermToSemanticRefIndex | undefined;
+    /**
+     * Secondary indexes for the conversation.
+     */
     secondaryIndexes?: IConversationSecondaryIndexes | undefined;
 }
 
+/**
+ * Represents a scored semantic reference ordinal.
+ */
 export type ScoredSemanticRefOrdinal = {
+    /**
+     * Ordinal number for the semantic reference.
+     */
     semanticRefOrdinal: SemanticRefOrdinal;
+    /**
+     * Score associated with the semantic reference.
+     */
     score: number;
 };
 
+/**
+ * Inverted Index from term to Semantic Refs {@link SemanticRef}
+ */
 export interface ITermToSemanticRefIndex {
+    /**
+     * Retrieves all terms in the index.
+     *
+     * @returns An array of terms.
+     */
     getTerms(): string[];
+    /**
+     * Adds a term with its associated semantic reference ordinal.
+     *
+     * @param term - The term to add.
+     * @param semanticRefOrdinal - The semantic reference ordinal or scored semantic reference ordinal.
+     * @returns The added term.
+     */
     addTerm(
         term: string,
         semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): string;
+    /**
+     * Removes a term with its associated semantic reference ordinal.
+     *
+     * @param term - The term to remove.
+     * @param semanticRefOrdinal - The semantic reference ordinal.
+     */
     removeTerm(term: string, semanticRefOrdinal: SemanticRefOrdinal): void;
+    /**
+     * Looks up a term and retrieves its associated scored semantic reference ordinals.
+     *
+     * @param term - The term to look up.
+     * @returns An array of scored semantic reference ordinals or undefined if the term is not found.
+     */
     lookupTerm(term: string): ScoredSemanticRefOrdinal[] | undefined;
 }
 
@@ -97,13 +229,19 @@ export interface ITermToSemanticRefIndex {
  * A message can contain one or more text chunks
  */
 export interface TextLocation {
-    // the ordinal of the message
+    /**
+     * The ordinal of the message.
+     */
     messageOrdinal: MessageOrdinal;
 
-    // [Optional] The ordinal index of the chunk within the message.
+    /**
+     * [Optional] The ordinal index of the chunk within the message.
+     */
     chunkOrdinal?: number;
 
-    // [Optional] The ordinal index of the character within the chunk.
+    /**
+     * [Optional] The ordinal index of the character within the chunk.
+     */
     charOrdinal?: number;
 }
 
@@ -113,37 +251,87 @@ export interface TextLocation {
  * If 'end' is undefined, the text range represents a point location, identified by 'start'
  */
 export interface TextRange {
-    // the start of the range
+    /**
+     * The start of the range.
+     */
     start: TextLocation;
-    // the (optional)end of the range  (exclusive)
+    /**
+     * The (optional) end of the range (exclusive).
+     */
     end?: TextLocation | undefined;
 }
 
+/**
+ * Represents a date range.
+ */
 export type DateRange = {
+    /**
+     * The start date of the range (inclusive).
+     */
     start: Date;
-    // Inclusive
+    /**
+     * The (optional) end date of the range (inclusive).
+     */
     end?: Date | undefined;
 };
 
+/**
+ * Represents a term with optional weighting.
+ */
 export type Term = {
+    /**
+     * The text of the term.
+     */
     text: string;
     /**
-     * Optional weighting for these matches
+     * Optional weighting for any matches for this term
      */
     weight?: number | undefined;
 };
 
+/**
+ * Represents scored knowledge.
+ * Scored knowledge is typically returned by search APIs
+ */
 export type ScoredKnowledge = {
+    /**
+     * Type of knowledge.
+     */
     knowledgeType: KnowledgeType;
+    /**
+     * The actual knowledge object.
+     */
     knowledge: Knowledge;
+    /**
+     * Score associated with the knowledge.
+     */
     score: number;
 };
 
+/**
+ * Interface for conversation secondary indexes.
+ * {@link IConversation}
+ */
 export interface IConversationSecondaryIndexes {
+    /**
+     * Index mapping properties to semantic references.
+     */
     propertyToSemanticRefIndex?: IPropertyToSemanticRefIndex | undefined;
+    /**
+     * Index mapping timestamps to text ranges.
+     */
     timestampIndex?: ITimestampToTextRangeIndex | undefined;
+    /**
+     * Index mapping terms to related terms.
+     */
     termToRelatedTermsIndex?: ITermToRelatedTermsIndex | undefined;
+    /**
+     * Optional threads in the conversation.
+     */
     threads?: IConversationThreads | undefined;
+    /**
+     * Optional index for message text.
+     */
     messageIndex?: IMessageTextIndex | undefined;
 }
 
@@ -151,48 +339,125 @@ export interface IConversationSecondaryIndexes {
  * Allows for faster retrieval of name, value properties
  */
 export interface IPropertyToSemanticRefIndex {
+    /**
+     * All property values
+     */
     getValues(): string[];
+    /**
+     * Adds a property name, value and the ordinal of the semantic ref this
+     * property was found in (associated with)
+     *
+     * @param propertyName - The name of the property.
+     * @param value - The value of the property.
+     * @param semanticRefOrdinal - The semantic reference ordinal or scored semantic reference ordinal.
+     */
     addProperty(
         propertyName: string,
         value: string,
         semanticRefOrdinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
     ): void;
+    /**
+     * Looks up a property (name, value) returning the associated scored semantic reference ordinals.
+     *
+     * @param propertyName - The name of the property.
+     * @param value - The value of the property.
+     * @returns An array of scored semantic reference ordinals or undefined if the property is not found.
+     */
     lookupProperty(
         propertyName: string,
         value: string,
     ): ScoredSemanticRefOrdinal[] | undefined;
 }
 
+/**
+ * Represents a timestamped text range.
+ */
 export type TimestampedTextRange = {
+    /**
+     * The timestamp associated with the text range.
+     */
     timestamp: string;
+    /**
+     * The text range.
+     */
     range: TextRange;
 };
 
 /**
- * Return text ranges in the given date range
+ * Interface for timestamp to text range index.
+ * Allows for retrieval of text ranges within a given date range.
  */
 export interface ITimestampToTextRangeIndex {
+    /**
+     * Adds a message ordinal with the given timestamp
+     * The message ordinal represents a {@link TextLocation} {messageOrdinal}
+     * @param messageOrdinal - The ordinal of the message.
+     * @param timestamp - The timestamp to add.
+     * @returns True if the timestamp was added successfully, false otherwise.
+     */
     addTimestamp(messageOrdinal: MessageOrdinal, timestamp: string): boolean;
+    /**
+     * Add multiple {messageOrdinal, timestamp} pairs
+     * @param messageTimestamps
+     */
     addTimestamps(
         messageTimestamps: [MessageOrdinal, string][],
     ): ListIndexingResult;
+    /**
+     * Looks up text ranges within a given date range.
+     *
+     * @param dateRange - The date range to look up.
+     * @returns An array of timestamped text ranges.
+     */
     lookupRange(dateRange: DateRange): TimestampedTextRange[];
 }
 
+/**
+ * Returns related terms for a given term
+ * This is ideal for local synonym and other tables
+ */
 export interface ITermToRelatedTerms {
+    /**
+     * Lookup terms related to the given term text
+     * @param text
+     */
     lookupTerm(text: string): Term[] | undefined;
 }
 
+/**
+ * An index that maintains fuzzy (approximate) relationships between terms
+ * The fuzzy relationship may be determined dynamically
+ * Given a term, can return terms approximately related to it.
+ */
 export interface ITermToRelatedTermsFuzzy {
+    /**
+     * Add a term to the index.
+     * @param terms
+     * @param eventHandler
+     */
     addTerms(
         terms: string[],
         eventHandler?: IndexingEventHandlers,
     ): Promise<ListIndexingResult>;
+    /**
+     * Looks up a term and retrieves related terms
+     *
+     * @param text - The text of the term to look up.
+     * @param maxMatches - Optional maximum number of matches to retrieve.
+     * @param thresholdScore - Optional threshold similarity score for matches.
+     * @returns A promise that resolves to an array of related terms.
+     */
     lookupTerm(
         text: string,
         maxMatches?: number,
         thresholdScore?: number,
     ): Promise<Term[]>;
+    /**
+     * Looks up terms in a batch
+     * @param textArray
+     * @param maxMatches
+     * @param thresholdScore
+     */
     lookupTerms(
         textArray: string[],
         maxMatches?: number,
@@ -200,8 +465,17 @@ export interface ITermToRelatedTermsFuzzy {
     ): Promise<Term[][]>;
 }
 
+/**
+ * Interface for term to related terms index.
+ */
 export interface ITermToRelatedTermsIndex {
+    /**
+     * Return the alias index, if available
+     */
     get aliases(): ITermToRelatedTerms | undefined;
+    /**
+     * Return a fuzzy index, if available
+     */
     get fuzzyIndex(): ITermToRelatedTermsFuzzy | undefined;
 }
 
@@ -284,7 +558,7 @@ export type KnowledgePropertyName =
 
 export type PropertySearchTerm = {
     /**
-     * PropertySearch terms let you matched named property, values
+     * PropertySearch terms let you match named property, values
      * - You can  match a well known property name (name("Bach") type("book"))
      * - Or you can provide a SearchTerm as a propertyName.
      *   E.g. to match hue(red)
@@ -293,6 +567,9 @@ export type PropertySearchTerm = {
      *    We also want hue(red) to match any facets called color(red)
      * SearchTerms can included related terms
      *   E.g you could include "color" as a related term for the propertyName "hue". Or 'crimson' for red.
+     *
+     * See {@link KnowledgePropertyName} for well known property names
+     *
      * The the query processor can also related terms using a related terms secondary index, if one is available
      */
     propertyName: KnowledgePropertyName | SearchTerm;

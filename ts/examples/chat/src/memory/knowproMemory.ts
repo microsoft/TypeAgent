@@ -16,7 +16,7 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { ChatContext } from "./chatMemory.js";
+import { KnowledgeProcessorContext } from "./knowledgeProcessorMemory.js";
 import { ChatModel } from "aiclient";
 import fs from "fs";
 import {
@@ -41,7 +41,7 @@ import {
 } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
-import { createKnowproChatCommands } from "./knowproChat.js";
+import { createKnowproConversationCommands } from "./knowproConversation.js";
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
@@ -56,7 +56,7 @@ export type KnowProContext = {
 };
 
 export async function createKnowproCommands(
-    chatContext: ChatContext,
+    chatContext: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
     const knowledgeModel = chatContext.models.chatModel;
@@ -76,7 +76,7 @@ export async function createKnowproCommands(
     await ensureDir(context.basePath);
     await createKnowproDataFrameCommands(context, commands);
     await createKnowproEmailCommands(context, commands);
-    await createKnowproChatCommands(context, commands);
+    await createKnowproConversationCommands(context, commands);
 
     commands.kpPodcastMessages = showMessages;
     commands.kpPodcastImport = podcastImport;

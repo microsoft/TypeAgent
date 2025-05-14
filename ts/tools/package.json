@@ -13,7 +13,7 @@
   "author": "Microsoft",
   "dependencies": {
     "@azure/arm-authorization": "^9.0.0",
-    "@azure/identity": "4.2.1",
+    "@azure/identity": "^4.9.1",
     "chalk": "^5.3.0",
     "sort-package-json": "^3.0.0",
     "validate-npm-package-name": "^6.0.0"

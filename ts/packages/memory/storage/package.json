@@ -15,6 +15,10 @@
     ".": "./dist/index.js"
   },
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" dist",
