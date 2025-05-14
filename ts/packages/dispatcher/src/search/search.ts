@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    createActionResult,
     createActionResultFromError,
+    createActionResultFromHtmlDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { LookupAndAnswerAction } from "../context/dispatcher/schema/lookupActionSchema.js";
@@ -11,6 +11,7 @@ import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
 import { conversation } from "knowledge-processor";
 import { getLookupSettings, handleLookup } from "./internet.js";
 import registerDebug from "debug";
+import { getImageElement, getMimeType } from "common-utils";
 
 const debug = registerDebug("typeagent:dispatcher:lookup");
 const debugError = registerDebug("typeagent:dispatcher:lookup:error");
@@ -75,11 +76,18 @@ export async function lookupAndAnswer(
                                 .substring(0, 100) +
                             "...",
                     );
-                    return createActionResult(
-                        matches.response.answer.answer!,
-                        undefined,
-                        matchedEntities(matches.response),
-                    );
+
+                    const matchEntities: Entity[] = matchedEntities(matches.response);  
+                    const imageNames: (string | undefined)[] = matchEntities.map((e) => {
+                        if (e.type.includes("image")) {
+                            return e.name;
+                        }
+                    })                                      
+
+                    return createActionResultFromHtmlDisplay(
+                        `<div>${matches.response.answer.answer!}</div><div class='chat-smallImage'>${await rehydrateImages(context, imageNames)}</div>`, 
+                        matches.response.answer.answer!, 
+                        matchEntities);
                 }
             }
             debugError("bug bug");
@@ -103,4 +111,36 @@ function compositeEntityToEntity(entity: conversation.CompositeEntity): Entity {
         name: entity.name,
         type: [...entity.type, conversation.KnownEntityTypes.Memorized],
     };
+}
+
+async function rehydrateImages(context: ActionContext<CommandHandlerContext>, files: (string | undefined)[]) {
+    let html = "<div>";
+
+    if (files) {
+        for (let i = 0; i < files.length; i++) {
+            let name = files[i];
+
+            if (files[i] && name) {
+                console.log(`Rehydrating Image ${name}`);
+                if (files[i]!.lastIndexOf("\\") > -1) {
+                    name = files[i]!.substring(files[i]!.lastIndexOf("\\") + 1);
+                }
+
+                let a = await context.sessionContext.sessionStorage?.read(
+                    `\\..\\user_files\\${name}`,
+                    "base64",
+                );
+
+                if (a) {
+                    html += getImageElement(
+                        `data:image/${getMimeType(name.substring(name.indexOf(".")))};base64,${a}`,
+                    );
+                }
+            }
+        }
+    }
+
+    html += "</div>";
+
+    return html;
 }

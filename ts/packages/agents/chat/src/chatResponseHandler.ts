@@ -75,10 +75,14 @@ async function handleChatResponse(
                         "...",
                 );
 
-                const needDisplay = context.streamingContext !== generatedText; //|| generateResponseAction.parameters.showImageToUser;
+                const needDisplay = context.streamingContext !== generatedText || generateResponseAction.parameters.relatedFiles;
                 let result;
                 if (needDisplay) {
-                    result = createActionResult(generatedText, true);
+                    if (generateResponseAction.parameters.relatedFiles) {
+                        result = createActionResultFromHtmlDisplay(`<div>${generatedText}</div><div class='chat-smallImage'>${await rehydrateImages(context, chatAction.parameters.relatedFiles!)}</div>`);
+                    } else {
+                        result = createActionResult(generatedText, true);
+                    }                    
                 } else {
                     result = createActionResultNoDisplay(generatedText);
                 }
