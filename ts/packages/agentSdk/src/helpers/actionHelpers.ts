@@ -52,10 +52,11 @@ export function createActionResultFromTextDisplay(
 export function createActionResultFromHtmlDisplay(
     displayText: string,
     literalText?: string,
+    entities?: Entity[] | undefined,
 ): ActionResultSuccess {
     return {
         literalText,
-        entities: [],
+        entities: entities ? entities : [],
         displayContent: {
             type: "html",
             content: displayText,
