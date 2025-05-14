@@ -555,20 +555,28 @@ function resolveParameterEntity(
     value: any,
     entityContext: PendingActionEntityContext,
 ) {
-    const resultEntity = entityContext.resultEntityMap?.get(value);
-    if (resultEntity !== undefined) {
-        // fix up the action to the actual entity name
-        obj[key] = resultEntity.name;
-        return resultEntity.sourceAppAgentName === appAgentName
-            ? resultEntity
-            : undefined;
+    if (value.startsWith("${result-")) {
+        const resultEntity = entityContext.resultEntityMap?.get(value);
+        if (resultEntity !== undefined) {
+            // fix up the action to the actual entity name
+            obj[key] = resultEntity.name;
+            return resultEntity.sourceAppAgentName === appAgentName
+                ? resultEntity
+                : undefined;
+        }
+        throw new Error(`Result entity reference not found: ${value}`);
     }
-    const entity = entityContext.promptEntityMap?.get(value);
-    if (entity !== undefined) {
-        // fix up the action to the actual entity name
-        obj[key] = entity.name;
-        // Don't allow entity to be used in different app agent name.
-        return entity.sourceAppAgentName === appAgentName ? entity : undefined;
+    if (value.startsWith("${entity-")) {
+        const entity = entityContext.promptEntityMap?.get(value);
+        if (entity !== undefined) {
+            // fix up the action to the actual entity name
+            obj[key] = entity.name;
+            // Don't allow entity to be used in different app agent name.
+            return entity.sourceAppAgentName === appAgentName
+                ? entity
+                : undefined;
+        }
+        throw new Error(`Entity reference not found: ${value}`);
     }
 
     // LLM like to correct/change casing.  Normalize entity name for look up.
@@ -695,13 +703,14 @@ function toPendingActions(
             entityContext,
         };
         resolveEntities(executableAction.action, entityContext);
-        if (executableAction.resultEntityId) {
-            resultEntityMap.set(executableAction.resultEntityId, {
-                name: executableAction.resultEntityId,
+
+        const resultEntityId = executableAction.resultEntityId;
+        if (resultEntityId !== undefined) {
+            const name = `\${result-${resultEntityId}}`;
+            resultEntityMap.set(name, {
+                name,
                 type: [],
-                sourceAppAgentName: getAppAgentName(
-                    executableAction.action.schemaName,
-                ),
+                sourceAppAgentName: "",
             });
         }
         return pending;
@@ -777,7 +786,7 @@ export async function executeActions(
                 resultEntityMap = new Map<string, PromptEntity>();
                 entityContext.resultEntityMap = resultEntityMap;
             }
-            resultEntityMap.set(resultEntityId, {
+            resultEntityMap.set(`\${result-${resultEntityId}}`, {
                 ...result.resultEntity,
                 sourceAppAgentName: appAgentName,
             });
