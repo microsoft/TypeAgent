@@ -40,9 +40,10 @@
     "shell:smoke": "npx playwright test simple.spec.ts",
     "shell:test": "npx playwright test",
     "start": "npm run prepare-vite && electron-vite preview -- --env ../../.env",
-    "start:linux": "./dist/linux-unpacked/typeagentshell",
-    "start:mac": "open ./dist/mac-arm64/TypeAgent\\ Shell.app",
-    "start:win": ".\\dist\\win-unpacked\\typeagentshell.exe",
+    "start:package": "run-script-os",
+    "start:package:linux": "./dist/linux-unpacked/typeagentshell",
+    "start:package:macos": "open ./dist/mac-arm64/TypeAgent\\ Shell.app",
+    "start:package:win32": ".\\dist\\win-unpacked\\typeagentshell.exe",
     "typecheck": "concurrently npm:typecheck:node npm:typecheck:web",
     "typecheck:node": "tsc -p tsconfig.node.json",
     "typecheck:web": "tsc -p tsconfig.web.json"

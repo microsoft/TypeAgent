@@ -17,7 +17,8 @@
     "asc-dev": "./bin/dev.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/test"
   ],
   "scripts": {
     "build": "npm run tsc",

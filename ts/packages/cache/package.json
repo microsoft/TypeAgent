@@ -17,6 +17,10 @@
       "default": "./dist/indexBrowser.js"
     }
   },
+  "files": [
+    "dist",
+    "!dist/test"
+  ],
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
