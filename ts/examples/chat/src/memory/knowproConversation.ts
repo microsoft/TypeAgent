@@ -155,8 +155,8 @@ export async function createKnowproConversationCommands(
         const memory = await ensureLoaded();
         const messages = memory.messages;
         const numMessages = Math.min(namedArgs.numMessages, messages.length);
-        // Print newest messages first
-        for (let i = numMessages - 1; i >= 0; --i) {
+        // Print oldest messages first
+        for (let i = 0; i < numMessages; ++i) {
             const message = await messages.get(i);
             context.printer.writeMessage(message);
             context.printer.writeLine();

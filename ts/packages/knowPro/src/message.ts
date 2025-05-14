@@ -111,12 +111,18 @@ export function getCountOfMessagesInCharBudget(
     return i;
 }
 
+export function textRangesFromMessageOrdinals(
+    messageOrdinals: MessageOrdinal[],
+): TextRange[] {
+    return messageOrdinals.map((ordinal) => textRangeFromMessage(ordinal));
+}
+
 /**
  * Turn message ordinals into text ranges.. building longest contiguous ranges
  * @param messageOrdinals
  * @returns
  */
-export function textRangesFromMessageOrdinals(
+export function textRangesFromMessageOrdinalsMerged(
     messageOrdinals: MessageOrdinal[],
 ): TextRange[] {
     if (messageOrdinals.length === 0) {
