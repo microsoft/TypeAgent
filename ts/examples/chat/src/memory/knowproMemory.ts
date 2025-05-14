@@ -403,7 +403,7 @@ export async function createKnowproCommands(
                 endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
-                distinct: argBool("Show distinct results", false),
+                distinct: argBool("Show distinct results", true),
             },
         };
         if (kType === undefined) {
@@ -544,6 +544,7 @@ export async function createKnowproCommands(
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
+        def.options!.maxToDisplay = argNum("Maximum to display", 100);
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -764,6 +765,7 @@ export async function createKnowproCommands(
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 minScore: argNum("Min threshold score", 0.7),
+                charBudget: argNum("Character budget", 1024 * 16),
             },
         };
     }
@@ -778,6 +780,7 @@ export async function createKnowproCommands(
             namedArgs.query,
             {
                 thresholdScore: namedArgs.minScore,
+                maxCharsInBudget: namedArgs.charBudget,
             },
         );
         if (matches !== undefined) {
@@ -810,6 +813,7 @@ export async function createKnowproCommands(
             namedArgs.query,
             {
                 thresholdScore: namedArgs.minScore,
+                maxCharsInBudget: namedArgs.charBudget,
             },
         );
         if (searchResult !== undefined) {
