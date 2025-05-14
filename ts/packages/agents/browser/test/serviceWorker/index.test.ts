@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import {
     // showBadgeError,
     showBadgeHealthy,
@@ -7,7 +10,6 @@ import { toggleSiteTranslator } from "../../src/extension/serviceWorker/siteTran
 
 jest.mock("../../src/extension/serviceWorker/websocket", () => {
     const ensureWebsocketConnectedMock = jest.fn().mockImplementation(() => {
-        console.trace("ensureWebsocketConnected called");
         return Promise.resolve(true);
     });
 
@@ -75,21 +77,6 @@ describe("Service Worker initialization", () => {
         ensureWebsocketConnected.mockResolvedValue(true);
 
         await initialize();
-
-        console.log(
-            "ensureWebsocketConnected called:",
-            ensureWebsocketConnected.mock.calls.length,
-            "times",
-        );
-        console.log(
-            "reconnectWebSocket called:",
-            reconnectWebSocket.mock.calls.length,
-            "times",
-        );
-        console.log(
-            "ensureWebsocketConnected returned:",
-            ensureWebsocketConnected.mock.results[0].value,
-        );
 
         expect(ensureWebsocketConnected).toHaveBeenCalled();
         expect(reconnectWebSocket).not.toHaveBeenCalled();

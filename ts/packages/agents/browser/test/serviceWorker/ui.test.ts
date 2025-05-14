@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /// <reference path="../types/jest-chrome-extensions.d.ts" />
 
 const {

@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 jest.mock("../../src/extension/serviceWorker/storage", () => ({
     getSettings: jest.fn().mockImplementation(() =>
         Promise.resolve({
@@ -25,17 +28,24 @@ describe("WebSocket Module", () => {
         jest.clearAllMocks();
 
         jest.useFakeTimers();
+        jest.resetModules();
 
         websocketModule = require("../../src/extension/serviceWorker/websocket");
     });
 
     afterEach(() => {
         jest.useRealTimers();
+
+        const ws = websocketModule.getWebSocket();
+        if (ws) {
+            ws.close();
+        }
     });
 
     describe("createWebSocket", () => {
         it("should create a WebSocket connection", async () => {
             const createWebSocket = websocketModule.createWebSocket;
+            jest.useRealTimers();
             const socket = await createWebSocket();
 
             expect(socket).toBeDefined();
@@ -50,6 +60,7 @@ describe("WebSocket Module", () => {
                 websocketModule.ensureWebsocketConnected;
             const getWebSocket = websocketModule.getWebSocket;
 
+            jest.useRealTimers();
             const socket = await ensureWebsocketConnected();
             expect(socket).toBeDefined();
             expect(getWebSocket()).toBe(socket);
@@ -69,7 +80,7 @@ describe("WebSocket Module", () => {
 
             // Test if the callback works correctly
             // by advancing timers and checking what happens
-            jest.advanceTimersByTime(5000); // Advance 5 seconds
+            jest.advanceTimersByTime(5000);
         });
     });
 
