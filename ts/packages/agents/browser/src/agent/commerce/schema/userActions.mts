@@ -26,8 +26,29 @@ export type BuyProduct = {
     };
 };
 
+export type SearchForReservation = {
+    actionName: "searchForReservation";
+    parameters: {
+        restaurantName: string;
+        // provide an AM or PM time. If the user gives a meal-based time such as breakfast or dinner,
+        // translate this into a correspodning AM or PM time.
+        time: string;
+        // default value is 1
+        numberOfPeople:number;
+    };
+};
+
+export type SelectReservation = {
+    actionName: "selectReservation";
+    parameters: {
+        time: string;
+    };
+};
+
 export type ShoppingActions =
     | ViewShoppingCart
     | FindNearbyStore
     | GetLocationInStore
-    | BuyProduct;
+    | BuyProduct
+    | SearchForReservation
+    | SelectReservation;

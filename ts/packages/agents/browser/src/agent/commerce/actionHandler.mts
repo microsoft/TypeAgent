@@ -6,8 +6,11 @@ import { BrowserActionContext } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createCommercePageTranslator } from "./translator.mjs";
 import {
+    BookReservationsModule,
+    BookSelectorButton,
     ProductDetailsHeroTile,
     ProductTile,
+    RestaurantResult,
     SearchInput,
     ShoppingCartButton,
     ShoppingCartDetails,
@@ -15,7 +18,7 @@ import {
 } from "./schema/pageComponents.mjs";
 import { ShoppingActions } from "./schema/userActions.mjs";
 import { ShoppingPlanActions } from "./schema/planActions.mjs";
-import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { createActionResult, createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { createExecutionTracker } from "../planVisualizationClient.mjs";
 import { PageState } from "./schema/pageStates.mjs";
 
@@ -45,6 +48,9 @@ export async function handleCommerceAction(
             break;
         case "buyProduct":
             return await handleShoppingRequest(action);
+        case "searchForReservation":
+        case "selectReservation":
+            return await handleRestaurantAction(action, context);
     }
 
     async function getComponentFromPage(
@@ -209,9 +215,7 @@ export async function handleCommerceAction(
         const planVisualizationEndpoint = `http://localhost:${context.sessionContext.getSharedLocalHostPort("planVisualizer")}`;
 
         if (!planVisualizationEndpoint) {
-            throw new Error(
-                "Plan visualization endpoint not assigned. Please check your configuration.",
-            );
+           console.warn("Plan visualization endpoint not assigned. Please check your configuration.");
         }
         console.log("Plan visualizer: " + planVisualizationEndpoint);
 

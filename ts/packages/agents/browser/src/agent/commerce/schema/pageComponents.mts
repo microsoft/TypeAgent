@@ -69,3 +69,22 @@ export type ShoppingCartDetails = {
 
     relatedProducts?: ProductTile[];
 };
+
+export type RestaurantResult = {
+    restaurantName: string;
+    rating: string;
+    detailsLinkCssSelector: string;
+    availableTimeSlots?: BookSelectorButton[];
+}
+
+export type BookSelectorButton = {
+    time?:string;
+    cssSelector: string;
+}
+
+export type BookReservationsModule = {
+    date: string;
+    targetTime:string;
+    availableTimeSlots?: BookSelectorButton[];
+    numberOfPeople?: number;
+};
