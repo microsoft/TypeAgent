@@ -193,6 +193,14 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
 }
 
 /**
+ * A
+ */
+export type MemoryFilter = {
+    knowledgeType?: kp.KnowledgeType | undefined;
+    tag?: string | string[];
+};
+
+/**
  * A memory containing a sequence of messages {@link Message}
  * Memory is modeled as a conversation {@link kp.IConversation}
  */
@@ -265,6 +273,7 @@ export abstract class Memory<
     public async searchWithLanguage(
         searchText: string,
         options?: kp.LanguageSearchOptions,
+        langSearchFilter?: kp.LanguageSearchFilter,
         debugContext?: kp.LanguageSearchDebugContext,
     ): Promise<Result<kp.ConversationSearchResult[]>> {
         options = this.adjustLanguageSearchOptions(options);
@@ -273,6 +282,7 @@ export abstract class Memory<
             searchText,
             this.getQueryTranslator(),
             options,
+            langSearchFilter,
             debugContext,
         );
     }
@@ -306,6 +316,7 @@ export abstract class Memory<
     public async getAnswerFromLanguage(
         question: string,
         searchOptions?: kp.LanguageSearchOptions,
+        langSearchFilter?: kp.LanguageSearchFilter,
         progress?: (
             searchResult: kp.ConversationSearchResult,
             chunk: kp.AnswerContext,
@@ -316,6 +327,7 @@ export abstract class Memory<
         const searchResults = await this.searchWithLanguage(
             question,
             searchOptions,
+            langSearchFilter,
         );
         if (!searchResults.success) {
             return searchResults;
@@ -397,10 +409,7 @@ export abstract class Memory<
     }
 
     private adjustLanguageSearchOptions(options?: kp.LanguageSearchOptions) {
-        options ??= {
-            ...kp.createSearchOptionsTypical(),
-            compileOptions: kp.createLanguageQueryCompileOptions(),
-        };
+        options ??= kp.createLanguageSearchOptionsTypical();
         const instructions = this.getModelInstructions();
         if (instructions) {
             if (options.modelInstructions) {

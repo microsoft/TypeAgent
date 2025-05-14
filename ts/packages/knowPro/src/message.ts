@@ -36,6 +36,15 @@ export function textRangeFromMessageChunk(
     };
 }
 
+export function textRangeFromMessage(
+    messageOrdinal: MessageOrdinal,
+): TextRange {
+    return {
+        start: { messageOrdinal: messageOrdinal },
+        end: undefined,
+    };
+}
+
 export function textRangeFromMessageRange(
     start: MessageOrdinal,
     end: MessageOrdinal,
@@ -102,12 +111,18 @@ export function getCountOfMessagesInCharBudget(
     return i;
 }
 
+export function textRangesFromMessageOrdinals(
+    messageOrdinals: MessageOrdinal[],
+): TextRange[] {
+    return messageOrdinals.map((ordinal) => textRangeFromMessage(ordinal));
+}
+
 /**
  * Turn message ordinals into text ranges.. building longest contiguous ranges
  * @param messageOrdinals
  * @returns
  */
-export function textRangesFromMessageOrdinals(
+export function textRangesFromMessageOrdinalsMerged(
     messageOrdinals: MessageOrdinal[],
 ): TextRange[] {
     if (messageOrdinals.length === 0) {
@@ -116,19 +131,34 @@ export function textRangesFromMessageOrdinals(
     // Sort ordinals in ascending order
     messageOrdinals.sort((x, y) => x - y);
     let ranges: TextRange[] = [];
-    let startOrdinal: MessageOrdinal | undefined = messageOrdinals[0];
-    let endOrdinal = startOrdinal;
+    let rangeStartOrdinal: MessageOrdinal | undefined = messageOrdinals[0];
+    let rangeEndOrdinal = rangeStartOrdinal;
     for (let i = 1; i < messageOrdinals.length; ++i) {
         const messageOrdinal = messageOrdinals[i];
-        if (messageOrdinal - endOrdinal > 1) {
+        if (messageOrdinal - rangeEndOrdinal > 1) {
             // Non-contiguous range
-            ranges.push(textRangeFromMessageRange(startOrdinal, endOrdinal));
-            startOrdinal = messageOrdinal;
+            addRange(ranges, rangeStartOrdinal, rangeEndOrdinal);
+            rangeStartOrdinal = messageOrdinal;
         }
-        endOrdinal = messageOrdinal;
+        rangeEndOrdinal = messageOrdinal;
     }
-    ranges.push(textRangeFromMessageRange(startOrdinal, endOrdinal));
+    addRange(ranges, rangeStartOrdinal, rangeEndOrdinal);
     return ranges;
+
+    function addRange(
+        ranges: TextRange[],
+        rangeStartAt: MessageOrdinal,
+        rangeEndAt: MessageOrdinal,
+    ) {
+        if (rangeStartAt == rangeEndAt) {
+            ranges.push(textRangeFromMessage(rangeStartAt));
+        } else {
+            // The end of a Text range is exclusive, so we have to add 1!
+            ranges.push(
+                textRangeFromMessageRange(rangeStartAt, rangeEndAt + 1),
+            );
+        }
+    }
 }
 
 export function getMaxMessageOrdinal(

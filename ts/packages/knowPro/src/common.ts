@@ -127,6 +127,10 @@ export function flattenResultsArray<T>(results: Result<T>[]): Result<T[]> {
     return success(data);
 }
 
+export function sortNumericArray(array: number[]) {
+    array.sort((x, y) => x - y);
+}
+
 //
 // String processing
 //
