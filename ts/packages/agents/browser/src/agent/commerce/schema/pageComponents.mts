@@ -75,16 +75,16 @@ export type RestaurantResult = {
     rating: string;
     detailsLinkCssSelector: string;
     availableTimeSlots?: BookSelectorButton[];
-}
+};
 
 export type BookSelectorButton = {
-    time?:string;
+    time?: string;
     cssSelector: string;
-}
+};
 
 export type BookReservationsModule = {
     date: string;
-    targetTime:string;
+    targetTime: string;
     availableTimeSlots?: BookSelectorButton[];
     numberOfPeople?: number;
 };

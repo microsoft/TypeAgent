@@ -1,0 +1,19 @@
+@clear
+
+@pauseForInput
+
+# -------------------------------------
+# Memory interactions
+# -------------------------------------
+
+What is the name of the Cirque show I went to last february?
+
+Show me the photo I uploaded from the event.
+
+Play the album from this show.
+
+What is the name of the restaurant we went to for dinner afterwards?
+
+Make a dinner reservation there for two people for Sunday. 
+
+Add it to my calendar.
