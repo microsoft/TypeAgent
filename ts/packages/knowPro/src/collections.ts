@@ -646,10 +646,18 @@ export class TextRangeCollection implements Iterable<TextRange> {
     // Maintains ranges sorted by message index
     private ranges: TextRange[];
 
-    // TODO: consider: check if passed in ranges are not sorted?
-    // All usage is internal so far, guarantees sort, but...
-    constructor(ranges?: TextRange[] | undefined) {
-        this.ranges = ranges ?? [];
+    constructor(
+        ranges?: TextRange[] | undefined,
+        ensureSorted: boolean = false,
+    ) {
+        if (ensureSorted) {
+            this.ranges = [];
+            if (ranges && ranges.length > 0) {
+                this.addRanges(ranges);
+            }
+        } else {
+            this.ranges = ranges ?? [];
+        }
     }
 
     public get size() {

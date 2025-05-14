@@ -47,7 +47,11 @@ import {
 import { conversation as kpLib } from "knowledge-processor";
 import { collections, NormalizedEmbedding } from "typeagent";
 import { facetValueToString } from "./knowledgeLib.js";
-import { isInDateRange, isSearchTermWildcard } from "./common.js";
+import {
+    isInDateRange,
+    isSearchTermWildcard,
+    sortNumericArray,
+} from "./common.js";
 import {
     IMessageTextEmbeddingIndex,
     isMessageTextEmbeddingIndex,
@@ -1149,7 +1153,7 @@ export interface IQueryTextRangeSelector {
 export class TextRangeSelector implements IQueryTextRangeSelector {
     public textRangesInScope: TextRangeCollection;
     constructor(rangesInScope: TextRange[]) {
-        this.textRangesInScope = new TextRangeCollection(rangesInScope);
+        this.textRangesInScope = new TextRangeCollection(rangesInScope, true);
     }
 
     public eval(
@@ -1255,6 +1259,7 @@ export class TextRangesFromMessagesSelector implements IQueryTextRangeSelector {
         let rangesInScope: TextRange[] | undefined;
         if (matches.size > 0) {
             const allOrdinals = [...matches.getMatchedValues()];
+            sortNumericArray(allOrdinals);
             rangesInScope = textRangesFromMessageOrdinals(allOrdinals);
         }
         return new TextRangeCollection(rangesInScope);

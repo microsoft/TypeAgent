@@ -13,6 +13,7 @@ import {
     createTestMessagesArray,
     TestMessage,
 } from "./testMessage.js";
+import { verifyTextRanges } from "./verify.js";
 
 describe("messageCollection", () => {
     test("addMessage", () => {
@@ -121,6 +122,13 @@ describe("TextRangeCollection", () => {
 
         textRangeCollection.clear();
         testRange(textRangeCollection, messageRanges, [2, 3, 4, 5], 4);
+    });
+    test("sort", () => {
+        let messageRanges = textRangesFromMessageOrdinals([
+            5, 3, 9, 7, 12, 1, 2, 2, 5,
+        ]);
+        let textRangeCollection = new TextRangeCollection(messageRanges, true);
+        verifyTextRanges(textRangeCollection);
     });
 
     function testRange(
