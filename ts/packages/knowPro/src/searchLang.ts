@@ -11,6 +11,7 @@ import {
 import {
     ConversationSearchResult,
     createSearchOptions,
+    createSearchOptionsTypical,
     hasConversationResults,
     runSearchQuery,
     runSearchQueryText,
@@ -42,11 +43,16 @@ import {
     Work in progress; frequent improvements/tweaks
 */
 
+export type LanguageSearchFilter = {
+    tags?: string[] | undefined;
+};
+
 export async function searchConversationWithLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
     options?: LanguageSearchOptions,
+    langSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     options ??= createLanguageSearchOptions();
@@ -55,6 +61,7 @@ export async function searchConversationWithLanguage(
         queryTranslator,
         searchText,
         options,
+        langSearchFilter,
         debugContext,
     );
     if (!langQueryResult.success) {
@@ -160,6 +167,7 @@ export async function searchQueryExprFromLanguage(
     translator: SearchQueryTranslator,
     queryText: string,
     options?: LanguageSearchOptions,
+    languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
     const queryResult = await searchQueryFromLanguage(
@@ -178,6 +186,7 @@ export async function searchQueryExprFromLanguage(
             conversation,
             query,
             options.compileOptions,
+            languageSearchFilter,
         );
         return success({
             queryText,
@@ -217,6 +226,13 @@ export function createLanguageSearchOptions(): LanguageSearchOptions {
     };
 }
 
+export function createLanguageSearchOptionsTypical(): LanguageSearchOptions {
+    return {
+        ...createSearchOptionsTypical(),
+        compileOptions: createLanguageQueryCompileOptions(),
+    };
+}
+
 export type LanguageSearchDebugContext = {
     /**
      * Query returned by the LLM
@@ -237,8 +253,13 @@ export function compileSearchQuery(
     conversation: IConversation,
     query: querySchema.SearchQuery,
     options?: LanguageQueryCompileOptions,
+    langSearchFilter?: LanguageSearchFilter,
 ): SearchQueryExpr[] {
-    const queryBuilder = new SearchQueryCompiler(conversation, options);
+    const queryBuilder = new SearchQueryCompiler(
+        conversation,
+        options,
+        langSearchFilter,
+    );
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
@@ -248,10 +269,12 @@ export function compileSearchFilter(
     conversation: IConversation,
     searchFilter: querySchema.SearchFilter,
     options?: LanguageQueryCompileOptions,
+    langFilter?: LanguageSearchFilter,
 ): SearchSelectExpr {
     const queryBuilder = new SearchQueryCompiler(
         conversation,
         options ?? createLanguageQueryCompileOptions(),
+        langFilter,
     );
     return queryBuilder.compileSearchFilter(searchFilter);
 }
@@ -304,6 +327,7 @@ class SearchQueryCompiler {
     constructor(
         public conversation: IConversation,
         compileOptions?: LanguageQueryCompileOptions,
+        public langSearchFilter?: LanguageSearchFilter,
     ) {
         this.compileOptions =
             compileOptions ?? createLanguageQueryCompileOptions();
@@ -412,6 +436,20 @@ class SearchQueryCompiler {
         if (filter.timeRange) {
             when ??= {};
             when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
+        }
+        if (this.langSearchFilter) {
+            if (
+                this.langSearchFilter.tags &&
+                this.langSearchFilter.tags.length > 0
+            ) {
+                when ??= {};
+                const tagTerms = this.compileTags(this.langSearchFilter.tags);
+                if (when.scopeDefiningTerms) {
+                    when.scopeDefiningTerms.terms.push(tagTerms);
+                } else {
+                    when.scopeDefiningTerms = tagTerms;
+                }
+            }
         }
         return when;
     }
@@ -623,6 +661,16 @@ class SearchQueryCompiler {
             this.compileOptions.exactScope,
         );
         return objectTermGroup;
+    }
+
+    private compileTags(tags: string[]): SearchTermGroup {
+        const termGroup = createOrMaxTermGroup();
+        for (const tag of tags) {
+            termGroup.terms.push(
+                createPropertySearchTerm(PropertyNames.Tag, tag, true),
+            );
+        }
+        return termGroup;
     }
 
     private addVerbsToGroup(

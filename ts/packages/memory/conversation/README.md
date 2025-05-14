@@ -1,6 +1,6 @@
 # conversation-memory
 
-**conversation-memory** is an **experimental prototype and sample code** with ongoing and _frequent_ changes.
+**conversation-memory** is an early stage **experimental prototype** with ongoing and _frequent_ changes to the API.
 
 It explores how to implement different memory [types](#memory-types) using [**Structured RAG**](../../knowPro/README.md) implemented by the [knowpro](../../knowPro) library.
 

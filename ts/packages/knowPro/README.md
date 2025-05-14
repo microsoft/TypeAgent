@@ -2,7 +2,7 @@
 
 **knowpro** is an **experimental sample code and prototype** working towards a shared understanding of the MVP for **Structured RAG**.
 
-**knowpro** is in **active** development with very _frequent_ changes.
+**knowpro** is currently in **active** development with _frequent_ changes as the API evolves and feature set expands.
 
 - knowpro implements **Structured RAG**.
   - Structured RAG first extracts **dense information** from text.

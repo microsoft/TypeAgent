@@ -656,6 +656,7 @@ export async function createKnowproCommands(
                 ? await context.conversation.searchWithLanguage(
                       searchText,
                       options,
+                      undefined,
                       debugContext,
                   )
                 : await kp.searchConversationWithLanguage(
@@ -663,6 +664,7 @@ export async function createKnowproCommands(
                       searchText,
                       context.queryTranslator,
                       options,
+                      undefined,
                       debugContext,
                   );
         if (!searchResults.success) {
