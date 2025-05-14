@@ -77,17 +77,21 @@ export async function lookupAndAnswer(
                             "...",
                     );
 
-                    const matchEntities: Entity[] = matchedEntities(matches.response);  
-                    const imageNames: (string | undefined)[] = matchEntities.map((e) => {
-                        if (e.type.includes("image")) {
-                            return e.name;
-                        }
-                    })                                      
+                    const matchEntities: Entity[] = matchedEntities(
+                        matches.response,
+                    );
+                    const imageNames: (string | undefined)[] =
+                        matchEntities.map((e) => {
+                            if (e.type.includes("image")) {
+                                return e.name;
+                            }
+                        });
 
                     return createActionResultFromHtmlDisplay(
-                        `<div>${matches.response.answer.answer!}</div><div class='chat-smallImage'>${await rehydrateImages(context, imageNames)}</div>`, 
-                        matches.response.answer.answer!, 
-                        matchEntities);
+                        `<div>${matches.response.answer.answer!}</div><div class='chat-smallImage'>${await rehydrateImages(context, imageNames)}</div>`,
+                        matches.response.answer.answer!,
+                        matchEntities,
+                    );
                 }
             }
             debugError("bug bug");
@@ -113,7 +117,10 @@ function compositeEntityToEntity(entity: conversation.CompositeEntity): Entity {
     };
 }
 
-async function rehydrateImages(context: ActionContext<CommandHandlerContext>, files: (string | undefined)[]) {
+async function rehydrateImages(
+    context: ActionContext<CommandHandlerContext>,
+    files: (string | undefined)[],
+) {
     let html = "<div>";
 
     if (files) {
