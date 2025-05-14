@@ -1120,9 +1120,6 @@ importers:
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
-      open:
-        specifier: ^7.0.4
-        version: 7.4.2
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -1581,8 +1578,8 @@ importers:
         specifier: ^4.21.2
         version: 4.21.2
       open:
-        specifier: ^7.0.4
-        version: 7.4.2
+        specifier: ^10.1.0
+        version: 10.1.0
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.2)
@@ -1972,9 +1969,6 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
-      open:
-        specifier: ^10.1.0
-        version: 10.1.0
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@22.15.2)(typescript@5.4.5)
@@ -2018,9 +2012,6 @@ importers:
       dotenv:
         specifier: ^16.3.1
         version: 16.3.1
-      open:
-        specifier: ^7.0.4
-        version: 7.4.2
       ws:
         specifier: ^8.17.1
         version: 8.17.1
@@ -8448,10 +8439,6 @@ packages:
   open@10.1.0:
     resolution: {integrity: sha512-mnkeQ1qP5Ue2wd+aivTD3NHd/lZ96Lu0jgf0pwktLPtx6cTZiH7tyeGRRHs0zX0rbrahXPnXlUnbeXyaBBuIaw==}
     engines: {node: '>=18'}
-
-  open@7.4.2:
-    resolution: {integrity: sha512-MVHddDVweXZF3awtlAS+6pgKLlm/JgxZ90+/NBurBoQctVOOB/zDdVjcyPzQ+0laDGbsWgrRkflI65sQeOgT9Q==}
-    engines: {node: '>=8'}
 
   optionator@0.8.3:
     resolution: {integrity: sha512-+IW9pACdk3XWmmTXG8m3upGUJst5XRGzxMRjXzAuJ1XnIFNvfhjjIuYkDvysnPQ7qzqVzLt78BCruntqRhWQbA==}
@@ -17049,11 +17036,6 @@ snapshots:
       define-lazy-prop: 3.0.0
       is-inside-container: 1.0.0
       is-wsl: 3.1.0
-
-  open@7.4.2:
-    dependencies:
-      is-docker: 2.2.1
-      is-wsl: 2.2.0
 
   optionator@0.8.3:
     dependencies:
