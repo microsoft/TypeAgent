@@ -807,6 +807,11 @@ class SearchQueryCompiler {
             return;
         }
         this.addSearchTermToGroup(entityTerm.name, termGroup);
+        if (entityTerm.type && entityTerm.type.length > 0) {
+            for (const type of entityTerm.type) {
+                this.addSearchTermToGroup(type, termGroup);
+            }
+        }
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
                 this.addSearchTermToGroup(facetTerm.facetName, termGroup);
