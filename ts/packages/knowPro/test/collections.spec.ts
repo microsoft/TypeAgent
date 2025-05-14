@@ -3,7 +3,10 @@
 
 import { TextRangeCollection } from "../src/collections.js";
 import { MessageOrdinal, TextRange } from "../src/interfaces.js";
-import { textRangeFromMessageChunk } from "../src/message.js";
+import {
+    textRangeFromMessage,
+    textRangesFromMessageOrdinals,
+} from "../src/message.js";
 import { getBatchesFromCollection, MessageCollection } from "../src/storage.js";
 import {
     createTestMessages,
@@ -110,7 +113,42 @@ describe("TextRangeCollection", () => {
             }
         }
     });
+    test("nonContiguous", () => {
+        let messageRanges = makeMessagesTextRanges(0, 7);
+        let textRangeCollection = new TextRangeCollection();
+
+        testRange(textRangeCollection, messageRanges, [0, 1, 6], 3);
+
+        textRangeCollection.clear();
+        testRange(textRangeCollection, messageRanges, [2, 3, 4, 5], 4);
+    });
+
+    function testRange(
+        textRangeCollection: TextRangeCollection,
+        allRanges: TextRange[],
+        inRangeOrdinals: MessageOrdinal[],
+        expectedMatchCount: number,
+    ): void {
+        textRangeCollection.addRanges(
+            textRangesFromMessageOrdinals(inRangeOrdinals),
+        );
+        let matchCount = getMatchCount(textRangeCollection, allRanges);
+        expect(matchCount).toBe(expectedMatchCount);
+    }
 });
+
+function getMatchCount(
+    textRangeCollection: TextRangeCollection,
+    textRanges: Iterable<TextRange>,
+): number {
+    let matchCount = 0;
+    for (let range of textRanges) {
+        if (textRangeCollection.isInRange(range)) {
+            ++matchCount;
+        }
+    }
+    return matchCount;
+}
 
 function makeMessagesTextRanges(
     ordinalStartAt: MessageOrdinal,
@@ -118,7 +156,7 @@ function makeMessagesTextRanges(
 ): TextRange[] {
     const ranges: TextRange[] = [];
     for (let i = 0; i < count; ++i) {
-        ranges.push(textRangeFromMessageChunk(ordinalStartAt + i));
+        ranges.push(textRangeFromMessage(ordinalStartAt + i));
     }
     return ranges;
 }

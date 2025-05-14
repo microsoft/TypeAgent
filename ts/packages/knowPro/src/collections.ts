@@ -719,6 +719,10 @@ export class TextRangeCollection implements Iterable<TextRange> {
         }
         return false;
     }
+
+    public clear(): void {
+        this.ranges = [];
+    }
 }
 
 export class TextRangesInScope {
