@@ -528,9 +528,7 @@ interface EntityObject {
 function getParameterObjectEntities(
     appAgentName: string,
     obj: Record<string, any>,
-    resultEntityMap: Map<string, PromptEntity>,
-    promptEntityMap: Map<string, PromptEntity> | undefined,
-    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+    entityContext: PendingActionEntityContext,
 ) {
     let hasEntity = false;
     const entities: EntityObject | EntityField[] = Array.isArray(obj) ? [] : {};
@@ -540,9 +538,7 @@ function getParameterObjectEntities(
             obj,
             k,
             v,
-            resultEntityMap,
-            promptEntityMap,
-            promptNameEntityMap,
+            entityContext,
         );
         if (entity !== undefined) {
             hasEntity = true;
@@ -553,26 +549,45 @@ function getParameterObjectEntities(
 }
 
 function resolveParameterEntity(
+    appAgentName: string,
     obj: Record<string, any>,
     key: string,
     value: any,
-    resultEntityMap: Map<string, PromptEntity>,
-    promptEntityMap: Map<string, PromptEntity> | undefined,
-    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+    entityContext: PendingActionEntityContext,
 ) {
-    const resultEntity = resultEntityMap.get(value);
+    const resultEntity = entityContext.resultEntityMap?.get(value);
     if (resultEntity !== undefined) {
-        return resultEntity;
+        // fix up the action to the actual entity name
+        obj[key] = resultEntity.name;
+        return resultEntity.sourceAppAgentName === appAgentName
+            ? resultEntity
+            : undefined;
     }
-    const entity = promptEntityMap?.get(value);
+    const entity = entityContext.promptEntityMap?.get(value);
     if (entity !== undefined) {
         // fix up the action to the actual entity name
         obj[key] = entity.name;
-        return entity;
+        // Don't allow entity to be used in different app agent name.
+        return entity.sourceAppAgentName === appAgentName ? entity : undefined;
     }
 
     // LLM like to correct/change casing.  Normalize entity name for look up.
-    return promptNameEntityMap?.get(normalizeParamString(value));
+    const foundEntity = entityContext.promptNameEntityMap?.get(
+        normalizeParamString(value),
+    );
+    if (foundEntity === undefined) {
+        return undefined;
+    }
+    if (!Array.isArray(foundEntity)) {
+        return foundEntity.sourceAppAgentName === appAgentName
+            ? foundEntity
+            : undefined;
+    }
+    const matched = foundEntity.filter(
+        (e) => e.sourceAppAgentName === appAgentName,
+    );
+    // TODO: If there are multiple match, ignore for now.
+    return matched.length === 1 ? matched[0] : undefined;
 }
 
 function getParameterEntities(
@@ -580,55 +595,36 @@ function getParameterEntities(
     obj: any,
     key: string,
     value: any,
-    resultEntityMap: Map<string, PromptEntity>,
-    promptEntityMap: Map<string, PromptEntity> | undefined,
-    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
+    entityContext: PendingActionEntityContext,
 ): EntityField | undefined {
     switch (typeof value) {
         case "undefined":
             return;
         case "string":
-            const entity = resolveParameterEntity(
+            return resolveParameterEntity(
+                appAgentName,
                 obj,
                 key,
                 value,
-                resultEntityMap,
-                promptEntityMap,
-                promptNameEntityMap,
+                entityContext,
             );
-
-            if (entity === undefined) {
-                return undefined;
-            }
-            if (!Array.isArray(entity)) {
-                return entity.sourceAppAgentName === appAgentName
-                    ? entity
-                    : undefined;
-            }
-            const matched = entity.filter(
-                (e) => e.sourceAppAgentName === appAgentName,
-            );
-            // TODO: If there are multiple match, ignore for now.
-            return matched.length === 1 ? matched[0] : undefined;
         case "function":
             throw new Error("Function is not supported as an action value");
         case "object":
             return value
-                ? getParameterObjectEntities(
-                      appAgentName,
-                      value,
-                      resultEntityMap,
-                      promptEntityMap,
-                      promptNameEntityMap,
-                  )
+                ? getParameterObjectEntities(appAgentName, value, entityContext)
                 : undefined;
     }
 }
 
-type PendingAction = {
-    executableAction: ExecutableAction;
+type PendingActionEntityContext = {
     promptEntityMap: Map<string, PromptEntity> | undefined;
     promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined;
+    resultEntityMap: Map<string, PromptEntity> | undefined;
+};
+type PendingAction = {
+    executableAction: ExecutableAction;
+    entityContext: PendingActionEntityContext;
 };
 
 function toPromptEntityMap(entities: PromptEntity[] | undefined) {
@@ -663,39 +659,56 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
 
 function resolveEntities(
     action: TypeAgentAction<FullAction>,
-    resultEntityMap: Map<string, PromptEntity>,
-    promptEntityMap: Map<string, PromptEntity> | undefined,
-    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
-    duplicateAction: boolean,
+    entityContext: PendingActionEntityContext,
 ) {
     if (action.parameters === undefined) {
-        return action;
+        return;
     }
-    const result = duplicateAction ? { ...action } : action;
+    // Clear the existing entities.
+    delete action.entities;
     const entities = getParameterObjectEntities(
         getAppAgentName(action.schemaName),
         action.parameters!,
-        resultEntityMap,
-        promptEntityMap,
-        promptNameEntityMap,
+        entityContext,
     );
     if (entities !== undefined) {
-        result.entities = entities as any;
+        action.entities = entities as any;
     }
-    return result;
+    return;
 }
 
 function toPendingActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
 ): PendingAction[] {
+    const resultEntityMap = new Map<string, PromptEntity>();
     const promptEntityMap = toPromptEntityMap(entities);
     const promptNameEntityMap = toPromptEntityNameMap(entities);
-    return Array.from(actions).map((executableAction) => ({
-        executableAction,
+    const entityContext: PendingActionEntityContext = {
         promptEntityMap,
         promptNameEntityMap,
-    }));
+        resultEntityMap,
+    };
+    const pending = actions.map((executableAction) => {
+        const pending: PendingAction = {
+            executableAction,
+            entityContext,
+        };
+        resolveEntities(executableAction.action, entityContext);
+        if (executableAction.resultEntityId) {
+            resultEntityMap.set(executableAction.resultEntityId, {
+                name: executableAction.resultEntityId,
+                type: [],
+                sourceAppAgentName: getAppAgentName(
+                    executableAction.action.schemaName,
+                ),
+            });
+        }
+        return pending;
+    });
+    // clear the fake result.
+    entityContext.resultEntityMap = undefined;
+    return pending;
 }
 
 export async function executeActions(
@@ -704,19 +717,10 @@ export async function executeActions(
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
+    const actionQueue: PendingAction[] = toPendingActions(actions, entities);
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
-        const promptEntityMap = toPromptEntityMap(entities);
-        const promptNameEntityMap = toPromptEntityNameMap(entities);
-        commandResult.actions = actions.map(({ action }) =>
-            resolveEntities(
-                action,
-                new Map(),
-                promptEntityMap,
-                promptNameEntityMap,
-                true,
-            ),
-        );
+        commandResult.actions = actions.map(({ action }) => action);
     }
 
     if (!(await canExecute(actions, context))) {
@@ -724,12 +728,9 @@ export async function executeActions(
     }
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
-    const resultEntityMap = new Map<string, PromptEntity>();
-    const actionQueue: PendingAction[] = toPendingActions(actions, entities);
 
     while (actionQueue.length !== 0) {
-        const { executableAction, promptEntityMap, promptNameEntityMap } =
-            actionQueue.shift()!;
+        const { executableAction, entityContext } = actionQueue.shift()!;
         const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
@@ -751,76 +752,84 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.schemaName);
-        resolveEntities(
-            action,
-            resultEntityMap,
-            promptEntityMap,
-            promptNameEntityMap,
-            false,
-        );
+        // resolve again to populate the result entities.
+        resolveEntities(action, entityContext);
         const result = await executeAction(
             executableAction,
             context,
             actionIndex,
         );
-        if (result.error === undefined) {
-            if (result.resultEntity && executableAction.resultEntityId) {
-                resultEntityMap.set(executableAction.resultEntityId, {
-                    ...result.resultEntity,
-                    sourceAppAgentName: appAgentName,
-                });
+        if (result.error !== undefined) {
+            return;
+        }
+        const resultEntityId = executableAction.resultEntityId;
+        if (resultEntityId !== undefined) {
+            if (result.resultEntity === undefined) {
+                throw new Error(
+                    `Action ${getFullActionName(
+                        executableAction,
+                    )} did not return a result entity.`,
+                );
             }
 
-            if (result.additionalActions !== undefined) {
-                try {
-                    const actions = getAdditionalExecutableActions(
-                        result.additionalActions,
-                        action.schemaName,
-                        systemContext,
-                    );
-                    // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
-                    actionQueue.unshift(
-                        ...toPendingActions(actions, undefined),
-                    );
-                } catch (e) {
-                    throw new Error(
-                        `${action.schemaName}.${action.actionName} returned an invalid action: ${e}`,
-                    );
-                }
+            let resultEntityMap = entityContext.resultEntityMap;
+            if (resultEntityMap === undefined) {
+                resultEntityMap = new Map<string, PromptEntity>();
+                entityContext.resultEntityMap = resultEntityMap;
+            }
+            resultEntityMap.set(resultEntityId, {
+                ...result.resultEntity,
+                sourceAppAgentName: appAgentName,
+            });
+        }
+
+        if (result.additionalActions !== undefined) {
+            try {
+                const actions = getAdditionalExecutableActions(
+                    result.additionalActions,
+                    action.schemaName,
+                    systemContext,
+                );
+                // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
+                actionQueue.unshift(...toPendingActions(actions, undefined));
+            } catch (e) {
+                throw new Error(
+                    `${action.schemaName}.${action.actionName} returned an invalid action: ${e}`,
+                );
+            }
+        }
+
+        if (result.activityContext !== undefined) {
+            if (actionQueue.length > 0) {
+                throw new Error(
+                    `Cannot start an activity when there are pending actions.`,
+                );
             }
 
-            if (result.activityContext !== undefined) {
-                if (actionQueue.length > 0) {
-                    throw new Error(
-                        `Cannot start an activity when there are pending actions.`,
-                    );
-                }
-
-                if (result.activityContext === null) {
-                    clearActivityContext(systemContext);
-                } else {
-                    // TODO: validation
-                    const { activityName, description, state, openLocalView } =
-                        result.activityContext;
-                    const prevOpenLocalView =
-                        systemContext.activityContext?.openLocalView;
-                    systemContext.activityContext = {
-                        appAgentName,
-                        activityName,
-                        description,
-                        state,
-                        openLocalView: prevOpenLocalView || openLocalView,
-                    };
-                    systemContext.agents.toggleTransient(
-                        DispatcherActivityName,
-                        true,
-                    );
-                    if (openLocalView) {
-                        const port =
-                            systemContext.agents.getLocalHostPort(appAgentName);
-                        if (port !== undefined) {
-                            await systemContext.clientIO.openLocalView(port);
-                        }
+            if (result.activityContext === null) {
+                clearActivityContext(systemContext);
+            } else {
+                // TODO: validation
+                const { activityName, description, state, openLocalView } =
+                    result.activityContext;
+                const prevOpenLocalView =
+                    systemContext.activityContext?.openLocalView;
+                systemContext.activityContext = {
+                    appAgentName,
+                    activityName,
+                    description,
+                    state,
+                    openLocalView: prevOpenLocalView || openLocalView,
+                };
+                systemContext.agents.toggleTransient(
+                    DispatcherActivityName,
+                    true,
+                );
+                if (openLocalView) {
+                    const port =
+                        systemContext.agents.getLocalHostPort(appAgentName);
+                    if (port !== undefined) {
+                        await systemContext.clientIO.openLocalView(port);
                     }
                 }
             }
