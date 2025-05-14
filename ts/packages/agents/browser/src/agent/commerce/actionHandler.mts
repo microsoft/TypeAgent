@@ -217,7 +217,10 @@ export async function handleCommerceAction(
         let executionHistory: any[] = [];
         let lastAction: any;
 
-        const port = await context.sessionContext.getSharedLocalHostPort("planVisualizer");
+        const port =
+            await context.sessionContext.getSharedLocalHostPort(
+                "planVisualizer",
+            );
         const planVisualizationEndpoint = `http://localhost:${port}`;
 
         if (!planVisualizationEndpoint) {
