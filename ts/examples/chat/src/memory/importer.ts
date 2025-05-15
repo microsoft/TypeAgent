@@ -8,7 +8,7 @@ import {
     TextBlock,
 } from "knowledge-processor";
 import { dateTime, getAbsolutePath, WorkQueue } from "typeagent";
-import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
 import { existsSync } from "node:fs";
 import { error, Result, success } from "typechat";
 
@@ -56,7 +56,7 @@ export async function runImportQueue(
     clean: boolean,
     maxItems: number,
     pauseMs: number,
-    printer: ChatMemoryPrinter,
+    printer: KnowledgeProcessorWriter,
     itemProcessor: (
         filePath: string,
         index: number,

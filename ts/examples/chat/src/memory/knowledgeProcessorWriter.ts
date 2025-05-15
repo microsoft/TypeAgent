@@ -14,7 +14,7 @@ import chalk, { ChalkInstance } from "chalk";
 import { pathToFileURL } from "url";
 import { getSearchQuestion } from "./common.js";
 
-export class ChatMemoryPrinter extends MemoryConsoleWriter {
+export class KnowledgeProcessorWriter extends MemoryConsoleWriter {
     constructor(io: InteractiveIo) {
         super(io);
     }

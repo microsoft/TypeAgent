@@ -24,7 +24,7 @@ import {
     getFileName,
     NameValue,
 } from "typeagent";
-import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
 import path from "path";
 import fs from "fs";
 
@@ -280,7 +280,7 @@ export function getSearchQuestion(
 
 export async function manageConversationAlias(
     cm: conversation.ConversationManager,
-    printer: ChatMemoryPrinter,
+    printer: KnowledgeProcessorWriter,
     name: string | undefined,
     alias: string | undefined,
 ) {

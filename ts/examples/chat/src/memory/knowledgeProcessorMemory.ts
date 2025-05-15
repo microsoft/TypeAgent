@@ -39,7 +39,7 @@ import {
     removeDir,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
-import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
@@ -73,7 +73,7 @@ export type Models = {
 export type KnowledgeProcessorContext = {
     storePath: string;
     statsPath: string;
-    printer: ChatMemoryPrinter;
+    printer: KnowledgeProcessorWriter;
     models: Models;
     maxCharsPerChunk: number;
     stats?: knowLib.IndexingStats | undefined;
@@ -196,7 +196,7 @@ export async function createKnowledgeProcessorContext(
     const context: KnowledgeProcessorContext = {
         storePath,
         statsPath,
-        printer: new ChatMemoryPrinter(getInteractiveIO()),
+        printer: new KnowledgeProcessorWriter(getInteractiveIO()),
         models,
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
@@ -372,7 +372,7 @@ export async function runMemoryCommands(): Promise<void> {
 
     function onStart(io: InteractiveIo): void {
         if (io !== context.printer.io) {
-            printer = new ChatMemoryPrinter(io);
+            printer = new KnowledgeProcessorWriter(io);
             context.printer = printer;
         }
     }
