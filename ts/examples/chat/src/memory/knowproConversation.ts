@@ -16,11 +16,11 @@ import * as kp from "knowpro";
 import * as cm from "conversation-memory";
 import path from "path";
 
-import { KnowProContext } from "./knowproMemory.js";
+import { KnowproContext } from "./knowproMemory.js";
 import { ensureDir } from "typeagent";
 import chalk from "chalk";
 
-export type KnowProChatContext = {
+export type KnowproConversationContext = {
     printer: KnowProPrinter;
     conversationMemory?: cm.ConversationMemory | undefined;
     basePath: string;
@@ -28,10 +28,10 @@ export type KnowProChatContext = {
 };
 
 export async function createKnowproConversationCommands(
-    kpContext: KnowProContext,
+    kpContext: KnowproContext,
     commands: Record<string, CommandHandler>,
 ) {
-    const context: KnowProChatContext = {
+    const context: KnowproConversationContext = {
         printer: kpContext.printer,
         basePath: path.join(kpContext.basePath, "chat"),
         defaultName: "default",

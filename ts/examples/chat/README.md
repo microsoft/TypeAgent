@@ -1,19 +1,20 @@
-## Chat test app
+## Chat and Memory example
 
-**Frequent changes**
-
-- This **test app is sample code** that is used to interactively test and explore several **conversation** and **memory** related packages as they are being developed.
+- **Sample code** used to interactively experiment with several **conversation** and **memory** related packages as they are being developed.
 - Requires file system access. The app creates test directories under **/data/testChat**
+- **Frequent changes**
 
 Interaction is via a set of commands.
 
 - Enter @**help** for a list of commands
-- Command names must be prefixed with @ to run. E.g. @kpCmRemember
-- Get help for any command like this: @kpEmailsLoad --?
+- All command names must be prefixed with **@**
+  - E.g: @kpCmRemember
+- Get help for any command using --?
+  - E.g: @kpCmRemember --?
 
 ## knowpro and memory
 
-Packages targeted:
+Packages explored:
 
 - [knowpro](../../packages/knowPro/)
 - [memory](../../packages/memory/)
@@ -24,19 +25,18 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
 | Feature Area                                               | Command Prefix             |
 | ---------------------------------------------------------- | -------------------------- |
-| [Podcast Memory](./src/memory/knowproMemory.ts)            | @kpPodcast...              |
-| [Image Memory](./src/memory/knowproMemory.ts)              | @kpImage...                |
 | [knowpro Search/Answer](./src/memory/knowproMemory.ts)     | @kpSearch..., @kpAnswer... |
+| [Podcast Memory](./src/memory/knowproPodcast.ts)           | @kpPodcast...              |
+| [Image Memory](./src/memory/knowproImage.ts)               | @kpImage...                |
 | [Email](./src/memory/knowproEmail.ts)                      | @kpEmail...                |
 | [Conversation Memory](./src/memory/knowproConversation.ts) | @kpCm...                   |
 
 ## knowledge-processor
 
-Packages targeted:
+Any command that does not have the prefix "@kp".
+Experiments with older packages:
 
 - [knowledge-processor](../../packages/knowledgeProcessor/)
-
-Any command that does not have the prefix "@kp".
 
 ## code-processor
 

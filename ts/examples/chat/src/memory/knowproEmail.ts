@@ -11,7 +11,7 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { KnowProContext } from "./knowproMemory.js";
+import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
 import path from "path";
@@ -30,7 +30,7 @@ export type KnowProEmailContext = {
 };
 
 export async function createKnowproEmailCommands(
-    kpContext: KnowProContext,
+    kpContext: KnowproContext,
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
     const context: KnowProEmailContext = {
