@@ -79,7 +79,7 @@ function loadParsedActionSchema(
                 `Schema type mismatch: actual: ${parsedActionSchema.entry.action?.name}, expected:${activityTypeName}`,
             );
         }
-        
+
         return {
             schemaName,
             sourceHash,
