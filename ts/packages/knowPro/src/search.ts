@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { MessageAccumulator, SemanticRefAccumulator } from "./collections.js";
-import { createAndTermGroup } from "./searchLib.js";
+import { createAndTermGroup, createTagSearchTermGroup } from "./searchLib.js";
 import {
     IConversation,
     IConversationSecondaryIndexes,
@@ -539,6 +539,14 @@ class QueryCompiler {
             scopeSelectors ??= [];
             scopeSelectors?.push(
                 new q.TextRangeSelector(filter.textRangesInScope),
+            );
+        }
+        // Tags...
+        if (filter && filter.tags && filter.tags.length > 0) {
+            scopeSelectors ??= [];
+            this.addTermsScopeSelector(
+                createTagSearchTermGroup(filter.tags),
+                scopeSelectors,
             );
         }
         // If a thread index is available...

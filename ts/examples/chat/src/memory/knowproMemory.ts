@@ -544,7 +544,8 @@ export async function createKnowproCommands(
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
-        def.options!.maxToDisplay = argNum("Maximum to display", 100);
+        def.options.maxToDisplay = argNum("Maximum to display", 100);
+        def.options.thread = arg("Thread description");
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -726,6 +727,10 @@ export async function createKnowproCommands(
         if (namedArgs.ktype) {
             selectExpr.when ??= {};
             selectExpr.when.knowledgeType = namedArgs.ktype;
+        }
+        if (namedArgs.thread) {
+            selectExpr.when ??= {};
+            selectExpr.when.threadDescription = namedArgs.thread;
         }
         context.printer.writeSelectExpr(selectExpr);
         const searchResults = await kp.searchConversation(
