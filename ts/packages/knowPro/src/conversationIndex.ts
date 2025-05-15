@@ -483,11 +483,13 @@ export async function buildConversationIndex(
 
     addMessageKnowledgeToSemanticRefIndex(conversation, 0);
 
-    indexingResult.semanticRefs = await buildSemanticRefIndex(
-        conversation,
-        settings.semanticRefIndexSettings,
-        eventHandler,
-    );
+    if (settings.semanticRefIndexSettings.autoExtractKnowledge) {
+        indexingResult.semanticRefs = await buildSemanticRefIndex(
+            conversation,
+            settings.semanticRefIndexSettings,
+            eventHandler,
+        );
+    }
     if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
         indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
             conversation,
