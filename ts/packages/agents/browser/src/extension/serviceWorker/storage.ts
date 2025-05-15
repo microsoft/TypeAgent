@@ -34,8 +34,16 @@ export async function setStoredPageProperty(
     try {
         const result = await chrome.storage.local.get([url]);
         const urlData = result[url] || {};
-        urlData[key] = value;
+        if (
+            key === "__proto__" ||
+            key === "constructor" ||
+            key === "prototype"
+        ) {
+            console.error(`Invalid key '${key}' detected. Operation aborted.`);
+            return;
+        }
 
+        urlData[key] = value;
         await chrome.storage.local.set({ [url]: urlData });
         console.log(`Saved property '${key}' for ${url}`);
     } catch (error) {
