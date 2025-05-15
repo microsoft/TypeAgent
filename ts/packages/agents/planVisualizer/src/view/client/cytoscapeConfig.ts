@@ -98,21 +98,7 @@ const CytoscapeConfig = {
                     "shadow-opacity": 0.8,
                 },
             },
-            // Screenshot mode styles - larger rectangles
-            {
-                selector: "node.screenshot-mode",
-                style: {
-                    width: 200,
-                    height: 120,
-                    "text-margin-y": -5,
-                    "text-background-color": "rgba(255,255,255,0.7)",
-                    "text-background-opacity": 1,
-                    "text-background-padding": 3,
-                    "text-background-shape": "roundrectangle",
-                },
-            },
-
-            // Nodes with screenshots regardless of mode - add background image
+            // Nodes with screenshots - add background image
             {
                 selector: "node[?hasScreenshot]",
                 style: {
@@ -151,26 +137,6 @@ const CytoscapeConfig = {
                 },
             },
 
-            // For screenshot mode, make the styling even more pronounced
-            {
-                selector: "node.screenshot-mode[?hasScreenshot]",
-                style: {
-                    // Same background-image and background-fit as above
-                    // Make the label even smaller and more out of the way
-                    "font-size": "10px",
-                    "text-margin-y": -12,
-                    "text-margin-x": 0, // Set to 0 to align with the left edge
-                    "text-valign": "top",
-                    "text-halign": "left",
-                    "text-background-color": "rgba(255,255,255,0.9)",
-                    "text-background-shape": "roundrectangle",
-                    "text-background-padding": 2,
-                    "border-width": 2,
-                    // Increase the node size in screenshot mode
-                    width: 220,
-                    height: 140,
-                },
-            },
             // Temporary nodes
             {
                 selector: "node[?isTemporary]",

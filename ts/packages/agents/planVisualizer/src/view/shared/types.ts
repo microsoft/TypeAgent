@@ -42,7 +42,7 @@ export interface TransitionFormData {
     currentState: string;
     action: string;
     nodeType: string;
-    screenshot?: string | undefined;
+    screenshot?: string | null;
 }
 
 // API transition response
