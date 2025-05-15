@@ -156,7 +156,7 @@ export function createEmailCommands(
     function emailConvertMsgDef(): CommandMetadata {
         return {
             description:
-                "Convert Outlook .msg files in a folder\nRequires:\n-Windows\n-Outlook (classic) for O365",
+                "Convert Outlook .msg files in a folder. Requires: Windows, Outlook (classic) for O365",
             args: {
                 sourcePath: argSourceFileOrFolder(),
             },

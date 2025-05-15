@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import * as knowLib from "knowledge-processor";
 import {
     arg,
     argBool,
@@ -26,10 +25,7 @@ import { dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as cm from "conversation-memory";
-import {
-    hasConversationResults,
-    matchFilterToConversation,
-} from "./knowproCommon.js";
+import { hasConversationResults } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
@@ -38,7 +34,6 @@ import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 
 export type KnowproContext = {
     knowledgeModel: ChatModel;
-    knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
     printer: KnowProPrinter;
     conversation?: kp.IConversation | undefined;
@@ -53,10 +48,6 @@ export async function createKnowproCommands(
     const knowledgeModel = chatContext.models.chatModel;
     const context: KnowproContext = {
         knowledgeModel,
-        knowledgeActions:
-            knowLib.conversation.createKnowledgeActionTranslator(
-                knowledgeModel,
-            ),
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         answerGenerator: new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(knowledgeModel),
@@ -77,7 +68,6 @@ export async function createKnowproCommands(
      * CREATE GENERAL MEMORY COMMANDS
      */
     commands.kpSearchTerms = searchTerms;
-    commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
     commands.kpSearchRag = searchRag;
@@ -212,49 +202,6 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpSearch.metadata = searchDef();
-    async function searchV1(args: string[]): Promise<void> {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, searchDef());
-        const query = namedArgs.query;
-        const result = await context.knowledgeActions.translateSearchTermsV2(
-            query,
-            kp.getTimeRangePromptSectionForConversation(context.conversation!),
-        );
-        if (!result.success) {
-            context.printer.writeError(result.message);
-            return;
-        }
-        let searchAction = result.data;
-        if (searchAction.actionName !== "getAnswer") {
-            return;
-        }
-        context.printer.writeSearchFilter(searchAction);
-        if (searchAction.parameters.filters.length > 0) {
-            const filter = searchAction.parameters.filters[0];
-            const searchResults = await matchFilterToConversation(
-                context.conversation!,
-                filter,
-                namedArgs.ktype,
-                {
-                    exactMatch: namedArgs.exact,
-                },
-            );
-            if (searchResults) {
-                context.printer.writeKnowledgeSearchResults(
-                    context.conversation!,
-                    searchResults,
-                    namedArgs.maxToDisplay,
-                    namedArgs.distinct,
-                );
-            } else {
-                context.printer.writeLine("No matches");
-            }
-        }
-    }
-
     function searchDefNew(): CommandMetadata {
         const def = searchDef();
         def.description = "Search using natural language";
