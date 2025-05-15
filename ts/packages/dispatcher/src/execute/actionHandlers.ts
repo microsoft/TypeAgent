@@ -64,6 +64,9 @@ import { ActionParamObject, ActionParamType } from "action-schema";
 import { AppAgentManager } from "../context/appAgentManager.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
+const debugActionEntities = registerDebug(
+    "typeagent:dispatcher:actions:entities",
+);
 
 export function getSchemaNamePrefix(
     schemaName: string,
@@ -525,7 +528,7 @@ async function canExecute(
 type EntityValue = PromptEntity | undefined;
 type EntityField = EntityValue | EntityObject | EntityField[];
 interface EntityObject {
-    [key: string]: EntityValue | EntityField;
+    [key: string]: EntityField;
 }
 
 async function getParameterObjectEntities(
@@ -533,9 +536,10 @@ async function getParameterObjectEntities(
     obj: Record<string, any>,
     objType: ActionParamObject,
     entityContext: PendingActionEntityContext,
+    existing?: EntityObject,
 ) {
     let hasEntity = false;
-    const entities: EntityObject | EntityField[] = Array.isArray(obj) ? [] : {};
+    const entities: EntityObject = {};
     for (const [k, v] of Object.entries(obj)) {
         const fieldType = objType.fields[k]?.type;
         if (fieldType === undefined) {
@@ -550,6 +554,7 @@ async function getParameterObjectEntities(
             v,
             fieldType,
             entityContext,
+            existing?.[k],
         );
         if (entity !== undefined) {
             hasEntity = true;
@@ -590,8 +595,11 @@ async function resolveParameterEntity(
     value: any,
     fieldType: ActionParamType,
     entityContext: PendingActionEntityContext,
+    existing?: EntityValue,
 ): Promise<PromptEntity | undefined> {
     const appAgentName = getAppAgentName(action.schemaName);
+
+    // Always resolve results
     if (value.startsWith("${result-")) {
         const resultEntity = entityContext.resultEntityMap?.get(value);
         if (resultEntity !== undefined) {
@@ -603,6 +611,12 @@ async function resolveParameterEntity(
         }
         throw new Error(`Result entity reference not found: ${value}`);
     }
+
+    // Don't resolve other entities if we already have one.
+    if (existing !== undefined) {
+        return existing;
+    }
+
     if (value.startsWith("${entity-")) {
         const entity = entityContext.promptEntityMap?.get(value);
         if (entity !== undefined) {
@@ -662,6 +676,7 @@ async function getParameterEntities(
     value: unknown,
     fieldType: ActionParamType,
     entityContext: PendingActionEntityContext,
+    existing?: EntityField,
 ): Promise<EntityField | undefined> {
     switch (typeof value) {
         case "undefined":
@@ -674,6 +689,7 @@ async function getParameterEntities(
                 value,
                 fieldType,
                 entityContext,
+                existing as EntityValue | undefined,
             );
         case "function":
             throw new Error("Function is not supported as an action value");
@@ -696,6 +712,7 @@ async function getParameterEntities(
                             v,
                             fieldType.elementType,
                             entityContext,
+                            (existing as EntityField[] | undefined)?.[i],
                         ),
                     ),
                 );
@@ -709,6 +726,7 @@ async function getParameterEntities(
                       value,
                       fieldType,
                       entityContext,
+                      existing as EntityObject | undefined,
                   )
                 : undefined;
     }
@@ -763,8 +781,6 @@ async function resolveEntities(
     if (parameters === undefined) {
         return;
     }
-    // Clear the existing entities.
-    delete action.entities;
 
     const agents = entityContext.agents;
     const config = agents.getActionConfig(action.schemaName);
@@ -792,8 +808,16 @@ async function resolveEntities(
         parameters,
         parameterType,
         entityContext,
+        action.entities as EntityObject | undefined,
     );
     if (entities !== undefined) {
+        debugActionEntities(
+            `Resolved action entities: ${JSON.stringify(
+                entities,
+                undefined,
+                2,
+            )}`,
+        );
         action.entities = entities as any;
     }
     return;
@@ -854,6 +878,7 @@ export async function executeActions(
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
         commandResult.actions = actions.map(({ action }) => action);
+        console.log(commandResult.actions);
     }
 
     if (!(await canExecute(actions, context))) {
@@ -887,7 +912,7 @@ export async function executeActions(
         }
         const appAgentName = getAppAgentName(action.schemaName);
         // resolve again to populate the result entities.
-        resolveEntities(action, entityContext);
+        await resolveEntities(action, entityContext);
         const result = await executeAction(
             executableAction,
             context,
