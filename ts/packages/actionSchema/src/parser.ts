@@ -316,6 +316,7 @@ export function createParsedActionSchema(
 type SchemaTypeNames = {
     action?: string;
     activity?: string;
+    entity?: string;
 };
 
 export function parseActionSchemaSource(
@@ -407,6 +408,16 @@ class ActionParser {
                 );
             }
         }
+
+        const entityTypeName =
+            typeof typeName === "string" ? undefined : typeName.entity;
+        if (entityTypeName) {
+            definitions.entity = this.typeMap.get(entityTypeName);
+            if (definitions.entity === undefined) {
+                throw new Error(`Entity type '${entityTypeName}' not found`);
+            }
+        }
+
         return definitions;
     }
 

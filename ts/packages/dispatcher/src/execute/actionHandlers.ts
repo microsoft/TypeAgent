@@ -303,6 +303,7 @@ function getStreamingActionContext(
         actionContext?.closeActionContext();
         return undefined;
     }
+
     // If we are reusing the streaming action context, we need to update the action.
     systemContext.clientIO.setDisplayInfo(
         appAgentName,
@@ -527,7 +528,7 @@ interface EntityObject {
     [key: string]: EntityValue | EntityField;
 }
 
-function getParameterObjectEntities(
+async function getParameterObjectEntities(
     action: FullAction,
     obj: Record<string, any>,
     objType: ActionParamObject,
@@ -542,7 +543,7 @@ function getParameterObjectEntities(
                 `Parameter type mismatch: ${action.schemaName}.${action.actionName}: schema does not have field ${k}`,
             );
         }
-        const entity = getParameterEntities(
+        const entity = await getParameterEntities(
             action,
             obj,
             k,
@@ -754,7 +755,7 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
     return map;
 }
 
-function resolveEntities(
+async function resolveEntities(
     action: TypeAgentAction<FullAction>,
     entityContext: PendingActionEntityContext,
 ) {
@@ -786,7 +787,7 @@ function resolveEntities(
         );
     }
 
-    const entities = getParameterObjectEntities(
+    const entities = await getParameterObjectEntities(
         action,
         parameters,
         parameterType,
@@ -798,11 +799,11 @@ function resolveEntities(
     return;
 }
 
-function toPendingActions(
+async function toPendingActions(
     agents: AppAgentManager,
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
-): PendingAction[] {
+): Promise<PendingAction[]> {
     const resultEntityMap = new Map<string, PromptEntity>();
     const promptEntityMap = toPromptEntityMap(entities);
     const promptNameEntityMap = toPromptEntityNameMap(entities);
@@ -812,24 +813,26 @@ function toPendingActions(
         resultEntityMap,
         agents,
     };
-    const pending = actions.map((executableAction) => {
-        const pending: PendingAction = {
-            executableAction,
-            entityContext,
-        };
-        resolveEntities(executableAction.action, entityContext);
+    const pending = await Promise.all(
+        actions.map(async (executableAction) => {
+            const pending: PendingAction = {
+                executableAction,
+                entityContext,
+            };
+            await resolveEntities(executableAction.action, entityContext);
 
-        const resultEntityId = executableAction.resultEntityId;
-        if (resultEntityId !== undefined) {
-            const name = `\${result-${resultEntityId}}`;
-            resultEntityMap.set(name, {
-                name,
-                type: [],
-                sourceAppAgentName: "",
-            });
-        }
-        return pending;
-    });
+            const resultEntityId = executableAction.resultEntityId;
+            if (resultEntityId !== undefined) {
+                const name = `\${result-${resultEntityId}}`;
+                resultEntityMap.set(name, {
+                    name,
+                    type: [],
+                    sourceAppAgentName: "",
+                });
+            }
+            return pending;
+        }),
+    );
     // clear the fake result.
     entityContext.resultEntityMap = undefined;
     return pending;
@@ -843,7 +846,7 @@ export async function executeActions(
     const systemContext = context.sessionContext.agentContext;
 
     // Even if the action is not executed, resolve the entities for the commandResult.
-    const actionQueue: PendingAction[] = toPendingActions(
+    const actionQueue: PendingAction[] = await toPendingActions(
         systemContext.agents,
         actions,
         entities,
@@ -874,11 +877,11 @@ export async function executeActions(
 
             const requestAction = translationResult.requestAction;
             actionQueue.unshift(
-                ...toPendingActions(
+                ...(await toPendingActions(
                     systemContext.agents,
                     requestAction.actions,
                     requestAction.history?.entities,
-                ),
+                )),
             );
             continue;
         }
@@ -923,11 +926,11 @@ export async function executeActions(
                 );
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
                 actionQueue.unshift(
-                    ...toPendingActions(
+                    ...(await toPendingActions(
                         systemContext.agents,
                         actions,
                         undefined,
-                    ),
+                    )),
                 );
             } catch (e) {
                 throw new Error(
