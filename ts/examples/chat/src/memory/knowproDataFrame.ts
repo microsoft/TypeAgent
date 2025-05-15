@@ -252,7 +252,6 @@ export async function createKnowproDataFrameCommands(
         }
 
         context.conversation = restaurantCollection.conversation;
-        context.printer.conversation = restaurantCollection.conversation;
     }
 
     async function buildIndex(restaurantCollection: RestaurantIndex) {
