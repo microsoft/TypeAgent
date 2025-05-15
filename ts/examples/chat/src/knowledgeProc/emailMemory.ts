@@ -14,7 +14,7 @@ import { sqlite } from "memory-providers";
 import {
     KnowledgeProcessorContext,
     ReservedConversationNames,
-} from "../memory/knowledgeProcessorMemory.js";
+} from "./knowledgeProcessorMemory.js";
 import { Models } from "../common.js";
 import {
     createWorkQueueFolder,

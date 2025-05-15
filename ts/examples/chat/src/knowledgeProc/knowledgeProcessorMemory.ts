@@ -39,8 +39,8 @@ import {
     removeDir,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
-import { KnowledgeProcessorWriter } from "../knowledgeProc/knowledgeProcessorWriter.js";
-import { timestampBlocks } from "../knowledgeProc/importer.js";
+import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
+import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
 import {
@@ -54,20 +54,10 @@ import {
     Models,
     createModels,
 } from "../common.js";
-import {
-    createEmailCommands,
-    createEmailMemory,
-} from "../knowledgeProc/emailMemory.js";
-import {
-    createImageMemory,
-    createImageCommands,
-} from "../knowledgeProc/imageMemory.js";
+import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
+import { createImageMemory, createImageCommands } from "./imageMemory.js";
 import { pathToFileURL } from "url";
-import {
-    createPodcastCommands,
-    createPodcastMemory,
-} from "../knowledgeProc/podcastMemory.js";
-import { createKnowproCommands } from "./knowproMemory.js";
+import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
 
 /**
  * Context for knowledge-processor based experiments
@@ -338,10 +328,6 @@ export async function runKnowledgeProcessorCommands(): Promise<void> {
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
     createImageCommands(context, commands);
-    //
-    // AND ALSO SET UP knowpro test commands
-    //
-    await createKnowproCommands(commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {

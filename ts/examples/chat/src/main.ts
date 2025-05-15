@@ -3,7 +3,7 @@
 
 import dotenv from "dotenv";
 import { runCodeChat } from "./codeChat/codeChat.js";
-import { runKnowledgeProcessorCommands } from "./memory/knowledgeProcessorMemory.js";
+import { runKnowledgeProcessorCommands } from "./knowledgeProc/knowledgeProcessorMemory.js";
 import { runCodeMemoryCommands } from "./codeChat/codeMemory.js";
 import { runKnowproMemory } from "./memory/knowproMemory.js";
 

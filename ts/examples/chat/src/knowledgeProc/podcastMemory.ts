@@ -12,7 +12,7 @@ import * as knowLib from "knowledge-processor";
 import {
     KnowledgeProcessorContext,
     ReservedConversationNames,
-} from "../memory/knowledgeProcessorMemory.js";
+} from "./knowledgeProcessorMemory.js";
 import { Models } from "../common.js";
 import { sqlite } from "memory-providers";
 import { elastic } from "memory-providers";

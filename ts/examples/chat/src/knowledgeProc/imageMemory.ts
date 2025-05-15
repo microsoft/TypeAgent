@@ -18,7 +18,7 @@ import {
 import {
     KnowledgeProcessorContext,
     ReservedConversationNames,
-} from "../memory/knowledgeProcessorMemory.js";
+} from "./knowledgeProcessorMemory.js";
 import { Models } from "../common.js";
 import {
     argDestFile,
