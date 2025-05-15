@@ -21,7 +21,7 @@ import {
 /**
  * Initializes the service worker
  */
-async function initialize(): Promise<void> {
+export async function initialize(): Promise<void> {
     console.log("Browser Agent Service Worker initializing");
 
     try {
