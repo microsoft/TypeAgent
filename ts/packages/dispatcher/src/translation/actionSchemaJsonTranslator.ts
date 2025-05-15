@@ -170,6 +170,7 @@ class ActionSchemaBuilder {
         }
 
         const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
+        const entitySchemas = new Map<string, ActionSchemaTypeDefinition>();
         const pending = [...this.definitions];
         while (pending.length > 0) {
             const current = pending.shift()!;
@@ -212,7 +213,7 @@ class ActionSchemaBuilder {
             }
         }
 
-        return { entry, actionSchemas, order };
+        return { entry, actionSchemas, entitySchemas, order };
     }
 }
 

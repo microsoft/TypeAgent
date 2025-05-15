@@ -135,6 +135,16 @@ export function createAgentRpcServer(
                 getActionContextShim(param),
             );
         },
+        async resolveEntity(param) {
+            if (agent.resolveEntity === undefined) {
+                throw new Error("Invalid invocation of resolveEntity");
+            }
+            return agent.resolveEntity(
+                param.type,
+                param.name,
+                getSessionContextShim(param),
+            );
+        },
         async getTemplateSchema(param) {
             if (agent.getTemplateSchema === undefined) {
                 throw new Error("Invalid invocation of getTemplateSchema");

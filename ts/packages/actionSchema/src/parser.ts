@@ -194,6 +194,7 @@ export function createParsedActionSchema(
         pending.push(entry.activity);
     }
     const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
+    const entitySchemas = new Map<string, ActionSchemaTypeDefinition>();
     while (pending.length > 0) {
         const current = pending.shift()!;
         switch (current.type.type) {
@@ -255,6 +256,7 @@ export function createParsedActionSchema(
     const parsedActionSchema: ParsedActionSchema = {
         entry: entry as ActionSchemaEntryTypeDefinitions,
         actionSchemas,
+        entitySchemas,
     };
     if (schemaConfig?.actionNamespace === true) {
         parsedActionSchema.actionNamespace = true;

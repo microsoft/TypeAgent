@@ -140,6 +140,8 @@ export type ActionSchemaGroup<T = ActionSchemaEntryTypeDefinition> = {
     entry: T;
     // Map action name to action type definition
     actionSchemas: Map<string, ActionSchemaTypeDefinition>;
+    // Map of entity type name to type definition
+    entitySchemas?: Map<string, ActionSchemaTypeDefinition>;
     // Order for the type definitions
     order?: Map<string, number>; // for exact regen
 };

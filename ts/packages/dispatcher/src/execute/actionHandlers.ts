@@ -60,6 +60,8 @@ import { getActionSchema } from "../internal.js";
 import { validateAction } from "action-schema";
 import { IndexManager } from "../context/indexManager.js";
 import { IndexData } from "image-memory";
+import { ActionParamObject, ActionParamType } from "action-schema";
+import { AppAgentManager } from "../context/appAgentManager.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -526,18 +528,26 @@ interface EntityObject {
 }
 
 function getParameterObjectEntities(
-    appAgentName: string,
+    action: FullAction,
     obj: Record<string, any>,
+    objType: ActionParamObject,
     entityContext: PendingActionEntityContext,
 ) {
     let hasEntity = false;
     const entities: EntityObject | EntityField[] = Array.isArray(obj) ? [] : {};
     for (const [k, v] of Object.entries(obj)) {
+        const fieldType = objType.fields[k]?.type;
+        if (fieldType === undefined) {
+            throw new Error(
+                `Parameter type mismatch: ${action.schemaName}.${action.actionName}: schema does not have field ${k}`,
+            );
+        }
         const entity = getParameterEntities(
-            appAgentName,
+            action,
             obj,
             k,
             v,
+            fieldType,
             entityContext,
         );
         if (entity !== undefined) {
@@ -548,13 +558,39 @@ function getParameterObjectEntities(
     return hasEntity ? entities : undefined;
 }
 
-function resolveParameterEntity(
+function resolvePromptEntity(
     appAgentName: string,
-    obj: Record<string, any>,
-    key: string,
-    value: any,
     entityContext: PendingActionEntityContext,
+    value: string,
 ) {
+    // LLM like to correct/change casing.  Normalize entity name for look up.
+    const foundEntity = entityContext.promptNameEntityMap?.get(
+        normalizeParamString(value),
+    );
+    if (foundEntity === undefined) {
+        return undefined;
+    }
+    if (!Array.isArray(foundEntity)) {
+        return foundEntity.sourceAppAgentName === appAgentName
+            ? foundEntity
+            : undefined;
+    }
+    const matched = foundEntity.filter(
+        (e) => e.sourceAppAgentName === appAgentName,
+    );
+    // TODO: If there are multiple match, ignore for now.
+    return matched.length === 1 ? matched[0] : undefined;
+}
+
+async function resolveParameterEntity(
+    action: FullAction,
+    obj: Record<string, any>,
+    key: string | number,
+    value: any,
+    fieldType: ActionParamType,
+    entityContext: PendingActionEntityContext,
+): Promise<PromptEntity | undefined> {
+    const appAgentName = getAppAgentName(action.schemaName);
     if (value.startsWith("${result-")) {
         const resultEntity = entityContext.resultEntityMap?.get(value);
         if (resultEntity !== undefined) {
@@ -579,48 +615,100 @@ function resolveParameterEntity(
         throw new Error(`Entity reference not found: ${value}`);
     }
 
-    // LLM like to correct/change casing.  Normalize entity name for look up.
-    const foundEntity = entityContext.promptNameEntityMap?.get(
-        normalizeParamString(value),
-    );
-    if (foundEntity === undefined) {
-        return undefined;
+    const entity = resolvePromptEntity(appAgentName, entityContext, value);
+    if (entity !== undefined) {
+        return entity;
     }
-    if (!Array.isArray(foundEntity)) {
-        return foundEntity.sourceAppAgentName === appAgentName
-            ? foundEntity
-            : undefined;
+
+    if (fieldType.type === "type-reference") {
+        const agents = entityContext.agents;
+        const actionSchemaFile = agents.getActionSchemaFileForConfig(
+            agents.getActionConfig(action.schemaName),
+        );
+        const entitySchema =
+            actionSchemaFile.parsedActionSchema.entitySchemas?.get(
+                fieldType.name,
+            );
+        if (entitySchema === undefined) {
+            return;
+        }
+        const agent = agents.getAppAgent(appAgentName);
+        if (agent.resolveEntity === undefined) {
+            throw new Error(
+                "Agent declares entity types but does not implement resolveEntity",
+            );
+        }
+        const result = await agent.resolveEntity(
+            fieldType.name,
+            value,
+            agents.getSessionContext(appAgentName),
+        );
+        if (result) {
+            return {
+                sourceAppAgentName: appAgentName,
+                ...result.entity,
+            };
+        }
     }
-    const matched = foundEntity.filter(
-        (e) => e.sourceAppAgentName === appAgentName,
-    );
-    // TODO: If there are multiple match, ignore for now.
-    return matched.length === 1 ? matched[0] : undefined;
+
+    return undefined;
 }
 
-function getParameterEntities(
-    appAgentName: string,
+async function getParameterEntities(
+    action: FullAction,
     obj: any,
-    key: string,
-    value: any,
+    key: string | number,
+    value: unknown,
+    fieldType: ActionParamType,
     entityContext: PendingActionEntityContext,
-): EntityField | undefined {
+): Promise<EntityField | undefined> {
     switch (typeof value) {
         case "undefined":
             return;
         case "string":
             return resolveParameterEntity(
-                appAgentName,
+                action,
                 obj,
                 key,
                 value,
+                fieldType,
                 entityContext,
             );
         case "function":
             throw new Error("Function is not supported as an action value");
         case "object":
+            if (value === null) {
+                throw new Error(
+                    `Action parameter value cannot be null: ${key}`,
+                );
+            }
+            if (Array.isArray(value)) {
+                if (fieldType.type !== "array") {
+                    throw new Error(`Action parameter type mismatch: ${key}`);
+                }
+                return Promise.all(
+                    value.map((v, i) =>
+                        getParameterEntities(
+                            action,
+                            obj,
+                            i,
+                            v,
+                            fieldType.elementType,
+                            entityContext,
+                        ),
+                    ),
+                );
+            }
+            if (fieldType.type !== "object") {
+                throw new Error(`Action parameter type mismatch: ${key}`);
+            }
             return value
-                ? getParameterObjectEntities(appAgentName, value, entityContext)
+                ? getParameterObjectEntities(
+                      action,
+                      value,
+                      fieldType,
+                      entityContext,
+                  )
                 : undefined;
     }
 }
@@ -629,6 +717,7 @@ type PendingActionEntityContext = {
     promptEntityMap: Map<string, PromptEntity> | undefined;
     promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined;
     resultEntityMap: Map<string, PromptEntity> | undefined;
+    agents: AppAgentManager;
 };
 type PendingAction = {
     executableAction: ExecutableAction;
@@ -669,14 +758,38 @@ function resolveEntities(
     action: TypeAgentAction<FullAction>,
     entityContext: PendingActionEntityContext,
 ) {
-    if (action.parameters === undefined) {
+    const parameters = action.parameters;
+    if (parameters === undefined) {
         return;
     }
     // Clear the existing entities.
     delete action.entities;
+
+    const agents = entityContext.agents;
+    const config = agents.getActionConfig(action.schemaName);
+    const actionSchemaFile = agents.getActionSchemaFileForConfig(config);
+
+    const schema = actionSchemaFile.parsedActionSchema.actionSchemas.get(
+        action.actionName,
+    );
+
+    if (schema === undefined) {
+        throw new Error(
+            `Action schema not found for ${action.schemaName}.${action.actionName}`,
+        );
+    }
+
+    const parameterType = schema?.type.fields.parameters?.type;
+    if (parameterType?.type !== "object") {
+        throw new Error(
+            `Action schema parameter type mismatch: ${action.schemaName}.${action.actionName}`,
+        );
+    }
+
     const entities = getParameterObjectEntities(
-        getAppAgentName(action.schemaName),
-        action.parameters!,
+        action,
+        parameters,
+        parameterType,
         entityContext,
     );
     if (entities !== undefined) {
@@ -686,6 +799,7 @@ function resolveEntities(
 }
 
 function toPendingActions(
+    agents: AppAgentManager,
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
 ): PendingAction[] {
@@ -696,6 +810,7 @@ function toPendingActions(
         promptEntityMap,
         promptNameEntityMap,
         resultEntityMap,
+        agents,
     };
     const pending = actions.map((executableAction) => {
         const pending: PendingAction = {
@@ -726,7 +841,13 @@ export async function executeActions(
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
-    const actionQueue: PendingAction[] = toPendingActions(actions, entities);
+
+    // Even if the action is not executed, resolve the entities for the commandResult.
+    const actionQueue: PendingAction[] = toPendingActions(
+        systemContext.agents,
+        actions,
+        entities,
+    );
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
         commandResult.actions = actions.map(({ action }) => action);
@@ -754,6 +875,7 @@ export async function executeActions(
             const requestAction = translationResult.requestAction;
             actionQueue.unshift(
                 ...toPendingActions(
+                    systemContext.agents,
                     requestAction.actions,
                     requestAction.history?.entities,
                 ),
@@ -800,7 +922,13 @@ export async function executeActions(
                     systemContext,
                 );
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
-                actionQueue.unshift(...toPendingActions(actions, undefined));
+                actionQueue.unshift(
+                    ...toPendingActions(
+                        systemContext.agents,
+                        actions,
+                        undefined,
+                    ),
+                );
             } catch (e) {
                 throw new Error(
                     `${action.schemaName}.${action.actionName} returned an invalid action: ${e}`,
