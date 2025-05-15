@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "rimraf": "^6.0.1",
-    "typescript": "~5.4.2"
+    "typescript": "~5.4.5"
   },
   "engines": {
     "node": ">=20"
