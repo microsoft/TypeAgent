@@ -430,6 +430,17 @@ export async function createAgentRpcClient(
                 }),
             );
         },
+        resolveEntity(
+            type: string,
+            name: string,
+            context: SessionContext<ShimContext>,
+        ) {
+            return rpc.invoke("resolveEntity", {
+                ...getContextParam(context),
+                type,
+                name,
+            });
+        },
         getTemplateSchema(
             templateName,
             data,

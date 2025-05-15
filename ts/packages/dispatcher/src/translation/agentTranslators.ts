@@ -125,12 +125,33 @@ export function getActivitySchemaTypeName(
     return typeof schemaType === "string" ? undefined : schemaType.activity;
 }
 
-export function getCombinedSchemaTypeName(
-    schemaType: string | SchemaTypeNames,
-) {
-    return typeof schemaType === "string"
-        ? schemaType
-        : Object.values(schemaType).join("");
+export function getEntitySchemaTypeName(schemaType: string | SchemaTypeNames) {
+    return typeof schemaType === "string" ? undefined : schemaType.entities;
+}
+
+/**
+ * Combine all action schema type names into a single type name
+ * @param schemaType
+ * @returns
+ */
+export function getCombinedActionSchemaTypeName(
+    actionConfig: ActionConfig,
+): string | undefined {
+    const schemaType = actionConfig.schemaType;
+    if (typeof schemaType === "string") {
+        return schemaType;
+    }
+    if (schemaType.action !== undefined) {
+        return schemaType.activity !== undefined
+            ? `${schemaType.action}${schemaType.activity}`
+            : schemaType.action;
+    }
+    if (schemaType.activity !== undefined) {
+        return schemaType.activity;
+    }
+    throw new Error(
+        `Action config ${actionConfig.schemaName} does not have any action or activity schema type`,
+    );
 }
 
 function getTranslatorSchemaDef(
