@@ -8,7 +8,7 @@ import {
     TextBlock,
 } from "knowledge-processor";
 import { dateTime, getAbsolutePath, WorkQueue } from "typeagent";
-import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
+import { KnowledgeProcessorWriter } from "../knowledgeProc/knowledgeProcessorWriter.js";
 import { existsSync } from "node:fs";
 import { error, Result, success } from "typechat";
 

@@ -25,7 +25,7 @@ import {
     argDestFile,
     argSourceFileOrFolder,
     argSourceFolder,
-} from "./common.js";
+} from "../common.js";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import fs from "node:fs";
 import * as knowLib from "knowledge-processor";

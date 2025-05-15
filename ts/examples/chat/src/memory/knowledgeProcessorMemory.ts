@@ -39,7 +39,7 @@ import {
     removeDir,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
-import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
+import { KnowledgeProcessorWriter } from "../knowledgeProc/knowledgeProcessorWriter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
@@ -51,7 +51,7 @@ import {
     argSourceFile,
     getMessagesAndCount,
     extractedKnowledgeToResponse,
-} from "./common.js";
+} from "../common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
 import { createImageMemory } from "./imageMemory.js";
 import { pathToFileURL } from "url";

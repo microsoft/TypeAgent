@@ -28,7 +28,7 @@ import {
     argSourceFile,
     argToDate,
     copyFileToDir,
-} from "./common.js";
+} from "../common.js";
 import { ensureDir, getFileName } from "typeagent";
 import chalk from "chalk";
 

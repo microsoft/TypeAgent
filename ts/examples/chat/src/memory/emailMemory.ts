@@ -48,7 +48,7 @@ import {
     getSearchQuestion,
     indexingStatsToCsv,
     pause,
-} from "./common.js";
+} from "../common.js";
 import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
 import fs from "fs";

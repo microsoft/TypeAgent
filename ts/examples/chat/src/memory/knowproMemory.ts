@@ -20,7 +20,7 @@ import {
     argToDate,
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
-} from "./common.js";
+} from "../common.js";
 import { dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";

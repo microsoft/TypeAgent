@@ -6,7 +6,7 @@ import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
 import { MemoryConsoleWriter } from "../memoryWriter.js";
-import { addFileNameSuffixToPath } from "./common.js";
+import { addFileNameSuffixToPath } from "../common.js";
 import path from "path";
 import { getFileName } from "typeagent";
 

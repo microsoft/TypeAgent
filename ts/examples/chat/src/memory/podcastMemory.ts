@@ -38,7 +38,7 @@ import {
     findConversationThread,
     getMessageIdsForThread,
     manageConversationAlias,
-} from "./common.js";
+} from "../common.js";
 import path from "path";
 import {
     asyncArray,

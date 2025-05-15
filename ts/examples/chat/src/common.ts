@@ -24,7 +24,7 @@ import {
     getFileName,
     NameValue,
 } from "typeagent";
-import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
+import { KnowledgeProcessorWriter } from "./knowledgeProc/knowledgeProcessorWriter.js";
 import path from "path";
 import fs from "fs";
 

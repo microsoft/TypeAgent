@@ -12,7 +12,7 @@ import { collections, dateTime } from "typeagent";
 import { MemoryConsoleWriter } from "../memoryWriter.js";
 import chalk, { ChalkInstance } from "chalk";
 import { pathToFileURL } from "url";
-import { getSearchQuestion } from "./common.js";
+import { getSearchQuestion } from "../common.js";
 
 export class KnowledgeProcessorWriter extends MemoryConsoleWriter {
     constructor(io: InteractiveIo) {
