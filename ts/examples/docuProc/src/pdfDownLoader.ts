@@ -244,7 +244,7 @@ export async function downloadArxivPaper(
     try {
         return await withFileLock(filePath, async () => {
             if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-                return buildEntry();
+                return buildEntry(undefined);
             }
 
             const resp = await fetchWithRetry(downloadUrl, {
@@ -262,8 +262,8 @@ export async function downloadArxivPaper(
             await fsp.rename(tmpPath, filePath);
 
             await fsp.writeFile(metaPath, JSON.stringify(paper, null, 2));
-            await downloadArxivSource(paper);
-            return buildEntry();
+            const paperTarFile = await downloadArxivSource(paper);
+            return buildEntry(paperTarFile);
         });
     } catch (err) {
         console.error("Error downloading paper:", err);
@@ -271,17 +271,26 @@ export async function downloadArxivPaper(
     }
 
     // helper to assemble the catalog object
-    function buildEntry(): CatalogEntry {
+    function buildEntry(paperTarFile: string | undefined): CatalogEntry {
         const paperId = arxivIdFromLink(paper.id);
-        const paperTarFile = getPaperTarFilePath(paperId);
-        return {
-            id: paperId,
-            filePath,
-            metaPath,
-            downloadedAt: new Date().toISOString(),
-            tags: deriveTags(paper), // basic tag extractor (below)
-            sourcePath: paperTarFile,
-        };
+        if (paperTarFile === undefined) {
+            return {
+                id: paperId,
+                filePath,
+                metaPath,
+                downloadedAt: new Date().toISOString(),
+                tags: deriveTags(paper), // basic tag extractor (below)
+            };
+        } else {
+            return {
+                id: paperId,
+                filePath,
+                metaPath,
+                downloadedAt: new Date().toISOString(),
+                tags: deriveTags(paper), // basic tag extractor (below)
+                sourcePath: paperTarFile,
+            };
+        }
     }
 }
 
