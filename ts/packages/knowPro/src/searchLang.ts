@@ -450,12 +450,7 @@ class SearchQueryCompiler {
                 this.langSearchFilter.tags.length > 0
             ) {
                 when ??= {};
-                const tagTerms = this.compileTags(this.langSearchFilter.tags);
-                if (when.scopeDefiningTerms) {
-                    when.scopeDefiningTerms.terms.push(tagTerms);
-                } else {
-                    when.scopeDefiningTerms = tagTerms;
-                }
+                when.tags = this.langSearchFilter.tags;
             }
         }
         return when;
@@ -668,16 +663,6 @@ class SearchQueryCompiler {
             this.compileOptions.exactScope,
         );
         return objectTermGroup;
-    }
-
-    private compileTags(tags: string[]): SearchTermGroup {
-        const termGroup = createOrMaxTermGroup();
-        for (const tag of tags) {
-            termGroup.terms.push(
-                createPropertySearchTerm(PropertyNames.Tag, tag, true),
-            );
-        }
-        return termGroup;
     }
 
     private addVerbsToGroup(

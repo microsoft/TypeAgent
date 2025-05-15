@@ -14,6 +14,7 @@ import {
     SearchTermGroupTypes,
 } from "./interfaces.js";
 import * as kpLib from "knowledge-processor";
+import { PropertyNames } from "./propertyIndex.js";
 
 /**
  * Create a search term with an optional weight
@@ -168,6 +169,16 @@ export function createPropertySearchTerms(
         }
     }
     return propertySearchTerms;
+}
+
+export function createTagSearchTermGroup(tags: string[]): SearchTermGroup {
+    const termGroup = createOrMaxTermGroup();
+    for (const tag of tags) {
+        termGroup.terms.push(
+            createPropertySearchTerm(PropertyNames.Tag, tag, true),
+        );
+    }
+    return termGroup;
 }
 
 function splitTermValues(term: string, splitChar: string): string[] {

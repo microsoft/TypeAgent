@@ -622,6 +622,7 @@ export type WhenFilter = {
     knowledgeType?: KnowledgeType | undefined;
     dateRange?: DateRange | undefined;
     threadDescription?: string | undefined;
+    tags?: string[] | undefined;
     // SCOPE DEFINITION
     /**
      * Search terms whose matching text ranges supply the scope for this query

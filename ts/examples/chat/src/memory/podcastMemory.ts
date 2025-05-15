@@ -246,10 +246,10 @@ export function createPodcastCommands(
             podcastMessages.length,
         );
 
-        context.printer.writeLine("Building secondary indexes");
-        await kp.buildSecondaryIndexes(
-            kpPodcast,
-            kpPodcast.settings,
+        context.printer.writeLine("Building indexes");
+        kpPodcast.settings.semanticRefIndexSettings.autoExtractKnowledge =
+            false;
+        await kpPodcast.buildIndex(
             createIndexingEventHandler(
                 context.printer,
                 progress,
