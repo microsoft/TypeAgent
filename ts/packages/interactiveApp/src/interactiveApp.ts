@@ -713,6 +713,22 @@ export function displayHelp(
     }
 }
 
+export function displayClosestCommands(
+    commandName: string,
+    handlers: Record<string, CommandHandler>,
+    io: InteractiveIo,
+): boolean {
+    const [matches, matchCount] = filterCommandsByName(
+        commandName + "*",
+        handlers,
+    );
+    if (matchCount > 0) {
+        displayCommands(matches, io, "Closest matches:");
+        return true;
+    }
+    return false;
+}
+
 export function searchCommands(
     args: string[],
     handlers: Record<string, CommandHandler>,

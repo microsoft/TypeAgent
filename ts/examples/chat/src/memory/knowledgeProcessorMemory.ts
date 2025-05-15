@@ -306,7 +306,7 @@ export async function loadConversation(
 }
 
 // This creates both (knowledge-processor) and know-pro commands
-export async function runMemoryCommands(): Promise<void> {
+export async function runKnowledgeProcessorCommands(): Promise<void> {
     let context = await createKnowledgeProcessorContext(captureTokenStats);
     let showTokenStats = false;
     let printer = context.printer;
@@ -341,7 +341,7 @@ export async function runMemoryCommands(): Promise<void> {
     //
     // AND ALSO SET UP knowpro test commands
     //
-    await createKnowproCommands(context, commands);
+    await createKnowproCommands(commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {

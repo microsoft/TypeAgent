@@ -3,19 +3,21 @@
 
 import * as kp from "knowpro";
 import {
+    addStandardHandlers,
     arg,
     argBool,
     argNum,
     askYesNo,
     CommandHandler,
     CommandMetadata,
+    displayClosestCommands,
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
+    runConsole,
     StopWatch,
 } from "interactive-app";
-import { KnowledgeProcessorContext } from "./knowledgeProcessorMemory.js";
-import { ChatModel } from "aiclient";
+import { ChatModel, openai } from "aiclient";
 import {
     argToDate,
     parseFreeAndNamedArguments,
@@ -24,13 +26,45 @@ import {
 import { dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as cm from "conversation-memory";
 import { hasConversationResults } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
 import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
+import * as cm from "conversation-memory";
+
+export async function runKnowproMemory(): Promise<void> {
+    const storePath = "/data/testChat";
+    await ensureDir(storePath);
+
+    const commands: Record<string, CommandHandler> = {};
+    await createKnowproCommands(commands);
+    addStandardHandlers(commands);
+    await runConsole({
+        inputHandler,
+        handlers: commands,
+    });
+
+    async function inputHandler(
+        line: string,
+        io: InteractiveIo,
+    ): Promise<void> {
+        if (line.length > 0) {
+            const args = line.split(" ");
+            if (args.length > 0) {
+                const cmdName = args[0];
+                io.writer.writeLine(`Did you mean @${cmdName}?`);
+                io.writer.writeLine("Commands must be prefixed with @");
+                io.writer.writeLine();
+                if (displayClosestCommands(cmdName, commands, io)) {
+                    return;
+                }
+            }
+        }
+        io.writer.writeLine("Enter @help for a list of commands");
+    }
+}
 
 export type KnowproContext = {
     knowledgeModel: ChatModel;
@@ -41,11 +75,16 @@ export type KnowproContext = {
     answerGenerator: kp.AnswerGenerator;
 };
 
+export function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    return openai.createJsonChatModel(chatModelSettings, ["knowproMemory"]);
+}
+
 export async function createKnowproCommands(
-    chatContext: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
-    const knowledgeModel = chatContext.models.chatModel;
+    const knowledgeModel = createKnowledgeModel();
     const context: KnowproContext = {
         knowledgeModel,
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
@@ -552,7 +591,7 @@ export async function createKnowproCommands(
             "topic",
         );
     }
-    commands.topics.metadata = topicsDef();
+    commands.kpTopics.metadata = topicsDef();
     async function topics(args: string[]): Promise<void> {
         const conversation = ensureConversationLoaded();
         if (!conversation) {

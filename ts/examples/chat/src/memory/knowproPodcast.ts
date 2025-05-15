@@ -271,6 +271,7 @@ export async function createKnowproPodcastCommands(
         context.printer.writeListIndexingResult(result);
     }
 
+    commands.kpPodcastLoadSample.metadata = "Load sample podcast index";
     async function podcastLoadSample(args: string[]) {
         const sampleTranscript =
             "../../../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt";
