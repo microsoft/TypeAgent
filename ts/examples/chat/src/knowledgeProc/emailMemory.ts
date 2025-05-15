@@ -4,7 +4,6 @@
 /**
  * ===============================================
  * Email memory experiments with knowledge-processor package
- * For knowpro, see {@link ./knowproEmail.ts}
  * ===============================================
  */
 
@@ -14,9 +13,9 @@ import { conversation } from "knowledge-processor";
 import { sqlite } from "memory-providers";
 import {
     KnowledgeProcessorContext,
-    Models,
     ReservedConversationNames,
-} from "./knowledgeProcessorMemory.js";
+} from "../memory/knowledgeProcessorMemory.js";
+import { Models } from "../common.js";
 import {
     createWorkQueueFolder,
     dateTime,
@@ -53,7 +52,10 @@ import chalk from "chalk";
 import { convertMsgFiles } from "./importer.js";
 import fs from "fs";
 import { error, Result, success } from "typechat";
-import { loadEmailMemory, memoryNameToIndexPath } from "./knowproCommon.js";
+import {
+    loadEmailMemory,
+    memoryNameToIndexPath,
+} from "../memory/knowproCommon.js";
 import * as cm from "conversation-memory";
 
 export async function createEmailMemory(

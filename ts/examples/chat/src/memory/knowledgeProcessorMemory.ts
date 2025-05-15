@@ -10,7 +10,7 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
+import { openai } from "aiclient";
 import {
     CommandHandler,
     CommandMetadata,
@@ -40,7 +40,7 @@ import {
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
 import { KnowledgeProcessorWriter } from "../knowledgeProc/knowledgeProcessorWriter.js";
-import { timestampBlocks } from "./importer.js";
+import { timestampBlocks } from "../knowledgeProc/importer.js";
 import path from "path";
 import fs from "fs";
 import {
@@ -51,20 +51,23 @@ import {
     argSourceFile,
     getMessagesAndCount,
     extractedKnowledgeToResponse,
+    Models,
+    createModels,
 } from "../common.js";
-import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
-import { createImageMemory } from "./imageMemory.js";
+import {
+    createEmailCommands,
+    createEmailMemory,
+} from "../knowledgeProc/emailMemory.js";
+import {
+    createImageMemory,
+    createImageCommands,
+} from "../knowledgeProc/imageMemory.js";
 import { pathToFileURL } from "url";
-import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
-import { createImageCommands } from "./imageMemory.js";
+import {
+    createPodcastCommands,
+    createPodcastMemory,
+} from "../knowledgeProc/podcastMemory.js";
 import { createKnowproCommands } from "./knowproMemory.js";
-
-export type Models = {
-    chatModel: ChatModel;
-    answerModel: ChatModel;
-    embeddingModel: TextEmbeddingModel;
-    embeddingModelSmall?: TextEmbeddingModel | undefined;
-};
 
 /**
  * Context for knowledge-processor based experiments
@@ -128,35 +131,6 @@ function getReservedConversation(
             return context.imageMemory;
     }
     return undefined;
-}
-
-export function createModels(): Models {
-    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
-    chatModelSettings.retryPauseMs = 10000;
-    const embeddingModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Embedding,
-    );
-    embeddingModelSettings.retryPauseMs = 25 * 1000;
-
-    const models: Models = {
-        chatModel: openai.createJsonChatModel(chatModelSettings, [
-            "chatMemory",
-        ]),
-        answerModel: openai.createChatModel(),
-        embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(embeddingModelSettings),
-            1024,
-        ),
-        /*
-        embeddingModelSmall: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel("3_SMALL", 1536),
-            256,
-        ),
-        */
-    };
-    models.chatModel.completionSettings.seed = 123;
-    models.answerModel.completionSettings.seed = 123;
-    return models;
 }
 
 export async function createKnowledgeProcessorContext(

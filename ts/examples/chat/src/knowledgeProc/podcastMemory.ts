@@ -4,7 +4,6 @@
 /**
  * ===============================================
  * Podcast memory experiments with knowledge-processor package
- * For knowpro, see {@link ./knowproMemory.ts}
  * ===============================================
  */
 
@@ -12,9 +11,9 @@ import { conversation } from "knowledge-processor";
 import * as knowLib from "knowledge-processor";
 import {
     KnowledgeProcessorContext,
-    Models,
     ReservedConversationNames,
-} from "./knowledgeProcessorMemory.js";
+} from "../memory/knowledgeProcessorMemory.js";
+import { Models } from "../common.js";
 import { sqlite } from "memory-providers";
 import { elastic } from "memory-providers";
 import {
@@ -58,7 +57,7 @@ import * as cm from "conversation-memory";
 import {
     addToConversation,
     createIndexingEventHandler,
-} from "./knowproCommon.js";
+} from "../memory/knowproCommon.js";
 
 export async function createPodcastMemory(
     models: Models,
