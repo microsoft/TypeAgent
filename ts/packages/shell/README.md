@@ -10,7 +10,7 @@ TypeAgent Shell is a **single personal assistant** that takes user request and u
 
 ### Linux/WSL Build Prerequisites
 
-TypeAgent shell is built using [Electron](https://www.electronjs.org). Install libraries needed to build in Linux/WSL following the [instructions here](https://www.electronjs.org/docs/latest/development/build-instructions-linux).
+TypeAgent shell is built using [Electron](https://www.electronjs.org). Follow these [instructions](https://www.electronjs.org/docs/latest/development/build-instructions-linux) to install the libraries needed to build and use in the Linux/WSL environment.
 
 ## Running the agent shell
 
