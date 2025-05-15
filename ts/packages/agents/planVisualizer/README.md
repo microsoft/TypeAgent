@@ -1,4 +1,4 @@
-# Markdown Agent
+# Plan Visualizer
 
 Plan Visualizer is **sample code** that explores visualizations for Web Plans.
 
