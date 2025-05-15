@@ -21,7 +21,6 @@ class Visualizer {
     private cy: cytoscape.Core | null;
     public pathHighlighted: boolean;
     private tempAnimInterval: number | null;
-    private screenshotMode: boolean = false;
     private _resizeObserver: ResizeObserver | null;
 
     /**
@@ -942,63 +941,6 @@ class Visualizer {
         }
     }
 
-    setScreenshotMode(enabled: boolean): void {
-        this.screenshotMode = enabled;
-
-        if (!this.cy) return;
-
-        const nodesWithScreenshots = this.cy
-            .nodes()
-            .filter((node) => node.data("hasScreenshot"));
-
-        if (enabled) {
-            // Add screenshot-mode class to all nodes
-            this.cy.nodes().addClass("screenshot-mode");
-
-            // For nodes with screenshots, apply special styling for visibility
-            nodesWithScreenshots.forEach((node) => {
-                node.style("z-index", 10); // Ensure label is above other elements
-            });
-
-            // Update the UI to indicate screenshot mode is active
-            const screenshotBadge = document.querySelector(".screenshot-badge");
-            if (screenshotBadge) {
-                screenshotBadge.classList.add("active");
-            } else {
-                // Create badge if it doesn't exist
-                const badge = document.createElement("div");
-                badge.className = "screenshot-badge active";
-                badge.textContent = "Screenshot Mode";
-                document.querySelector(".container")?.appendChild(badge);
-            }
-        } else {
-            // Remove screenshot-mode class from all nodes
-            this.cy.nodes().removeClass("screenshot-mode");
-
-            // Reset z-index for all nodes
-            this.cy.nodes().style("z-index", 0);
-
-            // Still keep labels above nodes with screenshots
-            nodesWithScreenshots.forEach((node) => {
-                node.style("z-index", 5); // Less than in screenshot mode, but still above
-            });
-
-            // Hide the screenshot mode indicator
-            const screenshotBadge = document.querySelector(".screenshot-badge");
-            if (screenshotBadge) {
-                screenshotBadge.classList.remove("active");
-            }
-
-            // Remove any existing custom labels
-            document
-                .querySelectorAll(".cy-node-screenshot-label")
-                .forEach((el) => el.remove());
-        }
-
-        // Force a redraw of the graph to update node appearance
-        this.cy.style().update();
-    }
-
     updateNodeScreenshot(nodeId: string, screenshot: string): void {
         if (!this.cy) return;
 
@@ -1036,11 +978,6 @@ class Visualizer {
 
             // Apply screenshot-specific styling if needed
             if (node.data("hasScreenshot")) {
-                // If we're in screenshot mode, make sure the node has that class
-                if (this.screenshotMode && !node.hasClass("screenshot-mode")) {
-                    node.addClass("screenshot-mode");
-                }
-
                 // For better performance, only animate this specific node
                 // rather than all nodes
                 node.style("z-index", 10); // Ensure label is above other elements
