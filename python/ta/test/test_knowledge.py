@@ -15,6 +15,7 @@ from typeagent.knowpro import convknowledge, kplib
 
 from fixtures import needs_auth
 
+
 @pytest.fixture
 def mock_knowledge_extractor():
     """Fixture to create a mock KnowledgeExtractor."""
