@@ -141,18 +141,25 @@ export type ActionSchemaGroup<T = ActionSchemaEntryTypeDefinition> = {
     // Map action name to action type definition
     actionSchemas: Map<string, ActionSchemaTypeDefinition>;
     // Map of entity type name to type definition
-    entitySchemas?: Map<string, ActionSchemaTypeDefinition>;
+    entitySchemas?: Map<string, ActionSchemaEntityTypeDefinition> | undefined;
     // Order for the type definitions
     order?: Map<string, number>; // for exact regen
 };
 
-export type SchemaEntryTypeDefinitions<T = SchemaTypeDefinition> = {
-    action?: T | undefined;
-    activity?: T | undefined;
-};
+// Only support string for now.
+export type ActionSchemaEntityTypeDefinition =
+    SchemaTypeAliasDefinition<SchemaTypeString>;
 
-export type ActionSchemaEntryTypeDefinitions =
-    SchemaEntryTypeDefinitions<ActionSchemaEntryTypeDefinition>;
+export type ActionSchemaEntityEntryTypeDefinition = SchemaTypeAliasDefinition<
+    | SchemaTypeReference<ActionSchemaEntityTypeDefinition>
+    | SchemaTypeUnion<SchemaTypeReference<ActionSchemaEntityTypeDefinition>>
+>;
+
+export type ActionSchemaEntryTypeDefinitions = {
+    action?: ActionSchemaEntryTypeDefinition | undefined;
+    activity?: ActionSchemaEntryTypeDefinition | undefined;
+    entity?: ActionSchemaEntityEntryTypeDefinition | undefined;
+};
 
 // Action schema that is parsed from a file.
 export type ParsedActionSchema =

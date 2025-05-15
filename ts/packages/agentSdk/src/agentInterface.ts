@@ -16,12 +16,13 @@ export type AppAgentManifest = {
     description: string;
     commandDefaultEnabled?: boolean;
     localView?: boolean; // whether the agent serve a local view, default is false
-    sharedLocalView?: string[]; // the agent to share the local view with, default is none
+    sharedLocalView?: string[]; // list of agents to share the local view with, default is none
 } & ActionManifest;
 
 export type SchemaTypeNames = {
     action?: string;
     activity?: string;
+    entities?: string;
 };
 
 export type SchemaFormat = "ts" | "pas";

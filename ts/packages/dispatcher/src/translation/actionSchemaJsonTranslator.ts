@@ -23,7 +23,7 @@ import {
 } from "common-utils";
 import {
     createChangeAssistantActionSchema,
-    getCombinedSchemaTypeName,
+    getCombinedActionSchemaTypeName,
     TranslatedAction,
 } from "./agentTranslators.js";
 import {
@@ -170,7 +170,6 @@ class ActionSchemaBuilder {
         }
 
         const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
-        const entitySchemas = new Map<string, ActionSchemaTypeDefinition>();
         const pending = [...this.definitions];
         while (pending.length > 0) {
             const current = pending.shift()!;
@@ -213,7 +212,7 @@ class ActionSchemaBuilder {
             }
         }
 
-        return { entry, actionSchemas, entitySchemas, order };
+        return { entry, actionSchemas, entitySchemas: undefined, order };
     }
 }
 
@@ -246,7 +245,7 @@ export function composeSelectedActionSchema(
 ) {
     const builder = new ActionSchemaBuilder(provider, options?.activity);
     const union = sc.union(definitions.map((definition) => sc.ref(definition)));
-    const typeName = `Partial${getCombinedSchemaTypeName(actionConfig.schemaType)}`;
+    const typeName = `Partial${getCombinedActionSchemaTypeName(actionConfig)}`;
     const comments = `${typeName} is a partial list of actions available in schema group '${actionConfig.schemaName}'.`;
 
     const entry = sc.type(typeName, union, comments);
