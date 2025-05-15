@@ -23,7 +23,12 @@ import {
     memoryNameToIndexPath,
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
-import { argDestFile, argSourceFile, argToDate } from "./common.js";
+import {
+    argDestFile,
+    argSourceFile,
+    argToDate,
+    copyFileToDir,
+} from "./common.js";
 import { ensureDir, getFileName } from "typeagent";
 import chalk from "chalk";
 
@@ -47,6 +52,7 @@ export async function createKnowproPodcastCommands(
     commands.kpPodcastLoad = podcastLoad;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
     commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
+    commands.kpPodcastLoadSample = podcastLoadSample;
 
     function podcastImportDef(): CommandMetadata {
         return {
@@ -263,6 +269,33 @@ export async function createKnowproPodcastCommands(
         );
         progress.complete();
         context.printer.writeListIndexingResult(result);
+    }
+
+    async function podcastLoadSample(args: string[]) {
+        const sampleTranscript =
+            "../../../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt";
+        const podcastName = getFileName(sampleTranscript);
+        await ensureSampleCopied(sampleTranscript);
+        context.printer.writeLine(
+            `Loading indexes for ${path.resolve(sampleTranscript)}`,
+        );
+        context.printer.writeLine();
+        await podcastLoad(["--name", podcastName]);
+    }
+
+    async function ensureSampleCopied(transcriptPath: string) {
+        const srcDir = path.dirname(transcriptPath);
+        const fileName = getFileName(transcriptPath);
+
+        const files = fs
+            .readdirSync(srcDir)
+            .filter((file) => file.startsWith(fileName));
+        const destDir = context.basePath;
+        await ensureDir(destDir);
+        for (const file of files) {
+            const srcPath = path.join(srcDir, file);
+            await copyFileToDir(srcPath, destDir, false);
+        }
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {

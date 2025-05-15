@@ -1,0 +1,22 @@
+# Sample inputs for knowPro
+
+# Load Sample Index
+@kpPodcastLoadSample
+
+# Answer natural language questions 
+@kpAnswer --query "List all book titles"
+@kpAnswer --query "List all books that are also movies"
+
+# Search with natural language
+@kpSearch --query "List all book titles"
+
+# Low level Search
+@kpSearchTerms book
+@kpSearchTerms book --type series
+@kpSearchTerms --type book --genre fantasy
+@kpSearchTerms --type book --category fantasy
+
+@kpSearchTerms "Empire in Black and Gold"
+@kpSearchTerms "Empire in Black and Gold" "Children of Memory"
+@kpSearchTerms "Empire in Black" "Children of"
+

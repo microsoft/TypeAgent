@@ -26,9 +26,24 @@ import {
 } from "typeagent";
 import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
 import path from "path";
+import fs from "fs";
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function copyFileToDir(
+    srcPath: string,
+    destDir: string,
+    always: boolean,
+): Promise<boolean> {
+    const fileName = path.basename(srcPath);
+    const destPath = path.join(destDir, fileName);
+    if (always || !fs.existsSync(destPath)) {
+        await fs.promises.copyFile(srcPath, destPath);
+        return true;
+    }
+    return false;
 }
 
 export async function getMessages(
