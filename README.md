@@ -52,7 +52,6 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
   - [Markdown](./ts/packages/agents/markdown/)
   - [Montage](./ts/packages/agents/montage/)
   - [Spelunker](./ts/packages/agents/spelunker/)
-  - [Test](./ts/packages/agents/test/)
   - [Turtle](./ts/packages/agents/turtle/)
   - [Phone](.ts/packages/agents/phone/)
   - [Photo](.ts/packages/agents/photo/)
