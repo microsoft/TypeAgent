@@ -8,12 +8,12 @@
 @kpSearchTerms book --type series
 @kpSearchTerms --type book --genre fantasy
 @kpSearchTerms --type book --category fantasy
+
 @kpSearchTerms "Empire in Black and Gold"
-@kpSearchTerms "Empire in Black and Gold" "Children of Memory"
 @kpSearchTerms "Empire in Black" "Children of"
 
 # Answer natural language questions 
-@kpAnswer --query "List all books"
+@kpAnswer --query "List the names of all books"
 @kpAnswer --query "List all books that are also movies"
 
 # Search with natural language
