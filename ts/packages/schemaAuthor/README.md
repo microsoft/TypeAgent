@@ -1,6 +1,6 @@
 # SchemaAuthor
 
-SchemaAuthor is **sample code** that shows how to use TypeChat to:
+SchemaAuthor is **sample code** that shows how to use structured prompting and LLM to:
 
 - Generate variations of user utterances.
 - Generate possible utterances for a given schema

@@ -1,12 +1,14 @@
 # TypeAgent Dispatcher
 
-TypeAgent Dispatcher is **sample code** and the core component that explores how to build a **single personal assistant** implementation with TypeChat:
+TypeAgent Dispatcher is **sample code** and the core component that explores how to build a **personal agent** implementation with structured prompting and LLM:
 
 - [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) are two front ends that make use of this shared component.
 - Extensible [application agents](../agentSdk/README.md) architecture.
 - [Agent Cache](../cache/README.md) to lower latency and cost.
 
 Dispatcher processes user requests and asks LLM to translate it into an action based on a schema provided by the application agents. It has ability to automatically switch between different agents to provide a seamless experience in a extensible and scalable way.
+
+See [architecture](../../../docs/architecture/dispatcher.md) doc for more details on the design of the dispatcher component.
 
 ## Usage
 
@@ -151,7 +153,13 @@ Use the `@const <args>` command at the prompt to control the construction store.
 
 ### Debugging
 
+#### Traces
+
 `@trace <trace pattern>` - add a trace pattern for debugging. See [Tracing](../../README.md#tracing) in the ts root README.md.
+
+#### In-proc agent mode.
+
+By default agents runs out of proc in their own process. This is to ensure that agent is built to be able to run independently or in the cloud. For debugging, agents can be forced to run in the same process as the dispatcher by setting the environment variable `TYPEAGENT_EXECMODE=0`
 
 ### Other configs
 
@@ -163,9 +171,9 @@ Use the `@const <args>` command at the prompt to control the construction store.
 
 ## Adding Dispatcher Agent
 
-Additional Dispatcher Agent can be create and added to the dispatcher to extend the capabilities of TypeAgent as a **single personal assistant**. [Agent SDK](../agentSdk) defines the interfaces and helper needed to develop an agent. The `Echo` agent [tutorial](../../../docs/tutorial/agent.md) illustrate the steps to create a basic agent in a NPM module and install into TypeAgent's [shell](../shell) and [CLI](../cli).
+Additional Dispatcher Agent can be create and added to the dispatcher to extend the capabilities of TypeAgent as a **personal agent**. [Agent SDK](../agentSdk) defines the interfaces and helper needed to develop an agent. The `Echo` agent [tutorial](../../../docs/tutorial/agent.md) illustrate the steps to create a basic agent in a NPM module and install into TypeAgent's [shell](../shell) and [CLI](../cli).
 
-By default dispatcher only comes with `system` and `dispatcher` agents, providing minimal base functionality. Additional agents are provided using [AppAgentProvider](./src/agentProvider/agentProvider.ts)) when the dispatcher is created by the host. The host of the dispatcher (like [shell](../shell) and [CLI](../cli)) is configured with the default provider with subset of agents implemented in this repo, and a extensible provider that allow additional agent to be dynamically install/registered. (See [default-agent-provider](../defaultAgentProvider/) package).
+By default dispatcher only comes with `system` and `dispatcher` agents, providing minimal base functionality. Additional agents are provided using [AppAgentProvider](./src/agentProvider/agentProvider.ts) when the dispatcher is created by the host. The host of the dispatcher (like [shell](../shell) and [CLI](../cli)) is configured with the default provider with subset of agents implemented in this repo, and a extensible provider that allow additional agent to be dynamically install/registered. (See [default-agent-provider](../defaultAgentProvider/) package).
 
 ## Trademarks
 

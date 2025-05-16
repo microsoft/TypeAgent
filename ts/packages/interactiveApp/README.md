@@ -4,7 +4,7 @@
 
 InteractiveApp is:
 
-- Sample code used by TypeAgent examples.
+- **Sample code** used by TypeAgent examples.
 - Not intended for other uses.
 
 ## Trademarks

@@ -1,6 +1,6 @@
 # Greeting Agent
 
-Greeting Agent is **sample code** that explores how to build a typed Greeting agent with **TypeChat**.
+Greeting Agent is **sample code** that explores how to build a typed Greeting agent with structured prompting and LLM.
 
 The sample demonstrates:
 
