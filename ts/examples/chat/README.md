@@ -31,14 +31,23 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
 ### Trying it out
 
+- Ensure you have a [.env](../../README.md#service-keys) configured with Service keys.
+- This code has currently been tested with **gpt-4o** only.
+  - Behavior or results with other models is currently unknown.
+- Run the app:
+  - cd <app directory>
+  - node dist/main.js
 - Use the **@kpPodcastLoadSample** command to load a pre-built Structured-RAG index for a [sample podcast](../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt).
 - Run example commands such as those listed in [input.txt](./src/memory/input.txt)
 
 ```
 @kpPodcastLoadSample
 
+@kpSearchTerms book
+
+@kpSearchTerms book --genre fantasy
+
 @kpAnswer --query "List all books"
-@kpAnswer --query "List all books that are also movies"
 ```
 
 ### Notes
