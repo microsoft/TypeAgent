@@ -31,7 +31,6 @@ export async function createWebDispatcher(): Promise<WebDispatcher> {
     const clientIO = createClientIORpcClient(clientIOChannel.channel);
     const dispatcher = await createDispatcher("api", {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
-        explanationAsynchronousMode: true,
         persistSession: true,
         persistDir: instanceDir,
         enableServiceHost: true,
