@@ -4,7 +4,7 @@
 // This requires that python3 is on the PATH
 // and the pdfChunker.py script is in the dist directory.
 
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import path, { resolve } from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
@@ -15,7 +15,7 @@ import { PdfChunkDocumentation, PdfDocumentInfo } from "./pdfDocChunkSchema.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const execPromise = promisify(exec);
+const execFilePromise = promisify(execFile);
 
 export type ChunkId = string;
 
@@ -115,12 +115,19 @@ export async function chunkifyPdfFiles(
     try {
         const chunkerPath = path.join(__dirname, "pdfChunker.py");
         const absChunkerPath = resolve(chunkerPath);
-        const absFilenames = filenames.map(
-            (f) => `"${path.join(__dirname, f)}"`,
-        );
+        const absFilenames = filenames.map((f) => path.join(__dirname, f));
         const outputDir = path.join(rootDir, "chunked-docs");
-        let { stdout, stderr } = await execPromise(
-            `python3 -X utf8 "${absChunkerPath}" -files ${absFilenames.join(" ")} -outdir ${outputDir}`,
+        let { stdout, stderr } = await execFilePromise(
+            "python3",
+            [
+                "-X",
+                "utf8",
+                absChunkerPath,
+                "-files",
+                ...absFilenames,
+                "-outdir",
+                outputDir,
+            ],
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
         );
         output = stdout;
