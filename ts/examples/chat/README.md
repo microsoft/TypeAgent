@@ -1,6 +1,6 @@
-## Chat
+## Memory and Chat Example
 
-A test app and CLI for testing and experimenting with the [knowpro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This app is **sample code** in active development with _frequent updates_
+A CLI for testing and experimenting with the [knowpro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with _frequent updates_.
 
 The CLI explores memory scenarios using the following packages:
 
