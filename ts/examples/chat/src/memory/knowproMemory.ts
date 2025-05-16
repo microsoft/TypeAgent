@@ -151,7 +151,7 @@ export async function createKnowproCommands(
                 description ??
                 "Search current knowPro conversation by manually providing terms as arguments",
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 100),
+                maxToDisplay: argNum("Maximum matches to display", 25),
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
@@ -249,7 +249,7 @@ export async function createKnowproCommands(
         def.options.showMessages = argBool("Show message matches", false);
         def.options.knowledgeTopK = argNum(
             "How many top K knowledge matches",
-            100,
+            50,
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget");
@@ -257,7 +257,7 @@ export async function createKnowproCommands(
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
-        def.options.maxToDisplay = argNum("Maximum to display", 100);
+        def.options.maxToDisplay = argNum("Maximum to display", 25);
         def.options.thread = arg("Thread description");
         return def;
     }

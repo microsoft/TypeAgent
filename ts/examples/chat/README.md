@@ -1,58 +1,50 @@
-## Chat and Memory example
+## Memory
 
-- **Sample code** used to interactively experiment with several **conversation** and **memory** related packages as they are being developed.
-- Requires file system access. The app creates test directories under **/data/testChat**
-- **Frequent changes**
+CLI for experimenting with Structured RAG and memory packages under **active development**.
 
-Interaction is via a set of commands.
+- **Sample code** with _Frequent Updates_
 
-- Enter @**help** for a list of commands
+The CLI explores memory scenarios using the following packages:
+
+- [knowpro](../../packages/knowPro/)
+- [conversation-memory](../../packages/memory/conversation)
+- [image-memory](../../packages/memory/image)
+
+The CLI is also used for interactive adhoc testing of these packages.
+
+Enter @**help** for a list of commands
+
 - All command names must be prefixed with **@**
   - E.g: @kpCmRemember
 - Get help for any command using --?
   - E.g: @kpCmRemember --?
 
-## knowpro and memory
-
-Packages explored:
-
-- [knowpro](../../packages/knowPro/)
-- [memory](../../packages/memory/)
-
-All knowPro commands prefixed with @**kp**.
-
 You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
 | Feature Area                                               | Command Prefix             |
 | ---------------------------------------------------------- | -------------------------- |
-| [knowpro Search/Answer](./src/memory/knowproMemory.ts)     | @kpSearch..., @kpAnswer... |
+| [General Search and Answer](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
 | [Podcast Memory](./src/memory/knowproPodcast.ts)           | @kpPodcast...              |
 | [Image Memory](./src/memory/knowproImage.ts)               | @kpImage...                |
-| [Email](./src/memory/knowproEmail.ts)                      | @kpEmail...                |
+| [Email Memory](./src/memory/knowproEmail.ts)               | @kpEmail...                |
 | [Conversation Memory](./src/memory/knowproConversation.ts) | @kpCm...                   |
 
-## knowledge-processor
+### Trying it out
 
-Any command that does not have the prefix "@kp".
-Experiments with older packages:
+- Use the **@kpPodcastLoadSample** command to load a pre-built Structured-RAG index for a [sample podcast](../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt).
+- Run example commands such as those listed in [input.txt](./src/memory/input.txt)
 
-- [knowledge-processor](../../packages/knowledgeProcessor/)
+```
+@kpPodcastLoadSample
 
-## code-processor
-
-Packages targeted:
-
-- [code-processor](../../packages/codeProcessor/)
-
-Run the test app with argument:
-
-- "code": Code analysis, search and other ideas
-- "codeMemory": Experiments with memory for devs
+@kpAnswer --query "List all books"
+@kpAnswer --query "List all books that are also movies"
+```
 
 ### Notes
 
-- This test app creates test directories.
-- This may require **_admin (sudo)_** rights. On Linux/WSL, you may need to launch node with sudo.
+- Requires file system access. Creates test directories under **/data/testChat**
+- May require **_admin (sudo)_** rights. On Linux/WSL, you may need to launch node with sudo.
 
 ## Trademarks
 
