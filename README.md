@@ -1,7 +1,5 @@
 # TypeAgent
 
-## Overview
-
 **TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
 We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing called Structured RAG as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
@@ -27,13 +25,13 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
 
 ### Quick start - Components
 
-- [Agent Dispatcher](./ts/packages/dispatcher/)
+- [TypeAgent Dispatcher](./ts/packages/dispatcher/)
   
   Explores applying structured prompting and LLM to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
 - [Knowledge Processor](./ts/packages/knowPro)
 
-- [Agent Cache](./ts/packages/cache/)
+- [TypeAgent Cache](./ts/packages/cache/)
 
   Explores how LLM with structured prompting can be used to cache action translation, minimizing the need to go the LLM.
 
@@ -52,7 +50,7 @@ Code in this repo doesn't not collect telemetry by default.
 
 ## Roadmap
 
-- Publish library for agent memory and action dispatch.
+- Publish libraries for agent memory and action dispatch.
 
 ## Limitations
 
@@ -68,14 +66,12 @@ TypeAgent is early stage sample code. TypeAgent is not a framework. All code in 
 
 ### Repo overivew
 
-**TypeAgent** uses structured prompting with LLM technique for many of the components.
+This repo contains the personal agent and example application agents, along with internal packages used to build them. **TypeAgent** uses structured prompting with LLM technique for many of the components,
 to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
 
-This repo contains the personal agent and example application agents, along with internal packages used to build them.
+### Exploring TypeAction Dispatch
 
-### Exploring Action Dispatch
-
-[Agent Shell](./ts/packages/shell) example allow additional agents to be installed/registered to extend its functionality. For developers who are interested in experimenting with action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [Agent Shell](./ts/packages/shell) example to explore using the [Agent Dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the interface definitions between [Agent Dispatcher](./ts/packages/dispatcher) and the agent.
+[TypeAgent Shell](./ts/packages/shell)'s functionality can be extended by installing/registering additional agents. For developers who are interested in experimenting adding action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [TypeAgent Shell](./ts/packages/shell) example to explore using the [TypeAgent Dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [TypeAgent SDK](./ts/packages/agentSdk/) provides the interface definitions between [TypeAgent Dispatcher](./ts/packages/dispatcher) and the agent.
 
 ### Working with TypeAgent repo
 
