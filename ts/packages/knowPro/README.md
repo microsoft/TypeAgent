@@ -19,7 +19,7 @@
 
 ## Knowpro implementation
 
-Knowpro implements the ideas of Structured RAG. Knowpro uses [TypeChat](https://github.com/microsoft/Typechat) to implement many core features.
+Knowpro implements the ideas of Structured RAG. Knowpro uses structured prompting and LLM to implement many core features.
 
 Knowpro also provides support for:
 

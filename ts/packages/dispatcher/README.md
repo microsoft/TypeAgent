@@ -1,6 +1,6 @@
 # TypeAgent Dispatcher
 
-TypeAgent Dispatcher is **sample code** and the core component that explores how to build a **personal agent** implementation with TypeChat:
+TypeAgent Dispatcher is **sample code** and the core component that explores how to build a **personal agent** implementation with structured prompting and LLM:
 
 - [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) are two front ends that make use of this shared component.
 - Extensible [application agents](../agentSdk/README.md) architecture.
