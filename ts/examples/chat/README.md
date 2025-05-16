@@ -2,7 +2,7 @@
 
 A CLI for testing and experimenting with the [knowpro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with _frequent updates_.
 
-The CLI explores memory scenarios using the following packages:
+The CLI explores:
 
 - [knowpro](../../packages/knowPro/README.md)
 - [conversation-memory](../../packages/memory/conversation)
