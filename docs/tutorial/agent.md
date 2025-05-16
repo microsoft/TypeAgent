@@ -1,15 +1,15 @@
 # Building Agents for TypeAgent Dispatcher
 
-TypeAgent [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli) are built using [Agent Dispatcher](../../ts/packages/dispatcher). It has an configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [Agent SDK](../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and surface them in the [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli).
+TypeAgent [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli) are built using [Agent Dispatcher](../../ts/packages/dispatcher). It has a configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [Agent SDK](../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and then surfaced in the [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli).
 
-This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli)
+This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli). The are two example agents in this repo you can reference: [Echo Agent](../../ts/examples/agentExamples/echo/) and [Measure Agent](../../ts/examples/agentExamples/measure/).
 
 ## Prerequisites
 
 Begin by exploring the following:
 
 - **Agent SDK**: Read about the architecture of the [**Agent SDK**](../../ts/packages/agentSdk/README.md).
-- **Example Agents**:
+- **Sample Agents**:
   - Review agents under the [agents](../../ts/packages/agents) directory. The [List](../../ts/packages/agents/list/) agent provides a good example and template for building an agent.
   - The [Echo](../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own custom application agents.
 
