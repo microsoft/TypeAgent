@@ -30,8 +30,8 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 ### Trying it out
 
 - Ensure you have a [.env](../../README.md#service-keys) configured with Service keys.
-- This code has currently been tested with **gpt-4o** only.
-  - Behavior or results with other models is currently unknown.
+- This code has currently been tested with **GPT-4o** only.
+  - Results with other models are not guaranteed.
 - Run the app:
   - cd <app directory>
   - node dist/main.js
