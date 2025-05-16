@@ -1,6 +1,6 @@
 # Sample inputs for knowPro
 
-# Load Sample Index
+## FIRST, LOAD A Sample Index
 @kpPodcastLoadSample
 
 # Direct low level Search
@@ -12,10 +12,13 @@
 @kpSearchTerms "Empire in Black and Gold"
 @kpSearchTerms "Empire in Black" "Children of"
 
+# Search with natural language
+@kpSearch --query "List all books"
+@kpSearch --query "List the names of all books"
+@kpSearch --query "List all books that are also movies"
+
 # Answer natural language questions 
 @kpAnswer --query "List the names of all books"
 @kpAnswer --query "List all books that are also movies"
 
-# Search with natural language
-@kpSearch --query "List all books"
 
