@@ -84,13 +84,13 @@ Code in this repo doesn't not collect telemetry by default.
 
 ## Limitations
 
-TypeAgent is early stage sample code over [TypeChat](https://github.com/microsoft/typechat). TypeAgent is not a framework. All code in this repo is intended for building our own example apps and agents only.
+TypeAgent is early stage sample code over [TypeChat](https://github.com/microsoft/typechat). TypeAgent is not a framework. All code in this repo is intended for building examples (apps, agents, and disptacher hosts) only.
 
 - TypeAgent is in **active development** with frequent updates and refactoring.
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
 - TypeAgent is currently tested in English. Performance may vary in other languages.
 - TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
-- You are responsible for supplying any **API keys** for services used by examples.
+- You are responsible for supplying any **API keys** for services used by examples.  You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
 
 ## Developers
 
