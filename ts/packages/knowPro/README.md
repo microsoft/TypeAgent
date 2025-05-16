@@ -1,20 +1,20 @@
 # Knowpro
 
-**Knowpro** is **experimental sample code** working towards an MVP library for **Structured RAG**. Knowpro is currently in **active** development with _frequent_ changes as the API and feature set evolves.
+**Knowpro** is **experimental sample code** working towards an MVP library for **Structured RAG**. Knowpro is currently in **active** development with frequent updates as the API and feature set evolves.
 
 - The Knowpro implementation of Structured RAG is used to implement types of [**memory**](../memory/README.md)
-- The [knowpro test app](../../examples/chat/) demonstrates how to use both memory APIs and knowpro.
+- A [knowpro test app](../../examples/chat/) demonstrates how to use both knowpro and memory APIs.
 
 ## Structured RAG overview
 
-- Structured RAG (and knowpro) work with conversations. Conversations are defined as a sequence of messages.
+- Structured RAG works with conversations. A conversations is a sequence of messages.
 - A message can be a turn in a conversation, podcast or chat transcript. It can also be an email message, the description of an image, etc.
 - Structured RAG extracts dense information from the text of messages. The extracted information includes short topic sentences, tree-structured entities, and relationship information such as actions.
 - Structured information may also accompany a message. This can be timestamps, metadata such as to/from information, or the location information associated with an image. Structured information may be added to a relational table associated with the conversation as needed.
-- Structured RAG stores the information associated with a message in suitable indexes. These indexes allow the information to be:
-  - Searched and retrieved using _structured queries_ for improved precision and low latency.
-  - Enumerated and filtered using API calls.
-- Information recalled through by querying can also be used to retrieve the source messages it came from.
+- The information associated with a message in suitable indexes. These indexes allow the information to be:
+  - Searched and retrieved using _query expressions_ for improved precision and low latency.
+  - Enumerated and filtered.
+- Information retrieved by executing a query can also be used to retrieve the messages it originated in.
 - Indexes can be updated incrementally or in the background.
 
 ## Knowpro implementation
@@ -23,10 +23,33 @@ Knowpro implements the ideas of Structured RAG. Knowpro uses [TypeChat](https://
 
 Knowpro also provides support for:
 
-- Natural language queries: translating natural language user requests to structured queries.
-- Answer generation: using the structured objects and (as needed) their source text (as needed) returned by structured queries to generate natural language **answers** to natural language user requests.
+- Natural language queries: translating natural language user requests and questions to queries.
+- Answer generation: using query results from executing queries to generate natural language **answers** to user requests.
 
 Knowpro has been primarily tested with **GPT-4o**. Results with other models are not guaranteed.
+
+### Query flow
+
+For each user request (including natural language):
+
+#### Search
+
+- Convert the user request into a query expression. Converting a natural language to query expressions can use a language model.
+- For the unstructured data, the query expression consists of two parts: _scope_ expressions and _tree-pattern_ expressions. 
+- Scope expressions, such as _time range_, restrict search results to a subset of the conversation.  Scope expressions can include topic descriptions, which specify the subset of the conversation that matches the description. Scope expressions can also define relationships such as actions.
+- Tree-pattern expressions match specific trees extracted from the conversation and can be connected by logical operators. Tree expressions can match granular facets.
+- If the user request refers to structured information, the query expression will include a relational query to be _joined_ with the unstructured data query result.  The relational query may include comparison operators.
+- Execute the query, yielding lists of entities, topics and actions, ordered by _relevance_ score.
+
+  - The matched artifacts reference the sources from which they were derived.
+
+- **Knowpro** uses secondary indices for matching tree expressions efficiently. It also uses secondary scope expressions such as document range and time range.  Knowpro also uses secondary indices for related terms, such as "novel" for "book". 
+
+#### Generate Answers
+
+- Select the top entities and topics returned by Search and add them to the answer prompt
+- If the topics and entities do not use all of the token budget, add to the prompt the messages referenced by the top entities and topics. 
+- Submit the answer prompt to a language model to generate the final answer.
 
 ### Knowpro API
 
