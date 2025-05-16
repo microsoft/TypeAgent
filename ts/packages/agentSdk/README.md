@@ -1,4 +1,4 @@
-# Agent SDK Interfaces and Utilities
+# TypeAgent SDK Interfaces and Utilities
 
 This package contains interface definitions and utilities for implementing a **Dispatcher Agent**.
 
@@ -6,7 +6,7 @@ This package contains interface definitions and utilities for implementing a **D
 - The [Dispatcher README](../dispatcher/README.md) contains instructions on how to register a dispatcher agent with the TypeAgent Dispatcher.
 - You can also create [agents as NPM packages](../../../docs/tutorial/agent.md) that can be installed/register to the [Shell](../shell) or [CLI](../cli)
 
-## Agent SDK
+## TypeAgent SDK
 
 To build a dispatcher agent, you provide a manifest and an instantiation entry point for your agent.  
 These are declared in the `package.json` as export paths:

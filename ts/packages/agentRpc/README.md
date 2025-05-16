@@ -1,6 +1,6 @@
 # Agent Remoting
 
-This package contains code to support remoting Agent SDK interfaces via an abstract RpcChannel interface.
+This package contains code to support remoting TypeAgent SDK interfaces via an abstract RpcChannel interface.
 
 ## Trademarks
 
