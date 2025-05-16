@@ -1,10 +1,10 @@
 # TypeAgent
 
-**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with a _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
+**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with a _natural language interfaces_.
 
 **TypeAgent** uses [TypeChat](https://github.com/microsoft/typechat) to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
 
-The TypeAgent repo contains the personal agent and example application agents, along with internal packages used to build them.
+This repo contains the personal agent and example application agents, along with internal packages used to build them.
 
 ## Getting Started
 
@@ -63,6 +63,8 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
 
   Explores applying [TypeChat](https://github.com/microsoft/typechat) to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
+- [Knowledge Processor](./ts/packages/knowPro)
+
 - [Agent Cache](./ts/packages/cache/)
 
   Explores how [TypeChat](https://github.com/microsoft/typechat) translations from user intent to actions can be cached, minimizing the need to go the LLM.
@@ -98,7 +100,7 @@ TypeAgent is early stage sample code over [TypeChat](https://github.com/microsof
 
 ### Working with TypeAgent repo
 
-For developers who want to modify TypeAgent and contribute to our repo.
+For developers who want to modify TypeAgent or contribute to our repo.
 
 Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
 
@@ -106,6 +108,8 @@ Microsoft TypeAgent Repo is a mono-repo, with components organized with the foll
 - [`python`](./python) Python code ([Readme](./python/README.md))
 - [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
 - [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
+
+See more information about working with the repo [here](./docs/help/dev.md).
 
 ## Contributing
 
