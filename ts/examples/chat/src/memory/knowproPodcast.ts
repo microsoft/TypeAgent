@@ -29,7 +29,7 @@ import {
     argToDate,
     copyFileToDir,
 } from "../common.js";
-import { ensureDir, getFileName } from "typeagent";
+import { ensureDir, getAbsolutePath, getFileName } from "typeagent";
 import chalk from "chalk";
 
 export type KnowproPodcastContext = {
@@ -273,12 +273,13 @@ export async function createKnowproPodcastCommands(
 
     commands.kpPodcastLoadSample.metadata = "Load sample podcast index";
     async function podcastLoadSample(args: string[]) {
-        const sampleTranscript =
+        let samplePath =
             "../../../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt";
-        const podcastName = getFileName(sampleTranscript);
-        await ensureSampleCopied(sampleTranscript);
+        samplePath = getAbsolutePath(samplePath, import.meta.url);
+        const podcastName = getFileName(samplePath);
+        await ensureSampleCopied(samplePath);
         context.printer.writeLine(
-            `Loading indexes for ${path.resolve(sampleTranscript)}`,
+            `Loading indexes for ${path.resolve(samplePath)}`,
         );
         context.printer.writeLine();
         await podcastLoad(["--name", podcastName]);
