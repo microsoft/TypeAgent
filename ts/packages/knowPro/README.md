@@ -1,11 +1,24 @@
 # Knowpro
 
-**Knowpro** is **experimental sample code** working towards a shared understanding of the MVP for **Structured RAG**.
+**Knowpro** is **experimental sample code** working towards an MVP library for **Structured RAG**.
 
 - Knowpro is currently in **active** development with _frequent_ changes as the API evolves.
-- Knowpro has been primarily tested with **gpt-4o**. Performance with other models is not guaranteed.
 - Knowpro is used to implement various types of [**memory**](../memory)
 - The [knowpro test app](../../examples/chat/) demonstrates how to use both memory APIs and knowpro.
+- Knowpro has been primarily tested with **gpt-4o**. Performance with other models is not guaranteed.
+
+Knowpro implements **Structured RAG**.
+
+- Structured RAG first extracts **dense information** from source text.
+- This dense information includes **structured** information such as entities, actions, topics, and tabular data in data frames.
+- This structured information is stored with suitable indexes that allow it to be:
+  - Searched and retrieved using **structured queries** for improved precision and low latency
+  - Enumerated and filtered using API calls
+- Retrieved information can also be used to retrieve the source text it was originally found in.
+- Indexes are updated incrementally, on the fly or in the background.
+- Knowpro also supports:
+  - Natural Language Queries: translating **natural language user requests** to structured queries.
+  - Answer Generation: Using retrieved structured objects and (as needed) their source text (as needed) to generate **answers** to user requests.
 
 ## Structured RAG Overview
 
