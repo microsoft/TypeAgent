@@ -4,6 +4,7 @@
 import { AppAction, ActionResult, TypeAgentAction } from "./action.js";
 import { AppAgentCommandInterface } from "./command.js";
 import { ActionIO, DisplayType, DynamicDisplay } from "./display.js";
+import { Entity } from "./memory.js";
 import { Profiler } from "./profiler.js";
 import { TemplateSchema } from "./templateInput.js";
 
@@ -15,12 +16,13 @@ export type AppAgentManifest = {
     description: string;
     commandDefaultEnabled?: boolean;
     localView?: boolean; // whether the agent serve a local view, default is false
-    sharedLocalView?: string[]; // the agent to share the local view with, default is none
+    sharedLocalView?: string[]; // list of agents to share the local view with, default is none
 } & ActionManifest;
 
 export type SchemaTypeNames = {
     action?: string;
     activity?: string;
+    entities?: string;
 };
 
 export type SchemaFormat = "ts" | "pas";
@@ -49,6 +51,10 @@ export type ActionManifest = {
 
 export type AppAgentInitSettings = {
     localHostPort?: number; // the assigned port to use to serve the view if localHostPort is true in the manifest
+};
+
+export type ResolveEntityResult = {
+    entity: Entity;
 };
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
@@ -80,6 +86,11 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     ): Promise<boolean>;
 
     // Input
+    resolveEntity?(
+        type: string,
+        name: string,
+        context: SessionContext,
+    ): Promise<ResolveEntityResult | undefined>;
     getTemplateSchema?(
         templateName: string,
         data: unknown,

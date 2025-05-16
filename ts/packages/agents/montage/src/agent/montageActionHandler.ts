@@ -39,6 +39,7 @@ import registerDebug from "debug";
 import { spawnSync } from "node:child_process";
 import { createSemanticMap } from "typeagent";
 import { openai, TextEmbeddingModel } from "aiclient";
+import { ResolveEntityResult } from "../../../../agentSdk/dist/agentInterface.js";
 
 const debug = registerDebug("typeagent:agent:montage");
 
@@ -46,6 +47,7 @@ export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeMontageContext,
         updateAgentContext: updateMontageContext,
+        resolveEntity,
         executeAction: executeMontageAction,
         closeAgentContext: closeMontageContext,
     };
@@ -76,6 +78,23 @@ export type PhotoMontage = {
     files: string[];
     selected: string[];
 };
+
+async function resolveEntity(
+    type: string,
+    name: string,
+    context: SessionContext<MontageActionContext>,
+): Promise<ResolveEntityResult | undefined> {
+    const agentContext = context.agentContext;
+    if (type === "Montage") {
+        const montage = await findMontageByTitle(name, agentContext);
+        if (montage) {
+            return {
+                entity: entityFromMontage(montage),
+            };
+        }
+    }
+    return undefined;
+}
 
 async function executeMontageAction(
     action: TypeAgentAction<MontageAction | MontageActivity>,
@@ -714,7 +733,7 @@ function createNewMontage(
 function entityFromMontage(montage: PhotoMontage) {
     return {
         name: montage.title,
-        type: ["project", "montage"],
+        type: ["Montage", "project"],
         uniqueId: montage.id.toString(),
         facets: [
             {
@@ -845,6 +864,32 @@ function filterToSearchTerm(filters: string[]): kp.SearchTerm[] {
     return terms;
 }
 
+async function findMontageByTitle(
+    title: string,
+    agentContext: MontageActionContext,
+) {
+    const montage = agentContext.montages.find((value) => value.title == title);
+
+    if (montage) {
+        debug(`Found montage ${montage.title} by title`);
+        return montage;
+    }
+
+    const fuzzyMontage = await getMontageByFuzzyMatching(
+        title,
+        agentContext.montages,
+        agentContext.fuzzyMatchingModel,
+    );
+
+    debug(
+        fuzzyMontage
+            ? `Found montage ${fuzzyMontage.title} by fuzzy matching with ${title}`
+            : `Unable to find montage ${title}`,
+    );
+
+    return fuzzyMontage;
+}
+
 async function getActionMontage(
     agentContext: MontageActionContext,
     action: TypeAgentAction<{
@@ -866,27 +911,7 @@ async function getActionMontage(
 
         return montage;
     }
-    const montage = agentContext.montages.find(
-        (value) => value.title == action.parameters.title,
-    );
-
-    if (montage) {
-        debug(`Found montage ${montage.title} by title`);
-        return montage;
-    }
-
-    const fuzzyMontage = await getMontageByFuzzyMatching(
-        action.parameters.title,
-        agentContext.montages,
-        agentContext.fuzzyMatchingModel,
-    );
-
-    debug(
-        fuzzyMontage
-            ? `Found montage ${fuzzyMontage.title} by fuzzy matching with ${action.parameters.title}`
-            : `Unable to find montage ${action.parameters.title}`,
-    );
-    return fuzzyMontage;
+    return findMontageByTitle(action.parameters.title, agentContext);
 }
 
 async function ensureActionMontage(

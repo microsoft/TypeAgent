@@ -1,6 +1,6 @@
 # TypeAgent
 
-**TypeAgent** is **sample code** that explores an architecture for using [TypeChat](https://github.com/microsoft/typechat) to build a _personal agent_ with a _natural language interface_.
+**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with a _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
 
 **TypeAgent** uses [TypeChat](https://github.com/microsoft/typechat) to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
 
@@ -21,11 +21,24 @@ Follow these step-by-step instructions to quickly setup tools and environments f
 - [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
 - MacOS (coming soon)
 
-See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) for more detailed setup instructions.
+For more detailed setup instructions, see the [README.md](./ts/README.md) in the TypeScript code [directory](./ts)
 
 ## Examples
 
-- Application agents with natural language interfaces:
+### Apps
+
+- [TypeAgent Shell](./ts/packages/shell/)
+
+  An Electron application for interacting with multiple registered agents using a single unified user interface. Agent Shell includes:
+
+  - Integrated chat experience with voice support
+  - Dispatcher that translate and dispatch actions to registered agents
+  - Structured memory
+  - Structured RAG
+
+### Agents
+
+- Application agents with natural language interfaces integrated with [TypeAgent Shell](./ts/packages/shell/) and [TypeAgent CLI](./ts/packages/cli/)
 
   - [Music Player](./ts/packages/agents/player/)
   - [Chat](./ts/packages/agents/chat/)
@@ -45,6 +58,8 @@ See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) 
   - [Photo](.ts/packages/agents/photo/)
   - [androidMobile](.ts/packages/agents/androidMobile/)
 
+### Components
+
 - [Agent Dispatcher](./ts/packages/dispatcher/)
 
   Explores applying [TypeChat](https://github.com/microsoft/typechat) to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
@@ -53,20 +68,13 @@ See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) 
 
   Explores how [TypeChat](https://github.com/microsoft/typechat) translations from user intent to actions can be cached, minimizing the need to go the LLM.
 
-- [Agent Shell](./ts/packages/shell/)
-
-  An Electron application for interacting with multiple registered agents using a single unified user interface. Agent Shell includes:
-
-  - Integrated chat experience with voice support
-  - Dispatcher that dispatches to registered agents
-  - Structured memory
-  - Structured RAG
-
-### State Management
+## State Management
 
 Storage, registration, chat, memory and other state maintained by examples is **_typically_** stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
 
 Example agents that use the Microsoft Graph or similar external services may store state in those services.
+
+Code in this repo doesn't not collect telemetry by default.
 
 ## Intended Uses
 
@@ -85,11 +93,11 @@ TypeAgent is early stage sample code over [TypeChat](https://github.com/microsof
 
 ## Developers
 
-### Custom Dispatcher Agents
+### Exploring Action Dispatch
 
-For developer that are interested develop custom agents to show up in our [Agent Shell](./ts/packages/shell) example and explore using the [Agent Dispatcher](./ts/packages/dispatcher/) to route action to the custom agents, [Agent Shell](./ts/packages/shell) example allow additional agent to be installed/registered to extent functionality. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the details of the interface between [Agent Dispatcher](./ts/packages/dispatcher) and the agent.
+[Agent Shell](./ts/packages/shell) example allow additional agents to be installed/registered to extend its functionality. For developers who are interested in experimenting with action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [Agent Shell](./ts/packages/shell) example to explore using the [Agent Dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the interface definitions between [Agent Dispatcher](./ts/packages/dispatcher) and the agent.
 
-### Developing TypeAgent
+### Working with TypeAgent repo
 
 For developers who want to modify TypeAgent and contribute to our repo.
 

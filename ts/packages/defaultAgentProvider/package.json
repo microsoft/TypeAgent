@@ -50,7 +50,7 @@
     "debug": "^4.4.0",
     "desktop-automation": "workspace:*",
     "email": "workspace:*",
-    "exifreader": "4.23.5",
+    "exifreader": "^4.30.1",
     "file-size": "^1.0.0",
     "glob": "^10.3.12",
     "greeting-agent": "workspace:*",

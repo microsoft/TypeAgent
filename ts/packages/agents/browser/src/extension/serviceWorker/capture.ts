@@ -123,7 +123,8 @@ export async function getFilteredHTMLFragments(
             }
         } catch (error) {
             console.error(
-                `Error filtering HTML for frame ${inputHtmlFragments[i].frameId}:`,
+                "Error filtering HTML for frame with ID %s:",
+                inputHtmlFragments[i].frameId,
                 error,
             );
         }

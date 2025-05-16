@@ -21,7 +21,6 @@ class Visualizer {
     private cy: cytoscape.Core | null;
     public pathHighlighted: boolean;
     private tempAnimInterval: number | null;
-    private screenshotMode: boolean = false;
     private _resizeObserver: ResizeObserver | null;
 
     /**
@@ -250,87 +249,126 @@ class Visualizer {
             return true;
         }
 
-        // Find the temporary node in the old data
-        const oldTempNode = oldData.nodes.find((node) => node.isTemporary);
+        // Find the temporary nodes in the old and new data
+        const oldTempNodes = oldData.nodes.filter((node) => node.isTemporary);
+        const newTempNodes = newData.nodes.filter((node) => node.isTemporary);
 
-        // Find the temporary node in the new data
-        const newTempNode = newData.nodes.find((node) => node.isTemporary);
-
-        // Find the node that was replaced (temporary node)
-        const replacedNodeId = this._findReplacedNodeId(oldData, newData);
-
-        // Case 1: A temporary node was replaced and a new temporary node was added
-        if (
-            oldTempNode &&
-            (!newTempNode || newTempNode.id !== oldTempNode.id)
-        ) {
-            // Get the replacement node data
-            const replacementNode = newData.nodes.find(
-                (node) => node.id === oldTempNode.id && !node.isTemporary,
+        // Case 1: A temporary node was replaced with a final state (the temporary node exists in old data but not in new data)
+        // or it has the same ID but is no longer temporary
+        const replacedTempNodes = oldTempNodes.filter((oldTempNode) => {
+            // Check if this temp node no longer exists or is no longer temporary in new data
+            const matchingNewNode = newData.nodes.find(
+                (newNode) => newNode.id === oldTempNode.id,
             );
+            return !matchingNewNode || !matchingNewNode.isTemporary;
+        });
 
-            if (replacementNode) {
-                // In-place update of the temporary node
-                const tempNode = this.cy.getElementById(oldTempNode.id);
-                console.log("Replacing node: " + oldTempNode.id);
+        if (replacedTempNodes.length > 0) {
+            // Process each replaced temporary node
+            let allReplacementsSuccessful = true;
 
-                if (tempNode.length > 0) {
-                    // Stop any existing animations to prevent errors
-                    try {
-                        (tempNode as any).animation().stop();
-                    } catch (animError) {
-                        console.warn("Error stopping animation:", animError);
-                    }
+            for (const oldTempNode of replacedTempNodes) {
+                // Find the replacement node in new data
+                const replacementNode = newData.nodes.find(
+                    (node) => node.id === oldTempNode.id && !node.isTemporary,
+                );
 
-                    // Update the node's data
-                    tempNode.data({
-                        label: replacementNode.label || "",
-                        type: replacementNode.type,
-                        isTemporary: false,
-                        isActive: true,
-                        screenshot: replacementNode.screenshot,
-                    });
+                if (replacementNode) {
+                    // Update the temporary node in-place
+                    const tempNode = this.cy.getElementById(oldTempNode.id);
 
-                    // Animate the node in place
-                    tempNode.animate({
-                        style: {
-                            "background-color": CONFIG.COLORS.HIGHLIGHT,
-                            "border-color": CONFIG.COLORS.HIGHLIGHT,
-                            "border-width": 5,
-                            opacity: 1,
-                        },
-                        duration: 300,
-                        complete: () => {
-                            // Get the proper color for the node type
-                            const nodeColor = Visualizer.getNodeColor(
-                                replacementNode.type,
+                    if (tempNode.length > 0) {
+                        try {
+                            // Stop any existing animations
+                            (tempNode as any).animation().stop();
+                        } catch (animError) {
+                            console.warn(
+                                "Error stopping animation:",
+                                animError,
                             );
+                        }
 
-                            tempNode.animate({
-                                style: {
-                                    "background-color": nodeColor,
-                                    "border-color": CONFIG.COLORS.HIGHLIGHT,
-                                    "border-width": 3,
-                                    opacity: 1,
-                                },
-                                duration: 300,
-                            });
-                        },
-                    });
+                        // Update the node's data
+                        tempNode.data({
+                            label: replacementNode.label || "",
+                            type: replacementNode.type,
+                            isTemporary: false,
+                            isActive:
+                                replacementNode.id === newData.currentNode,
+                            screenshot: replacementNode.screenshot,
+                            hasScreenshot: !!replacementNode.screenshot,
+                        });
 
-                    // Set this as the node to focus on
-                    nodeToFocus = replacedNodeId;
+                        // Get the proper color for the node type
+                        const nodeColor = Visualizer.getNodeColor(
+                            replacementNode.type,
+                        );
 
-                    this.startTemporaryNodeAnimation();
+                        // Animate the node to highlight the change
+                        tempNode.animate({
+                            style: {
+                                "background-color": CONFIG.COLORS.HIGHLIGHT,
+                                "border-color": CONFIG.COLORS.HIGHLIGHT,
+                                "border-width": 5,
+                                opacity: 1,
+                                "border-style": "solid",
+                            },
+                            duration: 300,
+                            complete: () => {
+                                tempNode.animate({
+                                    style: {
+                                        "background-color": nodeColor,
+                                        "border-color": CONFIG.COLORS.HIGHLIGHT,
+                                        "border-width": 3,
+                                        opacity: 1,
+                                        "border-style": "solid",
+                                    },
+                                    duration: 300,
+                                });
+                            },
+                        });
 
-                    // Update data reference
-                    this.webPlanData = newData;
+                        // Set as node to focus
+                        nodeToFocus = oldTempNode.id;
+                    } else {
+                        allReplacementsSuccessful = false;
+                    }
+                } else {
+                    // The temporary node was removed but not replaced
+                    const tempNode = this.cy.getElementById(oldTempNode.id);
+
+                    if (tempNode.length > 0) {
+                        // Fade out and remove the node
+                        tempNode.animate({
+                            style: { opacity: 0 },
+                            duration: 300,
+                            complete: () => {
+                                this.cy?.remove(tempNode);
+                            },
+                        });
+                    }
                 }
             }
 
-            // Now add the new temporary node if present
-            if (newTempNode) {
-                // Find the source node and link for this temporary node
+            if (!allReplacementsSuccessful) {
+                return false;
+            }
+        }
+
+        // Case 2: A new temporary node was added (exists in new data but not in old data)
+        const newlyAddedTempNodes = newTempNodes.filter(
+            (newTempNode) =>
+                !oldData.nodes.some(
+                    (oldNode) =>
+                        oldNode.id === newTempNode.id && oldNode.isTemporary,
+                ),
+        );
+
+        if (newlyAddedTempNodes.length > 0) {
+            let allAdditionsSuccessful = true;
+
+            for (const newTempNode of newlyAddedTempNodes) {
+                // Find the link to this new temporary node
                 const tempNodeLink = newData.links.find(
                     (link) => link.target === newTempNode.id,
                 );
@@ -338,45 +376,49 @@ class Visualizer {
                 if (tempNodeLink) {
                     const sourceNodeId = tempNodeLink.source;
 
-                    // Make sure the source node exists in the graph
+                    // Check if the source node exists in the graph
                     const sourceCyNode = this.cy.getElementById(sourceNodeId);
 
                     if (sourceCyNode.length > 0) {
-                        // Generate a unique ID for this node to avoid collisions
-                        const newUniqueId = `temp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                        // Use the actual node ID instead of generating a new one to maintain consistency
+                        const nodeId = newTempNode.id;
 
                         // Add the temporary node
                         const addedNode = this.cy.add({
                             group: "nodes",
                             data: {
-                                id: newUniqueId,
-                                originalId: newTempNode.id,
+                                id: nodeId,
                                 label: newTempNode.label || "",
                                 type: newTempNode.type || "temporary",
                                 isTemporary: true,
-                                isActive: false,
+                                isActive:
+                                    newData.currentNode === newTempNode.id,
                                 screenshot: newTempNode.screenshot,
+                                hasScreenshot: !!newTempNode.screenshot,
                             },
                         });
 
-                        // Add the edge to the temporary node
+                        // Add the edge
                         this.cy.add({
                             group: "edges",
                             data: {
                                 id: `edge-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
                                 source: sourceNodeId,
-                                target: newUniqueId,
+                                target: nodeId,
                                 label: tempNodeLink.label || "",
                                 edgeType: this._getEdgeType(tempNodeLink),
                             },
                         });
 
-                        // Position the temporary node
+                        // Position the node
                         const position =
                             this._findOptimalNodePosition(addedNode);
                         addedNode.position(position);
 
-                        // Start the temporary node animation
+                        // Set as node to focus
+                        nodeToFocus = nodeId;
+
+                        // Start the animation
                         setTimeout(() => {
                             try {
                                 this.startTemporaryNodeAnimation();
@@ -387,213 +429,100 @@ class Visualizer {
                                 );
                             }
                         }, 100);
-
-                        // Set the replacement node as the node to focus on
-                        nodeToFocus = replacementNode
-                            ? replacementNode.id
-                            : null;
+                    } else {
+                        allAdditionsSuccessful = false;
                     }
+                } else {
+                    allAdditionsSuccessful = false;
+                }
+            }
+
+            if (!allAdditionsSuccessful) {
+                return false;
+            }
+        }
+
+        // Case 3: Existing nodes were updated
+        const updatedNonTempNodes = newData.nodes.filter(
+            (newNode) =>
+                !newNode.isTemporary &&
+                oldData.nodes.some(
+                    (oldNode) =>
+                        oldNode.id === newNode.id &&
+                        (oldNode.label !== newNode.label ||
+                            oldNode.type !== newNode.type ||
+                            oldNode.screenshot !== newNode.screenshot),
+                ),
+        );
+
+        if (updatedNonTempNodes.length > 0) {
+            for (const updatedNode of updatedNonTempNodes) {
+                const cyNode = this.cy.getElementById(updatedNode.id);
+
+                if (cyNode.length > 0) {
+                    // Update the node's data
+                    cyNode.data({
+                        label: updatedNode.label || "",
+                        type: updatedNode.type,
+                        isActive: updatedNode.id === newData.currentNode,
+                        screenshot: updatedNode.screenshot,
+                        hasScreenshot: !!updatedNode.screenshot,
+                    });
+
+                    // Refresh the node style
+                    this.refreshNodeStyle(updatedNode.id);
                 }
             }
         }
-        // Case 2: Only a new temporary node was added (no replacement)
-        else if (
-            newTempNode &&
-            (!oldTempNode || newTempNode.id !== oldTempNode.id)
+
+        // Handle current node changes
+        if (
+            oldData.currentNode !== newData.currentNode &&
+            newData.currentNode
         ) {
-            // Find the link to the new temporary node
-            const tempNodeLink = newData.links.find(
-                (link) => link.target === newTempNode.id,
-            );
+            const currentCyNode = this.cy.getElementById(newData.currentNode);
 
-            if (tempNodeLink) {
-                const sourceNodeId = tempNodeLink.source;
+            if (currentCyNode.length > 0) {
+                // Reset active status for all nodes
+                this.cy.nodes().forEach((node) => {
+                    node.data("isActive", false);
+                });
 
-                // Check if the source node exists in the graph
-                const sourceCyNode = this.cy.getElementById(sourceNodeId);
+                // Set the new current node as active
+                currentCyNode.data("isActive", true);
 
-                if (sourceCyNode.length > 0) {
-                    // Generate a unique ID for this node
-                    const newUniqueId = `temp-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                // Set as node to focus
+                nodeToFocus = newData.currentNode;
+            }
+        }
 
-                    // Add the temporary node
-                    const addedNode = this.cy.add({
-                        group: "nodes",
-                        data: {
-                            id: newUniqueId,
-                            originalId: newTempNode.id,
-                            label: newTempNode.label || "",
-                            type: newTempNode.type || "temporary",
-                            isTemporary: true,
-                            isActive: false,
-                            screenshot: newTempNode.screenshot,
-                        },
-                    });
+        // Update links - add any new links
+        const oldLinkKeys = oldData.links.map(
+            (link) => `${link.source}-${link.target}`,
+        );
+        const newLinks = newData.links.filter(
+            (newLink) =>
+                !oldLinkKeys.includes(`${newLink.source}-${newLink.target}`),
+        );
 
+        if (newLinks.length > 0) {
+            for (const newLink of newLinks) {
+                // Check if both source and target nodes exist
+                const sourceNode = this.cy.getElementById(newLink.source);
+                const targetNode = this.cy.getElementById(newLink.target);
+
+                if (sourceNode.length > 0 && targetNode.length > 0) {
                     // Add the edge
                     this.cy.add({
                         group: "edges",
                         data: {
                             id: `edge-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                            source: sourceNodeId,
-                            target: newUniqueId,
-                            label: tempNodeLink.label || "",
-                            edgeType: this._getEdgeType(tempNodeLink),
+                            source: newLink.source,
+                            target: newLink.target,
+                            label: newLink.label || "",
+                            edgeType: this._getEdgeType(newLink),
                         },
                     });
-
-                    // Position the node
-                    const position = this._findOptimalNodePosition(addedNode);
-                    addedNode.position(position);
-
-                    // Start the animation
-                    setTimeout(() => {
-                        try {
-                            this.startTemporaryNodeAnimation();
-                        } catch (pulseError) {
-                            console.warn(
-                                "Error starting pulse animation:",
-                                pulseError,
-                            );
-                        }
-                    }, 100);
-
-                    // Focus on the source node
-                    nodeToFocus = sourceNodeId;
-                }
-            }
-        }
-        // Case 3: A new non-temporary node was added
-        else if (newData.nodes.length > oldData.nodes.length) {
-            // Find nodes that are in the new data but not in the old data
-            const newNodes = newData.nodes.filter(
-                (newNode) =>
-                    !oldData.nodes.some((oldNode) => oldNode.id === newNode.id),
-            );
-
-            // Process each new node
-            for (const newNode of newNodes) {
-                // Skip temporary nodes as they're handled separately
-                if (newNode.isTemporary) continue;
-
-                // Find links to this node
-                const nodeLinks = newData.links.filter(
-                    (link) =>
-                        link.target === newNode.id ||
-                        link.source === newNode.id,
-                );
-
-                // Only proceed if we have links
-                if (nodeLinks.length > 0) {
-                    // Generate a unique ID
-                    const newUniqueId = `node-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-                    // Add the node
-                    const addedNode = this.cy.add({
-                        group: "nodes",
-                        data: {
-                            id: newUniqueId,
-                            originalId: newNode.id,
-                            label: newNode.label || "",
-                            type: newNode.type,
-                            isTemporary: false,
-                            isActive: newData.currentNode === newNode.id,
-                            screenshot: newNode.screenshot,
-                        },
-                    });
-
-                    // Add all connecting edges
-                    for (const link of nodeLinks) {
-                        const isSource = link.source === newNode.id;
-                        const connectedNodeId = isSource
-                            ? link.target
-                            : link.source;
-
-                        // Check if the connected node exists
-                        const connectedNode =
-                            this.cy.getElementById(connectedNodeId);
-
-                        if (connectedNode.length > 0) {
-                            this.cy.add({
-                                group: "edges",
-                                data: {
-                                    id: `edge-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                                    source: isSource
-                                        ? newUniqueId
-                                        : connectedNodeId,
-                                    target: isSource
-                                        ? connectedNodeId
-                                        : newUniqueId,
-                                    label: link.label || "",
-                                    edgeType: this._getEdgeType(link),
-                                },
-                            });
-                        }
-                    }
-
-                    // Position the node
-                    const position = this._findOptimalNodePosition(addedNode);
-                    addedNode.position(position);
-
-                    // Set as node to focus
-                    nodeToFocus = newUniqueId;
-                }
-            }
-        }
-        // Case 4: A temporary node was simply replaced with an end node (no new temp node)
-        else if (
-            oldTempNode &&
-            !newTempNode &&
-            oldData.nodes.length === newData.nodes.length
-        ) {
-            // Find the node that replaced the old temporary node
-            const replacementNode = newData.nodes.find(
-                (node) => node.id === oldTempNode.id && !node.isTemporary,
-            );
-
-            if (replacementNode && replacementNode.type === "end") {
-                console.log("Found end node");
-                // Update the temporary node in place
-                const tempCyNode = this.cy.getElementById(oldTempNode.id);
-                if (tempCyNode.length > 0) {
-                    // Stop any existing animations
-                    try {
-                        (tempCyNode as any).animation().stop();
-                    } catch (animError) {
-                        console.warn("Error stopping animation:", animError);
-                    }
-
-                    // Update the node data
-                    tempCyNode.data({
-                        label: replacementNode.label || "",
-                        type: replacementNode.type,
-                        isTemporary: false,
-                        isActive: true,
-                        screenshot: replacementNode.screenshot,
-                    });
-
-                    // Update the node style - use end node style
-                    try {
-                        const nodeColor = Visualizer.getNodeColor("end");
-                        tempCyNode.animate({
-                            style: {
-                                "background-color": nodeColor,
-                                "border-color": CONFIG.COLORS.HIGHLIGHT,
-                                "border-width": 3,
-                                opacity: 1,
-                                "border-style": "solid",
-                            },
-                            duration: 300,
-                        });
-                    } catch (styleError) {
-                        console.warn(
-                            "Error updating end node style:",
-                            styleError,
-                        );
-                    }
-
-                    // Set this as node to focus
-                    nodeToFocus = tempCyNode.id();
                 }
             }
         }
@@ -604,11 +533,9 @@ class Visualizer {
         // Focus on the identified node
         if (nodeToFocus) {
             this._focusOnNodeContext(nodeToFocus);
-            return true;
         }
 
-        // Fall back to full redraw if everything else failed
-        return false;
+        return true;
     }
 
     /**
@@ -759,30 +686,6 @@ class Visualizer {
                 this.applyPartialLayout(false);
             }
         });
-    }
-
-    /**
-     * Helper method to find the node that was replaced
-     * @param {WebPlanData} oldData - Previous graph data
-     * @param {WebPlanData} newData - New graph data after replacement
-     * @returns {string|null} The ID of the replaced node, or null if none found
-     * @private
-     */
-    private _findReplacedNodeId(
-        oldData: WebPlanData,
-        newData: WebPlanData,
-    ): string | null {
-        // Find the temporary node in old data that's no longer temporary in new data
-        const tempNode = oldData.nodes.find(
-            (oldNode) =>
-                oldNode.isTemporary &&
-                newData.nodes.some(
-                    (newNode) =>
-                        newNode.id === oldNode.id && !newNode.isTemporary,
-                ),
-        );
-
-        return tempNode ? tempNode.id : null;
     }
 
     /**
@@ -1038,63 +941,6 @@ class Visualizer {
         }
     }
 
-    setScreenshotMode(enabled: boolean): void {
-        this.screenshotMode = enabled;
-
-        if (!this.cy) return;
-
-        const nodesWithScreenshots = this.cy
-            .nodes()
-            .filter((node) => node.data("hasScreenshot"));
-
-        if (enabled) {
-            // Add screenshot-mode class to all nodes
-            this.cy.nodes().addClass("screenshot-mode");
-
-            // For nodes with screenshots, apply special styling for visibility
-            nodesWithScreenshots.forEach((node) => {
-                node.style("z-index", 10); // Ensure label is above other elements
-            });
-
-            // Update the UI to indicate screenshot mode is active
-            const screenshotBadge = document.querySelector(".screenshot-badge");
-            if (screenshotBadge) {
-                screenshotBadge.classList.add("active");
-            } else {
-                // Create badge if it doesn't exist
-                const badge = document.createElement("div");
-                badge.className = "screenshot-badge active";
-                badge.textContent = "Screenshot Mode";
-                document.querySelector(".container")?.appendChild(badge);
-            }
-        } else {
-            // Remove screenshot-mode class from all nodes
-            this.cy.nodes().removeClass("screenshot-mode");
-
-            // Reset z-index for all nodes
-            this.cy.nodes().style("z-index", 0);
-
-            // Still keep labels above nodes with screenshots
-            nodesWithScreenshots.forEach((node) => {
-                node.style("z-index", 5); // Less than in screenshot mode, but still above
-            });
-
-            // Hide the screenshot mode indicator
-            const screenshotBadge = document.querySelector(".screenshot-badge");
-            if (screenshotBadge) {
-                screenshotBadge.classList.remove("active");
-            }
-
-            // Remove any existing custom labels
-            document
-                .querySelectorAll(".cy-node-screenshot-label")
-                .forEach((el) => el.remove());
-        }
-
-        // Force a redraw of the graph to update node appearance
-        this.cy.style().update();
-    }
-
     updateNodeScreenshot(nodeId: string, screenshot: string): void {
         if (!this.cy) return;
 
@@ -1132,11 +978,6 @@ class Visualizer {
 
             // Apply screenshot-specific styling if needed
             if (node.data("hasScreenshot")) {
-                // If we're in screenshot mode, make sure the node has that class
-                if (this.screenshotMode && !node.hasClass("screenshot-mode")) {
-                    node.addClass("screenshot-mode");
-                }
-
                 // For better performance, only animate this specific node
                 // rather than all nodes
                 node.style("z-index", 10); // Ensure label is above other elements

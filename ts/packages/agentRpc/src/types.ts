@@ -21,6 +21,7 @@ import {
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
+import { ResolveEntityResult } from "../../agentSdk/dist/agentInterface.js";
 
 export type AgentContextCallFunctions = {
     notify(param: {
@@ -162,6 +163,12 @@ export type AgentInvokeFunctions = {
             params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
     ): Promise<void>;
+    resolveEntity(
+        param: Partial<ContextParams> & {
+            type: string;
+            name: string;
+        },
+    ): Promise<ResolveEntityResult | undefined>;
     getTemplateSchema(
         param: Partial<ContextParams> & {
             templateName: string;

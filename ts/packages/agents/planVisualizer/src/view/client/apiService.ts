@@ -63,7 +63,6 @@ class ApiService {
                 nodeType: formData.nodeType,
             };
 
-            // Only include screenshot if it exists to reduce payload size
             if (formData.screenshot) {
                 requestBody.screenshot = formData.screenshot;
             }
@@ -82,7 +81,6 @@ class ApiService {
 
             const newPlanData = (await response.json()) as WebPlanData;
 
-            // Return both old and new data
             return {
                 oldData: oldPlanData,
                 newData: newPlanData,
