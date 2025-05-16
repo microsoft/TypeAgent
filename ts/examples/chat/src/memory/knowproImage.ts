@@ -22,7 +22,7 @@ import {
     memoryNameToIndexPath,
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
-import { argDestFile, argSourceFile } from "./common.js";
+import { argDestFile, argSourceFile } from "../common.js";
 import { ensureDir, getFileName } from "typeagent";
 
 export type KnowproImageContext = {

@@ -23,8 +23,13 @@ import {
     memoryNameToIndexPath,
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
-import { argDestFile, argSourceFile, argToDate } from "./common.js";
-import { ensureDir, getFileName } from "typeagent";
+import {
+    argDestFile,
+    argSourceFile,
+    argToDate,
+    copyFileToDir,
+} from "../common.js";
+import { ensureDir, getAbsolutePath, getFileName } from "typeagent";
 import chalk from "chalk";
 
 export type KnowproPodcastContext = {
@@ -47,6 +52,7 @@ export async function createKnowproPodcastCommands(
     commands.kpPodcastLoad = podcastLoad;
     commands.kpPodcastBuildIndex = podcastBuildIndex;
     commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
+    commands.kpPodcastLoadSample = podcastLoadSample;
 
     function podcastImportDef(): CommandMetadata {
         return {
@@ -263,6 +269,35 @@ export async function createKnowproPodcastCommands(
         );
         progress.complete();
         context.printer.writeListIndexingResult(result);
+    }
+
+    commands.kpPodcastLoadSample.metadata = "Load sample podcast index";
+    async function podcastLoadSample(args: string[]) {
+        let samplePath =
+            "../../../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt";
+        samplePath = getAbsolutePath(samplePath, import.meta.url);
+        const podcastName = getFileName(samplePath);
+        await ensureSampleCopied(samplePath);
+        context.printer.writeLine(
+            `Loading indexes for ${path.resolve(samplePath)}`,
+        );
+        context.printer.writeLine();
+        await podcastLoad(["--name", podcastName]);
+    }
+
+    async function ensureSampleCopied(transcriptPath: string) {
+        const srcDir = path.dirname(transcriptPath);
+        const fileName = getFileName(transcriptPath);
+
+        const files = fs
+            .readdirSync(srcDir)
+            .filter((file) => file.startsWith(fileName));
+        const destDir = context.basePath;
+        await ensureDir(destDir);
+        for (const file of files) {
+            const srcPath = path.join(srcDir, file);
+            await copyFileToDir(srcPath, destDir, false);
+        }
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {

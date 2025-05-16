@@ -1,8 +1,8 @@
 # knowpro
 
-**knowpro** is an **experimental sample code and prototype** working towards a shared understanding of the MVP for **Structured RAG**.
+**knowpro** is an **experimental sample code** working towards a shared understanding of the MVP for **Structured RAG**.
 
-**knowpro** is currently in **active** development with _frequent_ changes as the API evolves and feature set expands.
+**knowpro** is currently in **active** development with _frequent_ changes as the API evolves.
 
 - knowpro implements **Structured RAG**.
   - Structured RAG first extracts **dense information** from text.
@@ -10,8 +10,8 @@
   - This structured information is stored with suitable indexes that allow it to be:
     - Searched and retrieved using **structured queries**.
     - Enumerated and filtered using API calls
-    - Retrieved information can also be used to retrieve the source text it was originally found in.
-  - Indexes are updated incrementally, on the fly or in the background.
+  - Retrieved information can also be used to retrieve the source text it was originally found in.
+  - Indexes can be updated incrementally, on the fly or in the background.
 - knowpro also explores:
   - How to translate **natural language user requests** to structured queries.
   - How to use retrieved structured objects and their source text (as needed) to generate **answers** to user requests.

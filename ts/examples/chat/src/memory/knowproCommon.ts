@@ -6,7 +6,7 @@ import * as knowLib from "knowledge-processor";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
 import { MemoryConsoleWriter } from "../memoryWriter.js";
-import { addFileNameSuffixToPath } from "./common.js";
+import { addFileNameSuffixToPath } from "../common.js";
 import path from "path";
 import { getFileName } from "typeagent";
 
@@ -57,42 +57,6 @@ export function textLocationToString(location: kp.TextLocation): string {
         text += `\nCharOrdinal: ${location.charOrdinal}`;
     }
     return text;
-}
-
-export async function matchFilterToConversation(
-    conversation: kp.IConversation,
-    filter: knowLib.conversation.TermFilterV2,
-    knowledgeType: kp.KnowledgeType | undefined,
-    searchOptions: kp.SearchOptions,
-    useAnd: boolean = false,
-) {
-    let termGroup: kp.SearchTermGroup = termFilterToSearchGroup(filter, useAnd);
-    if (filter.action) {
-        let actionGroup: kp.SearchTermGroup = actionFilterToSearchGroup(
-            filter.action,
-            useAnd,
-        );
-        // Just flatten for now...
-        termGroup.terms.push(...actionGroup.terms);
-    }
-    let when: kp.WhenFilter = termFilterToWhenFilter(filter);
-    when.knowledgeType = knowledgeType;
-    let searchResults = await kp.searchConversationKnowledge(
-        conversation,
-        termGroup,
-        when,
-        searchOptions,
-    );
-    if (useAnd && (!searchResults || searchResults.size === 0)) {
-        // Try again with OR
-        termGroup = termFilterToSearchGroup(filter, false);
-        searchResults = await kp.searchConversationKnowledge(
-            conversation,
-            termGroup,
-            when,
-        );
-    }
-    return searchResults;
 }
 
 export function termFilterToSearchGroup(

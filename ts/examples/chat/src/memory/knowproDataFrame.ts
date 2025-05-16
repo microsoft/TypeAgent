@@ -20,7 +20,7 @@ import { createIndexingEventHandler } from "./knowproCommon.js";
 import chalk from "chalk";
 import { conversation as kpLib } from "knowledge-processor";
 import { RestaurantDb } from "./restaurantDb.js";
-import { argDestFile, argSourceFile } from "./common.js";
+import { argDestFile, argSourceFile } from "../common.js";
 import path from "path";
 
 export async function createKnowproDataFrameCommands(

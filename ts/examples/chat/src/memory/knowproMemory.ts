@@ -2,43 +2,72 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import * as knowLib from "knowledge-processor";
 import {
+    addStandardHandlers,
     arg,
     argBool,
     argNum,
     askYesNo,
     CommandHandler,
     CommandMetadata,
+    displayClosestCommands,
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
+    runConsole,
     StopWatch,
 } from "interactive-app";
-import { KnowledgeProcessorContext } from "./knowledgeProcessorMemory.js";
-import { ChatModel } from "aiclient";
+import { ChatModel, openai } from "aiclient";
 import {
     argToDate,
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
-} from "./common.js";
+} from "../common.js";
 import { dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as cm from "conversation-memory";
-import {
-    hasConversationResults,
-    matchFilterToConversation,
-} from "./knowproCommon.js";
+import { hasConversationResults } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
 import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
+import * as cm from "conversation-memory";
+
+export async function runKnowproMemory(): Promise<void> {
+    const storePath = "/data/testChat";
+    await ensureDir(storePath);
+
+    const commands: Record<string, CommandHandler> = {};
+    await createKnowproCommands(commands);
+    addStandardHandlers(commands);
+    await runConsole({
+        inputHandler,
+        handlers: commands,
+    });
+
+    async function inputHandler(
+        line: string,
+        io: InteractiveIo,
+    ): Promise<void> {
+        if (line.length > 0) {
+            const args = line.split(" ");
+            if (args.length > 0) {
+                const cmdName = args[0];
+                io.writer.writeLine(`Did you mean @${cmdName}?`);
+                io.writer.writeLine("Commands must be prefixed with @");
+                io.writer.writeLine();
+                if (displayClosestCommands(cmdName, commands, io)) {
+                    return;
+                }
+            }
+        }
+        io.writer.writeLine("Enter @help for a list of commands");
+    }
+}
 
 export type KnowproContext = {
     knowledgeModel: ChatModel;
-    knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
     printer: KnowProPrinter;
     conversation?: kp.IConversation | undefined;
@@ -46,17 +75,18 @@ export type KnowproContext = {
     answerGenerator: kp.AnswerGenerator;
 };
 
+export function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    return openai.createJsonChatModel(chatModelSettings, ["knowproMemory"]);
+}
+
 export async function createKnowproCommands(
-    chatContext: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
-    const knowledgeModel = chatContext.models.chatModel;
+    const knowledgeModel = createKnowledgeModel();
     const context: KnowproContext = {
         knowledgeModel,
-        knowledgeActions:
-            knowLib.conversation.createKnowledgeActionTranslator(
-                knowledgeModel,
-            ),
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         answerGenerator: new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(knowledgeModel),
@@ -77,7 +107,6 @@ export async function createKnowproCommands(
      * CREATE GENERAL MEMORY COMMANDS
      */
     commands.kpSearchTerms = searchTerms;
-    commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
     commands.kpSearchRag = searchRag;
@@ -122,7 +151,7 @@ export async function createKnowproCommands(
                 description ??
                 "Search current knowPro conversation by manually providing terms as arguments",
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 100),
+                maxToDisplay: argNum("Maximum matches to display", 25),
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
@@ -212,49 +241,6 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpSearch.metadata = searchDef();
-    async function searchV1(args: string[]): Promise<void> {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, searchDef());
-        const query = namedArgs.query;
-        const result = await context.knowledgeActions.translateSearchTermsV2(
-            query,
-            kp.getTimeRangePromptSectionForConversation(context.conversation!),
-        );
-        if (!result.success) {
-            context.printer.writeError(result.message);
-            return;
-        }
-        let searchAction = result.data;
-        if (searchAction.actionName !== "getAnswer") {
-            return;
-        }
-        context.printer.writeSearchFilter(searchAction);
-        if (searchAction.parameters.filters.length > 0) {
-            const filter = searchAction.parameters.filters[0];
-            const searchResults = await matchFilterToConversation(
-                context.conversation!,
-                filter,
-                namedArgs.ktype,
-                {
-                    exactMatch: namedArgs.exact,
-                },
-            );
-            if (searchResults) {
-                context.printer.writeKnowledgeSearchResults(
-                    context.conversation!,
-                    searchResults,
-                    namedArgs.maxToDisplay,
-                    namedArgs.distinct,
-                );
-            } else {
-                context.printer.writeLine("No matches");
-            }
-        }
-    }
-
     function searchDefNew(): CommandMetadata {
         const def = searchDef();
         def.description = "Search using natural language";
@@ -263,7 +249,7 @@ export async function createKnowproCommands(
         def.options.showMessages = argBool("Show message matches", false);
         def.options.knowledgeTopK = argNum(
             "How many top K knowledge matches",
-            100,
+            50,
         );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget");
@@ -271,7 +257,7 @@ export async function createKnowproCommands(
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
-        def.options.maxToDisplay = argNum("Maximum to display", 100);
+        def.options.maxToDisplay = argNum("Maximum to display", 25);
         def.options.thread = arg("Thread description");
         return def;
     }
@@ -605,7 +591,7 @@ export async function createKnowproCommands(
             "topic",
         );
     }
-    commands.topics.metadata = topicsDef();
+    commands.kpTopics.metadata = topicsDef();
     async function topics(args: string[]): Promise<void> {
         const conversation = ensureConversationLoaded();
         if (!conversation) {

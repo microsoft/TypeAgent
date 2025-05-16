@@ -66,7 +66,7 @@ describe("search.offline", () => {
                     conversation,
                     matches,
                 );
-                expectHasEntities(semanticRefs, "Starship Troopers");
+                expectHasEntities(semanticRefs, "The Circle");
                 expectDoesNotHaveEntities(semanticRefs, "Children of Time");
             }
             termGroup = createAndTermGroup(
@@ -83,7 +83,7 @@ describe("search.offline", () => {
             let termGroup = createAndTermGroup(
                 createOrTermGroup(
                     createSearchTerm("Children of Time"),
-                    createSearchTerm("Starship Troopers"),
+                    createSearchTerm("The Circle"),
                 ),
                 createSearchTerm("movie", undefined, true), // Exact match movies
             );
@@ -93,7 +93,7 @@ describe("search.offline", () => {
                     conversation,
                     matches,
                 );
-                expectHasEntities(semanticRefs, "Starship Troopers");
+                expectHasEntities(semanticRefs, "The Circle");
                 expectDoesNotHaveEntities(semanticRefs, "Children of Time");
             }
         },
@@ -115,7 +115,7 @@ describe("search.offline", () => {
                 );
                 expectHasEntities(
                     semanticRefs,
-                    "Starship Troopers",
+                    "The Circle",
                     "Children of Time",
                     "spider",
                     "spiders",
