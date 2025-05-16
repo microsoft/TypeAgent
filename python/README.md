@@ -2,7 +2,7 @@
 
 ## Overview
 
-**TypeAgent** is **sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
+**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
 This directory contain python code that support our **TypeAgent** implementation.
 

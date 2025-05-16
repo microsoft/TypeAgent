@@ -1,6 +1,6 @@
 # Chat Agent
 
-Chat Agent is **sample code** that explores how to build a typed Chat agent with **TypeChat**.
+Chat Agent is **sample code** that explores how to build a typed Chat agent with structured prompting and LLM.
 
 The sample demonstrates:
 

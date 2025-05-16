@@ -1,14 +1,16 @@
 # TypeAgent
 
-**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with a _natural language interfaces_.
+## Overview
 
-**TypeAgent** uses [TypeChat](https://github.com/microsoft/typechat) to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
+**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
-This repo contains the personal agent and example application agents, along with internal packages used to build them.
+We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing called Structured RAG as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
+
+We are trying to build a single personal agent that can apply to any application.  To apply agent interfaces to all applications, we need to map user requests to actions at much lower cost and latency than current systems.  To make this possible, we have created a system that can distill language models into logical systems that can handle most user requests.  
+
+Actions and memories flow together.  Actions like "add to my calendar pickleball game 2-3pm on Friday" yield memories that can become parameters of future actions like "put in an hour of recovery time after my pickleball game."  We are working on an architecture, called AMP, that integrates actions, memories, and plans (extended sets of actions). 
 
 ## Getting Started
-
-TypeAgent is written in TypeScript and relies on [TypeChat](https://github.com/microsoft/typechat). To understand how TypeAgent examples work, we recommend getting comfortable with [TypeChat](https://github.com/microsoft/typechat) and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
 
 ### Quick start - Agent Shell Example
 
@@ -23,9 +25,72 @@ Follow these step-by-step instructions to quickly setup tools and environments f
 
 For more detailed setup instructions, see the [README.md](./ts/README.md) in the TypeScript code [directory](./ts)
 
-## Examples
+### Quick start - Components
 
-### Apps
+- [Agent Dispatcher](./ts/packages/dispatcher/)
+  
+  Explores applying structured prompting and LLM to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
+
+- [Knowledge Processor](./ts/packages/knowPro)
+
+- [Agent Cache](./ts/packages/cache/)
+
+  Explores how LLM with structured prompting can be used to cache action translation, minimizing the need to go the LLM.
+
+## State Management
+
+Storage, registration, chat, memory and other state maintained by examples is **_typically_** stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
+
+Example agents that use the Microsoft Graph or similar external services may store state in those services.
+
+Code in this repo doesn't not collect telemetry by default.
+
+## Intended Uses
+
+- TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using structured prompting and LLM
+- Sample agents are not intended to be implemented in real-world settings without further testing/validation.
+
+## Roadmap
+
+- Publish library for agent memory and action dispatch.
+
+## Limitations
+
+TypeAgent is early stage sample code. TypeAgent is not a framework. All code in this repo is intended for building examples (apps, agents, and disptacher hosts) only.
+
+- TypeAgent is in **active development** with frequent updates and refactoring.
+- TypeAgent has been tested with Azure Open AI services on developer's own machines only.
+- TypeAgent is currently tested in English. Performance may vary in other languages.
+- TypeAgent uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
+- You are responsible for supplying any **API keys** for services used by examples.  You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
+
+## Developers
+
+### Repo overivew
+
+**TypeAgent** uses structured prompting with LLM technique for many of the components.
+to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
+
+This repo contains the personal agent and example application agents, along with internal packages used to build them.
+
+### Exploring Action Dispatch
+
+[Agent Shell](./ts/packages/shell) example allow additional agents to be installed/registered to extend its functionality. For developers who are interested in experimenting with action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [Agent Shell](./ts/packages/shell) example to explore using the [Agent Dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the interface definitions between [Agent Dispatcher](./ts/packages/dispatcher) and the agent.
+
+### Working with TypeAgent repo
+
+For developers who want to modify TypeAgent or contribute to our repo.
+
+Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
+
+- [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
+- [`python`](./python) Python code ([Readme](./python/README.md))
+- [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
+- [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
+
+See more information about working with the repo [here](./docs/help/dev.md).
+
+#### Apps
 
 - [TypeAgent Shell](./ts/packages/shell/)
 
@@ -36,7 +101,7 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
   - Structured memory
   - Structured RAG
 
-### Agents
+#### Agents
 
 - Application agents with natural language interfaces integrated with [TypeAgent Shell](./ts/packages/shell/) and [TypeAgent CLI](./ts/packages/cli/)
 
@@ -56,60 +121,6 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
   - [Phone](.ts/packages/agents/phone/)
   - [Photo](.ts/packages/agents/photo/)
   - [androidMobile](.ts/packages/agents/androidMobile/)
-
-### Components
-
-- [Agent Dispatcher](./ts/packages/dispatcher/)
-
-  Explores applying [TypeChat](https://github.com/microsoft/typechat) to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
-
-- [Knowledge Processor](./ts/packages/knowPro)
-
-- [Agent Cache](./ts/packages/cache/)
-
-  Explores how [TypeChat](https://github.com/microsoft/typechat) translations from user intent to actions can be cached, minimizing the need to go the LLM.
-
-## State Management
-
-Storage, registration, chat, memory and other state maintained by examples is **_typically_** stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
-
-Example agents that use the Microsoft Graph or similar external services may store state in those services.
-
-Code in this repo doesn't not collect telemetry by default.
-
-## Intended Uses
-
-- TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using [TypeChat](https://github.com/microsoft/typechat).
-- Sample agents are not intended to be implemented in real-world settings without further testing/validation.
-
-## Limitations
-
-TypeAgent is early stage sample code over [TypeChat](https://github.com/microsoft/typechat). TypeAgent is not a framework. All code in this repo is intended for building examples (apps, agents, and disptacher hosts) only.
-
-- TypeAgent is in **active development** with frequent updates and refactoring.
-- TypeAgent has been tested with Azure Open AI services on developer's own machines only.
-- TypeAgent is currently tested in English. Performance may vary in other languages.
-- TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
-- You are responsible for supplying any **API keys** for services used by examples.  You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
-
-## Developers
-
-### Exploring Action Dispatch
-
-[Agent Shell](./ts/packages/shell) example allow additional agents to be installed/registered to extend its functionality. For developers who are interested in experimenting with action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [Agent Shell](./ts/packages/shell) example to explore using the [Agent Dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the interface definitions between [Agent Dispatcher](./ts/packages/dispatcher) and the agent.
-
-### Working with TypeAgent repo
-
-For developers who want to modify TypeAgent or contribute to our repo.
-
-Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
-
-- [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
-- [`python`](./python) Python code ([Readme](./python/README.md))
-- [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
-- [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
-
-See more information about working with the repo [here](./docs/help/dev.md).
 
 ## Code of Conduct
 

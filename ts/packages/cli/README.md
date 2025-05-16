@@ -2,7 +2,7 @@
 
 ## Overview
 
-TypeAgent CLI is a command line entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
+TypeAgent CLI is a command line entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using structured prompting and LLM.
 
 TypeAgent CLI host multiple subcommands, including the [interactive mode](#interactive-mode), a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent Shell](../shell/) is the UI version of the interactive mode, and both shared the core [Dispatcher](../dispatcher/) component. Please read Dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
 
