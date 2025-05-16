@@ -9,7 +9,7 @@ Knowledge-processor explores how to:
 - Generate queries: translate natural language questions into **queries** to retrieve this knowledge.
 - Generate answers: use query results to generate natural language **_answer_** questions.
 
-Knowledge-processor is currently used to implement [conversation-memory](./src/conversation/conversationManager.ts) for the Type Agent Shell.
+Knowledge-processor is currently used to implement [conversation-memory](./src/conversation/conversationManager.ts) for the Agent Shell.
 
 ## Trademarks
 

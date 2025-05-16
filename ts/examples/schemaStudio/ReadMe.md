@@ -1,6 +1,6 @@
 ## Schema Studio
 
-This example explores how you could use TypeChat to:
+This example explores how you could use structured prompting and LLM to:
 
 - Generate variations on user utterances
 - Automatically generate possible user utterances for a given schema
