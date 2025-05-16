@@ -98,8 +98,8 @@ importers:
         specifier: workspace:*
         version: link:../examplesLib
       exifreader:
-        specifier: 4.23.5
-        version: 4.23.5
+        specifier: ^4.30.1
+        version: 4.30.1
       image-memory:
         specifier: workspace:*
         version: link:../../packages/memory/image
@@ -2132,7 +2132,7 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       exifreader:
-        specifier: ^4.23.5
+        specifier: ^4.30.1
         version: 4.30.1
       find-config:
         specifier: ^1.0.0
@@ -6915,9 +6915,6 @@ packages:
   execa@5.1.1:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
     engines: {node: '>=10'}
-
-  exifreader@4.23.5:
-    resolution: {integrity: sha512-Gy9FXSBW+4ivu4aNtthGHAPEfVJ72z4aN9Iusr3YiIOy+ZCh7NWfoswCXZV/CH8MpOJE2Ij4hmmKQPGvo4Vf9g==}
 
   exifreader@4.30.1:
     resolution: {integrity: sha512-XoEKKQ0FmJwCKHnuErceFAM+MSfZ+px7Nci5BhBP1cgEHi/fHSBvQySsdfd0MaFHzNh8ITsRNwpnvkMuIPicrg==}
@@ -15679,10 +15676,6 @@ snapshots:
       onetime: 5.1.2
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
-
-  exifreader@4.23.5:
-    optionalDependencies:
-      '@xmldom/xmldom': 0.8.10
 
   exifreader@4.30.1:
     optionalDependencies:

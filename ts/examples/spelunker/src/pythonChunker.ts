@@ -4,7 +4,7 @@
 // This requires that python3 is on the PATH
 // and the chunker.py script is in the dist directory.
 
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 import { promisify } from "util";
@@ -14,7 +14,7 @@ import { FileDocumentation } from "./fileDocSchema.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const execPromise = promisify(exec);
+const execFilePromise = promisify(execFile);
 
 export type ChunkId = string;
 
@@ -54,8 +54,9 @@ export async function chunkifyPythonFiles(
         success = false;
     try {
         const chunkerPath = path.join(__dirname, "chunker.py");
-        let { stdout, stderr } = await execPromise(
-            `python3 -X utf8 ${chunkerPath} ${filenames.join(" ")}`,
+        let { stdout, stderr } = await execFilePromise(
+            "python3",
+            ["-X", "utf8", chunkerPath, ...filenames],
             { maxBuffer: 64 * 1024 * 1024 }, // Super large buffer
         );
         output = stdout;
