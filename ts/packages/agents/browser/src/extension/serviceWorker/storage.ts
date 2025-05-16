@@ -33,7 +33,10 @@ export async function setStoredPageProperty(
 ): Promise<void> {
     try {
         const result = await chrome.storage.local.get([url]);
-        const urlData = result[url] || {};
+        const urlData = result[url]
+            ? Object.assign(Object.create(null), result[url])
+            : Object.create(null);
+
         if (
             key === "__proto__" ||
             key === "constructor" ||
