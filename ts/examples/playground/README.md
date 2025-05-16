@@ -1,6 +1,6 @@
 ## Playground
 
-This example explores how to use TypeChat to implement interactive chat with history.
+This example explores how to use structured prompting and LLM to implement interactive chat with history.
 
 The example is **sample code** and not intended to be implemented in real-world settings.
 

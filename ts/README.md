@@ -2,7 +2,7 @@
 
 ## Overview
 
-**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with a _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat). The personal agent can work with _application agents_.
+**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
 This directory contains Typescript implemented packages and main entry point for **TypeAgent**. For more details about the project, please review the TypeAgent [ReadMe](./../README.md).
 
