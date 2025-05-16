@@ -1,12 +1,10 @@
-## Memory
+## Chat
 
-CLI for experimenting with Structured RAG and memory packages under **active development**.
-
-- **Sample code** with _Frequent Updates_
+A test app and CLI for testing and experimenting with the [knowpro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This app is **sample code** in active development with _frequent updates_
 
 The CLI explores memory scenarios using the following packages:
 
-- [knowpro](../../packages/knowPro/)
+- [knowpro](../../packages/knowPro/README.md)
 - [conversation-memory](../../packages/memory/conversation)
 - [image-memory](../../packages/memory/image)
 
@@ -47,7 +45,7 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
 @kpSearchTerms book --genre fantasy
 
-@kpAnswer --query "List all books"
+@kpAnswer --query "List the names of all books"
 ```
 
 ### Notes
