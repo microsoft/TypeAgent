@@ -688,6 +688,9 @@ export async function createKnowproCommands(
         options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
         options.maxCharsInBudget = namedArgs.charBudget;
+        if (context.conversation!.messages.length > 500) {
+            options.maxKnowledgeMatches = options.maxKnowledgeMatches! * 2;
+        }
         return options;
     }
 
