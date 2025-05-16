@@ -180,7 +180,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     dblogging?: boolean; // default to false
 
     constructionProvider?: ConstructionProvider;
-    explanationAsynchronousMode?: boolean; // default to false
+    explanationAsynchronousMode?: boolean; // default to true
     collectCommandResult?: boolean; // default to false
 
     allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
@@ -340,7 +340,7 @@ export async function initializeCommandHandlerContext(
 ): Promise<CommandHandlerContext> {
     const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
-        options?.explanationAsynchronousMode ?? false;
+        options?.explanationAsynchronousMode ?? true;
 
     const persistSession = options?.persistSession ?? false;
     const persistDir = options?.persistDir;
