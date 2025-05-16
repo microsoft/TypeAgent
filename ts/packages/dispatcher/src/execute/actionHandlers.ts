@@ -707,7 +707,7 @@ async function getParameterEntities(
                     value.map((v, i) =>
                         getParameterEntities(
                             action,
-                            obj,
+                            value,
                             i,
                             v,
                             fieldType.elementType,

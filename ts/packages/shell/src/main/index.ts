@@ -267,7 +267,6 @@ async function initializeDispatcher(
                 ...getDefaultAppAgentProviders(instanceDir),
             ],
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
-            explanationAsynchronousMode: true,
             persistSession: true,
             persistDir: instanceDir,
             enableServiceHost: true,
