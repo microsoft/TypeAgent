@@ -1,8 +1,11 @@
 # image-memory
 
-**Experimental prototype**: Working toward a shared understanding of implementing image-memory using structured RAG and the [knowpro](../../knowPro/) experimental library.
+Image-memory is **Experimental sample code** working toward an MVP of implementing an _image-memory_ using the [knowpro](../../knowPro/README.md) library.
 
-This is **sample code** only.
+An [Image Collection](./src/imageCollection.ts) can viewed as memory.
+
+- Images may searched for based on their knowledge content as well as metadata.
+- Natural language may be used to ask questions and get answers
 
 ## Trademarks
 
