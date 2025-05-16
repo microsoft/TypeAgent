@@ -1,13 +1,15 @@
 # knowledge-processor
 
-**Sample code** and early ideas that explore how to:
+Knowledge-processor is **sample code** that explores _early_ ideas in Structured RAG. See the [knowpro](../knowPro/README.md) package for the latest on Structured RAG.
 
-- Use structured prompting and LLM to extract **_structured knowledge_** from conversations, transcripts, images, and documents.
-- Implement a **Structured RAG**. The exploration includes ideas on how to:
-  - Index the extracted knowledge and source text for retrieval.
-  - Use structured prompting and LLM to generate **structured queries** for structured knowledge.\*\*
-  - Use structured objects to **_answer_** questions.
-  - Use structured indices to improve precision.
+Knowledge-processor explores how to:
+
+- Extract **_knowledge_**: from conversations, transcripts, images, and documents.
+- Index the extracted knowledge and source text for retrieval.
+- Generate queries: translate natural language questions into **queries** to retrieve this knowledge.
+- Generate answers: use query results to generate natural language **_answer_** questions.
+
+Knowledge-processor is currently used to implement [conversation-memory](./src/conversation/conversationManager.ts) for the Agent Shell.
 
 ## Trademarks
 

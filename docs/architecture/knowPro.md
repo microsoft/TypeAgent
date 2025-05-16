@@ -1,3 +1,3 @@
-# Knowledge Processor
+# Knowpro
 
-Coming soon.
+Please review the [knowpro README](../../ts/packages/knowPro/README.md)

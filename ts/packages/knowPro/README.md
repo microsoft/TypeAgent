@@ -1,9 +1,9 @@
 # Knowpro
 
-**Knowpro** is **experimental sample code** working towards an MVP library for **Structured RAG**. Knowpro is currently in **active** development with frequent updates as the API and feature set evolves.
+**Knowpro** is **experimental sample code** working towards an MVP library for **Structured RAG**. Knowpro is in **active** development with frequent updates.
 
-- The Knowpro implementation of Structured RAG is used to implement types of [**memory**](../memory/README.md)
-- A [knowpro test app](../../examples/chat/) demonstrates how to use both knowpro and memory APIs.
+- The knowpro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md)
+- The [knowpro test app](../../examples/chat/) demonstrates knowpro and memory APIs.
 
 ## Structured RAG overview
 
@@ -11,17 +11,18 @@
 - A message can be a turn in a conversation, podcast or chat transcript. It can also be an email message, the description of an image, etc.
 - Structured RAG extracts dense information from the text of messages. The extracted information includes short topic sentences, tree-structured entities, and relationship information such as actions.
 - Structured information may also accompany a message. This can be timestamps, metadata such as to/from information, or the location information associated with an image. Structured information may be added to a relational table associated with the conversation as needed.
-- The information associated with a message in suitable indexes. These indexes allow the information to be:
+- The information associated with a message is stored in suitable indexes. These indexes allow the information to be:
   - Searched and retrieved using _query expressions_ for improved precision and low latency.
   - Enumerated and filtered.
-- Information retrieved by executing a query can also be used to retrieve the messages it originated in.
 - Indexes can be updated incrementally or in the background.
+- Information retrieved by executing a query can also be used to retrieve the messages it originated in.
+- Natural language user requests are translated to search query expressions. Query results are used to generate answers to user requests.
 
 ## Knowpro implementation
 
 Knowpro implements the ideas of Structured RAG. Knowpro uses structured prompting and LLM to implement many core features.
 
-Knowpro also provides support for:
+Knowpro also supports:
 
 - Natural language queries: translating natural language user requests and questions to queries.
 - Answer generation: using query results from executing queries to generate natural language **answers** to user requests.
@@ -51,16 +52,16 @@ For each user request (including natural language):
 - If the topics and entities do not use all of the token budget, add to the prompt the messages referenced by the top entities and topics. 
 - Submit the answer prompt to a language model to generate the final answer.
 
-### Knowpro API
+### API
 
 - [Base interfaces and types](./src/interfaces.ts)
 - [Search](./src/search.ts)
-- [Natural Language Querying](./src/searchLang.ts)
-- [Answer Generation](./src/answerGenerator.ts)
+- [Natural language querying](./src/searchLang.ts)
+- [Answer generation](./src/answerGenerator.ts)
 
 ### Examples
 
-- [Memory Implemented using Knowpro](../memory/README.md)
+- [Memory with knowpro](../memory/README.md)
 - [Knowpro example](../../examples/chat/README.md)
 
 ## Trademarks
