@@ -9,7 +9,7 @@ This document describes how to build a custom application agent as an independen
 Begin by exploring the following:
 
 - **Agent SDK**: Read about the architecture of the [**Agent SDK**](../../ts/packages/agentSdk/README.md).
-- **Sample Agents**:
+- **Example Agents**:
   - Review agents under the [agents](../../ts/packages/agents) directory. The [List](../../ts/packages/agents/list/) agent provides a good example and template for building an agent.
   - The [Echo](../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own custom application agents.
 
