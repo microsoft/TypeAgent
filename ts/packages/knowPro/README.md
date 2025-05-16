@@ -26,7 +26,7 @@ Knowpro also provides support for:
 - Natural language queries: translating natural language user requests to structured queries.
 - Answer generation: using the structured objects and (as needed) their source text (as needed) returned by structured queries to generate natural language **answers** to natural language user requests.
 
-Knowpro has been primarily tested with **gpt-4o**. Performance with other models is not guaranteed.
+Knowpro has been primarily tested with **GPT-4o**. Results with other models are not guaranteed.
 
 ### Knowpro API
 
