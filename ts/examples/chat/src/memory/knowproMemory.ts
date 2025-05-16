@@ -395,10 +395,6 @@ export async function createKnowproCommands(
         if (!hasConversationResults(searchResults.data)) {
             context.printer.writeLine();
             context.printer.writeLine("No matches");
-            context.printer.writeInColor(
-                chalk.gray,
-                `--fallback ${namedArgs.fallback}`,
-            );
             return;
         }
         for (let i = 0; i < searchResults.data.length; ++i) {
