@@ -1,12 +1,10 @@
-## Memory
+## Memory and Chat Example
 
-CLI for experimenting with Structured RAG and memory packages under **active development**.
+A CLI for testing and experimenting with the [knowpro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with _frequent updates_.
 
-- **Sample code** with _Frequent Updates_
+The CLI explores:
 
-The CLI explores memory scenarios using the following packages:
-
-- [knowpro](../../packages/knowPro/)
+- [knowpro](../../packages/knowPro/README.md)
 - [conversation-memory](../../packages/memory/conversation)
 - [image-memory](../../packages/memory/image)
 
@@ -31,14 +29,23 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
 ### Trying it out
 
+- Ensure you have a [.env](../../README.md#service-keys) configured with Service keys.
+- This code has currently been tested with **gpt-4o** only.
+  - Behavior or results with other models is currently unknown.
+- Run the app:
+  - cd <app directory>
+  - node dist/main.js
 - Use the **@kpPodcastLoadSample** command to load a pre-built Structured-RAG index for a [sample podcast](../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt).
 - Run example commands such as those listed in [input.txt](./src/memory/input.txt)
 
 ```
 @kpPodcastLoadSample
 
-@kpAnswer --query "List all books"
-@kpAnswer --query "List all books that are also movies"
+@kpSearchTerms book
+
+@kpSearchTerms book --genre fantasy
+
+@kpAnswer --query "List the names of all books"
 ```
 
 ### Notes
