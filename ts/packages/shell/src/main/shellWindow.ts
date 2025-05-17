@@ -332,7 +332,7 @@ export class ShellWindow {
 
             this.targetUrl = targetUrl.toString();
             // indicate in the settings which canvas is open
-            this.settings.setUserSettingValue("canvas", targetUrl.toString());
+            this.setUserSettingValue("canvas", targetUrl.toString());
         }
     }
 
@@ -404,7 +404,7 @@ export class ShellWindow {
         // clear the canvas settings
         if (save) {
             this.targetUrl = undefined;
-            this.settings.setUserSettingValue("canvas", undefined);
+            this.setUserSettingValue("canvas", undefined);
         }
     }
 

@@ -60,7 +60,6 @@ export class BrowserAgentIpc {
                     typeof event.data === "string"
                         ? event.data
                         : await (event.data as Blob).text();
-                console.log(text);
                 try {
                     const data = JSON.parse(text) as WebSocketMessageV2;
                     if (data.method) {
