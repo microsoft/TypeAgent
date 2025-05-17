@@ -4,7 +4,7 @@ TypeAgent memory uses a method called **Structured RAG** for indexing and queryi
 
 Classic RAG is defined as embedding each conversation turn into a vector, and then for each user request embedding the user request and then placing into the answer generation prompt the top conversation turns by cosine similarity to the user request.
 
-Structured RAG is defined as the following steps.
+Structured RAG is defined as the following steps:
 
 - For each conversation turn (message):
   - Extract short topic sentences and tree-structured entity and relationship information.
