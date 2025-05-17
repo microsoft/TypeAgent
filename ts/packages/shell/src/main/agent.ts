@@ -225,6 +225,10 @@ class ShellOpenWebContentView implements CommandHandler {
                 targetUrl = new URL("https://www.target.com/");
                 break;
 
+            case "turtlegraphics":
+                targetUrl = new URL("http://localhost:9000/");
+                break;
+
             default:
                 try {
                     const port =

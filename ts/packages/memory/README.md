@@ -1,6 +1,6 @@
 # Memory
 
-**Memory** includes sample packages that explore how to implement different memory types using the [knowpro](../knowPro/README.md) library.
+**Memory** includes sample packages that explore how to implement different memory types using the [KnowPro](../knowPro/README.md) library.
 
 Memory types currently being explored:
 
