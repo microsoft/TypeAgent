@@ -189,7 +189,10 @@ export class ShellWindow {
     }
 
     public sendMessageToInlineWebContent(message: WebSocketMessageV2) {
-        this.inlineWebContentView?.webContents.send("webview-message", message);
+        this.inlineWebContentView?.webContents.send(
+            "received-from-browser-ipc",
+            message,
+        );
     }
 
     public runDemo(interactive: boolean = false) {

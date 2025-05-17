@@ -54,7 +54,10 @@ export class BrowserAgentIpc {
             keepWebSocketAlive(this.webSocket, "browser");
 
             this.webSocket.onmessage = async (event: any) => {
-                const text = event.data.toString();
+                const text =
+                    typeof event.data === "string"
+                        ? event.data
+                        : await (event.data as Blob).text();
                 try {
                     const data = JSON.parse(text) as WebSocketMessageV2;
                     if (data.method) {
