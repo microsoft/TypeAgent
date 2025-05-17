@@ -17,13 +17,13 @@ Enter @**help** for a list of commands
 
 You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
-| Feature Area                                               | Command Prefix             |
-| ---------------------------------------------------------- | -------------------------- |
-| [General Search and Answer](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
-| [Podcast Memory](./src/memory/knowproPodcast.ts)           | @kpPodcast...              |
-| [Email Memory](./src/memory/knowproEmail.ts)               | @kpEmail...                |
-| [Conversation Memory](./src/memory/knowproConversation.ts) | @kpCm...                   |
-| [Image Memory](./src/memory/knowproImage.ts)               | @kpImage...                |
+| Feature Area                                                     | Command Prefix             |
+| ---------------------------------------------------------------- | -------------------------- |
+| [Knowpro APIs: Search and Answer](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
+| [Podcast Memory](./src/memory/knowproPodcast.ts)                 | @kpPodcast...              |
+| [Email Memory](./src/memory/knowproEmail.ts)                     | @kpEmail...                |
+| [Conversation Memory](./src/memory/knowproConversation.ts)       | @kpCm...                   |
+| [Image Memory](./src/memory/knowproImage.ts)                     | @kpImage...                |
 
 ### Trying it out
 

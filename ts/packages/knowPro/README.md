@@ -1,9 +1,25 @@
 # Knowpro
 
-**Knowpro** is **experimental sample code** working towards an MVP library for **Structured RAG**. Knowpro is in **active** development with frequent updates.
+**Knowpro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). Knowpro is in **active** development with frequent updates.
 
 - The knowpro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md)
 - The [knowpro test app](../../examples/chat/) demonstrates knowpro and memory APIs.
+
+Note: the TypeAgent **Dispatcher** currently implements **Agent Memory** using an early implementation of Structured RAG found in the [knowledge-processor](../knowledgeProcessor/README.md) package.
+
+## API
+
+- [Base interfaces and types](./src/interfaces.ts)
+- [Search](./src/search.ts)
+- [Natural language querying](./src/searchLang.ts)
+- [Answer generation](./src/answerGenerator.ts)
+
+### Examples
+
+Examples of using the above APIs can be found here:
+
+- [Knowpro and Memory examples](../../examples/chat/README.md)
+- [Memory implementations](../memory/README.md)
 
 ## Structured RAG overview
 
@@ -51,18 +67,6 @@ For each user request (including natural language):
 - Select the top entities and topics returned by Search and add them to the answer prompt
 - If the topics and entities do not use all of the token budget, add to the prompt the messages referenced by the top entities and topics. 
 - Submit the answer prompt to a language model to generate the final answer.
-
-### API
-
-- [Base interfaces and types](./src/interfaces.ts)
-- [Search](./src/search.ts)
-- [Natural language querying](./src/searchLang.ts)
-- [Answer generation](./src/answerGenerator.ts)
-
-### Examples
-
-- [Memory with knowpro](../memory/README.md)
-- [Knowpro example](../../examples/chat/README.md)
 
 ## Trademarks
 
