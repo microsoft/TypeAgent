@@ -36,6 +36,7 @@ For robustness -- TypeChat already retries, but my embeddings don't.
 
 - Change some inconsistent module names  [DONE -- if we are okay deviating from the TS module names]
 - Rewrite podcast parsing without regexes (low priority)
+- Switch from Protocol to ABC
 
 ## Type checking stuff
 
