@@ -37,7 +37,7 @@ export function createTurtleCanvas() {
     let angle = 0;
 
     const updatePosition = () => {
-        turtleDiv.style.left = `${x - 5}px`;
+        turtleDiv.style.left = `${x - 7}px`;
         turtleDiv.style.top = `${y - 9}px`;
     };
 
