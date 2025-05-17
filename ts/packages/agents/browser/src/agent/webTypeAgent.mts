@@ -14,7 +14,9 @@ import { BrowserActionContext } from "./actionHandler.mjs";
 import { WebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 
 import registerDebug from "debug";
+import { AgentInterfaceFunctionName } from "agent-rpc/server";
 
+const debug = registerDebug("typeagent:webAgent");
 const debugError = registerDebug("typeagent:webAgent:error");
 
 export type WebAgentChannels = {
@@ -129,23 +131,31 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         addTypeAgent: async (param: {
             name: string;
             manifest: AppAgentManifest;
+            agentInterface: AgentInterfaceFunctionName[];
             title: string; // filled in by the proxy (service worker for browser or preload script in electron)
             url: string; // filled in by the proxy (service worker for browser or preload script in electron)
         }): Promise<void> => {
-            const { name, manifest, title, url } = param;
+            const { name, manifest, title, url, agentInterface } = param;
 
-            if (!checkDynamicAgentPermission(title, url, context)) {
+            if (!(await checkDynamicAgentPermission(title, url, context))) {
                 throw new Error(
-                    `Dynamic agent ${param.name} is not allowed to be added`,
+                    `Permission denied: Dynamic agent ${param.name} is not allowed to connect to TypeAgent.`,
                 );
             }
+
             try {
                 await context.addDynamicAgent(
                     name,
                     manifest,
-                    await createAgentRpcClient(name, channelProvider),
+                    await createAgentRpcClient(
+                        name,
+                        channelProvider,
+                        agentInterface,
+                    ),
                 );
+                debug("Registered dynamic agent", name);
             } catch (e: any) {
+                debugError("Failed to register dynamic agent", name, e);
                 // Clean up the channel if adding the agent fails
                 channelProvider.deleteChannel(name);
                 throw e;

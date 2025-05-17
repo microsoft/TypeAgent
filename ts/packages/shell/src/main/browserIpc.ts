@@ -8,6 +8,8 @@ import {
 } from "common-utils";
 
 import WebSocket from "ws";
+import registerDebug from "debug";
+const debugBrowserIPC = registerDebug("typeagent:browser:ipc");
 
 export class BrowserAgentIpc {
     private static instance: BrowserAgentIpc;
@@ -58,6 +60,7 @@ export class BrowserAgentIpc {
                     typeof event.data === "string"
                         ? event.data
                         : await (event.data as Blob).text();
+                console.log(text);
                 try {
                     const data = JSON.parse(text) as WebSocketMessageV2;
                     if (data.method) {
@@ -70,6 +73,7 @@ export class BrowserAgentIpc {
                                 schema.startsWith("browser.")) &&
                             this.onMessageReceived
                         ) {
+                            debugBrowserIPC("Browser -> Dispatcher", data);
                             this.onMessageReceived(data);
                         }
                     }
@@ -103,6 +107,7 @@ export class BrowserAgentIpc {
 
     public async send(message: WebSocketMessageV2) {
         await this.ensureWebsocketConnected();
+        debugBrowserIPC("Browser -> Dispatcher", message);
         this.webSocket.send(JSON.stringify(message));
     }
 }

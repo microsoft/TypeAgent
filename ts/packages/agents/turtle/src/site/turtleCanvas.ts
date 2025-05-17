@@ -3,7 +3,6 @@
 
 export function createTurtleCanvas() {
     const div = document.createElement("div");
-    document.body.appendChild(div);
     div.className = "main";
 
     const turtleDiv = document.createElement("div");
@@ -13,8 +12,8 @@ export function createTurtleCanvas() {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     turtleDiv.appendChild(svg);
 
-    svg.outerHTML = `<svg width="10" height="10" xmlns="http://www.w3.org/2000/svg">
-        <polygon points="10,5 0,0 0,10" />
+    svg.outerHTML = `<svg width="15" height="10" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="15,5 0,0 0,10" />
     </svg>`;
 
     const canvas = document.createElement("canvas");
@@ -34,8 +33,8 @@ export function createTurtleCanvas() {
     let angle = 0;
 
     const updatePosition = () => {
-        turtleDiv.style.left = `${x - 5}px`;
-        turtleDiv.style.top = `${y - 8}px`;
+        turtleDiv.style.left = `${div.clientLeft + x}px`;
+        turtleDiv.style.top = `${div.clientTop + y}px`;
     };
 
     const updateAngle = () => {
@@ -43,32 +42,35 @@ export function createTurtleCanvas() {
     };
     updatePosition();
     return {
-        forward(pixel: number) {
-            const dx = Math.cos(angle * (Math.PI / 180)) * pixel;
-            const dy = Math.sin(angle * (Math.PI / 180)) * pixel;
-            if (penDown) {
-                ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x + dx, y + dy);
-                ctx.stroke();
-            }
-            x += dx;
-            y += dy;
-            updatePosition();
-        },
-        left: (degrees: number) => {
-            angle -= degrees;
-            updateAngle();
-        },
-        right: (degrees: number) => {
-            angle += degrees;
-            updateAngle();
-        },
-        penUp: () => {
-            penDown = false;
-        },
-        penDown: () => {
-            penDown = true;
+        div,
+        turtle: {
+            forward(pixel: number) {
+                const dx = Math.cos(angle * (Math.PI / 180)) * pixel;
+                const dy = Math.sin(angle * (Math.PI / 180)) * pixel;
+                if (penDown) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + dx, y + dy);
+                    ctx.stroke();
+                }
+                x += dx;
+                y += dy;
+                updatePosition();
+            },
+            left: (degrees: number) => {
+                angle -= degrees;
+                updateAngle();
+            },
+            right: (degrees: number) => {
+                angle += degrees;
+                updateAngle();
+            },
+            penUp: () => {
+                penDown = false;
+            },
+            penDown: () => {
+                penDown = true;
+            },
         },
     };
 }

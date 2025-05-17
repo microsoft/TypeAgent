@@ -22,6 +22,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { ResolveEntityResult } from "../../agentSdk/dist/agentInterface.js";
+import { AgentInterfaceFunctionName } from "./server.js";
 
 export type AgentContextCallFunctions = {
     notify(param: {
@@ -101,6 +102,7 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         name: string;
         manifest: AppAgentManifest;
+        agentInterface: AgentInterfaceFunctionName[];
     }) => Promise<void>;
     removeDynamicAgent: (param: {
         contextId: number;
@@ -194,11 +196,6 @@ export type AgentInvokeFunctions = {
             propertyName: string;
         },
     ): Promise<string[]>;
-};
-
-export type InitializeMessage = {
-    type: "initialized";
-    agentInterface: (keyof AgentInvokeFunctions)[];
 };
 
 export type ContextParams = {
