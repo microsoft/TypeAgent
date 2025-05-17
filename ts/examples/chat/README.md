@@ -1,10 +1,10 @@
 ## Memory and Chat Example
 
-A CLI to test and experiment with the [knowpro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with frequent updates.
+A CLI to test and experiment with the [KnowPro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with frequent updates.
 
 The CLI explores:
 
-- [knowpro](../../packages/knowPro/README.md)
+- [KnowPro](../../packages/knowPro/README.md)
 - [conversation-memory](../../packages/memory/conversation/README.md)
 - [image-memory](../../packages/memory/image/README.md)
 
@@ -19,7 +19,7 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
 | Feature Area                                                     | Command Prefix             |
 | ---------------------------------------------------------------- | -------------------------- |
-| [Knowpro APIs: Search and Answer](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
+| [KnowPro APIs: Search and Answer](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
 | [Podcast Memory](./src/memory/knowproPodcast.ts)                 | @kpPodcast...              |
 | [Email Memory](./src/memory/knowproEmail.ts)                     | @kpEmail...                |
 | [Conversation Memory](./src/memory/knowproConversation.ts)       | @kpCm...                   |
@@ -49,6 +49,10 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
 - Requires file system access. Creates test directories under **/data/testChat**
 - May require **_admin (sudo)_** rights. On Linux/WSL, you may need to launch node with sudo.
+
+### knowledge-processor
+
+The CLI additionally lets you explore the [knowledge-processor](../../packages/knowledgeProcessor/README.md) package. See [instructions](./src/knowledgeProc/README.md) for how to do so.
 
 ## Trademarks
 

@@ -1,9 +1,9 @@
-# Knowpro
+# KnowPro
 
-**Knowpro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). Knowpro is in **active** development with frequent updates.
+**KnowPro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). KnowPro is in **active** development with frequent updates.
 
-- The knowpro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md)
-- The [knowpro test app](../../examples/chat/) demonstrates knowpro and memory APIs.
+- The KnowPro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md)
+- The [KnowPro test app](../../examples/chat/README.md) demonstrates how to use the KnowPro API and memory implementations.
 
 Note: the TypeAgent **Dispatcher** currently implements **Agent Memory** using an early implementation of Structured RAG found in the [knowledge-processor](../knowledgeProcessor/README.md) package.
 
@@ -18,7 +18,7 @@ Note: the TypeAgent **Dispatcher** currently implements **Agent Memory** using a
 
 Examples of using the above APIs can be found here:
 
-- [Knowpro and Memory examples](../../examples/chat/README.md)
+- [KnowPro + Memory examples](../../examples/chat/README.md)
 - [Memory implementations](../memory/README.md)
 
 ## Structured RAG overview
@@ -34,16 +34,16 @@ Examples of using the above APIs can be found here:
 - Information retrieved by executing a query can also be used to retrieve the messages it originated in.
 - Natural language user requests are translated to search query expressions. Query results are used to generate answers to user requests.
 
-## Knowpro implementation
+## KnowPro implementation
 
-Knowpro implements the ideas of Structured RAG. Knowpro uses structured prompting and LLM to implement many core features.
+KnowPro implements the ideas of Structured RAG. KnowPro uses structured prompting and LLM to implement many core features.
 
-Knowpro also supports:
+KnowPro also supports:
 
 - Natural language queries: translating natural language user requests and questions to queries.
 - Answer generation: using query results from executing queries to generate natural language **answers** to user requests.
 
-Knowpro has been primarily tested with **GPT-4o**. Results with other models are not guaranteed.
+KnowPro has been primarily tested with **GPT-4o**. Results with other models are not guaranteed.
 
 ### Query flow
 
@@ -60,7 +60,7 @@ For each user request (including natural language):
 
   - The matched artifacts reference the sources from which they were derived.
 
-- **Knowpro** uses secondary indices for matching tree expressions efficiently. It also uses secondary scope expressions such as document range and time range.  Knowpro also uses secondary indices for related terms, such as "novel" for "book". 
+- **KnowPro** uses secondary indices for matching tree expressions efficiently. It also uses secondary scope expressions such as document range and time range.  KnowPro also uses secondary indices for related terms, such as "novel" for "book". 
 
 #### Generate Answers
 

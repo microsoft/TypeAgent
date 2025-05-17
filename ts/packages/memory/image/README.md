@@ -1,6 +1,6 @@
 # image-memory
 
-Image-memory is **Experimental sample code** working toward an MVP of implementing an _image-memory_ using the [knowpro](../../knowPro/README.md) library.
+Image-memory is **experimental sample code** working toward an MVP of implementing an _image-memory_ using the [KnowPro](../../knowPro/README.md) library.
 
 An [Image Collection](./src/imageCollection.ts) can viewed as memory.
 
