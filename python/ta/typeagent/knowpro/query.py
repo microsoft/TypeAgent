@@ -448,10 +448,6 @@ class MatchPropertySearchTermExpr(MatchTermExpr):
                     property_name,
                     property_value.text,
                 )
-                if semantic_refs is not None:
-                    print("semantic_refs =", semantic_refs)
-                else:
-                    print("semantic_refs is None")
                 matches.add_term_matches(property_value, semantic_refs, True)
                 context.matched_property_terms.add(property_name, property_value)
         else:
