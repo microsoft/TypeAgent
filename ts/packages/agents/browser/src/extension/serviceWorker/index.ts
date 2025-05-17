@@ -267,6 +267,7 @@ function setupEventListeners(): void {
                     // Fill in identification information
                     data.params.param.title = title;
                     data.params.param.url = url;
+                    console.log(data);
                 }
 
                 webSocket.send(JSON.stringify(data));

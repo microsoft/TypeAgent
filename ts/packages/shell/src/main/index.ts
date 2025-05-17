@@ -307,7 +307,8 @@ async function initializeDispatcher(
                 throw new Error("Invalid request");
             }
             debugShell(newDispatcher.getPrompt(), text);
-
+            // Update before processing the command in case there was change outside of command processing
+            updateSummary(dispatcher);
             const metrics = await newDispatcher.processCommand(
                 text,
                 id,
@@ -317,6 +318,8 @@ async function initializeDispatcher(
                 "send-demo-event",
                 "CommandProcessed",
             );
+
+            // Update the summary after processing the command in case state changed.
             updateSummary(dispatcher);
             return metrics;
         }

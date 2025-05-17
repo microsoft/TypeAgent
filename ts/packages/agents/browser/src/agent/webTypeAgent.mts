@@ -142,7 +142,6 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
                     `Permission denied: Dynamic agent ${param.name} is not allowed to connect to TypeAgent.`,
                 );
             }
-
             try {
                 await context.addDynamicAgent(
                     name,

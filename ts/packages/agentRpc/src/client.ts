@@ -160,7 +160,7 @@ export async function createAgentRpcClient(
                     await createAgentRpcClient(
                         param.name,
                         channelProvider,
-                        agentInterface,
+                        param.agentInterface,
                     ),
                 );
             } catch (e: any) {
