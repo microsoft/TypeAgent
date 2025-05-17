@@ -4,7 +4,7 @@ TypeAgent memory uses a method called **Structured RAG** for indexing and queryi
 
 Classic RAG is defined as embedding each conversation turn into a vector, and then for each user request embedding the user request and then placing into the answer generation prompt the top conversation turns by cosine similarity to the user request.
 
-Structured RAG is defined as the following steps.
+Structured RAG is defined as the following steps:
 
 - For each conversation turn (message):
   - Extract short topic sentences and tree-structured entity and relationship information.
@@ -22,7 +22,7 @@ Structured RAG is defined as the following steps.
 
 Structured RAG can use simple language models to extract entities and topics.  This enables Structured RAG to index large conversations, like sets of meeting transcripts.  With fine tuning, simple models deliver indices with only a small loss of precision and recall relative to indices built with large language models.
 
-The current Structured RAG implementation in the [Knowpro](../../ts/packages/knowPro/README.md) package uses secondary indices for scope expressions such as document range and time range.  The implementation also uses secondary indices for related terms, such as "novel" for "book".  During query, the memory system discovers related terms and caches them.  Models also offer related terms during information extraction.
+The current Structured RAG implementation in the [KnowPro](../../ts/packages/knowPro/README.md) package uses secondary indices for scope expressions such as document range and time range.  The implementation also uses secondary indices for related terms, such as "novel" for "book".  During query, the memory system discovers related terms and caches them.  Models also offer related terms during information extraction.
 
 Structured RAG has the following advantages over state-of-the-art memory using classic RAG:
 
