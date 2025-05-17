@@ -32,6 +32,7 @@ export function createClientIORpcServer(
             return clientIO.popupQuestion(
                 params.message,
                 params.choices,
+                params.defaultId,
                 params.source,
             );
         },

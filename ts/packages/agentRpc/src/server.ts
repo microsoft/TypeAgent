@@ -338,12 +338,14 @@ export function createAgentRpcServer(
             },
             popupQuestion: async (
                 message: string,
-                choices?: string[] | undefined,
-            ): Promise<string> => {
+                choices?: string[],
+                defaultId?: number,
+            ): Promise<number> => {
                 return rpc.invoke("popupQuestion", {
                     contextId,
                     message,
                     choices,
+                    defaultId,
                 });
             },
             toggleTransientAgent: async (

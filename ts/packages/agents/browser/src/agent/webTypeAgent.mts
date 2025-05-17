@@ -84,15 +84,15 @@ async function checkDynamicAgentPermission(
         return true;
     }
     const result = await context.popupQuestion(
-        `Allow ${title} (${domain}) to add dynamic agent?`,
-        ["Allow Once", "Allow Always", "Deny"],
+        `The Web Page '${title}' from domain '${domain}' want to connect to TypeAgent?`,
+        ["Allow Once", `Always Allow Domain ${domain}`, "Deny"],
     );
 
-    if (result === "Allow Always") {
+    if (result === 1) {
         await addAllowDynamicAgentDomains(domain, context);
         return true;
     }
-    return result === "Allow Once";
+    return result === 0;
 }
 function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
     const existing = context.agentContext.webAgentChannels;

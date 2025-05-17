@@ -281,9 +281,14 @@ export async function createAgentRpcClient(
             contextId: number;
             message: string;
             choices?: string[] | undefined;
+            defaultId?: number | undefined;
         }) => {
             const context = contextMap.get(param.contextId);
-            return context.popupQuestion(param.message, param.choices);
+            return context.popupQuestion(
+                param.message,
+                param.choices,
+                param.defaultId,
+            );
         },
     };
 

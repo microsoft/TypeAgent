@@ -13,7 +13,7 @@ import {
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import { createDispatcher, Dispatcher } from "agent-dispatcher";
+import { ClientIO, createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentInstaller,
@@ -238,12 +238,13 @@ async function initializeDispatcher(
         });
 
         const newClientIO = createClientIORpcClient(clientIOChannel.channel);
-        const clientIO = {
+        const clientIO: ClientIO = {
             ...newClientIO,
             // Main process intercepted clientIO calls
             popupQuestion: async (
                 message: string,
                 choices: string[],
+                defaultId: number | undefined,
                 source: string,
             ) => {
                 const result = await dialog.showMessageBox(
@@ -251,11 +252,12 @@ async function initializeDispatcher(
                     {
                         type: "question",
                         buttons: choices,
+                        defaultId,
                         message,
                         icon: source,
                     },
                 );
-                return choices?.[result.response];
+                return result.response;
             },
             openLocalView: (port: number) => {
                 debugShell(`Opening local view on port ${port}`);

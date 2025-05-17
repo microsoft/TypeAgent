@@ -76,8 +76,9 @@ export interface ClientIO {
     popupQuestion(
         message: string,
         choices: string[],
+        defaultId: number | undefined,
         source: string,
-    ): Promise<string>;
+    ): Promise<number>;
 
     // Notification (TODO: turn these in to dispatcher events)
     notify(

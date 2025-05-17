@@ -164,9 +164,10 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
 
         async popupQuestion(
             message: string,
-            choices: string[] | undefined,
+            choices: string[],
+            defaultId: number | undefined,
             source: string,
-        ): Promise<string> {
+        ): Promise<number> {
             // REVIEW:
             throw new Error("Not implemented");
         },

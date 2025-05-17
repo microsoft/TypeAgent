@@ -287,8 +287,14 @@ export function createSessionContext<T = unknown>(
         popupQuestion(
             message: string,
             choices: string[] = ["Yes", "No"], // default choices
-        ): Promise<string> {
-            return context.clientIO.popupQuestion(message, choices, name);
+            defaultId?: number,
+        ): Promise<number> {
+            return context.clientIO.popupQuestion(
+                message,
+                choices,
+                defaultId,
+                name,
+            );
         },
     };
 

@@ -115,7 +115,8 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         message: string;
         choices?: string[] | undefined;
-    }) => Promise<string>;
+        defaultId?: number | undefined;
+    }) => Promise<number>;
 };
 
 export type AgentCallFunctions = {
