@@ -1,10 +1,10 @@
-# Conversation-memory
+# Conversation Memory
 
-The **conversation-memory** package is **experimental sample code** under active development with _frequent_ changes to the API.
+The **conversation-memory** package is **experimental sample code** under active development with _frequent_ updates.
 
-Conversation-memory explores how to implement types of _conversational memory_ using the [knowpro](../../knowPro/README.md)/ library.
+The **conversation-memory** package explores how to implement types of _conversational memory_ using the [KnowPro](../../knowPro/README.md) library.
 
-The following memory types can be considered conversations: sequences of timestamped **messages** between senders and receivers.
+A **conversation** is defined as sequences of timestamped **messages** between senders and receivers. The following memory types can be considered conversations:
 
 - [Conversation Memory](./src/conversationMemory.ts) such as interactive chats
 - [Podcasts](./src/podcast.ts)

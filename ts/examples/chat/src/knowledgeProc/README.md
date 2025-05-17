@@ -6,7 +6,7 @@ CLI commands for experimenting with the [knowledge-processor](../../packages/kno
 - Used for legacy experiments with structured memory and RAG
 - Requires file system access. Creates test directories under **/data/testChat**
 
-Run the [test app](../main.ts) with argument "knowledgeProc"
+Run the [CLI App](../main.ts) with argument **"knowledgeProc"**.
 
 Enter @**help** for a list of commands
 

@@ -35,7 +35,7 @@ Structured RAG has the following advantages over state-of-the-art memory using c
 
 ## Implementations
 
-- The [knowpro](../../ts/packages//knowPro/README.md) package (in-development) contains the most recent implementation exploring the ideas of Structured RAG.
+- The [KnowPro](../../ts/packages//knowPro/README.md) package (in-development) contains the most recent implementation exploring the ideas of Structured RAG.
 
 ## Demos
 

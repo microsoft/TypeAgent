@@ -48,6 +48,8 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
 
 - [KnowPro](./ts/packages/knowPro)
 
+  Explores how to implement agent memory using the ideas of [Structured RAG](./docs/architecture/memory.md).
+
 - [TypeAgent Cache](./ts/packages/cache/)
 
   Explores how LLM with structured prompting can be used to cache action translation, minimizing the need to go the LLM.

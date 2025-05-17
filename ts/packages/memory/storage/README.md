@@ -1,8 +1,8 @@
 ## memory-storage
 
-**Early Sample code**: experiments with how to implement a backing store for knowpro using sqlite.
+**Early sample code** that explores with how to implement a backing store for [KnowPro](../../knowPro/README.md) using sqlite.
 
-This code early is rapidly evolving.
+This code is in active development with _frequent changes_ as the APIs evolve.
 
 ## Trademarks
 
