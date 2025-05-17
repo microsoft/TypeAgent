@@ -5,6 +5,8 @@
 - The knowpro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md)
 - The [knowpro test app](../../examples/chat/) demonstrates knowpro and memory APIs.
 
+Note: the TypeAgent **Dispatcher** currently implements **Agent Memory** using an early implementation of Structured RAG found in the [knowledge-processor](../knowledgeProcessor/README.md) package.
+
 ## API
 
 - [Base interfaces and types](./src/interfaces.ts)
@@ -12,10 +14,12 @@
 - [Natural language querying](./src/searchLang.ts)
 - [Answer generation](./src/answerGenerator.ts)
 
-## Examples
+### Examples
 
-- [Memory with knowpro](../memory/README.md)
-- [Knowpro example](../../examples/chat/README.md)
+Examples of using the above APIs can be found here:
+
+- [Knowpro and Memory examples](../../examples/chat/README.md)
+- [Memory implementations](../memory/README.md)
 
 ## Structured RAG overview
 

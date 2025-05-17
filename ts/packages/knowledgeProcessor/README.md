@@ -1,6 +1,12 @@
 # knowledge-processor
 
-Knowledge-processor is **sample code** that explores _early_ ideas in Structured RAG. See the [knowpro](../knowPro/README.md) package for the latest on Structured RAG.
+The knowledge-processor package is **sample code** that explores _early_ ideas in **Structured RAG**.
+
+The knowledge-processor package is currently used by the TypeAgent Dispatcher to implement **Agent Memory** for the Agent Shell. The dispatcher does so by using a [ConversationManager](./src/conversation/conversationManager.ts).
+
+See the [knowpro](../knowPro/README.md) package for the **latest** on Structured RAG.
+
+## Overview
 
 Knowledge-processor explores how to:
 
@@ -8,8 +14,6 @@ Knowledge-processor explores how to:
 - Index the extracted knowledge and source text for retrieval.
 - Generate queries: translate natural language questions into **queries** to retrieve this knowledge.
 - Generate answers: use query results to generate natural language **_answer_** questions.
-
-Knowledge-processor is currently used to implement [conversation-memory](./src/conversation/conversationManager.ts) for the Agent Shell.
 
 ## Trademarks
 
