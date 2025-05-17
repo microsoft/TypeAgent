@@ -4,7 +4,7 @@
 
 TypeAgent Shell is an UI entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using structured prompting and LLM.
 
-TypeAgent Shell is a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent CLI](../cli/)'s interactive mode is a command line version of the app, and both shared the core [Dispatcher](../dispatcher/) component. Please read Dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
+TypeAgent Shell is a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent CLI](../cli/)'s interactive mode is a command line version of the app, and both shared the core [dispatcher](../dispatcher/) component. Please read dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
 
 ## Prerequisites
 
