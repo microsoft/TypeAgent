@@ -133,6 +133,9 @@ export interface SessionContext<T = unknown> {
 
     notify(event: AppAgentEvent, message: string): void;
 
+    // choices default to ["Yes", "No"]
+    popupQuestion(message: string, choices?: string[]): Promise<string>;
+
     // can only toggle the sub agent of the current agent
     toggleTransientAgent(agentName: string, active: boolean): Promise<void>;
 

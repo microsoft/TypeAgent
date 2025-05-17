@@ -72,6 +72,13 @@ export interface ClientIO {
         source: string,
     ): Promise<unknown>;
 
+    // A question outside of the request
+    popupQuestion(
+        message: string,
+        choices: string[],
+        source: string,
+    ): Promise<string>;
+
     // Notification (TODO: turn these in to dispatcher events)
     notify(
         event: string,
@@ -147,6 +154,9 @@ export const nullClientIO: ClientIO = {
         defaultValue: boolean = false,
     ) => defaultValue,
     proposeAction: async () => undefined,
+    popupQuestion: async () => {
+        throw new Error("popupQuestion not implemented");
+    },
     notify: () => {},
     openLocalView: () => {},
     closeLocalView: () => {},

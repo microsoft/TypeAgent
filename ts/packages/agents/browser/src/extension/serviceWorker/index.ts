@@ -226,6 +226,18 @@ function setupEventListeners(): void {
             return;
         }
 
+        const tab = port.sender?.tab;
+        if (tab === undefined) {
+            // This shouldn't happen.
+            return;
+        }
+
+        const { title, url } = tab;
+        if (title === undefined || url === undefined) {
+            // This shouldn't happen.
+            return;
+        }
+
         const webSocket = getWebSocket();
         if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
             port.disconnect();
@@ -244,9 +256,14 @@ function setupEventListeners(): void {
         const agentNames: string[] = [];
         port.onMessage.addListener((data) => {
             if (isWebAgentMessage(data)) {
+                // relay message from the browser agent message sent via content script to the browser agent via the websocket.
                 if (data.method === "webAgent/register") {
                     agentNames.push(data.params.param.name);
+                    // Fill in identification information
+                    data.params.param.title = title;
+                    data.params.param.url = url;
                 }
+
                 webSocket.send(JSON.stringify(data));
             }
         });

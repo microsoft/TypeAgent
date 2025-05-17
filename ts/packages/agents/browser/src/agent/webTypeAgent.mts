@@ -22,6 +22,78 @@ export type WebAgentChannels = {
     registerChannel: GenericChannel;
 };
 
+const dynamicAgentDomainsDataName = "allowDynamicAgentDomains.json";
+export async function loadAllowDynamicAgentDomains(
+    context: SessionContext<BrowserActionContext>,
+) {
+    try {
+        const allowDynamicAgentDomains = await context.sessionStorage?.read(
+            dynamicAgentDomainsDataName,
+            "utf8",
+        );
+        if (allowDynamicAgentDomains) {
+            const parsedDomains = JSON.parse(allowDynamicAgentDomains);
+            if (
+                Array.isArray(parsedDomains) &&
+                parsedDomains.every((item) => typeof item === "string")
+            ) {
+                context.agentContext.allowDynamicAgentDomains = parsedDomains;
+            } else {
+                throw new Error(
+                    `Invalid format for ${dynamicAgentDomainsDataName}. Expected an string array.`,
+                );
+            }
+        }
+    } catch (e) {
+        debugError("Failed to load allowDynamicAgentDomains.json", e);
+    }
+}
+
+async function addAllowDynamicAgentDomains(
+    domain: string,
+    context: SessionContext<BrowserActionContext>,
+) {
+    if (context.agentContext.allowDynamicAgentDomains === undefined) {
+        context.agentContext.allowDynamicAgentDomains = [];
+    }
+    const allowDynamicAgentDomains =
+        context.agentContext.allowDynamicAgentDomains;
+    if (allowDynamicAgentDomains.includes(domain)) {
+        return;
+    }
+    allowDynamicAgentDomains.push(domain);
+
+    try {
+        await context.sessionStorage?.write(
+            dynamicAgentDomainsDataName,
+            JSON.stringify(allowDynamicAgentDomains),
+            "utf8",
+        );
+    } catch (e) {
+        debugError("Failed to save allowDynamicAgentDomains.json", e);
+    }
+}
+
+async function checkDynamicAgentPermission(
+    title: string,
+    url: string,
+    context: SessionContext<BrowserActionContext>,
+) {
+    const domain = new URL(url).hostname;
+    if (context.agentContext.allowDynamicAgentDomains?.includes(domain)) {
+        return true;
+    }
+    const result = await context.popupQuestion(
+        `Allow ${title} (${domain}) to add dynamic agent?`,
+        ["Allow Once", "Allow Always", "Deny"],
+    );
+
+    if (result === "Allow Always") {
+        await addAllowDynamicAgentDomains(domain, context);
+        return true;
+    }
+    return result === "Allow Once";
+}
 function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
     const existing = context.agentContext.webAgentChannels;
     if (existing) {
@@ -57,16 +129,25 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         addTypeAgent: async (param: {
             name: string;
             manifest: AppAgentManifest;
+            title: string; // filled in by the proxy (service worker for browser or preload script in electron)
+            url: string; // filled in by the proxy (service worker for browser or preload script in electron)
         }): Promise<void> => {
+            const { name, manifest, title, url } = param;
+
+            if (!checkDynamicAgentPermission(title, url, context)) {
+                throw new Error(
+                    `Dynamic agent ${param.name} is not allowed to be added`,
+                );
+            }
             try {
                 await context.addDynamicAgent(
-                    param.name,
-                    param.manifest,
-                    await createAgentRpcClient(param.name, channelProvider),
+                    name,
+                    manifest,
+                    await createAgentRpcClient(name, channelProvider),
                 );
             } catch (e: any) {
                 // Clean up the channel if adding the agent fails
-                channelProvider.deleteChannel(param.name);
+                channelProvider.deleteChannel(name);
                 throw e;
             }
         },

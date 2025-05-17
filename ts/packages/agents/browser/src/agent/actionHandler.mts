@@ -34,7 +34,11 @@ import {
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
 
-import { processWebAgentMessage, WebAgentChannels } from "./webTypeAgent.mjs";
+import {
+    loadAllowDynamicAgentDomains,
+    processWebAgentMessage,
+    WebAgentChannels,
+} from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import { BrowserActions } from "./actionsSchema.mjs";
@@ -59,6 +63,7 @@ export type BrowserActionContext = {
     browserConnector?: BrowserConnector | undefined;
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
+    allowDynamicAgentDomains?: string[];
 };
 
 async function initializeBrowserContext(): Promise<BrowserActionContext> {
@@ -75,6 +80,7 @@ async function updateBrowserContext(
         return;
     }
     if (enable) {
+        await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }

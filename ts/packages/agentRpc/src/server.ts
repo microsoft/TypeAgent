@@ -336,6 +336,16 @@ export function createAgentRpcServer(
                     message,
                 });
             },
+            popupQuestion: async (
+                message: string,
+                choices?: string[] | undefined,
+            ): Promise<string> => {
+                return rpc.invoke("popupQuestion", {
+                    contextId,
+                    message,
+                    choices,
+                });
+            },
             toggleTransientAgent: async (
                 name: string,
                 enable: boolean,

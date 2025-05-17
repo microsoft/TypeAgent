@@ -240,6 +240,23 @@ async function initializeDispatcher(
         const newClientIO = createClientIORpcClient(clientIOChannel.channel);
         const clientIO = {
             ...newClientIO,
+            // Main process intercepted clientIO calls
+            popupQuestion: async (
+                message: string,
+                choices: string[],
+                source: string,
+            ) => {
+                const result = await dialog.showMessageBox(
+                    shellWindow.mainWindow,
+                    {
+                        type: "question",
+                        buttons: choices,
+                        message,
+                        icon: source,
+                    },
+                );
+                return choices?.[result.response];
+            },
             openLocalView: (port: number) => {
                 debugShell(`Opening local view on port ${port}`);
                 return shellWindow.openInlineBrowser(

@@ -111,6 +111,11 @@ export type AgentContextInvokeFunctions = {
         agentName: string;
     }) => Promise<number>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
+    popupQuestion: (param: {
+        contextId: number;
+        message: string;
+        choices?: string[] | undefined;
+    }) => Promise<string>;
 };
 
 export type AgentCallFunctions = {

@@ -405,6 +405,11 @@ contextBridge.exposeInMainWorld("browserConnect", {
 
 window.addEventListener("message", async (event) => {
     if (event.data !== undefined && event.data.source === "webAgent") {
+        if (event.data.method === "webAgent/register") {
+            // Fill in identification information
+            event.data.params.param.title = document.title;
+            event.data.params.param.url = window.location.href;
+        }
         sendToBrowserAgent(event.data);
     }
 });

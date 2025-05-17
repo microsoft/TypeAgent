@@ -277,6 +277,14 @@ export async function createAgentRpcClient(
             const storage = getStorage(param, context);
             return (await storage.getTokenCachePersistence()).delete();
         },
+        popupQuestion: async (param: {
+            contextId: number;
+            message: string;
+            choices?: string[] | undefined;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return context.popupQuestion(param.message, param.choices);
+        },
     };
 
     const agentContextCallHandlers: AgentContextCallFunctions = {
