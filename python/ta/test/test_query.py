@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import cast
+from typing import Any, cast
 import pytest
 
 from typeagent.knowpro.collections import (
@@ -101,7 +101,7 @@ class MockConversation(IConversation[MockMessage, MockTermIndex]):
     """Mock conversation for testing."""
 
     def __init__(
-        self, name_tag: str = "Test", has_refs: bool = True, has_index: bool = True
+        self, name_tag: str = "MockConversation", has_refs: bool = True, has_index: bool = True
     ):
         self.name_tag = name_tag
         self.tags = []
@@ -357,69 +357,82 @@ class TestMatchSearchTermExpr:
         assert sorted_matches[1].score == 1.4  # 0.7 * 2.0
 
 
+class MockPropertyIndex(PropertyIndex):
+    """Mock property index for testing."""
+
+    def __init__(self):
+        super().__init__()
+        properties = {
+            "name": [
+                ScoredSemanticRefOrdinal(0, 1.0),
+                ScoredSemanticRefOrdinal(1, 0.8),
+            ],
+            "value": [
+                ScoredSemanticRefOrdinal(0, 0.9),
+                ScoredSemanticRefOrdinal(1, 0.7),
+            ],
+        }
+        for name, values in properties.items():
+            for value in values:
+                self.add_property(name, "test", value)
+
+
 class TestMatchPropertySearchTermExpr:
-    def setup_method(self):
-        """Set up test data."""
-        self.mock_property_index = PropertyIndex()
+
+    def test_accumulate_matches(self, eval_context: QueryEvalContext):
+        """Test accumulating matches for a property search term."""
+        # (1) property name is a string in KnowledgePropertyName; calls accumulate_matches_for_property()
+        eval_context.property_index = MockPropertyIndex()
+        property_search_term = PropertySearchTerm(property_name="name", property_value=SearchTerm(term=Term("test")))
+        expr = MatchPropertySearchTermExpr(property_search_term)
+        matches = SemanticRefAccumulator()
+        expr.accumulate_matches(eval_context, matches)
+        assert len(matches) == 2
+
+        # (2) property name is a SearchTerm(Term()); calls accumulate_matches_for_facets()
+        eval_context.property_index = MockPropertyIndex()
+        property_search_term = PropertySearchTerm(property_name=SearchTerm(Term("name")), property_value=SearchTerm(term=Term("test")))
+        expr = MatchPropertySearchTermExpr(property_search_term)
+        matches = SemanticRefAccumulator()
+        expr.accumulate_matches(eval_context, matches)
+        assert len(matches) == 1  # TODO: FAILS: 0
 
     def test_accumulate_matches_for_property(self, eval_context: QueryEvalContext):
-        """Test accumulating matches for a property."""
-        # Add property index to context
-        eval_context.property_index = self.mock_property_index
-
-        # Create property search term
-        property_search_term = PropertySearchTerm(
-            property_name="name", property_value=SearchTerm(term=Term("testFacet"))
-        )
-
-        expr = MatchPropertySearchTermExpr(property_search_term)
-
+        eval_context.property_index = MockPropertyIndex()
+        dummy_search_term: Any = None
+        expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
-        expr.accumulate_matches(eval_context, matches)
-
-        assert len(matches) == 1
-        assert matches.get_match(0) is not None
+        expr.accumulate_matches_for_property(eval_context, "name", SearchTerm(Term("test")), matches)
+        assert len(matches) == 2
 
     def test_accumulate_matches_for_facets(self, eval_context: QueryEvalContext):
-        """Test accumulating matches for facets."""
-        # Add property index to context
-        eval_context.property_index = self.mock_property_index
-
-        # Create property search term with SearchTerm as property_name
-        property_search_term = PropertySearchTerm(
-            property_name=SearchTerm(term=Term("testFacet")),
-            property_value=SearchTerm(term=Term("testValue")),
-        )
-
-        expr = MatchPropertySearchTermExpr(property_search_term)
-
+        eval_context.property_index = MockPropertyIndex()
+        dummy_search_term: Any = None
+        expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
-        expr.accumulate_matches(eval_context, matches)
+        st1, st2 = SearchTerm(Term("facet.name")), SearchTerm(Term("test"))
+        expr.accumulate_matches_for_facets(eval_context, st1, st2, matches)
+        assert len(matches) == 1  # TODO: FAILSE: 0
 
-        assert len(matches) == 2  # Should match both facetName and facetValue
+    def test_accumulate_matches_for_property_value(self, eval_context: QueryEvalContext):
+        eval_context.property_index = MockPropertyIndex()
+        dummy_search_term: Any = None
+        expr = MatchPropertySearchTermExpr(dummy_search_term)
 
-    def test_accumulate_matches_for_property_value(
-        self, eval_context: QueryEvalContext
-    ):
-        """Test accumulating matches for a property value."""
-        # Add property index to context
-        eval_context.property_index = self.mock_property_index
-
-        # Create expression
-        property_search_term = PropertySearchTerm(
-            property_name="name", property_value=SearchTerm(term=Term("testFacet"))
-        )
-        expr = MatchPropertySearchTermExpr(property_search_term)
-
-        # Call directly
+        # First call has two matches
         matches = SemanticRefAccumulator()
-        expr.accumulate_matches_for_property_value(
-            eval_context, matches, "name", Term("testFacet")
-        )
+        expr.accumulate_matches_for_property_value(eval_context, matches, "name", Term("test"))
+        assert len(matches) == 2
+        assert matches.get_match(0) is not None  # First semantic ref should be matched
+        assert matches.get_match(1) is not None  # Second semantic ref should be matched
+        assert eval_context.matched_property_terms.has("name", Term("test"))
 
-        assert len(matches) == 1
-        assert matches.get_match(0) is not None
+        # Second call with same property should do nothing because it's already matched
+        matches2: SemanticRefAccumulator = SemanticRefAccumulator()
+        expr.accumulate_matches_for_property_value(eval_context, matches2, "name", Term("test"))
+        assert len(matches2) == 0
 
+ 
 
 class TestGetScopeExpr:
     def test_eval(self, eval_context: QueryEvalContext):
