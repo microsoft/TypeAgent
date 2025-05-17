@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Any, cast
+from typing import cast
 import pytest
 
 from typeagent.knowpro.collections import (
@@ -50,6 +50,12 @@ from typeagent.knowpro.query import (
 )
 from typeagent.knowpro.propindex import PropertyIndex, PropertyNames
 from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
+
+
+def downcast[T](cls: type[T], obj: object) -> T:
+    """Downcast an object to a specific type."""
+    assert isinstance(obj, cls), f"Expected type {cls}, but got {type(obj)}"
+    return cast(T, obj)
 
 
 class MockMessage(IMessage):
@@ -159,11 +165,15 @@ def eval_context(searchable_conversation) -> QueryEvalContext:
 
 
 class TestConversationSearchability:
-    def test_is_conversation_searchable_true(self, searchable_conversation):
+    def test_is_conversation_searchable_true(
+        self, searchable_conversation: MockConversation
+    ):
         """Test is_conversation_searchable with a searchable conversation."""
         assert is_conversation_searchable(searchable_conversation) is True
 
-    def test_is_conversation_searchable_false(self, non_searchable_conversation):
+    def test_is_conversation_searchable_false(
+        self, non_searchable_conversation: MockConversation
+    ):
         """Test is_conversation_searchable with a non-searchable conversation."""
         assert is_conversation_searchable(non_searchable_conversation) is False
 
@@ -284,12 +294,12 @@ class TestQueryEvalContext:
     def test_get_message_for_ref(self, eval_context: QueryEvalContext):
         """Test get_message_for_ref method."""
         ref = eval_context.get_semantic_ref(0)
-        message = cast(MockMessage, eval_context.get_message_for_ref(ref))
+        message = downcast(MockMessage, eval_context.get_message_for_ref(ref))
         assert message.message_ordinal == 0
 
     def test_get_message(self, eval_context: QueryEvalContext):
         """Test get_message method."""
-        message = cast(MockMessage, eval_context.get_message(1))
+        message = downcast(MockMessage, eval_context.get_message(1))
         assert message.message_ordinal == 1
 
     def test_clear_matched_terms(self, eval_context: QueryEvalContext):
@@ -383,10 +393,11 @@ class MockPropertyIndex(PropertyIndex):
 
 
 class TestMatchPropertySearchTermExpr:
+    """Tests for the MatchPropertySearchTermExpr class."""
 
     def test_accumulate_matches_known_prop(self, eval_context: QueryEvalContext):
         """Test accumulating matches for a property search term."""
-        # property_name is a string in KnowledgePropertyName; calls accumulate_matches_for_property()
+        # property_name is a string (KnowledgePropertyName); calls accumulate_matches_for_property()
         eval_context.property_index = MockPropertyIndex()
         property_search_term = PropertySearchTerm(
             property_name="name", property_value=SearchTerm(term=Term("test"))
@@ -397,6 +408,7 @@ class TestMatchPropertySearchTermExpr:
         assert len(matches) == 2
 
     def test_accumulate_matches_user_prop(self, eval_context: QueryEvalContext):
+        """Test accumulating matches for a property search term with SearchTerm property name."""
         # property_name is a SearchTerm(Term()); calls accumulate_matches_for_facets()
         eval_context.property_index = MockPropertyIndex()
         property_search_term = PropertySearchTerm(
@@ -406,11 +418,14 @@ class TestMatchPropertySearchTermExpr:
         expr = MatchPropertySearchTermExpr(property_search_term)
         matches = SemanticRefAccumulator()
         expr.accumulate_matches(eval_context, matches)
-        assert len(matches) == 1  # TODO: FAILS: 0
+        assert len(matches) == 1
 
     def test_accumulate_matches_for_property(self, eval_context: QueryEvalContext):
+        """Test accumulate_matches_for_property method."""
         eval_context.property_index = MockPropertyIndex()
-        dummy_search_term: Any = None
+        dummy_search_term = PropertySearchTerm(
+            property_name="name", property_value=SearchTerm(term=Term("test"))
+        )
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
         expr.accumulate_matches_for_property(
@@ -419,19 +434,25 @@ class TestMatchPropertySearchTermExpr:
         assert len(matches) == 2
 
     def test_accumulate_matches_for_facets(self, eval_context: QueryEvalContext):
+        """Test accumulate_matches_for_facets method."""
         eval_context.property_index = MockPropertyIndex()
-        dummy_search_term: Any = None
+        dummy_search_term = PropertySearchTerm(
+            property_name="name", property_value=SearchTerm(term=Term("test"))
+        )
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
         st1, st2 = SearchTerm(Term("facet.name")), SearchTerm(Term("test"))
         expr.accumulate_matches_for_facets(eval_context, st1, st2, matches)
-        assert len(matches) == 1  # TODO: FAILSE: 0
+        assert len(matches) == 1
 
     def test_accumulate_matches_for_property_value(
         self, eval_context: QueryEvalContext
     ):
+        """Test accumulate_matches_for_property_value method."""
         eval_context.property_index = MockPropertyIndex()
-        dummy_search_term: Any = None
+        dummy_search_term = PropertySearchTerm(
+            property_name="name", property_value=SearchTerm(term=Term("test"))
+        )
         expr = MatchPropertySearchTermExpr(dummy_search_term)
 
         # First call has two matches
@@ -445,11 +466,11 @@ class TestMatchPropertySearchTermExpr:
         assert eval_context.matched_property_terms.has("name", Term("test"))
 
         # Second call with same property should do nothing because it's already matched
-        matches2: SemanticRefAccumulator = SemanticRefAccumulator()
+        second_matches: SemanticRefAccumulator = SemanticRefAccumulator()
         expr.accumulate_matches_for_property_value(
-            eval_context, matches2, "name", Term("test")
+            eval_context, second_matches, "name", Term("test")
         )
-        assert len(matches2) == 0
+        assert len(second_matches) == 0
 
 
 class TestGetScopeExpr:
