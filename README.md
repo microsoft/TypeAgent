@@ -27,9 +27,9 @@ We are applying AMP to the web by creating a browser that enables web sites to r
 
 ## Getting Started
 
-### Quick start - Agent Shell Example
+### Quick start - TypeAgent Shell Example
 
-The main entry point to explore TypeAgent is the [Agent Shell](./ts/packages/shell) example.
+[TypeAgent Shell](./ts/packages/shell) example is the starting point to explore the **personal agent** with **natural language interfaces** we have built so far. It takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation.
 
 Follow these step-by-step instructions to quickly setup tools and environments from scratch to build, run, explore, and develop.
 
@@ -46,7 +46,7 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
 
   Explores applying structured prompting and LLM to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
-- [Knowledge Processor](./ts/packages/knowPro)
+- [KnowPro](./ts/packages/knowPro)
 
 - [TypeAgent Cache](./ts/packages/cache/)
 
@@ -71,7 +71,7 @@ Code in this repo doesn't not collect telemetry by default.
 
 ## Limitations
 
-TypeAgent is early stage sample code. TypeAgent is not a framework. All code in this repo is intended for building examples (apps, agents, and disptacher hosts) only.
+TypeAgent is early stage sample code. TypeAgent is not a framework. All code in this repo is intended for building examples (apps, agents, and dispatcher hosts) only.
 
 - TypeAgent is in **active development** with frequent updates and refactoring.
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
@@ -81,16 +81,16 @@ TypeAgent is early stage sample code. TypeAgent is not a framework. All code in 
 
 ## Developers
 
-### Repo overivew
+### Repo Overview
 
 This repo contains the personal agent and example application agents, along with internal packages used to build them. **TypeAgent** uses structured prompting with LLM technique for many of the components,
 to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
 
-### Exploring TypeAction Dispatch
+### Exploring Action Dispatch
 
 [TypeAgent Shell](./ts/packages/shell)'s functionality can be extended by installing/registering additional agents. For developers who are interested in experimenting adding action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [TypeAgent Shell](./ts/packages/shell) example to explore using the [TypeAgent Dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [TypeAgent SDK](./ts/packages/agentSdk/) provides the interface definitions between [TypeAgent Dispatcher](./ts/packages/dispatcher) and the agent.
 
-### Working with TypeAgent repo
+### Working with TypeAgentR Repo
 
 For developers who want to modify TypeAgent or contribute to our repo.
 
