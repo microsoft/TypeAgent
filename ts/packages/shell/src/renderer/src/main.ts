@@ -182,6 +182,9 @@ function addEvents(
         proposeAction: async (actionTemplates, requestId, source) => {
             return chatView.proposeAction(actionTemplates, requestId, source);
         },
+        popupQuestion: () => {
+            throw new Error("Main process should have handled popupQuestion");
+        },
         notify: (event, requestId, data, source) => {
             switch (event) {
                 case "explained":

@@ -6,6 +6,8 @@ const { webFrame } = require("electron");
 
 import DOMPurify from "dompurify";
 import { ipcRenderer } from "electron";
+import registerDebug from "debug";
+const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
 ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
     if (data.error) {
@@ -47,6 +49,7 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
                 result: message,
             });
         } else if (schema === "webAgent") {
+            debugWebAgentProxy(`Dispatcher -> WebAgent`, data);
             window.postMessage(data);
         }
 
@@ -405,6 +408,12 @@ contextBridge.exposeInMainWorld("browserConnect", {
 
 window.addEventListener("message", async (event) => {
     if (event.data !== undefined && event.data.source === "webAgent") {
+        debugWebAgentProxy(`WebAgent -> Dispatcher`, event.data);
+        if (event.data.method === "webAgent/register") {
+            // Fill in identification information
+            event.data.params.param.title = document.title;
+            event.data.params.param.url = window.location.href;
+        }
         sendToBrowserAgent(event.data);
     }
 });

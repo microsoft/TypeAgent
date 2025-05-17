@@ -51,7 +51,13 @@ if (typeof module.instantiate !== "function") {
 //=================================================================
 const agent: AppAgent = module.instantiate();
 const channelProvider = createChannelProvider(process);
-createAgentRpcServer(agentName, agent, channelProvider);
+const { agentInterface } = createAgentRpcServer(
+    agentName,
+    agent,
+    channelProvider,
+);
+
+channelProvider.createChannel("initialize").send(agentInterface);
 
 //=================================================================
 // Set up debug trace coordination

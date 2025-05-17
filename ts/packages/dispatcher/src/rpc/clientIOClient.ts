@@ -83,6 +83,19 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
                 source,
             });
         },
+        popupQuestion(
+            message: string,
+            choices: string[],
+            defaultId: number | undefined,
+            source: string,
+        ): Promise<number> {
+            return rpc.invoke("popupQuestion", {
+                message,
+                choices,
+                defaultId,
+                source,
+            });
+        },
         notify(
             event: string,
             requestId: RequestId,

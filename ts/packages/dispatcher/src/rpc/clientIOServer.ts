@@ -28,6 +28,14 @@ export function createClientIORpcServer(
                 params.source,
             );
         },
+        popupQuestion: async (params) => {
+            return clientIO.popupQuestion(
+                params.message,
+                params.choices,
+                params.defaultId,
+                params.source,
+            );
+        },
         openLocalView: async (params) => {
             return clientIO.openLocalView(params.port);
         },

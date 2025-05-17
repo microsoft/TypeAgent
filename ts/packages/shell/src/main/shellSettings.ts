@@ -28,7 +28,7 @@ export type ShellWindowState = {
     inlineWidth: number;
     zoomLevel: number;
     devTools: boolean;
-    canvas?: string; // should the canvas be reopenend upon start?
+    canvas?: string; // should the canvas be reopen upon start?
 };
 
 export type ShellSettings = {

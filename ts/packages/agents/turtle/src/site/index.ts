@@ -5,9 +5,6 @@ import { AppAgentManifest } from "@typeagent/agent-sdk";
 import { createTurtleAgent } from "./turtleAgent";
 import { createTurtleCanvas } from "./turtleCanvas";
 
-const turtle = createTurtleCanvas();
-const agent = createTurtleAgent(turtle);
-
 const schemaTs = `
 export type TurtleAction =
     | TurtleForward
@@ -55,17 +52,24 @@ const manifest: AppAgentManifest = {
     },
 };
 
-let registered = false;
+async function initialize() {
+    const content = document.getElementById("content") as HTMLDivElement;
+    const message = document.createTextNode("Connecting to TypeAgent...");
+    try {
+        content.appendChild(message);
+        const { div, turtle } = createTurtleCanvas();
+        const agent = createTurtleAgent(turtle);
+        await (window as any).registerTypeAgent("turtle", manifest, agent);
+        content.removeChild(message);
+        content.appendChild(div);
+    } catch (e: any) {
+        message.nodeValue = `Failed to connect to TypeAgent: ${e.message}`;
+    }
+}
+let initialized = false;
 document.addEventListener("DOMContentLoaded", () => {
-    if (!registered) {
-        (window as any)
-            .registerTypeAgent("turtle", manifest, agent)
-            .then(() => {
-                console.log("Turtle agent registered");
-            })
-            .catch((e: any) => {
-                console.error("Failed to register turtle agent", e);
-            });
-        registered = true;
+    if (!initialized) {
+        initialized = true;
+        initialize();
     }
 });

@@ -7,7 +7,10 @@ import {
     createGenericChannelProvider,
 } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
-import { createAgentRpcServer } from "agent-rpc/server";
+import {
+    AgentInterfaceFunctionName,
+    createAgentRpcServer,
+} from "agent-rpc/server";
 import { isWebAgentMessageFromDispatcher } from "../common/webAgentMessageTypes.mjs";
 import {
     WebAgentRegisterMessage,
@@ -41,6 +44,7 @@ type DynamicTypeAgentManagerInvokeFunctions = {
     addTypeAgent: (param: {
         name: string;
         manifest: AppAgentManifest;
+        agentInterface: AgentInterfaceFunctionName[];
     }) => Promise<void>;
 };
 
@@ -72,16 +76,18 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     );
     manager = {
         addTypeAgent: async (name, manifest, agent) => {
-            const p = rpc.invoke("addTypeAgent", {
-                name,
-                manifest,
-            });
-
-            const closeFn = createAgentRpcServer(
+            const { closeFn, agentInterface } = createAgentRpcServer(
                 name,
                 agent,
                 messageChannelProvider,
             );
+
+            const p = rpc.invoke("addTypeAgent", {
+                name,
+                manifest,
+                agentInterface,
+            });
+
             try {
                 await p;
             } catch (e) {

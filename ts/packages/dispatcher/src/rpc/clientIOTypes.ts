@@ -16,6 +16,12 @@ export type ClientIOInvokeFunctions = {
         requestId: RequestId;
         source: string;
     }): Promise<unknown>;
+    popupQuestion(params: {
+        message: string;
+        choices: string[];
+        defaultId: number | undefined;
+        source: string;
+    }): Promise<number>;
     openLocalView(params: { port: number }): Promise<void>;
     closeLocalView(params: { port: number }): Promise<void>;
 };

@@ -6,6 +6,7 @@ import { AppAgent } from "@typeagent/agent-sdk";
 import { createAgentRpcClient } from "agent-rpc/client";
 import { createChannelProvider } from "agent-rpc/channel";
 import { fileURLToPath } from "url";
+import { AgentInterfaceFunctionName } from "agent-rpc/server";
 
 export type AgentProcess = {
     appAgent: AppAgent;
@@ -32,7 +33,27 @@ export async function createAgentProcess(
         trace: (namespaces: string) => {
             traceChannel.send(namespaces);
         },
-        appAgent: await createAgentRpcClient(agentName, channelProvider),
+        appAgent: await initializeAgentRpcClient(agentName, channelProvider),
         count: 1,
     };
+}
+
+async function initializeAgentRpcClient(name: string, channelProvider: any) {
+    const channel = channelProvider.createChannel("initialize");
+    const agentInterface = await new Promise<AgentInterfaceFunctionName[]>(
+        (resolve, reject) => {
+            channel.once("message", (message: any) => {
+                if (Array.isArray(message)) {
+                    resolve(message);
+                } else {
+                    reject(
+                        new Error(
+                            `Unexpected message: ${JSON.stringify(message)}`,
+                        ),
+                    );
+                }
+            });
+        },
+    );
+    return createAgentRpcClient(name, channelProvider, agentInterface);
 }
