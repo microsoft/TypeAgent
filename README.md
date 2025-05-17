@@ -2,11 +2,28 @@
 
 **TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
+The goal of the TypeAgent team is to explore how to get work done by safely and efficiently combining stochastic systems like language models with traditional software components.  Three principles have emerged during this investigation.  They are listed below along with examples of how the principles apply to actions, memory and plans.
+
+- Principle: distill models into logical structures
+  - Actions: find translation patterns and replace some model calls by applying patterns
+  - Memory: build ontologies from text
+  - Plans: people, programs and models collaborate using “tree of thought”
+- Principle: control information density
+  - Actions: applications define discrete categories with dense descriptions of action sets
+  - Memory: tight semantic structures fit into attention budget
+  - Plans: each search tree node defines a focused sub-problem
+- Principle: use logical structures to enable collaboration
+  - Actions: humans decide how to disambiguate action requests
+  - Memory: simple models extract logical structure from text
+  - Plan: quality models, advantage models, language models, humans and programs collaborate to expand each best-first-search node
+
 We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing called Structured RAG as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
 
-We are trying to build a single personal agent that can apply to any application.  To apply agent interfaces to all applications, we need to map user requests to actions at much lower cost and latency than current systems.  To make this possible, we have created a system that can distill language models into logical systems that can handle most user requests.  
+We are trying to build a single personal agent that can apply to any application.  To apply agent interfaces to all applications, we need to map user requests to actions at much lower cost and latency than current systems.  To make this possible, we have created a system that can distill language models into logical systems that can handle most user requests.
 
-Actions and memories flow together.  Actions like "add to my calendar pickleball game 2-3pm on Friday" yield memories that can become parameters of future actions like "put in an hour of recovery time after my pickleball game."  We are working on an architecture, called AMP, that integrates actions, memories, and plans (extended sets of actions). 
+Actions and memories flow together.  Actions like "add to my calendar pickle ball game 2-3pm on Friday" yield memories that can become parameters of future actions like "put in an hour of recovery time after my pickle ball game."  We are working on an architecture, AMP, that enables this natural information flow by integrating actions, memories, and plans
+
+We are applying AMP to the web by creating a browser that enables web sites to register actions through a JavaScript interface.
 
 ## Getting Started
 
@@ -26,7 +43,7 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
 ### Quick start - Components
 
 - [TypeAgent Dispatcher](./ts/packages/dispatcher/)
-  
+
   Explores applying structured prompting and LLM to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
 - [Knowledge Processor](./ts/packages/knowPro)
@@ -60,7 +77,7 @@ TypeAgent is early stage sample code. TypeAgent is not a framework. All code in 
 - TypeAgent has been tested with Azure Open AI services on developer's own machines only.
 - TypeAgent is currently tested in English. Performance may vary in other languages.
 - TypeAgent uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
-- You are responsible for supplying any **API keys** for services used by examples.  You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
+- You are responsible for supplying any **API keys** for services used by examples. You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
 
 ## Developers
 
