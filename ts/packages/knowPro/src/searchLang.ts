@@ -43,10 +43,25 @@ import {
     Work in progress; frequent improvements/tweaks
 */
 
+/**
+ * Type representing the filter options for language search.
+ */
 export type LanguageSearchFilter = {
     tags?: string[] | undefined;
 };
 
+/**
+ * Search a conversation using natural language. Returns {@link ConversationSearchResult} containing
+ * relevant knowledge and messages.
+ *
+ * @param conversation - The conversation object to search within.
+ * @param searchText - The natural language search phrase.
+ * @param queryTranslator - Translates natural language to a {@link querySchema.SearchQuery} structured query.
+ * @param options - Optional search options.
+ * @param langSearchFilter - Optional filter options for the search.
+ * @param debugContext - Optional context for debugging the search process.
+ * @returns {ConversationSearchResult} Conversation search results.
+ */
 export async function searchConversationWithLanguage(
     conversation: IConversation,
     searchText: string,
@@ -161,13 +176,34 @@ export async function searchConversationWithLanguage(
 }
 
 export type LanguageQueryExpr = {
+    /**
+     * The text of the query.
+     */
     queryText: string;
+    /**
+     * The structured search query the queryText was translated to.
+     */
     query: querySchema.SearchQuery;
+    /**
+     * The search query expressions the structured query was compiled to.
+     */
     queryExpressions: SearchQueryExpr[];
 };
 
 /**
  * Functions for compiling natural language queries
+ */
+
+/**
+ * Translate and compile a natural language query to a query expression.
+ *
+ * @param conversation - The conversation against which this query is being run.
+ * @param translator - Translates natural language to a {@link querySchema.SearchQuery} structured query.
+ * @param queryText - Natural language search query.
+ * @param options - Optional language search options.
+ * @param languageSearchFilter - Optional filter for language search.
+ * @param debugContext - Optional debug context for language search.
+ * @returns {LanguageQueryExpr}Language query expression.
  */
 export async function searchQueryExprFromLanguage(
     conversation: IConversation,
