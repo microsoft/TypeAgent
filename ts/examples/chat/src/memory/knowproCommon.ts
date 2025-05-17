@@ -126,6 +126,7 @@ export function createIndexingEventHandler(
     printer: MemoryConsoleWriter,
     progress: ProgressBar,
     maxMessages: number,
+    debugMode: boolean = false,
 ): kp.IndexingEventHandlers {
     let startedKnowledge = false;
     let startedRelated = false;
@@ -135,6 +136,11 @@ export function createIndexingEventHandler(
             if (!startedKnowledge) {
                 printer.writeLine("Indexing knowledge");
                 startedKnowledge = true;
+            }
+            if (debugMode) {
+                printer.writeLine("================");
+                printer.writeJson(knowledge);
+                printer.writeLine("================");
             }
             progress.advance();
             return progress.count < maxMessages;
