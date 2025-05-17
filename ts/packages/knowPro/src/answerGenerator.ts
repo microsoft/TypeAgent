@@ -15,7 +15,7 @@ import {
 import * as answerSchema from "./answerResponseSchema.js";
 import * as contextSchema from "./answerContextSchema.js";
 
-import { asyncArray, loadSchema, rewriteText } from "typeagent";
+import { asyncArray, getTopK, loadSchema, rewriteText } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
     IConversation,
@@ -25,6 +25,7 @@ import {
     SemanticRefSearchResult,
 } from "./interfaces.js";
 import {
+    MergedEntity,
     mergedToConcreteEntity,
     mergeScoredConcreteEntities,
     mergeScoredTopics,
@@ -40,7 +41,7 @@ import {
     AnswerContextChunkBuilder,
     answerContextToString,
 } from "./answerContext.js";
-import { flattenResultsArray, trimStringLength } from "./common.js";
+import { flattenResultsArray, Scored, trimStringLength } from "./common.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -89,6 +90,7 @@ export type AnswerGeneratorSettings = {
      * Maximum number of characters allowed in the context for any given call
      */
     maxCharsInBudget: number;
+    entityTopK?: number | undefined;
     /**
      * When chunking, produce answer in parallel
      */
@@ -124,7 +126,11 @@ export async function generateAnswer(
         Result<answerSchema.AnswerResponse>
     >,
 ): Promise<Result<answerSchema.AnswerResponse>> {
-    const context = answerContextFromSearchResult(conversation, searchResult);
+    const context = answerContextFromSearchResult(
+        conversation,
+        searchResult,
+        generator.settings,
+    );
     const contextContent = answerContextToString(context);
     if (contextContent.length <= generator.settings.maxCharsInBudget) {
         // Context is small enough
@@ -328,6 +334,7 @@ export function createAnswerGeneratorSettings(
 export function answerContextFromSearchResult(
     conversation: IConversation,
     searchResult: ConversationSearchResult,
+    settings?: AnswerGeneratorSettings,
 ) {
     let context: contextSchema.AnswerContext = {};
     for (const knowledgeType of searchResult.knowledgeMatches.keys()) {
@@ -338,6 +345,7 @@ export function answerContextFromSearchResult(
                 context.entities = getRelevantEntitiesForAnswer(
                     conversation,
                     searchResult.knowledgeMatches.get(knowledgeType)!,
+                    settings?.entityTopK,
                 );
                 break;
             case "topic":
@@ -383,6 +391,7 @@ export function getRelevantTopicsForAnswer(
 export function getRelevantEntitiesForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
+    topK?: number,
 ): contextSchema.RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
@@ -390,8 +399,13 @@ export function getRelevantEntitiesForAnswer(
         "entity",
     );
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
+    let candidateEntities: Iterable<Scored<MergedEntity>> =
+        mergedEntities.values();
+    if (topK !== undefined && topK > 0) {
+        candidateEntities = getTopK(candidateEntities, topK);
+    }
     const relevantEntities: contextSchema.RelevantKnowledge[] = [];
-    for (const scoredValue of mergedEntities.values()) {
+    for (const scoredValue of candidateEntities) {
         let mergedEntity = scoredValue.item;
         const relevantEntity = createRelevantKnowledge(
             conversation,

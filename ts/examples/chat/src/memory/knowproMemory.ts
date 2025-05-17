@@ -247,10 +247,6 @@ export async function createKnowproCommands(
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
-        def.options.knowledgeTopK = argNum(
-            "How many top K knowledge matches",
-            50,
-        );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget");
         def.options.applyScope = argBool("Apply scopes", true);
@@ -339,6 +335,10 @@ export async function createKnowproCommands(
             "Ignore messages if knowledge produces answers",
             true,
         );
+        def.options!.knowledgeTopK = argNum(
+            "How many top K knowledge matches",
+            50,
+        );
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -364,6 +364,13 @@ export async function createKnowproCommands(
                 maxCharsInBudget: options.maxCharsInBudget,
                 thresholdScore: 0.7,
             };
+        }
+        context.answerGenerator.settings.entityTopK = namedArgs.knowledgeTopK;
+        if (
+            context.conversation!.messages.length > 500 &&
+            context.answerGenerator.settings.entityTopK
+        ) {
+            context.answerGenerator.settings.entityTopK *= 2;
         }
 
         const searchResults =
@@ -681,12 +688,8 @@ export async function createKnowproCommands(
     function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
         let options = kp.createSearchOptions();
         options.exactMatch = namedArgs.exact;
-        options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
         options.maxCharsInBudget = namedArgs.charBudget;
-        if (context.conversation!.messages.length > 500) {
-            options.maxKnowledgeMatches = options.maxKnowledgeMatches! * 2;
-        }
         return options;
     }
 
