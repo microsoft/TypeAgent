@@ -128,7 +128,7 @@ try {
                     const errorMessage =
                         client.role === "client"
                             ? `The ${channelName} agent is not connected. The message cannot be processed.`
-                            : `No ${channelName} clients are listening for messaages on this channel`;
+                            : `No ${channelName} clients are listening for messages on this channel`;
                     ws.send(JSON.stringify({ error: errorMessage }));
                 }
             } catch {
