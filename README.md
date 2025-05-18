@@ -97,7 +97,7 @@ to build a set of application agents that **take actions**. Agents define action
 
 [TypeAgent Shell](./ts/packages/shell)'s functionality can be extended by installing/registering additional agents. For developers who are interested in experimenting adding action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [TypeAgent Shell](./ts/packages/shell) example to explore using the [dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [TypeAgent SDK](./ts/packages/agentSdk/) provides the interface definitions between [dispatcher](./ts/packages/dispatcher) and the agent.
 
-### Working with TypeAgentR Repo
+### Working with TypeAgent Repo
 
 For developers who want to modify TypeAgent or contribute to our repo.
 
