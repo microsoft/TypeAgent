@@ -1,4 +1,4 @@
-## Knowpro and Memory Example
+## Knowpro and Memory Test App
 
 A CLI to test and experiment with the [KnowPro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with frequent updates.
 
