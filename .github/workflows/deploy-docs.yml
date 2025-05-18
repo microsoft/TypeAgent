@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - siteTest
     # Only run when docs-related files change
     paths:
       - 'docs/**'
@@ -30,19 +31,47 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 16
-          cache: 'npm'
-          cache-dependency-path: './docs/package.json'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install Dependencies 📦
-        run: npm ci
+        run: pnpm install
 
       - name: Build Site 🔧
-        run: npm run build
+        run: pnpm run build
+        env:
+          # Explicitly set the GitHub repository name
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Debug Site Output 🔍
+        run: |
+          echo "Contents of _site directory:"
+          ls -la _site
+          echo "Contents of _site/assets directory (if exists):"
+          ls -la _site/assets || echo "assets directory not found"
 
       - name: Deploy to GitHub Pages 🚀
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: docs/_site      # The folder containing built site
-          branch: gh-pages        # The branch to deploy to
+          branch: siteTest        # The branch to deploy to
           commit-message: "Deploy docs: ${{ github.event.head_commit.message }} [skip ci]"
           clean: true
