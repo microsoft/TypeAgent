@@ -6,8 +6,6 @@ permalink: /
 
 TypeAgent is sample code that explores an architecture for building a single personal agent with natural language interfaces leveraging current advances in LLM technology.
 
-## What is TypeAgent?
-
 The goal of the TypeAgent team is to explore how to get work done by safely and efficiently combining stochastic systems like language models with traditional software components.  Three principles have emerged during this investigation.  They are listed below along with examples of how the principles apply to actions, memory and plans.
 
 - **Principle:** distilling models into logical structures
