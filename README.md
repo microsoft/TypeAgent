@@ -1,6 +1,6 @@
 # TypeAgent
 
-**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
+**TypeAgent** is **sample code** that explores an architecture for building a _single personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
 The goal of the TypeAgent team is to explore how to get work done by safely and efficiently combining stochastic systems like language models with traditional software components.  Three principles have emerged during this investigation.  They are listed below along with examples of how the principles apply to actions, memory and plans.
 
@@ -17,7 +17,7 @@ The goal of the TypeAgent team is to explore how to get work done by safely and 
   - Memory: simple models extract logical structure from text
   - Plan: quality models, advantage models, language models, humans and programs collaborate to expand each best-first-search node
 
-We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing called Structured RAG as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
+We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing approach called [Structured RAG](./docs/architecture/memory.md) as the basis for agent memory.  [Structured RAG](./docs/architecture/memory.md) does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
 
 We are trying to build a single personal agent that can apply to any application.  To apply agent interfaces to all applications, we need to map user requests to actions at much lower cost and latency than current systems.  To make this possible, we have created a system that can distill language models into logical systems that can handle most user requests.
 
@@ -29,7 +29,12 @@ We are applying AMP to the web by creating a browser that enables web sites to r
 
 ### Quick start - TypeAgent Shell Example
 
-[TypeAgent Shell](./ts/packages/shell) example is the starting point to explore the **personal agent** with **natural language interfaces** we have built so far. It takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation.
+[TypeAgent Shell](./ts/packages/shell) example is the starting point to explore the **single personal agent** with **natural language interfaces** we have built so far. It is an Electron application for interacting with multiple registered agents using a single unified user interface. TypeAgent Shell includes:
+
+- Integrated chat experience with voice support
+- A single personal agent conversational interface that works with the user to perform and dispatch actions to an extensible set of agents, answer question and carry on a conversation.
+- Conversational memory based on Structured RAG
+- Agent Cache to lower cost and latency
 
 Follow these step-by-step instructions to quickly setup tools and environments from scratch to build, run, explore, and develop.
 
@@ -108,13 +113,7 @@ See more information about working with the repo [here](./docs/help/dev.md).
 #### Apps
 
 - [TypeAgent Shell](./ts/packages/shell/)
-
-  An Electron application for interacting with multiple registered agents using a single unified user interface. Agent Shell includes:
-
-  - Integrated chat experience with voice support
-  - Dispatcher that translate and dispatch actions to registered agents
-  - Structured memory
-  - Structured RAG
+- [TypeAgent CLI](./ts/packages/lic/)
 
 #### Agents
 
