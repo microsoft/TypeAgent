@@ -1,4 +1,4 @@
-## Memory and Chat Example
+## Knowpro and Memory Example
 
 A CLI to test and experiment with the [KnowPro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with frequent updates.
 
