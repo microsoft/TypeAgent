@@ -17,9 +17,25 @@ permissions:
   id-token: write
   pages: write
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs 
+    
+    permissions:
+      contents: write
+      id-token: write
+      pages: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout Repository 🛎️
         uses: actions/checkout@v3
@@ -69,11 +85,11 @@ jobs:
 
       - name: Debug Site Output 🔍
         run: |
-          if [ -d "docs/_site" ]; then
+          if [ -d "_site" ]; then
             echo "Contents of _site directory:"
             ls -la _site
           else
-            echo "ERROR: docs/_site directory not found"
+            echo "ERROR: _site directory not found"
             exit 1
           fi
       - name: Upload artifact
@@ -82,4 +98,4 @@ jobs:
            name: github-pages
            path: docs/_site
       - name: Deploy to GitHub Pages from artifacts
-        uses: actions/deploy-pages@v2 
+        uses: actions/deploy-pages@v4
