@@ -2,7 +2,7 @@
 
 The knowledge-processor package is **sample code** that explores _early_ ideas in **Structured RAG**.
 
-The knowledge-processor package is currently used by the TypeAgent Dispatcher to implement **Agent Memory** for the Agent Shell. The dispatcher does so by using a [ConversationManager](./src/conversation/conversationManager.ts).
+The knowledge-processor package is currently used by the TypeAgent Dispatcher to implement **Agent Memory** for the [TypeAgent Shell](../shell). The dispatcher does so by using a [ConversationManager](./src/conversation/conversationManager.ts).
 
 See the [KnowPro](../knowPro/README.md) package for the **latest** on Structured RAG.
 

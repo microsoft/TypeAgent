@@ -34,6 +34,8 @@ Examples of using the above APIs can be found here:
 - Information retrieved by executing a query can also be used to retrieve the messages it originated in.
 - Natural language user requests are translated to search query expressions. Query results are used to generate answers to user requests.
 
+See [here](../../../docs/architecture/memory.md) for more information about memory architecture and Structured RAG.
+
 ## KnowPro implementation
 
 KnowPro implements the ideas of Structured RAG. KnowPro uses structured prompting and LLM to implement many core features.

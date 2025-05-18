@@ -284,6 +284,18 @@ export function createSessionContext<T = unknown>(
                 resolve(iidx);
             });
         },
+        popupQuestion(
+            message: string,
+            choices: string[] = ["Yes", "No"], // default choices
+            defaultId?: number,
+        ): Promise<number> {
+            return context.clientIO.popupQuestion(
+                message,
+                choices,
+                defaultId,
+                name,
+            );
+        },
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;

@@ -15,6 +15,8 @@ export type WebAgentRegisterMessage = {
     source: "webAgent";
     method: "webAgent/register";
     params: any;
+    title?: string;
+    url?: string;
 };
 
 export type WebAgentRpcMessage = {
