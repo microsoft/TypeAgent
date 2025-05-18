@@ -56,7 +56,7 @@ Reset to default:
 
 Dispatcher agent's schema, action and command can be toggled independently as well, using `@config schema`, `@config action`, `@config command`.
 
-To list all avaiable agents and their status, just the command without any parameters:
+To list all available agents and their status, just the command without any parameters:
 
 ```bash
 🤖🚧💾  [🎧📅📩📝🌐💬🤖🔧📷🖐🖼️📱🗎]> @config agent
