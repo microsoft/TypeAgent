@@ -20,4 +20,3 @@ export type {
     TemplateEditConfig,
     TemplateData,
 } from "./translation/actionTemplate.js";
-export type { systemHandlers } from "./context/system/systemAgent.js";
