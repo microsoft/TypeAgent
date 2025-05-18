@@ -1,0 +1,34 @@
+# Site settings
+title: TypeAgent Documentation
+description: Documentation for TypeAgent - A TypeScript library for building personal agents with natural language interfaces
+baseurl: "/TypeAgent" # the subpath of your site, e.g. /blog
+url: "https://hillary-mutisya.github.io" # the base hostname & protocol for your site
+
+# Build settings
+markdown: kramdown
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+# Theme settings
+show_downloads: true
+google_analytics:
+
+# Collections
+collections:
+  docs:
+    output: true
+    permalink: /:collection/:path/
+
+# Default settings
+defaults:
+  - scope:
+      path: ""
+      type: "docs"
+    values:
+      layout: "page"
+  - scope:
+      path: ""
+    values:
+      layout: "default"
