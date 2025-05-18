@@ -17,6 +17,8 @@ import {
     isWebAgentMessageFromDispatcher,
     WebAgentDisconnectMessage,
 } from "./types";
+import registerDebug from "debug";
+const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
 /**
  * Initializes the service worker
@@ -226,16 +228,30 @@ function setupEventListeners(): void {
             return;
         }
 
+        const tab = port.sender?.tab;
+        if (tab === undefined) {
+            // This shouldn't happen.
+            return;
+        }
+
+        const { title, url } = tab;
+        if (title === undefined || url === undefined) {
+            // This shouldn't happen.
+            return;
+        }
+
         const webSocket = getWebSocket();
         if (!webSocket || webSocket.readyState !== WebSocket.OPEN) {
             port.disconnect();
             return;
         }
 
+        debugWebAgentProxy("Web page connected:", url);
         const handler = async (event: MessageEvent) => {
             const message = await (event.data as Blob).text();
             const data = JSON.parse(message);
             if (isWebAgentMessageFromDispatcher(data)) {
+                debugWebAgentProxy(`Dispatcher -> WebAgent (${url})`, data);
                 port.postMessage(data);
             }
         };
@@ -244,14 +260,21 @@ function setupEventListeners(): void {
         const agentNames: string[] = [];
         port.onMessage.addListener((data) => {
             if (isWebAgentMessage(data)) {
+                debugWebAgentProxy(`WebAgent -> Dispatcher (${url})`, data);
+                // relay message from the browser agent message sent via content script to the browser agent via the websocket.
                 if (data.method === "webAgent/register") {
                     agentNames.push(data.params.param.name);
+                    // Fill in identification information
+                    data.params.param.title = title;
+                    data.params.param.url = url;
                 }
+
                 webSocket.send(JSON.stringify(data));
             }
         });
 
         port.onDisconnect.addListener(() => {
+            debugWebAgentProxy(`Web page disconnected: ${url}`);
             for (const name of agentNames) {
                 const message: WebAgentDisconnectMessage = {
                     source: "webAgent",
