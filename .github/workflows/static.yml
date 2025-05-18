@@ -72,17 +72,17 @@ jobs:
 
       - name: Debug Site Output 🔍
         run: |
-          if [ -d "docs/_site" ]; then
+          if [ -d "_site" ]; then
             echo "Contents of _site directory:"
             ls -la _site
           else
-            echo "ERROR: docs/_site directory not found"
+            echo "ERROR: _site directory not found"
             exit 1
           fi
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
            name: github-pages
-           path: docs/_site
+           path: _site
       - name: Deploy to GitHub Pages from artifacts
         uses: actions/deploy-pages@v2 
