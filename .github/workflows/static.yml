@@ -83,6 +83,6 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
            name: github-pages
-           path: _site
+           path: docs/_site
       - name: Deploy to GitHub Pages from artifacts
         uses: actions/deploy-pages@v2 
