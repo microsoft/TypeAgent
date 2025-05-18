@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" class="h-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if title %}{{ title }} - {% endif %}{{ site.title }}</title>
+  <meta name="description" content="{% if description %}{{ description }}{% else %}{{ site.description }}{% endif %}">
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | url }}?v={% version %}">
+</head>
+<body class="h-100">
+  <header class="site-header">
+    <div class="container">
+      <a href="{{ '/' | url }}" class="site-title">TypeAgent</a>
+      <nav class="main-nav">
+        <ul>
+          <li><a href="{{ '/' | url }}">Documentation</a></li>
+          <li><a href="{{ site.github }}">GitHub</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main class="content">
+    {{ content | safe }}
+  </main>
+
+  {% include "footer.njk" %}
+</body>
+</html>

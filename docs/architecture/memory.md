@@ -1,4 +1,7 @@
-# Memory architecture
+---
+layout: docs
+title: Memory architecture
+---
 
 TypeAgent memory uses a method called **Structured RAG** for indexing and querying agent conversations.
 

@@ -1,4 +1,7 @@
-# TypeAgent Command Reference
+---
+layout: docs
+title: TypeAgent Command Reference
+---
 
 The following list of commands are available in the [TypeAgent](/) system. Some commands may not be available based on the client being used (i.e. @shell commands do not work on the CLI) and or may be dependent on a specific agent (i.e. browser). This information is also available by running ```@help``` in the client.
 

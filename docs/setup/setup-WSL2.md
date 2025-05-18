@@ -1,3 +1,8 @@
+---
+layout: docs
+title: WSL2 environment setup
+---
+
 # WSL2 environment setup
 
 This is a list of step-by-step instructions to set up a WSL2 environment from _scratch_ to build, run, and develop the TypeAgent repo, collated from various READMEs throughout the repo and external source. The instruction will install and setup the necessary tools and put the repo in `~/src/TypeAgent`. Links to the original instructions for each part are provided for reference, but mostly not required to visit if you just follow the instructions here. Skip or change the steps as necessary to suit your existing or desired environment.

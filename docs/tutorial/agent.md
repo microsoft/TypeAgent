@@ -1,4 +1,8 @@
-# Building Agents for TypeAgent Dispatcher
+---
+layout: docs
+title: Building Agents for TypeAgent Dispatcher
+---
+
 
 TypeAgent [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli) are built using [TypeAgent Dispatcher](../../ts/packages/dispatcher). It has a configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [TypeAgent SDK](../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and then surfaced in the [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli).
 
@@ -224,10 +228,10 @@ The `Echo` agent should be in the list and enabled.
 `Echo` agent is now ready. Test it out by issuing some request to see the `Echo` agent in action
 
 When to run the cli this is how interaction with the `Echo` agent will look like:
-![alt text](./imgs/image-cli.png)
+![alt text](imgs/image-cli.png)
 
 When to run the shell this is how interaction with the `Echo` agent will look like:
-![alt text](./imgs/image-shell.png)
+![alt text](imgs/image-shell.png)
 
 The `Echo` agent will be reloaded again after installation. It can be uninstalled using the command:
 
