@@ -57,6 +57,10 @@ module.exports = function(eleventyConfig) {
           if (dir.includes('/tutorial') && link.startsWith('imgs/')) {
             return `/TypeAgent/tutorial/imgs/${link.substring(5)}`;
           }
+
+          if (dir.includes('/content') && link.startsWith('../tutorial/imgs/')) {
+            return `/TypeAgent/tutorial/imgs/${link.substring(17)}`;
+          }
           
           return link;
         }
