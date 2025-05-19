@@ -39,11 +39,8 @@ module.exports = {
       ]
     },
     {
-      title: "Command Reference",
-      url: "/help/commandReference/"
-    },
-    {
       title: "Tutorials",
+      url: "/tutorial/agent/",
       children: [
         {
           title: "Creating an Agent",
