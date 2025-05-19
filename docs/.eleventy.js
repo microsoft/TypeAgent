@@ -9,6 +9,7 @@ module.exports = function(eleventyConfig) {
   // Copy static assets
   eleventyConfig.addPassthroughCopy("_includes");
   eleventyConfig.addPassthroughCopy("assets");
+  eleventyConfig.addPassthroughCopy("content/imgs");
   eleventyConfig.addPassthroughCopy("tutorial/imgs");
   
     eleventyConfig.addShortcode("version", function() {
