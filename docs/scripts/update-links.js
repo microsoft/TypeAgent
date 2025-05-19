@@ -43,13 +43,16 @@ function updateLinks(content, inputPath, repoUrl, defaultBranch = 'main') {
       }
     }
     
-    // Skip if the link is already an absolute URL
-    if (path.startsWith('http')) {
+    // Skip if the link is already an absolute URL or is an image
+    if (path.startsWith('http')|| /\.(jpeg|jpg|gif|png|svg)$/.test(path)) {
       return match;
     }
     
     // Normalize path by removing ../ prefix
-    const normalizedPath = path.replace(/^\.\.\//, '');
+    let normalizedPath = path.replace(/^\.\.\//, '');
+    if(normalizedPath.startsWith("../")){
+        normalizedPath = normalizedPath.replace(/^\.\.\//, '');
+    }
     
     // Determine if this is a file or directory (assume directory if no extension)
     const isDirectory = !normalizedPath.includes('.');
