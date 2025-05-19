@@ -59,6 +59,7 @@ function updateLinks(content, inputPath, repoUrl, defaultBranch = 'main') {
       `${repoUrl}/tree/${defaultBranch}/${normalizedPath}` : 
       `${repoUrl}/blob/${defaultBranch}/${normalizedPath}`;
     
+      console.log(`Replacing link: ${path} with ${githubPath}`)
     // Return the updated link
     return `[${linkText}](${githubPath})`;
   });
