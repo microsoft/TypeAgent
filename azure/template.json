@@ -29,7 +29,7 @@
         "vaults_aisystems_name": {
             "defaultValue": "aisystems",
             "type": "String"
-        }        
+        }
     },
     "variables": {},
     "resources": [
@@ -303,8 +303,7 @@
             "apiVersion": "2024-10-01",
             "name": "[parameters('typeagent_speech')]",
             "location": "westus",
-            "tags": {
-            },
+            "tags": {},
             "sku": {
                 "name": "S0"
             },
@@ -374,7 +373,7 @@
             ],
             "sku": {
                 "name": "Standard",
-                "capacity": 2
+                "capacity": 1
             },
             "properties": {
                 "model": {
@@ -383,7 +382,7 @@
                     "version": "3.0"
                 },
                 "versionUpgradeOption": "OnceCurrentVersionExpired",
-                "currentCapacity": 2,
+                "currentCapacity": 1,
                 "raiPolicyName": "Microsoft.Default"
             }
         },
@@ -456,35 +455,13 @@
         {
             "type": "Microsoft.CognitiveServices/accounts/deployments",
             "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/gpt-35-turbo-instruct')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
-                "name": "Standard",
-                "capacity": 120
-            },
-            "properties": {
-                "model": {
-                    "format": "OpenAI",
-                    "name": "gpt-35-turbo-instruct",
-                    "version": "0914"
-                },
-                "versionUpgradeOption": "OnceNewDefaultVersionAvailable",
-                "currentCapacity": 120,
-                "raiPolicyName": "Microsoft.Default"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
             "name": "[concat(parameters('openai_eastus_name'), '/gpt-4o')]",
             "dependsOn": [
                 "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
             ],
             "sku": {
                 "name": "GlobalStandard",
-                "capacity": 450
+                "capacity": 50
             },
             "properties": {
                 "model": {
@@ -493,7 +470,7 @@
                     "version": "2024-08-06"
                 },
                 "versionUpgradeOption": "OnceCurrentVersionExpired",
-                "currentCapacity": 450,
+                "currentCapacity": 50,
                 "raiPolicyName": "Microsoft.DefaultV2"
             }
         },
@@ -506,7 +483,7 @@
             ],
             "sku": {
                 "name": "GlobalStandard",
-                "capacity": 2000
+                "capacity": 200
             },
             "properties": {
                 "model": {
@@ -515,164 +492,8 @@
                     "version": "2024-07-18"
                 },
                 "versionUpgradeOption": "OnceNewDefaultVersionAvailable",
-                "currentCapacity": 2000,
+                "currentCapacity": 200,
                 "raiPolicyName": "Microsoft.DefaultV2"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/raiPolicies",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/Microsoft.Default')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "properties": {
-                "mode": "Blocking",
-                "contentFilters": [
-                    {
-                        "name": "Hate",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Hate",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Sexual",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Sexual",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Violence",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Violence",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Selfharm",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Selfharm",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/raiPolicies",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/Microsoft.DefaultV2')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "properties": {
-                "mode": "Blocking",
-                "contentFilters": [
-                    {
-                        "name": "Hate",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Hate",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Sexual",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Sexual",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Violence",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Violence",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Selfharm",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Selfharm",
-                        "severityThreshold": "Medium",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Jailbreak",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Prompt"
-                    },
-                    {
-                        "name": "Protected Material Text",
-                        "blocking": true,
-                        "enabled": true,
-                        "source": "Completion"
-                    },
-                    {
-                        "name": "Protected Material Code",
-                        "blocking": false,
-                        "enabled": true,
-                        "source": "Completion"
-                    }
-                ]
             }
         },
         {
@@ -946,18 +767,18 @@
             "name": "[parameters('search_name')]",
             "location": "global",
             "sku": {
-              "name": "S1"
+                "name": "S1"
             },
             "kind": "Bing.Search.v7",
             "tags": {},
             "properties": {
-              "provisioningState": "Succeeded",
-              "endpoint": "https://api.bing.microsoft.com/",
-              "internalId": "3534d9bccab442b9b0d43b56b6924610",
-              "statisticsEnabled": false
+                "provisioningState": "Succeeded",
+                "endpoint": "https://api.bing.microsoft.com/",
+                "internalId": "3534d9bccab442b9b0d43b56b6924610",
+                "statisticsEnabled": false
             }
-          },
-          {
+        },
+        {
             "type": "Microsoft.KeyVault/vaults",
             "apiVersion": "2024-12-01-preview",
             "name": "[parameters('vaults_aisystems_name')]",
