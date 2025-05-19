@@ -58,8 +58,9 @@ module.exports = function(eleventyConfig) {
             return `/TypeAgent/tutorial/imgs/${link.substring(5)}`;
           }
 
-          if (dir.includes('/content') && link.startsWith('../tutorial/imgs/')) {
-            return `/TypeAgent/tutorial/imgs/${link.substring(17)}`;
+          if (dir.includes('/content')) {
+            const index = link.indexOf("imgs/");
+            return `/TypeAgent/content/imgs/${link.substring(index + 5)}`;
           }
           
           return link;

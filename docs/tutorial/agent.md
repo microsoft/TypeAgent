@@ -228,10 +228,10 @@ The `Echo` agent should be in the list and enabled.
 `Echo` agent is now ready. Test it out by issuing some request to see the `Echo` agent in action
 
 When to run the cli this is how interaction with the `Echo` agent will look like:
-![alt text](imgs/image-cli.png)
+![alt text](imgs/image-cli.png){width=800px}
 
 When to run the shell this is how interaction with the `Echo` agent will look like:
-![alt text](imgs/image-shell.png)
+![alt text](imgs/image-shell.png){width=800px}
 
 The `Echo` agent will be reloaded again after installation. It can be uninstalled using the command:
 

@@ -26,6 +26,7 @@ module.exports = {
     },
     {
       title: "Architecture",
+      url: "/architecture/memory/",
       children: [
         {
           title: "Memory",
