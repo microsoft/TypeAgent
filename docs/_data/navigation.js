@@ -6,7 +6,7 @@ module.exports = {
     },
     {
       title: "Getting Started",
-      url: "/content/getting-started/",
+      url: "/setup/setup-Windows/",
       children: [
         {
           title: "Windows",
