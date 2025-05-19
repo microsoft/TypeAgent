@@ -41,16 +41,3 @@ We are trying to create human-like memory with super-human precision and recall 
 Actions and memories flow together.  Actions like "add to my calendar pickleball game 2-3pm on Friday" yield memories that can become parameters of future actions like "put in an hour of recovery time after my pickleball game."  We are working on an architecture, **AMP**, that enables this natural information flow by integrating actions, memories, and plans. We are applying AMP to the web by creating a browser that enables web sites to register actions through a JavaScript interface.
 
 
-## Getting Started
-
-To get started with TypeAgent, check out the [Getting Started](/getting-started/) guide.
-
-## Examples
-
-TypeAgent includes several example agents:
-
-- **List Agent**: A simple agent for managing lists
-- **Calendar Agent**: An agent for managing calendar events
-- **Email Agent**: An agent for composing and sending emails
-
-Check out the [Examples](/examples/) section for more information.
