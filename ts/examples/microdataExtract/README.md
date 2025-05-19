@@ -1,4 +1,4 @@
-## Scheam.org microdata extractor
+## Schema.org microdata extractor
 
 ## Features
 

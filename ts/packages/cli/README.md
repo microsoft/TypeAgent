@@ -162,7 +162,7 @@ Examples:
    Total Elapsed Time: 19.070s
    ```
 
-2. Adding a single request to an existing test data file. Note that translator flags is not necessary and willb infered from the existing test file
+2. Adding a single request to an existing test data file. Note that translator flags is not necessary and will be inferred from the existing test file
 
    ```bash
    $ agent-cli data add -o blah.json "play some Beethoven"

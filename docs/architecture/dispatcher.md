@@ -5,7 +5,7 @@ title: TypeAgent Dispatcher Architecture
 
 ## Overview
 
-[TypeAgent Dispatcher](../../ts/packages/dispatcher) is the core component used to build **personal agent** implementation with _natural language interfaces_. The component's purpose is to understand user requests and translate it into actions using structured prompting and LLM and dispatch them to the appropriate TypeAgent to execute.
+[TypeAgent Dispatcher](../../ts/packages/dispatcher) is the core component used to build a **personal agent** implementation with _natural language interfaces_. The component's purpose is to understand user requests and translate it into actions using structured prompting and LLM and dispatch them to the appropriate TypeAgent to execute.
 
 ## Design Goals
 

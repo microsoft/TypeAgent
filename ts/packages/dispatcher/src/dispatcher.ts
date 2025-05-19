@@ -35,18 +35,41 @@ export type CommandResult = {
     tokenUsage?: ai.CompletionUsageStats;
 };
 
+/**
+ * A dispatcher instance
+ */
 export interface Dispatcher {
+    /**
+     * Process a single user request.
+     *
+     * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
+     * @param requestId an optional request id to track the command
+     * @param attachments encoded image attachments for the model
+     */
     processCommand(
         command: string,
         requestId?: RequestId,
         attachments?: string[],
     ): Promise<CommandResult | undefined>;
 
+    /**
+     * Close the dispatcher and release all resources.
+     */
+    close(): Promise<void>;
+
+    /**
+     * Get the latest update on a dynamic display that is returned to the host via ClientIO or CommandResult
+     * @param appAgentName the agent name that originated the display
+     * @param type the type of the display content.
+     * @param displayId the displayId of the display content as given from ClientIO or CommandResult.
+     */
     getDynamicDisplay(
         appAgentName: string,
         type: DisplayType,
-        id: string,
+        displayId: string,
     ): Promise<DynamicDisplay>;
+
+    // APIs for form filling templates.
     getTemplateSchema(
         templateAgentName: string,
         templateName: string,
@@ -60,10 +83,10 @@ export interface Dispatcher {
         propertyName: string,
     ): Promise<string[] | undefined>;
 
+    // APIs to get command completion for intellisense like functionality.
     getCommandCompletion(
         prefix: string,
     ): Promise<CommandCompletionResult | undefined>;
-    close(): Promise<void>;
 
     // TODO: Review these APIs
     getPrompt(): string;
@@ -123,6 +146,13 @@ async function getTemplateCompletion(
     );
 }
 
+/**
+ * Create a instance of the dispatcher.
+ *
+ * @param hostName A name use to identify the application that hosts the dispatcher for logging purposes.
+ * @param options A set of options to initialize the dispatcher.  See `DispatcherOptions` for more details.
+ * @returns a new dispatcher instance.
+ */
 export async function createDispatcher(
     hostName: string,
     options?: DispatcherOptions,
