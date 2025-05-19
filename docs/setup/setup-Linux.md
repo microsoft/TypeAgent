@@ -9,14 +9,14 @@ Instructions tested with Ubuntu 24.04.1 LTS and Debian 12.8.0
 - Install git and curl
   - `sudo apt update`
   - `sudo apt install git curl`
-- Setup node
+- Setup node using nvm
   - Setup [NVM](https://github.com/nvm-sh/nvm)
-    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash`
+    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
     - `source ~/.bashrc`
   - Install Node
     - `nvm install --lts`
 - Clone and build:
-  - `git clone https://github.com/microsoft/TypeAgent ~/src/TypeAgent`
+  - `git clone https://github.com/microsoft/TypeAgent ~/src/TypeAgent` (Note: you can clone this to any location and does not have to be ~/src)
   - `cd ~/src/TypeAgent/ts`
   - `corepack enable`
   - `pnpm setup`

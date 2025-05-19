@@ -4,8 +4,8 @@ This is a list of step-by-step instructions to set up a Windows environment from
 
 ## Build
 
-- Install Git ([download](https://git-scm.com/downloads/win))
-- Install Node ([download](https://nodejs.org/en/download))
+- Install Git ([instructions](https://git-scm.com/downloads/win))
+- Install Node ([instructions](https://nodejs.org/en/download))
 - Enable corepack
   - Open Command Prompt as Administrator
   - `corepack enable`

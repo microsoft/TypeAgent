@@ -10,7 +10,7 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
   - Setup WSL Username/password
 - Setup node
   - Setup [NVM](https://github.com/nvm-sh/nvm)
-    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash`
+    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
     - `source ~/.bashrc`
   - Install Node
     - `nvm install --lts`
