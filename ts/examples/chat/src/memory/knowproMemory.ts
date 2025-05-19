@@ -704,19 +704,19 @@ export async function createKnowproCommands(
         if (topK === undefined) {
             return {};
         }
-        if (topK === DefaultKnowledgeTopK) {
-            // Scale topK depending on the size of the conversation
-            const numMessages = context.conversation!.messages.length;
-            if (numMessages > 500) {
-                topK *= 2;
-            } else if (numMessages > 1000) {
-                topK *= 4;
-            }
-        }
         const options: kp.AnswerContextOptions = {
             entitiesTopK: topK,
             topicsTopK: topK,
         };
+        if (topK === DefaultKnowledgeTopK) {
+            // Scale topK depending on the size of the conversation
+            const numMessages = context.conversation!.messages.length;
+            if (numMessages >= 1000) {
+                options.entitiesTopK = options.entitiesTopK! * 4;
+            } else if (numMessages >= 500) {
+                options.entitiesTopK = options.entitiesTopK! * 2;
+            }
+        }
 
         return options;
     }
