@@ -27,6 +27,7 @@ import {
 import {
     MergedEntity,
     mergedToConcreteEntity,
+    MergedTopic,
     mergeScoredConcreteEntities,
     mergeScoredTopics,
 } from "./knowledgeMerge.js";
@@ -39,6 +40,7 @@ import {
 import { ConversationSearchResult } from "./search.js";
 import {
     AnswerContextChunkBuilder,
+    AnswerContextOptions,
     answerContextToString,
 } from "./answerContext.js";
 import { flattenResultsArray, Scored, trimStringLength } from "./common.js";
@@ -90,7 +92,6 @@ export type AnswerGeneratorSettings = {
      * Maximum number of characters allowed in the context for any given call
      */
     maxCharsInBudget: number;
-    entityTopK?: number | undefined;
     /**
      * When chunking, produce answer in parallel
      */
@@ -125,11 +126,12 @@ export async function generateAnswer(
         contextSchema.AnswerContext,
         Result<answerSchema.AnswerResponse>
     >,
+    contextOptions?: AnswerContextOptions,
 ): Promise<Result<answerSchema.AnswerResponse>> {
     const context = answerContextFromSearchResult(
         conversation,
         searchResult,
-        generator.settings,
+        contextOptions,
     );
     const contextContent = answerContextToString(context);
     if (contextContent.length <= generator.settings.maxCharsInBudget) {
@@ -334,8 +336,8 @@ export function createAnswerGeneratorSettings(
 export function answerContextFromSearchResult(
     conversation: IConversation,
     searchResult: ConversationSearchResult,
-    settings?: AnswerGeneratorSettings,
-) {
+    options?: AnswerContextOptions,
+): contextSchema.AnswerContext {
     let context: contextSchema.AnswerContext = {};
     for (const knowledgeType of searchResult.knowledgeMatches.keys()) {
         switch (knowledgeType) {
@@ -345,13 +347,14 @@ export function answerContextFromSearchResult(
                 context.entities = getRelevantEntitiesForAnswer(
                     conversation,
                     searchResult.knowledgeMatches.get(knowledgeType)!,
-                    settings?.entityTopK,
+                    options?.entitiesTopK,
                 );
                 break;
             case "topic":
                 context.topics = getRelevantTopicsForAnswer(
                     conversation,
                     searchResult.knowledgeMatches.get(knowledgeType)!,
+                    options?.topicsTopK,
                 );
                 break;
         }
@@ -360,6 +363,7 @@ export function answerContextFromSearchResult(
         context.messages = getRelevantMessagesForAnswer(
             conversation,
             searchResult.messageMatches,
+            options?.messagesTopK,
         );
     }
     return context;
@@ -368,15 +372,20 @@ export function answerContextFromSearchResult(
 export function getRelevantTopicsForAnswer(
     conversation: IConversation,
     searchResult: SemanticRefSearchResult,
+    topK?: number,
 ): contextSchema.RelevantKnowledge[] {
     const scoredEntities = getScoredSemanticRefsFromOrdinals(
         conversation.semanticRefs!,
         searchResult.semanticRefMatches,
         "topic",
     );
-    const mergedTopics = mergeScoredTopics(scoredEntities, true);
+    let mergedTopics = mergeScoredTopics(scoredEntities, true);
+    let candidateTopics: Iterable<Scored<MergedTopic>> = mergedTopics.values();
+    if (topK !== undefined && topK > 0 && mergedTopics.size > topK) {
+        candidateTopics = getTopK(candidateTopics, topK);
+    }
     const relevantTopics: contextSchema.RelevantKnowledge[] = [];
-    for (const scoredValue of mergedTopics.values()) {
+    for (const scoredValue of candidateTopics) {
         let mergedTopic = scoredValue.item;
         const relevantTopic = createRelevantKnowledge(
             conversation,
@@ -401,7 +410,7 @@ export function getRelevantEntitiesForAnswer(
     const mergedEntities = mergeScoredConcreteEntities(scoredEntities, true);
     let candidateEntities: Iterable<Scored<MergedEntity>> =
         mergedEntities.values();
-    if (topK !== undefined && topK > 0) {
+    if (topK !== undefined && topK > 0 && mergedEntities.size > topK) {
         candidateEntities = getTopK(candidateEntities, topK);
     }
     const relevantEntities: contextSchema.RelevantKnowledge[] = [];
@@ -420,6 +429,7 @@ export function getRelevantEntitiesForAnswer(
 export function getRelevantMessagesForAnswer(
     conversation: IConversation,
     messageOrdinals: ScoredMessageOrdinal[],
+    topK?: number,
 ): contextSchema.RelevantMessage[] {
     const relevantMessages: contextSchema.RelevantMessage[] = [];
     for (const message of getMessagesFromScoredOrdinals(
@@ -444,6 +454,9 @@ export function getRelevantMessagesForAnswer(
             relevantMessage.timestamp = new Date(message.timestamp);
         }
         relevantMessages.push(relevantMessage);
+        if (topK !== undefined && topK > 0 && relevantMessages.length >= topK) {
+            break;
+        }
     }
     return relevantMessages;
 }
@@ -523,7 +536,7 @@ function createQuestionPrompt(question: string): string {
         "The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
         "Answer the question using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
         "Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in the conversation history.",
-        "Use the name and type of the provided entities to select those highly relevant to answering the question.",
+        "Use the name and type of the provided entities to select only those highly relevant to PRECISELY answering the question.",
         "List ALL entities if query intent implies that.",
         "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
         "Use direct quotes only when needed or asked. Otherwise answer in your own words.",

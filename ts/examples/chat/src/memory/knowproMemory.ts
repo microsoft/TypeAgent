@@ -323,6 +323,7 @@ export async function createKnowproCommands(
         }
     }
 
+    const DefaultKnowledgeTopK = 25;
     function answerDefNew(): CommandMetadata {
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
@@ -337,7 +338,7 @@ export async function createKnowproCommands(
         );
         def.options!.knowledgeTopK = argNum(
             "How many top K knowledge matches",
-            50,
+            DefaultKnowledgeTopK,
         );
         return def;
     }
@@ -364,13 +365,6 @@ export async function createKnowproCommands(
                 maxCharsInBudget: options.maxCharsInBudget,
                 thresholdScore: 0.7,
             };
-        }
-        context.answerGenerator.settings.entityTopK = namedArgs.knowledgeTopK;
-        if (
-            context.conversation!.messages.length > 500 &&
-            context.answerGenerator.settings.entityTopK
-        ) {
-            context.answerGenerator.settings.entityTopK *= 2;
         }
 
         const searchResults =
@@ -422,6 +416,7 @@ export async function createKnowproCommands(
                         context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
+                createAnswerOptions(namedArgs),
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -549,6 +544,7 @@ export async function createKnowproCommands(
                         context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
+                createAnswerOptions(namedArgs),
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -699,5 +695,29 @@ export async function createKnowproCommands(
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
+    }
+
+    function createAnswerOptions(
+        namedArgs: NamedArgs,
+    ): kp.AnswerContextOptions {
+        let topK = namedArgs.knowledgeTopK;
+        if (topK === undefined) {
+            return {};
+        }
+        if (topK === DefaultKnowledgeTopK) {
+            // Scale topK depending on the size of the conversation
+            const numMessages = context.conversation!.messages.length;
+            if (numMessages > 500) {
+                topK *= 2;
+            } else if (numMessages > 1000) {
+                topK *= 4;
+            }
+        }
+        const options: kp.AnswerContextOptions = {
+            entitiesTopK: topK,
+            topicsTopK: topK,
+        };
+
+        return options;
     }
 }

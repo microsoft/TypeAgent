@@ -143,3 +143,9 @@ export class AnswerContextChunkBuilder {
         this.currentChunkCharCount = 0;
     }
 }
+
+export type AnswerContextOptions = {
+    entitiesTopK?: number | undefined;
+    topicsTopK?: number | undefined;
+    messagesTopK?: number | undefined;
+};
