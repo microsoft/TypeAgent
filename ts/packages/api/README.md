@@ -2,7 +2,7 @@
 
 ## Overview
 
-TypeAgent API is a HTTP+WS API server for **TypeAgent sample code**. It explores architectures for building distributed _interactive agents_ with _natural language interfaces_ using structured prompting and LLM. This interface shows devlopers one way of broadening the reach of Agents to web-enabled devices such as internet browsers, mobile phones, and IOT connected devices.
+TypeAgent API is a HTTP+WS API server for **TypeAgent sample code**. It explores architectures for building distributed _interactive agents_ with _natural language interfaces_ using structured prompting and LLM. This interface shows developers one way of broadening the reach of Agents to web-enabled devices such as internet browsers, mobile phones, and IOT connected devices.
 
 ## Running
 

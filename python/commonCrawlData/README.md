@@ -1,7 +1,6 @@
 # Common Crawl Restaurants schema.org dataset
 
-This directory contains examples of an Azure function that can extract [Schema.org](https://schema.org/) metadata from archives fetched from the Common Crawl index. Specifically, we exgtract [Restaurant](https://schema.org/Restaurant) data entries.
-
+This directory contains examples of an Azure function that can extract [Schema.org](https://schema.org/) metadata from archives fetched from the Common Crawl index. Specifically, we extract [Restaurant](https://schema.org/Restaurant) data entries.
 
 ## Trademarks
 
