@@ -19,8 +19,7 @@ const isNode = typeof window === 'undefined';
  */
 function updateLinks(content, inputPath, repoUrl, defaultBranch = 'main') {
   if (!repoUrl) {
-    // Default repository URL (update this to match your actual repo)
-    repoUrl = 'https://github.com/hillary-mutisya/TypeAgent';
+    repoUrl = 'https://github.com/microsoft/TypeAgent';
   }
   
   // Pattern to match markdown links to files outside the docs directory
@@ -113,6 +112,11 @@ if (isNode) {
   console.log(`Using repository URL: ${repoUrl || 'Not found - using default'}`);
   console.log(`Using default branch: ${defaultBranch}`);
   processDirectory(path.join(__dirname, '..', 'content'), repoUrl, defaultBranch);
+  processDirectory(path.join(__dirname, '..', 'architecture'), repoUrl, defaultBranch);
+  processDirectory(path.join(__dirname, '..', 'help'), repoUrl, defaultBranch);
+  processDirectory(path.join(__dirname, '..', 'setup'), repoUrl, defaultBranch);
+  processDirectory(path.join(__dirname, '..', 'tutorial'), repoUrl, defaultBranch);
+
   console.log('Link updating complete!');
 }
 
