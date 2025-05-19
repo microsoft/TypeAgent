@@ -77,11 +77,18 @@ jobs:
       - name: Install Dependencies 📦
         run: pnpm install
 
+      - name: Update Links in Markdown Files 🔄
+        run: |
+          # Run the link update script
+          node scripts/update-links.js
+
       - name: Build Site 🔧
         run: pnpm run build
         env:
           # Explicitly set the GitHub repository name
           GITHUB_REPOSITORY: ${{ github.repository }}
+           # Set the default branch name
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
       - name: Debug Site Output 🔍
         run: |
