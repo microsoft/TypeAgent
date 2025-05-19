@@ -1,0 +1,63 @@
+# Sample inputs for knowPro
+
+#=============================
+# FIRST, LOAD A Sample Index
+#=============================
+@kpPodcastLoadSample
+
+#=============================
+# Direct low level Search
+#=============================
+@kpSearchTerms book
+
+@kpSearchTerms book --type series
+
+@kpSearchTerms --type book --genre fantasy
+
+@kpSearchTerms --type book --category fantasy
+
+@kpSearchTerms "Empire in Black and Gold"
+
+@kpSearchTerms "Empire in Black" "Children of"
+
+#=============================
+# Search with natural language
+#=============================
+
+@kpSearch --query "List all books"
+
+@kpSearch --query "List the names of all books"
+
+@kpSearch --query "List all books that are also movies"
+
+@kpSearch --query "What is ChatGPT?"
+
+#===================================
+# Answer natural language questions 
+#===================================
+
+@kpAnswer --query "List the names of all books"
+
+@kpAnswer --query "List all books that are also movies"
+
+@kpAnswer --query "Please give me the names of books mentioned in the first 15 minutes"
+
+@kpAnswer --query "Please give me the book titles mentioned in the last 15 minutes"
+
+@kpAnswer --query "Tell me what Kevin said about 'portids'?"
+
+@kpAnswer --query "What did Adrian say about Children of Memory?"
+
+@kpAnswer --query "What did Kevin say about Profiles of the Future?"
+
+@kpAnswer --query "Summarize Kevin's thoughts on Artificial Intelligence"
+
+@kpAnswer --query "What is the whole point of Children of Memory?"
+
+@kpAnswer --query "I think Adrian spoke at length about spiders. Summarize what he said"
+
+@kpAnswer --query "Give me a list of all authors"
+
+@kpAnswer --query "Who wrote Profiles of the Future?"
+
+@kpAnswer --query "Who wrote Pride and Prejudice?"

@@ -13,7 +13,7 @@ import {
 } from "electron";
 import path from "node:path";
 import fs from "node:fs";
-import { createDispatcher, Dispatcher } from "agent-dispatcher";
+import { ClientIO, createDispatcher, Dispatcher } from "agent-dispatcher";
 import {
     getDefaultAppAgentProviders,
     getDefaultAppAgentInstaller,
@@ -238,8 +238,27 @@ async function initializeDispatcher(
         });
 
         const newClientIO = createClientIORpcClient(clientIOChannel.channel);
-        const clientIO = {
+        const clientIO: ClientIO = {
             ...newClientIO,
+            // Main process intercepted clientIO calls
+            popupQuestion: async (
+                message: string,
+                choices: string[],
+                defaultId: number | undefined,
+                source: string,
+            ) => {
+                const result = await dialog.showMessageBox(
+                    shellWindow.mainWindow,
+                    {
+                        type: "question",
+                        buttons: choices,
+                        defaultId,
+                        message,
+                        icon: source,
+                    },
+                );
+                return result.response;
+            },
             openLocalView: (port: number) => {
                 debugShell(`Opening local view on port ${port}`);
                 return shellWindow.openInlineBrowser(
@@ -267,7 +286,6 @@ async function initializeDispatcher(
                 ...getDefaultAppAgentProviders(instanceDir),
             ],
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
-            explanationAsynchronousMode: true,
             persistSession: true,
             persistDir: instanceDir,
             enableServiceHost: true,
@@ -289,7 +307,8 @@ async function initializeDispatcher(
                 throw new Error("Invalid request");
             }
             debugShell(newDispatcher.getPrompt(), text);
-
+            // Update before processing the command in case there was change outside of command processing
+            updateSummary(dispatcher);
             const metrics = await newDispatcher.processCommand(
                 text,
                 id,
@@ -299,6 +318,8 @@ async function initializeDispatcher(
                 "send-demo-event",
                 "CommandProcessed",
             );
+
+            // Update the summary after processing the command in case state changed.
             updateSummary(dispatcher);
             return metrics;
         }

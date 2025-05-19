@@ -25,7 +25,6 @@ import { SchemaInfoProvider } from "agent-cache";
 import {
     getActionSchemaTypeName,
     getActivitySchemaTypeName,
-    getCombinedSchemaTypeName,
 } from "./agentTranslators.js";
 
 const debug = registerDebug("typeagent:dispatcher:schema:cache");
@@ -80,6 +79,7 @@ function loadParsedActionSchema(
                 `Schema type mismatch: actual: ${parsedActionSchema.entry.action?.name}, expected:${activityTypeName}`,
             );
         }
+
         return {
             schemaName,
             sourceHash,
@@ -190,9 +190,7 @@ export class ActionSchemaFileCache {
             this.getSchemaSource(actionConfig);
 
         const hash = config ? hashStrings(source, config) : hashStrings(source);
-        const typeKey = getCombinedSchemaTypeName(actionConfig.schemaType);
-
-        const cacheKey = `${format}|${actionConfig.schemaName}|${typeKey}|${fullPath ?? ""}`;
+        const cacheKey = `${format}|${actionConfig.schemaName}|${JSON.stringify(actionConfig.schemaType)}|${fullPath ?? ""}`;
 
         const lastCached = this.prevSaved.get(cacheKey);
         if (lastCached !== undefined) {

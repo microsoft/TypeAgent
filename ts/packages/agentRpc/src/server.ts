@@ -40,7 +40,8 @@ export function createAgentRpcServer(
     agent: AppAgent,
     channelProvider: ChannelProvider,
 ) {
-    const channel = channelProvider.createChannel(`agent:${name}`);
+    const channelName = `agent:${name}`;
+    const channel = channelProvider.createChannel(channelName);
     const agentInvokeHandlers: AgentInvokeFunctions = {
         async initializeAgentContext(
             settings?: AppAgentInitSettings,
@@ -133,6 +134,16 @@ export function createAgentRpcServer(
                 param.commands,
                 param.params,
                 getActionContextShim(param),
+            );
+        },
+        async resolveEntity(param) {
+            if (agent.resolveEntity === undefined) {
+                throw new Error("Invalid invocation of resolveEntity");
+            }
+            return agent.resolveEntity(
+                param.type,
+                param.name,
+                getSessionContextShim(param),
             );
         },
         async getTemplateSchema(param) {
@@ -326,6 +337,18 @@ export function createAgentRpcServer(
                     message,
                 });
             },
+            popupQuestion: async (
+                message: string,
+                choices?: string[],
+                defaultId?: number,
+            ): Promise<number> => {
+                return rpc.invoke("popupQuestion", {
+                    contextId,
+                    message,
+                    choices,
+                    defaultId,
+                });
+            },
             toggleTransientAgent: async (
                 name: string,
                 enable: boolean,
@@ -353,19 +376,18 @@ export function createAgentRpcServer(
                         throw new Error(`Duplicate agent name: ${name}`);
                     }
 
+                    const { closeFn, agentInterface } = createAgentRpcServer(
+                        name,
+                        agent,
+                        channelProvider,
+                    );
                     // Trigger the addDynamicAgent on the client side
                     const p = rpc.invoke("addDynamicAgent", {
                         contextId,
                         name,
                         manifest,
+                        agentInterface,
                     });
-
-                    // Create the agent RPC server to send the "initialized" message
-                    const closeFn = createAgentRpcServer(
-                        name,
-                        agent,
-                        channelProvider,
-                    );
 
                     try {
                         // Wait for dispatcher to finish adding the agent
@@ -512,17 +534,21 @@ export function createAgentRpcServer(
         Object.keys(agentCallHandlers),
     );
 
-    channel.send({
-        type: "initialized",
-        agentInterface: allAgentInterface.filter(
-            (a: string) =>
-                (agent as any)[a] !== undefined ||
-                (a === "closeAgentContext" &&
-                    agent.initializeAgentContext !== undefined),
-        ),
-    });
+    const agentInterface = allAgentInterface.filter(
+        (a: string) =>
+            (agent as any)[a] !== undefined ||
+            (a === "closeAgentContext" &&
+                agent.initializeAgentContext !== undefined),
+    ) as AgentInterfaceFunctionName[];
 
-    return () => {
-        channelProvider.deleteChannel(name);
+    return {
+        agentInterface,
+        closeFn: () => {
+            channelProvider.deleteChannel(channelName);
+        },
     };
 }
+
+export type AgentInterfaceFunctionName =
+    | keyof AgentInvokeFunctions
+    | keyof AgentCallFunctions;

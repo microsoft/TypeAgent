@@ -16,12 +16,13 @@ export type MontageAction =
     | MergeMontageAction;
 
 export type MontageActivity = StartEditMontageAction | CreateMontageAction;
-
+export type MontageEntity = Montage;
+export type Montage = string;
 export type StartEditMontageAction = {
     actionName: "startEditMontage";
     parameters: {
         // title of the montage
-        title: string;
+        title: Montage;
     };
 };
 
@@ -30,7 +31,7 @@ export type SelectPhotosAction = {
     actionName: "selectPhotos";
     parameters: {
         // title of the montage
-        title: string;
+        title: Montage;
         // any search terms to use indicating the photos to remove
         search_filters?: string[];
         // any indices provided indicating the photos to remove from the set of available images
@@ -45,7 +46,7 @@ export type AddPhotosAction = {
     actionName: "addPhotos";
     parameters: {
         // title of the montage
-        title: string;
+        title: Montage;
         // placeholder for images to be populated later
         files?: string[];
         // always empty
@@ -58,7 +59,7 @@ export type ChangeTitleAction = {
     actionName: "changeTitle";
     parameters: {
         // current title of the montage to change
-        title: string;
+        title: Montage;
         newTitle: string;
     };
 };
@@ -68,7 +69,7 @@ export type RemovePhotosAction = {
     actionName: "removePhotos";
     parameters: {
         // title of the montage
-        title: string;
+        title: Montage;
         // any search terms to use indicating the photos to remove
         search_filters?: string[];
         // any indices provided indicating the photos to remove from the set of available images
@@ -85,7 +86,7 @@ export type ClearSelectionAction = {
     actionName: "clearSelectedPhotos";
     parameters: {
         // title of the montage
-        title: string;
+        title: Montage;
     };
 };
 
@@ -110,7 +111,7 @@ export type SetSearchParametersAction = {
 export type StartSlideShowAction = {
     actionName: "startSlideShow";
     parameters: {
-        title: string;
+        title: Montage;
     };
 };
 
@@ -119,7 +120,7 @@ export type CreateMontageAction = {
     actionName: "createNewMontage";
     parameters: {
         // Montage title, defaults to "Untitled"
-        title: string;
+        title: Montage;
         // any search terms to use to seed the montage based off of the title
         search_filters?: string[];
         // a flag indicating if the UI should immediately switch to this montage, defaults to true
@@ -134,7 +135,7 @@ export type DeleteMontageAction = {
     actionName: "deleteMontage";
     parameters: {
         // The title of the montage to delete
-        title: string;
+        title: Montage;
     };
 };
 
@@ -155,7 +156,7 @@ export type MergeMontageAction = {
         // The title of the merged montage
         mergedMontageTitle: string;
         // The titles of the montages to merge
-        titles?: string[];
+        titles?: Montage[];
         // THe ids of the montages to merge
         ids?: number[];
     };

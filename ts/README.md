@@ -2,7 +2,7 @@
 
 ## Overview
 
-**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with a _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat). The personal agent can work with _application agents_.
+**TypeAgent** is **sample code** that explores an architecture for building a _personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
 This directory contains Typescript implemented packages and main entry point for **TypeAgent**. For more details about the project, please review the TypeAgent [ReadMe](./../README.md).
 
@@ -135,7 +135,7 @@ You must also configure your services to use [RBAC](https://learn.microsoft.com/
 
 ### Just-in-time Access
 
-TypeAgent also supports least privileged security approach using [Azure Entra Prividged Identity Management](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-configure). [Elevate.js](./tools/scripts/elevate.js) is a script used to automate elevation. Default configuration
+TypeAgent also supports least privileged security approach using [Azure Entra Privileged Identity Management](https://learn.microsoft.com/en-us/entra/id-governance/privileged-identity-management/pim-configure). [Elevate.js](./tools/scripts/elevate.js) is a script used to automate elevation. Default configuration
 options for elevation (duration, justification message, etc.) are stored in `tools/scripts/elevate.config.json`. A typical developer workflow is to run `npm run elevate` once at the beginning of each workday.
 
 To learn more about JIT access: [start here](https://techcommunity.microsoft.com/t5/microsoft-entra-blog/just-in-time-access-to-groups-and-conditional-access-integration/ba-p/2466926).
@@ -288,9 +288,9 @@ Search the code base with '"typeagent:' will give all the traces available.
 
 TypeAgent does not collect telemetry by default. Developer can enable logging to a mongodb for internal debugging purpose by providing a mongodb connection string with the `MONGODB_CONNECTION_STRING` variable in the `.env` file.
 
-### Experiement with Local LLM via Ollama
+### Experiment with Local LLM via Ollama
 
-**NOTE**: TypeAgent is current only tuned to run on GPT4 and similar model. Reliablity and quality may vary using other smaller LLM models.
+**NOTE**: TypeAgent is current only tuned to run on GPT4 and similar model. Reliability and quality may vary using other smaller LLM models.
 
 TypeAgent's shell and CLI will detect if Ollama is running locally via default port (11434) and expose those model to be used.
 To use ollama, install ollama and pull some model locally. TypeAgent will automatically detect them.

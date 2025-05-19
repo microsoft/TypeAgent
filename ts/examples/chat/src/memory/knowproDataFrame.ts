@@ -12,7 +12,7 @@ import {
     ProgressBar,
     StopWatch,
 } from "interactive-app";
-import { KnowProContext } from "./knowproMemory.js";
+import { KnowproContext } from "./knowproMemory.js";
 import { Result, success } from "typechat";
 import { ensureDir, getFileName, readAllText } from "typeagent";
 import * as kp from "knowpro";
@@ -20,11 +20,11 @@ import { createIndexingEventHandler } from "./knowproCommon.js";
 import chalk from "chalk";
 import { conversation as kpLib } from "knowledge-processor";
 import { RestaurantDb } from "./restaurantDb.js";
-import { argDestFile, argSourceFile } from "./common.js";
+import { argDestFile, argSourceFile } from "../common.js";
 import path from "path";
 
 export async function createKnowproDataFrameCommands(
-    context: KnowProContext,
+    context: KnowproContext,
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
     //commands.kpGetSchema = getSchema;
@@ -252,7 +252,6 @@ export async function createKnowproDataFrameCommands(
         }
 
         context.conversation = restaurantCollection.conversation;
-        context.printer.conversation = restaurantCollection.conversation;
     }
 
     async function buildIndex(restaurantCollection: RestaurantIndex) {

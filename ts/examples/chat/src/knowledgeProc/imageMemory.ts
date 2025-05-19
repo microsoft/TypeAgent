@@ -4,7 +4,6 @@
 /**
  * ===============================================
  * Image Memory experiments with knowledge-processor package
- * For knowpro, see {@link ./knowproMemory.ts}
  * ===============================================
  */
 
@@ -18,14 +17,14 @@ import {
 } from "interactive-app";
 import {
     KnowledgeProcessorContext,
-    Models,
     ReservedConversationNames,
 } from "./knowledgeProcessorMemory.js";
+import { Models } from "../common.js";
 import {
     argDestFile,
     argSourceFileOrFolder,
     argSourceFolder,
-} from "./common.js";
+} from "../common.js";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import fs from "node:fs";
 import * as knowLib from "knowledge-processor";

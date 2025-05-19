@@ -13,6 +13,7 @@ import {
     MessageOrdinal,
     ScoredSemanticRefOrdinal,
     SemanticRefOrdinal,
+    Tag,
     TextIndexingResult,
     TextLocation,
     Topic,
@@ -202,6 +203,24 @@ function addAction(
         semanticRefIndex,
         termsAdded,
     );
+}
+
+function addTag(
+    tag: Tag,
+    semanticRefs: ISemanticRefCollection,
+    semanticRefIndex: ITermToSemanticRefIndex,
+    messageOrdinal: MessageOrdinal,
+    chunkOrdinal: number,
+    termsAdded?: Set<string>,
+) {
+    const semanticRefOrdinal = semanticRefs.length;
+    semanticRefs.append({
+        semanticRefOrdinal,
+        range: textRangeFromMessageChunk(messageOrdinal, chunkOrdinal),
+        knowledgeType: "tag",
+        knowledge: tag,
+    });
+    addTermToIndex(semanticRefIndex, tag.text, semanticRefOrdinal, termsAdded);
 }
 
 export type KnowledgeValidator = (
@@ -464,11 +483,13 @@ export async function buildConversationIndex(
 
     addMessageKnowledgeToSemanticRefIndex(conversation, 0);
 
-    indexingResult.semanticRefs = await buildSemanticRefIndex(
-        conversation,
-        settings.semanticRefIndexSettings,
-        eventHandler,
-    );
+    if (settings.semanticRefIndexSettings.autoExtractKnowledge) {
+        indexingResult.semanticRefs = await buildSemanticRefIndex(
+            conversation,
+            settings.semanticRefIndexSettings,
+            eventHandler,
+        );
+    }
     if (!indexingResult.semanticRefs?.error && conversation.semanticRefIndex) {
         indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
             conversation,
@@ -607,6 +628,8 @@ export function addMessageKnowledgeToSemanticRefIndex(
         return;
     }
     const messages = conversation.messages;
+    const semanticRefs = conversation.semanticRefs;
+    const semanticRefIndex = conversation.semanticRefIndex;
     for (
         let messageOrdinal = messageOrdinalStartAt;
         messageOrdinal < messages.length;
@@ -623,6 +646,19 @@ export function addMessageKnowledgeToSemanticRefIndex(
                 filterKnowledge(knowledge, knowledgeValidator),
                 termsAdded,
             );
+        }
+        if (msg.tags && semanticRefs) {
+            for (const tag of msg.tags) {
+                const tagObj: Tag = { text: tag };
+                addTag(
+                    tagObj,
+                    semanticRefs,
+                    semanticRefIndex,
+                    messageOrdinal,
+                    chunkOrdinal,
+                    termsAdded,
+                );
+            }
         }
     }
 }

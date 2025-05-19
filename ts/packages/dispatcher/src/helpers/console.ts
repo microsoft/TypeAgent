@@ -162,6 +162,16 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
             return undefined;
         },
 
+        async popupQuestion(
+            message: string,
+            choices: string[],
+            defaultId: number | undefined,
+            source: string,
+        ): Promise<number> {
+            // REVIEW:
+            throw new Error("Not implemented");
+        },
+
         // Notification (TODO: turn these in to dispatcher events)
         notify(
             event: string,

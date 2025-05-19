@@ -14,8 +14,8 @@ import {
     ActionSchemaTypeDefinition,
     SchemaObjectField,
     ParsedActionSchema,
-    SchemaEntryTypeDefinitions,
     ActionSchemaEntryTypeDefinitions,
+    ActionSchemaEntityTypeDefinition,
 } from "./type.js";
 import ts from "typescript";
 import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
@@ -171,7 +171,7 @@ function checkActionSchema(
 }
 
 export function createParsedActionSchema(
-    entry: SchemaEntryTypeDefinitions,
+    entry: ParsedSchemaEntryTypeDefinitions,
     order: Map<string, number> | undefined,
     strict: boolean,
     schemaConfig?: SchemaConfig,
@@ -194,6 +194,7 @@ export function createParsedActionSchema(
         pending.push(entry.activity);
     }
     const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
+
     while (pending.length > 0) {
         const current = pending.shift()!;
         switch (current.type.type) {
@@ -252,9 +253,56 @@ export function createParsedActionSchema(
     if (actionSchemas.size === 0) {
         throw new Error("No action schema found");
     }
+
+    let entitySchemas:
+        | Map<string, ActionSchemaEntityTypeDefinition>
+        | undefined;
+    if (entry.entity) {
+        entitySchemas = new Map<string, ActionSchemaEntityTypeDefinition>();
+        if (strict && !entry.entity.exported) {
+            throw new Error(
+                `Schema Error: Entity entry type '${entry.entity.name}' must be exported`,
+            );
+        }
+        const addEntityType = (type: SchemaTypeReference) => {
+            const definition = type.definition;
+            if (definition === undefined) {
+                throw new Error(
+                    `Schema Error: unresolved type reference '${type.name}' in the entity type`,
+                );
+            }
+            if (!definition.alias || definition.type.type !== "string") {
+                throw new Error(
+                    `Schema Error: entity type must be a type alias to string`,
+                );
+            }
+            entitySchemas!.set(
+                definition.name,
+                definition as ActionSchemaEntityTypeDefinition,
+            );
+        };
+        const entityEntityTypeType = entry.entity.type.type;
+        if (entityEntityTypeType === "type-reference") {
+            addEntityType(entry.entity.type);
+        } else if (entityEntityTypeType === "type-union") {
+            for (const type of entry.entity.type.types) {
+                if (type.type !== "type-reference") {
+                    throw new Error(
+                        `Schema Error: entity type in the entity entry union must be type reference`,
+                    );
+                }
+                addEntityType(type);
+            }
+        } else {
+            throw new Error(
+                `Schema Error: entity entry type ${entry.entity.name} must be a reference or union of of entity type`,
+            );
+        }
+    }
     const parsedActionSchema: ParsedActionSchema = {
         entry: entry as ActionSchemaEntryTypeDefinitions,
         actionSchemas,
+        entitySchemas,
     };
     if (schemaConfig?.actionNamespace === true) {
         parsedActionSchema.actionNamespace = true;
@@ -268,6 +316,7 @@ export function createParsedActionSchema(
 type SchemaTypeNames = {
     action?: string;
     activity?: string;
+    entity?: string;
 };
 
 export function parseActionSchemaSource(
@@ -298,6 +347,12 @@ export function parseActionSchemaSource(
     }
 }
 
+export type ParsedSchemaEntryTypeDefinitions = {
+    action?: SchemaTypeDefinition | undefined;
+    activity?: SchemaTypeDefinition | undefined;
+    entity?: SchemaTypeDefinition | undefined;
+};
+
 class ActionParser {
     static parseSourceFile(
         sourceFile: ts.SourceFile,
@@ -319,7 +374,7 @@ class ActionParser {
     private parseSchema(
         sourceFile: ts.SourceFile,
         typeName: string | SchemaTypeNames,
-    ): SchemaEntryTypeDefinitions {
+    ): ParsedSchemaEntryTypeDefinitions {
         this.fullText = sourceFile.getFullText();
         ts.forEachChild(sourceFile, (node: ts.Node) => {
             this.parseAST(node);
@@ -333,7 +388,7 @@ class ActionParser {
             pending.definition = resolvedType;
         }
 
-        const definitions: SchemaEntryTypeDefinitions = {};
+        const definitions: ParsedSchemaEntryTypeDefinitions = {};
         const actionTypeName =
             typeof typeName === "string" ? typeName : typeName.action;
         if (actionTypeName) {
@@ -353,6 +408,16 @@ class ActionParser {
                 );
             }
         }
+
+        const entityTypeName =
+            typeof typeName === "string" ? undefined : typeName.entity;
+        if (entityTypeName) {
+            definitions.entity = this.typeMap.get(entityTypeName);
+            if (definitions.entity === undefined) {
+                throw new Error(`Entity type '${entityTypeName}' not found`);
+            }
+        }
+
         return definitions;
     }
 

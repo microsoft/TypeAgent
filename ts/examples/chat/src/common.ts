@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { openai } from "aiclient";
+import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
 import { ChalkInstance } from "chalk";
 import {
     ArgDef,
@@ -24,11 +24,66 @@ import {
     getFileName,
     NameValue,
 } from "typeagent";
-import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import { KnowledgeProcessorWriter } from "./knowledgeProc/knowledgeProcessorWriter.js";
 import path from "path";
+import fs from "fs";
+import * as knowLib from "knowledge-processor";
+
+/**
+ * Models used by example code
+ */
+export type Models = {
+    chatModel: ChatModel;
+    answerModel: ChatModel;
+    embeddingModel: TextEmbeddingModel;
+    embeddingModelSmall?: TextEmbeddingModel | undefined;
+};
+
+export function createModels(): Models {
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    const embeddingModelSettings = openai.apiSettingsFromEnv(
+        openai.ModelType.Embedding,
+    );
+    embeddingModelSettings.retryPauseMs = 25 * 1000;
+
+    const models: Models = {
+        chatModel: openai.createJsonChatModel(chatModelSettings, [
+            "chatMemory",
+        ]),
+        answerModel: openai.createChatModel(),
+        embeddingModel: knowLib.createEmbeddingCache(
+            openai.createEmbeddingModel(embeddingModelSettings),
+            1024,
+        ),
+        /*
+        embeddingModelSmall: knowLib.createEmbeddingCache(
+            openai.createEmbeddingModel("3_SMALL", 1536),
+            256,
+        ),
+        */
+    };
+    models.chatModel.completionSettings.seed = 123;
+    models.answerModel.completionSettings.seed = 123;
+    return models;
+}
 
 export async function pause(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function copyFileToDir(
+    srcPath: string,
+    destDir: string,
+    always: boolean,
+): Promise<boolean> {
+    const fileName = path.basename(srcPath);
+    const destPath = path.join(destDir, fileName);
+    if (always || !fs.existsSync(destPath)) {
+        await fs.promises.copyFile(srcPath, destPath);
+        return true;
+    }
+    return false;
 }
 
 export async function getMessages(
@@ -265,7 +320,7 @@ export function getSearchQuestion(
 
 export async function manageConversationAlias(
     cm: conversation.ConversationManager,
-    printer: ChatMemoryPrinter,
+    printer: KnowledgeProcessorWriter,
     name: string | undefined,
     alias: string | undefined,
 ) {

@@ -567,6 +567,7 @@ export async function createKnowproCommands(
             searchText,
             context.queryTranslator,
             options,
+            undefined,
             debugContext,
         );
         if (!searchResults.success) {

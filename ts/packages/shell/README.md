@@ -2,15 +2,15 @@
 
 ## Overview
 
-TypeAgent Shell is an UI entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
+TypeAgent Shell is an UI entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using structured prompting and LLM.
 
-TypeAgent Shell is a **single personal assistant** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent CLI](../cli/)'s interactive mode is a command line version of the app, and both shared the core [Dispatcher](../dispatcher/) component. Please read Dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
+TypeAgent Shell is a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent CLI](../cli/)'s interactive mode is a command line version of the app, and both shared the core [dispatcher](../dispatcher/) component. Please read dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
 
 ## Prerequisites
 
 ### Linux/WSL Build Prerequisites
 
-TypeAgent shell is built using [Electron](https://www.electronjs.org). Install libraries needed to build in Linux/WSL following the [instructions here](https://www.electronjs.org/docs/latest/development/build-instructions-linux).
+TypeAgent shell is built using [Electron](https://www.electronjs.org). Follow these [instructions](https://www.electronjs.org/docs/latest/development/build-instructions-linux) to install the libraries needed to build and use in the Linux/WSL environment.
 
 ## Running the agent shell
 
@@ -45,7 +45,7 @@ If you would like to enable keyless Speech API access you must have performed th
 1. Specify `identity` as the `SPEECH_SDK_KEY` in the `.env` file.
 2. Replace the `SPEECH_SDK_ENDPOINT` value with the azure resource id of your cognitive service instance (i.e. `/subscriptions/<your subscription guid>/resourceGroups/myResourceGroup/providers/Microsoft.CognitiveServices/accounts/speechapi`).
 3. Configure your speech API to support Azure Entra RBAC and add the necessary users/groups with the necessary permissions
-   (typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on congitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control).
+   (typically `Cognitive Services Speech User` or `Cognitive Services Speech Contributor`). More information on cognitive services roles [here](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/role-based-access-control).
 4. If you are using JIT access elevate prior to calling the speech API. Please refer to the [elevate.js](../../tools/scripts/elevate.js) script for doing this efficiently.
 
 ## Trademarks

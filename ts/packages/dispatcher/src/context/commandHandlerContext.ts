@@ -166,25 +166,50 @@ async function getAgentCache(
     return agentCache;
 }
 
+/**
+ * Settings to initialize the dispatcher.
+ *
+ * Core options:
+ * - appAgentProviders: list of app agent providers to use. If not specified, only the system agents are available.
+ * * - clientIO: The client IO to use for interactivity. If not specified, no interactivity is available.
+ * - persistDir: The directory to save states, including cache and session (if enabled)
+ * - persistSession: whether to save and restore session state across runs.
+ *
+ * Agent port assignments - for agents that host their own http server:
+ * - portBase: The base port to use for the agents. Default is 9001.   Agents will be assigned ports starting from this value.
+ * - allowSharedLocalView: The list of agent names that can get the ports of all other agent's port. Default is undefined.
+ *
+ * Logging options:
+ * - metrics: whether to enable collection of timing metrics. Default is false.
+ * - collectCommandResult: whether to collect command result in the return for `processCommand`. Default is false.
+ * - dblogging: whether to enable database logging. If not specified, no logging is done.
+ * - clientId: An optional client ID to use for logging identification.
+ */
 export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
+    // Core options
     appAgentProviders?: AppAgentProvider[];
-    persistDir?: string | undefined;
+    persistDir?: string | undefined; // the directory to save state.
     persistSession?: boolean; // default to false,
-    clientId?: string;
-    clientIO?: ClientIO | undefined; // undefined to disable any IO.
+    clientIO?: ClientIO | undefined; // required for interactivity, undefined to disable any IO.
 
-    agentInstaller?: AppAgentInstaller;
+    // Initial state settings
     agents?: AppAgentStateInitSettings;
-    enableServiceHost?: boolean; // default to false,
-    metrics?: boolean; // default to false
-    dblogging?: boolean; // default to false
 
-    constructionProvider?: ConstructionProvider;
-    explanationAsynchronousMode?: boolean; // default to false
-    collectCommandResult?: boolean; // default to false
-
+    // Agent port assignments
     allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
     portBase?: number; // default to 9001
+
+    // Logging options
+    metrics?: boolean; // default to false
+    collectCommandResult?: boolean; // default to false
+    dblogging?: boolean; // default to false
+    clientId?: string; // optional additional for logging identification
+
+    // Additional integration options
+    agentInstaller?: AppAgentInstaller;
+    enableServiceHost?: boolean; // default to false,
+    constructionProvider?: ConstructionProvider;
+    explanationAsynchronousMode?: boolean; // default to true
 
     // Use for tests so that embedding can be cached without 'persistDir'
     embeddingCacheDir?: string | undefined; // default to 'cache' under 'persistDir' if specified
@@ -340,7 +365,7 @@ export async function initializeCommandHandlerContext(
 ): Promise<CommandHandlerContext> {
     const metrics = options?.metrics ?? false;
     const explanationAsynchronousMode =
-        options?.explanationAsynchronousMode ?? false;
+        options?.explanationAsynchronousMode ?? true;
 
     const persistSession = options?.persistSession ?? false;
     const persistDir = options?.persistDir;

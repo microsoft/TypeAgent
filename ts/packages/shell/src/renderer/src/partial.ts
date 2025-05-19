@@ -160,51 +160,56 @@ export class PartialCompletion {
         this.searchMenu.setChoices([]);
         const completionP = getDispatcher().getCommandCompletion(input);
         this.completionP = completionP;
-        completionP.then((result) => {
-            if (this.completionP !== completionP) {
-                debug(`Partial completion canceled: ${input}`);
-                return;
-            }
+        completionP
+            .then((result) => {
+                if (this.completionP !== completionP) {
+                    debug(`Partial completion canceled: ${input}`);
+                    return;
+                }
 
-            this.completionP = undefined;
-            debug(`Partial completion result: `, result);
-            if (result === undefined) {
-                debug(
-                    `Partial completion skipped: No completions for '${this.current}'`,
+                this.completionP = undefined;
+                debug(`Partial completion result: `, result);
+                if (result === undefined) {
+                    debug(
+                        `Partial completion skipped: No completions for '${this.current}'`,
+                    );
+                    this.noCompletion = true;
+                    return;
+                }
+
+                this.current = result.partial;
+                this.space = result.space;
+
+                if (result.completions.length === 0) {
+                    debug(
+                        `Partial completion skipped: No current completions for '${this.current}'`,
+                    );
+                    return;
+                }
+
+                this.searchMenu.setChoices(
+                    result.completions.map((choice) => ({
+                        matchText: choice,
+                        selectedText: choice,
+                    })),
                 );
-                this.noCompletion = true;
-                return;
-            }
 
-            this.current = result.partial;
-            this.space = result.space;
+                if (!this.isSelectionAtEnd()) {
+                    // selection changed.
+                    return;
+                }
 
-            if (result.completions.length === 0) {
-                debug(
-                    `Partial completion skipped: No current completions for '${this.current}'`,
-                );
-                return;
-            }
-
-            this.searchMenu.setChoices(
-                result.completions.map((choice) => ({
-                    matchText: choice,
-                    selectedText: choice,
-                })),
-            );
-
-            if (!this.isSelectionAtEnd()) {
-                // selection changed.
-                return;
-            }
-
-            const currentInput = this.getCurrentInputForCompletion();
-            if (currentInput === input) {
-                this.updateSearchMenuPrefix(result.prefix);
-            } else if (!this.reuseSearchMenu(currentInput)) {
-                this.updatePartialCompletion(currentInput);
-            }
-        });
+                const currentInput = this.getCurrentInputForCompletion();
+                if (currentInput === input) {
+                    this.updateSearchMenuPrefix(result.prefix);
+                } else if (!this.reuseSearchMenu(currentInput)) {
+                    this.updatePartialCompletion(currentInput);
+                }
+            })
+            .catch((e) => {
+                debugError(`Partial completion error: ${input} ${e}`);
+                this.completionP = undefined;
+            });
     }
 
     private showCompletionMenu() {

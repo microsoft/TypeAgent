@@ -1,58 +1,58 @@
-## Chat test app
+## Knowpro and Memory Test App
 
-**Frequent changes**
+A CLI to test and experiment with the [KnowPro](../../packages/knowPro/README.md) and [memory](../../packages/memory/README.md) packages. This is **sample code** in active development with frequent updates.
 
-- This **test app is sample code** that is used to interactively test and explore several **conversation** and **memory** related packages as they are being developed.
-- Requires file system access. The app creates test directories under **/data/testChat**
+The CLI explores:
 
-Interaction is via a set of commands.
+- [KnowPro](../../packages/knowPro/README.md)
+- [conversation-memory](../../packages/memory/conversation/README.md)
+- [image-memory](../../packages/memory/image/README.md)
 
-- Enter @**help** for a list of commands
-- Command names must be prefixed with @ to run. E.g. @kpCmRemember
-- Get help for any command like this: @kpEmailsLoad --?
+Enter @**help** for a list of commands
 
-## knowpro and memory
-
-Packages targeted:
-
-- [knowpro](../../packages/knowPro/)
-- [memory](../../packages/memory/)
-
-All knowPro commands prefixed with @**kp**.
+- All command names must be prefixed with **@**
+  - E.g: @kpCmRemember
+- Get help for any command using --?
+  - E.g: @kpCmRemember --?
 
 You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
-| Feature Area                                               | Command Prefix             |
-| ---------------------------------------------------------- | -------------------------- |
-| [Podcast Memory](./src/memory/knowproMemory.ts)            | @kpPodcast...              |
-| [Image Memory](./src/memory/knowproMemory.ts)              | @kpImage...                |
-| [knowpro Search/Answer](./src/memory/knowproMemory.ts)     | @kpSearch..., @kpAnswer... |
-| [Email](./src/memory/knowproEmail.ts)                      | @kpEmail...                |
-| [Conversation Memory](./src/memory/knowproConversation.ts) | @kpCm...                   |
+| Feature Area                                                     | Command Prefix             |
+| ---------------------------------------------------------------- | -------------------------- |
+| [KnowPro APIs: Search and Answer](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
+| [Podcast Memory](./src/memory/knowproPodcast.ts)                 | @kpPodcast...              |
+| [Email Memory](./src/memory/knowproEmail.ts)                     | @kpEmail...                |
+| [Conversation Memory](./src/memory/knowproConversation.ts)       | @kpCm...                   |
+| [Image Memory](./src/memory/knowproImage.ts)                     | @kpImage...                |
 
-## knowledge-processor
+### Trying it out
 
-Packages targeted:
+- Ensure you have a [.env](../../README.md#service-keys) configured with Service keys.
+- Examples have been tested with **GPT-4o** only.
+- Run the app:
+  - cd ts/examples/chat
+  - node dist/main.js
+- Use the **@kpPodcastLoadSample** command to load a pre-built Structured-RAG index for a [sample podcast](../../packages/knowPro/test/data/Episode_53_AdrianTchaikovsky.txt).
+- Run example commands such as those listed in [input.txt](./src/memory/input.txt)
 
-- [knowledge-processor](../../packages/knowledgeProcessor/)
+```
+@kpPodcastLoadSample
 
-Any command that does not have the prefix "@kp".
+@kpSearchTerms book
 
-## code-processor
+@kpSearchTerms book --genre fantasy
 
-Packages targeted:
-
-- [code-processor](../../packages/codeProcessor/)
-
-Run the test app with argument:
-
-- "code": Code analysis, search and other ideas
-- "codeMemory": Experiments with memory for devs
+@kpAnswer --query "List the names of all books"
+```
 
 ### Notes
 
-- This test app creates test directories.
-- This may require **_admin (sudo)_** rights. On Linux/WSL, you may need to launch node with sudo.
+- Requires file system access. Creates test directories under **/data/testChat**
+- May require **_admin (sudo)_** rights. On Linux/WSL, you may need to launch node with sudo.
+
+### knowledge-processor
+
+The CLI additionally lets you explore the [knowledge-processor](../../packages/knowledgeProcessor/README.md) package. See [instructions](./src/knowledgeProc/README.md) for how to do so.
 
 ## Trademarks
 

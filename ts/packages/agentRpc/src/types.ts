@@ -21,6 +21,8 @@ import {
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
+import { ResolveEntityResult } from "../../agentSdk/dist/agentInterface.js";
+import { AgentInterfaceFunctionName } from "./server.js";
 
 export type AgentContextCallFunctions = {
     notify(param: {
@@ -100,6 +102,7 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         name: string;
         manifest: AppAgentManifest;
+        agentInterface: AgentInterfaceFunctionName[];
     }) => Promise<void>;
     removeDynamicAgent: (param: {
         contextId: number;
@@ -110,6 +113,12 @@ export type AgentContextInvokeFunctions = {
         agentName: string;
     }) => Promise<number>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
+    popupQuestion: (param: {
+        contextId: number;
+        message: string;
+        choices?: string[] | undefined;
+        defaultId?: number | undefined;
+    }) => Promise<number>;
 };
 
 export type AgentCallFunctions = {
@@ -162,6 +171,12 @@ export type AgentInvokeFunctions = {
             params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
     ): Promise<void>;
+    resolveEntity(
+        param: Partial<ContextParams> & {
+            type: string;
+            name: string;
+        },
+    ): Promise<ResolveEntityResult | undefined>;
     getTemplateSchema(
         param: Partial<ContextParams> & {
             templateName: string;
@@ -181,11 +196,6 @@ export type AgentInvokeFunctions = {
             propertyName: string;
         },
     ): Promise<string[]>;
-};
-
-export type InitializeMessage = {
-    type: "initialized";
-    agentInterface: (keyof AgentInvokeFunctions)[];
 };
 
 export type ContextParams = {

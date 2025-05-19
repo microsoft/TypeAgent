@@ -36,6 +36,7 @@ export interface CatalogEntry {
     metaPath: string;
     downloadedAt: string;
     tags: string[];
+    sourcePath?: string; // path to .tar.gz
 }
 export interface CatalogEntryWithMeta extends CatalogEntry {
     meta: ArxivPaper;
@@ -226,20 +227,24 @@ export async function downloadArxivPaper(
 ): Promise<CatalogEntry | undefined> {
     const { downloadUrl, paperId } = getPdfUrlFromId(paper.id);
 
-    const filePath = path.join(
-        PAPER_DOWNLOAD_DIR,
-        `${getValidFilename(paperId)}.pdf`,
-    );
+    // Create the directory if it doesn't exist
+    const validPaperId = getValidFilename(paperId);
+    const paperFolder = path.join(PAPER_DOWNLOAD_DIR, validPaperId);
+
+    await createFolderIfNotExists(paperFolder);
+    const filePath = path.join(paperFolder, `${validPaperId}.pdf`);
+
     const metaPath = path.join(
         PAPER_DOWNLOAD_DIR,
-        `${getValidFilename(paperId)}.json`,
+        paperId,
+        `${validPaperId}.json`,
     );
     const tmpPath = `${filePath}.tmp`;
 
     try {
         return await withFileLock(filePath, async () => {
             if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
-                return buildEntry();
+                return buildEntry(undefined);
             }
 
             const resp = await fetchWithRetry(downloadUrl, {
@@ -257,7 +262,8 @@ export async function downloadArxivPaper(
             await fsp.rename(tmpPath, filePath);
 
             await fsp.writeFile(metaPath, JSON.stringify(paper, null, 2));
-            return buildEntry();
+            const paperTarFile = await downloadArxivSource(paper);
+            return buildEntry(paperTarFile);
         });
     } catch (err) {
         console.error("Error downloading paper:", err);
@@ -265,14 +271,26 @@ export async function downloadArxivPaper(
     }
 
     // helper to assemble the catalog object
-    function buildEntry(): CatalogEntry {
-        return {
-            id: arxivIdFromLink(paper.id),
-            filePath,
-            metaPath,
-            downloadedAt: new Date().toISOString(),
-            tags: deriveTags(paper), // basic tag extractor (below)
-        };
+    function buildEntry(paperTarFile: string | undefined): CatalogEntry {
+        const paperId = arxivIdFromLink(paper.id);
+        if (paperTarFile === undefined) {
+            return {
+                id: paperId,
+                filePath,
+                metaPath,
+                downloadedAt: new Date().toISOString(),
+                tags: deriveTags(paper), // basic tag extractor (below)
+            };
+        } else {
+            return {
+                id: paperId,
+                filePath,
+                metaPath,
+                downloadedAt: new Date().toISOString(),
+                tags: deriveTags(paper), // basic tag extractor (below)
+                sourcePath: paperTarFile,
+            };
+        }
     }
 }
 
@@ -281,6 +299,69 @@ function deriveTags(p: ArxivPaper): string[] {
     if (p.primary_category) tags.add(p.primary_category);
     if (p.category) tags.add(p.category);
     return [...tags];
+}
+
+export function getPaperFolderAndTarFile(paperId: string): {
+    paperFolder: string;
+    paperTarFile: string;
+} {
+    const paperFolder = path.join(
+        PAPER_DOWNLOAD_DIR,
+        getValidFilename(paperId),
+    );
+    const paperTarFile = path.join(paperFolder, `${paperId}.tar.gz`);
+    return { paperFolder, paperTarFile };
+}
+
+export function getPaperTarFilePath(paperId: string): string {
+    const paperFolder = path.join(
+        PAPER_DOWNLOAD_DIR,
+        getValidFilename(paperId),
+    );
+    return path.join(paperFolder, `${paperId}.tar.gz`);
+}
+
+export async function downloadArxivSource(
+    paper: ArxivPaper,
+): Promise<string | undefined> {
+    const arxivId = arxivIdFromLink(paper.id);
+    const sourceUrl = `https://arxiv.org/e-print/${arxivId}`;
+    const paperTarFile = getPaperTarFilePath(arxivId);
+    const tmpPath = `${paperTarFile}.tmp`;
+
+    try {
+        return await withFileLock(paperTarFile, async () => {
+            if (
+                fs.existsSync(paperTarFile) &&
+                fs.statSync(paperTarFile).size > 0
+            ) {
+                return paperTarFile;
+            }
+
+            const resp = await fetchWithRetry(sourceUrl, {
+                method: "GET",
+                headers: { Accept: "application/x-gzip" },
+            });
+            if (!resp.success) {
+                console.warn(
+                    `⚠️ Source not available for ${arxivId}: ${resp.message}`,
+                );
+                return undefined;
+            }
+
+            const buf = Buffer.from(
+                await (await resp.data.blob()).arrayBuffer(),
+            );
+            await fsp.writeFile(tmpPath, buf);
+            await fsp.rename(tmpPath, paperTarFile);
+
+            console.log(`Downloaded LaTeX source: ${paperTarFile}`);
+            return paperTarFile;
+        });
+    } catch (err) {
+        console.error("Error downloading LaTeX source:", err);
+        return undefined;
+    }
 }
 
 export async function downloadArxivPapers(

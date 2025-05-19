@@ -15,6 +15,7 @@ export type OpenCanvasAction = {
             | "montage"
             | "markdown"
             | "planViewer"
+            | "turtleGraphics"
             | string;
     };
 };

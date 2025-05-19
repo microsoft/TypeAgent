@@ -1,24 +1,14 @@
-# conversation-memory
+# Conversation Memory
 
-**conversation-memory** is an **experimental prototype and sample code** with ongoing and _frequent_ changes.
+The **conversation-memory** package is **experimental sample code** under active development with _frequent_ updates.
 
-It explores how to implement different memory [types](#memory-types) using [**Structured RAG**](../../knowPro/README.md) implemented by the [knowpro](../../knowPro) library.
+The **conversation-memory** package explores how to implement types of _conversational memory_ using the [KnowPro](../../knowPro/README.md) library.
 
-## Memory types
+A **conversation** is defined as sequences of timestamped **messages** between senders and receivers. The following memory types can be considered conversations:
 
-### Conversational
-
-Conversational memory treats the following domains like conversations: a sequence of timestamped **messages** between senders and receivers.
-
-- [Podcast](./src/podcast.ts)
-- [Conversation](./src/conversationMemory.ts) such as chats
-  - See [conversationManager](../../knowledgeProcessor/src/conversation/conversationManager.ts) in the [knowledgeProcessor](../../knowledgeProcessor) package for existing conversation memory implemented with structured RAG.
+- [Conversation Memory](./src/conversationMemory.ts) such as interactive chats
+- [Podcasts](./src/podcast.ts)
 - [Email](./src/emailMemory.ts)
-
-### Image
-
-Images can treated as memory and retrieved using both their knowledge content as well their metadata.
-[Image](../image/)
 
 ## Trademarks
 

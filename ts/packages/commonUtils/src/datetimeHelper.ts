@@ -139,6 +139,9 @@ export function getDateRelativeToDayV3(relativeDate: string): Date | undefined {
     const currentYear = currentDate.getFullYear();
     const currentMonth = currentDate.getMonth();
 
+    if (relativeDate.length > 1000) {
+        throw new Error("Input too long");
+    }
     const relativeDateRegex =
         /^(\d{1,2})?\s*(\w+)?\s*(of)?\s*(this|next)?\s*(\w+)?\s*(month)?$/i;
     const match = relativeDateRegex.exec(relativeDate.trim());

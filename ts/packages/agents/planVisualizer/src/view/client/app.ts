@@ -65,9 +65,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const showPathButton = document.getElementById(
         "show-path-button",
     ) as HTMLButtonElement;
-    const resetButton = document.getElementById(
-        "reset-button",
-    ) as HTMLButtonElement;
 
     const statusMessage = document.getElementById(
         "status-message",
@@ -77,29 +74,11 @@ document.addEventListener("DOMContentLoaded", function () {
         "view-mode-toggle",
     ) as HTMLInputElement;
 
-    const toggleFormButton = document.getElementById(
-        "toggle-form-button",
-    ) as HTMLButtonElement;
-    const formFlyout = document.getElementById("form-flyout") as HTMLDivElement;
-    const closeFlyoutButton = document.getElementById(
-        "close-flyout-button",
-    ) as HTMLButtonElement;
     const dynamicOnlyControls = document.querySelectorAll(
         ".dynamic-only-control",
     );
 
-    const stateTab = document.getElementById("state-tab") as HTMLElement;
-    const actionTab = document.getElementById("action-tab") as HTMLElement;
-    const stateForm = document.getElementById("state-form") as HTMLFormElement;
-    const actionForm = document.getElementById(
-        "action-form",
-    ) as HTMLFormElement;
-    const activeStateName = document.getElementById(
-        "active-state-name",
-    ) as HTMLElement;
-
     // Add application state for screenshot mode
-    let isScreenshotMode = false;
     let currentBase64Screenshot: string | null = null;
     let currentUploadNodeId: string | null = null;
 
@@ -172,30 +151,22 @@ document.addEventListener("DOMContentLoaded", function () {
      * Initialize the visualization
      */
     function initializeVisualization(): void {
-        // Destroy existing visualizer if it exists
         if (visualizer) {
             visualizer.destroy();
         }
 
-        // Create new visualizer
         visualizer = new Visualizer(cyContainer, webPlanData);
         visualizer.initialize();
 
         // Make visualizer accessible globally for resize handler
         window.visualizer = visualizer;
 
-        // Set up event listeners
         visualizer.setupEventListeners((nodeId: string) => {
             nodeSelect.value = nodeId;
         }, tooltip);
 
-        // Populate node selector
         populateNodeSelector();
-
-        // Make sure animation is running if there are temporary nodes
         visualizer.startTemporaryNodeAnimation();
-
-        updateCurrentStateIndicator();
     }
 
     /**
@@ -205,10 +176,8 @@ document.addEventListener("DOMContentLoaded", function () {
         try {
             webPlanData = await ApiService.getPlan(currentViewMode);
 
-            // Initialize visualization
             initializeVisualization();
 
-            // Update the title display
             const titleElement = document.getElementById("plan-title");
             if (titleElement && webPlanData.title) {
                 titleElement.textContent = webPlanData.title;
@@ -233,7 +202,6 @@ document.addEventListener("DOMContentLoaded", function () {
         nodeId: string,
         nodeLabel: string,
     ): void {
-        // Store the node ID in our global variable
         currentUploadNodeId = nodeId;
 
         // Get references to modal elements
@@ -244,16 +212,13 @@ document.addEventListener("DOMContentLoaded", function () {
             "upload-node-name",
         ) as HTMLElement;
 
-        // Only proceed if elements exist
         if (!screenshotUploadModal || !uploadNodeName) {
             console.error("Screenshot upload modal elements not found");
             return;
         }
 
-        // Set the node info in the modal
         uploadNodeName.textContent = nodeLabel || nodeId;
 
-        // Reset the form
         const screenshotFile = document.getElementById(
             "screenshot-file",
         ) as HTMLInputElement;
@@ -284,13 +249,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const file = files[0];
 
-        // Validate file type
         if (!file.type.match("image.*")) {
             showStatus("Please select an image file", true);
             return;
         }
 
-        // Get references to preview elements
         const previewContainer = document.getElementById(
             "preview-container",
         ) as HTMLDivElement;
@@ -411,7 +374,6 @@ document.addEventListener("DOMContentLoaded", function () {
     function setupScreenshotEventListeners(): void {
         console.log("Setting up screenshot event listeners");
 
-        // Get references to elements
         const screenshotFile = document.getElementById(
             "screenshot-file",
         ) as HTMLInputElement;
@@ -426,7 +388,6 @@ document.addEventListener("DOMContentLoaded", function () {
             "screenshot-upload-modal",
         ) as HTMLDivElement;
 
-        // File input change
         if (screenshotFile) {
             screenshotFile.addEventListener("change", function () {
                 handleFileSelect(this.files);
@@ -532,8 +493,6 @@ document.addEventListener("DOMContentLoaded", function () {
     nodeSelect.addEventListener("change", (e) => {
         if (visualizer) {
             visualizer.updateCurrentNode((e.target as HTMLSelectElement).value);
-
-            setTimeout(updateCurrentStateIndicator, 100);
         }
     });
 
@@ -563,280 +522,6 @@ document.addEventListener("DOMContentLoaded", function () {
             showPathButton.innerHTML = '<i class="fas fa-route"></i>';
             showPathButton.title = "Show Current Path";
         }
-    });
-
-    // Reset button handler
-    resetButton.addEventListener("click", function () {
-        if (currentViewMode === CONFIG.VIEW_MODES.STATIC) {
-            showStatus(
-                "Cannot reset static plan view. Switch to dynamic view to reset.",
-                true,
-            );
-            return;
-        }
-
-        if (
-            confirm(
-                "Are you sure you want to reset the plan? This will delete all nodes and edges.",
-            )
-        ) {
-            ApiService.resetPlan()
-                .then((data) => {
-                    webPlanData = data;
-                    showStatus("Plan reset successfully!");
-                    initializeVisualization();
-                })
-                .catch((error) => {
-                    showStatus(
-                        `Error resetting plan: ${(error as Error).message}`,
-                        true,
-                    );
-                });
-        }
-    });
-
-    toggleFormButton.addEventListener("click", function () {
-        const isVisible = formFlyout.style.display === "block";
-
-        if (isVisible) {
-            formFlyout.style.display = "none";
-            toggleFormButton.classList.remove("active");
-        } else {
-            formFlyout.style.display = "block";
-            toggleFormButton.classList.add("active");
-
-            // Position the flyout relative to the button
-            positionFlyout();
-        }
-    });
-
-    // Close flyout when close button is clicked
-    closeFlyoutButton.addEventListener("click", function () {
-        formFlyout.style.display = "none";
-        toggleFormButton.classList.remove("active");
-    });
-
-    // Close flyout when clicking outside
-    document.addEventListener("click", function (event) {
-        if (
-            !formFlyout.contains(event.target as Node) &&
-            event.target !== toggleFormButton
-        ) {
-            formFlyout.style.display = "none";
-            toggleFormButton.classList.remove("active");
-        }
-    });
-
-    // Position the flyout based on button position
-    function positionFlyout() {
-        const buttonRect = toggleFormButton.getBoundingClientRect();
-        const containerRect = document
-            .querySelector(".container")
-            ?.getBoundingClientRect();
-        if (containerRect) {
-            // Calculate position relative to container
-            const top = buttonRect.bottom - containerRect.top + 10;
-            const right = containerRect.right - buttonRect.right;
-
-            formFlyout.style.top = `${top}px`;
-            formFlyout.style.right = `${right}px`;
-        }
-    }
-
-    // Tab switching functionality
-    stateTab.addEventListener("click", function () {
-        stateTab.classList.add("active");
-        actionTab.classList.remove("active");
-        stateForm.style.display = "block";
-        actionForm.style.display = "none";
-    });
-
-    actionTab.addEventListener("click", function () {
-        actionTab.classList.add("active");
-        stateTab.classList.remove("active");
-        actionForm.style.display = "block";
-        stateForm.style.display = "none";
-    });
-
-    // Update the current state indicator whenever a node is selected
-    function updateCurrentStateIndicator() {
-        if (webPlanData.currentNode) {
-            const currentNode = webPlanData.nodes.find(
-                (node) => node.id === webPlanData.currentNode,
-            );
-
-            if (currentNode) {
-                // Display the label or a placeholder for temporary nodes
-                const displayName = currentNode.isTemporary
-                    ? "(Temporary Node)"
-                    : currentNode.label || "(Unnamed)";
-
-                activeStateName.textContent = displayName;
-
-                // Auto-switch to action tab if we've just set a state
-                actionTab.click();
-            } else {
-                activeStateName.textContent = "None";
-            }
-        } else {
-            activeStateName.textContent = "None";
-        }
-    }
-
-    // Set State form handler
-    stateForm.addEventListener("submit", function (e) {
-        e.preventDefault();
-
-        if (currentViewMode === CONFIG.VIEW_MODES.STATIC) {
-            showStatus(
-                "Cannot add states in static view. Switch to dynamic view.",
-                true,
-            );
-            return;
-        }
-
-        const currentState = (
-            document.getElementById("current-state") as HTMLInputElement
-        ).value;
-
-        const nodeType = (
-            document.getElementById("node-type") as HTMLSelectElement
-        ).value;
-
-        // Get screenshot if in screenshot mode
-        let screenshotData = undefined;
-        if (isScreenshotMode && currentBase64Screenshot) {
-            screenshotData = currentBase64Screenshot;
-        }
-
-        const formData = {
-            currentState: currentState,
-            action: "", // No action for this request
-            nodeType: nodeType,
-            screenshot: screenshotData, // Add screenshot if available
-        };
-
-        ApiService.addTransition(formData)
-            .then((result) => {
-                const { oldData, newData } = result;
-
-                // Clear the current screenshot data after successful submission
-                currentBase64Screenshot = null;
-
-                // Update the reference data
-                if (
-                    !visualizer ||
-                    !visualizer.updateWithoutRedraw(oldData, newData)
-                ) {
-                    webPlanData = newData;
-                    initializeVisualization();
-
-                    // Focus on current node
-                    if (visualizer && webPlanData.currentNode) {
-                        visualizer._focusOnNodeContext(webPlanData.currentNode);
-                    }
-                }
-
-                // Update the state indicator
-                updateCurrentStateIndicator();
-
-                // Clear the state input
-                (
-                    document.getElementById("current-state") as HTMLInputElement
-                ).value = "";
-
-                // Show success message
-                showStatus("State set successfully", false);
-            })
-            .catch((error) => {
-                showStatus(
-                    `Error setting state: ${(error as Error).message}`,
-                    true,
-                );
-                console.error(error);
-            });
-    });
-
-    // Add Action form handler
-    actionForm.addEventListener("submit", function (e) {
-        e.preventDefault();
-
-        if (currentViewMode === CONFIG.VIEW_MODES.STATIC) {
-            showStatus(
-                "Cannot add actions in static view. Switch to dynamic view.",
-                true,
-            );
-            return;
-        }
-
-        const action = (
-            document.getElementById("action-name") as HTMLInputElement
-        ).value;
-
-        // Validate we have a current node
-        if (!webPlanData.currentNode) {
-            showStatus(
-                "Please set a state first before adding an action.",
-                true,
-            );
-
-            // Switch to state tab
-            stateTab.click();
-            return;
-        }
-
-        // Get screenshot if in screenshot mode
-        let screenshotData = undefined;
-        if (isScreenshotMode && currentBase64Screenshot) {
-            screenshotData = currentBase64Screenshot;
-        }
-
-        const formData = {
-            currentState: "", // No state name for this request
-            action: action,
-            nodeType: "action", // Default type for new nodes
-            screenshot: screenshotData, // Add screenshot if available
-        };
-
-        ApiService.addTransition(formData)
-            .then((result) => {
-                const { oldData, newData } = result;
-
-                // Clear the current screenshot data after successful submission
-                currentBase64Screenshot = null;
-
-                // Update the reference data
-                if (
-                    !visualizer ||
-                    !visualizer.updateWithoutRedraw(oldData, newData)
-                ) {
-                    webPlanData = newData;
-                    initializeVisualization();
-
-                    // Focus on current node
-                    if (visualizer && webPlanData.currentNode) {
-                        visualizer._focusOnNodeContext(webPlanData.currentNode);
-                    }
-                }
-
-                // Update the state indicator
-                updateCurrentStateIndicator();
-
-                // Clear the action input
-                (
-                    document.getElementById("action-name") as HTMLInputElement
-                ).value = "";
-
-                // Show success message
-                showStatus("Action added successfully", false);
-            })
-            .catch((error) => {
-                showStatus(
-                    `Error adding action: ${(error as Error).message}`,
-                    true,
-                );
-                console.error(error);
-            });
     });
 
     function addScreenshotAttachmentUI() {
@@ -1163,7 +848,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             visualizer = new Visualizer(cyContainer, webPlanData);
             visualizer.initialize();
-            stateForm;
+            // stateForm;
 
             // Setup event listeners
             visualizer.setupEventListeners((nodeId: string) => {
@@ -1218,8 +903,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     updateDynamicControls();
 
-    updateCurrentStateIndicator();
-
     initializeSSE();
 
     // Setup screenshot functionality
@@ -1239,10 +922,6 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     window.addEventListener("resize", function () {
-        if (formFlyout.style.display === "block") {
-            positionFlyout();
-        }
-
         adjustCanvasHeight();
     });
 });

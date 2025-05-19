@@ -189,7 +189,10 @@ export class ShellWindow {
     }
 
     public sendMessageToInlineWebContent(message: WebSocketMessageV2) {
-        this.inlineWebContentView?.webContents.send("webview-message", message);
+        this.inlineWebContentView?.webContents.send(
+            "received-from-browser-ipc",
+            message,
+        );
     }
 
     public runDemo(interactive: boolean = false) {
@@ -329,7 +332,7 @@ export class ShellWindow {
 
             this.targetUrl = targetUrl.toString();
             // indicate in the settings which canvas is open
-            this.settings.setUserSettingValue("canvas", targetUrl.toString());
+            this.setUserSettingValue("canvas", targetUrl.toString());
         }
     }
 
@@ -401,7 +404,7 @@ export class ShellWindow {
         // clear the canvas settings
         if (save) {
             this.targetUrl = undefined;
-            this.settings.setUserSettingValue("canvas", undefined);
+            this.setUserSettingValue("canvas", undefined);
         }
     }
 

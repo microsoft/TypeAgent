@@ -1,115 +1,140 @@
 # TypeAgent
 
-**TypeAgent** is **sample code** that explores an architecture for using [TypeChat](https://github.com/microsoft/typechat) to build a _personal agent_ with a _natural language interface_.
+**TypeAgent** is **sample code** that explores an architecture for building a _single personal agent_ with _natural language interfaces_ leveraging current advances in LLM technology.
 
-**TypeAgent** uses [TypeChat](https://github.com/microsoft/typechat) to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
+The goal of the TypeAgent team is to explore how to get work done by safely and efficiently combining stochastic systems like language models with traditional software components.  Three principles have emerged during this investigation.  They are listed below along with examples of how the principles apply to actions, memory and plans.
 
-The TypeAgent repo contains the personal agent and example application agents, along with internal packages used to build them.
+-   Principle: distill models into logical structures
+    -   Actions: find translation patterns and replace some model calls by applying patterns
+    -   Memory: build ontologies from text
+    -   Plans: people, programs and models collaborate using “tree of thought”
+-   Principle: use structure to control information density
+    -   Actions: applications define discrete categories with dense descriptions of action sets
+    -   Memory: tight semantic structures fit into attention budget
+    -   Plans: each search tree node defines a focused sub-problem
+-   Principle: use structure to enable collaboration
+    -   Actions: humans decide how to disambiguate action requests
+    -   Memory: simple models extract logical structure from text
+    -   Plan: quality models, advantage models, language models, humans and programs collaborate to expand each best-first-search node
+
+We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing approach called [Structured RAG](./docs/architecture/memory.md) as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
+
+We are trying to build a single personal agent that can apply to any application.  To apply agent interfaces to all applications, we need to map user requests to actions at much lower cost and latency than current systems.  To make this possible, we have created a system that can distill language models into logical systems that can handle most user requests.
+
+Actions and memories flow together.  Actions like "add to my calendar pickle ball game 2-3pm on Friday" yield memories that can become parameters of future actions like "put in an hour of recovery time after my pickle ball game."  We are working on an architecture, AMP, that enables this natural information flow by integrating actions, memories, and plans
+
+We are applying AMP to the web by creating a browser that enables web sites to register actions through a JavaScript interface.
 
 ## Getting Started
 
-TypeAgent is written in TypeScript and relies on [TypeChat](https://github.com/microsoft/typechat). To understand how TypeAgent examples work, we recommend getting comfortable with [TypeChat](https://github.com/microsoft/typechat) and [TypeChat examples](https://github.com/microsoft/TypeChat/tree/main/typescript/examples) first.
+### Quick start - TypeAgent Shell Example
 
-### Quick start - Agent Shell Example
+[TypeAgent Shell](./ts/packages/shell) example is the starting point to explore the **single personal agent** with **natural language interfaces** we have built so far. It is an Electron application for interacting with multiple registered agents using a single unified user interface. TypeAgent Shell includes:
 
-The main entry point to explore TypeAgent is the [Agent Shell](./ts/packages/shell) example.
+-   Single personal agent conversational interface with voice support
+-   Collaborate with users to perform and dispatch actions to an extensible set of agents, answer question and carry on a conversation.
+-   Conversational memory based on Structured RAG
+-   Integration with TypeAgent Cache to lower cost and latency
 
 Follow these step-by-step instructions to quickly setup tools and environments from scratch to build, run, explore, and develop.
 
-- [Windows](./docs/setup/setup-Windows.md)
-- [WSL2](./docs/setup/setup-WSL2.md)
-- [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
-- MacOS (coming soon)
+-   [Windows](./docs/setup/setup-Windows.md)
+-   [WSL2](./docs/setup/setup-WSL2.md)
+-   [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
+-   MacOS (coming soon)
 
-See the [instructions](./ts/README.md) in the TypeScript code [directory](./ts) for more detailed setup instructions.
+For more detailed setup instructions, see the [README.md](./ts/README.md) in the TypeScript code [directory](./ts)
 
-## Examples
+### Quick start - Components
 
-- Application agents with natural language interfaces:
+-   [TypeAgent Dispatcher](./ts/packages/dispatcher/)
 
-  - [Music Player](./ts/packages/agents/player/)
-  - [Chat](./ts/packages/agents/chat/)
-  - [Browser](./ts/packages/agents/browser/)
-  - [VS Code](./ts/packages/agents/code/)
-  - [List Management](./ts/packages/agents/list/)
-  - [Calendar](./ts/packages/agents/calendar/)
-  - [Email](./ts/packages/agents/email/)
-  - [Desktop](./ts/packages/agents/desktop/)
-  - [Image](./ts/packages/agents/image/)
-  - [Markdown](./ts/packages/agents/markdown/)
-  - [Montage](./ts/packages/agents/montage/)
-  - [Spelunker](./ts/packages/agents/spelunker/)
-  - [Test](./ts/packages/agents/test/)
-  - [Turtle](./ts/packages/agents/turtle/)
-  - [Phone](.ts/packages/agents/phone/)
-  - [Photo](.ts/packages/agents/photo/)
-  - [androidMobile](.ts/packages/agents/androidMobile/)
+    Explores applying structured prompting and LLM to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
-- [Agent Dispatcher](./ts/packages/dispatcher/)
+-   [KnowPro](./ts/packages/knowPro)
 
-  Explores applying [TypeChat](https://github.com/microsoft/typechat) to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
+    Explores how to implement agent memory using the ideas of [Structured RAG](./docs/architecture/memory.md).
 
-- [Agent Cache](./ts/packages/cache/)
+-   [TypeAgent Cache](./ts/packages/cache/)
 
-  Explores how [TypeChat](https://github.com/microsoft/typechat) translations from user intent to actions can be cached, minimizing the need to go the LLM.
+    Explores how LLM with structured prompting can be used to cache action translation, minimizing the need to go the LLM.
 
-- [Agent Shell](./ts/packages/shell/)
-
-  An Electron application for interacting with multiple registered agents using a single unified user interface. Agent Shell includes:
-
-  - Integrated chat experience with voice support
-  - Dispatcher that dispatches to registered agents
-  - Structured memory
-  - Structured RAG
-
-### State Management
+## State Management
 
 Storage, registration, chat, memory and other state maintained by examples is **_typically_** stored **_locally_** in **your user folder** on your development machine. State is typically saved as ordinary text or JSON files in sub-folders below your user folder.
 
 Example agents that use the Microsoft Graph or similar external services may store state in those services.
 
+Code in this repo doesn't not collect telemetry by default.
+
 ## Intended Uses
 
-- TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using [TypeChat](https://github.com/microsoft/typechat).
-- Sample agents are not intended to be implemented in real-world settings without further testing/validation.
+-   TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using structured prompting and LLM
+-   Sample agents are not intended to be implemented in real-world settings without further testing/validation.
+
+## Roadmap
+
+-   Publish libraries for agent memory and action dispatch.
 
 ## Limitations
 
-TypeAgent is early stage sample code over [TypeChat](https://github.com/microsoft/typechat). TypeAgent is not a framework. All code in this repo is intended for building our own example apps and agents only.
+TypeAgent is early stage sample code. TypeAgent is not a framework. All code in this repo is intended for building examples (apps, agents, and dispatcher hosts) only.
 
-- TypeAgent is in **active development** with frequent updates and refactoring.
-- TypeAgent has been tested with Azure Open AI services on developer's own machines only.
-- TypeAgent is currently tested in English. Performance may vary in other languages.
-- TypeAgent relies on [TypeChat](https://github.com/microsoft/typechat), which uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
-- You are responsible for supplying any **API keys** for services used by examples.
+-   TypeAgent is in **active development** with frequent updates and refactoring.
+-   TypeAgent has been tested with Azure Open AI services on developer's own machines only.
+-   TypeAgent is currently tested in English. Performance may vary in other languages.
+-   TypeAgent uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
+-   You are responsible for supplying any **API keys** for services used by examples. You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
 
 ## Developers
 
-### Custom Dispatcher Agents
+### Repo Overview
 
-For developer that are interested develop custom agents to show up in our [Agent Shell](./ts/packages/shell) example and explore using the [Agent Dispatcher](./ts/packages/dispatcher/) to route action to the custom agents, [Agent Shell](./ts/packages/shell) example allow additional agent to be installed/registered to extent functionality. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [Agent SDK](./ts/packages/agentSdk/) provides the details of the interface between [Agent Dispatcher](./ts/packages/dispatcher) and the agent.
+This repo contains the personal agent and example application agents, along with internal packages used to build them. **TypeAgent** uses structured prompting with LLM technique for many of the components,
+to build a set of application agents that **take actions**. Agents define actions using [TypeChat](https://github.com/microsoft/typechat) schemas.
 
-### Developing TypeAgent
+### Exploring Action Dispatch
 
-For developers who want to modify TypeAgent and contribute to our repo.
+[TypeAgent Shell](./ts/packages/shell)'s functionality can be extended by installing/registering additional agents. For developers who are interested in experimenting adding action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [TypeAgent Shell](./ts/packages/shell) example to explore using the [dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [TypeAgent SDK](./ts/packages/agentSdk/) provides the interface definitions between [dispatcher](./ts/packages/dispatcher) and the agent.
+
+### Working with TypeAgent Repo
+
+For developers who want to modify TypeAgent or contribute to our repo.
 
 Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
 
-- [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
-- [`python`](./python) Python code ([Readme](./python/README.md))
-- [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
-- [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
+-   [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
+-   [`python`](./python) Python code ([Readme](./python/README.md))
+-   [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
+-   [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
 
-## Contributing
+See more information about working with the repo [here](./docs/help/dev.md).
 
-This project welcomes contributions and suggestions. Most contributions require you to
-agree to a Contributor License Agreement (CLA) declaring that you have the right to,
-and actually do, grant us the rights to use your contribution. For details, visit
-https://cla.microsoft.com.
+#### Apps
 
-When you submit a pull request, a CLA-bot will automatically determine whether you need
-to provide a CLA and decorate the PR appropriately (e.g., label, comment). Simply follow the
-instructions provided by the bot. You will only need to do this once across all repositories using our CLA.
+-   [TypeAgent Shell](./ts/packages/shell/)
+-   [TypeAgent CLI](./ts/packages/lic/)
+
+#### Agents
+
+-   Application agents with natural language interfaces integrated with [TypeAgent Shell](./ts/packages/shell/) and [TypeAgent CLI](./ts/packages/cli/)
+
+    -   [Music Player](./ts/packages/agents/player/)
+    -   [Chat](./ts/packages/agents/chat/)
+    -   [Browser](./ts/packages/agents/browser/)
+    -   [VS Code](./ts/packages/agents/code/)
+    -   [List Management](./ts/packages/agents/list/)
+    -   [Calendar](./ts/packages/agents/calendar/)
+    -   [Email](./ts/packages/agents/email/)
+    -   [Desktop](./ts/packages/agents/desktop/)
+    -   [Image](./ts/packages/agents/image/)
+    -   [Markdown](./ts/packages/agents/markdown/)
+    -   [Montage](./ts/packages/agents/montage/)
+    -   [Spelunker](./ts/packages/agents/spelunker/)
+    -   [Turtle](./ts/packages/agents/turtle/)
+    -   [Phone](.ts/packages/agents/phone/)
+    -   [Photo](.ts/packages/agents/photo/)
+    -   [androidMobile](.ts/packages/agents/androidMobile/)
 
 ## Code of Conduct
 

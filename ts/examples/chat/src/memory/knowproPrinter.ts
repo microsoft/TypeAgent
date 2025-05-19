@@ -11,7 +11,7 @@ import * as im from "image-memory";
 
 export class KnowProPrinter extends MemoryConsoleWriter {
     public sortAsc: boolean = true;
-    constructor(public conversation: kp.IConversation | undefined = undefined) {
+    constructor() {
         super();
     }
 

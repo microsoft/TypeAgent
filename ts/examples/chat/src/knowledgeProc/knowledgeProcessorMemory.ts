@@ -10,7 +10,7 @@
 
 import * as knowLib from "knowledge-processor";
 import { conversation } from "knowledge-processor";
-import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
+import { openai } from "aiclient";
 import {
     CommandHandler,
     CommandMetadata,
@@ -39,7 +39,7 @@ import {
     removeDir,
 } from "typeagent";
 import chalk, { ChalkInstance } from "chalk";
-import { ChatMemoryPrinter } from "./chatMemoryPrinter.js";
+import { KnowledgeProcessorWriter } from "./knowledgeProcessorWriter.js";
 import { timestampBlocks } from "./importer.js";
 import path from "path";
 import fs from "fs";
@@ -51,20 +51,13 @@ import {
     argSourceFile,
     getMessagesAndCount,
     extractedKnowledgeToResponse,
-} from "./common.js";
+    Models,
+    createModels,
+} from "../common.js";
 import { createEmailCommands, createEmailMemory } from "./emailMemory.js";
-import { createImageMemory } from "./imageMemory.js";
+import { createImageMemory, createImageCommands } from "./imageMemory.js";
 import { pathToFileURL } from "url";
 import { createPodcastCommands, createPodcastMemory } from "./podcastMemory.js";
-import { createImageCommands } from "./imageMemory.js";
-import { createKnowproCommands } from "./knowproMemory.js";
-
-export type Models = {
-    chatModel: ChatModel;
-    answerModel: ChatModel;
-    embeddingModel: TextEmbeddingModel;
-    embeddingModelSmall?: TextEmbeddingModel | undefined;
-};
 
 /**
  * Context for knowledge-processor based experiments
@@ -73,7 +66,7 @@ export type Models = {
 export type KnowledgeProcessorContext = {
     storePath: string;
     statsPath: string;
-    printer: ChatMemoryPrinter;
+    printer: KnowledgeProcessorWriter;
     models: Models;
     maxCharsPerChunk: number;
     stats?: knowLib.IndexingStats | undefined;
@@ -130,35 +123,6 @@ function getReservedConversation(
     return undefined;
 }
 
-export function createModels(): Models {
-    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
-    chatModelSettings.retryPauseMs = 10000;
-    const embeddingModelSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Embedding,
-    );
-    embeddingModelSettings.retryPauseMs = 25 * 1000;
-
-    const models: Models = {
-        chatModel: openai.createJsonChatModel(chatModelSettings, [
-            "chatMemory",
-        ]),
-        answerModel: openai.createChatModel(),
-        embeddingModel: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel(embeddingModelSettings),
-            1024,
-        ),
-        /*
-        embeddingModelSmall: knowLib.createEmbeddingCache(
-            openai.createEmbeddingModel("3_SMALL", 1536),
-            256,
-        ),
-        */
-    };
-    models.chatModel.completionSettings.seed = 123;
-    models.answerModel.completionSettings.seed = 123;
-    return models;
-}
-
 export async function createKnowledgeProcessorContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<KnowledgeProcessorContext> {
@@ -196,7 +160,7 @@ export async function createKnowledgeProcessorContext(
     const context: KnowledgeProcessorContext = {
         storePath,
         statsPath,
-        printer: new ChatMemoryPrinter(getInteractiveIO()),
+        printer: new KnowledgeProcessorWriter(getInteractiveIO()),
         models,
         maxCharsPerChunk: 4096,
         topicWindowSize: 8,
@@ -332,7 +296,7 @@ export async function loadConversation(
 }
 
 // This creates both (knowledge-processor) and know-pro commands
-export async function runMemoryCommands(): Promise<void> {
+export async function runKnowledgeProcessorCommands(): Promise<void> {
     let context = await createKnowledgeProcessorContext(captureTokenStats);
     let showTokenStats = false;
     let printer = context.printer;
@@ -364,15 +328,11 @@ export async function runMemoryCommands(): Promise<void> {
     createEmailCommands(context, commands);
     createPodcastCommands(context, commands);
     createImageCommands(context, commands);
-    //
-    // AND ALSO SET UP knowpro test commands
-    //
-    await createKnowproCommands(context, commands);
     addStandardHandlers(commands);
 
     function onStart(io: InteractiveIo): void {
         if (io !== context.printer.io) {
-            printer = new ChatMemoryPrinter(io);
+            printer = new KnowledgeProcessorWriter(io);
             context.printer = printer;
         }
     }

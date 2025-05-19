@@ -73,10 +73,10 @@ export function createMultipleActionSchema(
         action: types,
     };
     if (result) {
-        actionRequestEntryFields.resultEntityId = sc.optional(
-            sc.string(),
-            "if the action has a result, the result entity id can be used in future action parameters",
-        );
+        actionRequestEntryFields.resultEntityId = sc.optional(sc.string(), [
+            "If the action has a result, the result entity id can be referenced in later action's parameters with in this multiple action.",
+            "The reference to the result must be in the format '${result-<resultEntityId>}', where resultEntityId is uniquely generated name within this multiple action",
+        ]);
     }
 
     const actionRequestEntryType = sc.obj(actionRequestEntryFields);

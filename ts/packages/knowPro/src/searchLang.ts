@@ -11,6 +11,7 @@ import {
 import {
     ConversationSearchResult,
     createSearchOptions,
+    createSearchOptionsTypical,
     hasConversationResults,
     runSearchQuery,
     runSearchQueryText,
@@ -42,11 +43,31 @@ import {
     Work in progress; frequent improvements/tweaks
 */
 
+/**
+ * Type representing the filter options for language search.
+ */
+export type LanguageSearchFilter = {
+    tags?: string[] | undefined;
+};
+
+/**
+ * Search a conversation using natural language. Returns {@link ConversationSearchResult} containing
+ * relevant knowledge and messages.
+ *
+ * @param conversation - The conversation object to search within.
+ * @param searchText - The natural language search phrase.
+ * @param queryTranslator - Translates natural language to a {@link querySchema.SearchQuery} structured query.
+ * @param options - Optional search options.
+ * @param langSearchFilter - Optional filter options for the search.
+ * @param debugContext - Optional context for debugging the search process.
+ * @returns {ConversationSearchResult} Conversation search results.
+ */
 export async function searchConversationWithLanguage(
     conversation: IConversation,
     searchText: string,
     queryTranslator: SearchQueryTranslator,
     options?: LanguageSearchOptions,
+    langSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<ConversationSearchResult[]>> {
     options ??= createLanguageSearchOptions();
@@ -55,6 +76,7 @@ export async function searchConversationWithLanguage(
         queryTranslator,
         searchText,
         options,
+        langSearchFilter,
         debugContext,
     );
     if (!langQueryResult.success) {
@@ -71,6 +93,7 @@ export async function searchConversationWithLanguage(
     let fallbackQueryExpr = compileFallbackQuery(
         langQueryResult.data.query,
         options.compileOptions,
+        langSearchFilter,
     );
 
     const searchResults: ConversationSearchResult[] = [];
@@ -121,16 +144,22 @@ export async function searchConversationWithLanguage(
     function compileFallbackQuery(
         query: querySchema.SearchQuery,
         compileOptions: LanguageQueryCompileOptions,
+        langSearchFilter?: LanguageSearchFilter,
     ): SearchQueryExpr[] | undefined {
         const verbScope = compileOptions.verbScope;
         if (
             !compileOptions.exactScope &&
             (verbScope == undefined || verbScope)
         ) {
-            return compileSearchQuery(conversation, query, {
-                ...compileOptions,
-                verbScope: false,
-            });
+            return compileSearchQuery(
+                conversation,
+                query,
+                {
+                    ...compileOptions,
+                    verbScope: false,
+                },
+                langSearchFilter,
+            );
         }
         return undefined;
     }
@@ -147,19 +176,41 @@ export async function searchConversationWithLanguage(
 }
 
 export type LanguageQueryExpr = {
+    /**
+     * The text of the query.
+     */
     queryText: string;
+    /**
+     * The structured search query the queryText was translated to.
+     */
     query: querySchema.SearchQuery;
+    /**
+     * The search query expressions the structured query was compiled to.
+     */
     queryExpressions: SearchQueryExpr[];
 };
 
 /**
  * Functions for compiling natural language queries
  */
+
+/**
+ * Translate and compile a natural language query to a query expression.
+ *
+ * @param conversation - The conversation against which this query is being run.
+ * @param translator - Translates natural language to a {@link querySchema.SearchQuery} structured query.
+ * @param queryText - Natural language search query.
+ * @param options - Optional language search options.
+ * @param languageSearchFilter - Optional filter for language search.
+ * @param debugContext - Optional debug context for language search.
+ * @returns {LanguageQueryExpr}Language query expression.
+ */
 export async function searchQueryExprFromLanguage(
     conversation: IConversation,
     translator: SearchQueryTranslator,
     queryText: string,
     options?: LanguageSearchOptions,
+    languageSearchFilter?: LanguageSearchFilter,
     debugContext?: LanguageSearchDebugContext,
 ): Promise<Result<LanguageQueryExpr>> {
     const queryResult = await searchQueryFromLanguage(
@@ -178,6 +229,7 @@ export async function searchQueryExprFromLanguage(
             conversation,
             query,
             options.compileOptions,
+            languageSearchFilter,
         );
         return success({
             queryText,
@@ -217,6 +269,13 @@ export function createLanguageSearchOptions(): LanguageSearchOptions {
     };
 }
 
+export function createLanguageSearchOptionsTypical(): LanguageSearchOptions {
+    return {
+        ...createSearchOptionsTypical(),
+        compileOptions: createLanguageQueryCompileOptions(),
+    };
+}
+
 export type LanguageSearchDebugContext = {
     /**
      * Query returned by the LLM
@@ -237,8 +296,13 @@ export function compileSearchQuery(
     conversation: IConversation,
     query: querySchema.SearchQuery,
     options?: LanguageQueryCompileOptions,
+    langSearchFilter?: LanguageSearchFilter,
 ): SearchQueryExpr[] {
-    const queryBuilder = new SearchQueryCompiler(conversation, options);
+    const queryBuilder = new SearchQueryCompiler(
+        conversation,
+        options,
+        langSearchFilter,
+    );
     const searchQueryExprs: SearchQueryExpr[] =
         queryBuilder.compileQuery(query);
     return searchQueryExprs;
@@ -248,10 +312,12 @@ export function compileSearchFilter(
     conversation: IConversation,
     searchFilter: querySchema.SearchFilter,
     options?: LanguageQueryCompileOptions,
+    langFilter?: LanguageSearchFilter,
 ): SearchSelectExpr {
     const queryBuilder = new SearchQueryCompiler(
         conversation,
         options ?? createLanguageQueryCompileOptions(),
+        langFilter,
     );
     return queryBuilder.compileSearchFilter(searchFilter);
 }
@@ -304,6 +370,7 @@ class SearchQueryCompiler {
     constructor(
         public conversation: IConversation,
         compileOptions?: LanguageQueryCompileOptions,
+        public langSearchFilter?: LanguageSearchFilter,
     ) {
         this.compileOptions =
             compileOptions ?? createLanguageQueryCompileOptions();
@@ -412,6 +479,15 @@ class SearchQueryCompiler {
         if (filter.timeRange) {
             when ??= {};
             when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
+        }
+        if (this.langSearchFilter) {
+            if (
+                this.langSearchFilter.tags &&
+                this.langSearchFilter.tags.length > 0
+            ) {
+                when ??= {};
+                when.tags = this.langSearchFilter.tags;
+            }
         }
         return when;
     }
@@ -752,6 +828,11 @@ class SearchQueryCompiler {
             return;
         }
         this.addSearchTermToGroup(entityTerm.name, termGroup);
+        if (entityTerm.type && entityTerm.type.length > 0) {
+            for (const type of entityTerm.type) {
+                this.addSearchTermToGroup(type, termGroup);
+            }
+        }
         if (entityTerm.facets && entityTerm.facets.length > 0) {
             for (const facetTerm of entityTerm.facets) {
                 this.addSearchTermToGroup(facetTerm.facetName, termGroup);

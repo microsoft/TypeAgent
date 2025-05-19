@@ -8,6 +8,8 @@ import Database, * as sqlite from "better-sqlite3";
 import { SpelunkerContext } from "./spelunkerActionHandler.js";
 
 import { console_log } from "./logging.js";
+import { createRequire } from "node:module";
+import path from "node:path";
 
 const databaseSchema = `
 CREATE TABLE IF NOT EXISTS Files (
@@ -41,6 +43,19 @@ CREATE TABLE IF NOT EXISTS ChunkEmbeddings (
 );
 `;
 
+function getDbOptions() {
+    if (process?.versions?.electron !== undefined) {
+        return undefined;
+    }
+    const r = createRequire(import.meta.url);
+    const betterSqlitePath = r.resolve("better-sqlite3/package.json");
+    const nativeBinding = path.join(
+        betterSqlitePath,
+        "../build/Release-Node/better_sqlite3.node",
+    );
+    return { nativeBinding };
+}
+
 export function createDatabase(context: SpelunkerContext): void {
     if (!context.queryContext) {
         throw new Error(
@@ -57,7 +72,7 @@ export function createDatabase(context: SpelunkerContext): void {
     } else {
         console_log(`[Creating database at ${loc}]`);
     }
-    const db = new Database(loc);
+    const db = new Database(loc, getDbOptions());
     // Write-Ahead Logging, improving concurrency and performance
     db.pragma("journal_mode = WAL");
     // Fix permissions to be read/write only by the owner

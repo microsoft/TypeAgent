@@ -1,6 +1,6 @@
 # codeProcessor
 
-Code Processor is sample code that explores how to use TypeChat and schemas to work with source code. Areas of exploration include:
+Code Processor is sample code that explores how to use structured prompting and LLM and schemas to work with source code. Areas of exploration include:
 
 - Code analysis and review
 - LLM mediated debugging assistance

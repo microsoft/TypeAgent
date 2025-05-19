@@ -3,8 +3,9 @@
 
 import dotenv from "dotenv";
 import { runCodeChat } from "./codeChat/codeChat.js";
-import { runMemoryCommands } from "./memory/knowledgeProcessorMemory.js";
+import { runKnowledgeProcessorCommands } from "./knowledgeProc/knowledgeProcessorMemory.js";
 import { runCodeMemoryCommands } from "./codeChat/codeMemory.js";
+import { runKnowproMemory } from "./memory/knowproMemory.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -20,7 +21,10 @@ switch (areaName) {
         console.log("Unknown feature area name: " + areaName);
         break;
     case "memory":
-        await runMemoryCommands();
+        await runKnowproMemory();
+        break;
+    case "knowledgeProc":
+        await runKnowledgeProcessorCommands();
         break;
     case "code":
         await runCodeChat();

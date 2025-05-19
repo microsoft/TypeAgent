@@ -4,7 +4,6 @@
 /**
  * ===============================================
  * Podcast memory experiments with knowledge-processor package
- * For knowpro, see {@link ./knowproMemory.ts}
  * ===============================================
  */
 
@@ -12,9 +11,9 @@ import { conversation } from "knowledge-processor";
 import * as knowLib from "knowledge-processor";
 import {
     KnowledgeProcessorContext,
-    Models,
     ReservedConversationNames,
 } from "./knowledgeProcessorMemory.js";
+import { Models } from "../common.js";
 import { sqlite } from "memory-providers";
 import { elastic } from "memory-providers";
 import {
@@ -38,7 +37,7 @@ import {
     findConversationThread,
     getMessageIdsForThread,
     manageConversationAlias,
-} from "./common.js";
+} from "../common.js";
 import path from "path";
 import {
     asyncArray,
@@ -58,7 +57,7 @@ import * as cm from "conversation-memory";
 import {
     addToConversation,
     createIndexingEventHandler,
-} from "./knowproCommon.js";
+} from "../memory/knowproCommon.js";
 
 export async function createPodcastMemory(
     models: Models,
@@ -246,10 +245,10 @@ export function createPodcastCommands(
             podcastMessages.length,
         );
 
-        context.printer.writeLine("Building secondary indexes");
-        await kp.buildSecondaryIndexes(
-            kpPodcast,
-            kpPodcast.settings,
+        context.printer.writeLine("Building indexes");
+        kpPodcast.settings.semanticRefIndexSettings.autoExtractKnowledge =
+            false;
+        await kpPodcast.buildIndex(
             createIndexingEventHandler(
                 context.printer,
                 progress,

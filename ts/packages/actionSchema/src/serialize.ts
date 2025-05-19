@@ -14,6 +14,7 @@ export type ParsedActionSchemaJSON = {
     entry: {
         action?: string | undefined;
         activity?: string | undefined;
+        entity?: string | undefined;
     };
     types: Record<string, SchemaTypeDefinition>;
     actionNamespace?: boolean; // default to false
@@ -84,11 +85,18 @@ export function toJSONParsedActionSchema(
         definitions[activityEntryName] = entry.activity;
         collectTypes(definitions, entry.activity.type);
     }
+    let entityEntryName = undefined;
+    if (entry.entity) {
+        entityEntryName = entry.entity.name;
+        definitions[entityEntryName] = entry.entity;
+        collectTypes(definitions, entry.entity.type);
+    }
     const result: ParsedActionSchemaJSON = {
         version: parsedActionSchemaVersion,
         entry: {
             action: actionEntryName,
             activity: activityEntryName,
+            entity: entityEntryName,
         },
         types: definitions,
     };
@@ -158,6 +166,7 @@ export function fromJSONParsedActionSchema(
         activity: json.entry.activity
             ? json.types[json.entry.activity]
             : undefined,
+        entity: json.entry.entity ? json.types[json.entry.entity] : undefined,
     };
     const order = json.order ? new Map(Object.entries(json.order)) : undefined;
     // paramSpecs are already stored in each action definition.

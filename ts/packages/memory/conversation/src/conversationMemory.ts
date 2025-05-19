@@ -84,14 +84,16 @@ export class ConversationMessageMeta extends MessageMetadata {
 export class ConversationMessage extends Message<ConversationMessageMeta> {
     constructor(
         messageText: string | string[],
-        metadata: ConversationMessageMeta = new ConversationMessageMeta(),
-        tags: string[] = [],
+        metadata?: ConversationMessageMeta | undefined,
+        tags?: string[] | undefined,
         /**
          * Any pre-extracted knowledge for this message.
          */
         knowledge?: kpLib.KnowledgeResponse,
         timestamp?: string,
     ) {
+        metadata ??= new ConversationMessageMeta();
+        tags ??= [];
         timestamp = timestamp ?? new Date().toISOString();
         super(metadata, messageText, tags, timestamp, knowledge);
     }

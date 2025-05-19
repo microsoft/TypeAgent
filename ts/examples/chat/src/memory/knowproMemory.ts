@@ -2,70 +2,91 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import * as knowLib from "knowledge-processor";
 import {
+    addStandardHandlers,
     arg,
     argBool,
     argNum,
     askYesNo,
     CommandHandler,
     CommandMetadata,
+    displayClosestCommands,
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
-    ProgressBar,
+    runConsole,
     StopWatch,
 } from "interactive-app";
-import { KnowledgeProcessorContext } from "./knowledgeProcessorMemory.js";
-import { ChatModel } from "aiclient";
-import fs from "fs";
+import { ChatModel, openai } from "aiclient";
 import {
-    argDestFile,
-    argSourceFile,
     argToDate,
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
-} from "./common.js";
-import { dateTime, ensureDir, getFileName } from "typeagent";
-import path from "path";
+} from "../common.js";
+import { dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import * as cm from "conversation-memory";
-import * as im from "image-memory";
-import {
-    createIndexingEventHandler,
-    hasConversationResults,
-    matchFilterToConversation,
-    memoryNameToIndexPath,
-    sourcePathToMemoryIndexPath,
-} from "./knowproCommon.js";
+import { hasConversationResults } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
+import { createKnowproImageCommands } from "./knowproImage.js";
+import { createKnowproPodcastCommands } from "./knowproPodcast.js";
+import * as cm from "conversation-memory";
 
-export type KnowProContext = {
+export async function runKnowproMemory(): Promise<void> {
+    const storePath = "/data/testChat";
+    await ensureDir(storePath);
+
+    const commands: Record<string, CommandHandler> = {};
+    await createKnowproCommands(commands);
+    addStandardHandlers(commands);
+    await runConsole({
+        inputHandler,
+        handlers: commands,
+    });
+
+    async function inputHandler(
+        line: string,
+        io: InteractiveIo,
+    ): Promise<void> {
+        if (line.length > 0) {
+            const args = line.split(" ");
+            if (args.length > 0) {
+                const cmdName = args[0];
+                io.writer.writeLine(`Did you mean @${cmdName}?`);
+                io.writer.writeLine("Commands must be prefixed with @");
+                io.writer.writeLine();
+                if (displayClosestCommands(cmdName, commands, io)) {
+                    return;
+                }
+            }
+        }
+        io.writer.writeLine("Enter @help for a list of commands");
+    }
+}
+
+export type KnowproContext = {
     knowledgeModel: ChatModel;
-    knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
     printer: KnowProPrinter;
-    podcast?: cm.Podcast | undefined;
-    images?: im.ImageCollection | undefined;
     conversation?: kp.IConversation | undefined;
     queryTranslator: kp.SearchQueryTranslator;
     answerGenerator: kp.AnswerGenerator;
 };
 
+export function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    return openai.createJsonChatModel(chatModelSettings, ["knowproMemory"]);
+}
+
 export async function createKnowproCommands(
-    chatContext: KnowledgeProcessorContext,
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
-    const knowledgeModel = chatContext.models.chatModel;
-    const context: KnowProContext = {
+    const knowledgeModel = createKnowledgeModel();
+    const context: KnowproContext = {
         knowledgeModel,
-        knowledgeActions:
-            knowLib.conversation.createKnowledgeActionTranslator(
-                knowledgeModel,
-            ),
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         answerGenerator: new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(knowledgeModel),
@@ -74,36 +95,31 @@ export async function createKnowproCommands(
         printer: new KnowProPrinter(),
     };
     await ensureDir(context.basePath);
-    await createKnowproDataFrameCommands(context, commands);
+    /*
+     * CREATE COMMANDS FOR DIFFERENT MEMORY TYPES
+     */
+    await createKnowproPodcastCommands(context, commands);
+    await createKnowproImageCommands(context, commands);
     await createKnowproEmailCommands(context, commands);
     await createKnowproConversationCommands(context, commands);
-
-    commands.kpPodcastMessages = showMessages;
-    commands.kpPodcastImport = podcastImport;
-    commands.kpPodcastSave = podcastSave;
-    commands.kpPodcastLoad = podcastLoad;
+    await createKnowproDataFrameCommands(context, commands);
+    /*
+     * CREATE GENERAL MEMORY COMMANDS
+     */
     commands.kpSearchTerms = searchTerms;
-    commands.kpSearchV1 = searchV1;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
     commands.kpSearchRag = searchRag;
     commands.kpAnswerRag = answerRag;
     commands.kpEntities = entities;
     commands.kpTopics = topics;
-    commands.kpPodcastBuildIndex = podcastBuildIndex;
-    commands.kpPodcastBuildMessageIndex = podcastBuildMessageIndex;
-
-    commands.kpImages = showImages;
-    commands.kpImagesImport = imagesImport;
-    commands.kpImagesSave = imagesSave;
-    commands.kpImagesLoad = imagesLoad;
-    commands.kpImagesBuildIndex = imagesBuildIndex;
+    commands.kpMessages = showMessages;
 
     /*----------------
      * COMMANDS
+     * These are common to all memory/conversation types
      *---------------*/
 
-    ////////////////// Podcast Commands //////////////////
     function showMessagesDef(): CommandMetadata {
         return {
             description: "Show all messages",
@@ -112,7 +128,7 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpPodcastMessages.metadata = "Show all messages";
+    commands.kpMessages.metadata = "Show all messages";
     async function showMessages(args: string[]) {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
@@ -126,266 +142,6 @@ export async function createKnowproCommands(
         context.printer.writeMessages(messages);
     }
 
-    function podcastImportDef(): CommandMetadata {
-        return {
-            description: "Create knowPro index",
-            args: {
-                filePath: arg("File path to transcript file"),
-                startAt: arg("Start date and time"),
-            },
-            options: {
-                indexFilePath: arg("Output path for index file"),
-                maxMessages: argNum("Maximum messages to index"),
-                batchSize: argNum("Indexing batch size", 4),
-                length: argNum("Length of the podcast in minutes", 60),
-                buildIndex: argBool("Index the imported podcast", true),
-            },
-        };
-    }
-    commands.kpPodcastImport.metadata = podcastImportDef();
-    async function podcastImport(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, podcastImportDef());
-        if (!fs.existsSync(namedArgs.filePath)) {
-            context.printer.writeError(`${namedArgs.filePath} not found`);
-            return;
-        }
-        const startAt = argToDate(namedArgs.startAt)!;
-
-        context.podcast = await cm.importPodcast(
-            namedArgs.filePath,
-            getFileName(namedArgs.filePath),
-            startAt,
-            namedArgs.length,
-        );
-
-        context.conversation = context.podcast;
-        context.printer.conversation = context.conversation;
-        context.printer.writeLine("Imported podcast:");
-        context.printer.writePodcastInfo(context.podcast);
-        if (!namedArgs.buildIndex) {
-            return;
-        }
-        // Build index
-        await podcastBuildIndex(namedArgs);
-
-        // Save the index
-        namedArgs.filePath = sourcePathToMemoryIndexPath(
-            namedArgs.filePath,
-            namedArgs.indexFilePath,
-        );
-        await podcastSave(namedArgs);
-    }
-
-    function podcastSaveDef(): CommandMetadata {
-        return {
-            description: "Save Podcast",
-            args: {
-                filePath: argDestFile(),
-            },
-        };
-    }
-    commands.kpPodcastSave.metadata = podcastSaveDef();
-    async function podcastSave(args: string[] | NamedArgs): Promise<void> {
-        const namedArgs = parseNamedArguments(args, podcastSaveDef());
-        if (!context.podcast) {
-            context.printer.writeError("No podcast loaded");
-            return;
-        }
-        context.printer.writeLine("Saving index");
-        context.printer.writeLine(namedArgs.filePath);
-        const dirName = path.dirname(namedArgs.filePath);
-        await ensureDir(dirName);
-
-        const clock = new StopWatch();
-        clock.start();
-        await context.podcast.writeToFile(
-            dirName,
-            getFileName(namedArgs.filePath),
-        );
-        clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Write to file");
-    }
-
-    function podcastLoadDef(): CommandMetadata {
-        return {
-            description: "Load knowPro podcast",
-            options: {
-                filePath: argSourceFile(),
-                name: arg("Podcast name"),
-            },
-        };
-    }
-    commands.kpPodcastLoad.metadata = podcastLoadDef();
-    async function podcastLoad(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, podcastLoadDef());
-        let podcastFilePath = namedArgs.filePath;
-        podcastFilePath ??= namedArgs.name
-            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
-            : undefined;
-        if (!podcastFilePath) {
-            context.printer.writeError("No filepath or name provided");
-            return;
-        }
-        const clock = new StopWatch();
-        clock.start();
-        const podcast = await cm.Podcast.readFromFile(
-            path.dirname(podcastFilePath),
-            getFileName(podcastFilePath),
-        );
-        clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Read file");
-        if (!podcast) {
-            context.printer.writeLine("Podcast file not found");
-            return;
-        }
-        context.podcast = podcast;
-        context.conversation = context.podcast;
-        context.printer.conversation = context.conversation;
-        context.printer.writePodcastInfo(context.podcast);
-    }
-
-    ////////////////// Image Commands //////////////////
-    function showImagesDef(): CommandMetadata {
-        return {
-            description: "Show all images",
-            options: {
-                maxMessages: argNum("Maximum images to display"),
-            },
-        };
-    }
-    commands.kpImages.metadata = "Show all images";
-    async function showImages(args: string[]) {
-        const conversation = ensureConversationLoaded();
-        if (!conversation) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, showImagesDef());
-        const messages =
-            namedArgs.maxMessages > 0
-                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
-                : conversation.messages;
-        context.printer.writeMessages(messages);
-    }
-
-    function imageImportDef(): CommandMetadata {
-        return {
-            description: "Create knowPro image index",
-            args: {
-                filePath: arg("File path to an image file or folder"),
-            },
-            options: {
-                knowledge: argBool("Index knowledge", true),
-                related: argBool("Index related terms", true),
-                indexFilePath: arg("Output path for index file"),
-                maxMessages: argNum("Maximum images to index"),
-                cachePath: arg("Path to image knowledge response cache."),
-            },
-        };
-    }
-    commands.kpImagesImport.metadata = imageImportDef();
-    async function imagesImport(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, imageImportDef());
-        if (!fs.existsSync(namedArgs.filePath)) {
-            context.printer.writeError(`${namedArgs.filePath} not found`);
-            return;
-        }
-
-        let progress = new ProgressBar(context.printer, 165);
-        context.images = await im.importImages(
-            namedArgs.filePath,
-            namedArgs.cachePath,
-            true,
-            (text, _index, max) => {
-                progress.total = max;
-                progress.advance();
-                return progress.count < max;
-            },
-        );
-        context.conversation = context.images;
-        context.printer.conversation = context.conversation;
-        progress.complete();
-
-        context.printer.writeLine("Imported images:");
-        context.printer.writeImageCollectionInfo(context.images!);
-
-        if (!namedArgs.index) {
-            return;
-        }
-
-        // Build the image collection index
-        await imagesBuildIndex(namedArgs);
-
-        // Save the image collection index
-        namedArgs.filePath = sourcePathToMemoryIndexPath(
-            namedArgs.filePath,
-            namedArgs.indexFilePath,
-        );
-        await imagesSave(namedArgs);
-    }
-
-    function imagesSaveDef(): CommandMetadata {
-        return {
-            description: "Save Image Collection",
-            args: {
-                filePath: argDestFile(),
-            },
-        };
-    }
-
-    commands.kpImagesSave.metadata = imagesSaveDef();
-    async function imagesSave(args: string[] | NamedArgs): Promise<void> {
-        const namedArgs = parseNamedArguments(args, imagesSaveDef());
-        if (!context.images) {
-            context.printer.writeError("No image collection loaded");
-            return;
-        }
-        context.printer.writeLine("Saving index");
-        context.printer.writeLine(namedArgs.filePath);
-        if (context.images) {
-            const dirName = path.dirname(namedArgs.filePath);
-            await ensureDir(dirName);
-            await context.images.writeToFile(
-                dirName,
-                getFileName(namedArgs.filePath),
-            );
-        }
-    }
-
-    function imagesLoadDef(): CommandMetadata {
-        return {
-            description: "Load knowPro image collection",
-            options: {
-                filePath: argSourceFile(),
-                name: arg("Image Collection Name"),
-            },
-        };
-    }
-
-    commands.kpImagesLoad.metadata = imagesLoadDef();
-    async function imagesLoad(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, imagesLoadDef());
-        let imagesFilePath = namedArgs.filePath;
-        imagesFilePath ??= namedArgs.name
-            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
-            : undefined;
-        if (!imagesFilePath) {
-            context.printer.writeError("No filepath or name provided");
-            return;
-        }
-        context.images = await im.ImageCollection.readFromFile(
-            path.dirname(imagesFilePath),
-            getFileName(imagesFilePath),
-        );
-        if (!context.images) {
-            context.printer.writeLine("ImageCollection not found");
-            return;
-        }
-        context.conversation = context.images;
-        context.printer.conversation = context.conversation;
-        context.printer.writeImageCollectionInfo(context.images);
-    }
-
-    ////////////////// Miscellaneous Commands //////////////////
     function searchTermsDef(
         description?: string,
         kType?: kp.KnowledgeType,
@@ -403,7 +159,7 @@ export async function createKnowproCommands(
                 endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
-                distinct: argBool("Show distinct results", false),
+                distinct: argBool("Show distinct results", true),
             },
         };
         if (kType === undefined) {
@@ -485,49 +241,6 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpSearch.metadata = searchDef();
-    async function searchV1(args: string[]): Promise<void> {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, searchDef());
-        const query = namedArgs.query;
-        const result = await context.knowledgeActions.translateSearchTermsV2(
-            query,
-            kp.getTimeRangePromptSectionForConversation(context.conversation!),
-        );
-        if (!result.success) {
-            context.printer.writeError(result.message);
-            return;
-        }
-        let searchAction = result.data;
-        if (searchAction.actionName !== "getAnswer") {
-            return;
-        }
-        context.printer.writeSearchFilter(searchAction);
-        if (searchAction.parameters.filters.length > 0) {
-            const filter = searchAction.parameters.filters[0];
-            const searchResults = await matchFilterToConversation(
-                context.conversation!,
-                filter,
-                namedArgs.ktype,
-                {
-                    exactMatch: namedArgs.exact,
-                },
-            );
-            if (searchResults) {
-                context.printer.writeKnowledgeSearchResults(
-                    context.conversation!,
-                    searchResults,
-                    namedArgs.maxToDisplay,
-                    namedArgs.distinct,
-                );
-            } else {
-                context.printer.writeLine("No matches");
-            }
-        }
-    }
-
     function searchDefNew(): CommandMetadata {
         const def = searchDef();
         def.description = "Search using natural language";
@@ -544,6 +257,8 @@ export async function createKnowproCommands(
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
+        def.options.maxToDisplay = argNum("Maximum to display", 25);
+        def.options.thread = arg("Thread description");
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -656,6 +371,7 @@ export async function createKnowproCommands(
                 ? await context.conversation.searchWithLanguage(
                       searchText,
                       options,
+                      undefined,
                       debugContext,
                   )
                 : await kp.searchConversationWithLanguage(
@@ -663,6 +379,7 @@ export async function createKnowproCommands(
                       searchText,
                       context.queryTranslator,
                       options,
+                      undefined,
                       debugContext,
                   );
         if (!searchResults.success) {
@@ -678,10 +395,6 @@ export async function createKnowproCommands(
         if (!hasConversationResults(searchResults.data)) {
             context.printer.writeLine();
             context.printer.writeLine("No matches");
-            context.printer.writeInColor(
-                chalk.gray,
-                `--fallback ${namedArgs.fallback}`,
-            );
             return;
         }
         for (let i = 0; i < searchResults.data.length; ++i) {
@@ -724,6 +437,10 @@ export async function createKnowproCommands(
             selectExpr.when ??= {};
             selectExpr.when.knowledgeType = namedArgs.ktype;
         }
+        if (namedArgs.thread) {
+            selectExpr.when ??= {};
+            selectExpr.when.threadDescription = namedArgs.thread;
+        }
         context.printer.writeSelectExpr(selectExpr);
         const searchResults = await kp.searchConversation(
             context.conversation!,
@@ -762,6 +479,7 @@ export async function createKnowproCommands(
             options: {
                 maxToDisplay: argNum("Maximum matches to display", 25),
                 minScore: argNum("Min threshold score", 0.7),
+                charBudget: argNum("Character budget", 1024 * 16),
             },
         };
     }
@@ -776,6 +494,7 @@ export async function createKnowproCommands(
             namedArgs.query,
             {
                 thresholdScore: namedArgs.minScore,
+                maxCharsInBudget: namedArgs.charBudget,
             },
         );
         if (matches !== undefined) {
@@ -808,6 +527,7 @@ export async function createKnowproCommands(
             namedArgs.query,
             {
                 thresholdScore: namedArgs.minScore,
+                maxCharsInBudget: namedArgs.charBudget,
             },
         );
         if (searchResult !== undefined) {
@@ -867,7 +587,7 @@ export async function createKnowproCommands(
             "topic",
         );
     }
-    commands.topics.metadata = topicsDef();
+    commands.kpTopics.metadata = topicsDef();
     async function topics(args: string[]): Promise<void> {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
@@ -886,148 +606,6 @@ export async function createKnowproCommands(
                 context.printer.writeSemanticRefs(entities);
             }
         }
-    }
-
-    function podcastBuildIndexDef(): CommandMetadata {
-        return {
-            description: "Build index",
-            options: {
-                maxMessages: argNum("Maximum messages to index"),
-                batchSize: argNum("Indexing batch size", 8),
-            },
-        };
-    }
-    commands.kpPodcastBuildIndex.metadata = podcastBuildIndexDef();
-    async function podcastBuildIndex(
-        args: string[] | NamedArgs,
-    ): Promise<void> {
-        if (!context.podcast) {
-            context.printer.writeError("No podcast loaded");
-            return;
-        }
-        const messageCount = context.podcast.messages.length;
-        if (messageCount === 0) {
-            return;
-        }
-
-        const namedArgs = parseNamedArguments(args, podcastBuildIndexDef());
-        // Build index
-        context.printer.writeLine();
-        const maxMessages = namedArgs.maxMessages ?? messageCount;
-        let originalMessages = context.podcast.messages;
-        try {
-            if (maxMessages < messageCount) {
-                context.podcast.messages =
-                    new kp.MessageCollection<cm.PodcastMessage>(
-                        context.podcast.messages.getSlice(0, maxMessages),
-                    );
-            }
-            context.printer.writeLine(`Building Index`);
-            let progress = new ProgressBar(context.printer, maxMessages);
-            const eventHandler = createIndexingEventHandler(
-                context.printer,
-                progress,
-                maxMessages,
-            );
-            // Build full index?
-            const clock = new StopWatch();
-            clock.start();
-
-            context.podcast.settings.semanticRefIndexSettings.batchSize =
-                namedArgs.batchSize;
-            const indexResult = await context.podcast.buildIndex(eventHandler);
-
-            clock.stop();
-            progress.complete();
-            context.printer.writeTiming(chalk.gray, clock);
-            context.printer.writeIndexingResults(indexResult);
-        } finally {
-            context.podcast.messages = originalMessages;
-        }
-    }
-
-    function podcastBuildMessageIndexDef(): CommandMetadata {
-        return {
-            description: "Build fuzzy message index for the podcast",
-            options: {
-                maxMessages: argNum("Maximum messages to index"),
-                batchSize: argNum("Batch size", 4),
-            },
-        };
-    }
-    commands.kpPodcastBuildMessageIndex.metadata =
-        podcastBuildMessageIndexDef();
-    async function podcastBuildMessageIndex(args: string[]): Promise<void> {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(
-            args,
-            podcastBuildMessageIndexDef(),
-        );
-        context.printer.writeLine(`Indexing messages`);
-
-        const podcast = context.podcast!;
-        const settings: kp.MessageTextIndexSettings = {
-            ...context.podcast!.settings.messageTextIndexSettings,
-        };
-        settings.embeddingIndexSettings.batchSize = namedArgs.batchSize;
-        let progress = new ProgressBar(context.printer, namedArgs.maxMessages);
-        podcast.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
-            settings,
-        );
-        const result = await kp.buildMessageIndex(
-            podcast,
-            settings,
-            createIndexingEventHandler(
-                context.printer,
-                progress,
-                namedArgs.maxMessages,
-            ),
-        );
-        progress.complete();
-        context.printer.writeListIndexingResult(result);
-    }
-
-    //-------------------------
-    // Index Image Building
-    //--------------------------
-    function imageCollectionBuildIndexDef(): CommandMetadata {
-        return {
-            description: "Build image collection index",
-            options: {
-                knowledge: argBool("Index knowledge", false),
-                related: argBool("Index related terms", false),
-                maxMessages: argNum("Maximum messages to index"),
-            },
-        };
-    }
-
-    commands.kpImagesBuildIndex.metadata = imageCollectionBuildIndexDef();
-    async function imagesBuildIndex(args: string[] | NamedArgs): Promise<void> {
-        if (!context.images) {
-            context.printer.writeError("No image collection loaded");
-            return;
-        }
-        const messageCount = context.images.messages.length;
-        if (messageCount === 0) {
-            return;
-        }
-
-        const namedArgs = parseNamedArguments(
-            args,
-            imageCollectionBuildIndexDef(),
-        );
-        // Build index
-        context.printer.writeLine();
-        context.printer.writeLine("Building index");
-        const maxMessages = namedArgs.maxMessages ?? messageCount;
-        let progress = new ProgressBar(context.printer, maxMessages);
-        const indexResult = await context.images?.buildIndex(
-            createIndexingEventHandler(context.printer, progress, maxMessages),
-        );
-        progress.complete();
-        context.printer.writeIndexingResults(indexResult);
     }
 
     /*---------- 
@@ -1063,9 +641,11 @@ export async function createKnowproCommands(
         let filter: kp.WhenFilter = {
             knowledgeType: namedArgs.ktype,
         };
-        const conv: kp.IConversation | undefined =
-            context.podcast ?? context.images ?? context.conversation;
-        const dateRange = kp.getTimeRangeForConversation(conv!);
+        const conversation: kp.IConversation | undefined = context.conversation;
+        if (!conversation) {
+            throw new Error("No conversation loaded");
+        }
+        const dateRange = kp.getTimeRangeForConversation(conversation!);
         if (dateRange) {
             let startDate: Date | undefined;
             let endDate: Date | undefined;
@@ -1104,6 +684,9 @@ export async function createKnowproCommands(
         options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
         options.maxCharsInBudget = namedArgs.charBudget;
+        if (context.conversation!.messages.length > 500) {
+            options.maxKnowledgeMatches = options.maxKnowledgeMatches! * 2;
+        }
         return options;
     }
 

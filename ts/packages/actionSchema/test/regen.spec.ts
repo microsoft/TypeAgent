@@ -14,7 +14,7 @@ import { generateSchemaTypeDefinition } from "../src/generator.js";
 
 import prettier from "prettier";
 import { SchemaConfig } from "../src/schemaConfig.js";
-import { ParsedActionSchema } from "../src/type.js";
+import { ParsedActionSchema, SchemaTypeDefinition } from "../src/type.js";
 
 const defaultAgentProviderPath = fileURLToPath(
     new URL("../../../defaultAgentProvider", import.meta.url),
@@ -110,15 +110,15 @@ function generateParsedActionSchema(
     parsedActionSchema: ParsedActionSchema,
     exact?: boolean,
 ) {
-    const entry = [];
-    if (parsedActionSchema.entry.action) {
-        entry.push(parsedActionSchema.entry.action);
+    const entries: SchemaTypeDefinition[] = [];
+    for (const entry of Object.values(parsedActionSchema.entry)) {
+        if (entry !== undefined) {
+            entries.push(entry);
+        }
     }
-    if (parsedActionSchema.entry.activity) {
-        entry.push(parsedActionSchema.entry.activity);
-    }
+
     return generateSchemaTypeDefinition(
-        entry,
+        entries,
         exact
             ? {
                   exact: true,

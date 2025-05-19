@@ -2,9 +2,9 @@
 
 ## Overview
 
-TypeAgent CLI is a command line entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using [TypeChat](https://github.com/microsoft/typechat).
+TypeAgent CLI is a command line entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using structured prompting and LLM.
 
-TypeAgent CLI host multiple subcommands, including the [interactive mode](#interactive-mode), a **single personal assistant** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent Shell](../shell/) is the UI version of the interactive mode, and both shared the core [Dispatcher](../dispatcher/) component. Please read Dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
+TypeAgent CLI host multiple subcommands, including the [interactive mode](#interactive-mode), a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent Shell](../shell/) is the UI version of the interactive mode, and both shared the core [dispatcher](../dispatcher/) component. Please read dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
 
 TypeAgent CLI includes addition commands to help with development.
 
@@ -54,10 +54,10 @@ The CLI hosts multiple subcommands. The main one is **_interactive_**
 ### Interactive Mode
 
 The **_interactive_** CLI subcommand is a front end to the TypeAgent Dispatcher that takes user request and commands on the console
-and send to to the [TypeAgent Dispatcher](../dispatcher/). The dispatcher processes user requests and asks LLM to translate
+and send to to the [dispatcher](../dispatcher/). The dispatcher processes user requests and asks LLM to translate
 it into an action. If the user accepts the translation, LLM is asked to **explain** it, i.e. how it transformed the user request
 into the action, and constructions - parsing grammar/rule - is created and cached so that it can perform the user request
-translation locally bypassing the LLM. See [TypeAgent Dispatcher's README](../dispatcher/README.md) for a list of commands.
+translation locally bypassing the LLM. See [dispatcher's README](../dispatcher/README.md) for a list of commands.
 
 For example:
 
@@ -162,7 +162,7 @@ Examples:
    Total Elapsed Time: 19.070s
    ```
 
-2. Adding a single request to an existing test data file. Note that translator flags is not necessary and willb infered from the existing test file
+2. Adding a single request to an existing test data file. Note that translator flags is not necessary and will be inferred from the existing test file
 
    ```bash
    $ agent-cli data add -o blah.json "play some Beethoven"

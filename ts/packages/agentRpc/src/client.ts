@@ -30,6 +30,7 @@ import {
 import { createRpc } from "./rpc.js";
 import { ChannelProvider } from "./common.js";
 import { uint8ArrayToBase64 } from "common-utils";
+import { AgentInterfaceFunctionName } from "./server.js";
 
 type ShimContext =
     | {
@@ -78,23 +79,9 @@ function createContextMap<T>() {
 export async function createAgentRpcClient(
     name: string,
     channelProvider: ChannelProvider,
+    agentInterface: AgentInterfaceFunctionName[],
 ) {
     const channel = channelProvider.createChannel(`agent:${name}`);
-    const agentInterface = await new Promise<(keyof AgentInvokeFunctions)[]>(
-        (resolve, reject) => {
-            channel.once("message", (message: any) => {
-                if (message.type === "initialized") {
-                    resolve(message.agentInterface);
-                } else {
-                    reject(
-                        new Error(
-                            `Unexpected message: ${JSON.stringify(message)}`,
-                        ),
-                    );
-                }
-            });
-        },
-    );
     const contextMap = createContextMap<SessionContext<ShimContext>>();
     function getContextParam(
         context: SessionContext<ShimContext>,
@@ -163,13 +150,18 @@ export async function createAgentRpcClient(
             contextId: number;
             name: string;
             manifest: AppAgentManifest;
+            agentInterface: AgentInterfaceFunctionName[];
         }) => {
             const context = contextMap.get(param.contextId);
             try {
                 await context.addDynamicAgent(
                     param.name,
                     param.manifest,
-                    await createAgentRpcClient(param.name, channelProvider),
+                    await createAgentRpcClient(
+                        param.name,
+                        channelProvider,
+                        param.agentInterface,
+                    ),
                 );
             } catch (e: any) {
                 // Clean up the channel if adding the agent fails
@@ -276,6 +268,19 @@ export async function createAgentRpcClient(
             const context = contextMap.get(param.contextId);
             const storage = getStorage(param, context);
             return (await storage.getTokenCachePersistence()).delete();
+        },
+        popupQuestion: async (param: {
+            contextId: number;
+            message: string;
+            choices?: string[] | undefined;
+            defaultId?: number | undefined;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            return context.popupQuestion(
+                param.message,
+                param.choices,
+                param.defaultId,
+            );
         },
     };
 
@@ -429,6 +434,17 @@ export async function createAgentRpcClient(
                     params,
                 }),
             );
+        },
+        resolveEntity(
+            type: string,
+            name: string,
+            context: SessionContext<ShimContext>,
+        ) {
+            return rpc.invoke("resolveEntity", {
+                ...getContextParam(context),
+                type,
+                name,
+            });
         },
         getTemplateSchema(
             templateName,

@@ -31,7 +31,7 @@
     "common-utils": "workspace:*",
     "conversation-memory": "workspace:*",
     "dotenv": "^16.3.1",
-    "exifreader": "4.23.5",
+    "exifreader": "^4.30.1",
     "image-memory": "workspace:*",
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
