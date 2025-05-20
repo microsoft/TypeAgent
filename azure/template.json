@@ -1,794 +1,355 @@
 {
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-    "contentVersion": "1.0.0.0",
-    "parameters": {
-        "accounts_agentmaps_name": {
-            "defaultValue": "typeagentmaps",
-            "type": "String"
-        },
-        "databaseAccounts_typeagentlogdb_name": {
-            "defaultValue": "typeagentlogdb",
-            "type": "String"
-        },
-        "typeagent_speech": {
-            "defaultValue": "typeagent_speech",
-            "type": "String"
-        },
-        "openai_eastus_name": {
-            "defaultValue": "typeagent-openai-eastus",
-            "type": "String"
-        },
-        "storageAccounts_demopersistence_name": {
-            "defaultValue": "demopersistence",
-            "type": "String"
-        },
-        "search_name": {
-            "defaultValue": "typeagent_search",
-            "type": "String"
-        },
-        "vaults_aisystems_name": {
-            "defaultValue": "aisystems",
-            "type": "String"
-        }
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "languageVersion": "2.0",
+  "parameters": {
+    "principalId": {
+      "defaultValue": "[deployer().objectId]",
+      "type": "String"
     },
-    "variables": {},
-    "resources": [
-        {
-            "type": "Microsoft.Maps/accounts",
-            "apiVersion": "2024-07-01-preview",
-            "name": "[parameters('accounts_agentmaps_name')]",
-            "location": "eastus",
-            "sku": {
+    "region": {
+      "defaultValue": "[deployment().location]",
+      "type": "String"
+    },
+    "name": {
+      "defaultValue": "typeagent",
+      "type": "String"
+    },
+    "group_name": {
+      "defaultValue": "[concat(parameters('name'), '-', parameters('region'))]",
+      "type": "String"
+    },
+    "maps_region": {
+      "defaultValue": "[parameters('region')]",
+      "type": "String"
+    },
+    "maps_name": {
+      "defaultValue": "[concat(parameters('name'), '-', parameters('maps_region'), '-maps')]",
+      "type": "String"
+    },
+    "speech_region": {
+      "defaultValue": "[parameters('region')]",
+      "type": "String"
+    },
+    "speech_name": {
+      "defaultValue": "[concat(parameters('name'), '-', parameters('speech_region'), '-speech')]",
+      "type": "String"
+    },
+    "openai_region": {
+      "defaultValue": "[parameters('region')]",
+      "type": "String"
+    },
+    "openai_name": {
+      "defaultValue": "[concat(parameters('name'), '-', parameters('openai_region'), '-openai')]",
+      "type": "String"
+    },
+    "search_name": {
+      "defaultValue": "[concat(parameters('name'),  '-search')]",
+      "type": "String"
+    },
+    "vaults_region": {
+      "defaultValue": "[parameters('region')]",
+      "type": "String"
+    },
+    "vaults_name": {
+      "defaultValue": "[concat(parameters('name'), '-', parameters('vaults_region'), '-kv')]",
+      "type": "String"
+    }
+  },
+  "resources": {
+    "group": {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('group_name')]",
+      "location": "[parameters('region')]",
+      "properties": {}
+    },
+    "groupDeployment": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "typeagent-deployment",
+      "resourceGroup": "[parameters('group_name')]",
+      "dependsOn": ["group"],
+
+      "properties": {
+        "parameters": {
+          "maps_region": { "value": "[parameters('maps_region')]" },
+          "maps_name": { "value": "[parameters('maps_name')]" },
+          "speech_region": { "value": "[parameters('speech_region')]" },
+          "speech_name": { "value": "[parameters('speech_name')]" },
+          "openai_region": { "value": "[parameters('openai_region')]" },
+          "openai_name": { "value": "[parameters('openai_name')]" },
+          "search_name": { "value": "[parameters('search_name')]" },
+          "vaults_region": { "value": "[parameters('vaults_region')]" },
+          "vaults_name": { "value": "[parameters('vaults_name')]" },
+          "principalId": { "value": "[parameters('principalId')]" }
+        },
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "maps_region": { "type": "String" },
+            "maps_name": { "type": "String" },
+            "speech_region": { "type": "String" },
+            "speech_name": { "type": "String" },
+            "openai_region": { "type": "String" },
+            "openai_name": { "type": "String" },
+            "search_name": { "type": "String" },
+            "vaults_region": { "type": "String" },
+            "vaults_name": { "type": "String" },
+            "principalId": { "type": "String" }
+          },
+          "variables": {
+            "keyVaultSecretUserRole": "4633458b-17de-408a-b874-0445c86b69e6",
+            "cognitiveServicesOpenAIUserRole": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+            "cognitiveServicesSpeechUserRole": "f2dc8367-1007-4938-bd23-fe263f013447",
+            "azureMapsDataReaderRole": "423170ca-a8f6-4b0f-8487-9e4eb8f49bfa",
+            "openaiSubdomainName": "[concat(parameters('openai_name'), '-', uniqueString(subscription().id))]",
+            "openaiEndpoint": "[concat('https://', variables('openaiSubdomainName'), '.openai.azure.com/')]"
+          },
+          "resources": {
+            "maps": {
+              "type": "Microsoft.Maps/accounts",
+              "apiVersion": "2024-07-01-preview",
+              "name": "[parameters('maps_name')]",
+              "location": "[parameters('maps_region')]",
+              "sku": {
                 "name": "G2",
                 "tier": "Standard"
-            },
-            "kind": "Gen2",
-            "identity": {
+              },
+              "kind": "Gen2",
+              "identity": {
                 "type": "SystemAssigned"
-            },
-            "properties": {
+              },
+              "properties": {
                 "disableLocalAuth": true,
                 "cors": {
-                    "corsRules": [
-                        {
-                            "allowedOrigins": []
-                        }
-                    ]
+                  "corsRules": [
+                    {
+                      "allowedOrigins": []
+                    }
+                  ]
                 },
                 "locations": []
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[parameters('databaseAccounts_typeagentlogdb_name')]",
-            "location": "West US",
-            "tags": {
-                "defaultExperience": "Azure Cosmos DB for MongoDB API",
-                "hidden-cosmos-mmspecial": ""
+              }
             },
-            "kind": "MongoDB",
-            "identity": {
-                "type": "None"
+            "map_role": {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(concat(parameters('maps_name'), 'Azure Maps Data Reader'))]",
+              "scope": "[resourceId('Microsoft.Maps/accounts', parameters('maps_name'))]",
+              "dependsOn": ["vault"],
+              "properties": {
+                "roleDefinitionId": "[concat('/providers/Microsoft.Authorization/roleDefinitions/', variables('azureMapsDataReaderRole'))]",
+                "principalId": "[parameters('principalId')]"
+              }
             },
-            "properties": {
-                "publicNetworkAccess": "Enabled",
-                "enableAutomaticFailover": false,
-                "enableMultipleWriteLocations": false,
-                "isVirtualNetworkFilterEnabled": false,
-                "virtualNetworkRules": [],
-                "disableKeyBasedMetadataWriteAccess": false,
-                "enableFreeTier": false,
-                "enableAnalyticalStorage": false,
-                "analyticalStorageConfiguration": {
-                    "schemaType": "FullFidelity"
-                },
-                "databaseAccountOfferType": "Standard",
-                "capacityMode": "Provisioned",
-                "defaultIdentity": "FirstPartyIdentity",
-                "networkAclBypass": "None",
-                "disableLocalAuth": false,
-                "enablePartitionMerge": false,
-                "enablePerRegionPerPartitionAutoscale": false,
-                "enableBurstCapacity": false,
-                "enablePriorityBasedExecution": true,
-                "defaultPriorityLevel": "High",
-                "minimalTlsVersion": "Tls12",
-                "consistencyPolicy": {
-                    "defaultConsistencyLevel": "Session",
-                    "maxIntervalInSeconds": 5,
-                    "maxStalenessPrefix": 100
-                },
-                "apiProperties": {
-                    "serverVersion": "7.0"
-                },
-                "locations": [
-                    {
-                        "locationName": "West US",
-                        "failoverPriority": 0,
-                        "isZoneRedundant": false
-                    }
-                ],
-                "cors": [],
-                "capabilities": [
-                    {
-                        "name": "EnableMongo"
-                    }
-                ],
-                "ipRules": [],
-                "backupPolicy": {
-                    "type": "Periodic",
-                    "periodicModeProperties": {
-                        "backupIntervalInMinutes": 240,
-                        "backupRetentionIntervalInHours": 8,
-                        "backupStorageRedundancy": "Geo"
-                    }
-                },
-                "networkAclBypassResourceIds": [],
-                "diagnosticLogSettings": {
-                    "enableFullTextQuery": "None"
-                }
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts/mongodbDatabases",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('databaseAccounts_typeagentlogdb_name'), '/telemetrydb')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-            ],
-            "properties": {
-                "resource": {
-                    "id": "telemetrydb"
-                }
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('databaseAccounts_typeagentlogdb_name'), '/00000000-0000-0000-0000-000000000001')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-            ],
-            "properties": {
-                "roleName": "Cosmos DB Built-in Data Reader",
-                "type": "BuiltInRole",
-                "assignableScopes": [
-                    "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-                ],
-                "permissions": [
-                    {
-                        "dataActions": [
-                            "Microsoft.DocumentDB/databaseAccounts/readMetadata",
-                            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/executeQuery",
-                            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/readChangeFeed",
-                            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/read"
-                        ],
-                        "notDataActions": []
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts/sqlRoleDefinitions",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('databaseAccounts_typeagentlogdb_name'), '/00000000-0000-0000-0000-000000000002')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-            ],
-            "properties": {
-                "roleName": "Cosmos DB Built-in Data Contributor",
-                "type": "BuiltInRole",
-                "assignableScopes": [
-                    "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-                ],
-                "permissions": [
-                    {
-                        "dataActions": [
-                            "Microsoft.DocumentDB/databaseAccounts/readMetadata",
-                            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/*",
-                            "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/items/*"
-                        ],
-                        "notDataActions": []
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts/tableRoleDefinitions",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('databaseAccounts_typeagentlogdb_name'), '/00000000-0000-0000-0000-000000000001')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-            ],
-            "properties": {
-                "roleName": "Cosmos DB Built-in Data Reader",
-                "type": "BuiltInRole",
-                "assignableScopes": [
-                    "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-                ],
-                "permissions": [
-                    {
-                        "dataActions": [
-                            "Microsoft.DocumentDB/databaseAccounts/readMetadata",
-                            "Microsoft.DocumentDB/databaseAccounts/tables/containers/executeQuery",
-                            "Microsoft.DocumentDB/databaseAccounts/tables/containers/readChangeFeed",
-                            "Microsoft.DocumentDB/databaseAccounts/tables/containers/entities/read"
-                        ],
-                        "notDataActions": []
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts/tableRoleDefinitions",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('databaseAccounts_typeagentlogdb_name'), '/00000000-0000-0000-0000-000000000002')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-            ],
-            "properties": {
-                "roleName": "Cosmos DB Built-in Data Contributor",
-                "type": "BuiltInRole",
-                "assignableScopes": [
-                    "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-                ],
-                "permissions": [
-                    {
-                        "dataActions": [
-                            "Microsoft.DocumentDB/databaseAccounts/readMetadata",
-                            "Microsoft.DocumentDB/databaseAccounts/tables/*",
-                            "Microsoft.DocumentDB/databaseAccounts/tables/containers/*",
-                            "Microsoft.DocumentDB/databaseAccounts/tables/containers/entities/*"
-                        ],
-                        "notDataActions": []
-                    }
-                ]
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('databaseAccounts_typeagentlogdb_name'), '/telemetrydb/dispatcherlogs')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/mongodbDatabases', parameters('databaseAccounts_typeagentlogdb_name'), 'telemetrydb')]",
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-            ],
-            "properties": {
-                "resource": {
-                    "id": "dispatcherlogs",
-                    "indexes": [
-                        {
-                            "key": {
-                                "keys": [
-                                    "_id"
-                                ]
-                            }
-                        },
-                        {
-                            "key": {
-                                "keys": [
-                                    "timestamp"
-                                ]
-                            }
-                        },
-                        {
-                            "key": {
-                                "keys": [
-                                    "event.userId"
-                                ]
-                            }
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            "type": "Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections/throughputSettings",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('databaseAccounts_typeagentlogdb_name'), '/telemetrydb/dispatcherlogs/default')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/mongodbDatabases/collections', parameters('databaseAccounts_typeagentlogdb_name'), 'telemetrydb', 'dispatcherlogs')]",
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts/mongodbDatabases', parameters('databaseAccounts_typeagentlogdb_name'), 'telemetrydb')]",
-                "[resourceId('Microsoft.DocumentDB/databaseAccounts', parameters('databaseAccounts_typeagentlogdb_name'))]"
-            ],
-            "properties": {
-                "resource": {
-                    "throughput": 3200
-                }
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts",
-            "apiVersion": "2024-10-01",
-            "name": "[parameters('typeagent_speech')]",
-            "location": "westus",
-            "tags": {},
-            "sku": {
+            "speech": {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[parameters('speech_name')]",
+              "location": "[parameters('speech_region')]",
+              "tags": {},
+              "sku": {
                 "name": "S0"
-            },
-            "kind": "SpeechServices",
-            "identity": {
+              },
+              "kind": "SpeechServices",
+              "identity": {
                 "type": "None"
-            },
-            "properties": {
-                "customSubDomainName": "typeagent",
+              },
+              "properties": {
                 "networkAcls": {
-                    "defaultAction": "Allow",
-                    "virtualNetworkRules": [],
-                    "ipRules": []
+                  "defaultAction": "Allow",
+                  "virtualNetworkRules": [],
+                  "ipRules": []
                 },
                 "publicNetworkAccess": "Enabled",
                 "disableLocalAuth": true
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts",
-            "apiVersion": "2024-10-01",
-            "name": "[parameters('openai_eastus_name')]",
-            "location": "eastus",
-            "sku": {
-                "name": "S0"
+              }
             },
-            "kind": "OpenAI",
-            "properties": {
-                "customSubDomainName": "[parameters('openai_eastus_name')]",
+            "speech_role": {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(concat(parameters('speech_name'), 'Cognitive Services Speech User'))]",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('speech_name'))]",
+              "dependsOn": ["vault"],
+              "properties": {
+                "roleDefinitionId": "[concat('/providers/Microsoft.Authorization/roleDefinitions/', variables('cognitiveServicesSpeechUserRole'))]",
+                "principalId": "[parameters('principalId')]"
+              }
+            },
+            "openai": {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[parameters('openai_name')]",
+              "location": "[parameters('openai_region')]",
+              "sku": {
+                "name": "S0"
+              },
+              "kind": "OpenAI",
+              "properties": {
+                "customSubDomainName": "[variables('openaiSubdomainName')]",
                 "networkAcls": {
-                    "defaultAction": "Allow",
-                    "virtualNetworkRules": [],
-                    "ipRules": []
+                  "defaultAction": "Allow",
+                  "virtualNetworkRules": [],
+                  "ipRules": []
                 },
                 "publicNetworkAccess": "Enabled",
                 "disableLocalAuth": true
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/ada-002')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
+              }
+            },
+            "openai_role": {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(concat(parameters('openai_name'), 'Cognitive Services OpenAI User'))]",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_name'))]",
+              "dependsOn": ["vault"],
+              "properties": {
+                "roleDefinitionId": "[concat('/providers/Microsoft.Authorization/roleDefinitions/', variables('cognitiveServicesOpenAIUserRole'))]",
+                "principalId": "[parameters('principalId')]"
+              }
+            },
+            "openai_ada_002": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[concat(parameters('openai_name'), '/ada-002')]",
+              "dependsOn": ["openai"],
+              "sku": {
                 "name": "Standard",
                 "capacity": 120
-            },
-            "properties": {
+              },
+              "properties": {
                 "model": {
-                    "format": "OpenAI",
-                    "name": "text-embedding-ada-002",
-                    "version": "2"
+                  "format": "OpenAI",
+                  "name": "text-embedding-ada-002",
+                  "version": "2"
                 },
                 "versionUpgradeOption": "OnceCurrentVersionExpired",
                 "currentCapacity": 120,
                 "raiPolicyName": "Microsoft.DefaultV2"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/dall-e-3')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
+              }
+            },
+            "openai_dalle": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[concat(parameters('openai_name'), '/dall-e-3')]",
+              "dependsOn": ["openai", "openai_ada_002"],
+              "sku": {
                 "name": "Standard",
                 "capacity": 1
-            },
-            "properties": {
+              },
+              "properties": {
                 "model": {
-                    "format": "OpenAI",
-                    "name": "dall-e-3",
-                    "version": "3.0"
+                  "format": "OpenAI",
+                  "name": "dall-e-3",
+                  "version": "3.0"
                 },
                 "versionUpgradeOption": "OnceCurrentVersionExpired",
                 "currentCapacity": 1,
                 "raiPolicyName": "Microsoft.Default"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/embedding-large')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
-                "name": "Standard",
-                "capacity": 350
+              }
             },
-            "properties": {
-                "model": {
-                    "format": "OpenAI",
-                    "name": "text-embedding-3-large",
-                    "version": "1"
-                },
-                "versionUpgradeOption": "OnceCurrentVersionExpired",
-                "currentCapacity": 350,
-                "raiPolicyName": "Microsoft.DefaultV2"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/embedding-small')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
-                "name": "Standard",
-                "capacity": 350
-            },
-            "properties": {
-                "model": {
-                    "format": "OpenAI",
-                    "name": "text-embedding-3-small",
-                    "version": "1"
-                },
-                "versionUpgradeOption": "OnceCurrentVersionExpired",
-                "currentCapacity": 350,
-                "raiPolicyName": "Microsoft.DefaultV2"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/gpt-35-turbo-16k')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
+            "openai_gpt35": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[concat(parameters('openai_name'), '/gpt-35-turbo-16k')]",
+              "dependsOn": ["openai", "openai_ada_002", "openai_dalle"],
+              "sku": {
                 "name": "Standard",
                 "capacity": 120
-            },
-            "properties": {
+              },
+              "properties": {
                 "model": {
-                    "format": "OpenAI",
-                    "name": "gpt-35-turbo",
-                    "version": "0125"
+                  "format": "OpenAI",
+                  "name": "gpt-35-turbo",
+                  "version": "0125"
                 },
                 "versionUpgradeOption": "OnceNewDefaultVersionAvailable",
                 "currentCapacity": 120,
                 "raiPolicyName": "Microsoft.Default"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/gpt-4o')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
+              }
+            },
+            "openai_gpt4o": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[concat(parameters('openai_name'), '/gpt-4o')]",
+              "dependsOn": [
+                "openai",
+                "openai_ada_002",
+                "openai_dalle",
+                "openai_gpt35"
+              ],
+              "sku": {
                 "name": "GlobalStandard",
                 "capacity": 50
-            },
-            "properties": {
+              },
+              "properties": {
                 "model": {
-                    "format": "OpenAI",
-                    "name": "gpt-4o",
-                    "version": "2024-08-06"
+                  "format": "OpenAI",
+                  "name": "gpt-4o",
+                  "version": "2024-08-06"
                 },
                 "versionUpgradeOption": "OnceCurrentVersionExpired",
                 "currentCapacity": 50,
                 "raiPolicyName": "Microsoft.DefaultV2"
-            }
-        },
-        {
-            "type": "Microsoft.CognitiveServices/accounts/deployments",
-            "apiVersion": "2024-10-01",
-            "name": "[concat(parameters('openai_eastus_name'), '/gpt-4o-mini')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openai_eastus_name'))]"
-            ],
-            "sku": {
+              }
+            },
+            "openai_gpt4o_mini": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[concat(parameters('openai_name'), '/gpt-4o-mini')]",
+              "dependsOn": [
+                "openai",
+                "openai_ada_002",
+                "openai_dalle",
+                "openai_gpt35",
+                "openai_gpt4o"
+              ],
+              "sku": {
                 "name": "GlobalStandard",
                 "capacity": 200
-            },
-            "properties": {
+              },
+              "properties": {
                 "model": {
-                    "format": "OpenAI",
-                    "name": "gpt-4o-mini",
-                    "version": "2024-07-18"
+                  "format": "OpenAI",
+                  "name": "gpt-4o-mini",
+                  "version": "2024-07-18"
                 },
                 "versionUpgradeOption": "OnceNewDefaultVersionAvailable",
                 "currentCapacity": 200,
                 "raiPolicyName": "Microsoft.DefaultV2"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts",
-            "apiVersion": "2024-01-01",
-            "name": "[parameters('storageAccounts_demopersistence_name')]",
-            "location": "westus",
-            "tags": {
-                "Created by": "robgruen",
-                "Created": "12.10.2024"
+              }
             },
-            "sku": {
-                "name": "Standard_RAGRS",
-                "tier": "Standard"
-            },
-            "kind": "StorageV2",
-            "properties": {
-                "dnsEndpointType": "Standard",
-                "defaultToOAuthAuthentication": true,
-                "publicNetworkAccess": "Enabled",
-                "allowCrossTenantReplication": false,
-                "minimumTlsVersion": "TLS1_2",
-                "allowBlobPublicAccess": false,
-                "allowSharedKeyAccess": false,
-                "largeFileSharesState": "Enabled",
-                "networkAcls": {
-                    "resourceAccessRules": [
-                        {
-                            "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
-                            "resourceId": "/subscriptions/b64471de-f2ac-4075-a3cb-7656bca768d0/providers/Microsoft.Security/datascanners/storageDataScanner"
-                        }
-                    ],
-                    "bypass": "AzureServices",
-                    "virtualNetworkRules": [],
-                    "ipRules": [],
-                    "defaultAction": "Allow"
-                },
-                "supportsHttpsTrafficOnly": true,
-                "encryption": {
-                    "requireInfrastructureEncryption": false,
-                    "services": {
-                        "file": {
-                            "keyType": "Account",
-                            "enabled": true
-                        },
-                        "blob": {
-                            "keyType": "Account",
-                            "enabled": true
-                        }
-                    },
-                    "keySource": "Microsoft.Storage"
-                },
-                "accessTier": "Hot"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "sku": {
-                "name": "Standard_RAGRS",
-                "tier": "Standard"
-            },
-            "properties": {
-                "containerDeleteRetentionPolicy": {
-                    "enabled": true,
-                    "days": 7
-                },
-                "cors": {
-                    "corsRules": []
-                },
-                "deleteRetentionPolicy": {
-                    "allowPermanentDelete": false,
-                    "enabled": true,
-                    "days": 7
-                }
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/fileServices",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "sku": {
-                "name": "Standard_RAGRS",
-                "tier": "Standard"
-            },
-            "properties": {
-                "protocolSettings": {
-                    "smb": {}
-                },
-                "cors": {
-                    "corsRules": []
-                },
-                "shareDeleteRetentionPolicy": {
-                    "enabled": true,
-                    "days": 7
-                }
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/queueServices",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "cors": {
-                    "corsRules": []
-                }
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/tableServices",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "cors": {
-                    "corsRules": []
-                }
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions-curtis')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions-guido')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions-hillary')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions-piali')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions-rob')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions-steve')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-            "apiVersion": "2024-01-01",
-            "name": "[concat(parameters('storageAccounts_demopersistence_name'), '/default/sessions-umesh')]",
-            "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccounts_demopersistence_name'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccounts_demopersistence_name'))]"
-            ],
-            "properties": {
-                "immutableStorageWithVersioning": {
-                    "enabled": false
-                },
-                "defaultEncryptionScope": "$account-encryption-key",
-                "denyEncryptionScopeOverride": false,
-                "publicAccess": "None"
-            }
-        },
-        {
-            "type": "Microsoft.Bing/accounts",
-            "apiVersion": "2020-06-10",
-            "name": "[parameters('search_name')]",
-            "location": "global",
-            "sku": {
+            "search": {
+              "condition": false,
+              "type": "Microsoft.Bing/accounts",
+              "apiVersion": "2020-06-10",
+              "name": "[parameters('search_name')]",
+              "location": "global",
+              "sku": {
                 "name": "S1"
-            },
-            "kind": "Bing.Search.v7",
-            "tags": {},
-            "properties": {
+              },
+              "kind": "Bing.Search.v7",
+              "tags": {},
+              "properties": {
                 "provisioningState": "Succeeded",
                 "endpoint": "https://api.bing.microsoft.com/",
                 "internalId": "3534d9bccab442b9b0d43b56b6924610",
                 "statisticsEnabled": false
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[parameters('vaults_aisystems_name')]",
-            "location": "westus2",
-            "properties": {
+              }
+            },
+            "vault": {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[parameters('vaults_name')]",
+              "location": "[parameters('vaults_region')]",
+              "properties": {
                 "sku": {
-                    "family": "A",
-                    "name": "Standard"
+                  "family": "A",
+                  "name": "Standard"
                 },
-                "tenantId": "72f988bf-86f1-41af-91ab-2d7cd011db47",
                 "accessPolicies": [],
                 "enabledForDeployment": false,
                 "enabledForDiskEncryption": false,
@@ -796,547 +357,169 @@
                 "enableSoftDelete": true,
                 "softDeleteRetentionInDays": 90,
                 "enableRbacAuthorization": true,
-                "vaultUri": "[concat('https://', parameters('vaults_aisystems_name'), '.vault.azure.net/')]",
                 "provisioningState": "Succeeded",
-                "publicNetworkAccess": "Enabled"
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-MAPS-CLIENTID')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-MAPS-ENDPOINT')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-DALLE')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-EMBEDDING')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-35-TURBO')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-4-O')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-4-O-MINI')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                "publicNetworkAccess": "Enabled",
+                "tenantId": "[subscription().tenantId]"
+              }
             },
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-API-KEY-GPT-v')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-DALLE')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-EMBEDDING')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+            "vault_role": {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(concat(parameters('vaults_name'), 'Key Vault Secrets User'))]",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_name'))]",
+              "dependsOn": ["vault"],
+              "properties": {
+                "roleDefinitionId": "[concat('/providers/Microsoft.Authorization/roleDefinitions/', variables('keyVaultSecretUserRole'))]",
+                "principalId": "[parameters('principalId')]"
+              }
             },
-            "properties": {
+            "secrets_map_clientid": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-MAPS-CLIENTID')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-35-TURBO')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "[reference('maps', '2024-07-01-preview').uniqueId]"
+              }
             },
-            "properties": {
+            "secrets_map_endpoint": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-MAPS-ENDPOINT')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-4-O')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-4-O-MINI')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "https://atlas.microsoft.com/"
+              }
             },
-            "properties": {
+            "secrets_openai_endpoint": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-ENDPOINT-GPT-v')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview')]"
+              }
             },
-            "properties": {
+            "secrets_dalle_endpoint": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-DALLE')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-MAX-CONCURRENCY')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-OPENAI-RESPONSE-FORMAT')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-STORAGE-ACCOUNT')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/AZURE-STORAGE-CONTAINER')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/BING-API-KEY')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/BING-MAPS-API-KEY')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/MONGODB-CONNECTION-STRING')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/dall-e-3/images/generations?api-version=2024-02-01')]"
+              }
             },
-            "properties": {
+            "secrets_embedding_endpoint": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-EMBEDDING')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-CLIENTID')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-CLIENTSECRET')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-PASSWD')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-TENANTID')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/MSGRAPH-APP-USERNAME')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-API-KEY-LOCAL')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/ada-002/embeddings?api-version=2023-05-15')]"
+              }
             },
-            "properties": {
+            "secrets_gpt35_endpoint": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-GPT-35-TURBO')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-ENDPOINT-LOCAL')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/gpt-35-turbo-16k/chat/completions?api-version=2025-01-01-preview')]"
+              }
             },
-            "properties": {
+            "secrets_gpt4o_mini_endpoint": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-GPT-4-O-MINI')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-MODEL-LOCAL')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview')]"
+              }
             },
-            "properties": {
+            "secrets_openai_response_format": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-RESPONSE-FORMAT')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-ORGANIZATION-LOCAL')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+                  "enabled": true
+                },
+                "value": "1"
+              }
             },
-            "properties": {
+            "secrets_search_key": {
+              "condition": false,
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/BING-API-KEY')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
+                  "enabled": true
                 }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/OPENAI-RESPONSE-FORMAT-LOCAL')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "tags": {
-                "file-encoding": "utf-8"
+              }
             },
-            "properties": {
+            "secrets_search_endpoint": {
+              "condition": false,
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/BING-MAPS-API-KEY')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
+                  "enabled": true
                 }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/SPEECH-SDK-ENDPOINT')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
+              }
+            },
+            "speech_key": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/SPEECH-SDK-ENDPOINT')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
-            }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/SPEECH-SDK-KEY')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
+                  "enabled": true
+                },
+                "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('speech_name'))]"
+              }
+            },
+            "speech_region": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/SPEECH-SDK-REGION')]",
+              "dependsOn": ["vault"],
+              "properties": {
                 "attributes": {
-                    "enabled": true
-                }
+                  "enabled": true
+                },
+                "value": "[parameters('speech_region')]"
+              }
             }
-        },
-        {
-            "type": "Microsoft.KeyVault/vaults/secrets",
-            "apiVersion": "2024-12-01-preview",
-            "name": "[concat(parameters('vaults_aisystems_name'), '/SPEECH-SDK-REGION')]",
-            "location": "westus2",
-            "dependsOn": [
-                "[resourceId('Microsoft.KeyVault/vaults', parameters('vaults_aisystems_name'))]"
-            ],
-            "properties": {
-                "attributes": {
-                    "enabled": true
-                }
-            }
+          }
         }
-    ]
+      }
+    }
+  }
 }

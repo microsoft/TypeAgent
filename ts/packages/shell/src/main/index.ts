@@ -194,10 +194,10 @@ async function triggerRecognitionOnce(chatView: WebContentsView) {
 }
 
 function initializeSpeech(chatView: WebContentsView) {
-    const key = process.env["SPEECH_SDK_KEY"];
+    const key = process.env["SPEECH_SDK_KEY"] ?? "identity";
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
-    if (key && region) {
+    if (region) {
         AzureSpeech.initialize({
             azureSpeechSubscriptionKey: key,
             azureSpeechRegion: region,

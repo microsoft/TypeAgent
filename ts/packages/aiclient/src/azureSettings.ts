@@ -61,7 +61,12 @@ function azureChatApiSettingsFromEnv(
     return {
         provider: "azure",
         modelType: ModelType.Chat,
-        apiKey: getEnvSetting(env, EnvVars.AZURE_OPENAI_API_KEY, endpointName),
+        apiKey: getEnvSetting(
+            env,
+            EnvVars.AZURE_OPENAI_API_KEY,
+            endpointName,
+            "identity",
+        ),
         endpoint: getEnvSetting(
             env,
             EnvVars.AZURE_OPENAI_ENDPOINT,
@@ -110,6 +115,7 @@ function azureEmbeddingApiSettingsFromEnv(
             env,
             EnvVars.AZURE_OPENAI_API_KEY_EMBEDDING,
             endpointName,
+            "identity",
         ),
         endpoint: getEnvSetting(
             env,
@@ -135,6 +141,7 @@ function azureImageApiSettingsFromEnv(
             env,
             EnvVars.AZURE_OPENAI_API_KEY_DALLE,
             endpointName,
+            "identity",
         ),
         endpoint: getEnvSetting(
             env,
