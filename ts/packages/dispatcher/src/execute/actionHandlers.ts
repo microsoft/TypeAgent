@@ -57,7 +57,11 @@ import {
     translatePendingRequestAction,
 } from "../translation/translateRequest.js";
 import { getActionSchema } from "../internal.js";
-import { resolveReference, validateAction,ActionResolvedParamType } from "action-schema";
+import {
+    resolveReference,
+    validateAction,
+    ActionResolvedParamType,
+} from "action-schema";
 import { IndexManager } from "../context/indexManager.js";
 import { IndexData } from "image-memory";
 import { ActionParamObject, ActionParamType } from "action-schema";
@@ -714,7 +718,9 @@ async function getParameterEntities(
             }
             if (Array.isArray(value)) {
                 if (fieldType.type !== "array") {
-                    throw new Error(`Action parameter type mismatch: ${key}. Expected 'array' but got '${fieldType.type}'`);
+                    throw new Error(
+                        `Action parameter type mismatch: ${key}. Expected 'array' but got '${fieldType.type}'`,
+                    );
                 }
                 const elementType = resolveReference(fieldType.elementType);
                 if (elementType === undefined) {
@@ -735,7 +741,9 @@ async function getParameterEntities(
                 );
             }
             if (fieldType.type !== "object") {
-                throw new Error(`Action parameter type mismatch: ${key}.  Expected 'object' but got '${fieldType.type}'`);
+                throw new Error(
+                    `Action parameter type mismatch: ${key}.  Expected 'object' but got '${fieldType.type}'`,
+                );
             }
             return value
                 ? getParameterObjectEntities(

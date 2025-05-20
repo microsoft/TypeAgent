@@ -95,7 +95,7 @@ export type SchemaTypeDefinition =
     | SchemaTypeInterfaceDefinition
     | SchemaTypeAliasDefinition;
 
-export type ResolvedSchemaType = 
+export type ResolvedSchemaType =
     | SchemaTypeString
     | SchemaTypeNumber
     | SchemaTypeBoolean
@@ -105,10 +105,7 @@ export type ResolvedSchemaType =
     | SchemaTypeObject
     | SchemaTypeArray;
 
-export type SchemaType =
-    | ResolvedSchemaType
-    | SchemaTypeReference;
-
+export type SchemaType = ResolvedSchemaType | SchemaTypeReference;
 
 // Action Schema specializations
 export interface ActionSchemaObject extends SchemaTypeObject {

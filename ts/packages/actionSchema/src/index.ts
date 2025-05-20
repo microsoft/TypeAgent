@@ -28,7 +28,11 @@ export {
     ActionFunctionJsonSchema,
 } from "./jsonSchemaGenerator.js";
 export { validateAction } from "./validate.js";
-export { getParameterType, getParameterNames, resolveReference } from "./utils.js";
+export {
+    getParameterType,
+    getParameterNames,
+    resolveReference,
+} from "./utils.js";
 
 export * as ActionSchemaCreator from "./creator.js";
 

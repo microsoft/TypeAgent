@@ -1,9 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SchemaType, ActionSchemaTypeDefinition, ResolvedSchemaType } from "./type.js";
+import {
+    SchemaType,
+    ActionSchemaTypeDefinition,
+    ResolvedSchemaType,
+} from "./type.js";
 
-export function resolveReference(type?: SchemaType): ResolvedSchemaType | undefined {
+export function resolveReference(
+    type?: SchemaType,
+): ResolvedSchemaType | undefined {
     if (type === undefined) {
         return undefined;
     }
