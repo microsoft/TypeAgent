@@ -6,6 +6,7 @@ import registerDebug from "debug";
 
 const debugUrl = registerDebug("typeagent:rest:url");
 const debugHeader = registerDebug("typeagent:rest:header");
+const debugError = registerDebug("typeagent:rest:error");
 
 /**
  * Call an API using a JSON message body
@@ -212,7 +213,10 @@ export type FetchThrottler = (fn: () => Promise<Response>) => Promise<Response>;
 async function getErrorMessage(response: Response): Promise<string> {
     let bodyMessage = "";
     try {
-        bodyMessage = ((await response.json()) as any).error;
+        const bodyText = await response.text();
+        debugError(bodyText);
+        const bodyJson = JSON.parse(bodyText);
+        bodyMessage = bodyJson.error;
 
         if (typeof bodyMessage === "object") {
             if ((bodyMessage as any).message) {
@@ -261,8 +265,8 @@ export async function fetchWithRetry(
                 retryCount >= retryMaxAttempts
             ) {
                 return error(`fetch error: ${await getErrorMessage(result)}`);
-            } else if (debugHeader.enabled) {
-                debugHeader(await getErrorMessage(result));
+            } else if (debugError.enabled) {
+                debugError(await getErrorMessage(result));
             }
 
             // See if the service tells how long to wait to retry
