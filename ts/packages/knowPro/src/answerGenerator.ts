@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { ChatModel, openai } from "aiclient";
-import { conversation as kpLib } from "knowledge-processor";
 import {
     createJsonTranslator,
     error,
@@ -247,7 +246,7 @@ export class AnswerGenerator implements IAnswerGenerator {
     public generateAnswer(
         question: string,
         context: contextSchema.AnswerContext | string,
-    ): Promise<Result<kpLib.AnswerResponse>> {
+    ): Promise<Result<answerSchema.AnswerResponse>> {
         let contextContent =
             typeof context === "string"
                 ? context
@@ -540,7 +539,7 @@ function createQuestionPrompt(question: string): string {
         "- Use the name and type of the provided entities to identity those highly relevant to answering the question.",
         "- List only those entities and topics that answer the question PRECISELY.",
         "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",
-        "- Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc.",
+        "- Your answer is readable and complete, with appropriate formatting: line breaks, numbered lists, bullet points etc.",
     ];
     return prompt.join("\n");
 }

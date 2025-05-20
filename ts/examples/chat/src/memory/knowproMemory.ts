@@ -255,6 +255,7 @@ export async function createKnowproCommands(
         def.options.distinct = argBool("Show distinct results", true);
         def.options.maxToDisplay = argNum("Maximum to display", 25);
         def.options.thread = arg("Thread description");
+        def.options.tag = arg("Tag to filter by");
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -366,13 +367,13 @@ export async function createKnowproCommands(
                 thresholdScore: 0.7,
             };
         }
-
+        const langFilter = createLangFilter(namedArgs);
         const searchResults =
             context.conversation instanceof cm.Memory
                 ? await context.conversation.searchWithLanguage(
                       searchText,
                       options,
-                      undefined,
+                      langFilter,
                       debugContext,
                   )
                 : await kp.searchConversationWithLanguage(
@@ -380,7 +381,7 @@ export async function createKnowproCommands(
                       searchText,
                       context.queryTranslator,
                       options,
-                      undefined,
+                      langFilter,
                       debugContext,
                   );
         if (!searchResults.success) {
@@ -435,14 +436,7 @@ export async function createKnowproCommands(
         selectExpr: kp.SearchSelectExpr,
         namedArgs: NamedArgs,
     ): Promise<boolean> {
-        if (namedArgs.ktype) {
-            selectExpr.when ??= {};
-            selectExpr.when.knowledgeType = namedArgs.ktype;
-        }
-        if (namedArgs.thread) {
-            selectExpr.when ??= {};
-            selectExpr.when.threadDescription = namedArgs.thread;
-        }
+        selectExpr.when = createLangFilter(namedArgs);
         context.printer.writeSelectExpr(selectExpr);
         const searchResults = await kp.searchConversation(
             context.conversation!,
@@ -719,5 +713,24 @@ export async function createKnowproCommands(
         }
 
         return options;
+    }
+
+    function createLangFilter(
+        namedArgs: NamedArgs,
+    ): kp.LanguageSearchFilter | undefined {
+        let when: kp.WhenFilter | undefined;
+        if (namedArgs.ktype) {
+            when ??= {};
+            when.knowledgeType = namedArgs.ktype;
+        }
+        if (namedArgs.tag) {
+            when ??= {};
+            when.tags = [namedArgs.tag];
+        }
+        if (namedArgs.thread) {
+            when ??= {};
+            when.threadDescription = namedArgs.thread;
+        }
+        return when;
     }
 }

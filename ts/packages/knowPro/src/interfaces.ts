@@ -617,7 +617,6 @@ export type SearchSelectExpr = {
  *   dateRange matches...E.g. (Jan 3rd to Jan 10th)
  *   Semantic Refs are within supplied SCOPE.. i.e. only Semantic Refs from a 'scoping' set of text ranges will match
  */
-
 export type WhenFilter = {
     knowledgeType?: KnowledgeType | undefined;
     dateRange?: DateRange | undefined;

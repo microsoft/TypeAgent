@@ -4,6 +4,7 @@
 import { PromptSection, Result, success } from "typechat";
 import {
     IConversation,
+    KnowledgeType,
     SearchSelectExpr,
     SearchTermGroup,
     WhenFilter,
@@ -47,6 +48,8 @@ import {
  * Type representing the filter options for language search.
  */
 export type LanguageSearchFilter = {
+    knowledgeType?: KnowledgeType | undefined;
+    threadDescription?: string | undefined;
     tags?: string[] | undefined;
 };
 
@@ -488,6 +491,14 @@ class SearchQueryCompiler {
                 when ??= {};
                 when.tags = this.langSearchFilter.tags;
             }
+            if (
+                this.langSearchFilter.threadDescription &&
+                this.langSearchFilter.threadDescription.length > 0
+            ) {
+                when ??= {};
+                when.threadDescription =
+                    this.langSearchFilter.threadDescription;
+            }
         }
         return when;
     }
@@ -583,7 +594,13 @@ class SearchQueryCompiler {
     private compileEntityTermsAsSearchTerms(
         entityTerms: querySchema.EntityTerm[],
         termGroup: SearchTermGroup,
+        useOrMax: boolean = true,
     ): void {
+        if (useOrMax) {
+            const orGroup = createOrMaxTermGroup();
+            termGroup.terms.push(orGroup);
+            termGroup = orGroup;
+        }
         for (const term of entityTerms) {
             this.addEntityTermAsSearchTermsToGroup(term, termGroup);
         }
