@@ -42,5 +42,5 @@ Structured RAG has the following advantages over state-of-the-art memory using c
 
 ## Demos
 
-- [One minute demo:](): A command-line test of Structured RAG vs Classic RAG recall.  With 3K input tokens, Structured RAG recalls all 63 books discussed in 25 Behind the Tech podcasts, while Classic RAG recalls 15 books using twice as many input tokens.  Not shown, at 128K input tokens, Classic RAG recalls 31 books.
-- [Ninety second demo:]() Agent memory implemented using Structured RAG.
+- [One minute demo](https://youtu.be/jTHOt4O7YuM): A command-line test of Structured RAG vs Classic RAG recall.  With 3K input tokens, Structured RAG recalls all 63 books discussed in 25 Behind the Tech podcasts, while Classic RAG recalls 15 books using twice as many input tokens.  Not shown, at 128K input tokens, Classic RAG recalls 31 books.
+- [Ninety second demo](https://youtu.be/CWgrAEK123U): Agent memory implemented using Structured RAG.
