@@ -240,7 +240,7 @@ export class AnswerGenerator implements IAnswerGenerator {
         this.contextSchema = loadSchema(
             ["dateTimeSchema.ts", "answerContextSchema.ts"],
             import.meta.url,
-        );
+        ).trim();
         this.contextTypeName = "AnswerContext";
     }
 
@@ -532,14 +532,15 @@ function createRelevantKnowledge(
 
 function createQuestionPrompt(question: string): string {
     let prompt: string[] = [
-        `The following is a user question:\n===\n${question}\n===\n`, // Leave the '/n' here
-        "The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
-        "Answer the question using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
-        "Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in the conversation history.",
-        "Use the name and type of the provided entities to select only those highly relevant to PRECISELY answering the question.",
-        "List ALL entities if query intent implies that.",
-        "Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc).",
-        "Use direct quotes only when needed or asked. Otherwise answer in your own words.",
+        "The following is a user question:",
+        `===\n${question}\n===`, // Leave the '/n' here
+        "- The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
+        "- Answer the user question using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
+        "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in the conversation history.",
+        "- Use the name and type of the provided entities to identity those highly relevant to answering the question.",
+        "- List only those entities and topics that answer the question PRECISELY.",
+        "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",
+        "- Your answer is readable and complete, with suitable formatting: line breaks, bullet points, numbered lists etc.",
     ];
     return prompt.join("\n");
 }

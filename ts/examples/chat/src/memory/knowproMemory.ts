@@ -323,7 +323,7 @@ export async function createKnowproCommands(
         }
     }
 
-    const DefaultKnowledgeTopK = 25;
+    const DefaultKnowledgeTopK = 50;
     function answerDefNew(): CommandMetadata {
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
