@@ -208,3 +208,31 @@ export async function loadEmailMemory(
         createNew,
     );
 }
+
+export async function getLangSearchResult(
+    conversation: kp.IConversation | cm.Memory,
+    queryTranslator: kp.SearchQueryTranslator,
+    searchText: string,
+    options?: kp.LanguageSearchOptions,
+    langFilter?: kp.LanguageSearchFilter,
+    debugContext?: kp.LanguageSearchDebugContext,
+) {
+    const searchResults =
+        conversation instanceof cm.Memory
+            ? await conversation.searchWithLanguage(
+                  searchText,
+                  options,
+                  langFilter,
+                  debugContext,
+              )
+            : await kp.searchConversationWithLanguage(
+                  conversation,
+                  searchText,
+                  queryTranslator,
+                  options,
+                  langFilter,
+                  debugContext,
+              );
+
+    return searchResults;
+}

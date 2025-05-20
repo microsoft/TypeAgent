@@ -26,13 +26,17 @@ import {
 import { dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import { hasConversationResults } from "./knowproCommon.js";
+import {
+    getLangSearchResult,
+    hasConversationResults,
+} from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
 import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import * as cm from "conversation-memory";
+import { createKnowproTestCommands } from "./knowproTest.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -103,6 +107,7 @@ export async function createKnowproCommands(
     await createKnowproEmailCommands(context, commands);
     await createKnowproConversationCommands(context, commands);
     await createKnowproDataFrameCommands(context, commands);
+    await createKnowproTestCommands(context, commands);
     /*
      * CREATE GENERAL MEMORY COMMANDS
      */
@@ -368,22 +373,12 @@ export async function createKnowproCommands(
             };
         }
         const langFilter = createLangFilter(namedArgs);
-        const searchResults =
-            context.conversation instanceof cm.Memory
-                ? await context.conversation.searchWithLanguage(
-                      searchText,
-                      options,
-                      langFilter,
-                      debugContext,
-                  )
-                : await kp.searchConversationWithLanguage(
-                      context.conversation!,
-                      searchText,
-                      context.queryTranslator,
-                      options,
-                      langFilter,
-                      debugContext,
-                  );
+        const searchResults = await runSearch(
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -464,6 +459,23 @@ export async function createKnowproCommands(
             namedArgs.distinct,
         );
         return true;
+    }
+
+    async function runSearch(
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+        langFilter?: kp.LanguageSearchFilter,
+        debugContext?: kp.LanguageSearchDebugContext,
+    ) {
+        const searchResults = getLangSearchResult(
+            context.conversation!,
+            context.queryTranslator,
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
+        return searchResults;
     }
 
     function searchRagDef(): CommandMetadata {
