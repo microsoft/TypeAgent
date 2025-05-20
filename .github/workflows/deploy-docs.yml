@@ -4,33 +4,55 @@ on:
   push:
     branches:
       - main
-      - siteTest
+      - siteTestCode
+
     # Only run when docs-related files change
     paths:
       - 'docs/**'
+  
   # Allow manual deployment from the Actions tab
   workflow_dispatch:
 
 permissions:
   contents: write
+  id-token: write
+  pages: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./docs
+        working-directory: docs 
+    
+    permissions:
+      contents: write
+      id-token: write
+      pages: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout Repository 🛎️
         uses: actions/checkout@v3
         with:
-          # Full git history needed for proper timestamps
           fetch-depth: 0
 
+      - name: Check Repository Structure
+        run: |
+          echo "Repository root contents:"
+          ls -la
+        working-directory: .
+        
       - name: Setup Node.js ⚙️
         uses: actions/setup-node@v3
         with:
-          node-version: 16
+          node-version: 18.x
 
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -55,23 +77,21 @@ jobs:
       - name: Install Dependencies 📦
         run: pnpm install
 
+      - name: Update Links in Markdown Files 🔄
+        run: |
+          # Run the link update script
+          node scripts/update-links.js
+
       - name: Build Site 🔧
         run: pnpm run build
         env:
-          # Explicitly set the GitHub repository name
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
-      - name: Debug Site Output 🔍
-        run: |
-          echo "Contents of _site directory:"
-          ls -la _site
-          echo "Contents of _site/assets directory (if exists):"
-          ls -la _site/assets || echo "assets directory not found"
-
-      - name: Deploy to GitHub Pages 🚀
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          folder: docs/_site      # The folder containing built site
-          branch: siteTest        # The branch to deploy to
-          commit-message: "Deploy docs: ${{ github.event.head_commit.message }} [skip ci]"
-          clean: true
+           name: github-pages
+           path: docs/_site
+      - name: Deploy to GitHub Pages from artifacts
+        uses: actions/deploy-pages@v4
