@@ -29,7 +29,7 @@ Instructions tested with Ubuntu 24.04.1 LTS and Debian 12.8.0
 
 ## Configure Services
 
-- Setup Service Keys (See instructions [here](../../ts/README.md#service-keys))
+- Setup Service Keys (See instructions [here](../../../ts/README.md#service-keys))
 
 ## Run
 

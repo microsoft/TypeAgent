@@ -5,19 +5,19 @@ title: TypeAgent Dispatcher Architecture
 
 ## Overview
 
-[TypeAgent Dispatcher](../../ts/packages/dispatcher) is the core component used to build a **personal agent** implementation with _natural language interfaces_. The component's purpose is to understand user requests and translate it into actions using structured prompting and LLM and dispatch them to the appropriate TypeAgent to execute.
+[TypeAgent Dispatcher](../../../ts/packages/dispatcher) is the core component used to build a **personal agent** implementation with _natural language interfaces_. The component's purpose is to understand user requests and translate it into actions using structured prompting and LLM and dispatch them to the appropriate TypeAgent to execute.
 
 ## Design Goals
 
 Here are the design goals of the dispatcher:
 
 - Dispatcher processes user requests and use LLM to translate them into actions based on schemas provided by application agents. It automatically finds and switches between different agents to provide a seamless experience in a extensible and scalable way. It aids the user to clarify and complete missing details needed to perform the actions.
-- Dispatcher component can be hosted by different client front ends. [TypeAgent Shell](../../ts/packages/shell) and [TypeAgent CLI](../../ts/packages/cli) are two example of clients built using dispatcher to show case the **personal agent** experience.
-- Dispatcher has extensible [application agents](../../ts/packages/agentSdk/README.md) architecture that allow new agents to be developed and plugin to the **personal agent** experience, scaling up to thousands and more actions.
-- Dispatcher leverage an [agent cache](../../ts/packages/cache/README.md) to lower cost and latency.
-- Dispatcher memorize conversation history by integrating with [KnowPro](../../ts/packages/knowPro) to store past memory and recall for future use.
+- Dispatcher component can be hosted by different client front ends. [TypeAgent Shell](../../../ts/packages/shell) and [TypeAgent CLI](../../../ts/packages/cli) are two example of clients built using dispatcher to show case the **personal agent** experience.
+- Dispatcher has extensible [application agents](../../../ts/packages/agentSdk/README.md) architecture that allow new agents to be developed and plugin to the **personal agent** experience, scaling up to thousands and more actions.
+- Dispatcher leverage an [agent cache](../../../ts/packages/cache/README.md) to lower cost and latency.
+- Dispatcher memorize conversation history by integrating with [KnowPro](../../../ts/packages/knowPro) to store past memory and recall for future use.
 
-The current implementation of the [dispatcher](../../ts/packages/dispatcher) is a work in progress toward these goal and have explored most of the pieces described here.
+The current implementation of the [dispatcher](../../../ts/packages/dispatcher) is a work in progress toward these goal and have explored most of the pieces described here.
 
 ## Definitions
 

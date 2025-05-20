@@ -127,40 +127,30 @@ module.exports = function (eleventyConfig) {
 
   const { updateLinks } = require("./scripts/update-links");
 
-  // Add a transform to update external links
-  // Only apply this transform during build, not during development/watch mode
-  if (!process.env.ELEVENTY_ENV || process.env.ELEVENTY_ENV === "production") {
-    eleventyConfig.addTransform("updateLinks", function (content, outputPath) {
-      if (!outputPath || !outputPath.endsWith(".html")) {
-        return content; // Only process HTML files
-      }
+  eleventyConfig.addTransform("updateLinks", function (content, outputPath) {
+    if (!outputPath || !outputPath.endsWith(".html")) {
+      return content; // Only process HTML files
+    }
 
-      // Get the original input path for this file
-      const inputPath = pageMap.get(outputPath) || this.inputPath;
+    // Get the original input path for this file
+    const inputPath = pageMap.get(outputPath) || this.inputPath;
 
-      if (!inputPath) {
-        console.warn(
-          `No input path found for ${outputPath}, skipping link transformation`
-        );
-        return content;
-      }
-
-      const repoUrl = process.env.GITHUB_REPOSITORY
-        ? `https://github.com/${process.env.GITHUB_REPOSITORY}`
-        : this.ctx?.site?.github || "https://github.com/microsoft/TypeAgent";
-
-      const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || "main";
-
-      console.log(`Transforming links in: ${outputPath} (from ${inputPath})`);
-      return updateLinks(
-        content,
-        outputPath,
-        inputPath,
-        repoUrl,
-        defaultBranch
+    if (!inputPath) {
+      console.warn(
+        `No input path found for ${outputPath}, skipping link transformation`
       );
-    });
-  }
+      return content;
+    }
+
+    const repoUrl = process.env.GITHUB_REPOSITORY
+      ? `https://github.com/${process.env.GITHUB_REPOSITORY}`
+      : this.ctx?.site?.github || "https://github.com/microsoft/TypeAgent";
+
+    const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || "main";
+
+    console.log(`Transforming links in: ${outputPath} (from ${inputPath})`);
+    return updateLinks(content, outputPath, inputPath, repoUrl, defaultBranch);
+  });
 
   // Add a filter for GitHub repository URLs
   eleventyConfig.addFilter("githubUrl", function (path, isDirectory = false) {
