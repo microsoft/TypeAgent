@@ -12,7 +12,7 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy("_includes");
   eleventyConfig.addPassthroughCopy("assets");
   eleventyConfig.addPassthroughCopy("content/imgs");
-  eleventyConfig.addPassthroughCopy("tutorial/imgs");
+  eleventyConfig.addPassthroughCopy("content/tutorial/imgs");
 
   eleventyConfig.addShortcode("version", function () {
     return String(Date.now());
@@ -91,7 +91,7 @@ module.exports = function (eleventyConfig) {
             // construct a path relative to the site root
 
             if (dir.includes("/tutorial") && link.startsWith("imgs/")) {
-              return `/TypeAgent/tutorial/imgs/${link.substring(5)}`;
+              return `/TypeAgent/content/tutorial/imgs/${link.substring(5)}`;
             }
 
             if (dir.includes("/content")) {
