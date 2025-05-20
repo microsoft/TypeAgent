@@ -109,9 +109,14 @@ export async function createKnowproTestCommands(
                 context.printer.writeError(searchResult.message);
                 return;
             }
-            if (!compareLangSearchResults(searchResult.data, baseResults[i])) {
-                context.printer.writeError(searchText);
-                errors.push(searchResult.data);
+            const error = compareLangSearchResults(
+                searchResult.data,
+                baseResults[i],
+            );
+            if (error !== undefined && error.length > 0) {
+                context.printer.writeError(`[${error}]: searchText`);
+                const errorResult = { ...searchResult.data, error };
+                errors.push(errorResult);
             }
             ++i;
         }
@@ -136,6 +141,7 @@ type LangSearchResults = {
     searchText: string;
     searchQueryExpr?: kp.SearchQueryExpr[] | undefined;
     results: LangSearchResult[];
+    error?: string | undefined;
 };
 
 type LangSearchResult = {
@@ -201,26 +207,34 @@ async function* runLangSearchBatch(
 function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
-) {
+): string | undefined {
     if (lr1.results.length !== lr2.results.length) {
-        return false;
+        return "array";
     }
     for (let i = 0; i < lr1.results.length; ++i) {
-        if (!compareLangSearchResult(lr1.results[i], lr2.results[i])) {
-            return false;
+        const error = compareLangSearchResult(lr1.results[i], lr2.results[i]);
+        if (!error) {
+            return error;
         }
     }
-    return true;
+    return undefined;
 }
 
 function compareLangSearchResult(
     lr1: LangSearchResult,
     lr2: LangSearchResult,
-): boolean {
-    return (
-        isJsonEqual(lr1.messageMatches, lr2.messageMatches) &&
-        isJsonEqual(lr1.entityMatches, lr2.entityMatches) &&
-        isJsonEqual(lr1.topicMatches, lr2.topicMatches) &&
-        isJsonEqual(lr1.actionMatches, lr2.actionMatches)
-    );
+): string | undefined {
+    if (!isJsonEqual(lr1.messageMatches, lr2.messageMatches)) {
+        return "message";
+    }
+    if (!isJsonEqual(lr1.entityMatches, lr2.entityMatches)) {
+        return "entity";
+    }
+    if (!isJsonEqual(lr1.topicMatches, lr2.topicMatches)) {
+        return "topic";
+    }
+    if (!isJsonEqual(lr1.actionMatches, lr2.actionMatches)) {
+        return "action";
+    }
+    return undefined;
 }
