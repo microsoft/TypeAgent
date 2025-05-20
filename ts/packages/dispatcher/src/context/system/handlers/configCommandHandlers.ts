@@ -614,10 +614,10 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
 class ConfigPortsCommandHandler implements CommandHandler {
     public readonly description = "Lists the ports assigned to agents.";
 
-    public readonly parameters = { };
+    public readonly parameters = {};
 
     public async run(context: ActionContext<CommandHandler>) {
-        const ports: string[][] = [ [ "", "Agent", "Port"]];
+        const ports: string[][] = [["", "Agent", "Port"]];
         const cmdContext = context.sessionContext.agentContext as any;
         const emojis: Record<string, string> = cmdContext.agents.getEmojis();
 
@@ -625,8 +625,12 @@ class ConfigPortsCommandHandler implements CommandHandler {
             const port = cmdContext.agents.getLocalHostPort(name);
 
             if (port !== undefined) {
-                ports.push([emojis[name], name, cmdContext.agents.getLocalHostPort(name)!.toString()]);  
-            }            
+                ports.push([
+                    emojis[name],
+                    name,
+                    cmdContext.agents.getLocalHostPort(name)!.toString(),
+                ]);
+            }
         });
 
         displayResult(ports, context);
@@ -1229,7 +1233,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     },
                 ),
             },
-            ports:  new ConfigPortsCommandHandler()
+            ports: new ConfigPortsCommandHandler(),
         },
     };
 }
