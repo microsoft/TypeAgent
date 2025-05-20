@@ -12,18 +12,18 @@ Then run the follow command to deploy the source necessary for TypeAgent Shell i
 
 ## Services
 
-The ARM template will deploy the following Azure services in a single resource group (default name: typeagentshell-eastus)
+The ARM template will deploy the following Azure services in a single resource group (default name: `typeagent-eastus`)
 
 - [Speech](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/overview)
 - [OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/overview)
 - [Maps](https://learn.microsoft.com/en-us/azure/azure-maps/about-azure-maps)
 - [Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/secrets/about-secrets)
 
-They are all set up with Entra ID, the deployer (the account that is signed into the Azure CLI) is automatically add to the RBAC role necessary for these resource by the ARM template.
+These resources are set up with RBAC access with Entra ID , the account that is signed into the Azure CLI is automatically add to the RBAC role necessary to access these resource by the ARM template.
 
 ## Features Not Covered
 
-The following TypeAgent features/components are not automatically created or configured by these ARM templates:
+The following TypeAgent features/components are not automatically created or configured by this ARM templates:
 
 - Demo Tenant for [Calendar](../ts/packages/agents/calendar) & [Email](../ts/packages/agents/email/) agents
 - [Docker](../ts/Dockerfile) endpoint app service

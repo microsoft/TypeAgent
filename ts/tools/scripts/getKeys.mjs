@@ -20,8 +20,8 @@ const dotenvPath = path.resolve(__dirname, config.defaultDotEnvPath);
 const sharedKeys = config.env.shared;
 const privateKeys = config.env.private;
 const deleteKeys = config.env.delete;
-let sharedVault = config.vault.shared;
-let privateVault = undefined;
+let paramSharedVault = undefined;
+let paramPrivateVault = undefined;
 
 async function getSecretListWithElevation(keyVaultClient, vaultName) {
     try {
@@ -57,8 +57,7 @@ async function getSecretListWithElevation(keyVaultClient, vaultName) {
     }
 }
 
-async function getSecrets(keyVaultClient, shared) {
-    const vaultName = shared ? sharedVault : privateVault;
+async function getSecrets(keyVaultClient, vaultName, shared) {
     console.log(
         `Getting existing ${shared ? "shared" : "private"} secrets from ${chalk.cyanBright(vaultName)} key vault.`,
     );
@@ -202,12 +201,30 @@ async function pushSecret(
     return 1;
 }
 
+function getVaultNames(dotEnv) {
+    return {
+        shared:
+            paramSharedVault ??
+            dotEnv.get("TYPEAGENT_SHAREDVAULT") ??
+            config.vault.shared,
+        private:
+            paramPrivateVault ??
+            dotEnv.get("TYPEAGENT_PRIVATEVAULT") ??
+            undefined,
+    };
+}
+
 async function pushSecrets() {
     const dotEnv = await readDotenv();
     const keyVaultClient = await getKeyVaultClient();
-    const sharedSecrets = new Map(await getSecrets(keyVaultClient, true));
+    const vaultNames = getVaultNames(dotEnv);
+    const sharedSecrets = new Map(
+        await getSecrets(keyVaultClient, vaultNames.shared, true),
+    );
     const privateSecrets = new Map(
-        privateVault ? await getSecrets(keyVaultClient, false) : undefined,
+        vaultNames.private
+            ? await getSecrets(keyVaultClient, vaultNames.private, false)
+            : undefined,
     );
 
     console.log(`Pushing secrets from ${dotenvPath} to key vault.`);
@@ -221,7 +238,7 @@ async function pushSecrets() {
                 const result = await pushSecret(
                     stdio,
                     keyVaultClient,
-                    sharedVault,
+                    vaultNames.shared,
                     sharedSecrets,
                     secretKey,
                     value,
@@ -240,7 +257,7 @@ async function pushSecrets() {
                 const result = await pushSecret(
                     stdio,
                     keyVaultClient,
-                    privateVault,
+                    vaultNames.private,
                     privateSecrets,
                     secretKey,
                     value,
@@ -271,10 +288,9 @@ async function pushSecrets() {
     }
 }
 
-async function pullSecretsFromVault(keyVaultClient, shared, dotEnv) {
-    const vaultName = shared ? sharedVault : privateVault;
+async function pullSecretsFromVault(keyVaultClient, vaultName, shared, dotEnv) {
     const keys = shared ? sharedKeys : privateKeys;
-    const secrets = await getSecrets(keyVaultClient, shared);
+    const secrets = await getSecrets(keyVaultClient, vaultName, shared);
     if (secrets.length === 0) {
         console.log(
             chalk.yellow(
@@ -299,14 +315,21 @@ async function pullSecretsFromVault(keyVaultClient, shared, dotEnv) {
 async function pullSecrets() {
     const dotEnv = new Map(await readDotenv());
     const keyVaultClient = await getKeyVaultClient();
+    const vaultNames = getVaultNames(dotEnv);
     console.log(`Pulling secrets to ${chalk.cyanBright(dotenvPath)}`);
     const sharedUpdated = await pullSecretsFromVault(
         keyVaultClient,
+        vaultNames.shared,
         true,
         dotEnv,
     );
-    const privateUpdated = privateVault
-        ? await pullSecretsFromVault(keyVaultClient, false, dotEnv)
+    const privateUpdated = vaultNames.private
+        ? await pullSecretsFromVault(
+              keyVaultClient,
+              vaultNames.private,
+              false,
+              dotEnv,
+          )
         : undefined;
 
     if (sharedUpdated === undefined && privateUpdated === undefined) {
@@ -321,6 +344,19 @@ async function pullSecrets() {
             updated++;
         }
     }
+    if (dotEnv.get("TYPEAGENT_SHAREDVAULT") !== vaultNames.shared) {
+        console.log(`  Updating TYPEAGENT_SHAREDVAULT`);
+        dotEnv.set("TYPEAGENT_SHAREDVAULT", vaultNames.shared);
+        updated++;
+    }
+    if (
+        vaultNames.private &&
+        dotEnv.get("TYPEAGENT_PRIVATEVAULT") !== vaultNames.private
+    ) {
+        console.log(`  Updating TYPEAGENT_PRIVATEVAULT`);
+        dotEnv.set("TYPEAGENT_PRIVATEVAULT", vaultNames.private);
+        updated++;
+    }
 
     if (updated === 0) {
         console.log(
@@ -331,10 +367,11 @@ async function pullSecrets() {
     console.log(
         `\n${updated} values updated.\nWriting '${chalk.cyanBright(dotenvPath)}'.`,
     );
+
     await fs.promises.writeFile(
         dotenvPath,
         [...dotEnv.entries()]
-            .map(([key, value]) => `${key}=${value}`)
+            .map(([key, value]) => (key ? `${key}=${value}` : ""))
             .join("\n"),
     );
 }
@@ -348,8 +385,8 @@ const commands = ["push", "pull", "help"];
     for (let i = start; i < process.argv.length; i++) {
         const arg = process.argv[i];
         if (arg === "--vault") {
-            sharedVault = process.argv[i + 1];
-            if (sharedVault === undefined) {
+            paramSharedVault = process.argv[i + 1];
+            if (paramSharedVault === undefined) {
                 throw new Error("Missing value for --vault");
             }
             i++;
@@ -357,8 +394,8 @@ const commands = ["push", "pull", "help"];
         }
 
         if (arg === "--private") {
-            privateVault = process.argv[i + 1];
-            if (privateVault === undefined) {
+            paramPrivateVault = process.argv[i + 1];
+            if (paramPrivateVault === undefined) {
                 throw new Error("Missing value for --private");
             }
             i++;
