@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    argNum,
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
@@ -18,6 +19,7 @@ import {
     writeJsonFile,
 } from "typeagent";
 import { Result, success } from "typechat";
+import chalk from "chalk";
 
 /**
  * Test related commands
@@ -75,9 +77,13 @@ export async function createKnowproTestCommands(
 
     function testBatchDef(): CommandMetadata {
         return {
-            description: "Test previously saved batch results",
+            description: "Test previously query + saved batch results",
             args: {
                 srcPath: argSourceFile(),
+            },
+            options: {
+                startAt: argNum("Start at this query", 0),
+                count: argNum("Number to run"),
             },
         };
     }
@@ -96,27 +102,46 @@ export async function createKnowproTestCommands(
             return;
         }
         const errors: LangSearchResults[] = [];
-        let i = 0;
         let searchBatch = baseResults.map((r) => r.searchText);
+        const startAt = namedArgs.startAt ?? 0;
+        const count = namedArgs.count ?? searchBatch.length;
+        searchBatch = searchBatch.slice(startAt, startAt + count);
+        let i = 0;
         for await (const searchResult of runLangSearchBatch(
             context.conversation!,
             context.queryTranslator,
             searchBatch,
         )) {
             const searchText = searchBatch[i];
+            const baseResult = baseResults[i + startAt];
             context.printer.writeLine(`${i + 1}. ${searchText}`);
-            if (!searchResult.success) {
+            if (searchResult.success) {
+                let error = compareSearchExpr(
+                    searchResult.data.searchQueryExpr,
+                    baseResult.searchQueryExpr,
+                );
+                if (error !== undefined && error.length > 0) {
+                    context.printer.writeInColor(
+                        chalk.gray,
+                        `[${error}]: ${searchText}`,
+                    );
+                    context.printer.writeJsonInColor(
+                        chalk.gray,
+                        searchResult.data.searchQueryExpr,
+                    );
+                    context.printer.writeJsonInColor(
+                        chalk.gray,
+                        baseResult.searchQueryExpr,
+                    );
+                }
+                error = compareLangSearchResults(searchResult.data, baseResult);
+                if (error !== undefined && error.length > 0) {
+                    context.printer.writeError(`[${error}]: ${searchText}`);
+                    const errorResult = { ...searchResult.data, error };
+                    errors.push(errorResult);
+                }
+            } else {
                 context.printer.writeError(searchResult.message);
-                return;
-            }
-            const error = compareLangSearchResults(
-                searchResult.data,
-                baseResults[i],
-            );
-            if (error !== undefined && error.length > 0) {
-                context.printer.writeError(`[${error}]: searchText`);
-                const errorResult = { ...searchResult.data, error };
-                errors.push(errorResult);
             }
             ++i;
         }
@@ -139,7 +164,7 @@ export async function createKnowproTestCommands(
 
 type LangSearchResults = {
     searchText: string;
-    searchQueryExpr?: kp.SearchQueryExpr[] | undefined;
+    searchQueryExpr?: kp.querySchema.SearchQuery | undefined;
     results: LangSearchResult[];
     error?: string | undefined;
 };
@@ -169,7 +194,7 @@ async function* runLangSearchBatch(
         if (searchResult.success) {
             yield success({
                 searchText,
-                searchQueryExpr: debugContext.searchQueryExpr,
+                searchQueryExpr: debugContext.searchQuery,
                 results: searchResult.data.map((cr) => {
                     const lr: LangSearchResult = {
                         messageMatches: cr.messageMatches.map(
@@ -204,6 +229,16 @@ async function* runLangSearchBatch(
     }
 }
 
+function compareSearchExpr(
+    s1: kp.querySchema.SearchQuery | undefined,
+    s2: kp.querySchema.SearchQuery | undefined,
+): string | undefined {
+    if (!isJsonEqual(s1, s2)) {
+        return "searchExpr";
+    }
+    return undefined;
+}
+
 function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
@@ -213,7 +248,7 @@ function compareLangSearchResults(
     }
     for (let i = 0; i < lr1.results.length; ++i) {
         const error = compareLangSearchResult(lr1.results[i], lr2.results[i]);
-        if (!error) {
+        if (error !== undefined && error.length > 0) {
             return error;
         }
     }
