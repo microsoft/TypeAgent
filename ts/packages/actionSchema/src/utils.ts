@@ -1,9 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SchemaType, ActionSchemaTypeDefinition } from "./type.js";
+import { SchemaType, ActionSchemaTypeDefinition, ResolvedSchemaType } from "./type.js";
 
-export function resolveReference(type?: SchemaType): SchemaType | undefined {
+export function resolveReference(type?: SchemaType): ResolvedSchemaType | undefined {
     if (type === undefined) {
         return undefined;
     }
@@ -33,20 +33,21 @@ export function getParameterType(
     }
     for (const propertyName of propertyNames) {
         const maybeIndex = parseInt(propertyName);
+        let next: SchemaType | undefined;
         if (maybeIndex.toString() == propertyName) {
             if (curr.type !== "array") {
                 return undefined;
             }
-            curr = curr.elementType;
+            next = curr.elementType;
         } else {
             if (curr.type !== "object") {
                 return undefined;
             }
-            curr = curr.fields[propertyName]?.type;
+            next = curr.fields[propertyName]?.type;
         }
 
         // TODO: doesn't work on union types yet.
-        curr = resolveReference(curr);
+        curr = resolveReference(next);
         if (curr === undefined) {
             return undefined;
         }
