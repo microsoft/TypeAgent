@@ -136,6 +136,10 @@ See more information about working with the repo [here](./docs/help/dev.md).
   - [Photo](.ts/packages/agents/photo/)
   - [androidMobile](.ts/packages/agents/androidMobile/)
 
+## Questions
+
+If you have any questions about our project, you can post them in our [Q&A discussion section](https://github.com/microsoft/TypeAgent/discussions/categories/q-a).
+
 ## Code of Conduct
 
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).

@@ -9,10 +9,10 @@ Instructions tested with Ubuntu 24.04.1 LTS and Debian 12.8.0
 - Install git and curl
   - `sudo apt update`
   - `sudo apt install git curl`
-- Setup node using nvm
+- Setup NodeJS using nvm ([Full Instructions](https://nodejs.org/en/download))
   - Setup [NVM](https://github.com/nvm-sh/nvm)
     - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
-    - `source ~/.bashrc`
+    - `\. "$HOME/.nvm/nvm.sh"`
   - Install Node
     - `nvm install --lts`
 - Clone and build:
