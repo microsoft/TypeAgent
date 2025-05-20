@@ -18,7 +18,7 @@ module.exports = {
         ,
         {
           title: "MacOS",
-          url: "/content/setup/setup-MacOS/"
+          url: "/content/setup/setup-macOS/"
         }
         ,
 
