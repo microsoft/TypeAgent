@@ -4,16 +4,26 @@ The templates in this folder allow you to quickly create all of the necessary Az
 
 ## Quickstart
 
-To deploy these resources in your Azure subscription into a resource group called _typeagent_demo_ run the following command either in the cloud shell or from an AzureCLI:
+Before running the ARM template, make sure you have Azure CLI installed. Sign in using `az login` and choose the subscription you want to deploy to as the default.
 
-`az deployment group create --resource-group typeagent_demo --template-file template.json`
+Then run the follow command to deploy the source necessary for TypeAgent Shell in your Azure subscription into a resource group called `typeagent-eastus`:
+
+`az deployment sub create --template-file template.json --location eastus`
+
+## Services
+
+The ARM template will deploy the following Azure services in a single resource group (default name: typeagentshell-eastus)
+
+- [Speech](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/overview)
+- [OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/overview)
+- [Maps](https://learn.microsoft.com/en-us/azure/azure-maps/about-azure-maps)
+- [Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/secrets/about-secrets)
+
+They are all set up with Entra ID, the deployer (the account that is signed into the Azure CLI) is automatically add to the RBAC role necessary for these resource by the ARM template.
 
 ## Features Not Covered
 
 The following TypeAgent features/components are not automatically created or configured by these ARM templates:
 
 - Demo Tenant for [Calendar](../ts/packages/agents/calendar) & [Email](../ts/packages/agents/email/) agents
-- Permissions Assignment
-- Identity Management
-- Populating Key values in KeyVault (see [getKeys](../ts/tools/scripts/getKeys.mjs) script)
 - [Docker](../ts/Dockerfile) endpoint app service
