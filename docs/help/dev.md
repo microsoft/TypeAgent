@@ -1,4 +1,7 @@
-# TypeAgent repo for developers
+---
+layout: docs
+title: TypeAgent repo for developers
+---
 
 ## Tips
 

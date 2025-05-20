@@ -1,4 +1,7 @@
-# TypeAgent Dispatcher Architecture
+---
+layout: docs
+title: TypeAgent Dispatcher Architecture
+---
 
 ## Overview
 

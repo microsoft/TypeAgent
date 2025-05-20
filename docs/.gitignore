@@ -1,0 +1,17 @@
+# Dependencies
+/node_modules
+
+# Build output
+/_site
+
+# Cache
+/.cache
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS specific
+.DS_Store
+Thumbs.db
