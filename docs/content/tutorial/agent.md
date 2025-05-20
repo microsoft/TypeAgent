@@ -12,7 +12,7 @@ This document describes how to build a custom application agent as an independen
 
 Begin by exploring the following:
 
-- **TypeAgent SDK**: Read about the architecture of the [**TypeAgent SDK**](../../../ts/packages/agentSdk/README.md).
+- **TypeAgent SDK**: Read about the architecture of the [TypeAgent SDK](../../../ts/packages/agentSdk/README.md).
 - **Example Agents**:
   - Review agents under the [agents](../../../ts/packages/agents) directory. The [List](../../../ts/packages/agents/list/) agent provides a good example and template for building an agent.
   - The [Echo](../../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own custom application agents.
@@ -182,7 +182,7 @@ async function executeEchoAction(
 
 ### Step 2: Build the Agent
 
-First make sure the [TypeAgent's typescript code](../../ts) is built.
+First make sure the [TypeAgent's typescript code](../../../ts) is built.
 
 - Go to `<repo>/ts`
 - `pnpm i`
