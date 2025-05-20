@@ -12,7 +12,7 @@ module.exports = function (eleventyConfig) {
   eleventyConfig.addPassthroughCopy("_includes");
   eleventyConfig.addPassthroughCopy("assets");
   eleventyConfig.addPassthroughCopy("content/imgs");
-  eleventyConfig.addPassthroughCopy("tutorial/imgs");
+  eleventyConfig.addPassthroughCopy("content/tutorial/imgs");
 
   eleventyConfig.addShortcode("version", function () {
     return String(Date.now());
@@ -31,32 +31,33 @@ module.exports = function (eleventyConfig) {
     linkify: true,
   };
 
-   // Add a shortcode for repository links
-  eleventyConfig.addShortcode("repo", function(path, text) {
-    const repoUrl = process.env.GITHUB_REPOSITORY ? 
-      `https://github.com/${process.env.GITHUB_REPOSITORY}` : 
-      this.ctx?.site?.github || 'https://github.com/microsoft/TypeAgent';
-    
-    const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || 'main';
-    
-    const normalizedPath = path.replace(/^\.\.\/|^\//g, '');
-    
+  // Add a shortcode for repository links
+  eleventyConfig.addShortcode("repo", function (path, text) {
+    const repoUrl = process.env.GITHUB_REPOSITORY
+      ? `https://github.com/${process.env.GITHUB_REPOSITORY}`
+      : this.ctx?.site?.github || "https://github.com/microsoft/TypeAgent";
+
+    const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || "main";
+
+    const normalizedPath = path.replace(/^\.\.\/|^\//g, "");
+
     // Determine the correct GitHub URL based on whether it's a file or directory
-    const githubUrl = isDirectory ? 
-      `${repoUrl}/tree/${defaultBranch}/${normalizedPath}` : 
-      `${repoUrl}/blob/${defaultBranch}/${normalizedPath}`;
-    
+    const isDirectory = !normalizedPath.includes(".");
+    const githubUrl = isDirectory
+      ? `${repoUrl}/tree/${defaultBranch}/${normalizedPath}`
+      : `${repoUrl}/blob/${defaultBranch}/${normalizedPath}`;
+
     // Return markdown link
     return `[${text || normalizedPath}](${githubUrl})`;
   });
-  
+
   // Add debugging shortcode to show the current URL
-  eleventyConfig.addShortcode("debugUrl", function() {
+  eleventyConfig.addShortcode("debugUrl", function () {
     return `
       <div style="background: #f8d7da; padding: 10px; margin: 10px 0; border: 1px solid #f5c6cb;">
         <p><strong>Debug Path Information:</strong></p>
         <p>Path Prefix: ${pathPrefix}</p>
-        <p>Full Base URL: ${this.page ? this.page.url : 'No page context'}</p>
+        <p>Full Base URL: ${this.page ? this.page.url : "No page context"}</p>
       </div>
     `;
   });
@@ -90,7 +91,7 @@ module.exports = function (eleventyConfig) {
             // construct a path relative to the site root
 
             if (dir.includes("/tutorial") && link.startsWith("imgs/")) {
-              return `/TypeAgent/tutorial/imgs/${link.substring(5)}`;
+              return `/TypeAgent/content/tutorial/imgs/${link.substring(5)}`;
             }
 
             if (dir.includes("/content")) {
@@ -112,41 +113,58 @@ module.exports = function (eleventyConfig) {
       .filter((item) => !item.filePathStem.includes("index"));
   });
 
-  // Import the link updating script
-  const { updateLinks } = require('./scripts/update-links');
+  // Store a map of input paths to output paths
+  const pageMap = new Map();
+  eleventyConfig.addTransform("recordPaths", function (content, outputPath) {
+    const inputPath = this.inputPath;
 
-   // Add a transform to update external links in markdown files
-  eleventyConfig.addTransform("updateLinks", function(content, outputPath) {
-    const repoUrl = process.env.GITHUB_REPOSITORY ? 
-      `https://github.com/${process.env.GITHUB_REPOSITORY}` : 
-      this.ctx?.site?.github || 'https://github.com/microsoft/TypeAgent';
-      
-    const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || 'main';
-      
-    if (outputPath && outputPath.endsWith(".html")) {
-      // For HTML files, we don't need to update links - they were already processed 
-      // during markdown conversion
-      return content;
-    } else if (outputPath && outputPath.endsWith(".md")) {
-      // For markdown files, update external links
-      return updateLinks(content, outputPath, repoUrl, defaultBranch);
+    if (inputPath && outputPath) {
+      pageMap.set(outputPath, inputPath);
     }
+
     return content;
   });
-  
+
+  const { updateLinks } = require("./scripts/update-links");
+
+  eleventyConfig.addTransform("updateLinks", function (content, outputPath) {
+    if (!outputPath || !outputPath.endsWith(".html")) {
+      return content; // Only process HTML files
+    }
+
+    // Get the original input path for this file
+    const inputPath = pageMap.get(outputPath) || this.inputPath;
+
+    if (!inputPath) {
+      console.warn(
+        `No input path found for ${outputPath}, skipping link transformation`
+      );
+      return content;
+    }
+
+    const repoUrl = process.env.GITHUB_REPOSITORY
+      ? `https://github.com/${process.env.GITHUB_REPOSITORY}`
+      : this.ctx?.site?.github || "https://github.com/microsoft/TypeAgent";
+
+    const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || "main";
+
+    console.log(`Transforming links in: ${outputPath} (from ${inputPath})`);
+    return updateLinks(content, outputPath, inputPath, repoUrl, defaultBranch);
+  });
+
   // Add a filter for GitHub repository URLs
-  eleventyConfig.addFilter("githubUrl", function(path, isDirectory = false) {
-    const repoUrl = process.env.GITHUB_REPOSITORY ? 
-      `https://github.com/${process.env.GITHUB_REPOSITORY}` : 
-      this.ctx?.site?.github || 'https://github.com/microsoft/TypeAgent';
-    
-    const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || 'main';
-    
-    const normalizedPath = path.replace(/^\.\.\/|^\//g, '');
-    
-    return isDirectory ? 
-      `${repoUrl}/tree/${defaultBranch}/${normalizedPath}` : 
-      `${repoUrl}/blob/${defaultBranch}/${normalizedPath}`;
+  eleventyConfig.addFilter("githubUrl", function (path, isDirectory = false) {
+    const repoUrl = process.env.GITHUB_REPOSITORY
+      ? `https://github.com/${process.env.GITHUB_REPOSITORY}`
+      : this.ctx?.site?.github || "https://github.com/microsoft/TypeAgent";
+
+    const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || "main";
+
+    const normalizedPath = path.replace(/^\.\.\/|^\//g, "");
+
+    return isDirectory
+      ? `${repoUrl}/tree/${defaultBranch}/${normalizedPath}`
+      : `${repoUrl}/blob/${defaultBranch}/${normalizedPath}`;
   });
 
   return {

@@ -9,45 +9,50 @@ module.exports = {
     },
     {
       title: "Getting Started",
-      url: "/setup/setup-Windows/",
+      url: "/content/setup/setup-Windows/",
       children: [
         {
+          title: "Linux",
+          url: "/content/setup/setup-Linux/"
+        }
+        ,
+        {
+          title: "MacOS",
+          url: "/content/setup/setup-MacOS/"
+        }
+        ,
+
+        {
           title: "Windows",
-          url: "/setup/setup-Windows/"
+          url: "/content/setup/setup-Windows/"
         },
         {
           title: "WSL",
-          url: "/setup/setup-WSL2/"
+          url: "/content/setup/setup-WSL2/"
         }
-        ,
-        {
-          title: "Linux",
-          url: "/setup/setup-Linux/"
-        }
-        ,
       ]
     },
     {
       title: "Architecture",
-      url: "/architecture/memory/",
+      url: "/content/architecture/memory/",
       children: [
         {
           title: "Memory",
-          url: "/architecture/memory/"
+          url: "/content/architecture/memory/"
         },
         {
           title: "Dispatcher",
-          url: "/architecture/dispatcher/"
+          url: "/content/architecture/dispatcher/"
         }
       ]
     },
     {
       title: "Tutorials",
-      url: "/tutorial/agent/",
+      url: "/content/tutorial/agent/",
       children: [
         {
           title: "Creating an Agent",
-          url: "/tutorial/agent/"
+          url: "/content/tutorial/agent/"
         }
       ]
     }

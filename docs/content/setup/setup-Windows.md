@@ -23,7 +23,7 @@ This is a list of step-by-step instructions to set up a Windows environment from
 
 ## Configure Services
 
-- Setup Service Keys (See instructions [here](../../ts/README.md#service-keys))
+- Setup Service Keys (See instructions [here](../../../ts/README.md#service-keys))
 
 ## Run
 

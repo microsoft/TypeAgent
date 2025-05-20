@@ -4,30 +4,30 @@ title: Building Agents for TypeAgent Dispatcher
 ---
 
 
-TypeAgent [Shell](../../ts/packages/shell) and [CLI](../../ts/packages/cli) are built using [TypeAgent Dispatcher](../../ts/packages/dispatcher). It has a configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [TypeAgent SDK](../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and then surfaced in the [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli).
+TypeAgent [Shell](../../../ts/packages/shell) and [CLI](../../../ts/packages/cli) are built using [TypeAgent Dispatcher](../../../ts/packages/dispatcher). It has a configurable and extensible architecture that allow custom agents to plug into the system. The TypeAgent repo includes several example [agents](../../../ts/packages/agents/). **Application agents** can be built **_outside_** the TypeAgent repo by using the [TypeAgent SDK](../../../ts/packages/agentSdk/README.md). These agents can be packaged as npm packages and then surfaced in the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli).
 
-This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli). The are two example agents in this repo you can reference: [Echo Agent](../../ts/examples/agentExamples/echo/) and [Measure Agent](../../ts/examples/agentExamples/measure/).
+This document describes how to build a custom application agent as an independent local NPM package **_outside of the repo_** that works with a locally built TypeAgent [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli). The are two example agents in this repo you can reference: [Echo Agent](../../../ts/examples/agentExamples/echo/) and [Measure Agent](../../../ts/examples/agentExamples/measure/).
 
 ## Prerequisites
 
 Begin by exploring the following:
 
-- **TypeAgent SDK**: Read about the architecture of the [**TypeAgent SDK**](../../ts/packages/agentSdk/README.md).
+- **TypeAgent SDK**: Read about the architecture of the [**TypeAgent SDK**](../../../ts/packages/agentSdk/README.md).
 - **Example Agents**:
-  - Review agents under the [agents](../../ts/packages/agents) directory. The [List](../../ts/packages/agents/list/) agent provides a good example and template for building an agent.
-  - The [Echo](../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own custom application agents.
+  - Review agents under the [agents](../../../ts/packages/agents) directory. The [List](../../../ts/packages/agents/list/) agent provides a good example and template for building an agent.
+  - The [Echo](../../../ts/examples/agentExamples/echo/) agent illustrates the basics of building your own custom application agents.
 
 ## Steps to build an `Echo` agent outside of the repo
 
 For the rest of the documentation, we will assume that the custom agent is named **echo**. The echo agent performs a single action: echos any input back to the user.
 
-You can see the end result of this tutorial in [Echo](../../ts/examples/agentExamples/echo/) with some modification (NOTE: The only difference is the `@typeagent/agent-sdk` dependency)
+You can see the end result of this tutorial in [Echo](../../../ts/examples/agentExamples/echo/) with some modification (NOTE: The only difference is the `@typeagent/agent-sdk` dependency)
 
 ### Step 1: Create and author the `Echo` agent package
 
 Follow the following steps to create the `Echo` agent packages manually. Start by create a directory `echo` **_outside_** of the TypeAgent repo. Then populate the directory with the following content:
 
-**package.json** [package.json](../../ts/examples/agentExamples/echo/package.json) :
+**package.json** [package.json](../../../ts/examples/agentExamples/echo/package.json) :
 
 The `package.json` contains references to **handler** and **manifest** files in the `exports` field.
 
@@ -59,7 +59,7 @@ The `package.json` contains references to **handler** and **manifest** files in 
 }
 ```
 
-**Typescript build config file** [`tsconfig.json`](../../ts/examples/agentExamples/echo/tsconfig.json)
+**Typescript build config file** [`tsconfig.json`](../../../ts/examples/agentExamples/echo/tsconfig.json)
 
 ```json
 {
@@ -89,13 +89,13 @@ The `package.json` contains references to **handler** and **manifest** files in 
 }
 ```
 
-Every application agent requires the following files to be present in the agent's [**source**](../../ts/examples/agentExamples/echo/src/) directory.
+Every application agent requires the following files to be present in the agent's [**source**](../../../ts/examples/agentExamples/echo/src/) directory.
 
 - **Agent Manifest File**: The manifest file is used to register the agent with the TypeAgent ecosystem.
 - **Action Schema File**: The action schema file is used to define the actions that the agent can perform.
 - **Agent Action Handler**: Your code that perform's the agent's actions.
 
-**Agent Manifest File** : [`src/echoManifest.json`](../../ts/examples/agentExamples/echo/src/echoManifest.json)
+**Agent Manifest File** : [`src/echoManifest.json`](../../../ts/examples/agentExamples/echo/src/echoManifest.json)
 
 The manifest file contain reference in `schemaFile` to the path to **schema** file (relative path to the **manifest** file) and the `schemaType` corresponds to the union type of all the actions.
 
@@ -110,7 +110,7 @@ The manifest file contain reference in `schemaFile` to the path to **schema** fi
 }
 ```
 
-**Agent Action Schema File** : [`src/echoActionSchema.ts`](../../ts/examples/agentExamples/echo/src/echoActionSchema.ts)
+**Agent Action Schema File** : [`src/echoActionSchema.ts`](../../../ts/examples/agentExamples/echo/src/echoActionSchema.ts)
 
 ```ts
 export type EchoAction = GenEchoAction;
@@ -125,7 +125,7 @@ export type GenEchoAction = {
 };
 ```
 
-**Agent action handler** : [`src/echoActionHandler.ts`](../../ts/examples/agentExamples/echo/src/echoActionHandler.ts)
+**Agent action handler** : [`src/echoActionHandler.ts`](../../../ts/examples/agentExamples/echo/src/echoActionHandler.ts)
 
 ```ts
 import { ActionContext, AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
@@ -201,7 +201,7 @@ In the `Echo` package, run the following to link to `@typeagent/agent-sdk` packa
 
 ### Step 3: Install `Echo` agent in TypeAgent cli or shell.
 
-Start TypeAgent [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli)
+Start TypeAgent [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli)
 
 ```bash
 # you can run these commands from the `ts` folder
@@ -214,7 +214,7 @@ or
 pnpm run shell
 ```
 
-In the [Shell](../../ts/packages/shell) or [CLI](../../ts/packages/cli), install the echo agent and check the status by issuing the command:
+In the [Shell](../../../ts/packages/shell) or [CLI](../../../ts/packages/cli), install the echo agent and check the status by issuing the command:
 
 ```
 @install echo <path to echo package>
