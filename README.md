@@ -4,18 +4,18 @@
 
 The goal of the TypeAgent team is to explore how to get work done by safely and efficiently combining stochastic systems like language models with traditional software components.  Three principles have emerged during this investigation.  They are listed below along with examples of how the principles apply to actions, memory and plans.
 
--   Principle: distill models into logical structures
-    -   Actions: find translation patterns and replace some model calls by applying patterns
-    -   Memory: build ontologies from text
-    -   Plans: people, programs and models collaborate using “tree of thought”
--   Principle: use structure to control information density
-    -   Actions: applications define discrete categories with dense descriptions of action sets
-    -   Memory: tight semantic structures fit into attention budget
-    -   Plans: each search tree node defines a focused sub-problem
--   Principle: use structure to enable collaboration
-    -   Actions: humans decide how to disambiguate action requests
-    -   Memory: simple models extract logical structure from text
-    -   Plan: quality models, advantage models, language models, humans and programs collaborate to expand each best-first-search node
+- Principle: distill models into logical structures
+  - Actions: find translation patterns and replace some model calls by applying patterns
+  - Memory: build ontologies from text
+  - Plans: people, programs and models collaborate using “tree of thought”
+- Principle: use structure to control information density
+  - Actions: applications define discrete categories with dense descriptions of action sets
+  - Memory: tight semantic structures fit into attention budget
+  - Plans: each search tree node defines a focused sub-problem
+- Principle: use structure to enable collaboration
+  - Actions: humans decide how to disambiguate action requests
+  - Memory: simple models extract logical structure from text
+  - Plan: quality models, advantage models, language models, humans and programs collaborate to expand each best-first-search node
 
 We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing approach called [Structured RAG](./docs/architecture/memory.md) as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
 
@@ -31,33 +31,33 @@ We are applying AMP to the web by creating a browser that enables web sites to r
 
 [TypeAgent Shell](./ts/packages/shell) example is the starting point to explore the **single personal agent** with **natural language interfaces** we have built so far. It is an Electron application for interacting with multiple registered agents using a single unified user interface. TypeAgent Shell includes:
 
--   Single personal agent conversational interface with voice support
--   Collaborate with users to perform and dispatch actions to an extensible set of agents, answer question and carry on a conversation.
--   Conversational memory based on Structured RAG
--   Integration with TypeAgent Cache to lower cost and latency
+- Single personal agent conversational interface with voice support
+- Collaborate with users to perform and dispatch actions to an extensible set of agents, answer question and carry on a conversation.
+- Conversational memory based on Structured RAG
+- Integration with TypeAgent Cache to lower cost and latency
 
 Follow these step-by-step instructions to quickly setup tools and environments from scratch to build, run, explore, and develop.
 
--   [Windows](./docs/setup/setup-Windows.md)
--   [WSL2](./docs/setup/setup-WSL2.md)
--   [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
--   MacOS (coming soon)
+- [Windows](./docs/setup/setup-Windows.md)
+- [WSL2](./docs/setup/setup-WSL2.md)
+- [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
+- [MacOS](./docs/setup/setup-macOS.md)
 
 For more detailed setup instructions, see the [README.md](./ts/README.md) in the TypeScript code [directory](./ts)
 
 ### Quick start - Components
 
--   [TypeAgent Dispatcher](./ts/packages/dispatcher/)
+- [TypeAgent Dispatcher](./ts/packages/dispatcher/)
 
-    Explores applying structured prompting and LLM to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
+  Explores applying structured prompting and LLM to route user requests to agents whose typed contract best matches user intent. Main component of the personal agent.
 
--   [KnowPro](./ts/packages/knowPro)
+- [KnowPro](./ts/packages/knowPro)
 
-    Explores how to implement agent memory using the ideas of [Structured RAG](./docs/architecture/memory.md).
+  Explores how to implement agent memory using the ideas of [Structured RAG](./docs/architecture/memory.md).
 
--   [TypeAgent Cache](./ts/packages/cache/)
+- [TypeAgent Cache](./ts/packages/cache/)
 
-    Explores how LLM with structured prompting can be used to cache action translation, minimizing the need to go the LLM.
+  Explores how LLM with structured prompting can be used to cache action translation, minimizing the need to go the LLM.
 
 ## State Management
 
@@ -69,22 +69,22 @@ Code in this repo doesn't not collect telemetry by default.
 
 ## Intended Uses
 
--   TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using structured prompting and LLM
--   Sample agents are not intended to be implemented in real-world settings without further testing/validation.
+- TypeAgent is sample code shared to encourage the exploration of natural language agent architectures using structured prompting and LLM
+- Sample agents are not intended to be implemented in real-world settings without further testing/validation.
 
 ## Roadmap
 
--   Publish libraries for agent memory and action dispatch.
+- Publish libraries for agent memory and action dispatch.
 
 ## Limitations
 
 TypeAgent is early stage sample code. TypeAgent is not a framework. All code in this repo is intended for building examples (apps, agents, and dispatcher hosts) only.
 
--   TypeAgent is in **active development** with frequent updates and refactoring.
--   TypeAgent has been tested with Azure Open AI services on developer's own machines only.
--   TypeAgent is currently tested in English. Performance may vary in other languages.
--   TypeAgent uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
--   You are responsible for supplying any **API keys** for services used by examples. You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
+- TypeAgent is in **active development** with frequent updates and refactoring.
+- TypeAgent has been tested with Azure Open AI services on developer's own machines only.
+- TypeAgent is currently tested in English. Performance may vary in other languages.
+- TypeAgent uses schema to validate LLM responses. An agent's validity therefore depends on how well _its schema_ represents the user intents and LLM responses _for its domains_.
+- You are responsible for supplying any **API keys** for services used by examples. You can check the [Azure provisioning readme](./azure/README.MD) for a quickstart on setting up the necessary endpoints if you do not already have endpoints.
 
 ## Developers
 
@@ -103,38 +103,42 @@ For developers who want to modify TypeAgent or contribute to our repo.
 
 Microsoft TypeAgent Repo is a mono-repo, with components organized with the following root folders based on language used.
 
--   [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
--   [`python`](./python) Python code ([Readme](./python/README.md))
--   [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
--   [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
+- [`ts`](./ts) TypeScript code ([Readme](./ts/README.md))
+- [`python`](./python) Python code ([Readme](./python/README.md))
+- [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
+- [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
 
 See more information about working with the repo [here](./docs/help/dev.md).
 
 #### Apps
 
--   [TypeAgent Shell](./ts/packages/shell/)
--   [TypeAgent CLI](./ts/packages/lic/)
+- [TypeAgent Shell](./ts/packages/shell/)
+- [TypeAgent CLI](./ts/packages/lic/)
 
 #### Agents
 
--   Application agents with natural language interfaces integrated with [TypeAgent Shell](./ts/packages/shell/) and [TypeAgent CLI](./ts/packages/cli/)
+- Application agents with natural language interfaces integrated with [TypeAgent Shell](./ts/packages/shell/) and [TypeAgent CLI](./ts/packages/cli/)
 
-    -   [Music Player](./ts/packages/agents/player/)
-    -   [Chat](./ts/packages/agents/chat/)
-    -   [Browser](./ts/packages/agents/browser/)
-    -   [VS Code](./ts/packages/agents/code/)
-    -   [List Management](./ts/packages/agents/list/)
-    -   [Calendar](./ts/packages/agents/calendar/)
-    -   [Email](./ts/packages/agents/email/)
-    -   [Desktop](./ts/packages/agents/desktop/)
-    -   [Image](./ts/packages/agents/image/)
-    -   [Markdown](./ts/packages/agents/markdown/)
-    -   [Montage](./ts/packages/agents/montage/)
-    -   [Spelunker](./ts/packages/agents/spelunker/)
-    -   [Turtle](./ts/packages/agents/turtle/)
-    -   [Phone](.ts/packages/agents/phone/)
-    -   [Photo](.ts/packages/agents/photo/)
-    -   [androidMobile](.ts/packages/agents/androidMobile/)
+  - [Music Player](./ts/packages/agents/player/)
+  - [Chat](./ts/packages/agents/chat/)
+  - [Browser](./ts/packages/agents/browser/)
+  - [VS Code](./ts/packages/agents/code/)
+  - [List Management](./ts/packages/agents/list/)
+  - [Calendar](./ts/packages/agents/calendar/)
+  - [Email](./ts/packages/agents/email/)
+  - [Desktop](./ts/packages/agents/desktop/)
+  - [Image](./ts/packages/agents/image/)
+  - [Markdown](./ts/packages/agents/markdown/)
+  - [Montage](./ts/packages/agents/montage/)
+  - [Spelunker](./ts/packages/agents/spelunker/)
+  - [Turtle](./ts/packages/agents/turtle/)
+  - [Phone](.ts/packages/agents/phone/)
+  - [Photo](.ts/packages/agents/photo/)
+  - [androidMobile](.ts/packages/agents/androidMobile/)
+
+## Questions
+
+If you have any questions about our project, you can post them in our [Q&A discussion section](https://github.com/microsoft/TypeAgent/discussions/categories/q-a).
 
 ## Code of Conduct
 

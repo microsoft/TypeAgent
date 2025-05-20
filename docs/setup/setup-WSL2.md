@@ -8,10 +8,10 @@ This is a list of step-by-step instructions to set up a WSL2 environment from _s
   - Start Windows command prompt
   - `wsl --install Ubuntu`
   - Setup WSL Username/password
-- Setup node
+- Setup NodeJS using NVM ([Full Instructions](https://nodejs.org/en/download))
   - Setup [NVM](https://github.com/nvm-sh/nvm)
-    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash`
-    - `source ~/.bashrc`
+    - `curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash`
+    - `\. "$HOME/.nvm/nvm.sh"`
   - Install Node
     - `nvm install --lts`
 - Clone and build:
