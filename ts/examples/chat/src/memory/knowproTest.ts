@@ -164,7 +164,7 @@ export async function createKnowproTestCommands(
 
 type LangSearchResults = {
     searchText: string;
-    searchQueryExpr?: kp.querySchema.SearchQuery | undefined;
+    searchQueryExpr: kp.querySchema.SearchQuery;
     results: LangSearchResult[];
     error?: string | undefined;
 };
@@ -194,7 +194,7 @@ async function* runLangSearchBatch(
         if (searchResult.success) {
             yield success({
                 searchText,
-                searchQueryExpr: debugContext.searchQuery,
+                searchQueryExpr: debugContext.searchQuery!,
                 results: searchResult.data.map((cr) => {
                     const lr: LangSearchResult = {
                         messageMatches: cr.messageMatches.map(
@@ -230,11 +230,21 @@ async function* runLangSearchBatch(
 }
 
 function compareSearchExpr(
-    s1: kp.querySchema.SearchQuery | undefined,
-    s2: kp.querySchema.SearchQuery | undefined,
+    s1: kp.querySchema.SearchQuery,
+    s2: kp.querySchema.SearchQuery,
 ): string | undefined {
-    if (!isJsonEqual(s1, s2)) {
-        return "searchExpr";
+    if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
+        return "searchExpr Length";
+    }
+    for (let i = 0; i < s1.searchExpressions.length; ++i) {
+        if (
+            !isJsonEqual(
+                s1.searchExpressions[i].filters,
+                s2.searchExpressions[i].filters,
+            )
+        ) {
+            return "searchExpr Filter";
+        }
     }
     return undefined;
 }
