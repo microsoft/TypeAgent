@@ -241,7 +241,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         const semanticRef = semanticRefs.get(scoredRef.semanticRefOrdinal);
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}::${semanticRef.range.start.messageOrdinal} > ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}::${semanticRef.range.start.messageOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();

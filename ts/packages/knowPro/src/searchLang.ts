@@ -594,15 +594,18 @@ class SearchQueryCompiler {
     private compileEntityTermsAsSearchTerms(
         entityTerms: querySchema.EntityTerm[],
         termGroup: SearchTermGroup,
-        useOrMax: boolean = true,
+        useOrMax: boolean = false,
     ): void {
         if (useOrMax) {
-            const orGroup = createOrMaxTermGroup();
-            termGroup.terms.push(orGroup);
-            termGroup = orGroup;
-        }
-        for (const term of entityTerms) {
-            this.addEntityTermAsSearchTermsToGroup(term, termGroup);
+            const orMax = createOrMaxTermGroup();
+            for (const term of entityTerms) {
+                this.addEntityTermAsSearchTermsToGroup(term, orMax);
+            }
+            termGroup.terms.push(optimizeOrMax(orMax));
+        } else {
+            for (const term of entityTerms) {
+                this.addEntityTermAsSearchTermsToGroup(term, termGroup);
+            }
         }
     }
 
