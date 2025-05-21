@@ -8,6 +8,7 @@ import types
 from typing import (
     Annotated,
     Any,
+    cast,
     get_args,
     get_origin,
     Literal,
@@ -271,7 +272,8 @@ def get_embeddings_from_binary_data(
         raise DeserializationError(
             f"Expected {count} embeddings, got {len(embeddings)}"
         )
-    data = json_data
+    data = cast(dict, json_data)  # We know it's a dict, but pyright doesn't.
+    # Traverse the keys to get to the embeddings.
     for key in keys:
         new_data = data.get(key)
         if new_data is None or type(new_data) is not dict:
