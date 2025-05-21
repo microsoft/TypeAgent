@@ -265,6 +265,9 @@ Usage: `@config pen on`
 ## @config pen off - Turn off Surface Pen Click Handler  
 Usage: `@config pen off`  
 
+## @config ports - Lists the ports assigned to agents.  
+Usage: `@config ports`  
+
 ## @const new - Create a new construction store  
 Usage: `@const new [<file>]`  
 ### Arguments:  
@@ -460,7 +463,27 @@ Usage: `@env all`
 Usage: `@env get <name>`  
 ### Arguments:  
   - &lt;name&gt; - The name of the environment variable. (type: string)  
-   
+
+## @index list - List indexes
+Usage: `@index list` 
+
+## @index create - Create a new index
+Usage: `@index create <type> <name> <location>`
+Arguments:
+    - &lt;type&gt; - The type of index to create [image, email] (type: string)
+    - &lt;name&gt; - Name of the index (type: string)
+    - &lt;location&gt; - Location of the index (type: string)
+
+## @index delete - Delete an index
+Usage: `@index delete <name>`
+Arguments:
+  - &lt;name&gt; - Name of the index to delete (type: string)
+
+## @index info - Show index details
+Usage: `@index info <name>`
+Arguments:
+  - &lt;name&gt; - Name of the index (type: string)
+
 ## @install - Install an agent  
 Usage: `@install <name> <agent>`  
 ### Arguments:  
