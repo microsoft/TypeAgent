@@ -5,11 +5,11 @@ TypeAgent Dispatcher is the core component of the TypeAgent repo that explores h
 - Can be integrated and hosted in different front ends. [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) are two examples in this repo.
 - Extensible [application agents](../agentSdk/README.md) architecture.
 - [TypeAgent Cache](../cache/README.md) to lower latency and cost.
-- Conversational memory based on [Structured RAG](../../../docs/architecture/memory.md)
+- Conversational memory based on [Structured RAG](../../../docs/content/architecture/memory.md)
 
 Dispatcher processes user requests and asks LLM to translate it into an action based on a schema provided by the application agents. It has ability to automatically switch between different agents to provide a seamless experience in a extensible and scalable way.
 
-See [dispatcher architecture](../../../docs/architecture/dispatcher.md) doc for more details on the design of the dispatcher component.
+See [dispatcher architecture](../../../docs/content/architecture/dispatcher.md) doc for more details on the design of the dispatcher component.
 
 ## Usage - Natural Language Requests
 
@@ -174,7 +174,7 @@ By default agents runs out of proc in their own process. This is to ensure that 
 
 ### Adding Dispatcher Agent
 
-Additional Dispatcher Agent can be create and added to the dispatcher to extend the capabilities of TypeAgent as a **personal agent**. [TypeAgent SDK](../agentSdk) defines the interfaces and helper needed to develop an agent. The `Echo` agent [tutorial](../../../docs/tutorial/agent.md) illustrate the steps to create a basic agent in a NPM module and install into TypeAgent's [shell](../shell) and [CLI](../cli).
+Additional Dispatcher Agent can be create and added to the dispatcher to extend the capabilities of TypeAgent as a **personal agent**. [TypeAgent SDK](../agentSdk) defines the interfaces and helper needed to develop an agent. The `Echo` agent [tutorial](../../../docs/content/tutorial/agent.md) illustrate the steps to create a basic agent in a NPM module and install into TypeAgent's [shell](../shell) and [CLI](../cli).
 
 By default dispatcher only comes with `system` and `dispatcher` agents, providing minimal base functionality. Additional agents are provided using [AppAgentProvider](./src/agentProvider/agentProvider.ts) when the dispatcher is created by the host. The host of the dispatcher (like [shell](../shell) and [CLI](../cli)) is configured with the default provider with subset of agents implemented in this repo, and a extensible provider that allow additional agent to be dynamically install/registered. (See [default-agent-provider](../defaultAgentProvider/) package).
 

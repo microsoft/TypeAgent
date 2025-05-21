@@ -95,7 +95,7 @@ to build a set of application agents that **take actions**. Agents define action
 
 ### Exploring Action Dispatch
 
-[TypeAgent Shell](./ts/packages/shell)'s functionality can be extended by installing/registering additional agents. For developers who are interested in experimenting adding action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [TypeAgent Shell](./ts/packages/shell) example to explore using the [dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/tutorial/agent.md) is a starting point to create a plugin agent, and [TypeAgent SDK](./ts/packages/agentSdk/) provides the interface definitions between [dispatcher](./ts/packages/dispatcher) and the agent.
+[TypeAgent Shell](./ts/packages/shell)'s functionality can be extended by installing/registering additional agents. For developers who are interested in experimenting adding action dispatch for their own scenarios, they can create a _custom agents_ that plugs into the [TypeAgent Shell](./ts/packages/shell) example to explore using the [dispatcher](./ts/packages/dispatcher/) to route actions to their custom agents. The `Echo` agent [tutorial](./docs/content/tutorial/agent.md) is a starting point to create a plugin agent, and [TypeAgent SDK](./ts/packages/agentSdk/) provides the interface definitions between [dispatcher](./ts/packages/dispatcher) and the agent.
 
 ### Working with TypeAgent Repo
 
@@ -108,7 +108,7 @@ Microsoft TypeAgent Repo is a mono-repo, with components organized with the foll
 - [`dotnet`](./dotnet) Dotnet (C#) code ([Readme](./dotnet/README.md))
 - [`android`](./android/) Android (Kotlin/Java) code ([Readme](./android/README.md))
 
-See more information about working with the repo [here](./docs/help/dev.md).
+See more information about working with the repo [here](./docs/content/help/dev.md).
 
 #### Apps
 

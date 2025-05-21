@@ -6,7 +6,7 @@ Work in progress.
 
 ## Installation
 
-- Follow the standard [external Agent installation steps](../../../../docs/tutorial/agent.md#step-3-install-echo-agent-in-typeagent-cli-or-shell).
+- Follow the standard [external Agent installation steps](../../../../docs/content/tutorial/agent.md#step-3-install-echo-agent-in-typeagent-cli-or-shell).
 - **Note**: for this example agent, you must link both the typeagent and agent-sdk modules as specified in the instructions:
 
   - `npm link @typeagent`
