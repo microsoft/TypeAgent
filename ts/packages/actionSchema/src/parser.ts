@@ -19,7 +19,7 @@ import {
 } from "./type.js";
 import ts from "typescript";
 import { ActionParamSpecs, SchemaConfig } from "./schemaConfig.js";
-import { resolveReference } from "./utils.js";
+import { resolveTypeReference } from "./utils.js";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:schema:parse");
 
@@ -70,7 +70,7 @@ function checkParamSpecs(
                 }
                 currentType = field.type;
             }
-            const resolvedType = resolveReference(currentType);
+            const resolvedType = resolveTypeReference(currentType);
             if (resolvedType === undefined) {
                 throw new Error(
                     `Schema Config Error: Invalid parameter name '${propertyName}' for action '${actionName}': unresolved type reference for property '${name}'`,
@@ -148,7 +148,7 @@ function checkActionSchema(
     }
 
     const actionNameString = actionName.type.typeEnum[0];
-    const parameterFieldType = resolveReference(parameters?.type);
+    const parameterFieldType = resolveTypeReference(parameters?.type);
     if (
         parameterFieldType !== undefined &&
         parameterFieldType.type !== "object"
