@@ -386,7 +386,7 @@ export async function createKnowproCommands(
                 thresholdScore: 0.7,
             };
         }
-        const langFilter = createLangFilter(namedArgs);
+        const langFilter = createLangFilter(undefined, namedArgs);
         const searchResults = await runSearch(
             searchText,
             options,
@@ -445,7 +445,7 @@ export async function createKnowproCommands(
         selectExpr: kp.SearchSelectExpr,
         namedArgs: NamedArgs,
     ): Promise<boolean> {
-        selectExpr.when = createLangFilter(namedArgs);
+        selectExpr.when = createLangFilter(selectExpr.when, namedArgs);
         context.printer.writeSelectExpr(selectExpr);
         const searchResults = await kp.searchConversation(
             context.conversation!,
@@ -765,9 +765,9 @@ export async function createKnowproCommands(
     }
 
     function createLangFilter(
+        when: kp.WhenFilter | undefined,
         namedArgs: NamedArgs,
     ): kp.LanguageSearchFilter | undefined {
-        let when: kp.WhenFilter | undefined;
         if (namedArgs.ktype) {
             when ??= {};
             when.knowledgeType = namedArgs.ktype;

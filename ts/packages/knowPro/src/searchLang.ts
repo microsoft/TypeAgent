@@ -506,7 +506,7 @@ class SearchQueryCompiler {
     public compileActionTermAsSearchTerms(
         actionTerm: querySchema.ActionTerm,
         termGroup?: SearchTermGroup,
-        useOrMax: boolean = true,
+        useOrMax: boolean = false,
     ): SearchTermGroup {
         termGroup ??= createOrTermGroup();
         const actionGroup = useOrMax ? createOrMaxTermGroup() : termGroup;
