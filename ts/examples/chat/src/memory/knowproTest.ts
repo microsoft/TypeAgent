@@ -149,6 +149,7 @@ export async function createKnowproTestCommands(
             const destPath = appendFileNameSuffix(namedArgs.srcPath, "_errors");
             await writeJsonFile(destPath, errors);
         }
+        context.printer.writeLine(`${i} tests, ${errors.length} errors`);
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {
