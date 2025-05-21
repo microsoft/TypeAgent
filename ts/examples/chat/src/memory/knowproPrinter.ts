@@ -66,9 +66,16 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
-    public writeMessages(messages: Iterable<kp.IMessage> | kp.IMessage[]) {
+    public writeMessages(
+        messages: Iterable<kp.IMessage> | kp.IMessage[],
+        ordinalStartAt = 0,
+    ) {
+        let i = ordinalStartAt;
         for (const message of messages) {
+            this.writeLine(`[${i}]`);
             this.writeMessage(message);
+            ++i;
+            this.writeLine();
         }
     }
 

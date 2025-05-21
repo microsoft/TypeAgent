@@ -133,24 +133,31 @@ export async function createKnowproCommands(
 
     function showMessagesDef(): CommandMetadata {
         return {
-            description: "Show all messages",
+            description: "Show messages in the loaded conversation",
             options: {
-                maxMessages: argNum("Maximum messages to display"),
+                startAt: argNum("Ordinal to start at"),
+                count: argNum("Number of messages to display"),
             },
         };
     }
-    commands.kpMessages.metadata = "Show all messages";
+    commands.kpMessages.metadata = showMessagesDef();
     async function showMessages(args: string[]) {
         const conversation = ensureConversationLoaded();
         if (!conversation) {
             return;
         }
         const namedArgs = parseNamedArguments(args, showMessagesDef());
-        const messages =
-            namedArgs.maxMessages > 0
-                ? conversation.messages.getSlice(0, namedArgs.maxMessages)
-                : conversation.messages;
-        context.printer.writeMessages(messages);
+        const startAt =
+            namedArgs.startAt && namedArgs.startAt > 0 ? namedArgs.startAt : 0;
+        const count =
+            namedArgs.count && namedArgs.count > 0
+                ? namedArgs.count
+                : conversation.messages.length;
+        const messages = conversation.messages.getSlice(
+            startAt,
+            startAt + count,
+        );
+        context.printer.writeMessages(messages, startAt);
     }
 
     function searchTermsDef(
