@@ -1,6 +1,6 @@
 # KnowPro
 
-**KnowPro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). KnowPro is in **active** development with frequent updates.
+**KnowPro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). KnowPro is early stage, in **active** development, with frequent updates.
 
 - The KnowPro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md).
 - The [KnowPro test app](../../examples/chat/README.md) demonstrates how to use the KnowPro API and memory implementations.

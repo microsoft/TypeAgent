@@ -17,7 +17,7 @@ export type FacetTerm = {
 export type EntityTerm = {
     // the name of the entity or thing such as "Bach", "Great Gatsby", "frog" or "piano" or "we", "I"; "*" means match any entity name
     name: string;
-    isNamePronoun?: boolean;
+    isNamePronoun: boolean;
     // the specific types of the entity such as "book", "movie", "song", "speaker", "person", "artist", "animal", "instrument", "school", "room", "museum", "food" etc.
     // Generic types like "object", "thing" etc. are NOT allowed
     // An entity can have multiple types; entity types should be single words

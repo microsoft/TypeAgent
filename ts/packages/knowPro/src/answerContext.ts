@@ -64,10 +64,15 @@ export class AnswerContextChunkBuilder {
                 yield chunk;
             }
             for (const chunk of this.chunkKnowledge(
-                this.context.entities,
+                this.context.topics,
                 "topics",
             )) {
                 yield chunk;
+            }
+            // Any pending chunks?
+            if (this.currentChunkCharCount > 0) {
+                yield this.currentChunk;
+                this.newChunk();
             }
         }
         if (includeMessages) {
@@ -143,3 +148,9 @@ export class AnswerContextChunkBuilder {
         this.currentChunkCharCount = 0;
     }
 }
+
+export type AnswerContextOptions = {
+    entitiesTopK?: number | undefined;
+    topicsTopK?: number | undefined;
+    messagesTopK?: number | undefined;
+};

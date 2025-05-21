@@ -26,13 +26,17 @@ import {
 import { dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import { hasConversationResults } from "./knowproCommon.js";
+import {
+    getLangSearchResult,
+    hasConversationResults,
+} from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
 import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import * as cm from "conversation-memory";
+import { createKnowproTestCommands } from "./knowproTest.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -94,6 +98,12 @@ export async function createKnowproCommands(
         basePath: "/data/testChat/knowpro",
         printer: new KnowProPrinter(),
     };
+
+    const DefaultMaxToDisplay = 25;
+    const DefaultKnowledgeTopK = 50;
+    const MessageCountLarge = 1000;
+    const MessageCountMedium = 500;
+
     await ensureDir(context.basePath);
     /*
      * CREATE COMMANDS FOR DIFFERENT MEMORY TYPES
@@ -103,6 +113,7 @@ export async function createKnowproCommands(
     await createKnowproEmailCommands(context, commands);
     await createKnowproConversationCommands(context, commands);
     await createKnowproDataFrameCommands(context, commands);
+    await createKnowproTestCommands(context, commands);
     /*
      * CREATE GENERAL MEMORY COMMANDS
      */
@@ -151,7 +162,10 @@ export async function createKnowproCommands(
                 description ??
                 "Search current knowPro conversation by manually providing terms as arguments",
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 25),
+                maxToDisplay: argNum(
+                    "Maximum matches to display",
+                    DefaultMaxToDisplay,
+                ),
                 displayAsc: argBool("Display results in ascending order", true),
                 startMinute: argNum("Starting at minute."),
                 endMinute: argNum("Ending minute."),
@@ -214,7 +228,7 @@ export async function createKnowproCommands(
                 context.printer.writeKnowledgeSearchResults(
                     conversation,
                     matches,
-                    namedArgs.maxToDisplay,
+                    adjustMaxToDisplay(namedArgs.maxToDisplay),
                     namedArgs.distinct,
                 );
             } else {
@@ -234,7 +248,10 @@ export async function createKnowproCommands(
                 query: arg("Search query"),
             },
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 25),
+                maxToDisplay: argNum(
+                    "Maximum matches to display",
+                    DefaultMaxToDisplay,
+                ),
                 exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
                 distinct: argBool("Show distinct results", false),
@@ -247,18 +264,18 @@ export async function createKnowproCommands(
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
-        def.options.knowledgeTopK = argNum(
-            "How many top K knowledge matches",
-            50,
-        );
         def.options.messageTopK = argNum("How many top K message matches", 25);
         def.options.charBudget = argNum("Maximum characters in budget");
         def.options.applyScope = argBool("Apply scopes", true);
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
-        def.options.maxToDisplay = argNum("Maximum to display", 25);
+        def.options.maxToDisplay = argNum(
+            "Maximum to display",
+            DefaultMaxToDisplay,
+        );
         def.options.thread = arg("Thread description");
+        def.options.tag = arg("Tag to filter by");
         return def;
     }
     commands.kpSearch.metadata = searchDefNew();
@@ -339,6 +356,10 @@ export async function createKnowproCommands(
             "Ignore messages if knowledge produces answers",
             true,
         );
+        def.options!.knowledgeTopK = argNum(
+            "How many top K knowledge matches",
+            DefaultKnowledgeTopK,
+        );
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -365,23 +386,13 @@ export async function createKnowproCommands(
                 thresholdScore: 0.7,
             };
         }
-
-        const searchResults =
-            context.conversation instanceof cm.Memory
-                ? await context.conversation.searchWithLanguage(
-                      searchText,
-                      options,
-                      undefined,
-                      debugContext,
-                  )
-                : await kp.searchConversationWithLanguage(
-                      context.conversation!,
-                      searchText,
-                      context.queryTranslator,
-                      options,
-                      undefined,
-                      debugContext,
-                  );
+        const langFilter = createLangFilter(undefined, namedArgs);
+        const searchResults = await runSearch(
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -415,6 +426,7 @@ export async function createKnowproCommands(
                         context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
+                createAnswerOptions(namedArgs),
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -433,14 +445,7 @@ export async function createKnowproCommands(
         selectExpr: kp.SearchSelectExpr,
         namedArgs: NamedArgs,
     ): Promise<boolean> {
-        if (namedArgs.ktype) {
-            selectExpr.when ??= {};
-            selectExpr.when.knowledgeType = namedArgs.ktype;
-        }
-        if (namedArgs.thread) {
-            selectExpr.when ??= {};
-            selectExpr.when.threadDescription = namedArgs.thread;
-        }
+        selectExpr.when = createLangFilter(selectExpr.when, namedArgs);
         context.printer.writeSelectExpr(selectExpr);
         const searchResults = await kp.searchConversation(
             context.conversation!,
@@ -464,10 +469,27 @@ export async function createKnowproCommands(
             searchResults,
             namedArgs.showKnowledge,
             namedArgs.showMessages,
-            namedArgs.maxToDisplay,
+            adjustMaxToDisplay(namedArgs.maxToDisplay),
             namedArgs.distinct,
         );
         return true;
+    }
+
+    async function runSearch(
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+        langFilter?: kp.LanguageSearchFilter,
+        debugContext?: kp.LanguageSearchDebugContext,
+    ) {
+        const searchResults = getLangSearchResult(
+            context.conversation!,
+            context.queryTranslator,
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
+        return searchResults;
     }
 
     function searchRagDef(): CommandMetadata {
@@ -477,7 +499,10 @@ export async function createKnowproCommands(
                 query: arg("Search query"),
             },
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 25),
+                maxToDisplay: argNum(
+                    "Maximum matches to display",
+                    DefaultMaxToDisplay,
+                ),
                 minScore: argNum("Min threshold score", 0.7),
                 charBudget: argNum("Character budget", 1024 * 16),
             },
@@ -503,7 +528,7 @@ export async function createKnowproCommands(
                 matches,
                 false,
                 true,
-                namedArgs.maxToDisplay,
+                adjustMaxToDisplay(namedArgs.maxToDisplay),
                 true,
             );
         } else {
@@ -542,6 +567,7 @@ export async function createKnowproCommands(
                         context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
+                createAnswerOptions(namedArgs),
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -681,12 +707,8 @@ export async function createKnowproCommands(
     function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
         let options = kp.createSearchOptions();
         options.exactMatch = namedArgs.exact;
-        options.maxKnowledgeMatches = namedArgs.knowledgeTopK;
         options.maxMessageMatches = namedArgs.messageTopK;
         options.maxCharsInBudget = namedArgs.charBudget;
-        if (context.conversation!.messages.length > 500) {
-            options.maxKnowledgeMatches = options.maxKnowledgeMatches! * 2;
-        }
         return options;
     }
 
@@ -696,5 +718,68 @@ export async function createKnowproCommands(
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
+    }
+
+    function createAnswerOptions(
+        namedArgs: NamedArgs,
+    ): kp.AnswerContextOptions {
+        let topK = namedArgs.knowledgeTopK;
+        if (topK === undefined) {
+            return {};
+        }
+        const options: kp.AnswerContextOptions = {
+            entitiesTopK: topK,
+            topicsTopK: topK,
+        };
+        options.entitiesTopK = adjustKnowledgeTopK(options.entitiesTopK);
+        return options;
+    }
+
+    function adjustKnowledgeTopK(topK?: number | undefined) {
+        if (topK !== undefined && topK === DefaultKnowledgeTopK) {
+            // Scale topK depending on the size of the conversation
+            const numMessages = context.conversation!.messages.length;
+            if (numMessages >= MessageCountLarge) {
+                topK = topK * 4;
+            } else if (numMessages >= MessageCountMedium) {
+                topK = topK * 2;
+            }
+        }
+        return topK;
+    }
+
+    function adjustMaxToDisplay(maxToDisplay: number) {
+        if (
+            maxToDisplay !== undefined &&
+            maxToDisplay === DefaultMaxToDisplay
+        ) {
+            // Scale topK depending on the size of the conversation
+            const numMessages = context.conversation!.messages.length;
+            if (numMessages >= MessageCountLarge) {
+                maxToDisplay = maxToDisplay * 4;
+            } else if (numMessages >= MessageCountMedium) {
+                maxToDisplay = maxToDisplay * 2;
+            }
+        }
+        return maxToDisplay;
+    }
+
+    function createLangFilter(
+        when: kp.WhenFilter | undefined,
+        namedArgs: NamedArgs,
+    ): kp.LanguageSearchFilter | undefined {
+        if (namedArgs.ktype) {
+            when ??= {};
+            when.knowledgeType = namedArgs.ktype;
+        }
+        if (namedArgs.tag) {
+            when ??= {};
+            when.tags = [namedArgs.tag];
+        }
+        if (namedArgs.thread) {
+            when ??= {};
+            when.threadDescription = namedArgs.thread;
+        }
+        return when;
     }
 }

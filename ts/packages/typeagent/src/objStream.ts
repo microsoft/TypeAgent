@@ -227,6 +227,24 @@ export function getFileName(filePath: string): string {
     return path.basename(filePath, path.extname(filePath));
 }
 
+export function changeFileExt(
+    filePath: string,
+    newExt: string,
+    suffix?: string,
+): string {
+    const dirPath = path.dirname(filePath);
+    let fileName = getFileName(filePath);
+    if (suffix) {
+        fileName += suffix;
+    }
+    fileName += newExt;
+    return path.join(dirPath, fileName);
+}
+
+export function appendFileNameSuffix(filePath: string, suffix: string): string {
+    return changeFileExt(filePath, path.extname(filePath), suffix);
+}
+
 /**
  * Read all text from a file.
  * @param filePath can be direct or relative
