@@ -19,7 +19,7 @@ import {
     RemovePhotosAction,
     SelectPhotosAction,
     MontageActivity,
-    Montage,
+    SetMontageViewModeAction,
 } from "./montageActionSchema.js";
 import {
     createActionResult,
@@ -494,6 +494,21 @@ async function handleMontageAction(
                 message += `New montage image count: ${fileCount} images.`;
             }
             result = createActionResult(message);
+            break;
+        }
+        
+        case "setMontageViewMode": {
+            const viewAction = action as SetMontageViewModeAction;
+            if (agentContext.activeMontageId !== -1) {
+                updateViewWithAction(getActiveMontage(agentContext)!, action);
+                result = createActionResult(
+                    `Updated the montage view to ${viewAction.parameters.viewMode} mode.`,
+                );
+            } else {
+                result = createActionResult(
+                    `View Mode not set, no active montage.`,
+                )
+            }
             break;
         }
 
