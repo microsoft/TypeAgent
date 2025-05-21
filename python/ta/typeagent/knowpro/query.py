@@ -46,7 +46,19 @@ def is_conversation_searchable(conversation: IConversation) -> bool:
     )
 
 
-# TODO: getTextRangeForDateRange ... matchPropertySearchTermToSemanticRef
+# TODO: getTextRangeForDateRange
+# TODO: getMatchingTermForText
+# TODO: matchSearchTermToText
+# TODO: matchSearchTermToOneOfText
+# TODO: matchSearchTermToEntity
+# TODO: matchPropertySearchTermToEntity
+# TODO: matchConcreteEntity
+# TODO: matchEntityNameOrType
+# TODO: matchPropertyNameToFacetName
+# TODO: matchPropertyNameToFacetValue
+# TODO: matchPropertySearchTermToAction
+# TODO: matchPropertySearchTermToTag
+# TODO: matchPropertySearchTermToSemanticRef
 
 
 def lookup_term_filtered(
@@ -85,7 +97,8 @@ def lookup_term(
     return semantic_ref_index.lookup_term(term.text)
 
 
-# TODO: lookupProperty, lookupTermFiltered, lookupKnowledgeType
+# TODO: lookupProperty
+# TODO: lookupKnowledgeType
 
 
 @dataclass
@@ -485,6 +498,21 @@ class MatchPropertySearchTermExpr(MatchTermExpr):
             )
 
 
+# TODO: MatchTagExpr
+# TODO: MatchTopicExpr
+# TODO: GroupByKnowledgeTypeExpr
+# TODO: SelectTopNKnowledgeGroupExpr
+# TODO: GroupSearchResultsExpr
+# TODO: WhereSemanticRefExpr
+# TODO: IQuerySemanticRefPredicate
+# TODO: matchPredicates
+# TODO: KnowledgeTypePredicate
+# TODO: PropertyMatchPredicate
+
+
+# NOTE: GetScopeExpr is moved after TextRangeSelector to avoid circular references.
+
+
 class IQueryTextRangeSelector(Protocol):
     """Protocol for a selector that can evaluate to a text range."""
 
@@ -525,3 +553,24 @@ class GetScopeExpr(QueryOpExpr[TextRangesInScope]):
             if range_collection is not None:
                 ranges_in_scope.add_text_ranges(range_collection)
         return ranges_in_scope
+
+
+# TODO: SelectInScopeExpr
+# TODO: TextRangesInDateRangeSelector
+# TODO: TextRangesPredicateSelector
+# TODO: TextRangesWithTagSelector
+# TODO: TextRangesFromSemanticRefsSelector
+# TODO: TextRangesFromMessagesSelector
+# TODO: ThreadSelector
+# TODO: toGroupedSearchResults
+# TODO: MessagesFromKnowledgeExpr
+# TODO: SelectMessagesInCharBudget
+# TODO: RankMessagesBySimilarityExpr
+# TODO: GetScoredMessagesExpr
+# TODO: MatchMessagesBooleanExpr
+# TODO: MatchMessagesOrExpr
+# TODO: MatchMessagesAndExpr
+# TODO: MatchMessagesOrMaxExpr
+# TODO: MatchMessagesBySimilarityExpr
+# TODO: NoOpExpr
+# TODO: messageMatchesFromKnowledgeMatches
