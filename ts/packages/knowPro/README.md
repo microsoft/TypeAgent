@@ -34,7 +34,7 @@ Examples of using the above APIs can be found here:
 - Information retrieved by executing a query can also be used to retrieve the messages it originated in.
 - Natural language user requests are translated to search query expressions. These query expressions are then evaluated. Query results are used to generate answers to user requests.
 
-You can learn more about Structurd RAG in the [TypeAgent memory architecture](../../../docs/architecture/memory.md) document.
+You can learn more about Structurd RAG in the [TypeAgent memory architecture](../../../docs/content/architecture/memory.md) document.
 
 ## KnowPro implementation
 

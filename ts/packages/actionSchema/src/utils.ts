@@ -1,9 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SchemaType, ActionSchemaTypeDefinition } from "./type.js";
+import {
+    SchemaType,
+    ActionSchemaTypeDefinition,
+    ResolvedSchemaType,
+} from "./type.js";
+import { validateSchema } from "./validate.js";
 
-export function resolveReference(type?: SchemaType): SchemaType | undefined {
+export function resolveUnionType(type: ResolvedSchemaType, actual: unknown) {
+    if (type.type !== "type-union") {
+        return type;
+    }
+    for (const t of type.types) {
+        const actualType = resolveTypeReference(t);
+        if (actualType === undefined) {
+            throw new Error("Unresolved type reference");
+        }
+        try {
+            validateSchema("", actualType, actual, false);
+            // REVIEW: just pick the first match?
+            return actualType;
+        } catch {}
+    }
+    return undefined;
+}
+
+export function resolveTypeReference(
+    type?: SchemaType,
+): ResolvedSchemaType | undefined {
     if (type === undefined) {
         return undefined;
     }
@@ -27,26 +52,27 @@ export function getParameterType(
     if (propertyNames.shift() !== "parameters") {
         return undefined;
     }
-    let curr = resolveReference(actionType.type.fields.parameters?.type);
+    let curr = resolveTypeReference(actionType.type.fields.parameters?.type);
     if (curr === undefined) {
         return undefined;
     }
     for (const propertyName of propertyNames) {
         const maybeIndex = parseInt(propertyName);
+        let next: SchemaType | undefined;
         if (maybeIndex.toString() == propertyName) {
             if (curr.type !== "array") {
                 return undefined;
             }
-            curr = curr.elementType;
+            next = curr.elementType;
         } else {
             if (curr.type !== "object") {
                 return undefined;
             }
-            curr = curr.fields[propertyName]?.type;
+            next = curr.fields[propertyName]?.type;
         }
 
         // TODO: doesn't work on union types yet.
-        curr = resolveReference(curr);
+        curr = resolveTypeReference(next);
         if (curr === undefined) {
             return undefined;
         }

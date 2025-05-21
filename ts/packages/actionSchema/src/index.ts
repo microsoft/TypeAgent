@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export {
+    ResolvedSchemaType as ActionResolvedParamType,
     SchemaType as ActionParamType,
     SchemaTypeArray as ActionParamArray,
     SchemaTypeObject as ActionParamObject,
@@ -27,7 +28,12 @@ export {
     ActionFunctionJsonSchema,
 } from "./jsonSchemaGenerator.js";
 export { validateAction } from "./validate.js";
-export { getParameterType, getParameterNames } from "./utils.js";
+export {
+    getParameterType,
+    getParameterNames,
+    resolveTypeReference,
+    resolveUnionType,
+} from "./utils.js";
 
 export * as ActionSchemaCreator from "./creator.js";
 

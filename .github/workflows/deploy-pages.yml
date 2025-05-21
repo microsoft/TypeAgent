@@ -1,0 +1,100 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+name: Build and Deploy Docs
+
+on:
+  push:
+    branches:
+      - main
+      - siteTestCode
+
+    # Only run when docs-related files change
+    paths:
+      - 'docs/**'
+  
+  # Allow manual deployment from the Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  pages: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs 
+    
+    permissions:
+      contents: write
+      id-token: write
+      pages: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout Repository 🛎️
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check Repository Structure
+        run: |
+          echo "Repository root contents:"
+          ls -la
+        working-directory: .
+        
+      - name: Setup Node.js ⚙️
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18.x
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Dependencies 📦
+        run: pnpm install
+
+      - name: Update Links in Markdown Files 🔄
+        run: |
+          # Run the link update script
+          node scripts/update-links.js
+
+      - name: Build Site 🔧
+        run: pnpm run build
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+           name: github-pages
+           path: docs/_site
+      - name: Deploy to GitHub Pages from artifacts
+        uses: actions/deploy-pages@v4
