@@ -64,7 +64,7 @@ export class AnswerContextChunkBuilder {
                 yield chunk;
             }
             for (const chunk of this.chunkKnowledge(
-                this.context.entities,
+                this.context.topics,
                 "topics",
             )) {
                 yield chunk;

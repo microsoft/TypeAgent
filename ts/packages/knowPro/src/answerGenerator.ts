@@ -13,7 +13,6 @@ import {
 } from "typechat";
 import * as answerSchema from "./answerResponseSchema.js";
 import * as contextSchema from "./answerContextSchema.js";
-
 import { asyncArray, getTopK, loadSchema, rewriteText } from "typeagent";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import {
@@ -177,20 +176,20 @@ export async function generateAnswerInChunks(
         return runSingleChunk(chunks[0]);
     }
 
-    const structuredChunks = chunks.filter(
-        (c) => c.messages === undefined || c.messages.length === 0,
-    );
     let chunkAnswers: answerSchema.AnswerResponse[] = [];
-    const structuredAnswers = await runGenerateAnswers(
-        answerGenerator,
-        question,
-        structuredChunks,
-        progress,
-    );
-    if (!structuredAnswers.success) {
-        return structuredAnswers;
+    const structuredChunks = getStructuredChunks(chunks);
+    if (structuredChunks.length > 0) {
+        const structuredAnswers = await runGenerateAnswers(
+            answerGenerator,
+            question,
+            structuredChunks,
+            progress,
+        );
+        if (!structuredAnswers.success) {
+            return structuredAnswers;
+        }
+        chunkAnswers.push(...structuredAnswers.data);
     }
-    chunkAnswers.push(...structuredAnswers.data);
 
     if (!hasAnswer(chunkAnswers) || !answerGenerator.settings.fastStop) {
         // Generate partial answers from each message chunk
@@ -222,6 +221,28 @@ export async function generateAnswerInChunks(
 
     function hasAnswer(answers: answerSchema.AnswerResponse[]): boolean {
         return answers.some((a) => a.type === "Answered");
+    }
+
+    function getStructuredChunks(
+        chunks: contextSchema.AnswerContext[],
+    ): contextSchema.AnswerContext[] {
+        const structuredChunks: contextSchema.AnswerContext[] = [];
+        for (const chunk of chunks) {
+            let structuredChunk: contextSchema.AnswerContext | undefined =
+                undefined;
+            if (chunk.entities) {
+                structuredChunk = {};
+                structuredChunk.entities = chunk.entities;
+            }
+            if (chunk.topics) {
+                structuredChunk = {};
+                structuredChunk.topics = chunk.topics;
+            }
+            if (structuredChunk !== undefined) {
+                structuredChunks.push(structuredChunk);
+            }
+        }
+        return structuredChunks;
     }
 }
 
