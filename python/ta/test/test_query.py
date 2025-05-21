@@ -55,7 +55,7 @@ from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
 def downcast[T](cls: type[T], obj: object) -> T:
     """Downcast an object to a specific type."""
     assert isinstance(obj, cls), f"Expected type {cls}, but got {type(obj)}"
-    return cast(T, obj)
+    return obj
 
 
 class MockMessage(IMessage):
