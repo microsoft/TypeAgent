@@ -69,6 +69,11 @@ export class AnswerContextChunkBuilder {
             )) {
                 yield chunk;
             }
+            // Any pending chunks?
+            if (this.currentChunkCharCount > 0) {
+                yield this.currentChunk;
+                this.newChunk();
+            }
         }
         if (includeMessages) {
             for (const chunk of this.chunkMessages()) {

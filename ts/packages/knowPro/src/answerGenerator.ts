@@ -278,26 +278,34 @@ export class AnswerGenerator implements IAnswerGenerator {
                 this.settings.maxCharsInBudget,
             );
         }
-
-        let contextPrompt: PromptSection[] = [];
-        if (this.settings.modelInstructions) {
-            contextPrompt.push(...this.settings.modelInstructions);
-        }
-        contextPrompt.push(
+        let prompt: string[] = [];
+        const questionPrompt = createQuestionPrompt(question);
+        prompt.push(questionPrompt);
+        prompt.push(
             createContextPrompt(
                 this.contextTypeName,
                 this.contextSchema,
                 contextContent,
-            ),
+            ).content as string,
         );
-        const questionPrompt = createQuestionPrompt(question);
-        return this.answerTranslator.translate(questionPrompt, contextPrompt);
+        const promptText = prompt.join("\n");
+        return this.answerTranslator.translate(
+            promptText,
+            this.settings.modelInstructions,
+        );
     }
 
     public async combinePartialAnswers(
         question: string,
         partialAnswers: (answerSchema.AnswerResponse | undefined)[],
     ): Promise<Result<answerSchema.AnswerResponse>> {
+        if (partialAnswers.length === 1) {
+            let response = partialAnswers[0];
+            if (response) {
+                return success(response);
+            }
+            return error("No answer");
+        }
         let answer = "";
         let whyNoAnswer: string | undefined;
         let answerCount = 0;
@@ -555,10 +563,11 @@ function createQuestionPrompt(question: string): string {
         "The following is a user question:",
         `===\n${question}\n===`, // Leave the '/n' here
         "- The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
-        "- Answer the user question using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
-        "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in the conversation history.",
-        "- Use the name and type of the provided entities to identity those highly relevant to answering the question.",
-        "- List only those entities and topics that answer the question PRECISELY.",
+        "- Answer the user question PRECISELY using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
+        "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in [ANSWER CONTEXT].",
+        "- Use the 'name' and 'type' properties of the provided JSON entities to identity those highly relevant to answering the question.",
+        "- When asked for lists, ensure the the list contents answer the question and nothing else.",
+        "E.g. for the question 'List all books': List only the books in [ANSWER CONTEXT].",
         "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",
         "- Your answer is readable and complete, with appropriate formatting: line breaks, numbered lists, bullet points etc.",
     ];
@@ -571,7 +580,7 @@ function createContextPrompt(
     context: string,
 ): PromptSection {
     let content =
-        `Context relevant for answering the question is a JSON objects of type ${typeName} according to the following TypeScript definitions :\n` +
+        `[ANSWER CONTEXT] for answering user questions is a JSON object of type ${typeName} according to the following TypeScript definitions:\n` +
         `\`\`\`\n${schema}\`\`\`\n` +
         `[ANSWER CONTEXT]\n` +
         `"""\n${context}\n"""\n`;
