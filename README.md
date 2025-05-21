@@ -17,7 +17,7 @@ The goal of the TypeAgent team is to explore how to get work done by safely and 
   - Memory: simple models extract logical structure from text
   - Plan: quality models, advantage models, language models, humans and programs collaborate to expand each best-first-search node
 
-We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing approach called [Structured RAG](./docs/architecture/memory.md) as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
+We are trying to create human-like memory with super-human precision and recall for agent conversations.  We are using a new indexing and query processing approach called [Structured RAG](./docs/content/architecture/memory.md) as the basis for agent memory.  Structured RAG does substantially better than Classic RAG at answering questions about past conversations such as "what were the books we talked about?" and "what step were we on in building the photo montage?"
 
 We are trying to build a single personal agent that can apply to any application.  To apply agent interfaces to all applications, we need to map user requests to actions at much lower cost and latency than current systems.  To make this possible, we have created a system that can distill language models into logical systems that can handle most user requests.
 
@@ -38,10 +38,10 @@ We are applying AMP to the web by creating a browser that enables web sites to r
 
 Follow these step-by-step instructions to quickly setup tools and environments from scratch to build, run, explore, and develop.
 
-- [Windows](./docs/setup/setup-Windows.md)
-- [WSL2](./docs/setup/setup-WSL2.md)
-- [Linux (Ubuntu/Debian)](./docs/setup/setup-Linux.md)
-- [MacOS](./docs/setup/setup-macOS.md)
+- [Windows](./docs/content/setup/setup-Windows.md)
+- [WSL2](./docs/content/setup/setup-WSL2.md)
+- [Linux (Ubuntu/Debian)](./docs/content/setup/setup-Linux.md)
+- [MacOS](./docs/content/setup/setup-macOS.md)
 
 For more detailed setup instructions, see the [README.md](./ts/README.md) in the TypeScript code [directory](./ts)
 
@@ -53,7 +53,7 @@ For more detailed setup instructions, see the [README.md](./ts/README.md) in the
 
 - [KnowPro](./ts/packages/knowPro)
 
-  Explores how to implement agent memory using the ideas of [Structured RAG](./docs/architecture/memory.md).
+  Explores how to implement agent memory using the ideas of [Structured RAG](./docs/content/architecture/memory.md).
 
 - [TypeAgent Cache](./ts/packages/cache/)
 
