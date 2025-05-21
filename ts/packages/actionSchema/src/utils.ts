@@ -6,8 +6,27 @@ import {
     ActionSchemaTypeDefinition,
     ResolvedSchemaType,
 } from "./type.js";
+import { validateSchema } from "./validate.js";
 
-export function resolveReference(
+export function resolveUnionType(type: ResolvedSchemaType, actual: unknown) {
+    if (type.type !== "type-union") {
+        return type;
+    }
+    for (const t of type.types) {
+        const actualType = resolveTypeReference(t);
+        if (actualType === undefined) {
+            throw new Error("Unresolved type reference");
+        }
+        try {
+            validateSchema("", actualType, actual, false);
+            // REVIEW: just pick the first match?
+            return actualType;
+        } catch {}
+    }
+    return undefined;
+}
+
+export function resolveTypeReference(
     type?: SchemaType,
 ): ResolvedSchemaType | undefined {
     if (type === undefined) {
@@ -33,7 +52,7 @@ export function getParameterType(
     if (propertyNames.shift() !== "parameters") {
         return undefined;
     }
-    let curr = resolveReference(actionType.type.fields.parameters?.type);
+    let curr = resolveTypeReference(actionType.type.fields.parameters?.type);
     if (curr === undefined) {
         return undefined;
     }
@@ -53,7 +72,7 @@ export function getParameterType(
         }
 
         // TODO: doesn't work on union types yet.
-        curr = resolveReference(next);
+        curr = resolveTypeReference(next);
         if (curr === undefined) {
             return undefined;
         }

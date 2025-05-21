@@ -58,9 +58,10 @@ import {
 } from "../translation/translateRequest.js";
 import { getActionSchema } from "../internal.js";
 import {
-    resolveReference,
+    resolveTypeReference,
     validateAction,
     ActionResolvedParamType,
+    resolveUnionType,
 } from "action-schema";
 import { IndexManager } from "../context/indexManager.js";
 import { IndexData } from "image-memory";
@@ -557,7 +558,7 @@ async function getParameterObjectEntities(
     let hasEntity = false;
     const entities: EntityObject = {};
     for (const [k, v] of Object.entries(obj)) {
-        const fieldType = resolveReference(objType.fields[k]?.type);
+        const fieldType = resolveTypeReference(objType.fields[k]?.type);
         if (fieldType === undefined) {
             throw new Error(
                 `Parameter type mismatch: ${action.schemaName}.${action.actionName}: schema does not have field ${k}`,
@@ -694,6 +695,12 @@ async function getParameterEntities(
     entityContext: PendingActionEntityContext,
     existing?: EntityField,
 ): Promise<EntityField | undefined> {
+    const valueType = resolveUnionType(fieldType, value);
+    if (valueType === undefined) {
+        throw new Error(
+            `Action parameter type mismatch ${key}: value doesn't match any of the union type`,
+        );
+    }
     switch (typeof value) {
         case "undefined":
             return;
@@ -703,7 +710,7 @@ async function getParameterEntities(
                 obj,
                 key,
                 value,
-                fieldType,
+                valueType,
                 entityContext,
                 existing as EntityValue | undefined,
             );
@@ -717,12 +724,12 @@ async function getParameterEntities(
                 );
             }
             if (Array.isArray(value)) {
-                if (fieldType.type !== "array") {
+                if (valueType.type !== "array") {
                     throw new Error(
-                        `Action parameter type mismatch: ${key}. Expected 'array' but got '${fieldType.type}'`,
+                        `Action parameter type mismatch: ${key}. Expected 'array' but got '${valueType.type}'`,
                     );
                 }
-                const elementType = resolveReference(fieldType.elementType);
+                const elementType = resolveTypeReference(valueType.elementType);
                 if (elementType === undefined) {
                     throw new Error("Unresolved reference");
                 }
@@ -740,16 +747,16 @@ async function getParameterEntities(
                     ),
                 );
             }
-            if (fieldType.type !== "object") {
+            if (valueType.type !== "object") {
                 throw new Error(
-                    `Action parameter type mismatch: ${key}.  Expected 'object' but got '${fieldType.type}'`,
+                    `Action parameter type mismatch: ${key}.  Expected 'object' but got '${valueType.type}'`,
                 );
             }
             return value
                 ? getParameterObjectEntities(
                       action,
                       value,
-                      fieldType,
+                      valueType,
                       entityContext,
                       existing as EntityObject | undefined,
                   )
@@ -893,6 +900,10 @@ export async function executeActions(
     context: ActionContext<CommandHandlerContext>,
 ) {
     const systemContext = context.sessionContext.agentContext;
+    const commandResult = getCommandResult(systemContext);
+    if (commandResult !== undefined) {
+        commandResult.actions = actions.map(({ action }) => action);
+    }
 
     // Even if the action is not executed, resolve the entities for the commandResult.
     const actionQueue: PendingAction[] = await toPendingActions(
@@ -900,11 +911,6 @@ export async function executeActions(
         actions,
         entities,
     );
-    const commandResult = getCommandResult(systemContext);
-    if (commandResult !== undefined) {
-        commandResult.actions = actions.map(({ action }) => action);
-        console.log(commandResult.actions);
-    }
 
     if (!(await canExecute(actions, context))) {
         return;
