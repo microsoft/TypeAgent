@@ -4,7 +4,7 @@ This package contains interface definitions and utilities for implementing a **D
 
 - [List](../agents/list/) agent is a good example and initial template for building a dispatcher agent.
 - The [Dispatcher README](../dispatcher/README.md) contains instructions on how to register a dispatcher agent with the TypeAgent Dispatcher.
-- You can also create [agents as NPM packages](../../../docs/tutorial/agent.md) that can be installed/register to the [Shell](../shell) or [CLI](../cli)
+- You can also create [agents as NPM packages](../../../docs/content/tutorial/agent.md) that can be installed/register to the [Shell](../shell) or [CLI](../cli)
 
 ## TypeAgent SDK
 
