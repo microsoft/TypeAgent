@@ -29,26 +29,44 @@ function error(message) {
     console.error(chalk.redBright(message));
 }
 
+const defaultGlobalOptions = {
+    location: "eastus", // deployment location
+    name: "", // deployment name
+};
+
+const commands = ["create", "delete", "purge"];
 function parseArgs() {
     const args = process.argv;
+    if (args.length < 3) {
+        throw new Error("Command not specified.");
+    }
     const command = args[2];
-    if (command !== "create" && command !== "delete" && command !== "purge") {
-        throw new Error("Invalid command. Expected 'create' or 'delete'.");
+
+    if (!commands.includes(command)) {
+        throw new Error(
+            `Invalid command '${command}'. Valid commands are: ${commands.map((c) => `'${c}'`).join(", ")}`,
+        );
     }
 
-    const options = {
-        region: "eastus", // deployment region
-        purge: false,
-        name: "", // deployment name
-    };
+    const options =
+        command === "delete"
+            ? {
+                  ...defaultGlobalOptions,
+                  purge: true, // for delete: default to purge.
+              }
+            : { ...defaultGlobalOptions };
 
     for (let i = 3; i < args.length; i++) {
         if (!args[i].startsWith("--")) {
-            throw new Error(`Unknown argument: ${args[i]}`);
+            throw new Error(
+                `Unknown argument for command ${command}: ${args[i]}`,
+            );
         }
         const key = args[i].slice(2);
         if (!(key in options)) {
-            throw new Error(`Unknown options: ${args[i]}`);
+            throw new Error(
+                `Unknown options for command ${command}: ${args[i]}`,
+            );
         }
 
         const value = args[i + 1];
@@ -120,7 +138,7 @@ function getDeploymentName(options) {
     if (options.name) {
         return options.name;
     }
-    return `typeagent-${options.region}`;
+    return `typeagent-${options.location}`;
 }
 
 function createDeployment(options) {
@@ -132,7 +150,7 @@ function createDeployment(options) {
             "sub",
             "create",
             "--location",
-            options.region,
+            options.location,
             "--template-file",
             path.resolve(__dirname, "./armTemplates/template.json"),
             "--name",
@@ -298,7 +316,17 @@ function main() {
         error(`ERROR: ${getErrorMessage(e)}`);
         if (usage) {
             console.log(
-                "Usage: node azureDeploy.js [create|delete] [--region <region>]",
+                [
+                    "Usage: ",
+                    "  node azureDeploy.js create [--location <location>] [--name <name>]",
+                    "  node azureDeploy.js delete [--location <location>] [--name <name>] [--purge]",
+                    "  node azureDeploy.js purge [--location <location>] [--name <name>]",
+                    "",
+                    "Options:",
+                    "  --location <location>  The location the deployment is in. Default: eastus",
+                    "  --name <name>          The name of the deployment. Default: typeagent-<location>",
+                    "  --purge [true|false]   Purge deleted resources. Default: true",
+                ].join("\n"),
             );
         }
         process.exit(1);
