@@ -231,11 +231,11 @@ export async function generateAnswerInChunks(
             let structuredChunk: contextSchema.AnswerContext | undefined =
                 undefined;
             if (chunk.entities) {
-                structuredChunk = {};
+                structuredChunk ??= {};
                 structuredChunk.entities = chunk.entities;
             }
             if (chunk.topics) {
-                structuredChunk = {};
+                structuredChunk ??= {};
                 structuredChunk.topics = chunk.topics;
             }
             if (structuredChunk !== undefined) {
@@ -565,7 +565,7 @@ function createQuestionPrompt(question: string): string {
         "- The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
         "- Answer the user question PRECISELY using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
         "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in [ANSWER CONTEXT].",
-        "- Use the 'name' and 'type' properties of the provided JSON entities to identity those highly relevant to answering the question.",
+        "- Use the 'name', 'type' and 'facets' properties of the provided JSON entities to identify those highly relevant to answering the question.",
         "- When asked for lists, ensure the the list contents answer the question and nothing else.",
         "E.g. for the question 'List all books': List only the books in [ANSWER CONTEXT].",
         "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",
@@ -583,7 +583,7 @@ function createContextPrompt(
         `[ANSWER CONTEXT] for answering user questions is a JSON object of type ${typeName} according to the following TypeScript definitions:\n` +
         `\`\`\`\n${schema}\`\`\`\n` +
         `[ANSWER CONTEXT]\n` +
-        `"""\n${context}\n"""\n`;
+        `===\n${context}\n===\n`;
 
     return {
         role: "user",
