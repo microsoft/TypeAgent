@@ -5,6 +5,8 @@
 import { AuthorizationManagementClient } from "@azure/arm-authorization";
 import { DefaultAzureCredential } from "@azure/identity";
 import { randomUUID } from "node:crypto";
+import { getAzCliLoggedInInfo } from "./azureUtils.mjs";
+
 import child_process from "node:child_process";
 import chalk from "chalk";
 
@@ -15,23 +17,18 @@ function fatal(code, message) {
 
 class AzPIMClient {
     static async get() {
-        // We use this to validate that the user is logged in (already ran `az login`).
-        try {
-            const account = JSON.parse(await execAsync("az account show"));
-            console.log(`Logged in as ${chalk.cyanBright(account.user.name)}`);
-        } catch (e) {
-            console.log(e);
-            fatal(1, "User not logged in to Azure CLI. Run 'az login'.");
-        }
+        return new AzPIMClient(await getAzCliLoggedInInfo());
+    }
 
-        return new AzPIMClient();
+    constructor(azCliLoggedInUser) {
+        this.azCliLoggedInUser = azCliLoggedInUser;
     }
 
     // More details on elevation here: https://learn.microsoft.com/en-us/rest/api/authorization/role-assignment-schedule-requests/create?view=rest-authorization-2020-10-01&tabs=JavaScript&tryIt=true&source=docs#code-try-0
     // More details on role schedule requests here: https://learn.microsoft.com/en-us/javascript/api/@azure/arm-authorization/roleassignmentschedulerequests?view=azure-node-latest
     async elevate(options) {
         const credential = new DefaultAzureCredential();
-        const subscriptionId = await this.getSubscriptionId();
+        const subscriptionId = this.azCliLoggedInUser.subscription.id;
         const scope = `/subscriptions/${subscriptionId}`;
 
         // ARM client
@@ -110,38 +107,6 @@ class AzPIMClient {
             fatal(
                 13,
                 "Unable to find the requested role. Are you certain you are logged into the correct [default] subscription?",
-            );
-        }
-    }
-
-    async getSubscriptionId() {
-        var subscriptionId, subscriptionName;
-
-        try {
-            const subscriptions = JSON.parse(
-                await execAsync("az account list"),
-            );
-
-            subscriptions.forEach((subscription) => {
-                if (subscription.isDefault) {
-                    subscriptionId = subscription.id;
-                    subscriptionName = subscription.name;
-                }
-            });
-        } catch (e) {
-            console.log(e);
-            fatal(10, "Unable to get principal id of the current user.");
-        }
-
-        if (subscriptionId) {
-            console.log(
-                `Using subscription ${chalk.cyanBright(subscriptionName)} [${chalk.cyanBright(subscriptionId)}].`,
-            );
-            return subscriptionId;
-        } else {
-            fatal(
-                11,
-                "Unable to find default subscription! Unable to continue.",
             );
         }
     }
