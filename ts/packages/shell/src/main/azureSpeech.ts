@@ -76,7 +76,7 @@ export class AzureSpeech {
 
         if (!tokenResult.success) {
             throw new Error(
-                `AzureSpeech: getIdentityBasedTokenAsync: Failed to get identity based token! tokenResult: ${tokenResult}`,
+                `Failed to get identity based token.\nMake sure you have logged in using 'az login' if you are using AzCLI for auth.\n\n${tokenResult.message}`,
             );
         }
 
@@ -102,7 +102,7 @@ export class AzureSpeech {
         const response = await fetch(tokenEndpoint, options);
         if (!response.ok) {
             throw new Error(
-                `AzureSpeech: getTokenAsync: ${response.status} ${response.statusText}`,
+                `AzureSpeech: Failed to get key based token! ${response.status} ${response.statusText}`,
             );
         }
 
