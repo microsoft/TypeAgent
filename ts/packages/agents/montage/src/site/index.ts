@@ -29,6 +29,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const imgMap: Map<string, Photo> = new Map<string, Photo>();
     const selected: Set<string> = new Set<string>();
     let focusedImageIndex = 0;
+    const focusedImage = document.getElementById("focusedImage") as HTMLImageElement;
 
     // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
@@ -38,6 +39,17 @@ document.addEventListener("DOMContentLoaded", async function () {
 
         processMessage(e);
     };
+
+    // shortcut title click to change view mode
+    document.getElementById("title").onclick = () => {
+        if (document.body.classList.contains("focusOn")) {
+            document.body.classList.remove("focusOn");
+            document.body.classList.add("focusOff");
+        } else {
+            document.body.classList.remove("focusOff");
+            document.body.classList.add("focusOn");
+        }
+    }
 
     /**
      * Processes the supplied message
@@ -143,6 +155,12 @@ document.addEventListener("DOMContentLoaded", async function () {
                     msg.parameters.selected === "all"
                 ) {
                     selected.forEach((value: string) => {
+
+                        // clear the focused image if it's being removed
+                        if (focusedImage.getAttribute("path") === value) {
+                            focusedImage.src = "";
+                        }                        
+
                         imgMap.get(value).remove();
                         imgMap.delete(value);
                     });
@@ -158,6 +176,11 @@ document.addEventListener("DOMContentLoaded", async function () {
                         if (!selected.has(key)) {
                             value.remove();
                             imgMap.delete(key);
+
+                            // clear the focused image if it's being removed
+                            if (focusedImage.getAttribute("path") === key) {
+                                focusedImage.src = "";
+                            }
                         }
                     });
                 }
@@ -175,9 +198,15 @@ document.addEventListener("DOMContentLoaded", async function () {
                             );
                         });
 
-                        keep.forEach((img) => {
-                            imgMap.get(img).remove();
-                            imgMap.delete(img);
+                        keep.forEach((imgPath) => {
+
+                            // clear the focused image if it's being removed
+                            if (focusedImage.getAttribute("path") === imgPath) {
+                                focusedImage.src = "";
+                            }
+
+                            imgMap.get(imgPath).remove();
+                            imgMap.delete(imgPath);
                         });
                     } else {
                         // have to start at the end otherwise indexes will be wrong
@@ -193,6 +222,11 @@ document.addEventListener("DOMContentLoaded", async function () {
                                 );
                             mainContainer.children[index].remove();
 
+                            // clear the focused image if it's being removed
+                            if (focusedImage.getAttribute("path") === file) {
+                                focusedImage.src = "";
+                            }
+
                             imgMap.delete(file);
                             selected.delete(file);
                         }
@@ -206,6 +240,12 @@ document.addEventListener("DOMContentLoaded", async function () {
                             imgMap.get(msg.parameters.files[i]).remove();
                             imgMap.delete(msg.parameters.files[i]);
                         }
+
+                        // clear the focused image if it's being removed
+                        if (focusedImage.getAttribute("path") === msg.parameters.files[i]) {
+                            focusedImage.src = "";
+                        }
+
                         selected.delete(msg.parameters.files[i]);
                     }
                 }
@@ -226,6 +266,9 @@ document.addEventListener("DOMContentLoaded", async function () {
                         i + 1
                     ).toString();
                 }
+
+                // clear the focused image
+                focusedImage.src = "";
 
                 // Don't break because we want to clear the selection after doing a "remove"
                 if (!msg.parameters.selected) {
@@ -362,34 +405,47 @@ document.addEventListener("DOMContentLoaded", async function () {
      * Handle key events
      */
     document.addEventListener("keyup", (event) => {
-
-        // removed the focused image class from the current focused image
-        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-            const path = mainContainer.children[focusedImageIndex].getAttribute("path");
-            imgMap.get(path).unFocusImage();
-        }
-
         // left arrow - select the next image as the focused image
         if (event.key === "ArrowLeft") {
-            if (focusedImageIndex > 0) {
-                focusedImageIndex--;
-            }
+            updateFocusedImage(-1);
         }
 
         // right arrow - select previous image as the focused image
         if (event.key === "ArrowRight") {
-            if (focusedImageIndex < imgMap.size - 1) {
-                focusedImageIndex++;
-            }
+            updateFocusedImage(1);
+        }
+    });
+
+    /**
+     * Changes the focused image by shifting the index
+     * @param offset - The offset to move the focused image
+     */
+    function updateFocusedImage(offset: number) {
+        // removed the focused image class from the current focused image
+        const oldPath = mainContainer.children[focusedImageIndex].getAttribute("path");
+        imgMap.get(oldPath).unFocusImage();
+
+        focusedImageIndex += offset;
+
+        if (focusedImageIndex < 0) {
+            focusedImageIndex = 0;
+        } else if (focusedImageIndex >= imgMap.size) {
+            focusedImageIndex = imgMap.size - 1;
         }
 
         // add the focused image class to the new focused image
-        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-            const path = mainContainer.children[focusedImageIndex].getAttribute("path");
-            imgMap.get(path).setFocusedImage();
-        }
+        const newPath = mainContainer.children[focusedImageIndex].getAttribute("path");
+        imgMap.get(newPath).setFocusedImage();
+    }
 
-    });
+    // next/previous images
+    document.getElementById("btnPrevious").onclick = () => {
+        updateFocusedImage(-1);
+    }
+
+    document.getElementById("btnNext").onclick = () => {
+        updateFocusedImage(1);
+    }
 });
 
 /**

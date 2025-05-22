@@ -68,7 +68,8 @@ img {
 
 #focusContainer {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
 }
 
 #focusedImage {
@@ -86,6 +87,12 @@ img {
   #mainContainer {
     
   }
+}
+
+input[type="button"] {
+  width: 35px;
+  height: 75px;
+  border-radius: 3px;;
 }
 
 .focusOn {

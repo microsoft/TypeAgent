@@ -42,6 +42,7 @@ export class Photo {
                 fimg.alt = this.img.alt;
                 fimg.title = this.img.title;
                 fimg.style.backgroundImage = this.img.src;
+                fimg.setAttribute("path", imgPath);
             }
         };
     }
