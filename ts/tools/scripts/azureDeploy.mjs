@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import child_process, { exec } from "node:child_process";
+import child_process from "node:child_process";
 import chalk from "chalk";
 import registerDebug from "debug";
 import path from "node:path";
