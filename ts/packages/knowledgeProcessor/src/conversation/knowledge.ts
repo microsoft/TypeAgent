@@ -32,6 +32,7 @@ export interface KnowledgeExtractor {
 export type KnowledgeExtractorSettings = {
     maxContextLength: number;
     mergeActionKnowledge?: boolean;
+    mergeEntityFacets?: boolean;
 };
 
 export function createKnowledgeExtractor(
@@ -72,7 +73,7 @@ export function createKnowledgeExtractor(
     ): Promise<Result<KnowledgeResponse>> {
         const result = await translator.translate(message);
         if (result.success) {
-            if (settings.mergeActionKnowledge) {
+            if (settings.mergeActionKnowledge || settings.mergeEntityFacets) {
                 mergeActionKnowledge(result.data);
             }
         }
@@ -113,21 +114,28 @@ export function createKnowledgeExtractor(
         if (knowledge.actions === undefined) {
             knowledge.actions = [];
         }
-        // Merge all inverse actions into regular actions.
-        if (knowledge.inverseActions && knowledge.inverseActions.length > 0) {
-            knowledge.actions.push(...knowledge.inverseActions);
-            knowledge.inverseActions = [];
+        if (settings.mergeActionKnowledge) {
+            // Merge all inverse actions into regular actions.
+            if (
+                knowledge.inverseActions &&
+                knowledge.inverseActions.length > 0
+            ) {
+                knowledge.actions.push(...knowledge.inverseActions);
+                knowledge.inverseActions = [];
+            }
         }
-        // Also merge in any facets into
-        for (const action of knowledge.actions) {
-            if (action.subjectEntityFacet) {
-                const entity = knowledge.entities.find(
-                    (c) => c.name === action.subjectEntityName,
-                );
-                if (entity) {
-                    mergeEntityFacet(entity, action.subjectEntityFacet);
+        if (settings.mergeActionKnowledge || settings.mergeEntityFacets) {
+            // Also merge in any facets into
+            for (const action of knowledge.actions) {
+                if (action.subjectEntityFacet) {
+                    const entity = knowledge.entities.find(
+                        (c) => c.name === action.subjectEntityName,
+                    );
+                    if (entity) {
+                        mergeEntityFacet(entity, action.subjectEntityFacet);
+                    }
+                    action.subjectEntityFacet = undefined;
                 }
-                action.subjectEntityFacet = undefined;
             }
         }
     }

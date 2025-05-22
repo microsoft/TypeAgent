@@ -11,12 +11,12 @@
       "defaultValue": "[deployment().location]",
       "type": "String"
     },
-    "name": {
+    "prefix": {
       "defaultValue": "typeagent",
       "type": "String"
     },
     "group_name": {
-      "defaultValue": "[concat(parameters('name'), '-', parameters('region'))]",
+      "defaultValue": "[concat(parameters('prefix'), '-', parameters('region'))]",
       "type": "String"
     },
     "maps_region": {
@@ -24,7 +24,7 @@
       "type": "String"
     },
     "maps_name": {
-      "defaultValue": "[concat(parameters('name'), '-', parameters('maps_region'), '-maps')]",
+      "defaultValue": "[concat(parameters('prefix'), '-', parameters('maps_region'), '-maps')]",
       "type": "String"
     },
     "speech_region": {
@@ -32,7 +32,7 @@
       "type": "String"
     },
     "speech_name": {
-      "defaultValue": "[concat(parameters('name'), '-', parameters('speech_region'), '-speech')]",
+      "defaultValue": "[concat(parameters('prefix'), '-', parameters('speech_region'), '-speech')]",
       "type": "String"
     },
     "openai_region": {
@@ -40,11 +40,11 @@
       "type": "String"
     },
     "openai_name": {
-      "defaultValue": "[concat(parameters('name'), '-', parameters('openai_region'), '-openai')]",
+      "defaultValue": "[concat(parameters('prefix'), '-', parameters('openai_region'), '-openai')]",
       "type": "String"
     },
     "search_name": {
-      "defaultValue": "[concat(parameters('name'),  '-search')]",
+      "defaultValue": "[concat(parameters('prefix'),  '-search')]",
       "type": "String"
     },
     "vaults_region": {
@@ -52,7 +52,7 @@
       "type": "String"
     },
     "vaults_name": {
-      "defaultValue": "[concat(parameters('name'), '-', parameters('vaults_region'), '-kv')]",
+      "defaultValue": "[concat(parameters('prefix'), '-', uniqueString(parameters('vaults_region'), subscription().id))]",
       "type": "String"
     }
   },
@@ -67,7 +67,7 @@
     "groupDeployment": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2022-09-01",
-      "name": "typeagent-deployment",
+      "name": "[deployment().name]",
       "resourceGroup": "[parameters('group_name')]",
       "dependsOn": ["group"],
 
@@ -151,7 +151,9 @@
               "apiVersion": "2024-10-01",
               "name": "[parameters('speech_name')]",
               "location": "[parameters('speech_region')]",
-              "tags": {},
+              "tags": {
+                "typeagent": "[deployment().name]"
+              },
               "sku": {
                 "name": "S0"
               },
@@ -187,6 +189,9 @@
               "location": "[parameters('openai_region')]",
               "sku": {
                 "name": "S0"
+              },
+              "tags": {
+                "typeagent": "[deployment().name]"
               },
               "kind": "OpenAI",
               "properties": {
@@ -332,7 +337,6 @@
                 "name": "S1"
               },
               "kind": "Bing.Search.v7",
-              "tags": {},
               "properties": {
                 "provisioningState": "Succeeded",
                 "endpoint": "https://api.bing.microsoft.com/",
@@ -345,6 +349,9 @@
               "apiVersion": "2024-12-01-preview",
               "name": "[parameters('vaults_name')]",
               "location": "[parameters('vaults_region')]",
+              "tags": {
+                "typeagent": "[deployment().name]"
+              },
               "properties": {
                 "sku": {
                   "family": "A",

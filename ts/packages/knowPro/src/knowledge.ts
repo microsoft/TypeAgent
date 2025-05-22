@@ -28,6 +28,7 @@ export function createKnowledgeExtractor(
          * Merging is handled during indexing:
          */
         mergeActionKnowledge: false,
+        mergeEntityFacets: true,
     });
     return extractor;
 }

@@ -74,7 +74,7 @@ export function createSearchOptions(): SearchOptions {
 export function createSearchOptionsTypical(): SearchOptions {
     return {
         ...createSearchOptions(),
-        maxKnowledgeMatches: 100,
+        maxKnowledgeMatches: 50,
         maxMessageMatches: 25,
     };
 }

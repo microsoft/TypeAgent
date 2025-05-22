@@ -323,6 +323,7 @@ export abstract class Memory<
             index: number,
             result: Result<kp.AnswerResponse>,
         ) => void,
+        answerContextOptions?: kp.AnswerContextOptions,
     ): Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>> {
         const searchResults = await this.searchWithLanguage(
             question,
@@ -344,6 +345,7 @@ export abstract class Memory<
                           progress(searchResult, chunk, index, result);
                       }
                     : undefined,
+                answerContextOptions,
             );
             if (!answerResult.success) {
                 return answerResult;
@@ -369,6 +371,7 @@ export abstract class Memory<
             index: number,
             result: Result<kp.AnswerResponse>,
         ) => void,
+        answerContextOptions?: kp.AnswerContextOptions,
     ): Promise<Result<kp.AnswerResponse>> {
         question ??= searchResult.rawSearchQuery;
         if (!question) {
@@ -381,6 +384,7 @@ export abstract class Memory<
             question,
             searchResult,
             progress,
+            answerContextOptions,
         );
     }
 
