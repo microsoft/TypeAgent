@@ -38,7 +38,7 @@ class AzPIMClient {
         );
 
         // describe elevation
-        console.log("Looking up role information...");
+        console.log(`Looking up role information for ${options.roleName}...`);
         const roleAssignmentScheduleRequestName = randomUUID();
         const parameters = {
             principalId: await this.getPrincipalId(options?.continueOnFailure),
@@ -72,10 +72,10 @@ class AzPIMClient {
             );
 
             console.log(result);
-            console.log(chalk.greenBright("ELEVATION SUCCESSFUL"));
+            console.log(chalk.greenBright(`ELEVATION SUCCESSFUL for role ${options.roleName}`));
         } catch (e) {
             console.log(e);
-            console.log(chalk.red("Unable to elevate."));
+            console.log(chalk.red(`Unable to elevate for role ${options.roleName}.`));
         }
     }
 
