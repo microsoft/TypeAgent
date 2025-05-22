@@ -270,7 +270,9 @@ async function main() {
         const subscriptionId = azInfo.subscription.id;
         switch (command) {
             case "status":
-                const deployment = await getDeploymentDetails(getDeploymentName(options));
+                const deployment = await getDeploymentDetails(
+                    getDeploymentName(options),
+                );
                 console.log(JSON.stringify(deployment, null, 2));
                 break;
             case "create":
