@@ -8,7 +8,6 @@ import {
     RemovePhotosAction,
     SelectPhotosAction,
     SetMontageViewModeAction,
-    SetMontageViewModeAction,
 } from "../agent/montageActionSchema.js";
 import { PhotoMontage } from "../agent/montageActionHandler.js";
 import { Photo } from "./photo";
@@ -25,7 +24,6 @@ export type ListPhotosMessage = Message & {
     files: string[];
 };
 
-document.addEventListener("DOMContentLoaded", async function () {
 document.addEventListener("DOMContentLoaded", async function () {
     const mainContainer = document.getElementById("mainContainer");
     const imgMap: Map<string, Photo> = new Map<string, Photo>();
@@ -63,25 +61,6 @@ document.addEventListener("DOMContentLoaded", async function () {
      * @param msg The message to process
      */
     function processMessage(msg: any) {
-        processMessage(e);
-    };
-
-    // shortcut title click to change view mode
-    document.getElementById("title").onclick = () => {
-        if (document.body.classList.contains("focusOn")) {
-            document.body.classList.remove("focusOn");
-            document.body.classList.add("focusOff");
-        } else {
-            document.body.classList.remove("focusOff");
-            document.body.classList.add("focusOn");
-        }
-    };
-
-    /**
-     * Processes the supplied message
-     * @param msg The message to process
-     */
-    function processMessage(msg: any) {
         // check to see if we are getting initial data and handle that, otherwise process actions
         if (msg.actionName !== undefined && msg.actionName !== "") {
             processAction(msg);
@@ -90,32 +69,15 @@ document.addEventListener("DOMContentLoaded", async function () {
 
             // repopulate
             const montage = msg as PhotoMontage;
-            montageId.value = montage.id.toString();
-            montage.selected.forEach((value) => selected.add(value));
+            montageId.value = montage.id ? montage.id.toString() : "-1";
+
+            if (montage.selected) {
+                montage.selected.forEach((value) => selected.add(value));
+            }
+
             setTitle(montage.title);
             addImages(montage.files, true);
         }
-    }
-
-    function setViewMode(viewMode: string) {
-        switch (viewMode) {
-            case "grid": {
-                document.body.classList.remove("focusOn");
-                document.body.classList.add("focusOff");
-                break;
-            }
-
-            case "filmstrip": {
-                document.body.classList.remove("focusOff");
-                document.body.classList.add("focusOn");
-                break;
-            }
-
-            default: {
-                throw new Error("Unknown montage view mode!");
-            }
-        }
-    }
     }
 
     function setViewMode(viewMode: string) {
@@ -454,9 +416,11 @@ document.addEventListener("DOMContentLoaded", async function () {
      * @param newTitle The new title to set
      */
     function setTitle(newTitle) {
-        const title: HTMLElement = document.getElementById("title");
-        title.innerHTML = newTitle;
-        document.title = `Montage - ${newTitle}`;
+        if (newTitle) {
+            const title: HTMLElement = document.getElementById("title");
+            title.innerHTML = newTitle;
+            document.title = `Montage - ${newTitle}`;
+        }
     }
 
     // get the initial state
