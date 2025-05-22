@@ -213,16 +213,13 @@ export class ImageCollection
 
         // if we have an in-memory database we need to write it out to disk
         if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
-
             const dbFile = `${path.join(dirPath, baseFileName)}_dataFrames.sqlite`;
 
             if (fs.existsSync(dbFile)) {
                 fs.unlinkSync(dbFile);
             }
 
-            this.db?.exec(
-                `vacuum main into '${dbFile}'`,
-            );
+            this.db?.exec(`vacuum main into '${dbFile}'`);
         }
     }
 
