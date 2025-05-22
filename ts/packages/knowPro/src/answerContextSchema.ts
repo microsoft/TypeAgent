@@ -5,6 +5,7 @@ import { DateRange } from "./interfaces.js";
 
 export type AnswerContext = {
     // Relevant entities
+    // Use the 'name' and 'type' properties of entities to PRECISELY identify those that answer the user question.
     entities?: RelevantKnowledge[] | undefined;
     // Relevant topics
     topics?: RelevantKnowledge[] | undefined;

@@ -168,7 +168,7 @@ export function createTopNList<T>(maxMatches: number): TopNList<T> {
 }
 
 export function getTopK<T>(
-    items: IterableIterator<ScoredItem<T>>,
+    items: Iterable<ScoredItem<T>>,
     topK: number,
 ): ScoredItem<T>[] {
     const topNList = new TopNCollection<T | undefined>(topK, undefined);

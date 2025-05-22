@@ -66,9 +66,16 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
-    public writeMessages(messages: Iterable<kp.IMessage> | kp.IMessage[]) {
+    public writeMessages(
+        messages: Iterable<kp.IMessage> | kp.IMessage[],
+        ordinalStartAt = 0,
+    ) {
+        let i = ordinalStartAt;
         for (const message of messages) {
+            this.writeLine(`[${i}]`);
             this.writeMessage(message);
+            ++i;
+            this.writeLine();
         }
     }
 
@@ -241,7 +248,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         const semanticRef = semanticRefs.get(scoredRef.semanticRefOrdinal);
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}::${semanticRef.range.start.messageOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();
