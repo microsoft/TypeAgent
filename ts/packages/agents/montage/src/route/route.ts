@@ -30,6 +30,9 @@ let indexCachePath: string;
 // The root folder where the images are located
 let rootImageFolder: string;
 
+// The last message sent to the clients
+let lastMessage: any = {};
+
 // limit request rage
 const limiter = rateLimit({
     windowMs: 1000,
@@ -205,8 +208,15 @@ app.get("/events", (req, res) => {
     });
 });
 
-app.get("/cmd", async (req, res) => {
-    console.debug(req);
+/**
+ * Sends the last message to the requestor
+ */
+app.get("/lastMessage", async (req, res) => {
+    if (lastMessage) {
+        res.status(200).send(lastMessage);
+    } else {
+        res.status(404).send("No last message");
+    }
 });
 
 /**
@@ -218,6 +228,8 @@ function sendDataToClients(message: any) {
     if (clients.length == 0) {
         messageQueue.push(message);
     } else {
+        lastMessage = message;
+
         clients.forEach((client) => {
             client.write(`data: ${JSON.stringify(message)}\n\n`);
         });

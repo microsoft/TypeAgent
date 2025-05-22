@@ -1,128 +1,153 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-/**
- * This script updates links in markdown files that point outside the docs folder
- * to link directly to the GitHub repository
- */
-
-// Check if this is running in a browser or Node.js environment
-const isNode = typeof window === 'undefined';
+// Normalizes file paths to use forward slashes consistently
+function normalizePath(filePath) {
+  return filePath ? filePath.replace(/\\/g, "/") : "";
+}
 
 /**
  * Updates links in content to point to GitHub repository
- * @param {string} content - The markdown content
- * @param {string} inputPath - The path of the input file
+ * This relies on Eleventy's inputPath property to get the original Markdown path
+ *
+ * @param {string} content - The HTML content
+ * @param {string} outputPath - The output HTML file path
+ * @param {string} inputPath - The original Markdown file path
  * @param {string} repoUrl - The GitHub repository URL
  * @param {string} defaultBranch - The default branch name
  * @return {string} Updated content
  */
-function updateLinks(content, inputPath, repoUrl, defaultBranch = 'main') {
+function updateLinks(
+  content,
+  outputPath,
+  inputPath,
+  repoUrl,
+  defaultBranch = "main"
+) {
   if (!repoUrl) {
-    repoUrl = 'https://github.com/microsoft/TypeAgent';
+    repoUrl = "https://github.com/microsoft/TypeAgent";
   }
-  
-  // Pattern to match markdown links to files outside the docs directory
-  // This looks for links that start with ../ or similar patterns
-  const externalLinkPattern = /\[([^\]]+)\]\((?:\.\.\/|(?!https?:\/\/|\/docs\/|\/content\/|#)([^)]+))\)/g;
-  
-  return content.replace(externalLinkPattern, (match, linkText, linkPath) => {
-    // Extract the path part of the link
-    let path;
-    if (linkPath) {
-      // If linkPath is captured (for links that don't start with ../)
-      path = linkPath;
-    } else {
-      // For links that start with ../
-      const pathMatch = match.match(/\(([^)]+)\)/);
-      if (pathMatch) {
-        path = pathMatch[1];
-      } else {
-        // If we can't parse the path, return the original link
+
+  // Normalize paths
+  const normalizedInputPath = normalizePath(inputPath);
+  const normalizedOutputPath = normalizePath(outputPath);
+
+  console.log(`Processing file: ${normalizedOutputPath}`);
+  console.log(`Original source: ${normalizedInputPath}`);
+
+  // Process HTML links
+  const externalLinkPattern =
+    /<a\s+(?:[^>]*?\s+)?href=["']([^"']+)["']([^>]*)>([^<]*)<\/a>/g;
+
+  return content.replace(
+    externalLinkPattern,
+    (match, linkPath, attributes, linkText) => {
+      // Normalize link path
+      const normalizedLinkPath = normalizePath(linkPath);
+
+      // Skip if the link is internal (starts with #), a web URL, or a site-relative path
+      if (
+        normalizedLinkPath.startsWith("#") ||
+        normalizedLinkPath.startsWith("http") ||
+        normalizedLinkPath.startsWith("/docs/") ||
+        normalizedLinkPath.startsWith("/content/")
+      ) {
         return match;
       }
-    }
-    
-    // Skip if the link is already an absolute URL or is an image
-    if (path.startsWith('http')|| /\.(jpeg|jpg|gif|png|svg)$/.test(path)) {
-      return match;
-    }
-    
-    // Normalize path by removing ../ prefix
-    let normalizedPath = path.replace(/^\.\.\//, '');
-    if(normalizedPath.startsWith("../")){
-        normalizedPath = normalizedPath.replace(/^\.\.\//, '');
-    }
-    
-    // Determine if this is a file or directory (assume directory if no extension)
-    const isDirectory = !normalizedPath.includes('.');
-    
-    // Create the appropriate GitHub URL
-    const githubPath = isDirectory ? 
-      `${repoUrl}/tree/${defaultBranch}/${normalizedPath}` : 
-      `${repoUrl}/blob/${defaultBranch}/${normalizedPath}`;
-    
-      console.log(`Replacing link: ${path} with ${githubPath}`)
-    // Return the updated link
-    return `[${linkText}](${githubPath})`;
-  });
-}
 
-// If running in Node.js (for local development or CI)
-if (isNode) {
-  const fs = require('fs');
-  const path = require('path');
-  
-  // Try to get repository URL from environment
-  const repoUrl = process.env.GITHUB_REPOSITORY ? 
-    `https://github.com/${process.env.GITHUB_REPOSITORY}` : 
-    null;
-  
-  // Try to get default branch from environment
-  const defaultBranch = process.env.GITHUB_DEFAULT_BRANCH || 'main';
-  
-  // Function to recursively process all markdown files in a directory
-  function processDirectory(dir, repoUrl, defaultBranch) {
-    if (!fs.existsSync(dir)) {
-      console.warn(`Directory does not exist: ${dir}`);
-      return;
-    }
-    
-    const files = fs.readdirSync(dir);
-    
-    files.forEach(file => {
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
-      
-      if (stat.isDirectory()) {
-        // Recursively process subdirectories
-        processDirectory(filePath, repoUrl, defaultBranch);
-      } else if (file.endsWith('.md')) {
-        // Process markdown files
-        console.log(`Processing: ${filePath}`);
-        const content = fs.readFileSync(filePath, 'utf8');
-        const updatedContent = updateLinks(content, filePath, repoUrl, defaultBranch);
-        
-        // Only write if content changed
-        if (content !== updatedContent) {
-          fs.writeFileSync(filePath, updatedContent);
-          console.log(`Updated links in: ${filePath}`);
+      // Skip image files
+      if (/\.(jpeg|jpg|gif|png|svg)$/.test(normalizedLinkPath)) {
+        return match;
+      }
+
+      // Only process links that likely point outside the docs directory
+      // This typically means they start with ../ or are a path without a leading /
+      if (
+        normalizedLinkPath.startsWith("../") ||
+        (!normalizedLinkPath.startsWith("/") &&
+          !normalizedLinkPath.startsWith("."))
+      ) {
+        try {
+          // Use the original Markdown file path for resolution
+          const repoPath = resolvePathFromMarkdown(
+            normalizedLinkPath,
+            normalizedInputPath
+          );
+
+          // Determine if this is a file or directory (assume directory if no extension)
+          const isDirectory = !repoPath.includes(".");
+
+          // Create the appropriate GitHub URL
+          const githubPath = isDirectory
+            ? `${repoUrl}/tree/${defaultBranch}/${repoPath}`
+            : `${repoUrl}/blob/${defaultBranch}/${repoPath}`;
+
+          console.log(
+            `Replacing link: ${normalizedLinkPath} with ${githubPath}`
+          );
+
+          // Return the updated link
+          return `<a href="${githubPath}"${attributes}>${linkText}</a>`;
+        } catch (err) {
+          console.error(
+            `Error processing link ${normalizedLinkPath}: ${err.message}`
+          );
+          return match;
         }
       }
-    });
-  }
-  
-  // Start processing from the docs content directory
-  console.log(`Using repository URL: ${repoUrl || 'Not found - using default'}`);
-  console.log(`Using default branch: ${defaultBranch}`);
-  processDirectory(path.join(__dirname, '..', 'content'), repoUrl, defaultBranch);
-  processDirectory(path.join(__dirname, '..', 'architecture'), repoUrl, defaultBranch);
-  processDirectory(path.join(__dirname, '..', 'help'), repoUrl, defaultBranch);
-  processDirectory(path.join(__dirname, '..', 'setup'), repoUrl, defaultBranch);
-  processDirectory(path.join(__dirname, '..', 'tutorial'), repoUrl, defaultBranch);
 
-  console.log('Link updating complete!');
+      return match;
+    }
+  );
 }
 
-// Export the function for use in Eleventy transforms
-module.exports = { updateLinks };
+/**
+ * Resolves a relative path from a Markdown file to its repository path
+ *
+ * @param {string} relativePath - The relative path in the link
+ * @param {string} markdownFilePath - The original Markdown file path
+ * @returns {string} The resolved path relative to the repository root
+ */
+function resolvePathFromMarkdown(relativePath, markdownFilePath) {
+  try {
+    const lastSlashIndex = markdownFilePath.lastIndexOf("/");
+    const markdownDir =
+      lastSlashIndex !== -1
+        ? markdownFilePath.substring(0, lastSlashIndex)
+        : "";
+
+    const markdownDirParts = markdownDir ? markdownDir.split("/") : [];
+    const relativePathParts = relativePath.split("/");
+
+    const resultParts = [...markdownDirParts];
+
+    // Process each part of the relative path
+    for (const part of relativePathParts) {
+      if (part === "..") {
+        // Go up one directory
+        if (resultParts.length > 0) {
+          resultParts.pop();
+        }
+      } else if (part !== ".") {
+        resultParts.push(part);
+      }
+    }
+
+    // Join the path
+    const resolvedPath = resultParts.join("/");
+
+    const docsIndex = resolvedPath.indexOf("/docs/");
+    if (docsIndex !== -1) {
+      // If the path contains /docs/, everything before that is the repo root
+      const repoRoot = resolvedPath.substring(0, docsIndex);
+      return resolvedPath.substring(repoRoot.length + 1); // +1 for the leading slash
+    }
+
+    return resolvedPath;
+  } catch (err) {
+    console.error(`Error resolving path: ${err.message}`);
+    return relativePath;
+  }
+}
+
+module.exports = { updateLinks, normalizePath, resolvePathFromMarkdown };

@@ -19,6 +19,7 @@ import {
     RemovePhotosAction,
     SelectPhotosAction,
     MontageActivity,
+    SetMontageViewModeAction,
 } from "./montageActionSchema.js";
 import {
     createActionResult,
@@ -495,6 +496,21 @@ async function handleMontageAction(
             result = createActionResult(message);
             break;
         }
+        
+        case "setMontageViewMode": {
+            const viewAction = action as SetMontageViewModeAction;
+            if (agentContext.activeMontageId !== -1) {
+                updateViewWithAction(getActiveMontage(agentContext)!, action);
+                result = createActionResult(
+                    `Updated the montage view to ${viewAction.parameters.viewMode} mode.`,
+                );
+            } else {
+                result = createActionResult(
+                    `View Mode not set, no active montage.`,
+                )
+            }
+            break;
+        }
 
         case "showSearchParameters": {
             result = createActionResult(
@@ -867,14 +883,21 @@ function filterToSearchTerm(filters: string[]): kp.SearchTerm[] {
 async function findMontageByTitle(
     title: string,
     agentContext: MontageActionContext,
-) {
-    const montage = agentContext.montages.find((value) => value.title == title);
+): Promise<PhotoMontage | undefined> {
 
+    // no montages
+    if (agentContext.montages.length === 0) {
+        return undefined;
+    }
+
+    // Try exact match
+    const montage = agentContext.montages.find((value) => value.title == title);
     if (montage) {
         debug(`Found montage ${montage.title} by title`);
         return montage;
     }
 
+    // Try fuzzy match
     const fuzzyMontage = await getMontageByFuzzyMatching(
         title,
         agentContext.montages,
@@ -1145,7 +1168,7 @@ async function getMontageByFuzzyMatching(
     montages: PhotoMontage[],
     model: TextEmbeddingModel | undefined,
 ): Promise<PhotoMontage | undefined> {
-    if (fuzzyTitle === undefined) {
+    if (fuzzyTitle === undefined || montages.length === 0) {
         return undefined;
     }
 

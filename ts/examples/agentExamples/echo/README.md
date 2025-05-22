@@ -1,10 +1,10 @@
 # Echo Agent
 
-The Echo Agent demonstrates how to use the [agent-sdk](../../../../docs/tutorial/agent.md) to write agents as installable packages.
+The Echo Agent demonstrates how to use the [agent-sdk](../../../../docs/content/tutorial/agent.md) to write agents as installable packages.
 
 ## Installation
 
-- Follow the standard [external Agent installation steps](../../../../docs/tutorial/agent.md#step-3-install-echo-agent-in-typeagent-cli-or-shell)
+- Follow the standard [external Agent installation steps](../../../../docs/content/tutorial/agent.md#step-3-install-echo-agent-in-typeagent-cli-or-shell)
 
 ## Trademarks
 

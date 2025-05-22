@@ -66,6 +66,59 @@ img {
   gap: 2px;
 }
 
+#focusContainer {
+  display: flex;
+  justify-content: center;
+}
+
+#focusedImage {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 0px;
+}
+
+.focusOff {
+  #focusContainer {  
+      display: none;
+  }
+
+  #mainContainer {
+    
+  }
+}
+
+.focusOn {
+
+  #focusContainer {  
+      position: fixed;
+      top: 45px;
+      bottom: 200px;
+      right: 0px;
+      left: 0px;
+  }
+
+    #mainContainer {
+      top: auto;
+      flex-flow: nowrap;
+      overflow-x: scroll;
+      overflow-y: hidden;
+      justify-content: normal;
+
+      img {
+        cursor: pointer;
+      }
+  }
+
+  .focusedImage {
+    border: lightblue;
+    border-width: 2px;
+    border-style: dotted;
+    border-radius: 0px;
+  }  
+
+}
+
 .unselected {
   opacity: 0.25;
 }
@@ -76,3 +129,4 @@ img {
   border-style: dotted;
   border-radius: 3%;
 }
+

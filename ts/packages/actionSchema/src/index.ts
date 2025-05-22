@@ -31,7 +31,8 @@ export { validateAction } from "./validate.js";
 export {
     getParameterType,
     getParameterNames,
-    resolveReference,
+    resolveTypeReference,
+    resolveUnionType,
 } from "./utils.js";
 
 export * as ActionSchemaCreator from "./creator.js";

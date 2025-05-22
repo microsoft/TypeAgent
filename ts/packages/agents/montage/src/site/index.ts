@@ -7,6 +7,7 @@ import {
     ChangeTitleAction,
     RemovePhotosAction,
     SelectPhotosAction,
+    SetMontageViewModeAction,
 } from "../agent/montageActionSchema.js";
 import { PhotoMontage } from "../agent/montageActionHandler.js";
 import { Photo } from "./photo";
@@ -14,7 +15,6 @@ import { Photo } from "./photo";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:agent:montage:ui");
-//const eventSource = new EventSource("/events");
 
 export type Message = {
     type: "listPhotos";
@@ -24,10 +24,11 @@ export type ListPhotosMessage = Message & {
     files: string[];
 };
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
     const mainContainer = document.getElementById("mainContainer");
     const imgMap: Map<string, Photo> = new Map<string, Photo>();
     const selected: Set<string> = new Set<string>();
+    let focusedImageIndex = 0;
 
     // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
@@ -35,19 +36,27 @@ document.addEventListener("DOMContentLoaded", function () {
         const e = JSON.parse(event.data);
         console.log(e);
 
+        processMessage(e);
+    };
+
+    /**
+     * Processes the supplied message
+     * @param msg The message to process
+     */
+    function processMessage(msg: any) {
         // check to see if we are getting initial data and handle that, otherwise process actions
-        if (e.actionName !== undefined && e.actionName !== "") {
-            processAction(e);
+        if (msg.actionName !== undefined && msg.actionName !== "") {
+            processAction(msg);
         } else {
             reset();
 
             // repopulate
-            const montage = e as PhotoMontage;
+            const montage = msg as PhotoMontage;
             montage.selected.forEach((value) => selected.add(value));
             setTitle(montage.title);
             addImages(montage.files, true);
-        }
-    };
+        }        
+    }
 
     /**
      * Processes the supplied action
@@ -62,11 +71,33 @@ document.addEventListener("DOMContentLoaded", function () {
                 break;
             }
 
+            case "setMontageViewMode": {
+                const msg: SetMontageViewModeAction = action as SetMontageViewModeAction;
+
+                switch (msg.parameters.viewMode) {
+                    case "grid": {
+                        document.body.classList.remove("focusOn");
+                        document.body.classList.add("focusOff");
+                        break;
+                    }
+
+                    case "filmstrip": {
+                        document.body.classList.remove("focusOff");
+                        document.body.classList.add("focusOn");
+                        break;
+                    }
+
+                    default: {
+                        throw new Error("Unknown montage view mode!");
+                    }
+                }
+
+                break;
+            }
+
             case "addPhotos": {
                 const msg: AddPhotosAction = action as AddPhotosAction;
-
                 addImages(msg.parameters.files);
-
                 break;
             }
 
@@ -237,7 +268,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setSelectionState: boolean = false,
     ) {
         if (files !== undefined) {
-            files.forEach(async (f) => {
+            files.forEach(async (f, index) => {
                 if (!imgMap.has(f)) {
                     // create the image control
                     const img: Photo = new Photo(
@@ -254,6 +285,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     // does it need to be selected or unselected?
                     if (setSelectionState && selected.size > 0) {
                         select(img.container);
+                    }
+
+                    // make the first image the focused image
+                    if (index === 0) {
+                        img.setFocusedImage();
                     }
                 }
             });
@@ -299,10 +335,61 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    /**
+     * Update the page title
+     * @param newTitle The new title to set
+     */
     function setTitle(newTitle) {
         const title: HTMLElement = document.getElementById("title");
         title.innerHTML = newTitle;
+        document.title = `Montage - ${newTitle}`;
     }
+
+    // get the initial state
+    const res = await fetch("/lastMessage", {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+        },
+    });
+
+    if (res.status === 200) {
+        const json = await res.json();
+        processMessage(json);
+    }
+
+    /**
+     * Handle key events
+     */
+    document.addEventListener("keyup", (event) => {
+
+        // removed the focused image class from the current focused image
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            const path = mainContainer.children[focusedImageIndex].getAttribute("path");
+            imgMap.get(path).unFocusImage();
+        }
+
+        // left arrow - select the next image as the focused image
+        if (event.key === "ArrowLeft") {
+            if (focusedImageIndex > 0) {
+                focusedImageIndex--;
+            }
+        }
+
+        // right arrow - select previous image as the focused image
+        if (event.key === "ArrowRight") {
+            if (focusedImageIndex < imgMap.size - 1) {
+                focusedImageIndex++;
+            }
+        }
+
+        // add the focused image class to the new focused image
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            const path = mainContainer.children[focusedImageIndex].getAttribute("path");
+            imgMap.get(path).setFocusedImage();
+        }
+
+    });
 });
 
 /**
