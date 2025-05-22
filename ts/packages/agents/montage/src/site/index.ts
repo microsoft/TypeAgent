@@ -29,7 +29,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     const imgMap: Map<string, Photo> = new Map<string, Photo>();
     const selected: Set<string> = new Set<string>();
     let focusedImageIndex = 0;
-    const focusedImage = document.getElementById("focusedImage") as HTMLImageElement;
+    const focusedImage = document.getElementById(
+        "focusedImage",
+    ) as HTMLImageElement;
     let timeout = undefined;
     let preSlideShowViewmode = "grid";
 
@@ -51,7 +53,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             document.body.classList.remove("focusOff");
             document.body.classList.add("focusOn");
         }
-    }
+    };
 
     /**
      * Processes the supplied message
@@ -69,7 +71,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             montage.selected.forEach((value) => selected.add(value));
             setTitle(montage.title);
             addImages(montage.files, true);
-        }        
+        }
     }
 
     function setViewMode(viewMode: string) {
@@ -106,7 +108,8 @@ document.addEventListener("DOMContentLoaded", async function () {
             }
 
             case "setMontageViewMode": {
-                const msg: SetMontageViewModeAction = action as SetMontageViewModeAction;
+                const msg: SetMontageViewModeAction =
+                    action as SetMontageViewModeAction;
                 preSlideShowViewmode = msg.parameters.viewMode;
                 setViewMode(msg.parameters.viewMode);
                 break;
@@ -165,11 +168,10 @@ document.addEventListener("DOMContentLoaded", async function () {
                     msg.parameters.selected === "all"
                 ) {
                     selected.forEach((value: string) => {
-
                         // clear the focused image if it's being removed
                         if (focusedImage.getAttribute("path") === value) {
                             focusedImage.src = "";
-                        }                        
+                        }
 
                         imgMap.get(value).remove();
                         imgMap.delete(value);
@@ -209,7 +211,6 @@ document.addEventListener("DOMContentLoaded", async function () {
                         });
 
                         keep.forEach((imgPath) => {
-
                             // clear the focused image if it's being removed
                             if (focusedImage.getAttribute("path") === imgPath) {
                                 focusedImage.src = "";
@@ -252,7 +253,10 @@ document.addEventListener("DOMContentLoaded", async function () {
                         }
 
                         // clear the focused image if it's being removed
-                        if (focusedImage.getAttribute("path") === msg.parameters.files[i]) {
+                        if (
+                            focusedImage.getAttribute("path") ===
+                            msg.parameters.files[i]
+                        ) {
                             focusedImage.src = "";
                         }
 
@@ -432,7 +436,8 @@ document.addEventListener("DOMContentLoaded", async function () {
      */
     function updateFocusedImage(offset: number) {
         // removed the focused image class from the current focused image
-        const oldPath = mainContainer.children[focusedImageIndex].getAttribute("path");
+        const oldPath =
+            mainContainer.children[focusedImageIndex].getAttribute("path");
         imgMap.get(oldPath).unFocusImage();
 
         focusedImageIndex += offset;
@@ -444,31 +449,31 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
 
         // add the focused image class to the new focused image
-        const newPath = mainContainer.children[focusedImageIndex].getAttribute("path");
+        const newPath =
+            mainContainer.children[focusedImageIndex].getAttribute("path");
         imgMap.get(newPath).setFocusedImage();
     }
 
     // next/previous images
     document.getElementById("btnPrevious").onclick = () => {
         updateFocusedImage(-1);
-    }
+    };
 
     document.getElementById("btnNext").onclick = () => {
         updateFocusedImage(1);
-    }
+    };
 
     function startSlideShow() {
         setViewMode("filmstrip");
         const slideshow = document.getElementById("focusContainer");
-        
+
         slideshow.requestFullscreen().then(() => {
             timeout = setInterval(() => {
-                
                 if (focusedImageIndex === imgMap.size - 1) {
                     updateFocusedImage(-imgMap.size);
                 } else {
                     updateFocusedImage(1);
-                }                
+                }
             }, 3000); // Change slide every 3 seconds
         });
     }
@@ -514,5 +519,3 @@ function updateFileList(files: Map<string, Photo>, selected: Set<string>) {
         }),
     });
 }
-
-

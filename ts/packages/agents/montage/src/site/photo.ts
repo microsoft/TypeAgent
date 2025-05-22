@@ -35,7 +35,9 @@ export class Photo {
 
         // click handler
         this.img.onclick = () => {
-            const fimg = document.getElementById("focusedImage") as HTMLImageElement;
+            const fimg = document.getElementById(
+                "focusedImage",
+            ) as HTMLImageElement;
 
             if (fimg) {
                 fimg.src = "/image?path=" + imgPath;
@@ -64,7 +66,11 @@ export class Photo {
     }
 
     public setFocusedImage() {
-        this._container.scrollIntoView({ behavior: "smooth", block: 'center', inline: 'center' });
+        this._container.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "center",
+        });
         this.img.classList.add("focusedImage");
         this.img.click();
     }

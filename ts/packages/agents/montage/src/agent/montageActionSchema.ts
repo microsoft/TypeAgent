@@ -169,4 +169,4 @@ export type SetMontageViewModeAction = {
         // The view mode to set
         viewMode: "grid" | "filmstrip";
     };
-}
+};

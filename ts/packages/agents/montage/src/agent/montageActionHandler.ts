@@ -473,7 +473,7 @@ async function handleMontageAction(
             result = createActionResult(message);
             break;
         }
-        
+
         case "setMontageViewMode": {
             const viewAction = action as SetMontageViewModeAction;
             if (agentContext.activeMontageId !== -1) {
@@ -484,7 +484,7 @@ async function handleMontageAction(
             } else {
                 result = createActionResult(
                     `View Mode not set, no active montage.`,
-                )
+                );
             }
             break;
         }
@@ -513,16 +513,13 @@ async function handleMontageAction(
         }
 
         case "startSlideShow": {
-
             const montage = await ensureActionMontage(agentContext, action);
             updateViewWithAction(montage, action);
             //await spawn(`http://localhost:${agentContext.localHostPort}/?startSlideShow=true`);
 
-            result = createActionResult(
-                `Showing ${montage.title}.`,
-                false,
-                [entityFromMontage(montage)],
-            );
+            result = createActionResult(`Showing ${montage.title}.`, false, [
+                entityFromMontage(montage),
+            ]);
 
             break;
         }
@@ -857,7 +854,6 @@ async function findMontageByTitle(
     title: string,
     agentContext: MontageActionContext,
 ): Promise<PhotoMontage | undefined> {
-
     // no montages
     if (agentContext.montages.length === 0) {
         return undefined;
@@ -1011,7 +1007,7 @@ async function saveMontages(context: SessionContext<MontageActionContext>) {
 }
 
 /**
- * Attempts to find a montage by fuzzy matching the title 
+ * Attempts to find a montage by fuzzy matching the title
  * @param fuzzyTitle - The fuzzy title to match
  * @param montages - The montages to search
  * @param model - The model to use for fuzzy matching

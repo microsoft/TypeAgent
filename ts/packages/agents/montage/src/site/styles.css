@@ -80,41 +80,39 @@ img {
 }
 
 .focusOff {
-  #focusContainer {  
-      display: none;
+  #focusContainer {
+    display: none;
   }
 
   #mainContainer {
-    
   }
 }
 
 input[type="button"] {
   width: 35px;
   height: 75px;
-  border-radius: 3px;;
+  border-radius: 3px;
 }
 
 .focusOn {
-
-  #focusContainer {  
-      position: fixed;
-      top: 45px;
-      bottom: 200px;
-      right: 0px;
-      left: 0px;
+  #focusContainer {
+    position: fixed;
+    top: 45px;
+    bottom: 200px;
+    right: 0px;
+    left: 0px;
   }
 
-    #mainContainer {
-      top: auto;
-      flex-flow: nowrap;
-      overflow-x: scroll;
-      overflow-y: hidden;
-      justify-content: normal;
+  #mainContainer {
+    top: auto;
+    flex-flow: nowrap;
+    overflow-x: scroll;
+    overflow-y: hidden;
+    justify-content: normal;
 
-      img {
-        cursor: pointer;
-      }
+    img {
+      cursor: pointer;
+    }
   }
 
   .focusedImage {
@@ -122,8 +120,7 @@ input[type="button"] {
     border-width: 2px;
     border-style: dotted;
     border-radius: 0px;
-  }  
-
+  }
 }
 
 .unselected {
@@ -136,4 +133,3 @@ input[type="button"] {
   border-style: dotted;
   border-radius: 3%;
 }
-
