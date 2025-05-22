@@ -590,7 +590,9 @@ function setupDevicePermissions(mainWindow: BrowserWindow) {
                     (details.securityOrigin?.startsWith("http://localhost") ||
                         details.securityOrigin?.startsWith(
                             "https://localhost",
-                        )))
+                        )) ||
+                (permission.endsWith("fullscreen"))
+                    )
             ) {
                 return true;
             }

@@ -30,6 +30,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     const selected: Set<string> = new Set<string>();
     let focusedImageIndex = 0;
     const focusedImage = document.getElementById("focusedImage") as HTMLImageElement;
+    let timeout = undefined;
+    let preSlideShowViewmode = "grid";
 
     // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
@@ -70,6 +72,26 @@ document.addEventListener("DOMContentLoaded", async function () {
         }        
     }
 
+    function setViewMode(viewMode: string) {
+        switch (viewMode) {
+            case "grid": {
+                document.body.classList.remove("focusOn");
+                document.body.classList.add("focusOff");
+                break;
+            }
+
+            case "filmstrip": {
+                document.body.classList.remove("focusOff");
+                document.body.classList.add("focusOn");
+                break;
+            }
+
+            default: {
+                throw new Error("Unknown montage view mode!");
+            }
+        }
+    }
+
     /**
      * Processes the supplied action
      * @param action The action to process
@@ -85,25 +107,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
             case "setMontageViewMode": {
                 const msg: SetMontageViewModeAction = action as SetMontageViewModeAction;
+                preSlideShowViewmode = msg.parameters.viewMode;
+                setViewMode(msg.parameters.viewMode);
+                break;
+            }
 
-                switch (msg.parameters.viewMode) {
-                    case "grid": {
-                        document.body.classList.remove("focusOn");
-                        document.body.classList.add("focusOff");
-                        break;
-                    }
-
-                    case "filmstrip": {
-                        document.body.classList.remove("focusOff");
-                        document.body.classList.add("focusOn");
-                        break;
-                    }
-
-                    default: {
-                        throw new Error("Unknown montage view mode!");
-                    }
-                }
-
+            case "startSlideShow": {
+                startSlideShow();
                 break;
             }
 
@@ -446,6 +456,45 @@ document.addEventListener("DOMContentLoaded", async function () {
     document.getElementById("btnNext").onclick = () => {
         updateFocusedImage(1);
     }
+
+    function startSlideShow() {
+        setViewMode("filmstrip");
+        const slideshow = document.getElementById("focusContainer");
+        
+        slideshow.requestFullscreen().then(() => {
+            timeout = setInterval(() => {
+                
+                if (focusedImageIndex === imgMap.size - 1) {
+                    updateFocusedImage(-imgMap.size);
+                } else {
+                    updateFocusedImage(1);
+                }                
+            }, 3000); // Change slide every 3 seconds
+        });
+    }
+
+    // listen for the end of the slide show
+    document.addEventListener("fullscreenchange", () => {
+        if (!document.fullscreenElement) {
+            clearInterval(timeout);
+            timeout = undefined;
+            setViewMode(preSlideShowViewmode);
+        }
+    });
+
+    // // are we supposed to start the slide show when the page loads?
+    // const queryParams = new URLSearchParams(window.location.search);
+
+    // // Example: Get the value of a specific parameter
+    // const paramValue = queryParams.get('startSlideShow');
+
+    // document.getElementById("btnSlideShow").onclick = () => {
+    //     startSlideShow();
+    // };
+
+    // if (paramValue === "true") {
+    //     document.getElementById("btnSlideShow").click();
+    // }
 });
 
 /**
@@ -465,3 +514,5 @@ function updateFileList(files: Map<string, Photo>, selected: Set<string>) {
         }),
     });
 }
+
+

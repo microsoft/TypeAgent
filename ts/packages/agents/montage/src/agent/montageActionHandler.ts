@@ -9,7 +9,7 @@ import {
     TypeAgentAction,
     AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
-import { ChildProcess, fork, spawn } from "child_process";
+import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import {
@@ -29,15 +29,11 @@ import {
 import * as im from "image-memory";
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
-import { copyFileSync, existsSync, mkdirSync, rmdirSync } from "node:fs";
-//import Registry from "winreg";
-import koffi from "koffi";
 import {
     displayError,
     displayStatus,
 } from "@typeagent/agent-sdk/helpers/display";
 import registerDebug from "debug";
-import { spawnSync } from "node:child_process";
 import { createSemanticMap } from "typeagent";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { ResolveEntityResult } from "../../../../agentSdk/dist/agentInterface.js";
@@ -156,25 +152,6 @@ function updateMontageViewerState(context: MontageActionContext) {
         context.viewProcess?.send({ actionName: "reset" });
     }
 }
-
-// Define the nativew functions we'll be using function
-const shell32: koffi.IKoffiLib | undefined =
-    process.platform === "win32" ? koffi.load("shell32.dll") : undefined;
-const crypt32: koffi.IKoffiLib | undefined =
-    process.platform === "win32" ? koffi.load("crypt32.dll") : undefined;
-
-// define types
-koffi.opaque("ITEMIDLIST");
-
-// define functions
-const ILCreateFromPathW = shell32?.func(
-    "ITEMIDLIST* ILCreateFromPathW(str16 pszPath)",
-);
-const ILGetSize = shell32?.func("uint ILGetSize(ITEMIDLIST* pidl)");
-const ILFree = shell32?.func("void ILFree(ITEMIDLIST* pidl)");
-const CryptBinaryToStringW = crypt32?.func(
-    "bool CryptBinaryToStringW(ITEMIDLIST* pbBinary, uint cbBinary, uint dwFlags, _Inout_ str16 pszString, _Inout_ uint* pcchString)",
-);
 
 async function initializeMontageContext(
     settings?: AppAgentInitSettings,
@@ -536,20 +513,16 @@ async function handleMontageAction(
         }
 
         case "startSlideShow": {
-            if (process.platform == "win32") {
-                const montage = await ensureActionMontage(agentContext, action);
-                // start the slide show
-                startSlideShow(montage, agentContext);
-                result = createActionResult(
-                    `Showing ${montage.title}.`,
-                    false,
-                    [entityFromMontage(montage)],
-                );
-            } else {
-                result = createActionResultFromError(
-                    `This action is not supported on platform '${process.platform}'.`,
-                );
-            }
+
+            const montage = await ensureActionMontage(agentContext, action);
+            updateViewWithAction(montage, action);
+            //await spawn(`http://localhost:${agentContext.localHostPort}/?startSlideShow=true`);
+
+            result = createActionResult(
+                `Showing ${montage.title}.`,
+                false,
+                [entityFromMontage(montage)],
+            );
 
             break;
         }
@@ -1038,131 +1011,12 @@ async function saveMontages(context: SessionContext<MontageActionContext>) {
 }
 
 /**
- * Starts the built-in windows slideshow screensaver
- * @param folder The optional folder to lanch the slideshow for
+ * Attempts to find a montage by fuzzy matching the title 
+ * @param fuzzyTitle - The fuzzy title to match
+ * @param montages - The montages to search
+ * @param model - The model to use for fuzzy matching
+ * @returns - The highest scoring montage or undefined
  */
-function startSlideShow(montage: PhotoMontage, context: MontageActionContext) {
-    // copy images into slide show folder
-    const slideShowDir = path.join(process.env["TEMP"]!, "typeagent_slideshow");
-    if (existsSync(slideShowDir)) {
-        rmdirSync(slideShowDir, { recursive: true });
-    }
-
-    // make the new dir
-    mkdirSync(slideShowDir);
-
-    // copy images into slideshow dir
-    montage.files.forEach((file) =>
-        copyFileSync(file, path.join(slideShowDir, path.basename(file))),
-    );
-
-    // update slideshow screen saver directory
-    // const key = new Registry({
-    //     hive: Registry.HKCU,
-    //     key: "Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\Screensaver",
-    // });
-
-    // create the key if it doesn't exist
-    // BUGBUG - winreg does NOT work if the key has spaces in it
-    // https://github.com/fresc81/node-winreg
-    // there's a pending PR to fix but no response from the author so we just do it manually here ourselves
-    spawnSync("reg", [
-        "add",
-        "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
-    ]);
-    // key.create((err) => {
-    //     // remove spanSync once win-reg get's updated
-    // });
-
-    // set the registry value
-    const pidl = createEncryptedPIDLFromPath(slideShowDir);
-    if (pidl) {
-        spawnSync("reg", [
-            "add",
-            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
-            "/v",
-            "EncryptedPIDL",
-            "/t",
-            "REG_SZ",
-            "/d",
-            pidl,
-            "/f",
-        ]);
-
-        // fast
-        spawnSync("reg", [
-            "add",
-            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
-            "/v",
-            "Speed",
-            "/t",
-            "REG_DWORD",
-            "/d",
-            "2",
-            "/f",
-        ]);
-
-        // shuffle
-        spawnSync("reg", [
-            "add",
-            "HKCU\\Software\\Microsoft\\Windows Photo Viewer\\Slideshow\\ScreenSaver",
-            "/v",
-            "Shuffle",
-            "/t",
-            "REG_DWORD",
-            "/d",
-            "1",
-            "/f",
-        ]);
-        // key.set("EncryptedPIDL", "REG_SZ", pidl, (err) => {
-        //     if (err) {
-        //         console.error("Error reading registry value:", err);
-        //     }
-        // });
-
-        // key.set("Shuffle", "REG_DWORD", "1", () => {}); // randomize
-        // key.set("Speed", "REG_DWORD", "2", () => {});   // "fast"
-    }
-
-    // start slideshow screen saver
-    try {
-        spawn(`${process.env["SystemRoot"]}\\System32\\PhotoScreensaver.scr`, [
-            "/s",
-        ]);
-    } catch (e) {
-        debug(e);
-    }
-}
-
-/**
- * Creats an encrypted PIDL for use with the Photo Viewer slideshow screensaver
- * @param path - The path of the PIDL to create and encrypt
- * @returns - The encrypted PIDL
- */
-function createEncryptedPIDLFromPath(path: string) {
-    if (
-        ILCreateFromPathW !== undefined &&
-        CryptBinaryToStringW !== undefined &&
-        ILGetSize !== undefined &&
-        ILFree !== undefined
-    ) {
-        const pidl = ILCreateFromPathW(path);
-        const size: number = ILGetSize(pidl);
-
-        let stringBuffer = [" ".repeat(2048)];
-        let bufferSize = [2048];
-        if (!CryptBinaryToStringW(pidl, size, 1, stringBuffer, bufferSize)) {
-            debug(`ERROR encrypting PIDL for ${path}`);
-        }
-
-        ILFree(pidl);
-
-        return stringBuffer[0];
-    }
-
-    return undefined;
-}
-
 async function getMontageByFuzzyMatching(
     fuzzyTitle: string | undefined,
     montages: PhotoMontage[],
