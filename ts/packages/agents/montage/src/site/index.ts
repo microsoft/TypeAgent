@@ -7,6 +7,7 @@ import {
     ChangeTitleAction,
     RemovePhotosAction,
     SelectPhotosAction,
+    SetMontageViewModeAction,
 } from "../agent/montageActionSchema.js";
 import { PhotoMontage } from "../agent/montageActionHandler.js";
 import { Photo } from "./photo";
@@ -14,7 +15,6 @@ import { Photo } from "./photo";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:agent:montage:ui");
-//const eventSource = new EventSource("/events");
 
 export type Message = {
     type: "listPhotos";
@@ -24,10 +24,16 @@ export type ListPhotosMessage = Message & {
     files: string[];
 };
 
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", async function () {
     const mainContainer = document.getElementById("mainContainer");
     const imgMap: Map<string, Photo> = new Map<string, Photo>();
     const selected: Set<string> = new Set<string>();
+    let focusedImageIndex = 0;
+    const focusedImage = document.getElementById(
+        "focusedImage",
+    ) as HTMLImageElement;
+    let timeout = undefined;
+    let preSlideShowViewmode = "grid";
 
     // setup event source from host source (shell, etc.)
     const eventSource = new EventSource("/events");
@@ -35,19 +41,58 @@ document.addEventListener("DOMContentLoaded", function () {
         const e = JSON.parse(event.data);
         console.log(e);
 
+        processMessage(e);
+    };
+
+    // shortcut title click to change view mode
+    document.getElementById("title").onclick = () => {
+        if (document.body.classList.contains("focusOn")) {
+            document.body.classList.remove("focusOn");
+            document.body.classList.add("focusOff");
+        } else {
+            document.body.classList.remove("focusOff");
+            document.body.classList.add("focusOn");
+        }
+    };
+
+    /**
+     * Processes the supplied message
+     * @param msg The message to process
+     */
+    function processMessage(msg: any) {
         // check to see if we are getting initial data and handle that, otherwise process actions
-        if (e.actionName !== undefined && e.actionName !== "") {
-            processAction(e);
+        if (msg.actionName !== undefined && msg.actionName !== "") {
+            processAction(msg);
         } else {
             reset();
 
             // repopulate
-            const montage = e as PhotoMontage;
+            const montage = msg as PhotoMontage;
             montage.selected.forEach((value) => selected.add(value));
             setTitle(montage.title);
             addImages(montage.files, true);
         }
-    };
+    }
+
+    function setViewMode(viewMode: string) {
+        switch (viewMode) {
+            case "grid": {
+                document.body.classList.remove("focusOn");
+                document.body.classList.add("focusOff");
+                break;
+            }
+
+            case "filmstrip": {
+                document.body.classList.remove("focusOff");
+                document.body.classList.add("focusOn");
+                break;
+            }
+
+            default: {
+                throw new Error("Unknown montage view mode!");
+            }
+        }
+    }
 
     /**
      * Processes the supplied action
@@ -62,11 +107,22 @@ document.addEventListener("DOMContentLoaded", function () {
                 break;
             }
 
+            case "setMontageViewMode": {
+                const msg: SetMontageViewModeAction =
+                    action as SetMontageViewModeAction;
+                preSlideShowViewmode = msg.parameters.viewMode;
+                setViewMode(msg.parameters.viewMode);
+                break;
+            }
+
+            case "startSlideShow": {
+                startSlideShow();
+                break;
+            }
+
             case "addPhotos": {
                 const msg: AddPhotosAction = action as AddPhotosAction;
-
                 addImages(msg.parameters.files);
-
                 break;
             }
 
@@ -112,6 +168,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     msg.parameters.selected === "all"
                 ) {
                     selected.forEach((value: string) => {
+                        // clear the focused image if it's being removed
+                        if (focusedImage.getAttribute("path") === value) {
+                            focusedImage.src = "";
+                        }
+
                         imgMap.get(value).remove();
                         imgMap.delete(value);
                     });
@@ -127,6 +188,11 @@ document.addEventListener("DOMContentLoaded", function () {
                         if (!selected.has(key)) {
                             value.remove();
                             imgMap.delete(key);
+
+                            // clear the focused image if it's being removed
+                            if (focusedImage.getAttribute("path") === key) {
+                                focusedImage.src = "";
+                            }
                         }
                     });
                 }
@@ -144,9 +210,14 @@ document.addEventListener("DOMContentLoaded", function () {
                             );
                         });
 
-                        keep.forEach((img) => {
-                            imgMap.get(img).remove();
-                            imgMap.delete(img);
+                        keep.forEach((imgPath) => {
+                            // clear the focused image if it's being removed
+                            if (focusedImage.getAttribute("path") === imgPath) {
+                                focusedImage.src = "";
+                            }
+
+                            imgMap.get(imgPath).remove();
+                            imgMap.delete(imgPath);
                         });
                     } else {
                         // have to start at the end otherwise indexes will be wrong
@@ -162,6 +233,11 @@ document.addEventListener("DOMContentLoaded", function () {
                                 );
                             mainContainer.children[index].remove();
 
+                            // clear the focused image if it's being removed
+                            if (focusedImage.getAttribute("path") === file) {
+                                focusedImage.src = "";
+                            }
+
                             imgMap.delete(file);
                             selected.delete(file);
                         }
@@ -175,6 +251,15 @@ document.addEventListener("DOMContentLoaded", function () {
                             imgMap.get(msg.parameters.files[i]).remove();
                             imgMap.delete(msg.parameters.files[i]);
                         }
+
+                        // clear the focused image if it's being removed
+                        if (
+                            focusedImage.getAttribute("path") ===
+                            msg.parameters.files[i]
+                        ) {
+                            focusedImage.src = "";
+                        }
+
                         selected.delete(msg.parameters.files[i]);
                     }
                 }
@@ -195,6 +280,9 @@ document.addEventListener("DOMContentLoaded", function () {
                         i + 1
                     ).toString();
                 }
+
+                // clear the focused image
+                focusedImage.src = "";
 
                 // Don't break because we want to clear the selection after doing a "remove"
                 if (!msg.parameters.selected) {
@@ -237,7 +325,7 @@ document.addEventListener("DOMContentLoaded", function () {
         setSelectionState: boolean = false,
     ) {
         if (files !== undefined) {
-            files.forEach(async (f) => {
+            files.forEach(async (f, index) => {
                 if (!imgMap.has(f)) {
                     // create the image control
                     const img: Photo = new Photo(
@@ -254,6 +342,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     // does it need to be selected or unselected?
                     if (setSelectionState && selected.size > 0) {
                         select(img.container);
+                    }
+
+                    // make the first image the focused image
+                    if (index === 0) {
+                        img.setFocusedImage();
                     }
                 }
             });
@@ -299,10 +392,114 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    /**
+     * Update the page title
+     * @param newTitle The new title to set
+     */
     function setTitle(newTitle) {
         const title: HTMLElement = document.getElementById("title");
         title.innerHTML = newTitle;
+        document.title = `Montage - ${newTitle}`;
     }
+
+    // get the initial state
+    const res = await fetch("/lastMessage", {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
+        },
+    });
+
+    if (res.status === 200) {
+        const json = await res.json();
+        processMessage(json);
+    }
+
+    /**
+     * Handle key events
+     */
+    document.addEventListener("keyup", (event) => {
+        // left arrow - select the next image as the focused image
+        if (event.key === "ArrowLeft") {
+            updateFocusedImage(-1);
+        }
+
+        // right arrow - select previous image as the focused image
+        if (event.key === "ArrowRight") {
+            updateFocusedImage(1);
+        }
+    });
+
+    /**
+     * Changes the focused image by shifting the index
+     * @param offset - The offset to move the focused image
+     */
+    function updateFocusedImage(offset: number) {
+        // removed the focused image class from the current focused image
+        const oldPath =
+            mainContainer.children[focusedImageIndex].getAttribute("path");
+        imgMap.get(oldPath).unFocusImage();
+
+        focusedImageIndex += offset;
+
+        if (focusedImageIndex < 0) {
+            focusedImageIndex = 0;
+        } else if (focusedImageIndex >= imgMap.size) {
+            focusedImageIndex = imgMap.size - 1;
+        }
+
+        // add the focused image class to the new focused image
+        const newPath =
+            mainContainer.children[focusedImageIndex].getAttribute("path");
+        imgMap.get(newPath).setFocusedImage();
+    }
+
+    // next/previous images
+    document.getElementById("btnPrevious").onclick = () => {
+        updateFocusedImage(-1);
+    };
+
+    document.getElementById("btnNext").onclick = () => {
+        updateFocusedImage(1);
+    };
+
+    function startSlideShow() {
+        setViewMode("filmstrip");
+        const slideshow = document.getElementById("focusContainer");
+
+        slideshow.requestFullscreen().then(() => {
+            timeout = setInterval(() => {
+                if (focusedImageIndex === imgMap.size - 1) {
+                    updateFocusedImage(-imgMap.size);
+                } else {
+                    updateFocusedImage(1);
+                }
+            }, 3000); // Change slide every 3 seconds
+        });
+    }
+
+    // listen for the end of the slide show
+    document.addEventListener("fullscreenchange", () => {
+        if (!document.fullscreenElement) {
+            clearInterval(timeout);
+            timeout = undefined;
+            setViewMode(preSlideShowViewmode);
+        }
+    });
+
+    // // are we supposed to start the slide show when the page loads?
+    // const queryParams = new URLSearchParams(window.location.search);
+
+    // // Example: Get the value of a specific parameter
+    // const paramValue = queryParams.get('startSlideShow');
+
+    // document.getElementById("btnSlideShow").onclick = () => {
+    //     startSlideShow();
+    // };
+
+    // if (paramValue === "true") {
+    //     document.getElementById("btnSlideShow").click();
+    // }
 });
 
 /**

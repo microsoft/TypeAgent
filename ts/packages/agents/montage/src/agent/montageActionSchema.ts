@@ -13,7 +13,8 @@ export type MontageAction =
     | DeleteMontageAction
     | DeleteAllMontageAction
     | ListMontageAction
-    | MergeMontageAction;
+    | MergeMontageAction
+    | SetMontageViewModeAction;
 
 export type MontageActivity = StartEditMontageAction | CreateMontageAction;
 export type MontageEntity = Montage;
@@ -159,5 +160,13 @@ export type MergeMontageAction = {
         titles?: Montage[];
         // THe ids of the montages to merge
         ids?: number[];
+    };
+};
+
+export type SetMontageViewModeAction = {
+    actionName: "setMontageViewMode";
+    parameters: {
+        // The view mode to set
+        viewMode: "grid" | "filmstrip";
     };
 };
