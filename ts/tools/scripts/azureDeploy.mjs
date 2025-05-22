@@ -6,6 +6,7 @@ import chalk from "chalk";
 import registerDebug from "debug";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getAzCliLoggedInInfo, execAzCliCommand } from "./lib/azureUtils.mjs";
 
 const debug = registerDebug("typeagent:azure:deploy");
 const debugError = registerDebug("typeagent:azure:deploy:error");
@@ -29,19 +30,22 @@ function error(message) {
     console.error(chalk.redBright(message));
 }
 
+const nameColor = chalk.cyanBright;
+
 const defaultGlobalOptions = {
     location: "eastus", // deployment location
     name: "", // deployment name
 };
 
-const commands = ["create", "delete", "purge"];
+const commands = ["status", "create", "delete", "purge"];
 function parseArgs() {
     const args = process.argv;
     if (args.length < 3) {
-        throw new Error("Command not specified.");
+        throw new Error(
+            `Command not specified. Valid commands are: ${commands.map((c) => `'${c}'`).join(", ")}`,
+        );
     }
     const command = args[2];
-
     if (!commands.includes(command)) {
         throw new Error(
             `Invalid command '${command}'. Valid commands are: ${commands.map((c) => `'${c}'`).join(", ")}`,
@@ -90,62 +94,17 @@ function parseArgs() {
     return { command, options };
 }
 
-function checkAzCliLoggedIn() {
-    // We use this to validate that the user is logged in (already ran `az login`).
-    try {
-        const account = JSON.parse(
-            child_process.execFileSync("az", ["account", "show"]),
-        );
-        console.log(`Logged in as ${chalk.cyanBright(account.user.name)}`);
-    } catch (e) {
-        debugError(e);
-        throw new Error("User not logged in to Azure CLI. Run 'az login'.");
-    }
-}
-
-function getSubscriptionId() {
-    let subscriptionId, subscriptionName;
-
-    try {
-        const subscriptions = JSON.parse(
-            child_process.execFileSync("az", ["account", "list"]),
-        );
-
-        subscriptions.forEach((subscription) => {
-            if (subscription.isDefault) {
-                subscriptionId = subscription.id;
-                subscriptionName = subscription.name;
-            }
-        });
-    } catch (e) {
-        debugError(e);
-        throw new Error("Unable to get principal id of the current user.");
-    }
-
-    if (subscriptionId) {
-        console.log(
-            `Using subscription ${chalk.cyanBright(subscriptionName)} [${chalk.cyanBright(subscriptionId)}].`,
-        );
-        return subscriptionId;
-    } else {
-        throw new Error(
-            "Unable to find default subscription! Unable to continue.",
-        );
-    }
-}
-
 function getDeploymentName(options) {
-    if (options.name) {
-        return options.name;
-    }
-    return `typeagent-${options.location}`;
+    return options.name
+        ? options.name
+        : `typeagent-${options.location}-deployment`;
 }
 
-function createDeployment(options) {
+async function createDeployment(options) {
     const deploymentName = getDeploymentName(options);
-    status(`Creating deployment ${deploymentName}...`);
+    status(`Creating deployment ${nameColor(deploymentName)}...`);
     const output = JSON.parse(
-        child_process.execFileSync("az", [
+        await execAzCliCommand([
             "deployment",
             "sub",
             "create",
@@ -154,23 +113,25 @@ function createDeployment(options) {
             "--template-file",
             path.resolve(__dirname, "./armTemplates/template.json"),
             "--name",
-            getDeploymentName(options),
+            deploymentName,
         ]),
     );
 
-    console.log("Resources created:");
-    console.log(
+    status("Resources created:");
+    status(
         output.properties.outputResources.map((r) => `  ${r.id}`).join("\n"),
     );
 
+    success(
+        `Deployment ${nameColor(deploymentName)} deployed to resource group ${nameColor(output.properties.parameters.group_name.value)}`,
+    );
     return output.properties.parameters.vaults_name.value;
 }
 
-function deleteDeployment(options, subscriptionId) {
-    const deploymentName = getDeploymentName(options);
-    status("Getting deployment details...");
-    const deployment = JSON.parse(
-        child_process.execFileSync("az", [
+async function getDeploymentDetails(deploymentName) {
+    status(`Getting details on deployment ${nameColor(deploymentName)}...`);
+    return JSON.parse(
+        await execAzCliCommand([
             "deployment",
             "sub",
             "show",
@@ -178,10 +139,15 @@ function deleteDeployment(options, subscriptionId) {
             deploymentName,
         ]),
     );
+}
+
+async function deleteDeployment(options, subscriptionId) {
+    const deploymentName = getDeploymentName(options);
+    const deployment = await getDeploymentDetails(deploymentName);
     const resourceGroupName = deployment.properties.parameters.group_name.value;
     try {
-        status(`Deleting resource group ${resourceGroupName}...`);
-        child_process.execFileSync("az", [
+        status(`Deleting resource group ${nameColor(deploymentName)}...`);
+        await execAzCliCommand([
             "group",
             "delete",
             "--name",
@@ -189,7 +155,7 @@ function deleteDeployment(options, subscriptionId) {
             "--yes",
         ]);
 
-        success(`Resource group ${resourceGroupName} deleted`);
+        success(`Resource group ${nameColor(resourceGroupName)} deleted`);
     } catch (e) {
         if (!e.message.includes(" could not be found")) {
             throw e;
@@ -197,8 +163,8 @@ function deleteDeployment(options, subscriptionId) {
         warn(e.message);
     }
 
-    status(`Deleting deployment ${deploymentName}...`);
-    child_process.execFileSync("az", [
+    status(`Deleting deployment ${nameColor(deploymentName)}...`);
+    await execAzCliCommand([
         "deployment",
         "sub",
         "delete",
@@ -206,15 +172,15 @@ function deleteDeployment(options, subscriptionId) {
         deploymentName,
     ]);
 
-    success(`Deployment ${deploymentName} deleted`);
+    success(`Deployment ${nameColor(deploymentName)} deleted`);
 
     if (options.purge) {
-        purgeDeleted(options, subscriptionId);
+        await purgeDeleted(options, subscriptionId);
     }
 }
 
-function getDeletedResources(uri, tag) {
-    const deleted = child_process.execFileSync("az", [
+async function getDeletedResources(uri, tag) {
+    const deleted = await execAzCliCommand([
         "rest",
         "--method",
         "get",
@@ -231,11 +197,8 @@ function getDeletedResources(uri, tag) {
         .map((r) => r.id);
 }
 
-function getDeleteKeyVaults(tag) {
-    const deleted = child_process.execFileSync("az", [
-        "keyvault",
-        "list-deleted",
-    ]);
+async function getDeleteKeyVaults(tag) {
+    const deleted = await execAzCliCommand(["keyvault", "list-deleted"]);
     debug(`Get Delete KeyVault: ${deleted}`);
     const deletedJson = JSON.parse(deleted);
     return deletedJson
@@ -243,11 +206,11 @@ function getDeleteKeyVaults(tag) {
         .map((r) => r.name);
 }
 
-function purgeDeleted(options, subscriptionId) {
+async function purgeDeleted(options, subscriptionId) {
     const deploymentName = getDeploymentName(options);
-    status(`Purging resources for deployment ${deploymentName}...`);
+    status(`Purging resources for deployment ${nameColor(deploymentName)}...`);
     try {
-        const resources = getDeletedResources(
+        const resources = await getDeletedResources(
             `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.CognitiveServices/deletedAccounts?api-version=2021-04-30`,
             deploymentName,
         );
@@ -255,20 +218,18 @@ function purgeDeleted(options, subscriptionId) {
         if (resources.length !== 0) {
             status("Purging deleted cognitive services...");
             status(resources.map((r) => `  ${r}`).join("\n"));
-            child_process.execFileSync(
-                "az",
+            await execAzCliCommand(
                 ["resource", "delete", "--ids", ...resources],
                 { encoding: "utf8" },
             );
         }
 
-        const kvs = getDeleteKeyVaults(deploymentName);
+        const kvs = await getDeleteKeyVaults(deploymentName);
         if (kvs.length !== 0) {
             status("Purging delete keyvault...");
             status(kvs.map((r) => `  ${r}`).join("\n"));
             for (const kv of kvs) {
-                const kvPurgeResult = child_process.execFileSync(
-                    "az",
+                await execAzCliCommand(
                     ["keyvault", "purge", "--no-wait", "--name", kv],
                     { encoding: "utf8" },
                 );
@@ -290,27 +251,40 @@ function getErrorMessage(e) {
 }
 
 function getKeys(vaultName) {
-    child_process.execFileSync("node", [
+    status(`Populating keys from ${nameColor(vaultName)}...`);
+    child_process.execFileSync(process.execPath, [
         path.resolve(__dirname, "./getKeys.mjs"),
         "--vault",
         vaultName,
     ]);
+    success(`Keys populated from ${nameColor(vaultName)}.`);
 }
 
-function main() {
+async function main() {
     let usage = true;
     try {
         const { command, options } = parseArgs();
         usage = false;
-        checkAzCliLoggedIn();
-        const subscriptionId = getSubscriptionId();
-        if (command === "create") {
-            const kv = createDeployment(options);
-            getKeys(kv);
-        } else if (command === "delete") {
-            deleteDeployment(options, subscriptionId);
-        } else if (command === "purge") {
-            purgeDeleted(options, subscriptionId);
+
+        const azInfo = await getAzCliLoggedInInfo();
+        const subscriptionId = azInfo.subscription.id;
+        switch (command) {
+            case "status":
+                const deployment = await getDeploymentDetails(
+                    getDeploymentName(options),
+                );
+                console.log(JSON.stringify(deployment, null, 2));
+                break;
+            case "create":
+                const kv = await createDeployment(options);
+                await getKeys(kv);
+                break;
+            case "delete":
+                await deleteDeployment(options, subscriptionId);
+                break;
+            case "purge":
+                await purgeDeleted(options, subscriptionId);
+                break;
         }
     } catch (e) {
         error(`ERROR: ${getErrorMessage(e)}`);
@@ -324,7 +298,7 @@ function main() {
                     "",
                     "Options:",
                     "  --location <location>  The location the deployment is in. Default: eastus",
-                    "  --name <name>          The name of the deployment. Default: typeagent-<location>",
+                    "  --name <name>          The name of the deployment. Default: typeagent-<location>-deployment",
                     "  --purge [true|false]   Purge deleted resources. Default: true",
                 ].join("\n"),
             );
@@ -333,4 +307,4 @@ function main() {
     }
 }
 
-main();
+await main();
