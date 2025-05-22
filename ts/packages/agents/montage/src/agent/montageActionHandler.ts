@@ -258,15 +258,14 @@ async function updateMontageContext(
         if (!agentContext.viewProcess) {
             agentContext.viewProcess = await createViewServiceHost(
                 (montage: PhotoMontage) => {
-                    // replace the active montage with the one we just got from the client
-                    if (agentContext.activeMontageId > -1) {
+                    // replace the active montage with the one the client gave is if they match
+                    if (agentContext.activeMontageId == montage.id) {
                         // remove the active montage
                         agentContext.montages = agentContext.montages.filter(
                             (value) => value.id != agentContext.activeMontageId,
                         );
 
                         // push the received montage onto the stack
-                        montage.id = agentContext.activeMontageId;
                         agentContext.montages.push(montage);
                     }
                 },

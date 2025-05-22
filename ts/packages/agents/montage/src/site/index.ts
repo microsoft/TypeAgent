@@ -28,6 +28,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const mainContainer = document.getElementById("mainContainer");
     const imgMap: Map<string, Photo> = new Map<string, Photo>();
     const selected: Set<string> = new Set<string>();
+    const montageId = document.getElementById("montageId") as HTMLInputElement;
     let focusedImageIndex = 0;
     const focusedImage = document.getElementById(
         "focusedImage",
@@ -68,7 +69,12 @@ document.addEventListener("DOMContentLoaded", async function () {
 
             // repopulate
             const montage = msg as PhotoMontage;
-            montage.selected.forEach((value) => selected.add(value));
+            montageId.value = montage.id ? montage.id.toString() : "-1";
+
+            if (montage.selected) {
+                montage.selected.forEach((value) => selected.add(value));
+            }
+
             setTitle(montage.title);
             addImages(montage.files, true);
         }
@@ -104,6 +110,19 @@ document.addEventListener("DOMContentLoaded", async function () {
         switch (action.actionName) {
             case "reset": {
                 reset();
+                break;
+            }
+
+            case "setMontageViewMode": {
+                const msg: SetMontageViewModeAction =
+                    action as SetMontageViewModeAction;
+                preSlideShowViewmode = msg.parameters.viewMode;
+                setViewMode(msg.parameters.viewMode);
+                break;
+            }
+
+            case "startSlideShow": {
+                startSlideShow();
                 break;
             }
 
@@ -397,9 +416,11 @@ document.addEventListener("DOMContentLoaded", async function () {
      * @param newTitle The new title to set
      */
     function setTitle(newTitle) {
-        const title: HTMLElement = document.getElementById("title");
-        title.innerHTML = newTitle;
-        document.title = `Montage - ${newTitle}`;
+        if (newTitle) {
+            const title: HTMLElement = document.getElementById("title");
+            title.innerHTML = newTitle;
+            document.title = `Montage - ${newTitle}`;
+        }
     }
 
     // get the initial state
@@ -486,20 +507,6 @@ document.addEventListener("DOMContentLoaded", async function () {
             setViewMode(preSlideShowViewmode);
         }
     });
-
-    // // are we supposed to start the slide show when the page loads?
-    // const queryParams = new URLSearchParams(window.location.search);
-
-    // // Example: Get the value of a specific parameter
-    // const paramValue = queryParams.get('startSlideShow');
-
-    // document.getElementById("btnSlideShow").onclick = () => {
-    //     startSlideShow();
-    // };
-
-    // if (paramValue === "true") {
-    //     document.getElementById("btnSlideShow").click();
-    // }
 });
 
 /**
@@ -513,6 +520,7 @@ function updateFileList(files: Map<string, Photo>, selected: Set<string>) {
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
+            id: document.getElementById("montageId").getAttribute("value"),
             title: document.getElementById("title").innerHTML,
             files: [...files.keys()],
             selected: [...selected.values()],
