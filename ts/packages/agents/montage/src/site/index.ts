@@ -8,6 +8,7 @@ import {
     RemovePhotosAction,
     SelectPhotosAction,
     SetMontageViewModeAction,
+    SetMontageViewModeAction,
 } from "../agent/montageActionSchema.js";
 import { PhotoMontage } from "../agent/montageActionHandler.js";
 import { Photo } from "./photo";
@@ -24,6 +25,7 @@ export type ListPhotosMessage = Message & {
     files: string[];
 };
 
+document.addEventListener("DOMContentLoaded", async function () {
 document.addEventListener("DOMContentLoaded", async function () {
     const mainContainer = document.getElementById("mainContainer");
     const imgMap: Map<string, Photo> = new Map<string, Photo>();
@@ -42,6 +44,25 @@ document.addEventListener("DOMContentLoaded", async function () {
         const e = JSON.parse(event.data);
         console.log(e);
 
+        processMessage(e);
+    };
+
+    // shortcut title click to change view mode
+    document.getElementById("title").onclick = () => {
+        if (document.body.classList.contains("focusOn")) {
+            document.body.classList.remove("focusOn");
+            document.body.classList.add("focusOff");
+        } else {
+            document.body.classList.remove("focusOff");
+            document.body.classList.add("focusOn");
+        }
+    };
+
+    /**
+     * Processes the supplied message
+     * @param msg The message to process
+     */
+    function processMessage(msg: any) {
         processMessage(e);
     };
 
@@ -95,6 +116,27 @@ document.addEventListener("DOMContentLoaded", async function () {
             }
         }
     }
+    }
+
+    function setViewMode(viewMode: string) {
+        switch (viewMode) {
+            case "grid": {
+                document.body.classList.remove("focusOn");
+                document.body.classList.add("focusOff");
+                break;
+            }
+
+            case "filmstrip": {
+                document.body.classList.remove("focusOff");
+                document.body.classList.add("focusOn");
+                break;
+            }
+
+            default: {
+                throw new Error("Unknown montage view mode!");
+            }
+        }
+    }
 
     /**
      * Processes the supplied action
@@ -106,6 +148,19 @@ document.addEventListener("DOMContentLoaded", async function () {
         switch (action.actionName) {
             case "reset": {
                 reset();
+                break;
+            }
+
+            case "setMontageViewMode": {
+                const msg: SetMontageViewModeAction =
+                    action as SetMontageViewModeAction;
+                preSlideShowViewmode = msg.parameters.viewMode;
+                setViewMode(msg.parameters.viewMode);
+                break;
+            }
+
+            case "startSlideShow": {
+                startSlideShow();
                 break;
             }
 

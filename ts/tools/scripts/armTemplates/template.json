@@ -16,7 +16,7 @@
       "type": "String"
     },
     "group_name": {
-      "defaultValue": "[concat(parameters('prefix'), '-', parameters('region'))]",
+      "defaultValue": "[concat(parameters('prefix'), '-', parameters('region'), '-rg')]",
       "type": "String"
     },
     "maps_region": {
