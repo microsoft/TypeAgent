@@ -38,12 +38,12 @@ Maximize Edge
 # -------------------------------------
 # Browser actions
 # -------------------------------------
-Go To BBC
+Go To the microsoft homepage
 Scroll down
 Scroll up
 Zoom in
 Zoom out
-Follow BBC home link
+Follow Teams link
 
 # -------------------------------------
 # PBDB actions
