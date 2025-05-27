@@ -130,8 +130,13 @@ Note: Shared keys doesn't include Spotify integration, which can be created usin
 
 ### Keyless API Access
 
-For additional security, it is possible to run a subset of the TypeAgent endpoints in a keyless environment. Instead of using keys the examples provided can use Azure Entra user identities to authenticate against endpoints. To use this approach, modify the .env file and specify `identity` as the key value.
-You must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
+For additional security, it is possible to run a subset of the TypeAgent endpoints in a keyless environment and use Azure Entra user identities to authenticate against endpoint.
+
+In order to use keyless access you must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
+
+After configuring your service, modify the .env file and specify `identity` as the key value instead of using keys in the examples provided. To authenticate at runtime, make sure you have installed [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest) and logged in with the account that has access to the models using `az login`. Make sure choose the subscription where your services are as the default.
+
+Alternatively, TypeAgent make use of the Azure SDK's [DefaultAzureCredential](https://learn.microsoft.com/en-us/javascript/api/%40azure/identity/defaultazurecredential?view=azure-node-latest) which provide other methods to authenticate at runtime. Follow those instructions to provide keyless access to the services.
 
 ### Just-in-time Access
 
