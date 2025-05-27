@@ -14,6 +14,8 @@ import {
     createActionResultFromHtmlDisplay,
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
+import { AIProjectClient } from "@azure/ai-projects";
+import { DefaultAzureCredential } from "@azure/identity";
 
 export function instantiate(): AppAgent {
     return {
@@ -63,63 +65,9 @@ async function handleChatResponse(
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
-            const generateResponseAction = chatAction as GenerateResponseAction;
-            const parameters = generateResponseAction.parameters;
-            const generatedText = parameters.generatedText;
-            if (generatedText !== undefined) {
-                logEntities("UR Entities:", parameters.userRequestEntities);
-                logEntities("GT Entities:", parameters.generatedTextEntities);
-                console.log(
-                    "Got generated text: " +
-                        generatedText.substring(0, 100) +
-                        "...",
-                );
-
-                const needDisplay =
-                    context.streamingContext !== generatedText ||
-                    generateResponseAction.parameters.relatedFiles;
-                let result;
-                if (needDisplay) {
-                    if (generateResponseAction.parameters.relatedFiles) {
-                        result = createActionResultFromHtmlDisplay(
-                            `<div>${generatedText}</div><div class='chat-smallImage'>${await rehydrateImages(context, chatAction.parameters.relatedFiles!)}</div>`,
-                        );
-                    } else {
-                        result = createActionResult(generatedText, true);
-                    }
-                } else {
-                    result = createActionResultNoDisplay(generatedText);
-                }
-
-                let entities = parameters.generatedTextEntities || [];
-                if (parameters.userRequestEntities !== undefined) {
-                    result.entities =
-                        parameters.userRequestEntities.concat(entities);
-                }
-
-                if (
-                    generateResponseAction.parameters.relatedFiles !== undefined
-                ) {
-                    const fileEntities: Entity[] = new Array<Entity>();
-                    for (const file of generateResponseAction.parameters
-                        .relatedFiles) {
-                        let name = file;
-                        if (file.lastIndexOf("\\") > -1) {
-                            name = file.substring(file.lastIndexOf("\\") + 1);
-                        }
-                        fileEntities.push({
-                            name,
-                            type: ["file", "image", "data"],
-                        });
-                    }
-
-                    logEntities("File Entities:", fileEntities);
-                    result.entities = result.entities.concat(fileEntities);
-                }
-
-                return result;
-            }
-            break;
+            runAgentConversation();
+            return generateReponseWithBingSearch(chatAction, context);
+           break;
         }
 
         case "showImageFile":
@@ -132,6 +80,107 @@ async function handleChatResponse(
                 `Invalid chat action: ${(chatAction as TypeAgentAction).actionName}`,
             );
     }
+}
+
+async function runAgentConversation() {
+  const project = new AIProjectClient(
+    "https://typeagent-test-agent-resource.services.ai.azure.com/api/projects/typeagent-test-agent",
+    new DefaultAzureCredential());
+
+  const agent = await project.agents.getAgent("asst_qBRBuICfBaNYDH3WnpbBUSb0");
+  console.log(`Retrieved agent: ${agent.name}`);
+
+  const thread = await project.agents.threads.get("thread_mR7ai8Hgk6eoe3UvdEjzFkGW");
+  console.log(`Retrieved thread, thread ID: ${thread.id}`);
+
+  const message = await project.agents.messages.create(thread.id, "user", "Hi Agent492");
+  console.log(`Created message, message ID: ${message.id}`);
+
+  // Create run
+  let run = await project.agents.runs.create(thread.id, agent.id);
+
+  // Poll until the run reaches a terminal status
+  while (run.status === "queued" || run.status === "in_progress") {
+    // Wait for a second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    run = await project.agents.runs.get(thread.id, run.id);
+  }
+
+  if (run.status === "failed") {
+    console.error(`Run failed: `, run.lastError);
+  }
+
+  console.log(`Run completed with status: ${run.status}`);
+
+  // Retrieve messages
+  const messages = await project.agents.messages.list(thread.id, { order: "asc" });
+
+  // Display messages
+  for await (const m of messages) {
+    const content = m.content.find((c) => c.type === "text" && "text" in c);
+    if (content) {
+      console.log(`${m.role}: ${content}`);
+    }
+  }
+}
+
+async function generateReponseWithBingSearch(generateResponseAction: GenerateResponseAction, context: ActionContext) {
+    const parameters = generateResponseAction.parameters;
+    const generatedText = parameters.generatedText;
+    if (generatedText !== undefined) {
+        logEntities("UR Entities:", parameters.userRequestEntities);
+        logEntities("GT Entities:", parameters.generatedTextEntities);
+        console.log(
+            "Got generated text: " +
+                generatedText.substring(0, 100) +
+                "...",
+        );
+
+        const needDisplay =
+            context.streamingContext !== generatedText ||
+            generateResponseAction.parameters.relatedFiles;
+        let result;
+        if (needDisplay) {
+            if (generateResponseAction.parameters.relatedFiles) {
+                result = createActionResultFromHtmlDisplay(
+                    `<div>${generatedText}</div><div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`,
+                );
+            } else {
+                result = createActionResult(generatedText, true);
+            }
+        } else {
+            result = createActionResultNoDisplay(generatedText);
+        }
+
+        let entities = parameters.generatedTextEntities || [];
+        if (parameters.userRequestEntities !== undefined) {
+            result.entities =
+                parameters.userRequestEntities.concat(entities);
+        }
+
+        if (
+            generateResponseAction.parameters.relatedFiles !== undefined
+        ) {
+            const fileEntities: Entity[] = new Array<Entity>();
+            for (const file of generateResponseAction.parameters
+                .relatedFiles) {
+                let name = file;
+                if (file.lastIndexOf("\\") > -1) {
+                    name = file.substring(file.lastIndexOf("\\") + 1);
+                }
+                fileEntities.push({
+                    name,
+                    type: ["file", "image", "data"],
+                });
+            }
+
+            logEntities("File Entities:", fileEntities);
+            result.entities = result.entities.concat(fileEntities);
+        }
+
+        return result;
+    }
+
 }
 
 export function logEntities(label: string, entities?: Entity[]): void {

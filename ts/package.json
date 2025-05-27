@@ -62,7 +62,23 @@
         "x64",
         "arm64"
       ]
-    }
+    },
+    "onlyBuiltDependencies": [
+      "@azure/msal-node-extensions",
+      "@azure/msal-node-runtime",
+      "@vscode/vsce-sign",
+      "better-sqlite3",
+      "canvas",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "exifreader",
+      "keytar",
+      "koffi",
+      "protobufjs",
+      "puppeteer",
+      "sharp"
+    ]
   },
   "peerDependencyRules": {
     "ignoreMissing": [
