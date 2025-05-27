@@ -19,7 +19,7 @@ export class Photo {
         this.img.src = "/thumbnail?path=" + imgPath;
 
         // get the image caption
-        fetch(`/knowlegeResponse?path=${imgPath}`).then(async (response) => {
+        fetch(`/knowledgeResponse?path=${imgPath}`).then(async (response) => {
             const ii = await response.json();
             this.img.title = ii.fileName + " - " + ii.altText;
         });
