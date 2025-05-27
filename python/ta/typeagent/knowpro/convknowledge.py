@@ -11,6 +11,9 @@ from ..aitools import auth
 from . import kplib
 
 
+# TODO: Move ModelWrapper and create_typechat_model() to aitools package.
+
+
 class ModelWrapper(typechat.TypeChatLanguageModel):
     def __init__(
         self,

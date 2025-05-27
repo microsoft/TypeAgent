@@ -342,7 +342,15 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
             intersection.search_term_matches.update(other.search_term_matches)
         return intersection
 
-    # def to_scored_semantic_refs ...
+    def to_scored_semantic_refs(self) -> list[ScoredSemanticRefOrdinal]:
+        """Convert the accumulator to a list of scored semantic references."""
+        return [
+            ScoredSemanticRefOrdinal(
+                semantic_ref_ordinal=match.value,
+                score=match.score,
+            )
+            for match in self.get_sorted_by_score()
+        ]
 
 
 # TODO: MessageAccumulator, intersectScoredMessageOrdinals

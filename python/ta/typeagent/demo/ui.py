@@ -7,9 +7,20 @@ import sys
 
 import typechat
 
+from typeagent.knowpro.query import GroupSearchResultsExpr
 from typeagent.knowpro.convknowledge import create_typechat_model
 from .search_schema import SearchTermGroup
 from typeagent.aitools.auth import load_dotenv
+
+
+def main() -> None:
+    load_dotenv()
+    translator = create_translator()
+    print("TypeAgent demo UI 0.1 (type 'q' to exit)")
+    try:
+        read_commands(translator, sys.stdin)  # type: ignore  # Why is stdin not a TextIOWrapper?!
+    except KeyboardInterrupt:
+        print()
 
 
 def create_translator() -> typechat.TypeChatJsonTranslator[SearchTermGroup]:
@@ -25,29 +36,17 @@ def create_translator() -> typechat.TypeChatJsonTranslator[SearchTermGroup]:
     return translator
 
 
-def main() -> None:
-    load_dotenv()
-    translator = create_translator()
-    print("TypeAgent demo UI 0.1 (type 'exit' to exit)")
-    try:
-        read_commands(translator, sys.stdin)  # type: ignore  # Why is stdin not a TextIOWrapper?!
-    except KeyboardInterrupt:
-        print()
-
-
 def read_commands(translator, stream: io.TextIOWrapper) -> None:
+    ps1 = "--> "
     while True:
-        print("--> ", end="", flush=True)
-        line = stream.readline()
-        if not line:
-            print()
+        line = read_one_line(ps1, stream)
+        if line is None:  # EOF
             break
-        line = line.strip()
         if not line:
             continue
-        if line in ("exit", "quit"):
+        if line.lower() in ("exit", "quit", "q"):
             break
-        query = parse_command(translator, line)
+        query = translate_command(translator, line)
         if query:
             print(query)
             # result = execute_query(query)
@@ -59,15 +58,34 @@ def read_commands(translator, stream: io.TextIOWrapper) -> None:
             print("Invalid query.")
 
 
-def parse_command(translator, command: str):
+def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
+    """Read a single line from the input stream. Return None for EOF."""
+    if stream is sys.stdin:
+        import readline  # For its side-effect of turning on line editing and history in input().
+
+        try:
+            return input(ps1).strip()
+        except EOFError:
+            print()
+            return None
+    else:
+        print(ps1, end="", flush=True)
+        line = stream.readline()
+        if not line:
+            print()
+            return None
+        return line.strip()
+
+
+def translate_command(translator, command: str) -> GroupSearchResultsExpr | None:
     result = asyncio.run(
         translator.translate(
-            f"Please convert the following user query to a SearchTermGroup, "
-            f"making sure to fill in the related terms in SearchQuery objects:\n'''{command}\n'''\n"
+            f"Please convert the following user query to a SearchTermGroup:"
+            f"\n'''{command}\n'''\n"
         )
     )
     if isinstance(result, typechat.Success):
-        return result.value
+        return GroupSearchResultsExpr(result.value)
     else:
         print(f"Error translating {command!r}: {result.message}")
         return None

@@ -23,12 +23,14 @@ from .interfaces import (
     ISemanticRefCollection,
     ITermToSemanticRefIndex,
     ITimestampToTextRangeIndex,
+    KnowledgeType,
     MessageOrdinal,
     PropertySearchTerm,
     ScoredSemanticRefOrdinal,
     SearchTerm,
     SemanticRef,
     SemanticRefOrdinal,
+    SemanticRefSearchResult,
     Term,
 )
 from .propindex import PropertyNames, lookup_property_in_property_index
@@ -502,7 +504,18 @@ class MatchPropertySearchTermExpr(MatchTermExpr):
 # TODO: MatchTopicExpr
 # TODO: GroupByKnowledgeTypeExpr
 # TODO: SelectTopNKnowledgeGroupExpr
-# TODO: GroupSearchResultsExpr
+
+
+@dataclass
+class GroupSearchResultsExpr(QueryOpExpr[dict[KnowledgeType, SemanticRefSearchResult]]):
+    src_expr: IQueryOpExpr[dict[KnowledgeType, SemanticRefAccumulator]]
+
+    def eval(
+        self, context: QueryEvalContext
+    ) -> dict[KnowledgeType, SemanticRefSearchResult]:
+        return to_grouped_search_results(self.src_expr.eval(context))
+
+
 # TODO: WhereSemanticRefExpr
 # TODO: IQuerySemanticRefPredicate
 # TODO: matchPredicates
@@ -563,6 +576,21 @@ class GetScopeExpr(QueryOpExpr[TextRangesInScope]):
 # TODO: TextRangesFromMessagesSelector
 # TODO: ThreadSelector
 # TODO: toGroupedSearchResults
+
+
+def to_grouped_search_results(
+    eval_results: dict[KnowledgeType, SemanticRefAccumulator],
+) -> dict[KnowledgeType, SemanticRefSearchResult]:
+    semantic_ref_matches: dict[KnowledgeType, SemanticRefSearchResult] = {}
+    for typ, accumulator in eval_results.items():
+        if len(accumulator) > 0:
+            semantic_ref_matches[typ] = SemanticRefSearchResult(
+                term_matches=accumulator.search_term_matches,
+                semantic_ref_matches=accumulator.to_scored_semantic_refs(),
+            )
+    return semantic_ref_matches
+
+
 # TODO: MessagesFromKnowledgeExpr
 # TODO: SelectMessagesInCharBudget
 # TODO: RankMessagesBySimilarityExpr
