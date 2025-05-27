@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field
 from datetime import datetime as Datetime, timedelta as Timedelta
 from typing import (
     Any,
@@ -14,6 +13,8 @@ from typing import (
     TypedDict,
     overload,
 )
+
+from pydantic.dataclasses import dataclass
 
 from ..aitools.embeddings import NormalizedEmbedding, NormalizedEmbeddings
 from ..aitools.vectorbase import VectorBase
