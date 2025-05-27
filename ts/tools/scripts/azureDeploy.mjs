@@ -146,7 +146,7 @@ async function deleteDeployment(options, subscriptionId) {
     const deployment = await getDeploymentDetails(deploymentName);
     const resourceGroupName = deployment.properties.parameters.group_name.value;
     try {
-        status(`Deleting resource group ${nameColor(deploymentName)}...`);
+        status(`Deleting resource group ${nameColor(resourceGroupName)}...`);
         await execAzCliCommand([
             "group",
             "delete",
@@ -226,7 +226,7 @@ async function purgeDeleted(options, subscriptionId) {
 
         const kvs = await getDeleteKeyVaults(deploymentName);
         if (kvs.length !== 0) {
-            status("Purging delete keyvault...");
+            status("Purging deleted keyvault...");
             status(kvs.map((r) => `  ${r}`).join("\n"));
             for (const kv of kvs) {
                 await execAzCliCommand(
