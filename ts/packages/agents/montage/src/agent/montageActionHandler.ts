@@ -83,12 +83,33 @@ async function resolveEntity(
 ): Promise<ResolveEntityResult | undefined> {
     const agentContext = context.agentContext;
     if (type === "Montage") {
-        const montage = await findMontageByTitle(name, agentContext);
+        const montage = agentContext.montages.find(
+            (value) => value.title === name,
+        );
         if (montage) {
+            debug(`Resolve entity with exact match ${montage.title}`);
             return {
-                entity: entityFromMontage(montage),
+                match: "exact",
+                entities: [entityFromMontage(montage)],
             };
         }
+
+        const map = await createSemanticMap<PhotoMontage>(
+            agentContext.fuzzyMatchingModel,
+        );
+        await map.setMultiple(
+            agentContext.montages.map((pm) => [pm.title, pm]),
+        );
+        const nearest = await map.nearestNeighbors(name, 10, 0.5);
+        debug(
+            `Resolve entity with ${nearest.length} fuzzy matches\n${nearest.map((v) => `  ${v.item.title} ${v.score}`).join("\n")}`,
+        );
+        return {
+            match: "fuzzy",
+            entities: nearest.map((value) => {
+                return entityFromMontage(value.item);
+            }),
+        };
     }
     return undefined;
 }

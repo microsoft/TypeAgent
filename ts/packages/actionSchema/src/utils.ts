@@ -8,19 +8,23 @@ import {
 } from "./type.js";
 import { validateSchema } from "./validate.js";
 
-export function resolveUnionType(type: ResolvedSchemaType, actual: unknown) {
-    if (type.type !== "type-union") {
-        return type;
+export function resolveUnionType(
+    fieldType: SchemaType,
+    actualType: ResolvedSchemaType,
+    value: unknown,
+) {
+    if (actualType.type !== "type-union") {
+        return { fieldType, actualType };
     }
-    for (const t of type.types) {
+    for (const t of actualType.types) {
         const actualType = resolveTypeReference(t);
         if (actualType === undefined) {
             throw new Error("Unresolved type reference");
         }
         try {
-            validateSchema("", actualType, actual, false);
+            validateSchema("", actualType, value, false);
             // REVIEW: just pick the first match?
-            return actualType;
+            return { fieldType: t, actualType };
         } catch {}
     }
     return undefined;
