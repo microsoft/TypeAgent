@@ -20,6 +20,7 @@ class ConversationSearchResult:
     raw_search_query: str | None = None
 
 
+# TODO: This is not functional yet (needs to compile search term group to IQueryExpr).
 async def search_conversation(
     conversation: IConversation,
     search_term_group: SearchTermGroup,

@@ -216,7 +216,7 @@ class MatchTermsOrExpr(MatchTermsBooleanExpr):
     """Expression for matching terms with an OR condition."""
 
     term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
-        default_factory=list
+        default_factory=list[IQueryOpExpr[SemanticRefAccumulator | None]]
     )
 
     def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator:
@@ -254,7 +254,7 @@ class MatchTermsOrMaxExpr(MatchTermsOrExpr):
 @dataclass
 class MatchTermsAndExpr(MatchTermsBooleanExpr):
     term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
-        default_factory=list
+        default_factory=list[IQueryOpExpr[SemanticRefAccumulator | None]]
     )
     get_scope_expr: "GetScopeExpr | None" = None
 
@@ -282,9 +282,8 @@ class MatchTermsAndExpr(MatchTermsBooleanExpr):
 class MatchTermExpr(QueryOpExpr[SemanticRefAccumulator | None], ABC):
     """Expression for matching terms in a query.
 
-    This class evaluates a query expression to accumulate matches
-    in the form of a SemanticRefAccumulator. If no matches are found,
-    it returns None.
+    Subclasses need to define accumulate_matches(), which must add
+    matches to its SemanticRefAccumulator argument.
     """
 
     def eval(self, context: QueryEvalContext) -> SemanticRefAccumulator | None:

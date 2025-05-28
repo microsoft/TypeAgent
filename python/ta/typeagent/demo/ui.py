@@ -4,17 +4,33 @@
 import asyncio
 import io
 import sys
-from typing import cast
+from typing import Literal, cast
 
 import typechat
 
 from ..aitools.auth import load_dotenv
+from ..knowpro.collections import SemanticRefAccumulator
 from ..knowpro.convknowledge import create_typechat_model
-from ..knowpro.query import QueryEvalContext
+from ..knowpro.query import (
+    IQueryOpExpr,
+    MatchSearchTermExpr,
+    MatchTermsAndExpr,
+    MatchTermsBooleanExpr,
+    MatchTermsOrExpr,
+    MatchTermsOrMaxExpr,
+    QueryEvalContext,
+)
 from ..podcasts.podcast import Podcast
-from .search_schema import SearchTermGroup as LimitedSearchTermGroup
-from ..knowpro.interfaces import SearchTermGroup
-from ..knowpro.search import ConversationSearchResult, search_conversation
+
+from ..knowpro.interfaces import (
+    SearchTerm,
+    SearchTermGroup,
+    # SearchTermGroupTypes,  # TODO: Need this once we have property search terms
+)
+from .search_schema import (
+    SearchTermGroup as LimitedSearchTermGroup,
+    SearchTermGroupTypes as LimitedSearchTermGroupTypes,
+)
 
 
 def main() -> None:
@@ -44,7 +60,7 @@ def create_translator() -> typechat.TypeChatJsonTranslator[SearchTermGroup]:
 
 
 def read_commands(
-    translator: typechat.TypeChatJsonTranslator[SearchTermGroup],
+    translator: typechat.TypeChatJsonTranslator[LimitedSearchTermGroup],
     context: QueryEvalContext,
     stream: io.TextIOWrapper,
 ) -> None:
@@ -57,16 +73,21 @@ def read_commands(
             continue
         if line.lower() in ("exit", "quit", "q"):
             break
-        query = translate_command(translator, line)
-        if query is None:
-            print("Failed to translate command.")
+        search_terms = translate_command(translator, line)
+        if search_terms is None:
+            print("Failed to translate command to search terms.")
             continue
-        print(query)
-        result = run_query(query, context)
+        print(f"Search terms: {search_terms}")
+        query = compile_query(search_terms)
+        if query is None:
+            print("Failed to compile search terms to query.")
+            continue
+        print(f"Query: {query}")
+        result: SemanticRefAccumulator | None = eval_query(query, context)
         if result is None:
             print("Query execution failed.")
             continue
-        print(result)
+        print(f"Results: {result.to_scored_semantic_refs()}")
 
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
@@ -89,9 +110,9 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
 
 
 def translate_command(
-    translator: typechat.TypeChatJsonTranslator[SearchTermGroup], command: str
-) -> SearchTermGroup | None:
-    result: typechat.Result[SearchTermGroup] = asyncio.run(
+    translator: typechat.TypeChatJsonTranslator[LimitedSearchTermGroup], command: str
+) -> LimitedSearchTermGroup | None:
+    result: typechat.Result[LimitedSearchTermGroup] = asyncio.run(
         translator.translate(
             f"Please convert the following user query to a SearchTermGroup:"
             f"\n'''{command}\n'''\n"
@@ -103,12 +124,35 @@ def translate_command(
     return result.value
 
 
-def run_query(
-    query: SearchTermGroup, context: QueryEvalContext
-) -> ConversationSearchResult | None:
-    """Run the query against the conversation and return the results."""
+def compile_query(
+    search_term: LimitedSearchTermGroupTypes,
+) -> IQueryOpExpr[SemanticRefAccumulator | None] | None:
+    if isinstance(search_term, LimitedSearchTermGroup):
+        table: dict[
+            Literal["and", "or", "or_max"],
+            type[MatchTermsAndExpr | MatchTermsOrExpr | MatchTermsOrMaxExpr],
+        ] = {
+            "and": MatchTermsAndExpr,
+            "or": MatchTermsOrExpr,
+            "or_max": MatchTermsOrMaxExpr,
+        }
+        txs: list[IQueryOpExpr[SemanticRefAccumulator | None]] = []
+        for term in search_term.terms:
+            tx = compile_query(term)
+            if tx is None:
+                print(f"Cannot compile {term} .")
+                return None
+            txs.append(tx)
+        return table[search_term.boolean_op](term_expressions=txs)
 
-    return asyncio.run(search_conversation(context.conversation, query))
+    if isinstance(search_term, SearchTerm):
+        return MatchSearchTermExpr(search_term)
+
+
+def eval_query(
+    query: IQueryOpExpr[SemanticRefAccumulator | None], context: QueryEvalContext
+) -> SemanticRefAccumulator | None:
+    return query.eval(context)
 
 
 if __name__ == "__main__":
