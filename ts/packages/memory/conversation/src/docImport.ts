@@ -29,7 +29,7 @@ import { Result, success } from "typechat";
  * @param settings
  * @returns
  */
-export async function importTextDoc(
+export async function importTextFile(
     docFilePath: string,
     maxCharsPerChunk: number,
     docName?: string,

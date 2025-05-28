@@ -57,7 +57,7 @@ export async function createKnowproPodcastCommands(
 
     function podcastImportDef(): CommandMetadata {
         return {
-            description: "Create knowPro index",
+            description: "Import a podcast transcript as Podcast memory",
             args: {
                 filePath: arg("File path to transcript file"),
             },
@@ -143,7 +143,7 @@ export async function createKnowproPodcastCommands(
 
     function podcastLoadDef(): CommandMetadata {
         return {
-            description: "Load knowPro podcast",
+            description: "Load existing Podcast memory",
             options: {
                 filePath: argSourceFile(),
                 name: arg("Podcast name"),
