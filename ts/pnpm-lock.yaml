@@ -2635,6 +2635,9 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+      webvtt-parser:
+        specifier: 2.2.0
+        version: 2.2.0
     devDependencies:
       '@types/async':
         specifier: ^3.2.24
@@ -2648,6 +2651,9 @@ importers:
       '@types/mailparser':
         specifier: 3.4.6
         version: 3.4.6
+      '@types/webvtt-parser':
+        specifier: 2.2.0
+        version: 2.2.0
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -5438,6 +5444,9 @@ packages:
 
   '@types/webrtc@0.0.37':
     resolution: {integrity: sha512-JGAJC/ZZDhcrrmepU4sPLQLIOIAgs5oIK+Ieq90K8fdaNMhfdfqmYatJdgif1NDQtvrSlTOGJDUYHIDunuufOg==}
+
+  '@types/webvtt-parser@2.2.0':
+    resolution: {integrity: sha512-T8n08m3VWAOCVDHWPOtEehnLcVSyQaUmyjIvGCERWRPMyVooUjqWaDsvKD3bcwQSU8TLBW19YTSRx9UxBNfckA==}
 
   '@types/whatwg-url@11.0.4':
     resolution: {integrity: sha512-lXCmTWSHJvf0TRSO58nm978b8HJ/EdsSsEKLd3ODHFjo+3VGAyyTp4v50nWvwtzBxSMQrVOK7tcuN0zGPLICMw==}
@@ -10742,6 +10751,9 @@ packages:
     resolution: {integrity: sha512-OqedPIGOfsDlo31UNwYbCFMSaO9m9G/0faIHj5/dZFDMFqPTcx6UwqyOy3COEaEOg/9VsGIpdqn62W5KhoKSpg==}
     engines: {node: '>=0.8.0'}
 
+  webvtt-parser@2.2.0:
+    resolution: {integrity: sha512-FzmaED+jZyt8SCJPTKbSsimrrnQU8ELlViE1wuF3x1pgiQUM8Llj5XWj2j/s6Tlk71ucPfGSMFqZWBtKn/0uEA==}
+
   whatwg-encoding@2.0.0:
     resolution: {integrity: sha512-p41ogyeMUrw3jWclHWTQg1k05DSVXPLcVxRTYsXUk+ZooOCZLcoYgPZ/HL/D/N+uQPOtcp1me1WhBEaX02mhWg==}
     engines: {node: '>=12'}
@@ -14251,6 +14263,8 @@ snapshots:
   '@types/webidl-conversions@7.0.3': {}
 
   '@types/webrtc@0.0.37': {}
+
+  '@types/webvtt-parser@2.2.0': {}
 
   '@types/whatwg-url@11.0.4':
     dependencies:
@@ -20623,6 +20637,8 @@ snapshots:
       websocket-extensions: 0.1.4
 
   websocket-extensions@0.1.4: {}
+
+  webvtt-parser@2.2.0: {}
 
   whatwg-encoding@2.0.0:
     dependencies:

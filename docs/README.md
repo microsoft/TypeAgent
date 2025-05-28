@@ -39,8 +39,6 @@ docs/
 │       └── style.css   # CSS styles
 ├── content/            # Markdown content
 │   ├── index.md        # Homepage/Documentation index
-│   ├── getting-started/
-│   │   └── index.md    # Getting started guide
 │   └── ...             # Other documentation pages
 ├── .eleventy.js        # Eleventy configuration
 ├── .gitignore          # Git ignore file

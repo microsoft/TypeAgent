@@ -2,7 +2,12 @@
 // Licensed under the MIT License.
 import * as kpLib from "knowledge-processor";
 import { IMessage } from "knowpro";
+//import { WebVTTParser } from "webvtt-parser";
+import * as vtt from "webvtt-parser";
 
+import vttpgk from "webvtt-parser";
+import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
+const { WebVTTParser } = vttpgk;
 /**
  * INTERNAL LIBRARY
  * Should not be exposed via index.ts
@@ -57,9 +62,12 @@ export function parseTranscript<TMessage extends ITranscriptMessage>(
     return [messages, participants];
 }
 
-export function getTranscriptLines(transcriptText: string): string[] {
+export function getTranscriptLines(
+    transcriptText: string,
+    removeEmpty: boolean = true,
+): string[] {
     return kpLib.split(transcriptText, /\r?\n/, {
-        removeEmpty: true,
+        removeEmpty,
         trim: true,
     });
 }
@@ -109,5 +117,129 @@ export function timestampMessages(
             (total: number, chunk) => total + chunk.length,
             0,
         );
+    }
+}
+
+export function parseVttTranscript(
+    transcriptText: string,
+    startAt: Date,
+): [PodcastMessage[], Set<string>] {
+    const parser = new VttParser(startAt, (speaker) => {
+        return new PodcastMessage([], new PodcastMessageMeta(speaker));
+    });
+    return parser.parse(transcriptText);
+}
+
+class VttParser<TMessage extends ITranscriptMessage> {
+    private parser: vtt.WebVTTParser;
+    private messages: TMessage[];
+    private participants: Set<string>;
+    private curSpeaker: string = "";
+    private curMsg: TMessage | undefined;
+    private curOffsetSeconds: number | undefined;
+
+    constructor(
+        public startDate: Date,
+        public messageFactory: (speaker: string) => TMessage,
+    ) {
+        this.parser = new WebVTTParser();
+        this.messages = [];
+        this.participants = new Set<string>();
+    }
+
+    public parse(transcriptText: string): [TMessage[], Set<string>] {
+        const vttData: vtt.VTTData = this.parser.parse(transcriptText);
+        this.curSpeaker = "unknown";
+        for (const cue of vttData.cues) {
+            this.parseCue(cue);
+        }
+        this.completeMessage();
+        return [this.messages, this.participants];
+    }
+
+    public clear() {
+        this.messages = [];
+        this.participants = new Set<string>();
+        this.curMsg = undefined;
+        this.curSpeaker = "unknown";
+        this.curOffsetSeconds = undefined;
+    }
+
+    private parseCue(cue: vtt.Cue) {
+        this.curOffsetSeconds = cue.startTime;
+        for (const node of cue.tree.children) {
+            if (node.type === "object") {
+                switch (node.name) {
+                    default:
+                        break;
+
+                    case "v":
+                        const speaker = node.value;
+                        if (speaker !== this.curSpeaker) {
+                            this.completeMessage();
+                            this.startSpeaker(speaker);
+                        }
+                        this.ensureMessageStarted();
+                        this.parseInternalText(node);
+                        break;
+                }
+            } else if (node.type === "text") {
+                this.ensureMessageStarted();
+                this.appendMessageText(node.value);
+            }
+        }
+    }
+
+    private parseInternalText(node: any): void {
+        for (const childNode of node.children) {
+            if (childNode.type === "object") {
+                this.parseInternalText(childNode);
+            } else if (childNode.type === "text") {
+                this.appendMessageText(childNode.value);
+            }
+        }
+    }
+
+    private appendMessageText(text: string): void {
+        if (this.curMsg !== undefined) {
+            if (this.curMsg.textChunks.length > 0) {
+                this.curMsg.addContent(" ");
+            }
+            this.curMsg.addContent(this.processText(text));
+        }
+    }
+
+    private startSpeaker(speaker: string): void {
+        this.curSpeaker = speaker;
+        this.participants.add(speaker);
+    }
+
+    private ensureMessageStarted(): TMessage {
+        return this.curMsg === undefined ? this.startMessage() : this.curMsg;
+    }
+
+    private startMessage(): TMessage {
+        this.curMsg = this.messageFactory(this.curSpeaker);
+        if (this.curOffsetSeconds !== undefined) {
+            this.curMsg.timestamp = this.makeTimestamp(this.curOffsetSeconds);
+        }
+        return this.curMsg;
+    }
+
+    private completeMessage() {
+        if (this.curMsg !== undefined) {
+            this.messages.push(this.curMsg);
+            this.curMsg = undefined;
+        }
+    }
+
+    private makeTimestamp(offsetSeconds: number): string {
+        const dt = new Date(this.startDate.getTime() + offsetSeconds * 1000);
+        return dt.toISOString();
+    }
+
+    private processText(text: string): string {
+        text = text.replace(/\n/g, " ");
+        return text.trim();
     }
 }

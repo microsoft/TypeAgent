@@ -5,7 +5,11 @@ import { dateTime, getFileName, readAllText } from "typeagent";
 import { Podcast } from "./podcast.js";
 import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
 import { ConversationSettings } from "knowpro";
-import { parseTranscript, timestampMessages } from "./transcript.js";
+import {
+    parseTranscript,
+    parseVttTranscript,
+    timestampMessages,
+} from "./transcript.js";
 
 /**
  * Parses a podcast transcript consisting of turns in a conversation.
@@ -56,7 +60,23 @@ export async function importPodcast(
         );
     }
     const pod = new Podcast(podcastName, messages, [podcastName], settings);
-    // TODO: add more tags
+    return pod;
+}
+
+export async function importPodcastFromVtt(
+    transcriptFilePath: string,
+    podcastName?: string,
+    startDate?: Date,
+    settings?: ConversationSettings,
+): Promise<Podcast> {
+    const transcriptText = await readAllText(transcriptFilePath);
+    podcastName ??= getFileName(transcriptFilePath);
+    const [messages, participants] = parseVttTranscript(
+        transcriptText,
+        startDate ?? new Date(),
+    );
+    assignMessageListeners(messages, participants);
+    const pod = new Podcast(podcastName, messages, [podcastName], settings);
     return pod;
 }
 

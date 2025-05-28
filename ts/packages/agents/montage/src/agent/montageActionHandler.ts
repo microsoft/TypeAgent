@@ -83,12 +83,33 @@ async function resolveEntity(
 ): Promise<ResolveEntityResult | undefined> {
     const agentContext = context.agentContext;
     if (type === "Montage") {
-        const montage = await findMontageByTitle(name, agentContext);
+        const montage = agentContext.montages.find(
+            (value) => value.title === name,
+        );
         if (montage) {
+            debug(`Resolve entity with exact match ${montage.title}`);
             return {
-                entity: entityFromMontage(montage),
+                match: "exact",
+                entities: [entityFromMontage(montage)],
             };
         }
+
+        const map = await createSemanticMap<PhotoMontage>(
+            agentContext.fuzzyMatchingModel,
+        );
+        await map.setMultiple(
+            agentContext.montages.map((pm) => [pm.title, pm]),
+        );
+        const nearest = await map.nearestNeighbors(name, 10, 0.5);
+        debug(
+            `Resolve entity with ${nearest.length} fuzzy matches\n${nearest.map((v) => `  ${v.item.title} ${v.score}`).join("\n")}`,
+        );
+        return {
+            match: "fuzzy",
+            entities: nearest.map((value) => {
+                return entityFromMontage(value.item);
+            }),
+        };
     }
     return undefined;
 }
@@ -258,15 +279,14 @@ async function updateMontageContext(
         if (!agentContext.viewProcess) {
             agentContext.viewProcess = await createViewServiceHost(
                 (montage: PhotoMontage) => {
-                    // replace the active montage with the one we just got from the client
-                    if (agentContext.activeMontageId > -1) {
+                    // replace the active montage with the one the client gave is if they match
+                    if (agentContext.activeMontageId == montage.id) {
                         // remove the active montage
                         agentContext.montages = agentContext.montages.filter(
                             (value) => value.id != agentContext.activeMontageId,
                         );
 
                         // push the received montage onto the stack
-                        montage.id = agentContext.activeMontageId;
                         agentContext.montages.push(montage);
                     }
                 },

@@ -74,7 +74,7 @@ export class PodcastMessage implements kp.IMessage {
     }
 
     public addContent(content: string, chunkOrdinal = 0) {
-        if (chunkOrdinal > this.textChunks.length) {
+        if (chunkOrdinal > this.textChunks.length - 1) {
             this.textChunks.push(content);
         } else {
             this.textChunks[chunkOrdinal] += content;

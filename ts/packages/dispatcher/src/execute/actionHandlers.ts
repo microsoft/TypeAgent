@@ -558,8 +558,9 @@ async function getParameterObjectEntities(
     let hasEntity = false;
     const entities: EntityObject = {};
     for (const [k, v] of Object.entries(obj)) {
-        const fieldType = resolveTypeReference(objType.fields[k]?.type);
-        if (fieldType === undefined) {
+        const fieldType = objType.fields[k]?.type;
+        const actualType = resolveTypeReference(fieldType);
+        if (actualType === undefined) {
             throw new Error(
                 `Parameter type mismatch: ${action.schemaName}.${action.actionName}: schema does not have field ${k}`,
             );
@@ -570,6 +571,7 @@ async function getParameterObjectEntities(
             k,
             v,
             fieldType,
+            actualType,
             entityContext,
             existing?.[k],
         );
@@ -670,16 +672,36 @@ async function resolveParameterEntity(
                 "Agent declares entity types but does not implement resolveEntity",
             );
         }
+        debugActionEntities(
+            `Resolving ${fieldType.name} entity with agent ${appAgentName}: ${value}`,
+        );
         const result = await agent.resolveEntity(
             fieldType.name,
             value,
             agents.getSessionContext(appAgentName),
         );
         if (result) {
-            return {
-                sourceAppAgentName: appAgentName,
-                ...result.entity,
-            };
+            if (result.match === "exact") {
+                return {
+                    sourceAppAgentName: appAgentName,
+                    ...result.entities[0],
+                };
+            }
+
+            if (result.match === "fuzzy" && result.entities.length > 0) {
+                debugActionEntities(
+                    `Fuzzy match for ${fieldType.name} '${value}': ${JSON.stringify(
+                        result.entities,
+                        undefined,
+                        2,
+                    )}`,
+                );
+                // TODO: More advanced matching.
+                return {
+                    sourceAppAgentName: appAgentName,
+                    ...result.entities[0],
+                };
+            }
         }
     }
 
@@ -691,16 +713,22 @@ async function getParameterEntities(
     obj: any,
     key: string | number,
     value: unknown,
-    fieldType: ActionResolvedParamType,
+    originalFieldType: ActionParamType,
+    originalActualType: ActionResolvedParamType,
     entityContext: PendingActionEntityContext,
     existing?: EntityField,
 ): Promise<EntityField | undefined> {
-    const valueType = resolveUnionType(fieldType, value);
-    if (valueType === undefined) {
+    const resolvedType = resolveUnionType(
+        originalFieldType,
+        originalActualType,
+        value,
+    );
+    if (resolvedType === undefined) {
         throw new Error(
             `Action parameter type mismatch ${key}: value doesn't match any of the union type`,
         );
     }
+    const { fieldType, actualType } = resolvedType;
     switch (typeof value) {
         case "undefined":
             return;
@@ -710,7 +738,7 @@ async function getParameterEntities(
                 obj,
                 key,
                 value,
-                valueType,
+                fieldType,
                 entityContext,
                 existing as EntityValue | undefined,
             );
@@ -724,13 +752,16 @@ async function getParameterEntities(
                 );
             }
             if (Array.isArray(value)) {
-                if (valueType.type !== "array") {
+                if (actualType.type !== "array") {
                     throw new Error(
-                        `Action parameter type mismatch: ${key}. Expected 'array' but got '${valueType.type}'`,
+                        `Action parameter type mismatch: ${key}. Expected 'array' but got '${actualType.type}'`,
                     );
                 }
-                const elementType = resolveTypeReference(valueType.elementType);
-                if (elementType === undefined) {
+                const elementFieldType = actualType.elementType;
+                const elementActualType = resolveTypeReference(
+                    actualType.elementType,
+                );
+                if (elementActualType === undefined) {
                     throw new Error("Unresolved reference");
                 }
                 return Promise.all(
@@ -740,23 +771,24 @@ async function getParameterEntities(
                             value,
                             i,
                             v,
-                            elementType,
+                            elementFieldType,
+                            elementActualType,
                             entityContext,
                             (existing as EntityField[] | undefined)?.[i],
                         ),
                     ),
                 );
             }
-            if (valueType.type !== "object") {
+            if (actualType.type !== "object") {
                 throw new Error(
-                    `Action parameter type mismatch: ${key}.  Expected 'object' but got '${valueType.type}'`,
+                    `Action parameter type mismatch: ${key}.  Expected 'object' but got '${actualType.type}'`,
                 );
             }
             return value
                 ? getParameterObjectEntities(
                       action,
                       value,
-                      valueType,
+                      actualType,
                       entityContext,
                       existing as EntityObject | undefined,
                   )
