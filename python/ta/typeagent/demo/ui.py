@@ -3,8 +3,9 @@
 
 import asyncio
 import io
+import readline  # type: ignore  # For its side-effect of turning on line editing in input().
 import sys
-from typing import Literal, cast
+from typing import Literal
 
 import typechat
 
@@ -15,7 +16,6 @@ from ..knowpro.query import (
     IQueryOpExpr,
     MatchSearchTermExpr,
     MatchTermsAndExpr,
-    MatchTermsBooleanExpr,
     MatchTermsOrExpr,
     MatchTermsOrMaxExpr,
     QueryEvalContext,
@@ -23,14 +23,18 @@ from ..knowpro.query import (
 from ..podcasts.podcast import Podcast
 
 from ..knowpro.interfaces import (
+    PropertySearchTerm,
     SearchTerm,
     SearchTermGroup,
+    SearchTermGroupTypes,
     # SearchTermGroupTypes,  # TODO: Need this once we have property search terms
 )
-from .search_schema import (
-    SearchTermGroup as LimitedSearchTermGroup,
-    SearchTermGroupTypes as LimitedSearchTermGroupTypes,
-)
+
+# from .search_schema import (
+#     SearchTermGroup as LimitedSearchTermGroup,
+#     SearchTermGroupTypes as LimitedSearchTermGroupTypes,
+# )
+from .search_query_schema import SearchFilter
 
 
 def main() -> None:
@@ -48,19 +52,19 @@ def main() -> None:
         print()
 
 
-def create_translator() -> typechat.TypeChatJsonTranslator[SearchTermGroup]:
+def create_translator() -> typechat.TypeChatJsonTranslator[SearchFilter]:
     model = create_typechat_model()  # TODO: Move out of here.
-    schema = LimitedSearchTermGroup  # TODO: Use SearchTermGroup when ready.
+    schema = SearchFilter  # TODO: Use SearchTermGroup when ready.
     type_name = schema.__name__
     validator = typechat.TypeChatValidator[schema](schema)
     translator = typechat.TypeChatJsonTranslator[schema](model, validator, schema)
-    schema_text = translator._schema_str.rstrip()
+    schema_text = translator._schema_str.rstrip()  # type: ignore  # No other way.
     print(f"TypeScript schema for {type_name}:\n{schema_text}\n")
-    return cast(typechat.TypeChatJsonTranslator[SearchTermGroup], translator)
+    return translator
 
 
 def read_commands(
-    translator: typechat.TypeChatJsonTranslator[LimitedSearchTermGroup],
+    translator: typechat.TypeChatJsonTranslator[SearchFilter],
     context: QueryEvalContext,
     stream: io.TextIOWrapper,
 ) -> None:
@@ -78,23 +82,21 @@ def read_commands(
             print("Failed to translate command to search terms.")
             continue
         print(f"Search terms: {search_terms}")
-        query = compile_query(search_terms)
-        if query is None:
-            print("Failed to compile search terms to query.")
-            continue
-        print(f"Query: {query}")
-        result: SemanticRefAccumulator | None = eval_query(query, context)
-        if result is None:
-            print("Query execution failed.")
-            continue
-        print(f"Results: {result.to_scored_semantic_refs()}")
+        # query = compile_query(search_terms)
+        # if query is None:
+        #     print("Failed to compile search terms to query.")
+        #     continue
+        # print(f"Query: {query}")
+        # result: SemanticRefAccumulator | None = eval_query(query, context)
+        # if result is None:
+        #     print("Query execution failed.")
+        #     continue
+        # print(f"Results: {result.to_scored_semantic_refs()}")
 
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
     """Read a single line from the input stream. Return None for EOF."""
     if stream is sys.stdin:
-        import readline  # For its side-effect of turning on line editing and history in input().
-
         try:
             return input(ps1).strip()
         except EOFError:
@@ -110,9 +112,9 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
 
 
 def translate_command(
-    translator: typechat.TypeChatJsonTranslator[LimitedSearchTermGroup], command: str
-) -> LimitedSearchTermGroup | None:
-    result: typechat.Result[LimitedSearchTermGroup] = asyncio.run(
+    translator: typechat.TypeChatJsonTranslator[SearchFilter], command: str
+) -> SearchFilter | None:
+    result: typechat.Result[SearchFilter] = asyncio.run(
         translator.translate(
             f"Please convert the following user query to a SearchTermGroup:"
             f"\n'''{command}\n'''\n"
@@ -125,9 +127,9 @@ def translate_command(
 
 
 def compile_query(
-    search_term: LimitedSearchTermGroupTypes,
+    search_term: SearchTermGroupTypes,
 ) -> IQueryOpExpr[SemanticRefAccumulator | None] | None:
-    if isinstance(search_term, LimitedSearchTermGroup):
+    if isinstance(search_term, SearchTermGroup):
         table: dict[
             Literal["and", "or", "or_max"],
             type[MatchTermsAndExpr | MatchTermsOrExpr | MatchTermsOrMaxExpr],
@@ -147,6 +149,10 @@ def compile_query(
 
     if isinstance(search_term, SearchTerm):
         return MatchSearchTermExpr(search_term)
+
+    assert isinstance(search_term, PropertySearchTerm)
+    print("PropertySearchTerm not yet supported")
+    return None
 
 
 def eval_query(

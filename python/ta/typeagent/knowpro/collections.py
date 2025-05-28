@@ -336,7 +336,9 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
             other, SemanticRefAccumulator
         )  # Runtime check b/c other's type mismatch
         intersection = SemanticRefAccumulator()
-        super().intersect(other, intersection)
+        super().intersect(
+            other, intersection
+        )  # TODO: Why is this a red wiggle line in strict mode?
         if len(intersection) > 0:
             intersection.search_term_matches.update(self.search_term_matches)
             intersection.search_term_matches.update(other.search_term_matches)
