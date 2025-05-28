@@ -205,7 +205,7 @@ class VttParser<TMessage extends ITranscriptMessage> {
             if (this.curMsg.textChunks.length > 0) {
                 this.curMsg.addContent(" ");
             }
-            this.curMsg.addContent(text.trim());
+            this.curMsg.addContent(this.processText(text));
         }
     }
 
@@ -236,5 +236,10 @@ class VttParser<TMessage extends ITranscriptMessage> {
     private makeTimestamp(offsetSeconds: number): string {
         const dt = new Date(this.startDate.getTime() + offsetSeconds * 1000);
         return dt.toISOString();
+    }
+
+    private processText(text: string): string {
+        text = text.replace(/\n/g, " ");
+        return text.trim();
     }
 }

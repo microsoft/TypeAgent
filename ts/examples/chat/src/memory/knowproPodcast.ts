@@ -302,12 +302,8 @@ export async function createKnowproPodcastCommands(
     async function podcastImportVtt(args: string[]) {
         await podcastImport(args);
         if (context.podcast) {
-            context.printer.writePodcastInfo(context.podcast);
             context.printer.writeLine();
-            for (const msg of context.podcast.messages) {
-                context.printer.writeMessage(msg);
-                context.printer.writeLine();
-            }
+            context.printer.writeMessages(context.podcast.messages);
         }
     }
 
