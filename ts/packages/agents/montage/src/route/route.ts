@@ -144,7 +144,7 @@ function sendThumbnailorOriginalImage(
  * Gets the knowledge reponse file for the supplied image (if available)
  * Used for debugging purposes only.
  */
-app.get("/knowlegeResponse", (req: Request, res: Response) => {
+app.get("/knowledgeResponse", (req: Request, res: Response) => {
     const imageFile = `${req.query.path}`;
 
     // replace the image path root with the index cache root since KR files are stored in the index cache
