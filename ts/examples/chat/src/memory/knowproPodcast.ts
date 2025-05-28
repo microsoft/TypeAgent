@@ -154,9 +154,13 @@ export async function createKnowproPodcastCommands(
     async function podcastLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastLoadDef());
         let podcastFilePath = namedArgs.filePath;
-        podcastFilePath ??= namedArgs.name
-            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
-            : undefined;
+        if (!podcastFilePath) {
+            podcastFilePath = namedArgs.name
+                ? memoryNameToIndexPath(context.basePath, namedArgs.name)
+                : undefined;
+        } else {
+            podcastFilePath = sourcePathToMemoryIndexPath(podcastFilePath);
+        }
         if (!podcastFilePath) {
             context.printer.writeError("No filepath or name provided");
             return;

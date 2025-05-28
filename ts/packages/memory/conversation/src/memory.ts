@@ -141,7 +141,10 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 
     public addContent(content: string, chunkOrdinal = 0) {
-        if (chunkOrdinal > this.textChunks.length) {
+        if (
+            chunkOrdinal > this.textChunks.length ||
+            this.textChunks.length == 0
+        ) {
             this.textChunks.push(content);
         } else {
             this.textChunks[chunkOrdinal] += content;
