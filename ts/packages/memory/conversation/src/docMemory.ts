@@ -10,36 +10,36 @@ import {
     MessageMetadata,
 } from "./memory.js";
 
-export class TextBlockMeta extends MessageMetadata {
+export class DocTextBlockMeta extends MessageMetadata {
     constructor(public sourceUrl?: string | undefined) {
         super();
     }
 }
 
-export class TextBlock extends Message {
+export class DocTextBlock extends Message {
     constructor(
         textChunks: string | string[],
-        metadata?: TextBlockMeta | undefined,
+        metadata?: DocTextBlockMeta | undefined,
         tags?: string[] | undefined,
         timestamp?: string,
         deletionInfo: kp.DeletionInfo | undefined = undefined,
     ) {
-        metadata ??= new TextBlockMeta();
+        metadata ??= new DocTextBlockMeta();
         tags ??= [];
         timestamp = timestamp ?? new Date().toISOString();
         super(metadata, textChunks, tags, timestamp, undefined, deletionInfo);
     }
 }
 
-export class TextBlockSerializer implements kp.JsonSerializer<TextBlock> {
-    public serialize(value: TextBlock): string {
+export class DocTextBlockSerializer implements kp.JsonSerializer<DocTextBlock> {
+    public serialize(value: DocTextBlock): string {
         return JSON.stringify(value);
     }
 
-    public deserialize(json: string): TextBlock {
-        const jMsg: TextBlock = JSON.parse(json);
-        const jMeta: TextBlockMeta = jMsg.metadata;
-        return new TextBlock(
+    public deserialize(json: string): DocTextBlock {
+        const jMsg: DocTextBlock = JSON.parse(json);
+        const jMeta: DocTextBlockMeta = jMsg.metadata;
+        return new DocTextBlock(
             jMsg.textChunks,
             jMeta,
             jMsg.tags,
@@ -49,7 +49,7 @@ export class TextBlockSerializer implements kp.JsonSerializer<TextBlock> {
     }
 }
 
-export interface DocumentMemorySettings extends MemorySettings {}
+export interface DocMemorySettings extends MemorySettings {}
 
 export function createTextMemorySettings() {
     return {
@@ -57,24 +57,24 @@ export function createTextMemorySettings() {
     };
 }
 
-export class DocumentMemory
-    extends Memory<DocumentMemorySettings, TextBlock>
+export class DocMemory
+    extends Memory<DocMemorySettings, DocTextBlock>
     implements kp.IConversation
 {
-    public messages: kp.IMessageCollection<TextBlock>;
+    public messages: kp.MessageCollection<DocTextBlock>;
     public semanticRefs: kp.ISemanticRefCollection;
     public semanticRefIndex: kp.ConversationIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
 
     constructor(
-        storageProvider: kp.IStorageProvider,
-        settings?: DocumentMemorySettings,
-        name?: string,
+        nameTag: string = "",
+        textBlocks: DocTextBlock[],
+        settings?: DocMemorySettings,
         tags?: string[],
     ) {
-        super(settings ?? createTextMemorySettings(), name, tags);
-        this.messages = storageProvider.createMessageCollection();
-        this.semanticRefs = storageProvider.createSemanticRefCollection();
+        super(settings ?? createTextMemorySettings(), nameTag, tags);
+        this.messages = new kp.MessageCollection<DocTextBlock>(textBlocks);
+        this.semanticRefs = new kp.SemanticRefCollection();
 
         this.semanticRefIndex = new kp.ConversationIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
@@ -82,7 +82,7 @@ export class DocumentMemory
         );
     }
 
-    public override get conversation(): kp.IConversation<TextBlock> {
+    public override get conversation(): kp.IConversation<DocTextBlock> {
         return this;
     }
 }
