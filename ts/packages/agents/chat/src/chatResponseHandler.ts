@@ -16,6 +16,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
+import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
 
 export function instantiate(): AppAgent {
     return {
@@ -65,8 +66,8 @@ async function handleChatResponse(
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
-            runAgentConversation();
-            return generateReponseWithBingSearch(chatAction, context);
+            await runAgentConversation(chatAction.parameters.originalRequest, context);
+            return generateReponse(chatAction, context);
            break;
         }
 
@@ -82,7 +83,7 @@ async function handleChatResponse(
     }
 }
 
-async function runAgentConversation() {
+async function runAgentConversation(userRequest: string, context: ActionContext) {
   const project = new AIProjectClient(
     "https://typeagent-test-agent-resource.services.ai.azure.com/api/projects/typeagent-test-agent",
     new DefaultAzureCredential());
@@ -93,18 +94,19 @@ async function runAgentConversation() {
   const thread = await project.agents.threads.get("thread_mR7ai8Hgk6eoe3UvdEjzFkGW");
   console.log(`Retrieved thread, thread ID: ${thread.id}`);
 
-  const message = await project.agents.messages.create(thread.id, "user", "Hi Agent492");
+  const message = await project.agents.messages.create(thread.id, "user", userRequest);
   console.log(`Created message, message ID: ${message.id}`);
 
   // Create run
-  let run = await project.agents.runs.create(thread.id, agent.id);
+  // TODO: implement streaming API when it's available
+  let run = await project.agents.runs.createAndPoll(thread.id, agent.id, { stream: false })
 
   // Poll until the run reaches a terminal status
-  while (run.status === "queued" || run.status === "in_progress") {
-    // Wait for a second
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    run = await project.agents.runs.get(thread.id, run.id);
-  }
+//   while (run.status === "queued" || run.status === "in_progress") {
+//     // Wait for a second
+//     await new Promise((resolve) => setTimeout(resolve, 1000));
+//     run = await project.agents.runs.get(thread.id, run.id);
+//   }
 
   if (run.status === "failed") {
     console.error(`Run failed: `, run.lastError);
@@ -119,12 +121,13 @@ async function runAgentConversation() {
   for await (const m of messages) {
     const content = m.content.find((c) => c.type === "text" && "text" in c);
     if (content) {
+        displaySuccess(`${JSON.stringify(m.role)}: ${JSON.stringify(content)}`, context);
       console.log(`${m.role}: ${content}`);
     }
   }
 }
 
-async function generateReponseWithBingSearch(generateResponseAction: GenerateResponseAction, context: ActionContext) {
+async function generateReponse(generateResponseAction: GenerateResponseAction, context: ActionContext) {
     const parameters = generateResponseAction.parameters;
     const generatedText = parameters.generatedText;
     if (generatedText !== undefined) {

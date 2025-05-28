@@ -40,6 +40,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure/ai-projects": "^1.0.0-beta.8",
+    "@azure/identity": "^4.10.0",
     "@azure/msal-node-extensions": "^1.5.0",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",

@@ -20,6 +20,12 @@ import {
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
+import { AIProjectClient } from "@azure/ai-projects";
+import {
+    displayError,
+} from "@typeagent/agent-sdk/helpers/display";
+import { DefaultAzureCredential } from "@azure/identity";
+import { ThreadMessage } from "@azure/ai-projects";
 
 function urlToHtml(url: string): string {
     return `<a href="${url}" target="_blank">${url}</a>`;
@@ -51,10 +57,35 @@ function answerToHtml(answer: ChunkChatResponse, lookup?: string) {
     return html;
 }
 
-function answersToHtml(context: LookupContext): string {
+function _answerToHtml(answer: string) {
+    let html = "<p><div>";
+    if (answer.length > 0) {
+        // if (lookup) {
+        //     html += `<div><i>${capitalize(lookup)}</i></div>`;
+        // }
+        html += "<div>";
+        html += answer!.replaceAll("\n", "<br/>");
+        html += "</div>";
+        // if (answer.urls && answer.urls.length > 0) {
+        //     html += "<div>";
+        //     for (const url of answer.urls) {
+        //         // create a link to the url that opens in the default browser
+        //         html += urlToHtml(url) + "<br/>";
+        //     }
+        //     html += "</div>";
+        // }
+    }
+    html += "</div>";
+    return html;
+}
+
+function answersToHtml(context: LookupContext, messages: string[]): string {
     let html = "";
     for (const [lookup, chatResponse] of context.answers) {
         html += answerToHtml(chatResponse, lookup);
+    }
+    for (const m of messages) {
+        html += _answerToHtml(m);
     }
     return html;
 }
@@ -146,6 +177,7 @@ export async function handleLookup(
     sites: string[] | undefined,
     context: ActionContext<CommandHandlerContext>,
     settings: LookupSettings,
+    originalRequest: string,
 ): Promise<ActionResult> {
     let literalResponse = createActionResult("No information found");
 
@@ -155,6 +187,9 @@ export async function handleLookup(
     if (lookups.length > 3) {
         lookups = lookups.slice(0, 3);
     }
+
+    // run bing with grounding lookup
+    const msgs = await runAgentConversation(originalRequest, context);
 
     const lookUpConfig = await getLookupConfig();
     // If running single lookup, run documentConcurrency chunks per page simultaneously
@@ -197,6 +232,7 @@ export async function handleLookup(
             literalResponse = updateActionResult(
                 lookupContext,
                 literalResponse,
+                msgs
             );
             context.actionIO.setDisplay(literalResponse.displayContent);
             // Generate entities if needed
@@ -270,12 +306,13 @@ function getLookupInstructions(): PromptSection[] {
 function updateActionResult(
     context: LookupContext,
     literalResponse: ActionResultSuccess,
+    messages: any[]
 ): ActionResultSuccess {
     if (context.answers.size > 0) {
         literalResponse.literalText = "";
         literalResponse.displayContent = {
             type: "html",
-            content: answersToHtml(context),
+            content: answersToHtml(context, messages),
         };
         for (const [_lookup, chatResponse] of context.answers) {
             literalResponse.literalText += chatResponse.generatedText! + "\n";
@@ -405,4 +442,78 @@ function updateLookupProgress(
     }
     progress.answerSoFar = answerSoFar;
     progress.counter++;
+}
+
+export async function runAgentConversation(
+    userRequest: string,
+    context: ActionContext<any>,
+): Promise<any[]> {
+    const project = new AIProjectClient(
+        "https://typeagent-test-agent-resource.services.ai.azure.com/api/projects/typeagent-test-agent",
+        new DefaultAzureCredential(),
+    );
+
+    const agent = await project.agents.getAgent(
+        "asst_qBRBuICfBaNYDH3WnpbBUSb0",
+    );
+    console.log(`Retrieved agent: ${agent.name}`);
+
+    const thread = await project.agents.threads.get(
+        "thread_pGqNCJlb8vBpxX8mNzBWBvt8",
+    );
+    console.log(`Retrieved thread, thread ID: ${thread.id}`);
+
+    const message = await project.agents.messages.create(
+        thread.id,
+        "user",
+        userRequest,
+    );
+    console.log(`Created message, message ID: ${message.id}`);
+
+    // Create run
+    // TODO: implement streaming API when it's available
+    try {
+        let run = await project.agents.runs.createAndPoll(thread.id, agent.id, {
+            stream: false,
+        });
+
+        if (run.status === "failed") {
+            console.error(`Run failed: `, run.lastError);
+        }
+
+        console.log(`Run completed with status: ${run.status}`);
+
+        // Retrieve messages
+        const messages = await project.agents.messages.list(thread.id, {
+            order: "asc",
+        });
+
+        // Display messages
+        const msgs = [];
+        for await (const m of messages) {
+            const content = m.content.find(
+                (c) => c.type === "text" && "text" in c,
+            );
+            if (content) {
+                msgs.push(m);
+                context.actionIO.setDisplay(
+                    {   
+                        type: "html",
+                        content: `${JSON.stringify(m.role)}: ${JSON.stringify(content)}`
+                    },
+                );
+                console.log(`${m.role}: ${content}`);
+            }
+        }
+
+        return msgs;
+
+    } catch (error) {
+        displayError(
+            `Error creating run: ${error}. Check for model throttling or content filtering.`,
+            context,
+        );
+
+        throw error;
+    }
 }
