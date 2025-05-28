@@ -65,13 +65,15 @@ export async function createKnowproDocMemoryCommands(
             },
         };
     }
-    commands.kpPodcastImport.metadata = docImportDef();
+    commands.kpDocImport.metadata = docImportDef();
     async function docImport(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, docImportDef());
         if (!fs.existsSync(namedArgs.filePath)) {
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
+        const savePath = sourcePathToMemoryIndexPath(namedArgs.filePath);
+
         context.docMemory = await cm.importTextFile(
             namedArgs.filePath,
             namedArgs.maxCharsPerChunk,
@@ -96,11 +98,10 @@ export async function createKnowproDocMemoryCommands(
         progress.complete();
 
         // Save the index
-        const savePath = sourcePathToMemoryIndexPath(
-            namedArgs.filePath,
-            namedArgs.indexFilePath,
+        await context.docMemory.writeToFile(
+            path.dirname(savePath),
+            getFileName(savePath),
         );
-        await context.docMemory.writeToFile(savePath, getFileName(savePath));
     }
 
     function docLoadDef(): CommandMetadata {

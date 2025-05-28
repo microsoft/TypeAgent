@@ -148,6 +148,11 @@ export class DocMemory
                 docMemoryData.messageIndexData,
             );
         }
+        // Rebuild transient secondary indexes associated with the doc memory
+        await kp.buildTransientSecondaryIndexes(
+            this,
+            this.settings.conversationSettings,
+        );
     }
 
     public async writeToFile(
