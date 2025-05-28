@@ -32,6 +32,19 @@ export function parsePodcastTranscript(
     );
 }
 
+export function parsePodcastTranscriptVtt(
+    transcriptText: string,
+    startDate?: Date,
+): [PodcastMessage[], Set<string>] {
+    return parseVttTranscript(
+        transcriptText,
+        startDate ?? new Date(),
+        (speaker) => {
+            return new PodcastMessage([], new PodcastMessageMeta(speaker));
+        },
+    );
+}
+
 /**
  *
  * @param transcriptFilePath Path to a podcast transcript
@@ -71,7 +84,7 @@ export async function importPodcastFromVtt(
 ): Promise<Podcast> {
     const transcriptText = await readAllText(transcriptFilePath);
     podcastName ??= getFileName(transcriptFilePath);
-    const [messages, participants] = parseVttTranscript(
+    const [messages, participants] = parsePodcastTranscriptVtt(
         transcriptText,
         startDate ?? new Date(),
     );
