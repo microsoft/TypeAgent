@@ -29,12 +29,7 @@ import {
     argToDate,
     copyFileToDir,
 } from "../common.js";
-import {
-    ensureDir,
-    getAbsolutePath,
-    getFileName,
-    readAllText,
-} from "typeagent";
+import { ensureDir, getAbsolutePath, getFileName } from "typeagent";
 import chalk from "chalk";
 
 export type KnowproPodcastContext = {
@@ -65,9 +60,9 @@ export async function createKnowproPodcastCommands(
             description: "Create knowPro index",
             args: {
                 filePath: arg("File path to transcript file"),
-                startAt: arg("Start date and time"),
             },
             options: {
+                startAt: arg("Start date and time"),
                 indexFilePath: arg("Output path for index file"),
                 maxMessages: argNum("Maximum messages to index"),
                 batchSize: argNum("Indexing batch size", 4),
@@ -83,14 +78,21 @@ export async function createKnowproPodcastCommands(
             context.printer.writeError(`${namedArgs.filePath} not found`);
             return;
         }
-        const startAt = argToDate(namedArgs.startAt)!;
-
-        context.podcast = await cm.importPodcast(
-            namedArgs.filePath,
-            getFileName(namedArgs.filePath),
-            startAt,
-            namedArgs.length,
-        );
+        const startAt = argToDate(namedArgs.startAt);
+        const fileExt = path.extname(namedArgs.filePath);
+        context.podcast =
+            fileExt !== ".vtt"
+                ? await cm.importPodcast(
+                      namedArgs.filePath,
+                      getFileName(namedArgs.filePath),
+                      startAt,
+                      namedArgs.length,
+                  )
+                : await cm.importPodcastFromVtt(
+                      namedArgs.filePath,
+                      getFileName(namedArgs.filePath),
+                      startAt,
+                  );
 
         kpContext.conversation = context.podcast;
         context.printer.writeLine("Imported podcast:");
@@ -292,31 +294,20 @@ export async function createKnowproPodcastCommands(
     }
 
     function podcastImportVttDef(): CommandMetadata {
-        return {
-            description: "Import podcast from VTT files",
-            args: {
-                filePath: argSourceFile(),
-            },
-        };
+        const def = podcastImportDef();
+        def.description = "Import podcast from VTT files";
+        return def;
     }
     commands.kpPodcastImportVtt.metadata = podcastImportVttDef();
     async function podcastImportVtt(args: string[]) {
-        const namedArgs = parseNamedArguments(args, podcastImportVttDef());
-        const transcriptFilePath = namedArgs.filePath;
-        const transcriptText = await readAllText(transcriptFilePath);
-        const [messages, participants] = cm.parseVttTranscript(
-            transcriptText,
-            (speaker) => {
-                return new cm.PodcastMessage(
-                    [],
-                    new cm.PodcastMessageMeta(speaker),
-                );
-            },
-        );
-        context.printer.writeList(participants);
-        for (const msg of messages) {
-            context.printer.writeMessage(msg);
+        await podcastImport(args);
+        if (context.podcast) {
+            context.printer.writePodcastInfo(context.podcast);
             context.printer.writeLine();
+            for (const msg of context.podcast.messages) {
+                context.printer.writeMessage(msg);
+                context.printer.writeLine();
+            }
         }
     }
 

@@ -6,6 +6,7 @@ import { IMessage } from "knowpro";
 import * as vtt from "webvtt-parser";
 
 import vttpgk from "webvtt-parser";
+import { PodcastMessage, PodcastMessageMeta } from "./podcastMessage.js";
 const { WebVTTParser } = vttpgk;
 /**
  * INTERNAL LIBRARY
@@ -119,12 +120,13 @@ export function timestampMessages(
     }
 }
 
-export function parseVttTranscript<TMessage extends ITranscriptMessage>(
+export function parseVttTranscript(
     transcriptText: string,
-    messageFactory: (speaker: string) => TMessage,
-    startAt?: Date,
-): [TMessage[], Set<string>] {
-    const parser = new VttParser(startAt ?? new Date(), messageFactory);
+    startAt: Date,
+): [PodcastMessage[], Set<string>] {
+    const parser = new VttParser(startAt, (speaker) => {
+        return new PodcastMessage([], new PodcastMessageMeta(speaker));
+    });
     return parser.parse(transcriptText);
 }
 
