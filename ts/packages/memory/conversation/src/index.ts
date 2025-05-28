@@ -9,3 +9,5 @@ export * from "./conversationMemory.js";
 export * from "./emailMemory.js";
 export * from "./emailMessage.js";
 export * from "./emailImporter.js";
+
+export { parseVttTranscript } from "./transcript.js";
