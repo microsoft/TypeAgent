@@ -37,6 +37,7 @@ import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import * as cm from "conversation-memory";
 import { createKnowproTestCommands } from "./knowproTest.js";
+import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -114,6 +115,7 @@ export async function createKnowproCommands(
     await createKnowproConversationCommands(context, commands);
     await createKnowproDataFrameCommands(context, commands);
     await createKnowproTestCommands(context, commands);
+    await createKnowproDocMemoryCommands(context, commands);
     /*
      * CREATE GENERAL MEMORY COMMANDS
      */

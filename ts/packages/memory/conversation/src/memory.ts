@@ -130,7 +130,7 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
         messageBody: string | string[],
         public tags: string[] = [],
         public timestamp: string | undefined = undefined,
-        public knowledge: kpLib.KnowledgeResponse | undefined,
+        public knowledge: kpLib.KnowledgeResponse | undefined = undefined,
         public deletionInfo: kp.DeletionInfo | undefined = undefined,
     ) {
         if (Array.isArray(messageBody)) {
@@ -141,7 +141,10 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 
     public addContent(content: string, chunkOrdinal = 0) {
-        if (chunkOrdinal > this.textChunks.length) {
+        if (
+            chunkOrdinal > this.textChunks.length ||
+            this.textChunks.length == 0
+        ) {
             this.textChunks.push(content);
         } else {
             this.textChunks[chunkOrdinal] += content;
@@ -208,11 +211,15 @@ export abstract class Memory<
     TSettings extends MemorySettings = MemorySettings,
     TMessage extends Message = Message,
 > {
+    public nameTag: string;
+    public tags: string[];
     public settings: TSettings;
     public noiseTerms: Set<string>;
 
-    constructor(settings: TSettings) {
+    constructor(settings: TSettings, nameTag?: string, tags?: string[]) {
         this.settings = settings;
+        this.nameTag = nameTag ?? "";
+        this.tags = tags ?? [];
         this.noiseTerms = new Set<string>();
         this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
             this.settings.languageModel,
