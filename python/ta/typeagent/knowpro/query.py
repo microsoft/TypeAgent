@@ -236,7 +236,7 @@ class MatchTermsOrExpr(MatchTermsBooleanExpr):
 
 @dataclass
 class MatchTermsOrMaxExpr(MatchTermsOrExpr):
-    """Expression for matching terms with an OR condition and a maximum score."""
+    """OR-MAX returns the union if there are no common matches, else the maximum scoring match."""
 
     term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = field(
         default_factory=list
