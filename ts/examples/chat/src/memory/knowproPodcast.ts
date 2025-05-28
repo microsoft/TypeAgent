@@ -72,7 +72,7 @@ export async function createKnowproPodcastCommands(
         };
     }
     commands.kpPodcastImport.metadata = podcastImportDef();
-    async function podcastImport(args: string[]): Promise<void> {
+    async function podcastImport(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastImportDef());
         if (!fs.existsSync(namedArgs.filePath)) {
             context.printer.writeError(`${namedArgs.filePath} not found`);
@@ -300,8 +300,15 @@ export async function createKnowproPodcastCommands(
     }
     commands.kpPodcastImportVtt.metadata = podcastImportVttDef();
     async function podcastImportVtt(args: string[]) {
-        await podcastImport(args);
-        if (context.podcast) {
+        const namedArgs = parseNamedArguments(args, podcastImportVttDef());
+        await podcastImport(namedArgs);
+        if (!context.podcast) {
+            return;
+        }
+        if (namedArgs.buildIndex) {
+            await podcastBuildIndex(namedArgs);
+            await podcastSave(namedArgs);
+        } else {
             context.printer.writeLine();
             context.printer.writeMessages(context.podcast.messages);
         }
