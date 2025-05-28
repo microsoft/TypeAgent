@@ -1,11 +1,89 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { htmlToText } from "typeagent";
-import { DocPart, DocPartMeta } from "./docMemory.js";
+import { getFileName, htmlToText, readAllText } from "typeagent";
+import {
+    DocMemory,
+    DocMemorySettings,
+    DocPart,
+    DocPartMeta,
+} from "./docMemory.js";
 import * as kpLib from "knowledge-processor";
 import { parseVttTranscript } from "./transcript.js";
+import { filePathToUrlString } from "memory-storage";
+import path from "path";
+import { getHtml } from "aiclient";
+import { Result, success } from "typechat";
 
+/**
+ * Import a text document as DocMemory
+ * You must call buildIndex before you can query the memory
+ *
+ * Uses file extensions to determine how to import.
+ *  default: treat as text
+ *  .html => parse html
+ *  .vtt => parse vtt transcript
+ * @param docFilePath
+ * @param maxCharsPerChunk
+ * @param docName
+ * @param settings
+ * @returns
+ */
+export async function importTextDoc(
+    docFilePath: string,
+    maxCharsPerChunk: number,
+    docName?: string,
+    settings?: DocMemorySettings,
+): Promise<DocMemory> {
+    const docText = await readAllText(docFilePath);
+    docName ??= getFileName(docFilePath);
+    const ext = path.extname(docFilePath);
+
+    const sourceUrl = filePathToUrlString(docFilePath);
+    let parts: DocPart[];
+    switch (ext) {
+        default:
+            parts = docPartsFromText(docText, maxCharsPerChunk, sourceUrl);
+            break;
+        case ".html":
+        case ".htm":
+            parts = docPartsFromHtml(docText, maxCharsPerChunk, sourceUrl);
+            break;
+        case ".vtt":
+            parts = docPartsFromVtt(docText, sourceUrl);
+            if (parts.length > 0) {
+                parts = mergeDocParts(
+                    parts,
+                    parts[0].metadata,
+                    maxCharsPerChunk,
+                );
+            }
+            break;
+    }
+    return new DocMemory(docName, parts, settings);
+}
+
+/**
+ * Import a web page as DocMemory
+ * You must call buildIndex before you can query the memory
+ * @param url
+ * @param maxCharsPerChunk
+ * @param settings
+ * @returns
+ */
+export async function importWebPage(
+    url: string,
+    maxCharsPerChunk: number,
+    settings?: DocMemorySettings,
+): Promise<Result<DocMemory>> {
+    const htmlResult = await getHtml(url);
+    if (!htmlResult.success) {
+        return htmlResult;
+    }
+    const parts = docPartsFromHtml(htmlResult.data, maxCharsPerChunk, url);
+    const docMemory = new DocMemory(url, parts, settings);
+    return success(docMemory);
+}
 /**
  * Import the given text as separate blocks
  * @param documentText
@@ -74,11 +152,14 @@ export function docPartsFromHtml(
  * @param transcriptText
  * @returns
  */
-export function docPartsFromVtt(transcriptText: string): DocPart[] {
+export function docPartsFromVtt(
+    transcriptText: string,
+    sourceUrl?: string,
+): DocPart[] {
     const [parts, _] = parseVttTranscript<DocPart>(
         transcriptText,
         new Date(),
-        (speaker: string) => new DocPart([]),
+        (speaker: string) => new DocPart([], new DocPartMeta(sourceUrl)),
     );
     return parts;
 }

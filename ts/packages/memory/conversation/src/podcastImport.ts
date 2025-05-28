@@ -46,7 +46,9 @@ export function parsePodcastTranscriptVtt(
 }
 
 /**
- *
+ * Import a podcast from a transcript file.
+ * The podcast contains all messages in the transcript but is *not yet indexed*.
+ * You must call podcast.buildIndex if you want to query the podcast
  * @param transcriptFilePath Path to a podcast transcript
  * @param podcastName
  * @param startDate
@@ -76,6 +78,16 @@ export async function importPodcast(
     return pod;
 }
 
+/**
+ * Import a podcast from a VTT transcript file.
+ * The podcast contains all messages in the transcript but is *not yet indexed*.
+ * You must call podcast.buildIndex if you want to query the podcast
+ * @param transcriptFilePath
+ * @param podcastName
+ * @param startDate
+ * @param settings
+ * @returns
+ */
 export async function importPodcastFromVtt(
     transcriptFilePath: string,
     podcastName?: string,
