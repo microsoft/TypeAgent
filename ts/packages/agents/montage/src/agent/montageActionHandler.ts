@@ -137,7 +137,7 @@ async function executeMontageAction(
         }
 
         if (
-            action.actionName === "startEditMontage" ||
+            action.actionName === "openMontage" ||
             action.actionName === "createNewMontage" ||
             (context.activityContext !== undefined &&
                 context.activityContext.state.title !==
@@ -633,7 +633,7 @@ async function handleMontageAction(
             break;
         }
 
-        case "startEditMontage": {
+        case "openMontage": {
             const montage = await ensureActionMontage(agentContext, action);
 
             agentContext.activeMontageId = montage.id;

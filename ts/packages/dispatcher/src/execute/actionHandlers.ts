@@ -28,6 +28,7 @@ import {
     AppAgent,
     TypeAgentAction,
     AppAction,
+    ResolveEntityResult,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -48,6 +49,7 @@ import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
     DispatcherActivityName,
+    DispatcherClarifyName,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -677,14 +679,28 @@ function createResultEntityResolver(): EntityResolver {
     };
 }
 
+interface ParameterEntityResolver extends EntityResolver {
+    readonly clarifyResolvedEntities: ClarifyResolvedEntity[];
+}
+
+export type ClarifyResolvedEntity = {
+    type: string;
+    name: string;
+    result: ResolveEntityResult;
+};
+
 function createParameterEntityResolver(
     agents: AppAgentManager,
     entities: PromptEntity[] | undefined,
-): EntityResolver {
+): ParameterEntityResolver {
     const resultEntityMap = new Set<string>();
+    const clarifyEntities: ClarifyResolvedEntity[] = [];
     const promptEntityMap = toPromptEntityMap(entities);
     const promptNameEntityMap = toPromptEntityNameMap(entities);
     return {
+        get clarifyResolvedEntities() {
+            return clarifyEntities;
+        },
         resolve: async (
             action: FullAction,
             obj: Record<string, any>,
@@ -695,7 +711,7 @@ function createParameterEntityResolver(
         ): Promise<PromptEntity | undefined> => {
             const appAgentName = getAppAgentName(action.schemaName);
 
-            // Always resolve results
+            // validate result entity
             if (value.startsWith("${result-")) {
                 if (!resultEntityMap.has(value)) {
                     throw new Error(
@@ -758,12 +774,16 @@ function createParameterEntityResolver(
                     agents.getSessionContext(appAgentName),
                 );
                 if (result === undefined || result.entities.length === 0) {
-                    throw new Error(
-                        `Agent ${appAgentName} could not find ${fieldType.name} named '${value}'`,
-                    );
+                    // REVIEW: let the agent deal with it for now.
+                    return undefined;
                 }
 
                 if (result.entities.length > 1) {
+                    clarifyEntities.push({
+                        type: fieldType.name,
+                        name: value,
+                        result,
+                    });
                     return;
                 }
                 if (result.match === "exact") {
@@ -780,7 +800,8 @@ function createParameterEntityResolver(
                             2,
                         )}`,
                     );
-                    // TODO: More advanced matching.
+                    // TODO: we should have a heristic to determine if we should
+                    // clarify the fuzzy match or not.
                     return {
                         sourceAppAgentName: appAgentName,
                         ...result.entities[0],
@@ -869,7 +890,7 @@ async function getParameterEntities(
 
 type PendingAction = {
     executableAction: ExecutableAction;
-    resultEntityResolver: EntityResolver;
+    resultEntityResolver?: EntityResolver | undefined;
 };
 
 function toPromptEntityMap(entities: PromptEntity[] | undefined) {
@@ -952,24 +973,52 @@ async function resolveEntities(
     return;
 }
 
+// Action generated internally by the dispatcher.
+export type ClarifyEntityAction = {
+    actionName: "clarifyEntities";
+    parameters: ClarifyResolvedEntity;
+};
+
 async function toPendingActions(
-    agents: AppAgentManager,
+    context: CommandHandlerContext,
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
 ): Promise<PendingAction[]> {
-    const resultEntityResolver = createResultEntityResolver();
+    let resultEntityResolver: EntityResolver | undefined;
+    const agents = context.agents;
+    const entityClarificationEnabled =
+        context.session.getConfig().translation.entity.clarify;
+
     const entityResolver = createParameterEntityResolver(agents, entities);
     const pendingActions: PendingAction[] = [];
 
     for (const executableAction of actions) {
-        const pending: PendingAction = {
-            executableAction,
-            resultEntityResolver,
-        };
         await resolveEntities(agents, executableAction.action, entityResolver);
+
+        if (
+            entityClarificationEnabled &&
+            entityResolver.clarifyResolvedEntities.length > 0
+        ) {
+            const clarifyEntityAction: TypeAgentAction<ClarifyEntityAction> = {
+                schemaName: DispatcherClarifyName,
+                actionName: "clarifyEntities",
+                // REVIEW: Only clarify one parameter at a time?
+                parameters: entityResolver.clarifyResolvedEntities[0],
+            };
+            return [
+                {
+                    executableAction: {
+                        action: clarifyEntityAction as any,
+                    },
+                },
+            ];
+        }
 
         const resultEntityId = executableAction.resultEntityId;
         if (resultEntityId !== undefined) {
+            if (resultEntityResolver === undefined) {
+                resultEntityResolver = createResultEntityResolver();
+            }
             const name = `\${result-${resultEntityId}}`;
             entityResolver.setResultEntity(name, {
                 name,
@@ -977,8 +1026,13 @@ async function toPendingActions(
                 sourceAppAgentName: "",
             });
         }
+        const pending: PendingAction = {
+            executableAction,
+            resultEntityResolver,
+        };
         pendingActions.push(pending);
     }
+
     return pendingActions;
 }
 
@@ -995,7 +1049,7 @@ export async function executeActions(
 
     // Even if the action is not executed, resolve the entities for the commandResult.
     const actionQueue: PendingAction[] = await toPendingActions(
-        systemContext.agents,
+        systemContext,
         actions,
         entities,
     );
@@ -1022,7 +1076,7 @@ export async function executeActions(
             const requestAction = translationResult.requestAction;
             actionQueue.unshift(
                 ...(await toPendingActions(
-                    systemContext.agents,
+                    systemContext,
                     requestAction.actions,
                     requestAction.history?.entities,
                 )),
@@ -1031,11 +1085,13 @@ export async function executeActions(
         }
         const appAgentName = getAppAgentName(action.schemaName);
         // resolve result entities.
-        await resolveEntities(
-            systemContext.agents,
-            action,
-            resultEntityResolver,
-        );
+        if (resultEntityResolver !== undefined) {
+            await resolveEntities(
+                systemContext.agents,
+                action,
+                resultEntityResolver,
+            );
+        }
         const result = await executeAction(
             executableAction,
             context,
@@ -1051,6 +1107,11 @@ export async function executeActions(
                     `Action ${getFullActionName(
                         executableAction,
                     )} did not return a result entity.`,
+                );
+            }
+            if (resultEntityResolver === undefined) {
+                throw new Error(
+                    `Internal error: resultEntityResolver is undefined`,
                 );
             }
             resultEntityResolver.setResultEntity(
@@ -1072,7 +1133,7 @@ export async function executeActions(
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
                 actionQueue.unshift(
                     ...(await toPendingActions(
-                        systemContext.agents,
+                        systemContext,
                         actions,
                         undefined,
                     )),

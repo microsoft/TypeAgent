@@ -246,6 +246,7 @@ process.send?.("Success");
  */
 process.on("message", (message: any) => {
     if (message.folders) {
+        debug(`Folders: ${JSON.stringify(message)}`);
         // allowed folders already contains index cache path and indexed location
         if (message.folders.allowedFolders) {
             allowedFolders = [
