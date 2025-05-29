@@ -48,8 +48,6 @@ export class EmailMemory
 
     constructor(
         public storageProvider: ms.sqlite.SqliteStorageProvider,
-        public nameTag: string = "",
-        public tags: string[] = [],
         settings?: EmailMemorySettings,
     ) {
         super(settings ?? createMemorySettings());

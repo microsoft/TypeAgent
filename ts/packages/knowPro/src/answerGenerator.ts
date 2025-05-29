@@ -62,18 +62,37 @@ export function createAnswerTranslator(
     return translator;
 }
 
+/**
+ * Generates answers to questions using provided AnswerContext
+ */
 export interface IAnswerGenerator {
+    /**
+     * Settings for this answer generator
+     */
     readonly settings: AnswerGeneratorSettings;
+    /**
+     * Generate an answer
+     * @param question
+     * @param context
+     */
     generateAnswer(
         question: string,
         context: contextSchema.AnswerContext | string,
     ): Promise<Result<answerSchema.AnswerResponse>>;
+    /**
+     * Answers can be generated in parts, if the context is bigger than a character budget
+     * @param question
+     * @param responses
+     */
     combinePartialAnswers(
         question: string,
         responses: answerSchema.AnswerResponse[],
     ): Promise<Result<answerSchema.AnswerResponse>>;
 }
 
+/**
+ * Settings for answer generation
+ */
 export type AnswerGeneratorSettings = {
     /**
      * Model used to generate answers from context
@@ -105,7 +124,7 @@ export type AnswerGeneratorSettings = {
 };
 
 /**
- * Generate a natural language answer for question about a queusing the provided search results as context
+ * Generate a natural language answer for question about a conversation using the provided search results as context
  * If the context exceeds the generator.setting.maxCharsInBudget, will break up the context into
  * chunks, run them in parallel, and then merge the answers found in individual chunks
  * @param conversation conversation about which this is a question
@@ -160,6 +179,17 @@ export async function generateAnswer(
     return answer;
 }
 
+/**
+ * Generates answers in chunks for a given question based on provided context chunks.
+ * Processes the chunks in parallel, and merges the answers from individual chunks.
+ *
+ * @param answerGenerator - answer generator to use
+ * @param question - The question that was asked.
+ * @param chunks - The context chunks to use for answer generation.
+ * @param progress - Optional progress callback to track the progress of chunk processing.
+ *
+ * @returns A promise that resolves to a Result containing an array of AnswerResponses.
+ */
 export async function generateAnswerInChunks(
     answerGenerator: IAnswerGenerator,
     question: string,
@@ -246,6 +276,9 @@ export async function generateAnswerInChunks(
     }
 }
 
+/**
+ * Default Answer Generator. Implements {@link IAnswerGenerator}
+ */
 export class AnswerGenerator implements IAnswerGenerator {
     public settings: AnswerGeneratorSettings;
     private answerTranslator: AnswerTranslator;

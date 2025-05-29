@@ -5,7 +5,7 @@ import {
     getLastResponseInEmailThread,
     importEmlFile,
     importForwardedEmailsFromMimeText,
-} from "../src/emailImporter.js";
+} from "../src/emailImport.js";
 import { createEmailMemory, EmailMemory } from "../src/emailMemory.js";
 import { EmailMeta, EmailMessage } from "../src/emailMessage.js";
 import { IndexFileSettings } from "../src/memory.js";

@@ -188,3 +188,22 @@ function splitTermValues(term: string, splitChar: string): string[] {
     });
     return allTermStrings;
 }
+
+export function createMultipleChoiceQuestion(
+    question: string,
+    choices: string[],
+    addNone: boolean = true,
+): string {
+    let text = question;
+    if (choices.length > 0) {
+        text = `Multiple choice question:\n${question}`;
+        text += "\nAnswer using the following choices *only*:\n";
+        for (let i = 0; i < choices.length; ++i) {
+            text += `- ${choices[i].trim()}\n`;
+        }
+        if (addNone) {
+            text += "- None of the above";
+        }
+    }
+    return text;
+}

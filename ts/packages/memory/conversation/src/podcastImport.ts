@@ -32,8 +32,23 @@ export function parsePodcastTranscript(
     );
 }
 
+export function parsePodcastTranscriptVtt(
+    transcriptText: string,
+    startDate?: Date,
+): [PodcastMessage[], Set<string>] {
+    return parseVttTranscript(
+        transcriptText,
+        startDate ?? new Date(),
+        (speaker) => {
+            return new PodcastMessage([], new PodcastMessageMeta(speaker));
+        },
+    );
+}
+
 /**
- *
+ * Import a podcast from a transcript file.
+ * The podcast contains all messages in the transcript but is *not yet indexed*.
+ * You must call podcast.buildIndex if you want to query the podcast
  * @param transcriptFilePath Path to a podcast transcript
  * @param podcastName
  * @param startDate
@@ -63,6 +78,16 @@ export async function importPodcast(
     return pod;
 }
 
+/**
+ * Import a podcast from a VTT transcript file.
+ * The podcast contains all messages in the transcript but is *not yet indexed*.
+ * You must call podcast.buildIndex if you want to query the podcast
+ * @param transcriptFilePath
+ * @param podcastName
+ * @param startDate
+ * @param settings
+ * @returns
+ */
 export async function importPodcastFromVtt(
     transcriptFilePath: string,
     podcastName?: string,
@@ -71,7 +96,7 @@ export async function importPodcastFromVtt(
 ): Promise<Podcast> {
     const transcriptText = await readAllText(transcriptFilePath);
     podcastName ??= getFileName(transcriptFilePath);
-    const [messages, participants] = parseVttTranscript(
+    const [messages, participants] = parsePodcastTranscriptVtt(
         transcriptText,
         startDate ?? new Date(),
     );
