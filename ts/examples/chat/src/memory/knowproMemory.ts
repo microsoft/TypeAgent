@@ -369,6 +369,7 @@ export async function createKnowproCommands(
             "How many top K knowledge matches",
             DefaultKnowledgeTopK,
         );
+        def.options!.choices = arg("Answer choices, separated by ';'");
         return def;
     }
     commands.kpAnswer.metadata = answerDefNew();
@@ -417,6 +418,7 @@ export async function createKnowproCommands(
             context.printer.writeLine("No matches");
             return;
         }
+        const choices = namedArgs.choices?.split(";");
         for (let i = 0; i < searchResults.data.length; ++i) {
             const searchResult = searchResults.data[i];
             if (!namedArgs.messages) {
@@ -424,10 +426,14 @@ export async function createKnowproCommands(
                 searchResult.messageMatches = [];
             }
             context.answerGenerator.settings.fastStop = namedArgs.fastStop;
+            let question = searchResult.rawSearchQuery ?? searchText;
+            if (choices && choices.length > 0) {
+                question = kp.createMultipleChoiceQuestion(question, choices);
+            }
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
-                searchResult.rawSearchQuery ?? searchText,
+                question,
                 searchResult,
                 (chunk, _, result) => {
                     if (namedArgs.debug) {

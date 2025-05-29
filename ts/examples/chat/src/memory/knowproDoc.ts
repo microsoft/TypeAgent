@@ -51,7 +51,7 @@ export async function createKnowproDocMemoryCommands(
         return {
             description: "Import a text document as DocMemory",
             args: {
-                filePath: arg("File path to transcript file"),
+                filePath: arg("File path to a txt, html or vtt file"),
             },
             options: {
                 indexFilePath: arg("Output path for index file"),
