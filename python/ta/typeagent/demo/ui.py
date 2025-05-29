@@ -20,20 +20,14 @@ from ..knowpro.query import (
     MatchTermsOrMaxExpr,
     QueryEvalContext,
 )
-from ..podcasts.podcast import Podcast
-
 from ..knowpro.interfaces import (
     PropertySearchTerm,
     SearchTerm,
     SearchTermGroup,
     SearchTermGroupTypes,
-    # SearchTermGroupTypes,  # TODO: Need this once we have property search terms
 )
+from ..podcasts.podcast import Podcast
 
-# from .search_schema import (
-#     SearchTermGroup as LimitedSearchTermGroup,
-#     SearchTermGroupTypes as LimitedSearchTermGroupTypes,
-# )
 from .search_query_schema import SearchFilter
 
 
