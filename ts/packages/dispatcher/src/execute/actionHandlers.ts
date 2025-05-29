@@ -925,7 +925,7 @@ async function resolveEntities(
         );
     }
 
-    const parameterType = schema?.type.fields.parameters?.type;
+    const parameterType = schema.type.fields.parameters?.type;
     if (parameterType?.type !== "object") {
         throw new Error(
             `Action schema parameter type mismatch: ${action.schemaName}.${action.actionName}`,
@@ -959,31 +959,27 @@ async function toPendingActions(
 ): Promise<PendingAction[]> {
     const resultEntityResolver = createResultEntityResolver();
     const entityResolver = createParameterEntityResolver(agents, entities);
-    const pending = await Promise.all(
-        actions.map(async (executableAction) => {
-            const pending: PendingAction = {
-                executableAction,
-                resultEntityResolver,
-            };
-            await resolveEntities(
-                agents,
-                executableAction.action,
-                entityResolver,
-            );
+    const pendingActions: PendingAction[] = [];
 
-            const resultEntityId = executableAction.resultEntityId;
-            if (resultEntityId !== undefined) {
-                const name = `\${result-${resultEntityId}}`;
-                entityResolver.setResultEntity(name, {
-                    name,
-                    type: [],
-                    sourceAppAgentName: "",
-                });
-            }
-            return pending;
-        }),
-    );
-    return pending;
+    for (const executableAction of actions) {
+        const pending: PendingAction = {
+            executableAction,
+            resultEntityResolver,
+        };
+        await resolveEntities(agents, executableAction.action, entityResolver);
+
+        const resultEntityId = executableAction.resultEntityId;
+        if (resultEntityId !== undefined) {
+            const name = `\${result-${resultEntityId}}`;
+            entityResolver.setResultEntity(name, {
+                name,
+                type: [],
+                sourceAppAgentName: "",
+            });
+        }
+        pendingActions.push(pending);
+    }
+    return pendingActions;
 }
 
 export async function executeActions(
@@ -1034,7 +1030,7 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.schemaName);
-        // resolve again to populate the result entities.
+        // resolve result entities.
         await resolveEntities(
             systemContext.agents,
             action,
