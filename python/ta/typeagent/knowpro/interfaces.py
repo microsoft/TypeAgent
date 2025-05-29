@@ -2,7 +2,10 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterable, Sequence
-from datetime import datetime as Datetime, timedelta as Timedelta
+from datetime import (
+    datetime as Datetime,  # For export.
+    timedelta as Timedelta,  # type: ignore  # For export.
+)
 from typing import (
     Any,
     Callable,

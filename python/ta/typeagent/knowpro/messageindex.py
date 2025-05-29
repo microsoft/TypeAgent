@@ -2,8 +2,6 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterable
-from dataclasses import dataclass
-from typing import Any
 
 from ..aitools.embeddings import NormalizedEmbedding
 from .importing import MessageTextIndexSettings
@@ -115,7 +113,7 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         # TODO: This is unused -- remove it?
         # TODO: Retries?
         # TODO: Find a prettier API to get an embedding rather than using _vector_base?
-        return await self.text_location_index._vector_base.get_embedding(text)
+        return await self.text_location_index._vector_base.get_embedding(text)  # type: ignore  # Must use internal.
 
     # TODO: Waiting for text_location_index.lookup_in_subset_by_embeddings.
     # def lookup_in_subset_by_embedding(

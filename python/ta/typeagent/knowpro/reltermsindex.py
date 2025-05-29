@@ -1,9 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import NotRequired, TypedDict
-
-from ..aitools.vectorbase import NormalizedEmbeddings, VectorBase
+from ..aitools.vectorbase import VectorBase
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
@@ -16,7 +14,6 @@ from .interfaces import (
     IndexingEventHandlers,
     ListIndexingResult,
     Term,
-    TermData,
 )
 
 

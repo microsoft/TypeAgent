@@ -12,7 +12,6 @@ from .interfaces import (
     ListIndexingResult,
     TextLocation,
 )
-from .reltermsindex import TextEmbeddingIndexData
 
 
 @dataclass
@@ -105,8 +104,8 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
 
     async def lookup_text_in_subset(
         self,
-        *args,
-        **kwds,
+        *args: Any,
+        **kwds: Any,
     ) -> Any:
         raise NotImplementedError
 

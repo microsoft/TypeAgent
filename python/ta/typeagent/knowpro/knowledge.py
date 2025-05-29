@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typechat import Failure, Result, TypeChatLanguageModel
+from typechat import Result, TypeChatLanguageModel
 
 from . import convknowledge
 from . import kplib

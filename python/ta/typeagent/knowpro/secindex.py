@@ -6,7 +6,6 @@ from .messageindex import build_message_index
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
-    ConversationDataWithIndexes,
     IConversationSecondaryIndexes,
     IMessage,
     ITermToSemanticRefIndex,

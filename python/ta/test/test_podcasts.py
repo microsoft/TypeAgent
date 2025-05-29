@@ -4,11 +4,11 @@
 import asyncio
 import os
 
-from fixtures import needs_auth, temp_dir
+from fixtures import needs_auth, temp_dir  # type: ignore  # Yes they are used!
 
 from typeagent.podcasts.podcast import Podcast
 from typeagent.knowpro import importing
-from typeagent.knowpro.interfaces import Datetime, IndexingEventHandlers
+from typeagent.knowpro.interfaces import Datetime
 from typeagent.podcasts.podcast_import import import_podcast
 from typeagent.knowpro.serialization import DATA_FILE_SUFFIX, EMBEDDING_FILE_SUFFIX
 

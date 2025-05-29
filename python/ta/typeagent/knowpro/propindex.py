@@ -2,7 +2,6 @@
 # Licensed under the MIT License.
 
 import enum
-from typing import cast
 
 from .collections import TextRangesInScope
 from .interfaces import (
@@ -11,7 +10,6 @@ from .interfaces import (
     ISemanticRefCollection,
     ListIndexingResult,
     ScoredSemanticRefOrdinal,
-    SemanticRef,
     SemanticRefOrdinal,
     Tag,
 )
@@ -102,7 +100,6 @@ def add_action_properties_to_index(
 
 
 def build_property_index(conversation: IConversation) -> ListIndexingResult:
-    csi = conversation.secondary_indexes
     return add_to_property_index(
         conversation,
         0,

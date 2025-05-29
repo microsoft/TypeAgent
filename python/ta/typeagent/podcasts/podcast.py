@@ -89,7 +89,7 @@ class PodcastMessageData(TypedDict):
 @dataclass
 class PodcastMessage(interfaces.IMessage, PodcastMessageBase):
     text_chunks: list[str]
-    tags: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list[str])
     timestamp: str | None = None
 
     def add_timestamp(self, timestamp: str) -> None:
@@ -136,7 +136,7 @@ class Podcast(
     messages: IMessageCollection[PodcastMessage] = field(
         default_factory=MessageCollection[PodcastMessage]
     )
-    tags: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list[str])
     semantic_refs: ISemanticRefCollection | None = field(
         default_factory=SemanticRefCollection
     )
@@ -280,14 +280,15 @@ class Podcast(
         self._build_participant_aliases()
 
     def _build_participant_aliases(self) -> None:
-        aliases: ITermToRelatedTerms = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
-        aliases.clear()
+        aliases = self.secondary_indexes.term_to_related_terms_index.aliases  # type: ignore  # TODO
+        assert aliases is not None
+        aliases.clear()  # type: ignore  # Same issue as above.
         name_to_alias_map = self._collect_participant_aliases()
         for name in name_to_alias_map.keys():
             related_terms: list[interfaces.Term] = [
                 interfaces.Term(text=alias) for alias in name_to_alias_map[name]
             ]
-            aliases.add_related_term(name, related_terms)
+            aliases.add_related_term(name, related_terms)  # type: ignore  # TODO: Same issue as above.
 
     def _collect_participant_aliases(self) -> dict[str, set[str]]:
 

@@ -27,7 +27,7 @@ from .interfaces import (
     TextRange,
     Topic,
 )
-from . import convknowledge, importing, kplib, secindex, storage
+from . import convknowledge, importing, kplib, secindex
 
 
 # TODO: Doesn't exist any more? But used in timestampindex.py currently
@@ -351,8 +351,10 @@ async def build_semantic_ref_index[TM: IMessage](
     return await add_to_semantic_ref_index(conversation, settings, 0, event_handler)
 
 
-async def add_to_semantic_ref_index(
-    conversation: IConversation,
+async def add_to_semantic_ref_index[
+    TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
+](
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     settings: importing.SemanticRefIndexSettings,
     message_ordinal_start_at: MessageOrdinal,
     event_handler: IndexingEventHandlers | None = None,
@@ -383,9 +385,13 @@ async def add_to_semantic_ref_index(
     return indexing_result or TextIndexingResult()
 
 
-def begin_indexing(conversation: IConversation) -> None:
+def begin_indexing[
+    TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
+](
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
+) -> None:
     if conversation.semantic_ref_index is None:
-        conversation.semantic_ref_index = ConversationIndex()
+        conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't strict mode like this?
     # TODO: implement .storage.SemanticRefCollection
     # if conversation.semantic_refs is None:
     #     conversation.semantic_refs = SemanticRefCollection()
@@ -395,7 +401,7 @@ def dump(
     semantic_ref_index: ConversationIndex, semantic_refs: ISemanticRefCollection
 ) -> None:
     print("semantic_ref_index = {")
-    for k, v in semantic_ref_index._map.items():
+    for k, v in semantic_ref_index._map.items():  # type: ignore  # Need internal access to dump.
         print(f"    {k!r}: {v},")
     print("}\n")
     print("semantic_refs = []")

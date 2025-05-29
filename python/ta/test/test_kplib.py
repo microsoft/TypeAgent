@@ -1,8 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import pytest
-
 from typeagent.knowpro.kplib import (
     Quantity,
     Facet,

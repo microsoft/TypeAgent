@@ -1,7 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import cast
 import pytest
 
 from typeagent.knowpro.collections import (
@@ -15,9 +14,7 @@ from typeagent.knowpro.collections import (
 from typeagent.knowpro.interfaces import (
     IConversation,
     IMessage,
-    IMessageCollection,
     ITermToSemanticRefIndex,
-    ISemanticRefCollection,
     Term,
     SearchTerm,
     PropertySearchTerm,
@@ -25,7 +22,6 @@ from typeagent.knowpro.interfaces import (
     ScoredSemanticRefOrdinal,
     TextRange,
     TextLocation,
-    MessageOrdinal,
     Topic,
 )
 from typeagent.knowpro.kplib import KnowledgeResponse
@@ -35,10 +31,8 @@ from typeagent.knowpro.query import (
     lookup_term_filtered,
     lookup_term,
     QueryEvalContext,
-    IQueryOpExpr,
     QueryOpExpr,
     SelectTopNExpr,
-    MatchTermsBooleanExpr,
     MatchTermsOrExpr,
     MatchTermsOrMaxExpr,
     MatchTermsAndExpr,
@@ -46,9 +40,8 @@ from typeagent.knowpro.query import (
     MatchSearchTermExpr,
     MatchPropertySearchTermExpr,
     GetScopeExpr,
-    IQueryTextRangeSelector,
 )
-from typeagent.knowpro.propindex import PropertyIndex, PropertyNames
+from typeagent.knowpro.propindex import PropertyIndex
 from typeagent.knowpro.storage import MessageCollection, SemanticRefCollection
 
 

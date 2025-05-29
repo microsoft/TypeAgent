@@ -53,7 +53,7 @@ class MatchAccumulator[T]:
         self._matches[match.value] = match
 
     # TODO: Maybe make the callers call clear_matches()?
-    def set_matches(self, matches: Iterable[Match[T]], *, clear=False) -> None:
+    def set_matches(self, matches: Iterable[Match[T]], *, clear: bool = False) -> None:
         if clear:
             self.clear_matches()
         for match in matches:
@@ -93,8 +93,8 @@ class MatchAccumulator[T]:
                 self.combine_matches(existing_match, other_match)
 
     def intersect(
-        self, other: "MatchAccumulator", intersection: "MatchAccumulator"
-    ) -> "MatchAccumulator":
+        self, other: "MatchAccumulator[T]", intersection: "MatchAccumulator[T]"
+    ) -> "MatchAccumulator[T]":
         """Intersect with another collection of matches."""
         for self_match in self:
             other_match = other.get_match(self_match.value)
@@ -103,7 +103,7 @@ class MatchAccumulator[T]:
                 intersection.set_match(self_match)
         return intersection
 
-    def combine_matches(self, match: Match, other: Match) -> None:
+    def combine_matches(self, match: Match[T], other: Match[T]) -> None:
         """Combine the other match into the first."""
         match.hit_count += other.hit_count
         match.score += other.score
@@ -135,7 +135,7 @@ class MatchAccumulator[T]:
         if not self._matches:
             return []
         if max_matches and max_matches > 0:
-            top_list = TopNList(max_matches)
+            top_list = TopNList[T](max_matches)
             for match in self._matches_with_min_hit_count(min_hit_count):
                 top_list.push(match.value, match.score)
             ranked = top_list.by_rank()
@@ -212,7 +212,7 @@ def get_smooth_score(
         return 0.0
 
 
-def add_smooth_related_score_to_match_score(match: Match) -> None:
+def add_smooth_related_score_to_match_score[T](match: Match[T]) -> None:
     """Add the smooth related score to the match score."""
     if match.related_hit_count > 0:
         # Related term matches can be noisy and duplicative.
@@ -502,7 +502,7 @@ class TermSet:
 class PropertyTermSet:
     """A collection of property terms with support for adding, checking, and clearing."""
 
-    terms: dict[str, Term] = field(default_factory=dict)
+    terms: dict[str, Term] = field(default_factory=dict[str, Term])
 
     def add(self, property_name: str, property_value: Term) -> None:
         """Add a property term to the set."""
@@ -535,16 +535,16 @@ class ScoredItem[T]:
     item: T
     score: float
 
-    def __lt__(self, other: "ScoredItem") -> bool:
+    def __lt__(self, other: "ScoredItem[T]") -> bool:
         return self.score < other.score
 
-    def __gt__(self, other: "ScoredItem") -> bool:
+    def __gt__(self, other: "ScoredItem[T]") -> bool:
         return self.score > other.score
 
-    def __le__(self, other: "ScoredItem") -> bool:
+    def __le__(self, other: "ScoredItem[T]") -> bool:
         return self.score <= other.score
 
-    def __ge__(self, other: "ScoredItem") -> bool:
+    def __ge__(self, other: "ScoredItem[T]") -> bool:
         return self.score >= other.score
 
 
