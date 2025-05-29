@@ -18,10 +18,7 @@ from ..knowpro.interfaces import (
     Timedelta,
 )
 from ..knowpro.messageindex import MessageTextIndex
-from ..knowpro.serialization import (
-    write_conversation_data_to_file,
-    read_conversation_data_from_file,
-)
+from ..knowpro import serialization
 from ..knowpro.storage import MessageCollection, SemanticRefCollection
 
 
@@ -210,7 +207,7 @@ class Podcast(
 
     def write_to_file(self, filename: str) -> None:
         data = self.serialize()
-        write_conversation_data_to_file(data, filename)
+        serialization.write_conversation_data_to_file(data, filename)
 
     def deserialize(
         self, podcast_data: ConversationDataWithIndexes[PodcastMessageData]
@@ -269,7 +266,7 @@ class Podcast(
         embedding_size = (
             podcast.settings.related_term_index_settings.embedding_index_settings.embedding_model.embedding_size
         )
-        data = read_conversation_data_from_file(filename, embedding_size)
+        data = serialization.read_conversation_data_from_file(filename, embedding_size)
         if data:
             podcast.deserialize(data)
         return podcast

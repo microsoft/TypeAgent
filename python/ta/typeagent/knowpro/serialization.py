@@ -21,7 +21,7 @@ from typing import (
 import numpy as np
 
 from ..aitools.embeddings import NormalizedEmbeddings
-from ..podcasts.podcast import PodcastMessageData
+from ..podcasts import podcast
 
 from .interfaces import (
     ConversationDataWithIndexes,
@@ -195,9 +195,9 @@ def to_camel(name: str) -> str:
 # No exceptions are caught; they just bubble out.
 def read_conversation_data_from_file(
     filename: str, embedding_size: int
-) -> ConversationDataWithIndexes[PodcastMessageData] | None:
+) -> ConversationDataWithIndexes[Any] | None:
     with open(filename + DATA_FILE_SUFFIX, "r", encoding="utf-8") as f:
-        json_data: ConversationJsonData[PodcastMessageData] = json.load(f)
+        json_data: ConversationJsonData[podcast.PodcastMessageData] = json.load(f)
     # TODO: validate json_data. (Isn't this done by deserialize()?)
     embeddings_list: list[NormalizedEmbeddings] | None = None
     if embedding_size:
@@ -217,8 +217,8 @@ def read_conversation_data_from_file(
 
 
 def from_conversation_file_data(
-    file_data: ConversationFileData[PodcastMessageData],
-) -> ConversationDataWithIndexes[PodcastMessageData]:
+    file_data: ConversationFileData[Any],
+) -> ConversationDataWithIndexes[Any]:
     json_data = file_data["jsonData"]
     file_header = json_data.get("fileHeader")
     if file_header is None:
@@ -259,7 +259,7 @@ def from_conversation_file_data(
 
 def get_embeddings_from_binary_data(
     embeddings: NormalizedEmbeddings,
-    json_data: ConversationJsonData[PodcastMessageData],
+    json_data: ConversationJsonData[Any],
     keys: tuple[str, ...],
     offset: int,
     count: int | None,
