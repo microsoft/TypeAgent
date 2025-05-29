@@ -16,7 +16,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
-import { displaySuccess } from "@typeagent/agent-sdk/helpers/display";
+import { MessageContentUnion, MessageTextContent, MessageTextUrlCitationAnnotation } from "@azure/ai-agents";
 
 export function instantiate(): AppAgent {
     return {
@@ -91,8 +91,10 @@ async function runAgentConversation(userRequest: string, context: ActionContext)
   const agent = await project.agents.getAgent("asst_qBRBuICfBaNYDH3WnpbBUSb0");
   console.log(`Retrieved agent: ${agent.name}`);
 
-  const thread = await project.agents.threads.get("thread_mR7ai8Hgk6eoe3UvdEjzFkGW");
-  console.log(`Retrieved thread, thread ID: ${thread.id}`);
+  const thread = await project.agents.threads.create({});
+
+  //const thread = await project.agents.threads.get("thread_mR7ai8Hgk6eoe3UvdEjzFkGW");
+  //console.log(`Retrieved thread, thread ID: ${thread.id}`);
 
   const message = await project.agents.messages.create(thread.id, "user", userRequest);
   console.log(`Created message, message ID: ${message.id}`);
@@ -119,10 +121,30 @@ async function runAgentConversation(userRequest: string, context: ActionContext)
 
   // Display messages
   for await (const m of messages) {
-    const content = m.content.find((c) => c.type === "text" && "text" in c);
-    if (content) {
-        displaySuccess(`${JSON.stringify(m.role)}: ${JSON.stringify(content)}`, context);
-      console.log(`${m.role}: ${content}`);
+    if (m.role === "assistant") {
+        // TODO: handle multi-modal content
+        const content: MessageContentUnion | undefined = m.content.find((c) => c.type === "text" && "text" in c);
+        if (content) {
+            //context.actionIO.appendDisplay(`${JSON.stringify(m.role)}: ${JSON.stringify(content)}`);
+            const textContent: MessageTextContent = content as MessageTextContent;
+            let annotations = "";
+            textContent.text.annotations.forEach((a) => {
+                switch (a.type) {
+                    case "url_cititation":
+                        const citation: MessageTextUrlCitationAnnotation = a as MessageTextUrlCitationAnnotation;
+                        annotations += `<a href="${citation.urlCitation.url}" target="_blank">${citation.urlCitation.title}</a>`;
+                        break;
+                    // TODO: other annotation types
+                }
+            });
+
+            context.actionIO.appendDisplay({
+                type: "html",
+                content: `${textContent.text.value.replace("\n", "<br/>")}<br/>${annotations}`,
+            });
+
+            //console.log(`${m.role}: ${content}`);
+        }
     }
   }
 }

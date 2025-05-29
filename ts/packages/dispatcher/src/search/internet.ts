@@ -25,7 +25,8 @@ import {
     displayError,
 } from "@typeagent/agent-sdk/helpers/display";
 import { DefaultAzureCredential } from "@azure/identity";
-import { ThreadMessage } from "@azure/ai-projects";
+import { MessageContentUnion, MessageTextContent, MessageTextUrlCitationAnnotation, ThreadMessage } from "@azure/ai-agents";
+
 
 function urlToHtml(url: string): string {
     return `<a href="${url}" target="_blank">${url}</a>`;
@@ -57,33 +58,40 @@ function answerToHtml(answer: ChunkChatResponse, lookup?: string) {
     return html;
 }
 
-function _answerToHtml(answer: string) {
+function _answerToHtml(answer: ThreadMessage): string {
     let html = "<p><div>";
-    if (answer.length > 0) {
-        // if (lookup) {
-        //     html += `<div><i>${capitalize(lookup)}</i></div>`;
-        // }
+
+    const content: MessageContentUnion | undefined = answer.content.find((c) => c.type === "text" && "text" in c);
+
+    if (content) {
+
+        const textContent: MessageTextContent = content as MessageTextContent;
+        let annotations = "References:<br/>";
+        textContent.text.annotations.forEach((a) => {
+            switch (a.type) {
+                case "url_cititation":
+                    const citation: MessageTextUrlCitationAnnotation = a as MessageTextUrlCitationAnnotation;
+                    annotations += `<a href="${citation.urlCitation.url}" target="_blank">${citation.urlCitation.title}</a>`;
+                    break;
+                // TODO: other annotation types
+            }
+        });
+
         html += "<div>";
-        html += answer!.replaceAll("\n", "<br/>");
+        html += `${textContent.text.value.replaceAll("\n", "<br/>")}<br/>${annotations}`;
         html += "</div>";
-        // if (answer.urls && answer.urls.length > 0) {
-        //     html += "<div>";
-        //     for (const url of answer.urls) {
-        //         // create a link to the url that opens in the default browser
-        //         html += urlToHtml(url) + "<br/>";
-        //     }
-        //     html += "</div>";
-        // }
     }
+    
     html += "</div>";
     return html;
 }
 
-function answersToHtml(context: LookupContext, messages: string[]): string {
+function answersToHtml(context: LookupContext, messages: ThreadMessage[]): string {
     let html = "";
     for (const [lookup, chatResponse] of context.answers) {
         html += answerToHtml(chatResponse, lookup);
     }
+    html += "<hr/>";
     for (const m of messages) {
         html += _answerToHtml(m);
     }
@@ -188,9 +196,6 @@ export async function handleLookup(
         lookups = lookups.slice(0, 3);
     }
 
-    // run bing with grounding lookup
-    const msgs = await runAgentConversation(originalRequest, context);
-
     const lookUpConfig = await getLookupConfig();
     // If running single lookup, run documentConcurrency chunks per page simultaneously
     // Else we will be running at least more than 1 lookups in parallel anyway
@@ -203,6 +208,11 @@ export async function handleLookup(
         type: "html",
         content: lookupToHtml(lookups),
     });
+
+    // run bing with grounding lookup
+    //context.actionIO.appendDisplay({ type: "html", content: "<br/><hr/><br/>"});
+    const msgs = await runAgentConversation(originalRequest, context);
+
     const lookupContext: LookupContext = {
         request,
         lookups,
@@ -306,7 +316,7 @@ function getLookupInstructions(): PromptSection[] {
 function updateActionResult(
     context: LookupContext,
     literalResponse: ActionResultSuccess,
-    messages: any[]
+    messages: ThreadMessage[]
 ): ActionResultSuccess {
     if (context.answers.size > 0) {
         literalResponse.literalText = "";
@@ -447,7 +457,7 @@ function updateLookupProgress(
 export async function runAgentConversation(
     userRequest: string,
     context: ActionContext<any>,
-): Promise<any[]> {
+): Promise<ThreadMessage[]> {
     const project = new AIProjectClient(
         "https://typeagent-test-agent-resource.services.ai.azure.com/api/projects/typeagent-test-agent",
         new DefaultAzureCredential(),
@@ -458,10 +468,12 @@ export async function runAgentConversation(
     );
     console.log(`Retrieved agent: ${agent.name}`);
 
-    const thread = await project.agents.threads.get(
-        "thread_pGqNCJlb8vBpxX8mNzBWBvt8",
-    );
-    console.log(`Retrieved thread, thread ID: ${thread.id}`);
+    const thread = await project.agents.threads.create({});
+    
+    // const thread = await project.agents.threads.get(
+    //     "thread_pGqNCJlb8vBpxX8mNzBWBvt8",
+    // );
+    // console.log(`Retrieved thread, thread ID: ${thread.id}`);
 
     const message = await project.agents.messages.create(
         thread.id,
@@ -489,20 +501,31 @@ export async function runAgentConversation(
         });
 
         // Display messages
-        const msgs = [];
+        const msgs: ThreadMessage[] = [];
         for await (const m of messages) {
-            const content = m.content.find(
-                (c) => c.type === "text" && "text" in c,
-            );
-            if (content) {
-                msgs.push(m);
-                context.actionIO.setDisplay(
-                    {   
-                        type: "html",
-                        content: `${JSON.stringify(m.role)}: ${JSON.stringify(content)}`
-                    },
-                );
-                console.log(`${m.role}: ${content}`);
+
+            if (m.role === "assistant") {
+                // TODO: handle multi-modal content
+                const content: MessageContentUnion | undefined = m.content.find((c) => c.type === "text" && "text" in c);
+                if (content) {
+                    msgs.push(m);
+                    // const textContent: MessageTextContent = content as MessageTextContent;
+                    // let annotations = "";
+                    // textContent.text.annotations.forEach((a) => {
+                    //     switch (a.type) {
+                    //         case "url_cititation":
+                    //             const citation: MessageTextUrlCitationAnnotation = a as MessageTextUrlCitationAnnotation;
+                    //             annotations += `<a href="${citation.urlCitation.url}" target="_blank">${citation.urlCitation.title}</a>`;
+                    //             break;
+                    //         // TODO: other annotation types
+                    //     }
+                    // });
+
+                    // context.actionIO.appendDisplay({
+                    //     type: "html",
+                    //     content: `${textContent.text.value.replace("\n", "<br/>")}<br/>${annotations}`,
+                    // });
+                }
             }
         }
 

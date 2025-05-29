@@ -1049,6 +1049,9 @@ importers:
 
   packages/agents/chat:
     dependencies:
+      '@azure/ai-agents':
+        specifier: ^1.0.0-beta.3
+        version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
         version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
@@ -2334,6 +2337,9 @@ importers:
 
   packages/dispatcher:
     dependencies:
+      '@azure/ai-agents':
+        specifier: ^1.0.0-beta.3
+        version: 1.0.0-beta.3
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
         version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
