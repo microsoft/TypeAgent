@@ -9,7 +9,7 @@ import {
     generateAnswerFromWebPages,
     promptLib,
 } from "typeagent";
-import { ChatModel, bing, openai } from "aiclient";
+import { ChatModel, bing, bingWithGrounding, openai } from "aiclient";
 import { PromptSection } from "typechat";
 import {
     ActionContext,
@@ -81,7 +81,7 @@ function _answerToHtml(answer: ThreadMessage): string {
         html += `${textContent.text.value.replaceAll("\n", "<br/>")}<br/>${annotations}`;
         html += "</div>";
     }
-    
+
     html += "</div>";
     return html;
 }
@@ -454,14 +454,17 @@ function updateLookupProgress(
     progress.counter++;
 }
 
+let groundingConfig: bingWithGrounding.ApiSettings | undefined;
 export async function runAgentConversation(
     userRequest: string,
     context: ActionContext<any>,
 ): Promise<ThreadMessage[]> {
-    const project = new AIProjectClient(
-        "https://typeagent-test-agent-resource.services.ai.azure.com/api/projects/typeagent-test-agent",
-        new DefaultAzureCredential(),
-    );
+
+    if (!groundingConfig) {
+        groundingConfig = bingWithGrounding.apiSettingsFromEnv();
+    }
+
+    const project = new AIProjectClient(groundingConfig.endpoint!, new DefaultAzureCredential());
 
     const agent = await project.agents.getAgent(
         "asst_qBRBuICfBaNYDH3WnpbBUSb0",
@@ -485,6 +488,8 @@ export async function runAgentConversation(
     // Create run
     // TODO: implement streaming API when it's available
     try {
+        //let run2 = await project.agents.runs.create(thread.id, agent.id, { stream: true });
+        
         let run = await project.agents.runs.createAndPoll(thread.id, agent.id, {
             stream: false,
         });
