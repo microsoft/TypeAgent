@@ -14,9 +14,6 @@ import {
     createActionResultFromHtmlDisplay,
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
-import { AIProjectClient } from "@azure/ai-projects";
-import { DefaultAzureCredential } from "@azure/identity";
-import { MessageContentUnion, MessageTextContent, MessageTextUrlCitationAnnotation } from "@azure/ai-agents";
 
 export function instantiate(): AppAgent {
     return {
@@ -66,7 +63,6 @@ async function handleChatResponse(
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
-            await runAgentConversation(chatAction.parameters.originalRequest, context);
             return generateReponse(chatAction, context);
            break;
         }
@@ -81,72 +77,6 @@ async function handleChatResponse(
                 `Invalid chat action: ${(chatAction as TypeAgentAction).actionName}`,
             );
     }
-}
-
-async function runAgentConversation(userRequest: string, context: ActionContext) {
-  const project = new AIProjectClient(
-    "https://typeagent-test-agent-resource.services.ai.azure.com/api/projects/typeagent-test-agent",
-    new DefaultAzureCredential());
-
-  const agent = await project.agents.getAgent("asst_qBRBuICfBaNYDH3WnpbBUSb0");
-  console.log(`Retrieved agent: ${agent.name}`);
-
-  const thread = await project.agents.threads.create({});
-
-  //const thread = await project.agents.threads.get("thread_mR7ai8Hgk6eoe3UvdEjzFkGW");
-  //console.log(`Retrieved thread, thread ID: ${thread.id}`);
-
-  const message = await project.agents.messages.create(thread.id, "user", userRequest);
-  console.log(`Created message, message ID: ${message.id}`);
-
-  // Create run
-  // TODO: implement streaming API when it's available
-  let run = await project.agents.runs.createAndPoll(thread.id, agent.id, { stream: false })
-
-  // Poll until the run reaches a terminal status
-//   while (run.status === "queued" || run.status === "in_progress") {
-//     // Wait for a second
-//     await new Promise((resolve) => setTimeout(resolve, 1000));
-//     run = await project.agents.runs.get(thread.id, run.id);
-//   }
-
-  if (run.status === "failed") {
-    console.error(`Run failed: `, run.lastError);
-  }
-
-  console.log(`Run completed with status: ${run.status}`);
-
-  // Retrieve messages
-  const messages = await project.agents.messages.list(thread.id, { order: "asc" });
-
-  // Display messages
-  for await (const m of messages) {
-    if (m.role === "assistant") {
-        // TODO: handle multi-modal content
-        const content: MessageContentUnion | undefined = m.content.find((c) => c.type === "text" && "text" in c);
-        if (content) {
-            //context.actionIO.appendDisplay(`${JSON.stringify(m.role)}: ${JSON.stringify(content)}`);
-            const textContent: MessageTextContent = content as MessageTextContent;
-            let annotations = "";
-            textContent.text.annotations.forEach((a) => {
-                switch (a.type) {
-                    case "url_cititation":
-                        const citation: MessageTextUrlCitationAnnotation = a as MessageTextUrlCitationAnnotation;
-                        annotations += `<a href="${citation.urlCitation.url}" target="_blank">${citation.urlCitation.title}</a>`;
-                        break;
-                    // TODO: other annotation types
-                }
-            });
-
-            context.actionIO.appendDisplay({
-                type: "html",
-                content: `${textContent.text.value.replace("\n", "<br/>")}<br/>${annotations}`,
-            });
-
-            //console.log(`${m.role}: ${content}`);
-        }
-    }
-  }
 }
 
 async function generateReponse(generateResponseAction: GenerateResponseAction, context: ActionContext) {
