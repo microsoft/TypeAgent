@@ -86,9 +86,13 @@ function messageContentToHTML(
     }
 
     if (typeof message[0] === "string") {
-        return (message as string[])
-            .map((s) => processContent(s, type, inline))
-            .join("<br>");
+        return processContent(
+            (message as string[]).join(
+                type === "html" || type === "iframe" ? "<br>" : "\n",
+            ),
+            type,
+            inline,
+        );
     }
 
     const table = message as string[][];

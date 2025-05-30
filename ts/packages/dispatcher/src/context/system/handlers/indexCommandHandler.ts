@@ -14,6 +14,7 @@ import {
 } from "@typeagent/agent-sdk/helpers/display";
 import { IndexData, IndexSource } from "image-memory";
 import fileSize from "file-size";
+import { expandHome } from "../../../utils/fsUtils.js";
 
 class IndexListCommandHandler implements CommandHandler {
     public readonly description = "List indexes";
@@ -134,7 +135,7 @@ class IndexCreateCommandHandler implements CommandHandler {
             await systemContext.indexManager.createIndex(
                 params.args.name,
                 params.args.type as IndexSource,
-                params.args.location,
+                expandHome(params.args.location),
             )
         ) {
             // save the index by saving the session

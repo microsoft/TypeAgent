@@ -28,6 +28,7 @@ import {
     AppAgent,
     TypeAgentAction,
     AppAction,
+    ResolveEntityResult,
 } from "@typeagent/agent-sdk";
 import {
     createActionResult,
@@ -48,6 +49,7 @@ import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
     DispatcherActivityName,
+    DispatcherClarifyName,
     DispatcherName,
     isUnknownAction,
 } from "../context/dispatcher/dispatcherUtils.js";
@@ -65,7 +67,11 @@ import {
 } from "action-schema";
 import { IndexManager } from "../context/indexManager.js";
 import { IndexData } from "image-memory";
-import { ActionParamObject, ActionParamType } from "action-schema";
+import {
+    ActionParamObject,
+    ActionParamType,
+    ActionParamArray,
+} from "action-schema";
 import { AppAgentManager } from "../context/appAgentManager.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
@@ -552,7 +558,7 @@ async function getParameterObjectEntities(
     action: FullAction,
     obj: Record<string, any>,
     objType: ActionParamObject,
-    entityContext: PendingActionEntityContext,
+    entityResolver: EntityResolver,
     existing?: EntityObject,
 ) {
     let hasEntity = false;
@@ -572,7 +578,7 @@ async function getParameterObjectEntities(
             v,
             fieldType,
             actualType,
-            entityContext,
+            entityResolver,
             existing?.[k],
         );
         if (entity !== undefined) {
@@ -583,15 +589,41 @@ async function getParameterObjectEntities(
     return hasEntity ? entities : undefined;
 }
 
+async function getParameterArrayEntities(
+    action: FullAction,
+    value: unknown[],
+    actualType: ActionParamArray,
+    entityResolver: EntityResolver,
+    existing?: EntityField[] | undefined,
+) {
+    const elementFieldType = actualType.elementType;
+    const elementActualType = resolveTypeReference(actualType.elementType);
+    if (elementActualType === undefined) {
+        throw new Error("Unresolved reference");
+    }
+    return Promise.all(
+        value.map((v, i) =>
+            getParameterEntities(
+                action,
+                value,
+                i,
+                v,
+                elementFieldType,
+                elementActualType,
+                entityResolver,
+                existing?.[i],
+            ),
+        ),
+    );
+}
+
 function resolvePromptEntity(
     appAgentName: string,
-    entityContext: PendingActionEntityContext,
+    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined,
     value: string,
 ) {
     // LLM like to correct/change casing.  Normalize entity name for look up.
-    const foundEntity = entityContext.promptNameEntityMap?.get(
-        normalizeParamString(value),
-    );
+    const foundEntity = promptNameEntityMap?.get(normalizeParamString(value));
     if (foundEntity === undefined) {
         return undefined;
     }
@@ -607,105 +639,182 @@ function resolvePromptEntity(
     return matched.length === 1 ? matched[0] : undefined;
 }
 
-async function resolveParameterEntity(
-    action: FullAction,
-    obj: Record<string, any>,
-    key: string | number,
-    value: any,
-    fieldType: ActionParamType,
-    entityContext: PendingActionEntityContext,
-    existing?: EntityValue,
-): Promise<PromptEntity | undefined> {
-    const appAgentName = getAppAgentName(action.schemaName);
+interface EntityResolver {
+    resolve: (
+        action: FullAction,
+        obj: Record<string, any>,
+        key: string | number,
+        value: any,
+        fieldType: ActionParamType,
+        existing?: EntityValue,
+    ) => Promise<PromptEntity | undefined>;
+    setResultEntity: (name: string, entity: PromptEntity) => void;
+}
 
-    // Always resolve results
-    if (value.startsWith("${result-")) {
-        const resultEntity = entityContext.resultEntityMap?.get(value);
-        if (resultEntity !== undefined) {
-            // fix up the action to the actual entity name
-            obj[key] = resultEntity.name;
-            return resultEntity.sourceAppAgentName === appAgentName
-                ? resultEntity
-                : undefined;
-        }
-        throw new Error(`Result entity reference not found: ${value}`);
-    }
+function createResultEntityResolver(): EntityResolver {
+    const resultEntityMap = new Map<string, PromptEntity>();
+    return {
+        resolve: async (
+            action: FullAction,
+            obj: Record<string, any>,
+            key: string | number,
+            value: any,
+        ): Promise<PromptEntity | undefined> => {
+            if (value.startsWith("${result-")) {
+                const resultEntity = resultEntityMap?.get(value);
+                if (resultEntity !== undefined) {
+                    // fix up the action to the actual entity name
+                    obj[key] = resultEntity.name;
+                    const appAgentName = getAppAgentName(action.schemaName);
+                    return resultEntity.sourceAppAgentName === appAgentName
+                        ? resultEntity
+                        : undefined;
+                }
+                throw new Error(`Result entity reference not found: ${value}`);
+            }
+        },
+        setResultEntity: (name: string, entity: PromptEntity) => {
+            resultEntityMap.set(name, entity);
+        },
+    };
+}
 
-    // Don't resolve other entities if we already have one.
-    if (existing !== undefined) {
-        return existing;
-    }
+interface ParameterEntityResolver extends EntityResolver {
+    readonly clarifyResolvedEntities: ClarifyResolvedEntity[];
+}
 
-    if (value.startsWith("${entity-")) {
-        const entity = entityContext.promptEntityMap?.get(value);
-        if (entity !== undefined) {
-            // fix up the action to the actual entity name
-            obj[key] = entity.name;
-            // Don't allow entity to be used in different app agent name.
-            return entity.sourceAppAgentName === appAgentName
-                ? entity
-                : undefined;
-        }
-        throw new Error(`Entity reference not found: ${value}`);
-    }
+export type ClarifyResolvedEntity = {
+    type: string;
+    name: string;
+    result: ResolveEntityResult;
+};
 
-    const entity = resolvePromptEntity(appAgentName, entityContext, value);
-    if (entity !== undefined) {
-        return entity;
-    }
+function createParameterEntityResolver(
+    agents: AppAgentManager,
+    entities: PromptEntity[] | undefined,
+): ParameterEntityResolver {
+    const resultEntityMap = new Set<string>();
+    const clarifyEntities: ClarifyResolvedEntity[] = [];
+    const promptEntityMap = toPromptEntityMap(entities);
+    const promptNameEntityMap = toPromptEntityNameMap(entities);
+    return {
+        get clarifyResolvedEntities() {
+            return clarifyEntities;
+        },
+        resolve: async (
+            action: FullAction,
+            obj: Record<string, any>,
+            key: string | number,
+            value: any,
+            fieldType: ActionParamType,
+            existing?: EntityValue,
+        ): Promise<PromptEntity | undefined> => {
+            const appAgentName = getAppAgentName(action.schemaName);
 
-    if (fieldType.type === "type-reference") {
-        const agents = entityContext.agents;
-        const actionSchemaFile = agents.getActionSchemaFileForConfig(
-            agents.getActionConfig(action.schemaName),
-        );
-        const entitySchema =
-            actionSchemaFile.parsedActionSchema.entitySchemas?.get(
-                fieldType.name,
-            );
-        if (entitySchema === undefined) {
-            return;
-        }
-        const agent = agents.getAppAgent(appAgentName);
-        if (agent.resolveEntity === undefined) {
-            throw new Error(
-                "Agent declares entity types but does not implement resolveEntity",
-            );
-        }
-        debugActionEntities(
-            `Resolving ${fieldType.name} entity with agent ${appAgentName}: ${value}`,
-        );
-        const result = await agent.resolveEntity(
-            fieldType.name,
-            value,
-            agents.getSessionContext(appAgentName),
-        );
-        if (result) {
-            if (result.match === "exact") {
-                return {
-                    sourceAppAgentName: appAgentName,
-                    ...result.entities[0],
-                };
+            // validate result entity
+            if (value.startsWith("${result-")) {
+                if (!resultEntityMap.has(value)) {
+                    throw new Error(
+                        `Result entity reference not found: ${value}`,
+                    );
+                }
+                return;
             }
 
-            if (result.match === "fuzzy" && result.entities.length > 0) {
-                debugActionEntities(
-                    `Fuzzy match for ${fieldType.name} '${value}': ${JSON.stringify(
-                        result.entities,
-                        undefined,
-                        2,
-                    )}`,
+            // Don't resolve other entities if we already have one.
+            if (existing !== undefined) {
+                return existing;
+            }
+
+            if (value.startsWith("${entity-")) {
+                const entity = promptEntityMap?.get(value);
+                if (entity !== undefined) {
+                    // fix up the action to the actual entity name
+                    obj[key] = entity.name;
+                    // Don't allow entity to be used in different app agent name.
+                    return entity.sourceAppAgentName === appAgentName
+                        ? entity
+                        : undefined;
+                }
+                throw new Error(`Entity reference not found: ${value}`);
+            }
+
+            const entity = resolvePromptEntity(
+                appAgentName,
+                promptNameEntityMap,
+                value,
+            );
+            if (entity !== undefined) {
+                return entity;
+            }
+
+            if (fieldType.type === "type-reference") {
+                const actionSchemaFile = agents.getActionSchemaFileForConfig(
+                    agents.getActionConfig(action.schemaName),
                 );
-                // TODO: More advanced matching.
-                return {
-                    sourceAppAgentName: appAgentName,
-                    ...result.entities[0],
-                };
-            }
-        }
-    }
+                const entitySchema =
+                    actionSchemaFile.parsedActionSchema.entitySchemas?.get(
+                        fieldType.name,
+                    );
+                if (entitySchema === undefined) {
+                    return;
+                }
+                const agent = agents.getAppAgent(appAgentName);
+                if (agent.resolveEntity === undefined) {
+                    throw new Error(
+                        `Agent ${appAgentName} declares entity types but does not implement resolveEntity`,
+                    );
+                }
+                debugActionEntities(
+                    `Resolving ${fieldType.name} entity with agent ${appAgentName}: ${value}`,
+                );
+                const result = await agent.resolveEntity(
+                    fieldType.name,
+                    value,
+                    agents.getSessionContext(appAgentName),
+                );
+                if (result === undefined || result.entities.length === 0) {
+                    // REVIEW: let the agent deal with it for now.
+                    return undefined;
+                }
 
-    return undefined;
+                if (result.entities.length > 1) {
+                    clarifyEntities.push({
+                        type: fieldType.name,
+                        name: value,
+                        result,
+                    });
+                    return;
+                }
+                if (result.match === "exact") {
+                    return {
+                        sourceAppAgentName: appAgentName,
+                        ...result.entities[0],
+                    };
+                } else {
+                    // Fuzzy match
+                    debugActionEntities(
+                        `Fuzzy match for ${fieldType.name} '${value}': ${JSON.stringify(
+                            result.entities,
+                            undefined,
+                            2,
+                        )}`,
+                    );
+                    // TODO: we should have a heristic to determine if we should
+                    // clarify the fuzzy match or not.
+                    return {
+                        sourceAppAgentName: appAgentName,
+                        ...result.entities[0],
+                    };
+                }
+            }
+
+            return undefined;
+        },
+        setResultEntity: (name: string, entity: PromptEntity) => {
+            resultEntityMap.add(name);
+        },
+    };
 }
 
 async function getParameterEntities(
@@ -715,7 +824,7 @@ async function getParameterEntities(
     value: unknown,
     originalFieldType: ActionParamType,
     originalActualType: ActionResolvedParamType,
-    entityContext: PendingActionEntityContext,
+    entityResolver: EntityResolver,
     existing?: EntityField,
 ): Promise<EntityField | undefined> {
     const resolvedType = resolveUnionType(
@@ -733,13 +842,12 @@ async function getParameterEntities(
         case "undefined":
             return;
         case "string":
-            return resolveParameterEntity(
+            return entityResolver.resolve(
                 action,
                 obj,
                 key,
                 value,
                 fieldType,
-                entityContext,
                 existing as EntityValue | undefined,
             );
         case "function":
@@ -757,26 +865,12 @@ async function getParameterEntities(
                         `Action parameter type mismatch: ${key}. Expected 'array' but got '${actualType.type}'`,
                     );
                 }
-                const elementFieldType = actualType.elementType;
-                const elementActualType = resolveTypeReference(
-                    actualType.elementType,
-                );
-                if (elementActualType === undefined) {
-                    throw new Error("Unresolved reference");
-                }
-                return Promise.all(
-                    value.map((v, i) =>
-                        getParameterEntities(
-                            action,
-                            value,
-                            i,
-                            v,
-                            elementFieldType,
-                            elementActualType,
-                            entityContext,
-                            (existing as EntityField[] | undefined)?.[i],
-                        ),
-                    ),
+                return getParameterArrayEntities(
+                    action,
+                    value,
+                    actualType,
+                    entityResolver,
+                    existing as EntityField[] | undefined,
                 );
             }
             if (actualType.type !== "object") {
@@ -784,27 +878,19 @@ async function getParameterEntities(
                     `Action parameter type mismatch: ${key}.  Expected 'object' but got '${actualType.type}'`,
                 );
             }
-            return value
-                ? getParameterObjectEntities(
-                      action,
-                      value,
-                      actualType,
-                      entityContext,
-                      existing as EntityObject | undefined,
-                  )
-                : undefined;
+            return getParameterObjectEntities(
+                action,
+                value,
+                actualType,
+                entityResolver,
+                existing as EntityObject | undefined,
+            );
     }
 }
 
-type PendingActionEntityContext = {
-    promptEntityMap: Map<string, PromptEntity> | undefined;
-    promptNameEntityMap: Map<string, PromptEntity | PromptEntity[]> | undefined;
-    resultEntityMap: Map<string, PromptEntity> | undefined;
-    agents: AppAgentManager;
-};
 type PendingAction = {
     executableAction: ExecutableAction;
-    entityContext: PendingActionEntityContext;
+    resultEntityResolver?: EntityResolver | undefined;
 };
 
 function toPromptEntityMap(entities: PromptEntity[] | undefined) {
@@ -838,15 +924,15 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
 }
 
 async function resolveEntities(
+    agents: AppAgentManager,
     action: TypeAgentAction<FullAction>,
-    entityContext: PendingActionEntityContext,
+    entityResolver: EntityResolver,
 ) {
     const parameters = action.parameters;
     if (parameters === undefined) {
         return;
     }
 
-    const agents = entityContext.agents;
     const config = agents.getActionConfig(action.schemaName);
     const actionSchemaFile = agents.getActionSchemaFileForConfig(config);
 
@@ -860,7 +946,7 @@ async function resolveEntities(
         );
     }
 
-    const parameterType = schema?.type.fields.parameters?.type;
+    const parameterType = schema.type.fields.parameters?.type;
     if (parameterType?.type !== "object") {
         throw new Error(
             `Action schema parameter type mismatch: ${action.schemaName}.${action.actionName}`,
@@ -871,7 +957,7 @@ async function resolveEntities(
         action,
         parameters,
         parameterType,
-        entityContext,
+        entityResolver,
         action.entities as EntityObject | undefined,
     );
     if (entities !== undefined) {
@@ -887,43 +973,67 @@ async function resolveEntities(
     return;
 }
 
+// Action generated internally by the dispatcher.
+export type ClarifyEntityAction = {
+    actionName: "clarifyEntities";
+    parameters: ClarifyResolvedEntity;
+};
+
 async function toPendingActions(
-    agents: AppAgentManager,
+    context: CommandHandlerContext,
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
 ): Promise<PendingAction[]> {
-    const resultEntityMap = new Map<string, PromptEntity>();
-    const promptEntityMap = toPromptEntityMap(entities);
-    const promptNameEntityMap = toPromptEntityNameMap(entities);
-    const entityContext: PendingActionEntityContext = {
-        promptEntityMap,
-        promptNameEntityMap,
-        resultEntityMap,
-        agents,
-    };
-    const pending = await Promise.all(
-        actions.map(async (executableAction) => {
-            const pending: PendingAction = {
-                executableAction,
-                entityContext,
-            };
-            await resolveEntities(executableAction.action, entityContext);
+    let resultEntityResolver: EntityResolver | undefined;
+    const agents = context.agents;
+    const entityClarificationEnabled =
+        context.session.getConfig().translation.entity.clarify;
 
-            const resultEntityId = executableAction.resultEntityId;
-            if (resultEntityId !== undefined) {
-                const name = `\${result-${resultEntityId}}`;
-                resultEntityMap.set(name, {
-                    name,
-                    type: [],
-                    sourceAppAgentName: "",
-                });
+    const entityResolver = createParameterEntityResolver(agents, entities);
+    const pendingActions: PendingAction[] = [];
+
+    for (const executableAction of actions) {
+        await resolveEntities(agents, executableAction.action, entityResolver);
+
+        if (
+            entityClarificationEnabled &&
+            entityResolver.clarifyResolvedEntities.length > 0
+        ) {
+            const clarifyEntityAction: TypeAgentAction<ClarifyEntityAction> = {
+                schemaName: DispatcherClarifyName,
+                actionName: "clarifyEntities",
+                // REVIEW: Only clarify one parameter at a time?
+                parameters: entityResolver.clarifyResolvedEntities[0],
+            };
+            return [
+                {
+                    executableAction: {
+                        action: clarifyEntityAction as any,
+                    },
+                },
+            ];
+        }
+
+        const resultEntityId = executableAction.resultEntityId;
+        if (resultEntityId !== undefined) {
+            if (resultEntityResolver === undefined) {
+                resultEntityResolver = createResultEntityResolver();
             }
-            return pending;
-        }),
-    );
-    // clear the fake result.
-    entityContext.resultEntityMap = undefined;
-    return pending;
+            const name = `\${result-${resultEntityId}}`;
+            entityResolver.setResultEntity(name, {
+                name,
+                type: [],
+                sourceAppAgentName: "",
+            });
+        }
+        const pending: PendingAction = {
+            executableAction,
+            resultEntityResolver,
+        };
+        pendingActions.push(pending);
+    }
+
+    return pendingActions;
 }
 
 export async function executeActions(
@@ -939,7 +1049,7 @@ export async function executeActions(
 
     // Even if the action is not executed, resolve the entities for the commandResult.
     const actionQueue: PendingAction[] = await toPendingActions(
-        systemContext.agents,
+        systemContext,
         actions,
         entities,
     );
@@ -951,7 +1061,7 @@ export async function executeActions(
     let actionIndex = 0;
 
     while (actionQueue.length !== 0) {
-        const { executableAction, entityContext } = actionQueue.shift()!;
+        const { executableAction, resultEntityResolver } = actionQueue.shift()!;
         const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
@@ -966,7 +1076,7 @@ export async function executeActions(
             const requestAction = translationResult.requestAction;
             actionQueue.unshift(
                 ...(await toPendingActions(
-                    systemContext.agents,
+                    systemContext,
                     requestAction.actions,
                     requestAction.history?.entities,
                 )),
@@ -974,8 +1084,14 @@ export async function executeActions(
             continue;
         }
         const appAgentName = getAppAgentName(action.schemaName);
-        // resolve again to populate the result entities.
-        await resolveEntities(action, entityContext);
+        // resolve result entities.
+        if (resultEntityResolver !== undefined) {
+            await resolveEntities(
+                systemContext.agents,
+                action,
+                resultEntityResolver,
+            );
+        }
         const result = await executeAction(
             executableAction,
             context,
@@ -993,16 +1109,18 @@ export async function executeActions(
                     )} did not return a result entity.`,
                 );
             }
-
-            let resultEntityMap = entityContext.resultEntityMap;
-            if (resultEntityMap === undefined) {
-                resultEntityMap = new Map<string, PromptEntity>();
-                entityContext.resultEntityMap = resultEntityMap;
+            if (resultEntityResolver === undefined) {
+                throw new Error(
+                    `Internal error: resultEntityResolver is undefined`,
+                );
             }
-            resultEntityMap.set(`\${result-${resultEntityId}}`, {
-                ...result.resultEntity,
-                sourceAppAgentName: appAgentName,
-            });
+            resultEntityResolver.setResultEntity(
+                `\${result-${resultEntityId}}`,
+                {
+                    ...result.resultEntity,
+                    sourceAppAgentName: appAgentName,
+                },
+            );
         }
 
         if (result.additionalActions !== undefined) {
@@ -1015,7 +1133,7 @@ export async function executeActions(
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
                 actionQueue.unshift(
                     ...(await toPendingActions(
-                        systemContext.agents,
+                        systemContext,
                         actions,
                         undefined,
                     )),
