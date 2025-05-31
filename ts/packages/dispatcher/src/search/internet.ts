@@ -3,14 +3,10 @@
 
 import fs from "node:fs";
 import {
-    ChunkChatResponse,
     LookupOptions,
     extractEntities,
-    generateAnswerFromWebPages,
-    promptLib,
 } from "typeagent";
-import { ChatModel, bing, bingWithGrounding, openai } from "aiclient";
-import { PromptSection } from "typechat";
+import { ChatModel, bingWithGrounding, openai, } from "aiclient";
 import {
     ActionContext,
     ActionResult,
@@ -19,66 +15,59 @@ import {
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { AIProjectClient } from "@azure/ai-projects";
 import {
     displayError,
 } from "@typeagent/agent-sdk/helpers/display";
 import { DefaultAzureCredential } from "@azure/identity";
-import { MessageContentUnion, MessageTextContent, MessageTextUrlCitationAnnotation, ThreadMessage } from "@azure/ai-agents";
+import { DoneEvent, ErrorEvent, MessageContentUnion, 
+    MessageDeltaChunk, MessageDeltaTextContent, MessageDeltaTextUrlCitationAnnotation, 
+    MessageStreamEvent, MessageTextContent, MessageTextUrlCitationAnnotation, RunStreamEvent, ThreadMessage } from "@azure/ai-agents";
+import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
 
-function urlToHtml(url: string): string {
-    return `<a href="${url}" target="_blank">${url}</a>`;
+function urlToHtml(url: string, title?: string | undefined): string {
+    return `<a href="${url}" target="_blank">${title ? title : url }</a>`;
 }
 
 function capitalize(str: string): string {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function answerToHtml(answer: ChunkChatResponse, lookup?: string) {
-    let html = "<p><div>";
-    if (answer.generatedText) {
-        if (lookup) {
-            html += `<div><i>${capitalize(lookup)}</i></div>`;
-        }
-        html += "<div>";
-        html += answer.generatedText!.replaceAll("\n", "<br/>");
-        html += "</div>";
-        if (answer.urls && answer.urls.length > 0) {
-            html += "<div>";
-            for (const url of answer.urls) {
-                // create a link to the url that opens in the default browser
-                html += urlToHtml(url) + "<br/>";
-            }
-            html += "</div>";
-        }
-    }
-    html += "</div>";
-    return html;
-}
-
-function _answerToHtml(answer: ThreadMessage): string {
+function answerToHtml(answer: ThreadMessage): string {
     let html = "<p><div>";
 
     const content: MessageContentUnion | undefined = answer.content.find((c) => c.type === "text" && "text" in c);
 
     if (content) {
-
+        let refCount = 0;
         const textContent: MessageTextContent = content as MessageTextContent;
-        let annotations = "References:<br/>";
+        let annotations = "";
+        let text = textContent.text.value.replaceAll("\n", "<br/>");
         textContent.text.annotations.forEach((a) => {
             switch (a.type) {
-                case "url_cititation":
+                case "url_citation":
                     const citation: MessageTextUrlCitationAnnotation = a as MessageTextUrlCitationAnnotation;
-                    annotations += `<a href="${citation.urlCitation.url}" target="_blank">${citation.urlCitation.title}</a>`;
+                    annotations += urlToHtml(citation.urlCitation.url, `${++refCount}. ${citation.urlCitation.title}`);
+                    annotations += "<br/>";
+
+                    if (citation.text) {
+                        text = text.replaceAll(citation.text!, ` <sup>[${urlToHtml(citation.urlCitation.url, `${refCount}`)}]</sup>`);
+                    }
+
                     break;
+                default:
+                    console.warn(`Unsupported citation type: ${a.type}.`);                    
                 // TODO: other annotation types
             }
         });
 
-        html += "<div>";
-        html += `${textContent.text.value.replaceAll("\n", "<br/>")}<br/>${annotations}`;
+        if (annotations.length > 0) {
+            annotations = `<br /><div class=\"references\">References:<br/>${annotations}`;
+        }
+
+        html += "</div><div>";
+        html += `${text}<br/>${annotations}`;
         html += "</div>";
     }
 
@@ -86,14 +75,10 @@ function _answerToHtml(answer: ThreadMessage): string {
     return html;
 }
 
-function answersToHtml(context: LookupContext, messages: ThreadMessage[]): string {
+function answersToHtml(messages: ThreadMessage[]): string {
     let html = "";
-    for (const [lookup, chatResponse] of context.answers) {
-        html += answerToHtml(chatResponse, lookup);
-    }
-    html += "<hr/>";
     for (const m of messages) {
-        html += _answerToHtml(m);
+        html += answerToHtml(m);
     }
     return html;
 }
@@ -105,28 +90,6 @@ function lookupToHtml(lookups: string[]): string {
     lookups = lookups.map((l) => capitalize(l));
     html += lookups.join("<br/>");
     html += "</div>";
-    return html;
-}
-
-function lookupProgressAsHtml(lookupContext: LookupContext): string {
-    // Show what we are searching for
-    let html = lookupToHtml(lookupContext.lookups);
-    // Answers we have already found
-    const isMultiLookup = lookupContext.lookups.length > 1;
-    for (const [lookup, answer] of lookupContext.answers) {
-        html += answerToHtml(answer, isMultiLookup ? lookup : undefined);
-    }
-    // Show lookups in progress
-    for (const [lookup, lookupProgress] of lookupContext.inProgress) {
-        if (lookupProgress.url) {
-            // What we are searching for now and on which url
-            const searchUrl =
-                lookupProgress.counter > 1
-                    ? `<div>${urlToHtml(lookupProgress.url)}<b> | [${lookupProgress.counter}]</b></div>`
-                    : `<div>${urlToHtml(lookupProgress.url)}</div>`;
-            html += `<br/><div><b>Searching for</b> <i>${lookup}</i> on:${searchUrl}</div>`;
-        }
-    }
     return html;
 }
 
@@ -156,20 +119,6 @@ async function getLookupConfig() {
     return config.lookup;
 }
 
-type LookupContext = {
-    request: string; // request to be answered
-    lookups: string[]; // Lookups we are running
-    sites: string[] | undefined; // Sites we are looking at
-    answers: Map<string, ChunkChatResponse>; // lookup -> final answer for lookup
-    inProgress: Map<string, LookupProgress>; // lookup -> progress for lookup
-};
-
-type LookupProgress = {
-    url: string; // On what web site
-    counter: number; // How many chunks have we looked at?
-    answerSoFar?: ChunkChatResponse | undefined;
-};
-
 type LookupSettings = {
     fastMode: boolean;
     answerGenModel: ChatModel;
@@ -192,75 +141,29 @@ export async function handleLookup(
     if (!lookups || lookups.length === 0) {
         return literalResponse;
     }
-    if (lookups.length > 3) {
-        lookups = lookups.slice(0, 3);
-    }
 
-    const lookUpConfig = await getLookupConfig();
-    // If running single lookup, run documentConcurrency chunks per page simultaneously
-    // Else we will be running at least more than 1 lookups in parallel anyway
-    //const documentConcurrency = lookups.length === 1 ? 2 : 1;
-    let documentConcurrency = 1;
-    if (lookups.length === 1 && lookUpConfig?.documentConcurrency) {
-        documentConcurrency = lookUpConfig.documentConcurrency;
-    }
     context.actionIO.setDisplay({
         type: "html",
         content: lookupToHtml(lookups),
     });
 
     // run bing with grounding lookup
-    //context.actionIO.appendDisplay({ type: "html", content: "<br/><hr/><br/>"});
-    const msgs = await runAgentConversation(originalRequest, context);
+    const results = await runGroundingLookup(request, lookups, sites, context);
 
-    const lookupContext: LookupContext = {
-        request,
-        lookups,
-        sites,
-        answers: new Map<string, ChunkChatResponse>(),
-        inProgress: new Map<string, LookupProgress>(),
-    };
-
-    const siteQuery = sites ? ` site:${sites.join("|")}` : "";
-    // Run all lookups concurrently
-    const results = await Promise.all(
-        lookups.map((l) =>
-            runLookup(
-                `${l}${siteQuery}`,
-                lookupContext,
-                context,
-                settings,
-                documentConcurrency,
-            ),
-        ),
-    );
     if (results.length > 0) {
-        // Verify we got some answers at least
-        const hasValidResults = results.some((r) => r !== undefined);
-        if (hasValidResults) {
-            // Capture answers in the turn impression to return
-            literalResponse = updateActionResult(
-                lookupContext,
-                literalResponse,
-                msgs
-            );
-            context.actionIO.setDisplay(literalResponse.displayContent);
-            // Generate entities if needed
-            if (settings.entityGenModel) {
-                const entities = await runEntityExtraction(
-                    lookupContext,
-                    settings,
-                );
-                if (entities.length > 0) {
-                    literalResponse.entities.push(...entities);
-                }
-            }
-        } else {
-            literalResponse = createActionResult(
-                "There was an error searching for information on Bing.\nPlease ensure that:\n- The BING_API_KEY is correctly configured.\n- Bing is available",
-            );
+        updateActionResult(literalResponse, results);
+        context.actionIO.setDisplay(literalResponse.displayContent);
+
+        if (settings.entityGenModel) {
+            const entities = await runEntityExtraction(results, settings);
+            literalResponse.entities = literalResponse.entities.concat(entities);
         }
+    } else {
+        literalResponse = createActionResult(
+            "There was an error searching for information on Grounding with Bing.\nPlease ensure that:\n- The BING_WITH_GROUNDING_KEY is correctly configured.\n- Bing is available",
+        );
     }
+
     return literalResponse;
 }
 
@@ -309,93 +212,51 @@ export async function getLookupSettings(
     };
 }
 
-function getLookupInstructions(): PromptSection[] {
-    return [promptLib.dateTimePromptSection()];
-}
+// function getLookupInstructions(): PromptSection[] {
+//     return [promptLib.dateTimePromptSection()];
+// }
 
 function updateActionResult(
-    context: LookupContext,
     literalResponse: ActionResultSuccess,
     messages: ThreadMessage[]
 ): ActionResultSuccess {
-    if (context.answers.size > 0) {
+    if (messages.length > 0) {
         literalResponse.literalText = "";
         literalResponse.displayContent = {
             type: "html",
-            content: answersToHtml(context, messages),
-        };
-        for (const [_lookup, chatResponse] of context.answers) {
-            literalResponse.literalText += chatResponse.generatedText! + "\n";
-            if (chatResponse.entities && chatResponse.entities.length > 0) {
-                literalResponse.entities ??= [];
-                literalResponse.entities.push(...chatResponse.entities);
-            }
-        }
+            content: answersToHtml(messages),
+        };      
     }
+
     return literalResponse;
 }
 
-async function runLookup(
-    lookup: string,
-    lookupContext: LookupContext,
-    actionContext: ActionContext<CommandHandlerContext>,
-    settings: LookupSettings,
-    concurrency: number,
-) {
-    updateStatus();
-    //
-    // Lookups are implemented using a web search
-    //
-    let firstToken: boolean = true;
-
-    const urls = await searchWeb(lookup, settings.maxSearchResults);
-    if (!urls) {
-        return undefined;
-    }
-    const answer = await generateAnswerFromWebPages(
-        settings.fastMode ? "Speed" : "Quality",
-        settings.answerGenModel,
-        urls,
-        lookupContext.request,
-        settings.lookupOptions,
-        concurrency,
-        getLookupInstructions(),
-        (url, answerSoFar) => {
-            if (firstToken) {
-                actionContext.profiler?.mark("firstToken");
-                firstToken = false;
-            }
-
-            updateLookupProgress(lookupContext, lookup, url, answerSoFar);
-            updateStatus();
-        },
-    );
-    if (answer && answer.answerStatus !== "NotAnswered") {
-        lookupContext.answers.set(lookup, answer);
-    }
-    lookupContext.inProgress.delete(lookup);
-    updateStatus();
-    return answer;
-
-    function updateStatus() {
-        actionContext.actionIO.setDisplay({
-            type: "html",
-            content: lookupProgressAsHtml(lookupContext),
-        });
-    }
-}
-
 async function runEntityExtraction(
-    context: LookupContext,
+    messages: ThreadMessage[],
     settings: LookupSettings,
 ): Promise<Entity[]> {
     if (!settings.entityGenModel) {
         return [];
     }
     let entityText = "";
-    for (const [lookup, answer] of context.answers) {
-        if (answer.generatedText && answer.entities.length === 0) {
-            entityText += `${lookup}:\n${answer.generatedText}\n`;
+    for (const message of messages) {
+        for (const content of message.content) {
+            const textContent = content as MessageTextContent;
+
+            if (textContent) {
+                entityText += `${textContent.text.value}\n`;
+
+                for(const a of textContent.text.annotations) {
+                    switch (a.type) {
+                        case 'url_citation':
+                            const url = a as MessageTextUrlCitationAnnotation;
+                            entityText += `Reference: ${url.urlCitation.title} - ${url.urlCitation.url}`;
+                            break;
+                        default:
+                            console.warn(`Unsupported citation type: ${a.type}.`);
+                    }                    
+                }
+            }
         }
     }
     if (!entityText) {
@@ -408,55 +269,11 @@ async function runEntityExtraction(
     return results;
 }
 
-/**
- * Search bing
- * @param query
- * @returns urls of relevant web pages
- */
-async function searchWeb(
-    query: string,
-    maxSearchResults: number = 3,
-): Promise<string[] | undefined> {
-    const searchEngineResult = await bing.createBingSearch();
-    if (!searchEngineResult.success) {
-        console.log(searchEngineResult.message);
-        return undefined;
-    }
-    const searchEngine = searchEngineResult.data;
-    const matches = await searchEngine.webSearch(query, {
-        count: maxSearchResults,
-    });
-    if (!matches.success) {
-        return undefined;
-    }
-    let webPages = matches.data;
-    if (webPages.length > maxSearchResults) {
-        webPages = webPages.slice(0, maxSearchResults);
-    }
-    return webPages.map((webPage) => webPage.url);
-}
-
-function updateLookupProgress(
-    context: LookupContext,
-    lookup: string,
-    url?: string,
-    answerSoFar?: ChunkChatResponse,
-) {
-    let progress = context.inProgress.get(lookup);
-    if (!progress || progress.url !== url) {
-        progress = {
-            url: url ?? "",
-            counter: 0,
-        };
-        context.inProgress.set(lookup, progress);
-    }
-    progress.answerSoFar = answerSoFar;
-    progress.counter++;
-}
-
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
-export async function runAgentConversation(
-    userRequest: string,
+export async function runGroundingLookup(
+    question: string,
+    lookups: string[],
+    sites: string[] | undefined,
     context: ActionContext<any>,
 ): Promise<ThreadMessage[]> {
 
@@ -466,74 +283,86 @@ export async function runAgentConversation(
 
     const project = new AIProjectClient(groundingConfig.endpoint!, new DefaultAzureCredential());
 
-    const agent = await project.agents.getAgent(
-        "asst_qBRBuICfBaNYDH3WnpbBUSb0",
-    );
+    const agent = await project.agents.getAgent(groundingConfig.agent!);
     console.log(`Retrieved agent: ${agent.name}`);
 
-    const thread = await project.agents.threads.create({});
+    const thread = await project.agents.threads.create();
     
-    // const thread = await project.agents.threads.get(
-    //     "thread_pGqNCJlb8vBpxX8mNzBWBvt8",
-    // );
-    // console.log(`Retrieved thread, thread ID: ${thread.id}`);
-
-    const message = await project.agents.messages.create(
+    // the question that needs answering
+    await project.agents.messages.create(
         thread.id,
         "user",
-        userRequest,
+        `Here is my question: '${question}.\nHere are the internet search terms: ${lookups.join(",")}\nHere are the sites I want to search: ${sites?.join("|")}`
     );
-    console.log(`Created message, message ID: ${message.id}`);
 
     // Create run
-    // TODO: implement streaming API when it's available
     try {
-        //let run2 = await project.agents.runs.create(thread.id, agent.id, { stream: true });
-        
-        let run = await project.agents.runs.createAndPoll(thread.id, agent.id, {
-            stream: false,
-        });
+        let run = await project.agents.runs.create(thread.id, agent.id).stream();
+        for await (const eventMsg of run) {
+            switch(eventMsg.event) {
+                case RunStreamEvent.ThreadRunCreated:
+                    context.actionIO.setDisplay({ type: "html", content: ""});
+                    break;
+                case RunStreamEvent.ThreadRunCompleted:
+                    break;
+                case MessageStreamEvent.ThreadMessageDelta:
+                    const messageDelta = eventMsg.data as MessageDeltaChunk;
+                    messageDelta.delta.content.forEach((contentPart) => {
+                    if (contentPart.type === "text") {
+                        const textContent = contentPart as MessageDeltaTextContent;                        
+                        let textValue = textContent.text?.value || "";
 
-        if (run.status === "failed") {
-            console.error(`Run failed: `, run.lastError);
+                        if (textContent.text?.annotations) {
+                            textContent.text?.annotations.forEach((a) => {                                
+                                if (a) {
+                                    switch (a.type) {
+                                        case "url_citation":
+                                            const annotation = a as MessageDeltaTextUrlCitationAnnotation;
+                                            textValue = `[${urlToHtml((annotation as any).url_citation, `${annotation.index + 1}`)}]`;
+                                            break;
+                                        default:
+                                            console.warn(`Unsupported citation type: ${a.type}.`);                    
+                                        // TODO: other annotation types
+                                    }
+                                }
+                            });
+                        }
+
+                        context.actionIO.appendDisplay({
+                            type: "html",
+                            content: `${textValue.replace("\n", "<br/>")}`,
+                        });                        
+                    }
+                    });                    
+                    break;
+                case ErrorEvent.Error:
+                    break;
+                case DoneEvent.Done:
+                    break;
+            }
         }
-
-        console.log(`Run completed with status: ${run.status}`);
 
         // Retrieve messages
         const messages = await project.agents.messages.list(thread.id, {
             order: "asc",
         });
 
-        // Display messages
+        // accumulate assistant messages
         const msgs: ThreadMessage[] = [];
         for await (const m of messages) {
-
             if (m.role === "assistant") {
                 // TODO: handle multi-modal content
                 const content: MessageContentUnion | undefined = m.content.find((c) => c.type === "text" && "text" in c);
                 if (content) {
                     msgs.push(m);
-                    // const textContent: MessageTextContent = content as MessageTextContent;
-                    // let annotations = "";
-                    // textContent.text.annotations.forEach((a) => {
-                    //     switch (a.type) {
-                    //         case "url_cititation":
-                    //             const citation: MessageTextUrlCitationAnnotation = a as MessageTextUrlCitationAnnotation;
-                    //             annotations += `<a href="${citation.urlCitation.url}" target="_blank">${citation.urlCitation.title}</a>`;
-                    //             break;
-                    //         // TODO: other annotation types
-                    //     }
-                    // });
-
-                    // context.actionIO.appendDisplay({
-                    //     type: "html",
-                    //     content: `${textContent.text.value.replace("\n", "<br/>")}<br/>${annotations}`,
-                    // });
                 }
             }
         }
 
+        // delete the thread we just created since we are currently one and done
+        project.agents.threads.delete(thread.id);
+
+        // return assistant messages
         return msgs;
 
     } catch (error) {
