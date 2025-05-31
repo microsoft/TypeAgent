@@ -130,7 +130,7 @@ function resolveTypes(
         case "type-reference":
             if (type.definition !== undefined) {
                 throw new Error(
-                    "Internal error: type reference already have a definition",
+                    `Internal error: type reference already have a definition ${type.name}`,
                 );
             }
             const definition = definitions[type.name];

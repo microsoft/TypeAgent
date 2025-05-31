@@ -100,7 +100,7 @@ function loadCachedActionSchemaFile(
             schemaName: record.schemaName,
             sourceHash: record.sourceHash,
             parsedActionSchema: fromJSONParsedActionSchema(
-                record.parsedActionSchema,
+                structuredClone(record.parsedActionSchema), // Clone to avoid modifying the original data
             ),
         };
     } catch (e: any) {
