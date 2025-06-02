@@ -145,6 +145,7 @@ export async function generateAnswer(
         Result<answerSchema.AnswerResponse>
     >,
     contextOptions?: AnswerContextOptions,
+    promptPreamble?: PromptSection[] | undefined,
 ): Promise<Result<answerSchema.AnswerResponse>> {
     const context = answerContextFromSearchResult(
         conversation,
@@ -154,7 +155,11 @@ export async function generateAnswer(
     const contextContent = answerContextToString(context);
     if (contextContent.length <= generator.settings.maxCharsInBudget) {
         // Context is small enough
-        return generator.generateAnswer(question, contextContent);
+        return generator.generateAnswer(
+            question,
+            contextContent,
+            promptPreamble,
+        );
     }
     //
     // Use chunks
