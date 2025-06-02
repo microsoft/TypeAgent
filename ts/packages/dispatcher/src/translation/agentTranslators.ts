@@ -34,7 +34,7 @@ import {
     generateActionSchema,
     generateSchemaTypeDefinition,
     ActionSchemaObject,
-    ActionSchemaCreator as sc,
+    SchemaCreator as sc,
     GenerateSchemaOptions,
 } from "action-schema";
 import { ActionConfig } from "./actionConfig.js";

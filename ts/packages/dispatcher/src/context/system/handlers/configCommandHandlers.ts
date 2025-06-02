@@ -945,6 +945,38 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                 },
             },
         },
+        entity: {
+            description: "Entity translation configuration",
+            commands: {
+                resolve: getToggleHandlerTable(
+                    "entity resolution",
+                    async (context, enable) => {
+                        await changeContextConfig(
+                            { translation: { entity: { resolve: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                filter: getToggleHandlerTable(
+                    "entity filter using LLM",
+                    async (context, enable) => {
+                        await changeContextConfig(
+                            { translation: { entity: { filter: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                clarify: getToggleHandlerTable(
+                    "entity clarification",
+                    async (context, enable) => {
+                        await changeContextConfig(
+                            { translation: { entity: { clarify: enable } } },
+                            context,
+                        );
+                    },
+                ),
+            },
+        },
     },
 };
 

@@ -5,7 +5,7 @@ import { error, Result, success } from "typechat";
 import {
     generateActionSchema,
     validateAction,
-    ActionSchemaCreator as sc,
+    SchemaCreator as sc,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaTypeDefinition,
     ActionSchemaUnion,

@@ -14,7 +14,7 @@ import {
 import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ChatHistoryEntry } from "../../chatHistory.js";
-import { ActionSchemaCreator as sc, validateType } from "action-schema";
+import { SchemaCreator as sc, validateType } from "action-schema";
 
 class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";

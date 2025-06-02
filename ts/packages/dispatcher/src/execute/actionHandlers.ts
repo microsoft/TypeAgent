@@ -73,6 +73,7 @@ import {
     ActionParamArray,
 } from "action-schema";
 import { AppAgentManager } from "../context/appAgentManager.js";
+import { filterEntitySelection } from "../translation/entityResolution.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 const debugActionEntities = registerDebug(
@@ -689,9 +690,16 @@ export type ClarifyResolvedEntity = {
     result: ResolveEntityResult;
 };
 
+type ParameterEntityResolverOptions = {
+    resolve: boolean;
+    clarify: boolean;
+    filter: boolean;
+};
+
 function createParameterEntityResolver(
     agents: AppAgentManager,
     entities: PromptEntity[] | undefined,
+    options?: ParameterEntityResolverOptions,
 ): ParameterEntityResolver {
     const resultEntityMap = new Set<string>();
     const clarifyEntities: ClarifyResolvedEntity[] = [];
@@ -748,7 +756,7 @@ function createParameterEntityResolver(
                 return entity;
             }
 
-            if (fieldType.type === "type-reference") {
+            if (options?.resolve && fieldType.type === "type-reference") {
                 const actionSchemaFile = agents.getActionSchemaFileForConfig(
                     agents.getActionConfig(action.schemaName),
                 );
@@ -778,7 +786,28 @@ function createParameterEntityResolver(
                     return undefined;
                 }
 
-                if (result.entities.length > 1) {
+                debugActionEntities(
+                    `Resolved ${fieldType.name} entity for '${value}': ${JSON.stringify(
+                        result,
+                        undefined,
+                        2,
+                    )}`,
+                );
+
+                if (
+                    options?.filter &&
+                    result.match === "fuzzy" &&
+                    result.entities.length > 1
+                ) {
+                    // An extra pass to use LLM to narrow down the selection for fuzzy match.
+                    await filterEntitySelection(
+                        action,
+                        fieldType.name,
+                        value,
+                        result,
+                    );
+                }
+                if (options?.clarify && result.entities.length > 1) {
                     clarifyEntities.push({
                         type: fieldType.name,
                         name: value,
@@ -792,15 +821,7 @@ function createParameterEntityResolver(
                         ...result.entities[0],
                     };
                 } else {
-                    // Fuzzy match
-                    debugActionEntities(
-                        `Fuzzy match for ${fieldType.name} '${value}': ${JSON.stringify(
-                            result.entities,
-                            undefined,
-                            2,
-                        )}`,
-                    );
-                    // TODO: we should have a heristic to determine if we should
+                    // TODO: we should have a heuristic to determine if we should
                     // clarify the fuzzy match or not.
                     return {
                         sourceAppAgentName: appAgentName,
@@ -986,19 +1007,17 @@ async function toPendingActions(
 ): Promise<PendingAction[]> {
     let resultEntityResolver: EntityResolver | undefined;
     const agents = context.agents;
-    const entityClarificationEnabled =
-        context.session.getConfig().translation.entity.clarify;
-
-    const entityResolver = createParameterEntityResolver(agents, entities);
+    const entityResolver = createParameterEntityResolver(
+        agents,
+        entities,
+        context.session.getConfig().translation.entity,
+    );
     const pendingActions: PendingAction[] = [];
 
     for (const executableAction of actions) {
         await resolveEntities(agents, executableAction.action, entityResolver);
 
-        if (
-            entityClarificationEnabled &&
-            entityResolver.clarifyResolvedEntities.length > 0
-        ) {
+        if (entityResolver.clarifyResolvedEntities.length > 0) {
             const clarifyEntityAction: TypeAgentAction<ClarifyEntityAction> = {
                 schemaName: DispatcherClarifyName,
                 actionName: "clarifyEntities",
@@ -1035,7 +1054,6 @@ async function toPendingActions(
 
     return pendingActions;
 }
-
 export async function executeActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
