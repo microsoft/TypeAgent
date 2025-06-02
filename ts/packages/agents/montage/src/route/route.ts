@@ -66,7 +66,9 @@ app.get("/image", (req: Request, res: Response) => {
         return;
     } else {
         const normalized = path.resolve(file);
+        debug(`Normalized path: ${normalized}`);
         allowedFolders.forEach((folder) => {
+            debug(`Checking folder: ${folder}`);
             if (normalized.startsWith(path.resolve(folder))) {
                 // send the file
                 res.sendFile(normalized);
@@ -141,7 +143,7 @@ function sendThumbnailorOriginalImage(
 }
 
 /**
- * Gets the knowledge reponse file for the supplied image (if available)
+ * Gets the knowledge response file for the supplied image (if available)
  * Used for debugging purposes only.
  */
 app.get("/knowledgeResponse", (req: Request, res: Response) => {
@@ -225,7 +227,7 @@ app.get("/lastMessage", async (req, res) => {
  */
 function sendDataToClients(message: any) {
     // when no client is here just queue messages to drain later
-    if (clients.length == 0) {
+    if (clients.length === 0) {
         messageQueue.push(message);
     } else {
         lastMessage = message;

@@ -464,9 +464,7 @@ async function handleMontageAction(
                     action.parameters.files =
                         agentContext.imageCollection?.messages
                             .getAll()
-                            .map((img) =>
-                                img.metadata.img.fileName.toLocaleLowerCase(),
-                            );
+                            .map((img) => img.metadata.img.fileName);
                 }
             } else {
                 result = createActionResultFromError(
@@ -806,11 +804,7 @@ async function findRequestedImages(
                                             });
 
                                         if (f?.value) {
-                                            imageFiles.add(
-                                                f?.value
-                                                    .toString()
-                                                    .toLocaleLowerCase(),
-                                            );
+                                            imageFiles.add(f.value.toString());
                                         }
                                     } else {
                                         // for non-images trace it back to the originating image and add that
@@ -821,9 +815,7 @@ async function findRequestedImages(
                                                 imgRange.messageOrdinal,
                                             );
 
-                                        imageFiles.add(
-                                            img.metadata.fileName.toLocaleLowerCase(),
-                                        );
+                                        imageFiles.add(img.metadata.fileName);
                                     }
                                 } else if (
                                     semanticRef.knowledgeType === "action"
@@ -834,9 +826,7 @@ async function findRequestedImages(
                                         context.imageCollection!.messages.get(
                                             imgRange.messageOrdinal,
                                         );
-                                    imageFiles.add(
-                                        img.metadata.fileName.toLocaleLowerCase(),
-                                    );
+                                    imageFiles.add(img.metadata.fileName);
                                 } else if (
                                     semanticRef.knowledgeType === "tag"
                                 ) {
