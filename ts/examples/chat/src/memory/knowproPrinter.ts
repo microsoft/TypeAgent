@@ -558,7 +558,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
-    public writeNaturalLanguageContext(context: kp.LanguageSearchDebugContext) {
+    public writeDebugContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
             this.writeJson(context.searchQuery);

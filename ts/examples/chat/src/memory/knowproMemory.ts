@@ -292,7 +292,7 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
-        const [searchResults, searchContext] = await runAnswerSearch(namedArgs);
+        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -300,7 +300,7 @@ export async function createKnowproCommands(
         if (namedArgs.debug) {
             context.printer.writeInColor(chalk.gray, () => {
                 context.printer.writeLine();
-                context.printer.writeNaturalLanguageContext(searchContext);
+                context.printer.writeDebugContext(debugContext);
             });
         }
         if (!hasConversationResults(searchResults.data)) {
@@ -315,9 +315,16 @@ export async function createKnowproCommands(
             return;
         }
         for (let i = 0; i < searchResults.data.length; ++i) {
+            const searchQueryExpr = debugContext.searchQueryExpr![i];
+            if (!namedArgs.debug) {
+                // In debug mode, we already printed the entire debug context..
+                for (const selectExpr of searchQueryExpr.selectExpressions) {
+                    context.printer.writeSelectExpr(selectExpr, false);
+                }
+            }
             writeSearchResult(
                 namedArgs,
-                searchContext.searchQueryExpr![i],
+                searchQueryExpr,
                 searchResults.data[i],
             );
         }
@@ -356,7 +363,7 @@ export async function createKnowproCommands(
         if (namedArgs.debug) {
             context.printer.writeInColor(chalk.gray, () => {
                 context.printer.writeLine();
-                context.printer.writeNaturalLanguageContext(debugContext);
+                context.printer.writeDebugContext(debugContext);
             });
         }
         if (!hasConversationResults(searchResults.data)) {
@@ -589,10 +596,6 @@ export async function createKnowproCommands(
         searchQueryExpr: kp.SearchQueryExpr,
         searchResults: kp.ConversationSearchResult,
     ): void {
-        for (const selectExpr of searchQueryExpr.selectExpressions) {
-            context.printer.writeSelectExpr(selectExpr, namedArgs.debug);
-        }
-
         context.printer.writeLine("####");
         context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
         context.printer.writeLine("####");
