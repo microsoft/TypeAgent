@@ -36,6 +36,7 @@ import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
+//import { error, PromptSection, Result } from "typechat";
 import { Result } from "typechat";
 
 export async function runKnowproMemory(): Promise<void> {
@@ -775,3 +776,34 @@ export async function createKnowproCommands(
 export interface AnswerSearchContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
+
+/*
+export async function generateMultipartAnswer(
+    conversation: kp.IConversation,
+    generator: kp.IAnswerGenerator,
+    question: string,
+    searchResults: kp.ConversationSearchResult[],
+    progress?: asyncArray.ProcessProgress<
+        kp.AnswerContext,
+        Result<kp.AnswerResponse>
+    >,
+    contextOptions?: kp.AnswerContextOptions,
+): Promise<Result<kp.AnswerResponse>> {
+    let preamble: PromptSection[] | undefined;
+    for (let i = 0; i < searchResults.length; ++i) {
+        const searchResult = searchResults[i];
+        const answer = await kp.generateAnswer(
+            conversation,
+            generator,
+            searchResult.rawSearchQuery ?? question,
+            searchResult,
+            progress,
+            contextOptions,
+        );
+        if (!answer.success) {
+            return answer;
+        }
+    }
+    return error("No answer");
+}
+*/

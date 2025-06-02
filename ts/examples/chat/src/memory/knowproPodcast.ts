@@ -309,10 +309,7 @@ export async function createKnowproPodcastCommands(
         if (!context.podcast) {
             return;
         }
-        if (namedArgs.buildIndex) {
-            await podcastBuildIndex(namedArgs);
-            await podcastSave(namedArgs);
-        } else {
+        if (!namedArgs.buildIndex) {
             context.printer.writeLine();
             context.printer.writeMessages(context.podcast.messages);
         }
