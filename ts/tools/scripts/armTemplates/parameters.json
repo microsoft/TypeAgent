@@ -40,6 +40,12 @@
     },
     "vaults_name": {
       "value": null
+    },
+    "accounts_typeagent_test_agent_resource_name": {
+      "value": null
+    },
+    "accounts_bing_with_grounding_externalid": {
+      "value": null
     }
   }
 }
