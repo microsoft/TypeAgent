@@ -10,7 +10,7 @@ import registerDebug from "debug";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import {
     generateSchemaTypeDefinition,
-    ActionSchemaCreator as sc,
+    SchemaCreator as sc,
 } from "action-schema";
 import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
