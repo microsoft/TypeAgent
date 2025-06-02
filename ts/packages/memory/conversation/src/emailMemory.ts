@@ -50,7 +50,11 @@ export class EmailMemory
         public storageProvider: ms.sqlite.SqliteStorageProvider,
         settings?: EmailMemorySettings,
     ) {
-        super(settings ?? createMemorySettings());
+        settings ??= createMemorySettings(
+            64,
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
+        super(settings);
         this.serializer = new EmailMessageSerializer();
         this.indexingState = createIndexingState();
         this.messages = storageProvider.createMessageCollection<EmailMessage>(
