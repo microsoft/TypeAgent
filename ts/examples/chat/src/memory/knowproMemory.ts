@@ -38,6 +38,7 @@ import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import * as cm from "conversation-memory";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
+import { Result } from "typechat";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -353,7 +354,7 @@ export async function createKnowproCommands(
         }
     }
 
-    function answerDefNew(): CommandMetadata {
+    function answerDef(): CommandMetadata {
         const def = searchDefNew();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
@@ -372,37 +373,13 @@ export async function createKnowproCommands(
         def.options!.choices = arg("Answer choices, separated by ';'");
         return def;
     }
-    commands.kpAnswer.metadata = answerDefNew();
+    commands.kpAnswer.metadata = answerDef();
     async function answer(args: string[]): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, answerDefNew());
-        const searchText = namedArgs.query;
-        const debugContext: kp.LanguageSearchDebugContext = {};
-
-        const options: kp.LanguageSearchOptions = {
-            ...createSearchOptions(namedArgs),
-            compileOptions: {
-                exactScope: namedArgs.exactScope,
-                applyScope: namedArgs.applyScope,
-            },
-        };
-        options.exactMatch = namedArgs.exact;
-        if (namedArgs.fallback) {
-            options.fallbackRagOptions = {
-                maxMessageMatches: options.maxMessageMatches,
-                maxCharsInBudget: options.maxCharsInBudget,
-                thresholdScore: 0.7,
-            };
-        }
-        const langFilter = createLangFilter(undefined, namedArgs);
-        const searchResults = await runSearch(
-            searchText,
-            options,
-            langFilter,
-            debugContext,
-        );
+        const namedArgs = parseNamedArguments(args, answerDef());
+        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -426,7 +403,8 @@ export async function createKnowproCommands(
                 searchResult.messageMatches = [];
             }
             context.answerGenerator.settings.fastStop = namedArgs.fastStop;
-            let question = searchResult.rawSearchQuery ?? searchText;
+            let question =
+                searchResult.rawSearchQuery ?? debugContext.searchText;
             if (choices && choices.length > 0) {
                 question = kp.createMultipleChoiceQuestion(question, choices);
             }
@@ -488,23 +466,6 @@ export async function createKnowproCommands(
             namedArgs.distinct,
         );
         return true;
-    }
-
-    async function runSearch(
-        searchText: string,
-        options?: kp.LanguageSearchOptions,
-        langFilter?: kp.LanguageSearchFilter,
-        debugContext?: kp.LanguageSearchDebugContext,
-    ) {
-        const searchResults = getLangSearchResult(
-            context.conversation!,
-            context.queryTranslator,
-            searchText,
-            options,
-            langFilter,
-            debugContext,
-        );
-        return searchResults;
     }
 
     function searchRagDef(): CommandMetadata {
@@ -652,6 +613,58 @@ export async function createKnowproCommands(
     /*---------- 
       End COMMANDS
     ------------*/
+    /**
+     * Run a search whose results are then used to generate answers
+     * @param namedArgs
+     * @returns
+     */
+    async function runAnswerSearch(
+        namedArgs: NamedArgs,
+    ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerSearchContext]> {
+        const searchText = namedArgs.query;
+        const debugContext: AnswerSearchContext = { searchText };
+
+        const options: kp.LanguageSearchOptions = {
+            ...createSearchOptions(namedArgs),
+            compileOptions: {
+                exactScope: namedArgs.exactScope,
+                applyScope: namedArgs.applyScope,
+            },
+        };
+        options.exactMatch = namedArgs.exact;
+        if (namedArgs.fallback) {
+            options.fallbackRagOptions = {
+                maxMessageMatches: options.maxMessageMatches,
+                maxCharsInBudget: options.maxCharsInBudget,
+                thresholdScore: 0.7,
+            };
+        }
+        const langFilter = createLangFilter(undefined, namedArgs);
+        const searchResults = await getSearchResults(
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
+        return [searchResults, debugContext];
+    }
+
+    async function getSearchResults(
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+        langFilter?: kp.LanguageSearchFilter,
+        debugContext?: kp.LanguageSearchDebugContext,
+    ) {
+        const searchResults = getLangSearchResult(
+            context.conversation!,
+            context.queryTranslator,
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
+        return searchResults;
+    }
 
     function createSearchGroup(
         termArgs: string[],
@@ -797,4 +810,8 @@ export async function createKnowproCommands(
         }
         return when;
     }
+}
+
+export interface AnswerSearchContext extends kp.LanguageSearchDebugContext {
+    searchText: string;
 }
