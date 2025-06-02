@@ -13,7 +13,7 @@ import {
     parseActionSchemaSource,
     generateSchemaTypeDefinition,
 } from "action-schema";
-import { ActionSchemaCreator as sc } from "action-schema";
+import { SchemaCreator as sc } from "action-schema";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";

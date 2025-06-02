@@ -121,7 +121,9 @@ export type DispatcherConfig = {
             };
         };
         entity: {
+            resolve: boolean; // resolve entities in the request
             clarify: boolean; // clarify entity names when multiple entities match
+            filter: boolean;
         };
     };
 
@@ -200,7 +202,9 @@ const defaultSessionConfig: SessionConfig = {
             },
         },
         entity: {
-            clarify: false, // TODO : default to false for now until we fresh out the entity clarification flow.
+            resolve: true,
+            filter: true,
+            clarify: false, // TODO: enable when it is ready.
         },
     },
     execution: {
