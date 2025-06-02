@@ -7,7 +7,6 @@ import {
     arg,
     argBool,
     argNum,
-    askYesNo,
     CommandHandler,
     CommandMetadata,
     displayClosestCommands,
@@ -35,7 +34,6 @@ import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
 import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
-import * as cm from "conversation-memory";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
 import { Result } from "typechat";
@@ -250,7 +248,7 @@ export async function createKnowproCommands(
         }
     }
 
-    function searchDef(): CommandMetadata {
+    function searchDefBase(): CommandMetadata {
         return {
             description:
                 "Search using natural language and old knowlege-processor search filters",
@@ -268,8 +266,8 @@ export async function createKnowproCommands(
             },
         };
     }
-    function searchDefNew(): CommandMetadata {
-        const def = searchDef();
+    function searchDef(): CommandMetadata {
+        const def = searchDefBase();
         def.description = "Search using natural language";
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
@@ -288,74 +286,45 @@ export async function createKnowproCommands(
         def.options.tag = arg("Tag to filter by");
         return def;
     }
-    commands.kpSearch.metadata = searchDefNew();
+    commands.kpSearch.metadata = searchDef();
     async function search(args: string[], io: InteractiveIo): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, searchDefNew());
-        const textQuery = namedArgs.query;
-        const result =
-            context.conversation instanceof cm.Memory
-                ? await context.conversation.searchQueryFromLanguage(textQuery)
-                : await kp.searchQueryFromLanguage(
-                      context.conversation!,
-                      context.queryTranslator,
-                      textQuery,
-                  );
-        if (!result.success) {
-            context.printer.writeError(result.message);
+        const namedArgs = parseNamedArguments(args, searchDef());
+        const [searchResults, searchContext] = await runAnswerSearch(namedArgs);
+        if (!searchResults.success) {
+            context.printer.writeError(searchResults.message);
             return;
         }
-        let exactScope = namedArgs.exactScope;
-        let compileOptions = kp.createLanguageQueryCompileOptions();
-        compileOptions.exactScope = exactScope;
-        let retried = !exactScope;
-        const searchQuery = result.data;
-        context.printer.writeJson(searchQuery, true);
-        while (true) {
-            const searchQueryExpressions = kp.compileSearchQuery(
-                context.conversation!,
-                searchQuery,
-                {
-                    exactScope,
-                    applyScope: namedArgs.applyScope,
-                },
+        if (namedArgs.debug) {
+            context.printer.writeInColor(chalk.gray, () => {
+                context.printer.writeLine();
+                context.printer.writeNaturalLanguageContext(searchContext);
+            });
+        }
+        if (!hasConversationResults(searchResults.data)) {
+            context.printer.writeLine();
+            context.printer.writeLine("No matches");
+            if (namedArgs.exactScope) {
+                context.printer.writeInColor(
+                    chalk.gray,
+                    `--exactScope ${namedArgs.exactScope}`,
+                );
+            }
+            return;
+        }
+        for (let i = 0; i < searchResults.data.length; ++i) {
+            writeSearchResult(
+                namedArgs,
+                searchContext.searchQueryExpr![i],
+                searchResults.data[i],
             );
-            let countSelectMatches = 0;
-            for (const searchQueryExpr of searchQueryExpressions) {
-                for (const selectExpr of searchQueryExpr.selectExpressions) {
-                    if (
-                        await evalSelectQueryExpr(
-                            searchQueryExpr,
-                            selectExpr,
-                            namedArgs,
-                        )
-                    ) {
-                        countSelectMatches++;
-                    }
-                }
-            }
-            if (countSelectMatches === 0) {
-                context.printer.writeLine("No matches");
-            }
-            if (countSelectMatches > 0 || retried) {
-                break;
-            }
-            retried = await askYesNo(
-                io,
-                chalk.cyan("Using exact scope. Try fuzzy instead?"),
-            );
-            if (retried) {
-                exactScope = false;
-            } else {
-                break;
-            }
         }
     }
 
     function answerDef(): CommandMetadata {
-        const def = searchDefNew();
+        const def = searchDef();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
         def.options!.fallback = argBool(
@@ -431,41 +400,6 @@ export async function createKnowproCommands(
                 context.printer.writeError(answerResult.message);
             }
         }
-    }
-
-    async function evalSelectQueryExpr(
-        searchQueryExpr: kp.SearchQueryExpr,
-        selectExpr: kp.SearchSelectExpr,
-        namedArgs: NamedArgs,
-    ): Promise<boolean> {
-        selectExpr.when = createLangFilter(selectExpr.when, namedArgs);
-        context.printer.writeSelectExpr(selectExpr);
-        const searchResults = await kp.searchConversation(
-            context.conversation!,
-            selectExpr.searchTermGroup,
-            selectExpr.when,
-            createSearchOptions(namedArgs),
-            searchQueryExpr.rawQuery,
-        );
-        if (
-            searchResults === undefined ||
-            (searchResults.knowledgeMatches.size === 0 &&
-                searchResults.messageMatches.length === 0)
-        ) {
-            return false;
-        }
-        context.printer.writeLine("####");
-        context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
-        context.printer.writeLine("####");
-        context.printer.writeConversationSearchResult(
-            context.conversation!,
-            searchResults,
-            namedArgs.showKnowledge,
-            namedArgs.showMessages,
-            adjustMaxToDisplay(namedArgs.maxToDisplay),
-            namedArgs.distinct,
-        );
-        return true;
     }
 
     function searchRagDef(): CommandMetadata {
@@ -613,6 +547,7 @@ export async function createKnowproCommands(
     /*---------- 
       End COMMANDS
     ------------*/
+
     /**
      * Run a search whose results are then used to generate answers
      * @param namedArgs
@@ -647,6 +582,28 @@ export async function createKnowproCommands(
             debugContext,
         );
         return [searchResults, debugContext];
+    }
+
+    function writeSearchResult(
+        namedArgs: NamedArgs,
+        searchQueryExpr: kp.SearchQueryExpr,
+        searchResults: kp.ConversationSearchResult,
+    ): void {
+        for (const selectExpr of searchQueryExpr.selectExpressions) {
+            context.printer.writeSelectExpr(selectExpr, namedArgs.debug);
+        }
+
+        context.printer.writeLine("####");
+        context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
+        context.printer.writeLine("####");
+        context.printer.writeConversationSearchResult(
+            context.conversation!,
+            searchResults,
+            namedArgs.showKnowledge,
+            namedArgs.showMessages,
+            adjustMaxToDisplay(namedArgs.maxToDisplay),
+            namedArgs.distinct,
+        );
     }
 
     async function getSearchResults(
