@@ -109,10 +109,14 @@ export interface SearchAPI {
 function deprecated() {
     if (Date.now() < new Date("2025-08-11").getTime()) {
         console.error("Bing Search API was retired on August 11, 2025.");
-        console.error("Please use Grounding with Bing search. See https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement for more information.");
+        console.error(
+            "Please use Grounding with Bing search. See https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement for more information.",
+        );
     } else {
         console.warn("Bing Search API is retiring on August 11, 2025.");
-        console.warn("This API is deprecated and will be removed in a future release. Please use Grounding with Bing search. See https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement for more information.");
+        console.warn(
+            "This API is deprecated and will be removed in a future release. Please use Grounding with Bing search. See https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement for more information.",
+        );
     }
 }
 
@@ -126,7 +130,6 @@ function deprecated() {
 export async function createBingSearch(
     settings?: ApiSettings,
 ): Promise<Result<SearchAPI>> {
-
     deprecated();
 
     try {

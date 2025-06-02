@@ -23,7 +23,8 @@ export async function lookupAndAnswer(
     const source = lookupAction.parameters.lookup.source;
     switch (source) {
         case "internet":
-            const { question, lookup, originalRequest } = lookupAction.parameters;
+            const { question, lookup, originalRequest } =
+                lookupAction.parameters;
 
             const result = handleLookup(
                 question,

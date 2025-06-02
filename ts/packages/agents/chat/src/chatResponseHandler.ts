@@ -64,7 +64,7 @@ async function handleChatResponse(
     switch (chatAction.actionName) {
         case "generateResponse": {
             return generateReponse(chatAction, context);
-           break;
+            break;
         }
 
         case "showImageFile":
@@ -79,16 +79,17 @@ async function handleChatResponse(
     }
 }
 
-async function generateReponse(generateResponseAction: GenerateResponseAction, context: ActionContext) {
+async function generateReponse(
+    generateResponseAction: GenerateResponseAction,
+    context: ActionContext,
+) {
     const parameters = generateResponseAction.parameters;
     const generatedText = parameters.generatedText;
     if (generatedText !== undefined) {
         logEntities("UR Entities:", parameters.userRequestEntities);
         logEntities("GT Entities:", parameters.generatedTextEntities);
         console.log(
-            "Got generated text: " +
-                generatedText.substring(0, 100) +
-                "...",
+            "Got generated text: " + generatedText.substring(0, 100) + "...",
         );
 
         const needDisplay =
@@ -109,16 +110,12 @@ async function generateReponse(generateResponseAction: GenerateResponseAction, c
 
         let entities = parameters.generatedTextEntities || [];
         if (parameters.userRequestEntities !== undefined) {
-            result.entities =
-                parameters.userRequestEntities.concat(entities);
+            result.entities = parameters.userRequestEntities.concat(entities);
         }
 
-        if (
-            generateResponseAction.parameters.relatedFiles !== undefined
-        ) {
+        if (generateResponseAction.parameters.relatedFiles !== undefined) {
             const fileEntities: Entity[] = new Array<Entity>();
-            for (const file of generateResponseAction.parameters
-                .relatedFiles) {
+            for (const file of generateResponseAction.parameters.relatedFiles) {
                 let name = file;
                 if (file.lastIndexOf("\\") > -1) {
                     name = file.substring(file.lastIndexOf("\\") + 1);
@@ -135,7 +132,6 @@ async function generateReponse(generateResponseAction: GenerateResponseAction, c
 
         return result;
     }
-
 }
 
 export function logEntities(label: string, entities?: Entity[]): void {

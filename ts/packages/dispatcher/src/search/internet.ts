@@ -2,11 +2,8 @@
 // Licensed under the MIT License.
 
 import fs from "node:fs";
-import {
-    LookupOptions,
-    extractEntities,
-} from "typeagent";
-import { ChatModel, bingWithGrounding, openai, } from "aiclient";
+import { LookupOptions, extractEntities } from "typeagent";
+import { ChatModel, bingWithGrounding, openai } from "aiclient";
 import {
     ActionContext,
     ActionResult,
@@ -16,18 +13,25 @@ import {
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { AIProjectClient } from "@azure/ai-projects";
-import {
-    displayError,
-} from "@typeagent/agent-sdk/helpers/display";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 import { DefaultAzureCredential } from "@azure/identity";
-import { DoneEvent, ErrorEvent, MessageContentUnion, 
-    MessageDeltaChunk, MessageDeltaTextContent, MessageDeltaTextUrlCitationAnnotation, 
-    MessageStreamEvent, MessageTextContent, MessageTextUrlCitationAnnotation, RunStreamEvent, ThreadMessage } from "@azure/ai-agents";
+import {
+    DoneEvent,
+    ErrorEvent,
+    MessageContentUnion,
+    MessageDeltaChunk,
+    MessageDeltaTextContent,
+    MessageDeltaTextUrlCitationAnnotation,
+    MessageStreamEvent,
+    MessageTextContent,
+    MessageTextUrlCitationAnnotation,
+    RunStreamEvent,
+    ThreadMessage,
+} from "@azure/ai-agents";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
-
 function urlToHtml(url: string, title?: string | undefined): string {
-    return `<a href="${url}" target="_blank">${title ? title : url }</a>`;
+    return `<a href="${url}" target="_blank">${title ? title : url}</a>`;
 }
 
 function capitalize(str: string): string {
@@ -37,7 +41,9 @@ function capitalize(str: string): string {
 function answerToHtml(answer: ThreadMessage): string {
     let html = "<p><div>";
 
-    const content: MessageContentUnion | undefined = answer.content.find((c) => c.type === "text" && "text" in c);
+    const content: MessageContentUnion | undefined = answer.content.find(
+        (c) => c.type === "text" && "text" in c,
+    );
 
     if (content) {
         let refCount = 0;
@@ -47,17 +53,24 @@ function answerToHtml(answer: ThreadMessage): string {
         textContent.text.annotations.forEach((a) => {
             switch (a.type) {
                 case "url_citation":
-                    const citation: MessageTextUrlCitationAnnotation = a as MessageTextUrlCitationAnnotation;
-                    annotations += urlToHtml(citation.urlCitation.url, `${++refCount}. ${citation.urlCitation.title}`);
+                    const citation: MessageTextUrlCitationAnnotation =
+                        a as MessageTextUrlCitationAnnotation;
+                    annotations += urlToHtml(
+                        citation.urlCitation.url,
+                        `${++refCount}. ${citation.urlCitation.title}`,
+                    );
                     annotations += "<br/>";
 
                     if (citation.text) {
-                        text = text.replaceAll(citation.text!, ` <sup>[${urlToHtml(citation.urlCitation.url, `${refCount}`)}]</sup>`);
+                        text = text.replaceAll(
+                            citation.text!,
+                            ` <sup>[${urlToHtml(citation.urlCitation.url, `${refCount}`)}]</sup>`,
+                        );
                     }
 
                     break;
                 default:
-                    console.warn(`Unsupported citation type: ${a.type}.`);                    
+                    console.warn(`Unsupported citation type: ${a.type}.`);
                 // TODO: other annotation types
             }
         });
@@ -156,7 +169,8 @@ export async function handleLookup(
 
         if (settings.entityGenModel) {
             const entities = await runEntityExtraction(results, settings);
-            literalResponse.entities = literalResponse.entities.concat(entities);
+            literalResponse.entities =
+                literalResponse.entities.concat(entities);
         }
     } else {
         literalResponse = createActionResult(
@@ -218,14 +232,14 @@ export async function getLookupSettings(
 
 function updateActionResult(
     literalResponse: ActionResultSuccess,
-    messages: ThreadMessage[]
+    messages: ThreadMessage[],
 ): ActionResultSuccess {
     if (messages.length > 0) {
         literalResponse.literalText = "";
         literalResponse.displayContent = {
             type: "html",
             content: answersToHtml(messages),
-        };      
+        };
     }
 
     return literalResponse;
@@ -246,15 +260,17 @@ async function runEntityExtraction(
             if (textContent) {
                 entityText += `${textContent.text.value}\n`;
 
-                for(const a of textContent.text.annotations) {
+                for (const a of textContent.text.annotations) {
                     switch (a.type) {
-                        case 'url_citation':
+                        case "url_citation":
                             const url = a as MessageTextUrlCitationAnnotation;
                             entityText += `Reference: ${url.urlCitation.title} - ${url.urlCitation.url}`;
                             break;
                         default:
-                            console.warn(`Unsupported citation type: ${a.type}.`);
-                    }                    
+                            console.warn(
+                                `Unsupported citation type: ${a.type}.`,
+                            );
+                    }
                 }
             }
         }
@@ -276,64 +292,72 @@ export async function runGroundingLookup(
     sites: string[] | undefined,
     context: ActionContext<any>,
 ): Promise<ThreadMessage[]> {
-
     if (!groundingConfig) {
         groundingConfig = bingWithGrounding.apiSettingsFromEnv();
     }
 
-    const project = new AIProjectClient(groundingConfig.endpoint!, new DefaultAzureCredential());
+    const project = new AIProjectClient(
+        groundingConfig.endpoint!,
+        new DefaultAzureCredential(),
+    );
 
     const agent = await project.agents.getAgent(groundingConfig.agent!);
     console.log(`Retrieved agent: ${agent.name}`);
 
     const thread = await project.agents.threads.create();
-    
+
     // the question that needs answering
     await project.agents.messages.create(
         thread.id,
         "user",
-        `Here is my question: '${question}.\nHere are the internet search terms: ${lookups.join(",")}\nHere are the sites I want to search: ${sites?.join("|")}`
+        `Here is my question: '${question}.\nHere are the internet search terms: ${lookups.join(",")}\nHere are the sites I want to search: ${sites?.join("|")}`,
     );
 
     // Create run
     try {
-        let run = await project.agents.runs.create(thread.id, agent.id).stream();
+        let run = await project.agents.runs
+            .create(thread.id, agent.id)
+            .stream();
         for await (const eventMsg of run) {
-            switch(eventMsg.event) {
+            switch (eventMsg.event) {
                 case RunStreamEvent.ThreadRunCreated:
-                    context.actionIO.setDisplay({ type: "html", content: ""});
+                    context.actionIO.setDisplay({ type: "html", content: "" });
                     break;
                 case RunStreamEvent.ThreadRunCompleted:
                     break;
                 case MessageStreamEvent.ThreadMessageDelta:
                     const messageDelta = eventMsg.data as MessageDeltaChunk;
                     messageDelta.delta.content.forEach((contentPart) => {
-                    if (contentPart.type === "text") {
-                        const textContent = contentPart as MessageDeltaTextContent;                        
-                        let textValue = textContent.text?.value || "";
+                        if (contentPart.type === "text") {
+                            const textContent =
+                                contentPart as MessageDeltaTextContent;
+                            let textValue = textContent.text?.value || "";
 
-                        if (textContent.text?.annotations) {
-                            textContent.text?.annotations.forEach((a) => {                                
-                                if (a) {
-                                    switch (a.type) {
-                                        case "url_citation":
-                                            const annotation = a as MessageDeltaTextUrlCitationAnnotation;
-                                            textValue = `[${urlToHtml((annotation as any).url_citation, `${annotation.index + 1}`)}]`;
-                                            break;
-                                        default:
-                                            console.warn(`Unsupported citation type: ${a.type}.`);                    
-                                        // TODO: other annotation types
+                            if (textContent.text?.annotations) {
+                                textContent.text?.annotations.forEach((a) => {
+                                    if (a) {
+                                        switch (a.type) {
+                                            case "url_citation":
+                                                const annotation =
+                                                    a as MessageDeltaTextUrlCitationAnnotation;
+                                                textValue = `[${urlToHtml((annotation as any).url_citation, `${annotation.index + 1}`)}]`;
+                                                break;
+                                            default:
+                                                console.warn(
+                                                    `Unsupported citation type: ${a.type}.`,
+                                                );
+                                            // TODO: other annotation types
+                                        }
                                     }
-                                }
+                                });
+                            }
+
+                            context.actionIO.appendDisplay({
+                                type: "html",
+                                content: `${textValue.replace("\n", "<br/>")}`,
                             });
                         }
-
-                        context.actionIO.appendDisplay({
-                            type: "html",
-                            content: `${textValue.replace("\n", "<br/>")}`,
-                        });                        
-                    }
-                    });                    
+                    });
                     break;
                 case ErrorEvent.Error:
                     break;
@@ -352,7 +376,9 @@ export async function runGroundingLookup(
         for await (const m of messages) {
             if (m.role === "assistant") {
                 // TODO: handle multi-modal content
-                const content: MessageContentUnion | undefined = m.content.find((c) => c.type === "text" && "text" in c);
+                const content: MessageContentUnion | undefined = m.content.find(
+                    (c) => c.type === "text" && "text" in c,
+                );
                 if (content) {
                     msgs.push(m);
                 }
@@ -364,7 +390,6 @@ export async function runGroundingLookup(
 
         // return assistant messages
         return msgs;
-
     } catch (error) {
         displayError(
             `Error creating run: ${error}. Check for model throttling or content filtering.`,
