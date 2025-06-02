@@ -3,7 +3,9 @@
 
 import asyncio
 import io
+from pprint import pprint
 import readline  # type: ignore  # For its side-effect of turning on line editing in input().
+import shutil
 import sys
 from typing import Literal
 
@@ -28,7 +30,7 @@ from ..knowpro.interfaces import (
 )
 from ..podcasts.podcast import Podcast
 
-from .search_query_schema import SearchFilter
+from .search_query_schema import SearchQuery
 
 
 def main() -> None:
@@ -46,24 +48,24 @@ def main() -> None:
         print()
 
 
-def create_translator() -> typechat.TypeChatJsonTranslator[SearchFilter]:
+def create_translator() -> typechat.TypeChatJsonTranslator[SearchQuery]:
     model = create_typechat_model()  # TODO: Move out of here.
-    schema = SearchFilter  # TODO: Use SearchTermGroup when ready.
-    type_name = schema.__name__
+    schema = SearchQuery  # TODO: Use SearchTermGroup when ready.
     validator = typechat.TypeChatValidator[schema](schema)
     translator = typechat.TypeChatJsonTranslator[schema](model, validator, schema)
-    schema_text = translator._schema_str.rstrip()  # type: ignore  # No other way.
-    print(f"TypeScript schema for {type_name}:\n{schema_text}\n")
+    # schema_text = translator._schema_str.rstrip()  # type: ignore  # No other way.
+    # print(f"TypeScript schema for {schema.__name__}:\n{schema_text}\n")
     return translator
 
 
 def read_commands(
-    translator: typechat.TypeChatJsonTranslator[SearchFilter],
+    translator: typechat.TypeChatJsonTranslator[SearchQuery],
     context: QueryEvalContext,
     stream: io.TextIOWrapper,
 ) -> None:
     ps1 = "--> "
     while True:
+        print()
         line = read_one_line(ps1, stream)
         if line is None:  # EOF
             break
@@ -71,11 +73,12 @@ def read_commands(
             continue
         if line.lower() in ("exit", "quit", "q"):
             break
-        search_terms = translate_command(translator, line)
-        if search_terms is None:
+        search_query = translate_command(translator, line)
+        if search_query is None:
             print("Failed to translate command to search terms.")
             continue
-        print(f"Search terms: {search_terms}")
+        print(f"Search query:")
+        pprint(search_query, width=min(200, shutil.get_terminal_size().columns))
         # query = compile_query(search_terms)
         # if query is None:
         #     print("Failed to compile search terms to query.")
@@ -90,14 +93,15 @@ def read_commands(
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
     """Read a single line from the input stream. Return None for EOF."""
-    if stream is sys.stdin:
+    if stream is sys.stdin and stream.isatty():
         try:
             return input(ps1).strip()
         except EOFError:
             print()
             return None
     else:
-        print(ps1, end="", flush=True)
+        if stream.isatty():
+            print(ps1, end="", flush=True)
         line = stream.readline()
         if not line:
             print()
@@ -106,9 +110,9 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
 
 
 def translate_command(
-    translator: typechat.TypeChatJsonTranslator[SearchFilter], command: str
-) -> SearchFilter | None:
-    result: typechat.Result[SearchFilter] = asyncio.run(
+    translator: typechat.TypeChatJsonTranslator[SearchQuery], command: str
+) -> SearchQuery | None:
+    result: typechat.Result[SearchQuery] = asyncio.run(
         translator.translate(
             f"Please convert the following user query to a SearchTermGroup:"
             f"\n'''{command}\n'''\n"
