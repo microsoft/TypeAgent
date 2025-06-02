@@ -123,7 +123,11 @@ export class ConversationMemory
         tags: string[] = [],
         settings?: ConversationMemorySettings,
     ) {
-        super(settings ?? createMemorySettings(), nameTag, tags);
+        settings ??= createMemorySettings(
+            64,
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
+        super(settings, nameTag, tags);
         this.adjustSettings();
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = new kp.SemanticRefCollection();
