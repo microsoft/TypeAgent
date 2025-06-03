@@ -1,8 +1,8 @@
 # KnowPro
 
-**KnowPro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). KnowPro is in **active** development with frequent updates.
+**KnowPro** is **experimental sample code** working towards an MVP library for [**Structured RAG**](#structured-rag-overview). KnowPro is early stage, in **active** development, with frequent updates.
 
-- The KnowPro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md)
+- The KnowPro implementation of Structured RAG is used to explore types of [**memory**](../memory/README.md).
 - The [KnowPro test app](../../examples/chat/README.md) demonstrates how to use the KnowPro API and memory implementations.
 
 Note: the TypeAgent **Dispatcher** currently implements **Agent Memory** using an early implementation of Structured RAG found in the [knowledge-processor](../knowledgeProcessor/README.md) package.
@@ -23,7 +23,7 @@ Examples of using the above APIs can be found here:
 
 ## Structured RAG overview
 
-- Structured RAG works with conversations. A conversations is a sequence of messages.
+- Structured RAG works with conversations. A conversation is a sequence of messages.
 - A message can be a turn in a conversation, podcast or chat transcript. It can also be an email message, the description of an image, etc.
 - Structured RAG extracts dense information from the text of messages. The extracted information includes short topic sentences, tree-structured entities, and relationship information such as actions.
 - Structured information may also accompany a message. This can be timestamps, metadata such as to/from information, or the location information associated with an image. Structured information may be added to a relational table associated with the conversation as needed.
@@ -32,9 +32,9 @@ Examples of using the above APIs can be found here:
   - Enumerated and filtered.
 - Indexes can be updated incrementally or in the background.
 - Information retrieved by executing a query can also be used to retrieve the messages it originated in.
-- Natural language user requests are translated to search query expressions. Query results are used to generate answers to user requests.
+- Natural language user requests are translated to search query expressions. These query expressions are then evaluated. Query results are used to generate answers to user requests.
 
-See [here](../../../docs/architecture/memory.md) for more information about memory architecture and Structured RAG.
+You can learn more about Structurd RAG in the [TypeAgent memory architecture](../../../docs/content/architecture/memory.md) document.
 
 ## KnowPro implementation
 

@@ -30,6 +30,7 @@ import * as ms from "memory-storage";
 import { ExposureTable, GeoTable } from "./tables.js";
 import { Image, ImageMeta } from "./imageMeta.js";
 import path from "node:path";
+import fs from "node:fs";
 
 //const debug = registerDebug("typeagent:image-memory");
 
@@ -212,9 +213,13 @@ export class ImageCollection
 
         // if we have an in-memory database we need to write it out to disk
         if (this.dbPath.length === 0 || this.dbPath === ":memory:") {
-            this.db?.exec(
-                `vacuum main into '${path.join(dirPath, baseFileName)}_dataFrames.sqlite'`,
-            );
+            const dbFile = `${path.join(dirPath, baseFileName)}_dataFrames.sqlite`;
+
+            if (fs.existsSync(dbFile)) {
+                fs.unlinkSync(dbFile);
+            }
+
+            this.db?.exec(`vacuum main into '${dbFile}'`);
         }
     }
 

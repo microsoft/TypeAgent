@@ -48,11 +48,13 @@ export class EmailMemory
 
     constructor(
         public storageProvider: ms.sqlite.SqliteStorageProvider,
-        public nameTag: string = "",
-        public tags: string[] = [],
         settings?: EmailMemorySettings,
     ) {
-        super(settings ?? createMemorySettings());
+        settings ??= createMemorySettings(
+            64,
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
+        super(settings);
         this.serializer = new EmailMessageSerializer();
         this.indexingState = createIndexingState();
         this.messages = storageProvider.createMessageCollection<EmailMessage>(

@@ -97,14 +97,6 @@ export class ConversationMessage extends Message<ConversationMessageMeta> {
         timestamp = timestamp ?? new Date().toISOString();
         super(metadata, messageText, tags, timestamp, knowledge);
     }
-
-    public addContent(content: string, chunkOrdinal = 0) {
-        if (chunkOrdinal > this.textChunks.length) {
-            this.textChunks.push(content);
-        } else {
-            this.textChunks[chunkOrdinal] += content;
-        }
-    }
 }
 
 export type ConversationMemorySettings = MemorySettings;
@@ -126,12 +118,16 @@ export class ConversationMemory
     private updatesTaskQueue: QueueObject<ConversationMemoryTasks>;
 
     constructor(
-        public nameTag: string = "",
+        nameTag: string = "",
         messages: ConversationMessage[] = [],
-        public tags: string[] = [],
+        tags: string[] = [],
         settings?: ConversationMemorySettings,
     ) {
-        super(settings ?? createMemorySettings());
+        settings ??= createMemorySettings(
+            64,
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
+        super(settings, nameTag, tags);
         this.adjustSettings();
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = new kp.SemanticRefCollection();

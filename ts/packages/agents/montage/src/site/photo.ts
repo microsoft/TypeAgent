@@ -19,7 +19,7 @@ export class Photo {
         this.img.src = "/thumbnail?path=" + imgPath;
 
         // get the image caption
-        fetch(`/knowlegeResponse?path=${imgPath}`).then(async (response) => {
+        fetch(`/knowledgeResponse?path=${imgPath}`).then(async (response) => {
             const ii = await response.json();
             this.img.title = ii.fileName + " - " + ii.altText;
         });
@@ -32,6 +32,21 @@ export class Photo {
         // add children to the container
         this._container.append(this.img);
         this._container.append(this.indexDiv);
+
+        // click handler
+        this.img.onclick = () => {
+            const fimg = document.getElementById(
+                "focusedImage",
+            ) as HTMLImageElement;
+
+            if (fimg) {
+                fimg.src = "/image?path=" + imgPath;
+                fimg.alt = this.img.alt;
+                fimg.title = this.img.title;
+                fimg.style.backgroundImage = this.img.src;
+                fimg.setAttribute("path", imgPath);
+            }
+        };
     }
 
     public get container() {
@@ -46,11 +61,17 @@ export class Photo {
         this._container.remove();
     }
 
-    // public select() {
-    //     this.img.classList.add("selected");
-    // }
+    public unFocusImage() {
+        this.img.classList.remove("focusedImage");
+    }
 
-    // public unselect() {
-    //     this.img.classList.remove("selected");
-    // }
+    public setFocusedImage() {
+        this._container.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+            inline: "center",
+        });
+        this.img.classList.add("focusedImage");
+        this.img.click();
+    }
 }

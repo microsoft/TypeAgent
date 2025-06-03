@@ -1,16 +1,17 @@
 # TypeAgent Dispatcher
 
-TypeAgent Dispatcher is **sample code** and the core component that explores how to build a **personal agent** implementation with structured prompting and LLM:
+TypeAgent Dispatcher is the core component of the TypeAgent repo that explores how to build a **personal agent** with _natural language interfaces_ using structured prompting and LLM:
 
-- [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) are two front ends that make use of this shared component.
+- Can be integrated and hosted in different front ends. [TypeAgent Shell](../shell) and [TypeAgent CLI](../cli) are two examples in this repo.
 - Extensible [application agents](../agentSdk/README.md) architecture.
-- [Agent Cache](../cache/README.md) to lower latency and cost.
+- [TypeAgent Cache](../cache/README.md) to lower latency and cost.
+- Conversational memory based on [Structured RAG](../../../docs/content/architecture/memory.md)
 
 Dispatcher processes user requests and asks LLM to translate it into an action based on a schema provided by the application agents. It has ability to automatically switch between different agents to provide a seamless experience in a extensible and scalable way.
 
-See [architecture](../../../docs/architecture/dispatcher.md) doc for more details on the design of the dispatcher component.
+See [dispatcher architecture](../../../docs/content/architecture/dispatcher.md) doc for more details on the design of the dispatcher component.
 
-## Usage
+## Usage - Natural Language Requests
 
 User can request actions provided by [application agents](../agentSdk/README.md) using natural language.
 
@@ -31,7 +32,7 @@ More sample action requests:
 
 Additional system "commands" are available to provide direct interaction with the system, See the [Commands](#commands) section below.
 
-## Commands
+## Usage - Commands
 
 Beyond natural language, users can specify system command with inputs starting with `@`.
 
@@ -55,7 +56,7 @@ Reset to default:
 
 Dispatcher agent's schema, action and command can be toggled independently as well, using `@config schema`, `@config action`, `@config command`.
 
-To list all avaiable agents and their status, just the command without any parameters:
+To list all available agents and their status, just the command without any parameters:
 
 ```bash
 🤖🚧💾  [🎧📅📩📝🌐💬🤖🔧📷🖐🖼️📱🗎]> @config agent
@@ -169,11 +170,26 @@ By default agents runs out of proc in their own process. This is to ensure that 
 | `@config explanation on\|off` | Toggle LLM explanation (Turn off to stop updating construction store)          |
 | `@config log db on\|off`      | Toggle sending logging information to a remote database                        |
 
-## Adding Dispatcher Agent
+## Developer
 
-Additional Dispatcher Agent can be create and added to the dispatcher to extend the capabilities of TypeAgent as a **personal agent**. [TypeAgent SDK](../agentSdk) defines the interfaces and helper needed to develop an agent. The `Echo` agent [tutorial](../../../docs/tutorial/agent.md) illustrate the steps to create a basic agent in a NPM module and install into TypeAgent's [shell](../shell) and [CLI](../cli).
+### Adding Dispatcher Agent
+
+Additional Dispatcher Agent can be create and added to the dispatcher to extend the capabilities of TypeAgent as a **personal agent**. [TypeAgent SDK](../agentSdk) defines the interfaces and helper needed to develop an agent. The `Echo` agent [tutorial](../../../docs/content/tutorial/agent.md) illustrate the steps to create a basic agent in a NPM module and install into TypeAgent's [shell](../shell) and [CLI](../cli).
 
 By default dispatcher only comes with `system` and `dispatcher` agents, providing minimal base functionality. Additional agents are provided using [AppAgentProvider](./src/agentProvider/agentProvider.ts) when the dispatcher is created by the host. The host of the dispatcher (like [shell](../shell) and [CLI](../cli)) is configured with the default provider with subset of agents implemented in this repo, and a extensible provider that allow additional agent to be dynamically install/registered. (See [default-agent-provider](../defaultAgentProvider/) package).
+
+### Hosting Dispatcher
+
+#### Main entry point `createDispatcher` API
+
+Use `createDispatcher` to create a dispatcher instance `createDispatcher`. The main options are:
+
+- appAgentProviders: app agent providers to use. If not specified, only the system agents are available.
+- clientIO: The client IO to use for interactivity. If not specified, no interactivity is available.
+- persistDir: The directory to save states, including cache and session (if enabled)
+- persistSession: whether to save and restore session state across runs.
+
+After creation, use the `processCommand` API on the instance to start process any user requests.
 
 ## Trademarks
 

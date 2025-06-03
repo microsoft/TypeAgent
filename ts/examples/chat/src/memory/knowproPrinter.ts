@@ -66,9 +66,16 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
-    public writeMessages(messages: Iterable<kp.IMessage> | kp.IMessage[]) {
+    public writeMessages(
+        messages: Iterable<kp.IMessage> | kp.IMessage[],
+        ordinalStartAt = 0,
+    ) {
+        let i = ordinalStartAt;
         for (const message of messages) {
+            this.writeLine(`[${i}]`);
             this.writeMessage(message);
+            ++i;
+            this.writeLine();
         }
     }
 
@@ -241,7 +248,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         const semanticRef = semanticRefs.get(scoredRef.semanticRefOrdinal);
         this.writeInColor(
             chalk.green,
-            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
+            `#${matchNumber + 1} / ${totalMatches}: <${scoredRef.semanticRefOrdinal}::${semanticRef.range.start.messageOrdinal}> ${semanticRef.knowledgeType} [${scoredRef.score}]`,
         );
         this.writeSemanticRef(semanticRef);
         this.writeLine();
@@ -368,12 +375,31 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         }
     }
 
-    public writeSelectExpr(selectExpr: kp.SearchSelectExpr) {
-        this.writeInColor(chalk.gray, () => {
-            this.writeHeading("Compiled query");
-            this.writeJson(selectExpr);
-            this.writeLine();
-        });
+    public writeSelectExpr(
+        selectExpr: kp.SearchSelectExpr,
+        verbose: boolean = true,
+    ) {
+        if (verbose) {
+            this.writeInColor(chalk.gray, () => {
+                this.writeHeading("Compiled query");
+                this.writeJson(selectExpr);
+                this.writeLine();
+            });
+        } else {
+            const json = JSON.stringify(
+                selectExpr,
+                (key, value) =>
+                    key === "relatedTerms" || key === "weight"
+                        ? undefined
+                        : value,
+                2,
+            );
+            this.writeInColor(chalk.gray, () => {
+                this.writeHeading("Compiled query");
+                this.writeLine(json);
+                this.writeLine();
+            });
+        }
     }
 
     private writeResultDistinct(
@@ -532,7 +558,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         return this;
     }
 
-    public writeNaturalLanguageContext(context: kp.LanguageSearchDebugContext) {
+    public writeDebugContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
             this.writeJson(context.searchQuery);

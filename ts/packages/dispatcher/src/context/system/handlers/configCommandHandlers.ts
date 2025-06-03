@@ -611,6 +611,32 @@ class ConfigTranslationNumberOfInitialActionsCommandHandler
     }
 }
 
+class ConfigPortsCommandHandler implements CommandHandler {
+    public readonly description = "Lists the ports assigned to agents.";
+
+    public readonly parameters = {};
+
+    public async run(context: ActionContext<CommandHandler>) {
+        const ports: string[][] = [["", "Agent", "Port"]];
+        const cmdContext = context.sessionContext.agentContext as any;
+        const emojis: Record<string, string> = cmdContext.agents.getEmojis();
+
+        cmdContext.agents.getAppAgentNames().forEach((name: string) => {
+            const port = cmdContext.agents.getLocalHostPort(name);
+
+            if (port !== undefined) {
+                ports.push([
+                    emojis[name],
+                    name,
+                    cmdContext.agents.getLocalHostPort(name)!.toString(),
+                ]);
+            }
+        });
+
+        displayResult(ports, context);
+    }
+}
+
 class FixedSchemaCommandHandler implements CommandHandler {
     public readonly description = "Set a fixed schema disable switching";
     public readonly parameters = {
@@ -919,6 +945,38 @@ const configTranslationCommandHandlers: CommandHandlerTable = {
                 },
             },
         },
+        entity: {
+            description: "Entity translation configuration",
+            commands: {
+                resolve: getToggleHandlerTable(
+                    "entity resolution",
+                    async (context, enable) => {
+                        await changeContextConfig(
+                            { translation: { entity: { resolve: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                filter: getToggleHandlerTable(
+                    "entity filter using LLM",
+                    async (context, enable) => {
+                        await changeContextConfig(
+                            { translation: { entity: { filter: enable } } },
+                            context,
+                        );
+                    },
+                ),
+                clarify: getToggleHandlerTable(
+                    "entity clarification",
+                    async (context, enable) => {
+                        await changeContextConfig(
+                            { translation: { entity: { clarify: enable } } },
+                            context,
+                        );
+                    },
+                ),
+            },
+        },
     },
 };
 
@@ -1207,6 +1265,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     },
                 ),
             },
+            ports: new ConfigPortsCommandHandler(),
         },
     };
 }

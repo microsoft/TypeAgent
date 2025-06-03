@@ -92,13 +92,13 @@ The follow set of functionality will need the services keys. Please read the lin
 
 **Additional keys required for individual AppAgents** (Optional if not using these AppAgents)
 
-| Requirements                                                           | Functionality                                                             | Variables                                                                | Instructions                                                              | Keyless Access Supported |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------ |
-| Bing Search API                                                        | Chat Lookup                                                               | BING_API_KEY                                                             |                                                                           | No                       |
-| GPT-3.5 Turbo                                                          | Fast Chat Response<br>[Email](./packages/agents/email) content generation | AZURE_OPENAI_API_KEY_GPT_35_TURBO<br>AZURE_OPENAI_ENDPOINT_GPT_35_TURBO  |                                                                           | Yes                      |
-| [Spotify Web API](https://developer.spotify.com/documentation/web-api) | [Music player](./packages/agents/player/)                                 | SPOTIFY_APP_CLI<br>SPOTIFY_APP_CLISEC<br>SPOTIFY_APP_PORT                | [Music player setup](./packages/agents/player/README.md#application-keys) | No                       |
-| [Graph Application](https://developer.microsoft.com/en-us/graph)       | [Calendar](./packages/agents/calendar/)/[Email](./packages/agents/email)  | MSGRAPH_APP_CLIENTID<br>MSGRAPH_APP_CLIENTSECRET<br>MSGRAPH_APP_TENANTID |                                                                           | No                       |
-| GPT-4o                                                                 | [Browser](./packages/agents/browser/) - Crossword Page                    | AZURE_OPENAI_API_KEY_GPT_4_O<br>AZURE_OPENAI_ENDPOINT_GPT_4_O            |                                                                           | Yes                      |
+| Requirements                                                           | Functionality                                                             | Variables                                                                | Instructions                                                               | Keyless Access Supported |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------ |
+| Grounding with Bing                                                    | Chat Lookup                                                               | BING_WITH_GROUNDING_ENDPOINT<br>BING_WITH_GROUNDING_AGENT_ID             | [Internet lookups](./packages/dispatcher/src/context/dispatcher/README.md) | No                       |
+| GPT-3.5 Turbo                                                          | Fast Chat Response<br>[Email](./packages/agents/email) content generation | AZURE_OPENAI_API_KEY_GPT_35_TURBO<br>AZURE_OPENAI_ENDPOINT_GPT_35_TURBO  |                                                                            | Yes                      |
+| [Spotify Web API](https://developer.spotify.com/documentation/web-api) | [Music player](./packages/agents/player/)                                 | SPOTIFY_APP_CLI<br>SPOTIFY_APP_CLISEC<br>SPOTIFY_APP_PORT                | [Music player setup](./packages/agents/player/README.md#application-keys)  | No                       |
+| [Graph Application](https://developer.microsoft.com/en-us/graph)       | [Calendar](./packages/agents/calendar/)/[Email](./packages/agents/email)  | MSGRAPH_APP_CLIENTID<br>MSGRAPH_APP_CLIENTSECRET<br>MSGRAPH_APP_TENANTID |                                                                            | No                       |
+| GPT-4o                                                                 | [Browser](./packages/agents/browser/) - Crossword Page                    | AZURE_OPENAI_API_KEY_GPT_4_O<br>AZURE_OPENAI_ENDPOINT_GPT_4_O            |                                                                            | Yes                      |
 
 Other examples in the [example directory](./examples/) may have additional service keys requirements. See the README in those examples for more detail.
 
@@ -130,8 +130,13 @@ Note: Shared keys doesn't include Spotify integration, which can be created usin
 
 ### Keyless API Access
 
-For additional security, it is possible to run a subset of the TypeAgent endpoints in a keyless environment. Instead of using keys the examples provided can use Azure Entra user identities to authenticate against endpoints. To use this approach, modify the .env file and specify `identity` as the key value.
-You must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
+For additional security, it is possible to run a subset of the TypeAgent endpoints in a keyless environment and use Azure Entra user identities to authenticate against endpoint.
+
+In order to use keyless access you must also configure your services to use [RBAC](https://learn.microsoft.com/en-us/azure/role-based-access-control/overview) and assign users access to the correct roles for each endpoint. Please see the tables above to determine keyless endpoint support.
+
+After configuring your service, modify the .env file and specify `identity` as the key value instead of using keys in the examples provided. To authenticate at runtime, make sure you have installed [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest) and logged in with the account that has access to the models using `az login`. Make sure choose the subscription where your services are as the default.
+
+Alternatively, TypeAgent make use of the Azure SDK's [DefaultAzureCredential](https://learn.microsoft.com/en-us/javascript/api/%40azure/identity/defaultazurecredential?view=azure-node-latest) which provide other methods to authenticate at runtime. Follow those instructions to provide keyless access to the services.
 
 ### Just-in-time Access
 

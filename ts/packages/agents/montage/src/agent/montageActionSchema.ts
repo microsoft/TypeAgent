@@ -13,13 +13,16 @@ export type MontageAction =
     | DeleteMontageAction
     | DeleteAllMontageAction
     | ListMontageAction
-    | MergeMontageAction;
+    | MergeMontageAction
+    | SetMontageViewModeAction;
 
-export type MontageActivity = StartEditMontageAction | CreateMontageAction;
+export type MontageActivity = OpenMontageAction | CreateMontageAction;
 export type MontageEntity = Montage;
 export type Montage = string;
-export type StartEditMontageAction = {
-    actionName: "startEditMontage";
+
+// Open a montage for viewing and editing
+export type OpenMontageAction = {
+    actionName: "openMontage";
     parameters: {
         // title of the montage
         title: Montage;
@@ -120,7 +123,7 @@ export type CreateMontageAction = {
     actionName: "createNewMontage";
     parameters: {
         // Montage title, defaults to "Untitled"
-        title: Montage;
+        title: string;
         // any search terms to use to seed the montage based off of the title
         search_filters?: string[];
         // a flag indicating if the UI should immediately switch to this montage, defaults to true
@@ -159,5 +162,13 @@ export type MergeMontageAction = {
         titles?: Montage[];
         // THe ids of the montages to merge
         ids?: number[];
+    };
+};
+
+export type SetMontageViewModeAction = {
+    actionName: "setMontageViewMode";
+    parameters: {
+        // The view mode to set
+        viewMode: "grid" | "filmstrip";
     };
 };

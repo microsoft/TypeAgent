@@ -6,7 +6,7 @@
  * Knowledge functions
  */
 
-import { getTopK } from "typeagent";
+import { dateTime, getTopK } from "typeagent";
 import { Scored } from "./common.js";
 import {
     SemanticRef,
@@ -15,6 +15,9 @@ import {
     KnowledgeType,
     Knowledge,
     ISemanticRefCollection,
+    IConversation,
+    MessageOrdinal,
+    IMessageCollection,
 } from "./interfaces.js";
 import { conversation as kpLib } from "knowledge-processor";
 
@@ -62,4 +65,63 @@ export function* getScoredSemanticRefsFromOrdinals(
             };
         }
     }
+}
+
+export function getSemanticRefsFromScoredOrdinals(
+    semanticRefs: ISemanticRefCollection,
+    scoredOrdinals: ScoredSemanticRefOrdinal[],
+): SemanticRef[] {
+    const ordinals = scoredOrdinals.map((sr) => sr.semanticRefOrdinal);
+    return semanticRefs.getMultiple(ordinals);
+}
+
+export function* messageOrdinalsFromSemanticRefs(semanticRefs: SemanticRef[]) {
+    for (const sr of semanticRefs) {
+        yield sr.range.start.messageOrdinal;
+    }
+}
+
+export function getTimestampsForSemanticRefs(
+    messages: IMessageCollection,
+    semanticRefs: SemanticRef[],
+): Map<MessageOrdinal, Date> {
+    const tsMap = new Map<MessageOrdinal, Date>();
+    for (const messageOrdinal of messageOrdinalsFromSemanticRefs(
+        semanticRefs,
+    )) {
+        let ts = tsMap.get(messageOrdinal);
+        if (ts === undefined) {
+            const timestamp = messages.get(messageOrdinal).timestamp;
+            if (timestamp) {
+                ts = new Date(timestamp);
+                tsMap.set(messageOrdinal, ts);
+            }
+        }
+    }
+    return tsMap;
+}
+
+export function getTimestampedScoredSemanticRefOrdinals(
+    conversation: IConversation,
+    scoredOrdinals: ScoredSemanticRefOrdinal[],
+): dateTime.Timestamped<ScoredSemanticRefOrdinal>[] {
+    const messages = conversation.messages;
+    const semanticRefs = conversation.semanticRefs;
+    const timestamped: dateTime.Timestamped<ScoredSemanticRefOrdinal>[] = [];
+    if (messages && semanticRefs) {
+        const sRefs = getSemanticRefsFromScoredOrdinals(
+            semanticRefs,
+            scoredOrdinals,
+        );
+        const timestamps = getTimestampsForSemanticRefs(messages, sRefs);
+        for (let i = 0; i < sRefs.length; ++i) {
+            const timestamp = timestamps.get(
+                sRefs[i].range.start.messageOrdinal,
+            );
+            if (timestamp !== undefined) {
+                timestamped.push({ value: scoredOrdinals[i], timestamp });
+            }
+        }
+    }
+    return timestamped;
 }

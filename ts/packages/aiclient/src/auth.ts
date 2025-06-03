@@ -40,8 +40,8 @@ export function createAzureTokenProvider(
             tokenResponse.expiresOnTimestamp -= expirationBufferMs;
             accessToken = tokenResponse;
             return success(accessToken.token);
-        } catch (e) {
-            return error(`azure token error:\n${e}`);
+        } catch (e: any) {
+            return error(e.toString());
         }
     }
 

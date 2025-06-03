@@ -439,3 +439,14 @@ export async function* exportConversationMessages(
         }
     }
 }
+
+export function isJsonEqual(x: any | undefined, y: any | undefined): boolean {
+    if (x === undefined && y === undefined) {
+        return true;
+    } else if (x !== undefined && y !== undefined) {
+        const jx = JSON.stringify(x);
+        const jy = JSON.stringify(y);
+        return jx === jy;
+    }
+    return false;
+}

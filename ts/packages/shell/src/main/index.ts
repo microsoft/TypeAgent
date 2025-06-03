@@ -194,10 +194,10 @@ async function triggerRecognitionOnce(chatView: WebContentsView) {
 }
 
 function initializeSpeech(chatView: WebContentsView) {
-    const key = process.env["SPEECH_SDK_KEY"];
+    const key = process.env["SPEECH_SDK_KEY"] ?? "identity";
     const region = process.env["SPEECH_SDK_REGION"];
     const endpoint = process.env["SPEECH_SDK_ENDPOINT"] as string;
-    if (key && region) {
+    if (region) {
         AzureSpeech.initialize({
             azureSpeechSubscriptionKey: key,
             azureSpeechRegion: region,
@@ -309,7 +309,7 @@ async function initializeDispatcher(
             debugShell(newDispatcher.getPrompt(), text);
             // Update before processing the command in case there was change outside of command processing
             updateSummary(dispatcher);
-            const metrics = await newDispatcher.processCommand(
+            const commandResult = await newDispatcher.processCommand(
                 text,
                 id,
                 images,
@@ -321,7 +321,7 @@ async function initializeDispatcher(
 
             // Update the summary after processing the command in case state changed.
             updateSummary(dispatcher);
-            return metrics;
+            return commandResult;
         }
 
         const dispatcher = {

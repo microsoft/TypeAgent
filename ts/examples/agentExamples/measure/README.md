@@ -1,17 +1,16 @@
-# Measure
+# Measure example
 
-Measure is an example agent that implements actions to add and search a database of measurements. Examples: steps, pushups. cups of coffee, etc. Data is stored in a sqlite database.
+Measure is an example agent and **sample code** that implements actions to add and search a database of measurements. Data is stored in a sqlite database.
 
 Work in progress.
 
 ## Installation
 
-- Follow the standard [external Agent installation steps](../../../../docs/tutorial/agent.md#step-3-install-echo-agent-in-typeagent-cli-or-shell)
+- Follow the standard [external Agent installation steps](../../../../docs/content/tutorial/agent.md#step-3-install-echo-agent-in-typeagent-cli-or-shell).
+- **Note**: for this example agent, you must link both the typeagent and agent-sdk modules as specified in the instructions:
 
-# NOTE for this example agent you must both link both the typeagent and agent-sdk modules as specified in the instructions:
-
-- `npm link @typeagent`
-- `npm link @typeagent/agent-sdk`
+  - `npm link @typeagent`
+  - `npm link @typeagent/agent-sdk`
 
 ## Trademarks
 

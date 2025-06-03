@@ -78,13 +78,22 @@ export function createActionResultFromHtmlDisplayWithScript(
     };
 }
 
+/**
+ * Create an ActionResultSuccess from markdown text for both conversation history and display.
+ * @param markdownText single line or multiple lines of markdown text for both conversation history and display
+ * @param entities array of entities for the conversation history
+ * @param resultEntity the result entity of the action if any
+ * @returns
+ */
 export function createActionResultFromMarkdownDisplay(
-    markdownText: string,
+    markdownText: string | string[],
     entities: Entity[] = [],
     resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
-        literalText: markdownText,
+        literalText: Array.isArray(markdownText)
+            ? markdownText.join("\n")
+            : markdownText,
         entities,
         resultEntity,
         displayContent: { type: "markdown", content: markdownText },

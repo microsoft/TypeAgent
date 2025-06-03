@@ -30,6 +30,9 @@ let indexCachePath: string;
 // The root folder where the images are located
 let rootImageFolder: string;
 
+// The last message sent to the clients
+let lastMessage: any = {};
+
 // limit request rage
 const limiter = rateLimit({
     windowMs: 1000,
@@ -63,7 +66,9 @@ app.get("/image", (req: Request, res: Response) => {
         return;
     } else {
         const normalized = path.resolve(file);
+        debug(`Normalized path: ${normalized}`);
         allowedFolders.forEach((folder) => {
+            debug(`Checking folder: ${folder}`);
             if (normalized.startsWith(path.resolve(folder))) {
                 // send the file
                 res.sendFile(normalized);
@@ -138,10 +143,10 @@ function sendThumbnailorOriginalImage(
 }
 
 /**
- * Gets the knowledge reponse file for the supplied image (if available)
+ * Gets the knowledge response file for the supplied image (if available)
  * Used for debugging purposes only.
  */
-app.get("/knowlegeResponse", (req: Request, res: Response) => {
+app.get("/knowledgeResponse", (req: Request, res: Response) => {
     const imageFile = `${req.query.path}`;
 
     // replace the image path root with the index cache root since KR files are stored in the index cache
@@ -205,8 +210,15 @@ app.get("/events", (req, res) => {
     });
 });
 
-app.get("/cmd", async (req, res) => {
-    console.debug(req);
+/**
+ * Sends the last message to the requestor
+ */
+app.get("/lastMessage", async (req, res) => {
+    if (lastMessage) {
+        res.status(200).send(lastMessage);
+    } else {
+        res.status(404).send("No last message");
+    }
 });
 
 /**
@@ -215,9 +227,11 @@ app.get("/cmd", async (req, res) => {
  */
 function sendDataToClients(message: any) {
     // when no client is here just queue messages to drain later
-    if (clients.length == 0) {
+    if (clients.length === 0) {
         messageQueue.push(message);
     } else {
+        lastMessage = message;
+
         clients.forEach((client) => {
             client.write(`data: ${JSON.stringify(message)}\n\n`);
         });
@@ -234,6 +248,7 @@ process.send?.("Success");
  */
 process.on("message", (message: any) => {
     if (message.folders) {
+        debug(`Folders: ${JSON.stringify(message)}`);
         // allowed folders already contains index cache path and indexed location
         if (message.folders.allowedFolders) {
             allowedFolders = [

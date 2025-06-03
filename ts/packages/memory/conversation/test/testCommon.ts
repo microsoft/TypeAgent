@@ -12,7 +12,7 @@ import {
     getAbsolutePath,
     NullEmbeddingModel,
 } from "test-lib";
-import { importPodcast } from "../src/importPodcast.js";
+import { importPodcast } from "../src/podcastImport.js";
 import { Podcast } from "../src/podcast.js";
 import { PodcastMessage } from "../src/podcastMessage.js";
 

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "principalId": {
+      "value": null
+    },
+    "region": {
+      "value": null
+    },
+    "name": {
+      "value": null
+    },
+    "group_name": {
+      "value": null
+    },
+    "maps_region": {
+      "value": null
+    },
+    "maps_name": {
+      "value": null
+    },
+    "speech_region": {
+      "value": null
+    },
+    "speech_name": {
+      "value": null
+    },
+    "openai_region": {
+      "value": null
+    },
+    "openai_name": {
+      "value": null
+    },
+    "search_name": {
+      "value": null
+    },
+    "vaults_region": {
+      "value": null
+    },
+    "vaults_name": {
+      "value": null
+    },
+    "accounts_typeagent_test_agent_resource_name": {
+      "value": null
+    },
+    "accounts_bing_with_grounding_externalid": {
+      "value": null
+    }
+  }
+}

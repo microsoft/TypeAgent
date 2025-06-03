@@ -126,6 +126,7 @@ export function createIndexingEventHandler(
     printer: MemoryConsoleWriter,
     progress: ProgressBar,
     maxMessages: number,
+    debugMode: boolean = false,
 ): kp.IndexingEventHandlers {
     let startedKnowledge = false;
     let startedRelated = false;
@@ -135,6 +136,11 @@ export function createIndexingEventHandler(
             if (!startedKnowledge) {
                 printer.writeLine("Indexing knowledge");
                 startedKnowledge = true;
+            }
+            if (debugMode) {
+                printer.writeLine("================");
+                printer.writeJson(knowledge);
+                printer.writeLine("================");
             }
             progress.advance();
             return progress.count < maxMessages;
@@ -201,4 +207,32 @@ export async function loadEmailMemory(
         },
         createNew,
     );
+}
+
+export async function getLangSearchResult(
+    conversation: kp.IConversation | cm.Memory,
+    queryTranslator: kp.SearchQueryTranslator,
+    searchText: string,
+    options?: kp.LanguageSearchOptions,
+    langFilter?: kp.LanguageSearchFilter,
+    debugContext?: kp.LanguageSearchDebugContext,
+) {
+    const searchResults =
+        conversation instanceof cm.Memory
+            ? await conversation.searchWithLanguage(
+                  searchText,
+                  options,
+                  langFilter,
+                  debugContext,
+              )
+            : await kp.searchConversationWithLanguage(
+                  conversation,
+                  searchText,
+                  queryTranslator,
+                  options,
+                  langFilter,
+                  debugContext,
+              );
+
+    return searchResults;
 }

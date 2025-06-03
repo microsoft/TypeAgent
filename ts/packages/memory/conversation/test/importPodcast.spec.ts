@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { getAbsolutePath, readTestFile } from "test-lib";
-import { importPodcast, parsePodcastTranscript } from "../src/importPodcast.js";
+import { importPodcast, parsePodcastTranscript } from "../src/podcastImport.js";
 import {
     createOfflineConversationSettings,
     getTestTranscripts,

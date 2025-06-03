@@ -51,12 +51,28 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.11.0",
+  "packageManager": "pnpm@10.11.1",
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"
   },
   "pnpm": {
+    "onlyBuiltDependencies": [
+      "@azure/msal-node-extensions",
+      "@azure/msal-node-runtime",
+      "@vscode/vsce-sign",
+      "better-sqlite3",
+      "canvas",
+      "electron",
+      "electron-winstaller",
+      "esbuild",
+      "exifreader",
+      "keytar",
+      "koffi",
+      "protobufjs",
+      "puppeteer",
+      "sharp"
+    ],
     "supportedArchitectures": {
       "cpu": [
         "x64",

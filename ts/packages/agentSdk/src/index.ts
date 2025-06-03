@@ -17,6 +17,7 @@ export {
     SchemaTypeNames,
     ActivityContext,
     AppAgentInitSettings,
+    ResolveEntityResult,
 } from "./agentInterface.js";
 
 export {

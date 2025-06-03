@@ -130,7 +130,7 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
         messageBody: string | string[],
         public tags: string[] = [],
         public timestamp: string | undefined = undefined,
-        public knowledge: kpLib.KnowledgeResponse | undefined,
+        public knowledge: kpLib.KnowledgeResponse | undefined = undefined,
         public deletionInfo: kp.DeletionInfo | undefined = undefined,
     ) {
         if (Array.isArray(messageBody)) {
@@ -141,7 +141,10 @@ export class Message<TMeta extends MessageMetadata = MessageMetadata>
     }
 
     public addContent(content: string, chunkOrdinal = 0) {
-        if (chunkOrdinal > this.textChunks.length) {
+        if (
+            chunkOrdinal > this.textChunks.length - 1 ||
+            this.textChunks.length == 0
+        ) {
             this.textChunks.push(content);
         } else {
             this.textChunks[chunkOrdinal] += content;
@@ -208,11 +211,15 @@ export abstract class Memory<
     TSettings extends MemorySettings = MemorySettings,
     TMessage extends Message = Message,
 > {
+    public nameTag: string;
+    public tags: string[];
     public settings: TSettings;
     public noiseTerms: Set<string>;
 
-    constructor(settings: TSettings) {
+    constructor(settings: TSettings, nameTag?: string, tags?: string[]) {
         this.settings = settings;
+        this.nameTag = nameTag ?? "";
+        this.tags = tags ?? [];
         this.noiseTerms = new Set<string>();
         this.settings.queryTranslator ??= kp.createSearchQueryTranslator(
             this.settings.languageModel,
@@ -323,6 +330,7 @@ export abstract class Memory<
             index: number,
             result: Result<kp.AnswerResponse>,
         ) => void,
+        answerContextOptions?: kp.AnswerContextOptions,
     ): Promise<Result<[kp.ConversationSearchResult, kp.AnswerResponse][]>> {
         const searchResults = await this.searchWithLanguage(
             question,
@@ -344,6 +352,7 @@ export abstract class Memory<
                           progress(searchResult, chunk, index, result);
                       }
                     : undefined,
+                answerContextOptions,
             );
             if (!answerResult.success) {
                 return answerResult;
@@ -369,6 +378,7 @@ export abstract class Memory<
             index: number,
             result: Result<kp.AnswerResponse>,
         ) => void,
+        answerContextOptions?: kp.AnswerContextOptions,
     ): Promise<Result<kp.AnswerResponse>> {
         question ??= searchResult.rawSearchQuery;
         if (!question) {
@@ -381,14 +391,19 @@ export abstract class Memory<
             question,
             searchResult,
             progress,
+            answerContextOptions,
         );
     }
 
     protected beginIndexing(): void {
+        // Turn off caching during indexing because:
+        // - LRU caches will not be useful
+        // - Any persistent caches will be rebuilt anyway
         this.settings.embeddingModel.cacheEnabled = false;
     }
 
     protected endIndexing(): void {
+        // See note in beginIndexing for why this was turned off during indexing
         this.settings.embeddingModel.cacheEnabled = true;
     }
 

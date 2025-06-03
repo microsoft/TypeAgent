@@ -54,8 +54,10 @@ export type AppAgentInitSettings = {
 };
 
 export type ResolveEntityResult = {
-    entity: Entity;
+    match: "exact" | "fuzzy";
+    entities: Entity[];
 };
+
 export interface AppAgent extends Partial<AppAgentCommandInterface> {
     // Setup
     initializeAgentContext?(settings?: AppAgentInitSettings): Promise<unknown>;
