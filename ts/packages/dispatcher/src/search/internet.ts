@@ -361,7 +361,7 @@ export async function runGroundingLookup(
 
                             context.actionIO.appendDisplay({
                                 type: "html",
-                                content: `${textValue.replace("\n", "<br/>")}`,
+                                content: `${textValue.replaceAll("\n", "<br/>")}`,
                             });
                         }
                     });
