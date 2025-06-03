@@ -63,62 +63,7 @@ async function handleChatResponse(
     console.log(JSON.stringify(chatAction, undefined, 2));
     switch (chatAction.actionName) {
         case "generateResponse": {
-            const generateResponseAction = chatAction as GenerateResponseAction;
-            const parameters = generateResponseAction.parameters;
-            const generatedText = parameters.generatedText;
-            if (generatedText !== undefined) {
-                logEntities("UR Entities:", parameters.userRequestEntities);
-                logEntities("GT Entities:", parameters.generatedTextEntities);
-                console.log(
-                    "Got generated text: " +
-                        generatedText.substring(0, 100) +
-                        "...",
-                );
-
-                const needDisplay =
-                    context.streamingContext !== generatedText ||
-                    generateResponseAction.parameters.relatedFiles;
-                let result;
-                if (needDisplay) {
-                    if (generateResponseAction.parameters.relatedFiles) {
-                        result = createActionResultFromHtmlDisplay(
-                            `<div>${generatedText}</div><div class='chat-smallImage'>${await rehydrateImages(context, chatAction.parameters.relatedFiles!)}</div>`,
-                        );
-                    } else {
-                        result = createActionResult(generatedText, true);
-                    }
-                } else {
-                    result = createActionResultNoDisplay(generatedText);
-                }
-
-                let entities = parameters.generatedTextEntities || [];
-                if (parameters.userRequestEntities !== undefined) {
-                    result.entities =
-                        parameters.userRequestEntities.concat(entities);
-                }
-
-                if (
-                    generateResponseAction.parameters.relatedFiles !== undefined
-                ) {
-                    const fileEntities: Entity[] = new Array<Entity>();
-                    for (const file of generateResponseAction.parameters
-                        .relatedFiles) {
-                        let name = file;
-                        if (file.lastIndexOf("\\") > -1) {
-                            name = file.substring(file.lastIndexOf("\\") + 1);
-                        }
-                        fileEntities.push({
-                            name,
-                            type: ["file", "image", "data"],
-                        });
-                    }
-
-                    logEntities("File Entities:", fileEntities);
-                    result.entities = result.entities.concat(fileEntities);
-                }
-
-                return result;
-            }
+            return generateReponse(chatAction, context);
             break;
         }
 
@@ -131,6 +76,61 @@ async function handleChatResponse(
             throw new Error(
                 `Invalid chat action: ${(chatAction as TypeAgentAction).actionName}`,
             );
+    }
+}
+
+async function generateReponse(
+    generateResponseAction: GenerateResponseAction,
+    context: ActionContext,
+) {
+    const parameters = generateResponseAction.parameters;
+    const generatedText = parameters.generatedText;
+    if (generatedText !== undefined) {
+        logEntities("UR Entities:", parameters.userRequestEntities);
+        logEntities("GT Entities:", parameters.generatedTextEntities);
+        console.log(
+            "Got generated text: " + generatedText.substring(0, 100) + "...",
+        );
+
+        const needDisplay =
+            context.streamingContext !== generatedText ||
+            generateResponseAction.parameters.relatedFiles;
+        let result;
+        if (needDisplay) {
+            if (generateResponseAction.parameters.relatedFiles) {
+                result = createActionResultFromHtmlDisplay(
+                    `<div>${generatedText}</div><div class='chat-smallImage'>${await rehydrateImages(context, generateResponseAction.parameters.relatedFiles!)}</div>`,
+                );
+            } else {
+                result = createActionResult(generatedText, true);
+            }
+        } else {
+            result = createActionResultNoDisplay(generatedText);
+        }
+
+        let entities = parameters.generatedTextEntities || [];
+        if (parameters.userRequestEntities !== undefined) {
+            result.entities = parameters.userRequestEntities.concat(entities);
+        }
+
+        if (generateResponseAction.parameters.relatedFiles !== undefined) {
+            const fileEntities: Entity[] = new Array<Entity>();
+            for (const file of generateResponseAction.parameters.relatedFiles) {
+                let name = file;
+                if (file.lastIndexOf("\\") > -1) {
+                    name = file.substring(file.lastIndexOf("\\") + 1);
+                }
+                fileEntities.push({
+                    name,
+                    type: ["file", "image", "data"],
+                });
+            }
+
+            logEntities("File Entities:", fileEntities);
+            result.entities = result.entities.concat(fileEntities);
+        }
+
+        return result;
     }
 }
 

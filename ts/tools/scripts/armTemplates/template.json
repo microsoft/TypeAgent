@@ -54,6 +54,14 @@
     "vaults_name": {
       "defaultValue": "[concat(parameters('prefix'), '-', uniqueString(parameters('vaults_region'), subscription().id))]",
       "type": "String"
+    },
+    "accounts_typeagent_test_agent_resource_name": {
+      "defaultValue": "typeagent-test-agent-resource",
+      "type": "String"
+    },
+    "accounts_bing_with_grounding_externalid": {
+      "defaultValue": "[concat(subscription().id, 'resourceGroups', parameters('group_name'), 'providers/Microsoft.Bing/accounts/bing-with-grounding')]",
+      "type": "String"
     }
   },
   "resources": {
@@ -82,7 +90,13 @@
           "search_name": { "value": "[parameters('search_name')]" },
           "vaults_region": { "value": "[parameters('vaults_region')]" },
           "vaults_name": { "value": "[parameters('vaults_name')]" },
-          "principalId": { "value": "[parameters('principalId')]" }
+          "principalId": { "value": "[parameters('principalId')]" },
+          "accounts_typeagent_test_agent_resource_name": {
+            "value": "[parameters('accounts_typeagent_test_agent_resource_name')]"
+          },
+          "accounts_bing_with_grounding_externalid": {
+            "value": "[parameters('accounts_bing_with_grounding_externalid')]"
+          }
         },
         "mode": "Incremental",
         "template": {
@@ -99,7 +113,9 @@
             "search_name": { "type": "String" },
             "vaults_region": { "type": "String" },
             "vaults_name": { "type": "String" },
-            "principalId": { "type": "String" }
+            "principalId": { "type": "String" },
+            "accounts_typeagent_test_agent_resource_name": { "type": "String" },
+            "accounts_bing_with_grounding_externalid": { "type": "String" }
           },
           "variables": {
             "keyVaultSecretUserRole": "4633458b-17de-408a-b874-0445c86b69e6",
@@ -107,6 +123,7 @@
             "cognitiveServicesSpeechUserRole": "f2dc8367-1007-4938-bd23-fe263f013447",
             "azureMapsDataReaderRole": "423170ca-a8f6-4b0f-8487-9e4eb8f49bfa",
             "openaiSubdomainName": "[concat(parameters('openai_name'), '-', uniqueString(subscription().id))]",
+            "openaiSubdomainName2": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '-', uniqueString(subscription().id))]",
             "openaiEndpoint": "[concat('https://', variables('openaiSubdomainName'), '.openai.azure.com/')]"
           },
           "resources": {
@@ -327,23 +344,6 @@
                 "raiPolicyName": "Microsoft.DefaultV2"
               }
             },
-            "search": {
-              "condition": false,
-              "type": "Microsoft.Bing/accounts",
-              "apiVersion": "2020-06-10",
-              "name": "[parameters('search_name')]",
-              "location": "global",
-              "sku": {
-                "name": "S1"
-              },
-              "kind": "Bing.Search.v7",
-              "properties": {
-                "provisioningState": "Succeeded",
-                "endpoint": "https://api.bing.microsoft.com/",
-                "internalId": "3534d9bccab442b9b0d43b56b6924610",
-                "statisticsEnabled": false
-              }
-            },
             "vault": {
               "type": "Microsoft.KeyVault/vaults",
               "apiVersion": "2024-12-01-preview",
@@ -476,28 +476,28 @@
                 "value": "1"
               }
             },
-            "secrets_search_key": {
-              "condition": false,
+            "secrets_groundingWithBing_agent_id": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/BING-API-KEY')]",
+              "name": "[concat(parameters('vaults_name'), '/BING-WITH-GROUNDING-AGENT-ID')]",
               "dependsOn": ["vault"],
               "properties": {
                 "attributes": {
                   "enabled": true
-                }
+                },
+                "value": "<REPLACE WITH YOUR BING WITH GROUNDING AGENT ID>"
               }
             },
-            "secrets_search_endpoint": {
-              "condition": false,
+            "secrets_groundingWithBing_endpoint": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/BING-MAPS-API-KEY')]",
+              "name": "[concat(parameters('vaults_name'), '/BING-WITH-GROUNDING-ENDPOINT')]",
               "dependsOn": ["vault"],
               "properties": {
                 "attributes": {
                   "enabled": true
-                }
+                },
+                "value": "[concat('https://', variables('openaiSubdomainName2'), '.services.ai.azure.com/api/projects/typeagent-test-agent')]"
               }
             },
             "speech_key": {
@@ -522,6 +522,99 @@
                   "enabled": true
                 },
                 "value": "[parameters('speech_region')]"
+              }
+            },
+            "aiFoundry_account": {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[parameters('accounts_typeagent_test_agent_resource_name')]",
+              "location": "eastus2",
+              "tags": {
+                "typeagent": "[deployment().name]"
+              },
+              "sku": {
+                "name": "S0"
+              },
+              "kind": "AIServices",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "apiProperties": {},
+                "customSubDomainName": "[variables('openaiSubdomainName2')]",
+                "networkAcls": {
+                  "defaultAction": "Allow",
+                  "virtualNetworkRules": [],
+                  "ipRules": []
+                },
+                "allowProjectManagement": true,
+                "defaultProject": "typeagent-test-agent",
+                "associatedProjects": ["typeagent-test-agent"],
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": false
+              }
+            },
+            "agent_model": {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/gpt-4o')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accounts_typeagent_test_agent_resource_name'))]"
+              ],
+              "sku": {
+                "name": "GlobalStandard",
+                "capacity": 50
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "gpt-4o",
+                  "version": "2024-11-20"
+                },
+                "versionUpgradeOption": "OnceNewDefaultVersionAvailable",
+                "currentCapacity": 50,
+                "raiPolicyName": "Microsoft.DefaultV2"
+              }
+            },
+            "aiFoundry_project": {
+              "type": "Microsoft.CognitiveServices/accounts/projects",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/typeagent-test-agent')]",
+              "location": "eastus2",
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accounts_typeagent_test_agent_resource_name'))]"
+              ],
+              "kind": "AIServices",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {}
+            },
+            "aiFoundry_connection": {
+              "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/typeagent-test-agent/bingwithgrounding')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('accounts_typeagent_test_agent_resource_name'), 'typeagent-test-agent')]",
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accounts_typeagent_test_agent_resource_name'))]"
+              ],
+              "properties": {
+                "authType": "ApiKey",
+                "credentials": {
+                  "key": "sdfasdf"
+                },
+                "category": "GroundingWithBingSearch",
+                "target": "https://api.bing.microsoft.com/",
+                "useWorkspaceManagedIdentity": false,
+                "isSharedToAll": false,
+                "sharedUserList": [],
+                "peRequirement": "NotRequired",
+                "peStatus": "NotApplicable",
+                "metadata": {
+                  "type": "bing_grounding",
+                  "ApiType": "Azure",
+                  "ResourceId": "[parameters('accounts_bing_with_grounding_externalid')]"
+                }
               }
             }
           }

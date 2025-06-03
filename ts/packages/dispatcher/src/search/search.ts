@@ -23,14 +23,19 @@ export async function lookupAndAnswer(
     const source = lookupAction.parameters.lookup.source;
     switch (source) {
         case "internet":
-            const { question, lookup } = lookupAction.parameters;
-            return handleLookup(
+            const { question, lookup, originalRequest } =
+                lookupAction.parameters;
+
+            const result = handleLookup(
                 question,
                 lookup.internetLookups,
                 lookup.site,
                 context,
                 await getLookupSettings(true),
+                originalRequest,
             );
+
+            return result;
         case "conversation":
             const conversationManager: conversation.ConversationManager = (
                 context.sessionContext as any
