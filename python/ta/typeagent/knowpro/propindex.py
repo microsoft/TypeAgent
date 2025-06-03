@@ -26,6 +26,7 @@ class PropertyNames(enum.Enum):
     Object = "object"
     IndirectObject = "indirectObject"
     Tag = "tag"
+    Topic = "topic"
 
 
 def add_facet(

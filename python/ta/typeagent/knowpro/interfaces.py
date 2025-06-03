@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterable, Sequence
+from dataclasses import field
 from datetime import (
     datetime as Datetime,  # For export.
     timedelta as Timedelta,  # type: ignore  # For export.
@@ -541,13 +542,39 @@ class PropertySearchTerm:
     property_name: KnowledgePropertyName | SearchTerm
     property_value: SearchTerm
 
+    def __init__(
+        self, name: str | SearchTerm, value: str | SearchTerm, exact_match_value=False
+    ) -> None:
+        if isinstance(name, SearchTerm):
+            self.property_name = name
+        elif name in (
+            "name",
+            "type",
+            "verb",
+            "subject",
+            "object",
+            "indirectObject",
+            "tag",
+            "topic",
+        ):
+            self.property_name = name
+        else:
+            self.property_name = SearchTerm(Term(name))
+
+        if isinstance(value, SearchTerm):
+            self.property_value = value
+        else:
+            self.property_value = SearchTerm(Term(value))
+        if exact_match_value:
+            self.property_value.related_terms = []
+
 
 @dataclass
 class SearchTermGroup:
     """A group of search terms."""
 
     boolean_op: Literal["and", "or", "or_max"]
-    terms: list["SearchTermGroupTypes"]
+    terms: list["SearchTermGroupTypes"] = field(default_factory=list)
 
 
 SearchTermGroupTypes = SearchTerm | PropertySearchTerm | SearchTermGroup

@@ -392,9 +392,7 @@ class TestMatchPropertySearchTermExpr:
         """Test accumulating matches for a property search term."""
         # property_name is a string (KnowledgePropertyName); calls accumulate_matches_for_property()
         eval_context.property_index = MockPropertyIndex()
-        property_search_term = PropertySearchTerm(
-            property_name="name", property_value=SearchTerm(term=Term("test"))
-        )
+        property_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(property_search_term)
         matches = SemanticRefAccumulator()
         expr.accumulate_matches(eval_context, matches)
@@ -405,8 +403,8 @@ class TestMatchPropertySearchTermExpr:
         # property_name is a SearchTerm(Term()); calls accumulate_matches_for_facets()
         eval_context.property_index = MockPropertyIndex()
         property_search_term = PropertySearchTerm(
-            property_name=SearchTerm(Term("name")),
-            property_value=SearchTerm(term=Term("test")),
+            SearchTerm(Term("name")),
+            SearchTerm(term=Term("test")),
         )
         expr = MatchPropertySearchTermExpr(property_search_term)
         matches = SemanticRefAccumulator()
@@ -416,9 +414,7 @@ class TestMatchPropertySearchTermExpr:
     def test_accumulate_matches_for_property(self, eval_context: QueryEvalContext):
         """Test accumulate_matches_for_property method."""
         eval_context.property_index = MockPropertyIndex()
-        dummy_search_term = PropertySearchTerm(
-            property_name="name", property_value=SearchTerm(term=Term("test"))
-        )
+        dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
         expr.accumulate_matches_for_property(
@@ -429,9 +425,7 @@ class TestMatchPropertySearchTermExpr:
     def test_accumulate_matches_for_facets(self, eval_context: QueryEvalContext):
         """Test accumulate_matches_for_facets method."""
         eval_context.property_index = MockPropertyIndex()
-        dummy_search_term = PropertySearchTerm(
-            property_name="name", property_value=SearchTerm(term=Term("test"))
-        )
+        dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
         matches = SemanticRefAccumulator()
         st1, st2 = SearchTerm(Term("facet.name")), SearchTerm(Term("test"))
@@ -443,9 +437,7 @@ class TestMatchPropertySearchTermExpr:
     ):
         """Test accumulate_matches_for_property_value method."""
         eval_context.property_index = MockPropertyIndex()
-        dummy_search_term = PropertySearchTerm(
-            property_name="name", property_value=SearchTerm(term=Term("test"))
-        )
+        dummy_search_term = PropertySearchTerm("name", SearchTerm(term=Term("test")))
         expr = MatchPropertySearchTermExpr(dummy_search_term)
 
         # First call has two matches

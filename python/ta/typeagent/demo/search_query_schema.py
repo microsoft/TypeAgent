@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# TODO: Move this file into knowpro.
+
 from pydantic.dataclasses import dataclass
 from typing import Literal, Annotated
 from typing_extensions import Doc

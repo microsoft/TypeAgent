@@ -7,10 +7,17 @@ from .interfaces import (
     IConversation,
     KnowledgeType,
     ScoredMessageOrdinal,
+    SearchSelectExpr,
     SearchTermGroup,
     SemanticRefSearchResult,
 )
 from .query import is_conversation_searchable
+
+
+@dataclass
+class SearchQueryExpr:
+    select_expressions: list[SearchSelectExpr]
+    raw_query: str | None = None
 
 
 @dataclass
@@ -51,7 +58,7 @@ async def search_conversation_knowledge(
 """
 Rouch sketch of how to search:
 
-- search_term_group: SearchTermGroup has a bool=ish op and a list of (SearchTerm | SearchTermGroup).
+- search_term_group: SearchTermGroup has a bool-ish op and a list of (SearchTerm | SearchTermGroup).
 - for each item in the list:
   - if it's a SearchTermGroup, recursively search to get results.
   - if it's a SearchTerm, it has a term and maybe a list of related terms:

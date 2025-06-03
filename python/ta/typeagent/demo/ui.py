@@ -7,13 +7,26 @@ from pprint import pprint
 import readline  # type: ignore  # For its side-effect of turning on line editing in input().
 import shutil
 import sys
-from typing import Literal
+from typing import Any, Literal
 
+from pydantic.dataclasses import dataclass
 import typechat
 
 from ..aitools.auth import load_dotenv
 from ..knowpro.collections import SemanticRefAccumulator
 from ..knowpro.convknowledge import create_typechat_model
+from ..knowpro.interfaces import (
+    DateRange,
+    Datetime,
+    IConversation,
+    IMessage,
+    PropertySearchTerm,
+    SearchSelectExpr,
+    SearchTerm,
+    SearchTermGroup,
+    SearchTermGroupTypes,
+    WhenFilter,
+)
 from ..knowpro.query import (
     IQueryOpExpr,
     MatchSearchTermExpr,
@@ -22,15 +35,13 @@ from ..knowpro.query import (
     MatchTermsOrMaxExpr,
     QueryEvalContext,
 )
-from ..knowpro.interfaces import (
-    PropertySearchTerm,
-    SearchTerm,
-    SearchTermGroup,
-    SearchTermGroupTypes,
-)
+from ..knowpro.search import SearchQueryExpr
 from ..podcasts.podcast import Podcast
 
 from .search_query_schema import SearchQuery
+from .querycompiler import date_range_from_datetime_range
+
+cap = min  # More readable name for capping a value at some limit
 
 
 def main() -> None:
@@ -43,7 +54,7 @@ def main() -> None:
     context = QueryEvalContext(conversation=pod)  # type: ignore
     print("TypeAgent demo UI 0.1 (type 'q' to exit)")
     try:
-        read_commands(translator, context, sys.stdin)  # type: ignore  # Why is stdin not a TextIOWrapper?!
+        process_inputs(translator, context, sys.stdin)  # type: ignore  # Why is stdin not a TextIOWrapper?!
     except KeyboardInterrupt:
         print()
 
@@ -58,27 +69,43 @@ def create_translator() -> typechat.TypeChatJsonTranslator[SearchQuery]:
     return translator
 
 
-def read_commands(
+def process_inputs(
     translator: typechat.TypeChatJsonTranslator[SearchQuery],
     context: QueryEvalContext,
     stream: io.TextIOWrapper,
 ) -> None:
+    conversation = context.conversation
     ps1 = "--> "
     while True:
         print()
-        line = read_one_line(ps1, stream)
-        if line is None:  # EOF
+        query_text = read_one_line(ps1, stream)
+        if query_text is None:  # EOF
             break
-        if not line:
+        if not query_text:
             continue
-        if line.lower() in ("exit", "quit", "q"):
+        if query_text.lower() in ("exit", "quit", "q"):
             break
-        search_query = translate_command(translator, line)
+
+        # Gradually turn the query text into something we can use to search.
+
+        # 1. With LLM help, translate to SearchQuery (a tree but not yet usable to query)
+        search_query = translate_text_to_search_query(
+            conversation, translator, query_text
+        )
         if search_query is None:
             print("Failed to translate command to search terms.")
             continue
         print(f"Search query:")
-        pprint(search_query, width=min(200, shutil.get_terminal_size().columns))
+        pprint(search_query, width=cap(200, shutil.get_terminal_size().columns))
+
+        # 2. Translate the search query into something directly usable to query
+
+        xxx = search_conversation_with_language(conversation, query_text, search_query)
+
+        # 3. Search!
+
+        pass
+
         # query = compile_query(search_terms)
         # if query is None:
         #     print("Failed to compile search terms to query.")
@@ -109,19 +136,74 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
         return line.strip()
 
 
-def translate_command(
-    translator: typechat.TypeChatJsonTranslator[SearchQuery], command: str
+def translate_text_to_search_query(
+    conversation: IConversation,
+    translator: typechat.TypeChatJsonTranslator[SearchQuery],
+    text: str,
 ) -> SearchQuery | None:
+    prompt_preamble: list[typechat.PromptSection] = []
+    time_range_preamble = get_time_range_prompt_section_for_conversation(conversation)
+    if time_range_preamble is not None:
+        prompt_preamble.append(time_range_preamble)
     result: typechat.Result[SearchQuery] = asyncio.run(
-        translator.translate(
-            f"Please convert the following user query to a SearchTermGroup:"
-            f"\n'''{command}\n'''\n"
-        )
+        translator.translate(text, prompt_preamble=prompt_preamble)
     )
     if isinstance(result, typechat.Failure):
-        print(f"Error translating {command!r}: {result.message}")
+        print(f"Error translating {text!r}: {result.message}")
         return None
     return result.value
+
+
+# TODO: Move to conversation.py
+def get_time_range_prompt_section_for_conversation(
+    conversation: IConversation,
+) -> typechat.PromptSection | None:
+    time_range = get_time_range_for_conversation(conversation)
+    if time_range is not None:
+        return typechat.PromptSection(
+            role="system",
+            content=f"ONLY IF user request explicitly asks for time ranges, "
+            f'THEN use the CONVERSATION TIME RANGE: "{time_range.start} to {time_range.end}"',
+        )
+
+
+# TODO: Move to conversation.py
+def get_time_range_for_conversation(
+    conversation: IConversation[IMessage, Any],
+) -> DateRange | None:
+    messages = conversation.messages
+    if len(messages) > 0:
+        start = messages[0].timestamp
+        if start is not None:
+            end = messages[-1].timestamp
+            return DateRange(
+                start=Datetime.fromisoformat(start),
+                end=Datetime.fromisoformat(end) if end else None,
+            )
+    return None
+
+
+@dataclass
+class LanguageQueryExpr:
+    query_text: str
+    query: SearchQuery
+    query_expressions: list[SearchQueryExpr]
+
+
+def search_conversation_with_language(
+    conversation: IConversation, query_text, search_query: SearchQuery
+) -> LanguageQueryExpr | None:
+    query_expressions = compile_search_query(conversation, search_query)
+
+    return LanguageQueryExpr(query_text, search_query, query_expressions)
+
+
+def compile_search_query(conversation, search_query) -> list[SearchQueryExpr]:
+
+    return []
+
+
+# ---------- From an earlier version ----------
 
 
 def compile_query(
