@@ -8,6 +8,15 @@
     "schemaType": "BrowserActions"
   },
   "subActionManifests": {
+    "externalBrowser": {
+      "defaultEnabled": false,
+      "transient": true,
+      "schema": {
+        "description": "Actions to control open, close and switching external browser windows and tabs, add bookmarks and open websites based on history and bookmarks.",
+        "schemaFile": "./externalBrowserActionSchema.mts",
+        "schemaType": "ExternalBrowserActions"
+      }
+    },
     "crossword": {
       "defaultEnabled": false,
       "transient": true,

@@ -46,6 +46,7 @@ import { CrosswordActions } from "./crossword/schema/userActions.mjs";
 import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
+import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 
 export function instantiate(): AppAgent {
     return {
@@ -218,6 +219,7 @@ async function updateBrowserContext(
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
+        | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<CrosswordActions, "browser.crossword">
         | TypeAgentAction<ShoppingActions, "browser.commerce">
         | TypeAgentAction<InstacartActions, "browser.instacart">
