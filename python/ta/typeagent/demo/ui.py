@@ -21,11 +21,9 @@ from ..knowpro.interfaces import (
     IConversation,
     IMessage,
     PropertySearchTerm,
-    SearchSelectExpr,
     SearchTerm,
     SearchTermGroup,
     SearchTermGroupTypes,
-    WhenFilter,
 )
 from ..knowpro.query import (
     IQueryOpExpr,
@@ -39,7 +37,7 @@ from ..knowpro.search import SearchQueryExpr
 from ..podcasts.podcast import Podcast
 
 from .search_query_schema import SearchQuery
-from .querycompiler import date_range_from_datetime_range
+from .querycompiler import SearchQueryCompiler, date_range_from_datetime_range
 
 cap = min  # More readable name for capping a value at some limit
 
@@ -77,7 +75,6 @@ def process_inputs(
     conversation = context.conversation
     ps1 = "--> "
     while True:
-        print()
         query_text = read_one_line(ps1, stream)
         if query_text is None:  # EOF
             break
@@ -88,6 +85,8 @@ def process_inputs(
 
         # Gradually turn the query text into something we can use to search.
 
+        # TODO: # 0. Recognize @-commands like "@search" and handle them specially.
+
         # 1. With LLM help, translate to SearchQuery (a tree but not yet usable to query)
         search_query = translate_text_to_search_query(
             conversation, translator, query_text
@@ -97,14 +96,20 @@ def process_inputs(
             continue
         print(f"Search query:")
         pprint(search_query, width=cap(200, shutil.get_terminal_size().columns))
+        print()
 
-        # 2. Translate the search query into something directly usable to query
-
-        xxx = search_conversation_with_language(conversation, query_text, search_query)
+        # 2. Translate the search query into something directly usable as a query.
+        query_exprs = translate_search_query(search_query)
+        if not query_exprs:
+            print("Failed to translate search query to query expressions.")
+            continue
+        print("Search query expressions:")
+        for expr in query_exprs:
+            pprint(expr, width=cap(200, shutil.get_terminal_size().columns))
+        print()
 
         # 3. Search!
-
-        pass
+        # xxx = search_conversation_with_language(conversation, query_text, search_query)
 
         # query = compile_query(search_terms)
         # if query is None:
@@ -116,6 +121,8 @@ def process_inputs(
         #     print("Query execution failed.")
         #     continue
         # print(f"Results: {result.to_scored_semantic_refs()}")
+
+        print()
 
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
@@ -154,6 +161,12 @@ def translate_text_to_search_query(
     return result.value
 
 
+def translate_search_query(
+    search_query: SearchQuery,
+) -> list[SearchQueryExpr]:
+    return SearchQueryCompiler().compile_query(search_query)
+
+
 # TODO: Move to conversation.py
 def get_time_range_prompt_section_for_conversation(
     conversation: IConversation,
@@ -181,6 +194,9 @@ def get_time_range_for_conversation(
                 end=Datetime.fromisoformat(end) if end else None,
             )
     return None
+
+
+# ---------- From an earlier version ----------
 
 
 @dataclass
