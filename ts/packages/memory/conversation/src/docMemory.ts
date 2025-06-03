@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as kpLib from "knowledge-processor";
 import * as kp from "knowpro";
 import {
     createMemorySettings,
@@ -55,9 +56,12 @@ export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
 
 export interface DocMemorySettings extends MemorySettings {}
 
-export function createTextMemorySettings() {
+export function createTextMemorySettings(
+    embeddingCacheSize = 64,
+    getPersistentCache?: () => kpLib.TextEmbeddingCache | undefined,
+) {
     return {
-        ...createMemorySettings(),
+        ...createMemorySettings(embeddingCacheSize, getPersistentCache),
     };
 }
 
@@ -76,6 +80,11 @@ export class DocMemory
         settings?: DocMemorySettings,
         tags?: string[],
     ) {
+        settings ??= createTextMemorySettings(
+            64,
+            () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
+        );
+
         super(settings ?? createTextMemorySettings(), nameTag, tags);
         this.messages = new kp.MessageCollection<DocPart>(docParts);
         this.semanticRefs = new kp.SemanticRefCollection();

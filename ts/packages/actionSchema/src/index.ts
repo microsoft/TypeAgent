@@ -35,7 +35,7 @@ export {
     resolveUnionType,
 } from "./utils.js";
 
-export * as ActionSchemaCreator from "./creator.js";
+export * as SchemaCreator from "./creator.js";
 
 export {
     ParsedActionSchemaJSON,
