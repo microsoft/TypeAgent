@@ -12,6 +12,7 @@ from ..knowpro.collections import PropertyTermSet
 from ..knowpro.interfaces import (
     DateRange,
     Datetime,
+    KnowledgePropertyName,
     PropertySearchTerm,
     SearchSelectExpr,
     SearchTerm,
@@ -92,7 +93,7 @@ class SearchQueryCompiler:
             self.compile_search_terms(filter.search_terms, term_group)
         elif len(term_group.terms) == 0:
             # Summary
-            term_group.terms.append(PropertySearchTerm("topic", "*"))
+            term_group.terms.append(create_property_search_term("topic", "*"))
         return term_group
 
     def compile_when(self, filter: SearchFilter) -> WhenFilter | None:
@@ -204,7 +205,10 @@ class SearchQueryCompiler:
             action_term.additional_entities
         ):
             self.add_entity_names_to_group(
-                action_term.additional_entities, PropertyNames.EntityName, term_group, self.exact_scope
+                action_term.additional_entities,
+                PropertyNames.EntityName,
+                term_group,
+                self.exact_scope,
             )
 
         self.dedupe = save_dedupe
@@ -245,10 +249,16 @@ class SearchQueryCompiler:
     def compile_subject_and_verb(self, action_term: ActionTerm) -> SearchTermGroup:
         term_group = SearchTermGroup("and")
         self.add_subject_to_group(action_term, term_group)
-        raise NotImplementedError
+        term_group = SearchTermGroup("and")
+        self.add_subject_to_group(action_term, term_group)
+        if action_term.action_verbs is not None:
+            self.add_verbs_to_group(action_term.action_verbs, term_group)
+        return term_group
 
     def compile_subject(self, action_term: ActionTerm) -> SearchTermGroup:
-        raise NotImplementedError
+        term_group = SearchTermGroup("and")
+        self.add_subject_to_group(action_term, term_group)
+        return term_group
 
     def add_subject_to_group(
         self,
@@ -261,7 +271,16 @@ class SearchQueryCompiler:
             )
 
     def compile_object(self, entity: EntityTerm) -> SearchTermGroup:
-        raise NotImplementedError
+        # A target can be the name of an object of an action OR the name of an entity.
+        term_group = SearchTermGroup("or")
+        self.add_entity_name_to_group(entity, PropertyNames.Object, term_group)
+        self.add_entity_name_to_group(
+            entity, PropertyNames.EntityName, term_group, self.exact_scope
+        )
+        self.add_entity_name_to_group(
+            entity, PropertyNames.Topic, term_group, self.exact_scope
+        )
+        return term_group
 
     def add_verbs_to_group(
         self,
@@ -272,7 +291,7 @@ class SearchQueryCompiler:
             self.add_property_term_to_group("verb", verb, term_group)
 
     def add_entity_term_as_search_terms_to_group(
-            self, entity_term: EntityTerm, term_group: SearchTermGroup
+        self, entity_term: EntityTerm, term_group: SearchTermGroup
     ) -> None:
         if entity_term.is_name_pronoun:
             return
@@ -299,7 +318,42 @@ class SearchQueryCompiler:
         term_group: SearchTermGroup,
         exact_match_name=False,
     ) -> None:
-        raise NotImplementedError
+        self.add_property_term_to_group(
+            PropertyNames.EntityName.value,
+            entity_term.name,
+            term_group,
+            exact_match_name,
+        )
+        if entity_term.type:
+            for type in entity_term.type:
+                self.add_property_term_to_group(
+                    PropertyNames.EntityType.value, type, term_group
+                )
+        if entity_term.facets:
+            for facet in entity_term.facets:
+                name_is_wildcard = facet.facet_name == "*"
+                value_is_wildcard = facet.facet_value == "*"
+                match name_is_wildcard, value_is_wildcard:
+                    case False, False:
+                        self.add_property_term_to_group(
+                            facet.facet_name,
+                            facet.facet_value,
+                            term_group,
+                        )
+                    case False, True:
+                        self.add_property_term_to_group(
+                            PropertyNames.FacetName.value,
+                            facet.facet_name,
+                            term_group,
+                        )
+                    case True, False:
+                        self.add_property_term_to_group(
+                            PropertyNames.FacetValue.value,
+                            facet.facet_value,
+                            term_group,
+                        )
+                    case True, True:
+                        pass
 
     def add_entity_names_to_group(
         self,
@@ -360,7 +414,7 @@ class SearchQueryCompiler:
         if not self.dedupe or not self.entity_terms_added.has(
             property_name, property_value
         ):
-            search_term = PropertySearchTerm(
+            search_term = create_property_search_term(
                 property_name, property_value, exact_match_value
             )
             term_group.terms.append(search_term)
@@ -419,3 +473,20 @@ def datetime_from_date_time(date_time: DateTime) -> Datetime:
         minute=date_time.time.minute if date_time.time else 0,
         second=date_time.time.seconds if date_time.time else 0,
     )
+
+
+def create_property_search_term(
+    name: str,
+    value: str,
+    exact_match_value: bool = False,
+) -> PropertySearchTerm:
+    property_name: KnowledgePropertyName | SearchTerm
+    if name in KnowledgePropertyName.__args__:
+        property_name = cast(KnowledgePropertyName, name)
+    else:
+        property_name = SearchTerm(Term(name))
+    property_value = SearchTerm(Term(value))
+    if exact_match_value:
+        property_value.related_terms = []
+    return PropertySearchTerm(
+        property_name, property_value)
