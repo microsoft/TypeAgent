@@ -15,7 +15,7 @@ import {
     createSearchOptionsTypical,
     hasConversationResults,
     runSearchQuery,
-    runSearchQueryText,
+    runSearchQueryTextSimilarity,
     SearchOptions,
     SearchQueryExpr,
 } from "./search.js";
@@ -127,7 +127,7 @@ export async function searchConversationWithLanguage(
             options.fallbackRagOptions
         ) {
             const textSearchOptions = createTextQueryOptions(options);
-            const ragMatches = await runSearchQueryText(
+            const ragMatches = await runSearchQueryTextSimilarity(
                 conversation,
                 fallbackQuery ?? searchQuery,
                 textSearchOptions,

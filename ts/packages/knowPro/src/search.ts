@@ -16,6 +16,7 @@ import {
     SearchTerm,
     SearchTermGroup,
     SemanticRef,
+    SemanticRefOrdinal,
     SemanticRefSearchResult,
     Term,
     WhenFilter,
@@ -40,6 +41,10 @@ import {
     isSearchGroupTerm,
 } from "./compileLib.js";
 import { NormalizedEmbedding } from "typeagent";
+import {
+    getSemanticRefsFromScoredOrdinals,
+    getSemanticRefsWithTimestamps,
+} from "./knowledgeLib.js";
 
 /**
  * A Search Query expr consists:
@@ -226,7 +231,16 @@ export async function runSearchQuery(
     return results;
 }
 
-export async function runSearchQueryText(
+/**
+ * Run the search query. For each selectExpr:
+ * - only match messages using similarity to the rawQuery on each expression
+ * - scope messages using the when filter
+ * @param conversation
+ * @param query
+ * @param options
+ * @returns
+ */
+export async function runSearchQueryTextSimilarity(
     conversation: IConversation,
     query: SearchQueryExpr,
     options?: SearchOptions,
@@ -278,6 +292,41 @@ export function getDistinctTopicMatches(
     topK?: number,
 ): ScoredKnowledge[] {
     return getDistinctSemanticRefTopics(semanticRefs, searchResults, topK);
+}
+
+export enum RecencyType {
+    Ordinal,
+    Timestamp,
+}
+
+export function orderKnowledgeMatchesByRecency(
+    conversation: IConversation,
+    searchResults: ScoredSemanticRefOrdinal[],
+    sortType: RecencyType,
+): SemanticRefOrdinal[] {
+    if (sortType === RecencyType.Ordinal) {
+        let semanticRefs = getSemanticRefsFromScoredOrdinals(
+            conversation.semanticRefs!,
+            searchResults,
+        );
+        semanticRefs.sort(
+            (x, y) => x.semanticRefOrdinal - y.semanticRefOrdinal,
+        );
+        return semanticRefs.map((sr) => sr.semanticRefOrdinal);
+    }
+
+    if (sortType === RecencyType.Timestamp) {
+        const semanticRefsT = getSemanticRefsWithTimestamps(
+            conversation,
+            searchResults,
+        );
+        semanticRefsT.sort(
+            (x, y) => y.timestamp.getTime() - x.timestamp.getTime(),
+        );
+        return semanticRefsT.map((sr) => sr.value.semanticRefOrdinal);
+    }
+
+    return searchResults.map((sr) => sr.semanticRefOrdinal);
 }
 
 function runQuery<T = any>(
