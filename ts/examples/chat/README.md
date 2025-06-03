@@ -24,6 +24,7 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 | [Email Memory](./src/memory/knowproEmail.ts)                     | @kpEmail...                |
 | [Conversation Memory](./src/memory/knowproConversation.ts)       | @kpCm...                   |
 | [Image Memory](./src/memory/knowproImage.ts)                     | @kpImage...                |
+| [Document Memory](./src/memory/knowproDoc.ts)                    | @kpDoc...                  |
 
 ### Trying it out
 

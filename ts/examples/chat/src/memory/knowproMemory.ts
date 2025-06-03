@@ -36,7 +36,6 @@ import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
-//import { error, PromptSection, Result } from "typechat";
 import { Result } from "typechat";
 
 export async function runKnowproMemory(): Promise<void> {
@@ -117,7 +116,8 @@ export async function createKnowproCommands(
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
     /*
-     * CREATE GENERAL MEMORY COMMANDS
+     * CREATE GENERAL COMMANDS that are common to all memory types
+     * These include: (a) search (b) answer generation (c) enumeration
      */
     commands.kpSearchTerms = searchTerms;
     commands.kpSearch = search;
@@ -183,10 +183,13 @@ export async function createKnowproCommands(
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
                 distinct: argBool("Show distinct results", true),
+                orderBy: arg("Order by: score | timestamp | ordinal"),
             },
         };
         if (kType === undefined) {
-            meta.options!.ktype = arg("Knowledge type");
+            meta.options!.ktype = arg(
+                "Knowledge type: entity | topic | action | tag",
+            );
         }
 
         return meta;
@@ -232,7 +235,11 @@ export async function createKnowproCommands(
                 },
             );
             timer.stop();
+
             if (matches && matches.size > 0) {
+                if (namedArgs.orderBy) {
+                    orderKnowledgeSearchResults(matches, namedArgs.orderBy);
+                }
                 context.printer.writeLine();
                 context.printer.writeKnowledgeSearchResults(
                     conversation,
@@ -372,14 +379,25 @@ export async function createKnowproCommands(
             context.printer.writeLine("No matches");
             return;
         }
+        context.answerGenerator.settings.fastStop = namedArgs.fastStop;
+        if (!namedArgs.messages) {
+            // Don't include raw message text... try answering only with knowledge
+            searchResults.data.forEach((r) => (r.messageMatches = []));
+        }
         const choices = namedArgs.choices?.split(";");
+        const progressCallback = (
+            chunk: kp.AnswerContext,
+            index: number,
+            result: Result<kp.AnswerResponse>,
+        ) => {
+            if (namedArgs.debug) {
+                context.printer.writeLine();
+                context.printer.writeJsonInColor(chalk.gray, chunk);
+            }
+        };
+        const options = createAnswerOptions(namedArgs);
         for (let i = 0; i < searchResults.data.length; ++i) {
             const searchResult = searchResults.data[i];
-            if (!namedArgs.messages) {
-                // Don't include raw message text... try answering only with knowledge
-                searchResult.messageMatches = [];
-            }
-            context.answerGenerator.settings.fastStop = namedArgs.fastStop;
             let question =
                 searchResult.rawSearchQuery ?? debugContext.searchText;
             if (choices && choices.length > 0) {
@@ -390,23 +408,10 @@ export async function createKnowproCommands(
                 context.answerGenerator,
                 question,
                 searchResult,
-                (chunk, _, result) => {
-                    if (namedArgs.debug) {
-                        context.printer.writeLine();
-                        context.printer.writeJsonInColor(chalk.gray, chunk);
-                    }
-                },
-                createAnswerOptions(namedArgs),
+                progressCallback,
+                options,
             );
-            context.printer.writeLine();
-            if (answerResult.success) {
-                context.printer.writeAnswer(
-                    answerResult.data,
-                    debugContext.usedSimilarityFallback![i],
-                );
-            } else {
-                context.printer.writeError(answerResult.message);
-            }
+            writeAnswer(i, answerResult, debugContext);
         }
     }
 
@@ -563,9 +568,9 @@ export async function createKnowproCommands(
      */
     async function runAnswerSearch(
         namedArgs: NamedArgs,
-    ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerSearchContext]> {
+    ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
         const searchText = namedArgs.query;
-        const debugContext: AnswerSearchContext = { searchText };
+        const debugContext: AnswerDebugContext = { searchText };
 
         const options: kp.LanguageSearchOptions = {
             ...createSearchOptions(namedArgs),
@@ -608,6 +613,22 @@ export async function createKnowproCommands(
             adjustMaxToDisplay(namedArgs.maxToDisplay),
             namedArgs.distinct,
         );
+    }
+
+    function writeAnswer(
+        queryIndex: number,
+        answerResult: Result<kp.AnswerResponse>,
+        debugContext: AnswerDebugContext,
+    ) {
+        context.printer.writeLine();
+        if (answerResult.success) {
+            context.printer.writeAnswer(
+                answerResult.data,
+                debugContext.usedSimilarityFallback![queryIndex],
+            );
+        } else {
+            context.printer.writeError(answerResult.message);
+        }
     }
 
     async function getSearchResults(
@@ -771,9 +792,38 @@ export async function createKnowproCommands(
         }
         return when;
     }
+
+    function orderKnowledgeSearchResults(
+        results: Map<string, kp.SemanticRefSearchResult>,
+        orderBy: string,
+    ) {
+        let orderType: kp.ResultSortType | undefined;
+        switch (orderBy.toLowerCase()) {
+            default:
+                break;
+            case "score":
+                orderType = kp.ResultSortType.Score;
+                break;
+            case "timestamp":
+                orderType = kp.ResultSortType.Timestamp;
+                break;
+            case "ordinal":
+                orderType = kp.ResultSortType.Ordinal;
+                break;
+        }
+        if (orderType !== undefined) {
+            for (const kMatches of results.values()) {
+                kMatches.semanticRefMatches = kp.sortKnowledgeResults(
+                    context.conversation!,
+                    kMatches.semanticRefMatches,
+                    orderType,
+                );
+            }
+        }
+    }
 }
 
-export interface AnswerSearchContext extends kp.LanguageSearchDebugContext {
+export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
 
@@ -789,21 +839,54 @@ export async function generateMultipartAnswer(
     >,
     contextOptions?: kp.AnswerContextOptions,
 ): Promise<Result<kp.AnswerResponse>> {
-    let preamble: PromptSection[] | undefined;
-    for (let i = 0; i < searchResults.length; ++i) {
-        const searchResult = searchResults[i];
-        const answer = await kp.generateAnswer(
+    if (searchResults.length === 0) {
+        return error("No search results");
+    }
+    if (searchResults.length === 1) {
+        const searchResult = await kp.generateAnswer(
             conversation,
             generator,
-            searchResult.rawSearchQuery ?? question,
-            searchResult,
+            searchResults[0].rawSearchQuery ?? question,
+            searchResults[0],
             progress,
             contextOptions,
         );
-        if (!answer.success) {
-            return answer;
+        return searchResult;
+    }
+
+    let preamble: PromptSection[] | undefined;
+    let lastAnswer: Result<kp.AnswerResponse> | undefined;
+    for (let i = 0; i < searchResults.length; ++i) {
+        const searchResult = searchResults[i];
+        const userQuestion = searchResult.rawSearchQuery ?? question;
+        lastAnswer = await kp.generateAnswer(
+            conversation,
+            generator,
+            question,
+            searchResult,
+            progress,
+            contextOptions,
+            preamble,
+        );
+        if (!lastAnswer.success) {
+            return lastAnswer;
+        }
+        const lastAnswerText =
+            lastAnswer.data.type === "Answered"
+                ? lastAnswer.data.answer
+                : lastAnswer.data.whyNoAnswer;
+        if (lastAnswerText) {
+            preamble ??= [];
+            preamble.push({
+                role: "user",
+                content: userQuestion,
+            });
+            preamble.push({
+                role: "assistant",
+                content: lastAnswerText,
+            });
         }
     }
-    return error("No answer");
+    return lastAnswer !== undefined ? lastAnswer : error("No answer");
 }
 */

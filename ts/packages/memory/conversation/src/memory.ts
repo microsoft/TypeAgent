@@ -396,10 +396,14 @@ export abstract class Memory<
     }
 
     protected beginIndexing(): void {
+        // Turn off caching during indexing because:
+        // - LRU caches will not be useful
+        // - Any persistent caches will be rebuilt anyway
         this.settings.embeddingModel.cacheEnabled = false;
     }
 
     protected endIndexing(): void {
+        // See note in beginIndexing for why this was turned off during indexing
         this.settings.embeddingModel.cacheEnabled = true;
     }
 
