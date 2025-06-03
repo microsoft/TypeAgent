@@ -174,7 +174,7 @@ export async function handleLookup(
         }
     } else {
         literalResponse = createActionResult(
-            "There was an error searching for information on Grounding with Bing.\nPlease ensure that:\n- The BING_WITH_GROUNDING_KEY is correctly configured.\n- Bing is available",
+            "There was an error searching for information on Grounding with Bing.",
         );
     }
 
@@ -302,7 +302,14 @@ export async function runGroundingLookup(
     );
 
     const agent = await project.agents.getAgent(groundingConfig.agent!);
-    console.log(`Retrieved agent: ${agent.name}`);
+
+    if (!agent) {
+        displayError(
+            "No agent found for Bing with Grounding. Please check your configuration.",
+            context,
+        );
+        return [];
+    }
 
     const thread = await project.agents.threads.create();
 

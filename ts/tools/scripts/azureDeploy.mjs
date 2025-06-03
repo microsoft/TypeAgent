@@ -237,7 +237,7 @@ async function purgeDeleted(options, subscriptionId) {
     status(`Purging resources for deployment ${nameColor(deploymentName)}...`);
     try {
         const resources = await getDeletedResources(
-            `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.CognitiveServices/deletedAccounts?api-version=2021-04-30`,
+            `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.CognitiveServices/deletedAccounts?api-version=2025-04-01-preview`,
             deploymentName,
         );
 

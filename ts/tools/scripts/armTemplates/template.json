@@ -476,20 +476,7 @@
                 "value": "1"
               }
             },
-            "secrets_groundingWithBing_key": {
-              "condition": false,
-              "type": "Microsoft.KeyVault/vaults/secrets",
-              "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/BING-WITH-GROUNDING-KEY')]",
-              "dependsOn": ["vault"],
-              "properties": {
-                "attributes": {
-                  "enabled": true
-                }
-              }
-            },
             "secrets_groundingWithBing_agent_id": {
-              "condition": false,
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/BING-WITH-GROUNDING-AGENT-ID')]",
@@ -497,11 +484,11 @@
               "properties": {
                 "attributes": {
                   "enabled": true
-                }
-              }
+                },
+                "value": "<REPLACE WITH YOUR BING WITH GROUNDING AGENT ID>"
+              }              
             },            
             "secrets_groundingWithBing_endpoint": {
-              "condition": false,
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/BING-WITH-GROUNDING-ENDPOINT')]",
@@ -542,6 +529,9 @@
               "apiVersion": "2025-04-01-preview",
               "name": "[parameters('accounts_typeagent_test_agent_resource_name')]",
               "location": "eastus2",
+              "tags": {
+                "typeagent": "[deployment().name]"
+              },              
               "sku": {
                 "name": "S0"
               },
@@ -562,43 +552,6 @@
                 "associatedProjects": ["typeagent-test-agent"],
                 "publicNetworkAccess": "Enabled",
                 "disableLocalAuth": false
-              }
-            },
-            "grounding_with_bing": {
-              "type": "Microsoft.CognitiveServices/accounts/connections",
-              "apiVersion": "2025-04-01-preview",
-              "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/bingwithgrounding')]",
-              "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accounts_typeagent_test_agent_resource_name'))]"
-              ],
-              "properties": {
-                "authType": "ApiKey",
-                "credentials": {
-                  "key": "sdfasdf"
-                },
-                "category": "GroundingWithBingSearch",
-                "target": "https://api.bing.microsoft.com/",
-                "useWorkspaceManagedIdentity": false,
-                "isSharedToAll": false,
-                "sharedUserList": [],
-                "peRequirement": "NotRequired",
-                "peStatus": "NotApplicable",
-                "metadata": {
-                  "type": "bing_grounding",
-                  "ApiType": "Azure",
-                  "ResourceId": "[parameters('accounts_bing_with_grounding_externalid')]"
-                }
-              }
-            },
-            "aiFoundry_defenderForAISettings": {
-              "type": "Microsoft.CognitiveServices/accounts/defenderForAISettings",
-              "apiVersion": "2025-04-01-preview",
-              "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/Default')]",
-              "dependsOn": [
-                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accounts_typeagent_test_agent_resource_name'))]"
-              ],
-              "properties": {
-                "state": "Disabled"
               }
             },
             "agent_model": {
