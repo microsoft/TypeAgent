@@ -542,33 +542,6 @@ class PropertySearchTerm:
     property_name: KnowledgePropertyName | SearchTerm
     property_value: SearchTerm
 
-    def __init__(
-        self, name: str | SearchTerm, value: str | SearchTerm, exact_match_value=False
-    ) -> None:
-        if isinstance(name, SearchTerm):
-            self.property_name = name
-        elif name in (
-            "name",
-            "type",
-            "verb",
-            "subject",
-            "object",
-            "indirectObject",
-            "tag",
-            "topic",
-        ):
-            self.property_name = name
-        else:
-            self.property_name = SearchTerm(Term(name))
-
-        if isinstance(value, SearchTerm):
-            self.property_value = value
-        else:
-            self.property_value = SearchTerm(Term(value))
-        if exact_match_value:
-            self.property_value.related_terms = []
-
-
 @dataclass
 class SearchTermGroup:
     """A group of search terms."""
