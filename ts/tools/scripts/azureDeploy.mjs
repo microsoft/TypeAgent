@@ -216,7 +216,7 @@ async function purgeAIFoundryResources(options) {
         "--location",
         options.location,
         "--name",
-        "typeagent-test-agent-resource"
+        "typeagent-test-agent-resource",
     ]);
 }
 

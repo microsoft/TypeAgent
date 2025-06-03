@@ -486,8 +486,8 @@
                   "enabled": true
                 },
                 "value": "<REPLACE WITH YOUR BING WITH GROUNDING AGENT ID>"
-              }              
-            },            
+              }
+            },
             "secrets_groundingWithBing_endpoint": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
@@ -531,7 +531,7 @@
               "location": "eastus2",
               "tags": {
                 "typeagent": "[deployment().name]"
-              },              
+              },
               "sku": {
                 "name": "S0"
               },
