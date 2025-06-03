@@ -78,7 +78,6 @@ export interface IAnswerGenerator {
     generateAnswer(
         question: string,
         context: contextSchema.AnswerContext | string,
-        preamble?: PromptSection[] | undefined,
     ): Promise<Result<answerSchema.AnswerResponse>>;
     /**
      * Answers can be generated in parts, if the context is bigger than a character budget
@@ -145,7 +144,6 @@ export async function generateAnswer(
         Result<answerSchema.AnswerResponse>
     >,
     contextOptions?: AnswerContextOptions,
-    promptPreamble?: PromptSection[] | undefined,
 ): Promise<Result<answerSchema.AnswerResponse>> {
     const context = answerContextFromSearchResult(
         conversation,
@@ -155,11 +153,7 @@ export async function generateAnswer(
     const contextContent = answerContextToString(context);
     if (contextContent.length <= generator.settings.maxCharsInBudget) {
         // Context is small enough
-        return generator.generateAnswer(
-            question,
-            contextContent,
-            promptPreamble,
-        );
+        return generator.generateAnswer(question, contextContent);
     }
     //
     // Use chunks
@@ -306,7 +300,6 @@ export class AnswerGenerator implements IAnswerGenerator {
     public generateAnswer(
         question: string,
         context: contextSchema.AnswerContext | string,
-        preamble?: PromptSection[] | undefined,
     ): Promise<Result<answerSchema.AnswerResponse>> {
         let contextContent =
             typeof context === "string"
@@ -329,12 +322,10 @@ export class AnswerGenerator implements IAnswerGenerator {
             ).content as string,
         );
         const promptText = prompt.join("\n");
-        let promptPreamble = this.settings.modelInstructions;
-        if (preamble && preamble.length > 0) {
-            promptPreamble ??= [];
-            promptPreamble.push(...preamble);
-        }
-        return this.answerTranslator.translate(promptText, promptPreamble);
+        return this.answerTranslator.translate(
+            promptText,
+            this.settings.modelInstructions,
+        );
     }
 
     public async combinePartialAnswers(
