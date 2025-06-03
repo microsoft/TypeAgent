@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import child_process from "node:child_process";
+import child_process, { exec } from "node:child_process";
 import chalk from "chalk";
 import registerDebug from "debug";
 import path from "node:path";
@@ -206,12 +206,38 @@ async function getDeleteKeyVaults(tag) {
         .map((r) => r.name);
 }
 
+async function purgeAIFoundryResources(options) {
+    await execAzCliCommand([
+        "cognitiveservices",
+        "account",
+        "purge",
+        "--resource-group",
+        `typeagent-${options.location}-rg`,
+        "--location",
+        options.location,
+        "--name",
+        "typeagent-test-agent-resource",
+    ]);
+}
+
+async function purgeMaps(options) {
+    await execAzCliCommand([
+        "maps",
+        "account",
+        "delete",
+        "--resource-group",
+        `typeagent-${options.location}-rg`,
+        "--name",
+        `typeagent-${options.location}-maps`,
+    ]);
+}
+
 async function purgeDeleted(options, subscriptionId) {
     const deploymentName = getDeploymentName(options);
     status(`Purging resources for deployment ${nameColor(deploymentName)}...`);
     try {
         const resources = await getDeletedResources(
-            `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.CognitiveServices/deletedAccounts?api-version=2021-04-30`,
+            `https://management.azure.com/subscriptions/${subscriptionId}/providers/Microsoft.CognitiveServices/deletedAccounts?api-version=2025-04-01-preview`,
             deploymentName,
         );
 
@@ -235,6 +261,10 @@ async function purgeDeleted(options, subscriptionId) {
                 );
             }
         }
+
+        status("Purging AI Foundry resources...");
+        await purgeAIFoundryResources(options);
+
         success("Purged Completed.");
     } catch (e) {
         e.message = `Error purging deleted resources.\n${e.message}`;

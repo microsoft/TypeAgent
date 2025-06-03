@@ -352,6 +352,39 @@
       "program": "${workspaceFolder}/examples/commandHistogram/src/main.ts",
       "console": "externalTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
-    },    
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch azureDeploy (create)",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "program": "tools/scripts/azureDeploy.mjs",
+      "args": ["create", "--location", "eastus"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch azureDeploy (delete)",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "program": "tools/scripts/azureDeploy.mjs",
+      "args": ["delete", "--location", "eastus"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch repo policy check",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "program": "tools/scripts/repo-policy-check.mjs",
+      "args": [],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },              
   ]
 }
