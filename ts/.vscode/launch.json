@@ -374,6 +374,17 @@
       "args": ["delete", "--location", "eastus"],
       "console": "externalTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
-    },         
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch repo policy check",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}",
+      "program": "tools/scripts/repo-policy-check.mjs",
+      "args": [],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },              
   ]
 }
