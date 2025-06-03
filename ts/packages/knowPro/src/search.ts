@@ -16,7 +16,6 @@ import {
     SearchTerm,
     SearchTermGroup,
     SemanticRef,
-    SemanticRefOrdinal,
     SemanticRefSearchResult,
     Term,
     WhenFilter,
@@ -41,10 +40,7 @@ import {
     isSearchGroupTerm,
 } from "./compileLib.js";
 import { NormalizedEmbedding } from "typeagent";
-import {
-    getSemanticRefsFromScoredOrdinals,
-    getSemanticRefsWithTimestamps,
-} from "./knowledgeLib.js";
+import { getTimestampedScoredSemanticRefOrdinals } from "./knowledgeLib.js";
 
 /**
  * A Search Query expr consists:
@@ -294,39 +290,61 @@ export function getDistinctTopicMatches(
     return getDistinctSemanticRefTopics(semanticRefs, searchResults, topK);
 }
 
-export enum RecencyType {
+export enum ResultSortType {
+    Score,
     Ordinal,
     Timestamp,
 }
 
-export function orderKnowledgeMatchesByRecency(
+/**
+ * Sort knowledge results
+ * @param conversation
+ * @param searchResults Results to sort
+ * @param sortType
+ * @param asc (Default) False. Sort in ascending or descending order
+ * @returns
+ */
+export function sortKnowledgeResults(
     conversation: IConversation,
     searchResults: ScoredSemanticRefOrdinal[],
-    sortType: RecencyType,
-): SemanticRefOrdinal[] {
-    if (sortType === RecencyType.Ordinal) {
-        let semanticRefs = getSemanticRefsFromScoredOrdinals(
-            conversation.semanticRefs!,
-            searchResults,
-        );
-        semanticRefs.sort(
-            (x, y) => x.semanticRefOrdinal - y.semanticRefOrdinal,
-        );
-        return semanticRefs.map((sr) => sr.semanticRefOrdinal);
+    sortType: ResultSortType,
+    asc: boolean = false,
+): ScoredSemanticRefOrdinal[] {
+    switch (sortType) {
+        default:
+            if (asc) {
+                searchResults.sort((x, y) => x.score - y.score);
+            } else {
+                searchResults.sort((x, y) => y.score - x.score);
+            }
+            return searchResults;
+        case ResultSortType.Ordinal:
+            if (asc) {
+                searchResults.sort(
+                    (x, y) => x.semanticRefOrdinal - y.semanticRefOrdinal,
+                );
+            } else {
+                searchResults.sort(
+                    (x, y) => y.semanticRefOrdinal - x.semanticRefOrdinal,
+                );
+            }
+            return searchResults;
+        case ResultSortType.Timestamp:
+            const semanticRefsT = getTimestampedScoredSemanticRefOrdinals(
+                conversation,
+                searchResults,
+            );
+            if (asc) {
+                semanticRefsT.sort(
+                    (x, y) => x.timestamp.getTime() - y.timestamp.getTime(),
+                );
+            } else {
+                semanticRefsT.sort(
+                    (x, y) => y.timestamp.getTime() - x.timestamp.getTime(),
+                );
+            }
+            return semanticRefsT.map((sr) => sr.value);
     }
-
-    if (sortType === RecencyType.Timestamp) {
-        const semanticRefsT = getSemanticRefsWithTimestamps(
-            conversation,
-            searchResults,
-        );
-        semanticRefsT.sort(
-            (x, y) => y.timestamp.getTime() - x.timestamp.getTime(),
-        );
-        return semanticRefsT.map((sr) => sr.value.semanticRefOrdinal);
-    }
-
-    return searchResults.map((sr) => sr.semanticRefOrdinal);
 }
 
 function runQuery<T = any>(

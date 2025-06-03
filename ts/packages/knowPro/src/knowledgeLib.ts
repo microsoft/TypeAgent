@@ -101,23 +101,25 @@ export function getTimestampsForSemanticRefs(
     return tsMap;
 }
 
-export function getSemanticRefsWithTimestamps(
+export function getTimestampedScoredSemanticRefOrdinals(
     conversation: IConversation,
     scoredOrdinals: ScoredSemanticRefOrdinal[],
-): dateTime.Timestamped<SemanticRef>[] {
+): dateTime.Timestamped<ScoredSemanticRefOrdinal>[] {
     const messages = conversation.messages;
     const semanticRefs = conversation.semanticRefs;
-    const timestamped: dateTime.Timestamped<SemanticRef>[] = [];
+    const timestamped: dateTime.Timestamped<ScoredSemanticRefOrdinal>[] = [];
     if (messages && semanticRefs) {
         const sRefs = getSemanticRefsFromScoredOrdinals(
             semanticRefs,
             scoredOrdinals,
         );
         const timestamps = getTimestampsForSemanticRefs(messages, sRefs);
-        for (const sr of sRefs) {
-            const timestamp = timestamps.get(sr.range.start.messageOrdinal);
+        for (let i = 0; i < sRefs.length; ++i) {
+            const timestamp = timestamps.get(
+                sRefs[i].range.start.messageOrdinal,
+            );
             if (timestamp !== undefined) {
-                timestamped.push({ value: sr, timestamp });
+                timestamped.push({ value: scoredOrdinals[i], timestamp });
             }
         }
     }

@@ -116,7 +116,8 @@ export async function createKnowproCommands(
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
     /*
-     * CREATE GENERAL MEMORY COMMANDS
+     * CREATE GENERAL COMMANDS that are common to all memory types
+     * These include: (a) search (b) answer generation (c) enumeration
      */
     commands.kpSearchTerms = searchTerms;
     commands.kpSearch = search;
@@ -182,10 +183,13 @@ export async function createKnowproCommands(
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
                 distinct: argBool("Show distinct results", true),
+                orderBy: arg("Order by: score | timestamp | ordinal"),
             },
         };
         if (kType === undefined) {
-            meta.options!.ktype = arg("Knowledge type");
+            meta.options!.ktype = arg(
+                "Knowledge type: entity | topic | action | tag",
+            );
         }
 
         return meta;
@@ -231,7 +235,11 @@ export async function createKnowproCommands(
                 },
             );
             timer.stop();
+
             if (matches && matches.size > 0) {
+                if (namedArgs.orderBy) {
+                    orderKnowledgeSearchResults(matches, namedArgs.orderBy);
+                }
                 context.printer.writeLine();
                 context.printer.writeKnowledgeSearchResults(
                     conversation,
@@ -783,6 +791,35 @@ export async function createKnowproCommands(
             when.threadDescription = namedArgs.thread;
         }
         return when;
+    }
+
+    function orderKnowledgeSearchResults(
+        results: Map<string, kp.SemanticRefSearchResult>,
+        orderBy: string,
+    ) {
+        let orderType: kp.ResultSortType | undefined;
+        switch (orderBy.toLowerCase()) {
+            default:
+                break;
+            case "score":
+                orderType = kp.ResultSortType.Score;
+                break;
+            case "timestamp":
+                orderType = kp.ResultSortType.Timestamp;
+                break;
+            case "ordinal":
+                orderType = kp.ResultSortType.Ordinal;
+                break;
+        }
+        if (orderType !== undefined) {
+            for (const kMatches of results.values()) {
+                kMatches.semanticRefMatches = kp.sortKnowledgeResults(
+                    context.conversation!,
+                    kMatches.semanticRefMatches,
+                    orderType,
+                );
+            }
+        }
     }
 }
 
