@@ -319,6 +319,46 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  examples/mcpMemory:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.8.0
+        version: 1.12.1
+      conversation-memory:
+        specifier: workspace:*
+        version: link:../../packages/memory/conversation
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      examples-lib:
+        specifier: workspace:*
+        version: link:../examplesLib
+      interactive-app:
+        specifier: workspace:*
+        version: link:../../packages/interactiveApp
+      knowpro:
+        specifier: workspace:*
+        version: link:../../packages/knowPro
+      typeagent:
+        specifier: workspace:*
+        version: link:../../packages/typeagent
+      zod:
+        specifier: ^3.24.1
+        version: 3.24.4
+    devDependencies:
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      prettier:
+        specifier: ^3.2.5
+        version: 3.5.3
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.10
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/memoryProviders:
     dependencies:
       '@elastic/elasticsearch':
@@ -4404,6 +4444,10 @@ packages:
 
   '@modelcontextprotocol/sdk@1.11.3':
     resolution: {integrity: sha512-rmOWVRUbUJD7iSvJugjUbFZshTAuJ48MXoZ80Osx1GM0K/H1w7rSEvmw8m6vdWxNASgtaHIhAgre4H/E9GJiYQ==}
+    engines: {node: '>=18'}
+
+  '@modelcontextprotocol/sdk@1.12.1':
+    resolution: {integrity: sha512-KG1CZhZfWg+u8pxeM/mByJDScJSrjjxLc8fwQqbsS8xCjBmQfMNEBTotYdNanKekepnfRI85GtgQlctLFpcYPw==}
     engines: {node: '>=18'}
 
   '@modelcontextprotocol/server-filesystem@2025.1.14':
@@ -12976,6 +13020,22 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.11.3':
     dependencies:
+      content-type: 1.0.5
+      cors: 2.8.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.6
+      express: 5.1.0
+      express-rate-limit: 7.5.0(express@5.1.0)
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.0
+      zod: 3.24.4
+      zod-to-json-schema: 3.24.5(zod@3.24.4)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@modelcontextprotocol/sdk@1.12.1':
+    dependencies:
+      ajv: 6.12.6
       content-type: 1.0.5
       cors: 2.8.5
       cross-spawn: 7.0.6
