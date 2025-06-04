@@ -18,6 +18,8 @@ The ARM template will deploy the following Azure services in a single resource g
 - [OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/overview)
 - [Maps](https://learn.microsoft.com/en-us/azure/azure-maps/about-azure-maps)
 - [Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/secrets/about-secrets)
+- [AI Foundry](https://learn.microsoft.com/en-us/azure/ai-foundry/)
+- [AI Foundry Project](https://learn.microsoft.com/en-us/azure/ai-foundry/how-to/create-projects?tabs=ai-foundry&pivots=fdp-project)
 
 These resources are set up with RBAC access with Entra ID , the account that is signed into the Azure CLI is automatically add to the RBAC role necessary to access these resource by the ARM template.
 
@@ -27,3 +29,4 @@ The following TypeAgent features/components are not automatically created or con
 
 - Demo Tenant for [Calendar](../ts/packages/agents/calendar) & [Email](../ts/packages/agents/email/) agents
 - [Docker](../ts/Dockerfile) endpoint app service
+- AI Foundry Agent creation & Grounding with BING resource creation and linking. If you want to use the generic chat agent to do internet lookups ([lookupAndAnswer](../../../packages/dispatcher/src/context/dispatcher/dispatcherAgent.ts)) you must complete some additional manual configuration steps at this time. [Follow these instructions]().

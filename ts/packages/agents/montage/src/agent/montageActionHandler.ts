@@ -137,7 +137,7 @@ async function executeMontageAction(
         }
 
         if (
-            action.actionName === "startEditMontage" ||
+            action.actionName === "openMontage" ||
             action.actionName === "createNewMontage" ||
             (context.activityContext !== undefined &&
                 context.activityContext.state.title !==
@@ -464,9 +464,7 @@ async function handleMontageAction(
                     action.parameters.files =
                         agentContext.imageCollection?.messages
                             .getAll()
-                            .map((img) =>
-                                img.metadata.img.fileName.toLocaleLowerCase(),
-                            );
+                            .map((img) => img.metadata.img.fileName);
                 }
             } else {
                 result = createActionResultFromError(
@@ -633,7 +631,7 @@ async function handleMontageAction(
             break;
         }
 
-        case "startEditMontage": {
+        case "openMontage": {
             const montage = await ensureActionMontage(agentContext, action);
 
             agentContext.activeMontageId = montage.id;
@@ -806,11 +804,7 @@ async function findRequestedImages(
                                             });
 
                                         if (f?.value) {
-                                            imageFiles.add(
-                                                f?.value
-                                                    .toString()
-                                                    .toLocaleLowerCase(),
-                                            );
+                                            imageFiles.add(f.value.toString());
                                         }
                                     } else {
                                         // for non-images trace it back to the originating image and add that
@@ -821,9 +815,7 @@ async function findRequestedImages(
                                                 imgRange.messageOrdinal,
                                             );
 
-                                        imageFiles.add(
-                                            img.metadata.fileName.toLocaleLowerCase(),
-                                        );
+                                        imageFiles.add(img.metadata.fileName);
                                     }
                                 } else if (
                                     semanticRef.knowledgeType === "action"
@@ -834,9 +826,7 @@ async function findRequestedImages(
                                         context.imageCollection!.messages.get(
                                             imgRange.messageOrdinal,
                                         );
-                                    imageFiles.add(
-                                        img.metadata.fileName.toLocaleLowerCase(),
-                                    );
+                                    imageFiles.add(img.metadata.fileName);
                                 } else if (
                                     semanticRef.knowledgeType === "tag"
                                 ) {

@@ -106,6 +106,20 @@ export interface SearchAPI {
     ): Promise<Result<SearchResponse>>;
 }
 
+function deprecated() {
+    if (Date.now() < new Date("2025-08-11").getTime()) {
+        console.error("Bing Search API was retired on August 11, 2025.");
+        console.error(
+            "Please use Grounding with Bing search. See https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement for more information.",
+        );
+    } else {
+        console.warn("Bing Search API is retiring on August 11, 2025.");
+        console.warn(
+            "This API is deprecated and will be removed in a future release. Please use Grounding with Bing search. See https://learn.microsoft.com/en-us/lifecycle/announcements/bing-search-api-retirement for more information.",
+        );
+    }
+}
+
 /**
  * Create a Bing Search client. Requires a Bing API key.
  * If no API key provided in settings, tries to load BING_API_KEY from environment.
@@ -116,6 +130,8 @@ export interface SearchAPI {
 export async function createBingSearch(
     settings?: ApiSettings,
 ): Promise<Result<SearchAPI>> {
+    deprecated();
+
     try {
         settings ??= apiSettingsFromEnv();
     } catch (e) {
@@ -143,6 +159,7 @@ export async function createBingSearch(
         query: string | string[],
         options?: SearchOptions,
     ): Promise<Result<WebPage[]>> {
+        deprecated();
         const queryText =
             typeof query === "string" ? query : buildQuery(query, "OR");
 
@@ -158,6 +175,7 @@ export async function createBingSearch(
         query: string,
         options?: SearchOptions,
     ): Promise<Result<Image[]>> {
+        deprecated();
         let queryString = "?q=" + encodeURIComponent(query);
         if (options) {
             queryString = optionsToQS(queryString, options);
@@ -182,6 +200,7 @@ export async function createBingSearch(
         options?: SearchOptions,
         responseFilter?: string,
     ): Promise<Result<SearchResponse>> {
+        deprecated();
         let queryString = "?q=" + encodeURIComponent(query);
         if (responseFilter) {
             responseFilter =
@@ -223,6 +242,7 @@ export async function searchWeb(
     count?: number,
     site?: string,
 ): Promise<WebPage[]> {
+    deprecated();
     let options = count ? { count } : undefined;
     if (site) {
         query += ` site:${encodeURIComponent(site)}`;
@@ -248,6 +268,7 @@ export async function searchImages(
     query: string,
     count?: number,
 ): Promise<Image[]> {
+    deprecated();
     const options = count ? { count } : undefined;
     // Automatically uses Environment variable: BING_API_KEY
     const clientResult = await createBingSearch();

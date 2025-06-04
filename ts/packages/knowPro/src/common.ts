@@ -195,3 +195,9 @@ export type Batch<T = any> = {
     startAt: number;
     value: T[];
 };
+
+export type RecentItem<T = any> = {
+    ordinal: number;
+    timestamp?: Date;
+    value: T;
+};

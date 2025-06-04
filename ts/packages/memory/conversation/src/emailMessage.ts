@@ -7,7 +7,7 @@ import { conversation as kpLib } from "knowledge-processor";
 import { email as email } from "knowledge-processor";
 import { Message, MessageMetadata } from "./memory.js";
 import path from "path";
-import { importEmlFile } from "./emailImporter.js";
+import { importEmlFile } from "./emailImport.js";
 
 export class EmailMeta extends MessageMetadata {
     public cc?: email.EmailAddress[] | undefined;

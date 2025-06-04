@@ -57,7 +57,7 @@ export async function createKnowproPodcastCommands(
 
     function podcastImportDef(): CommandMetadata {
         return {
-            description: "Create knowPro index",
+            description: "Import a podcast transcript as Podcast memory",
             args: {
                 filePath: arg("File path to transcript file"),
             },
@@ -72,7 +72,7 @@ export async function createKnowproPodcastCommands(
         };
     }
     commands.kpPodcastImport.metadata = podcastImportDef();
-    async function podcastImport(args: string[]): Promise<void> {
+    async function podcastImport(args: string[] | NamedArgs): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastImportDef());
         if (!fs.existsSync(namedArgs.filePath)) {
             context.printer.writeError(`${namedArgs.filePath} not found`);
@@ -143,7 +143,7 @@ export async function createKnowproPodcastCommands(
 
     function podcastLoadDef(): CommandMetadata {
         return {
-            description: "Load knowPro podcast",
+            description: "Load existing Podcast memory",
             options: {
                 filePath: argSourceFile(),
                 name: arg("Podcast name"),
@@ -154,9 +154,13 @@ export async function createKnowproPodcastCommands(
     async function podcastLoad(args: string[]): Promise<void> {
         const namedArgs = parseNamedArguments(args, podcastLoadDef());
         let podcastFilePath = namedArgs.filePath;
-        podcastFilePath ??= namedArgs.name
-            ? memoryNameToIndexPath(context.basePath, namedArgs.name)
-            : undefined;
+        if (!podcastFilePath) {
+            podcastFilePath = namedArgs.name
+                ? memoryNameToIndexPath(context.basePath, namedArgs.name)
+                : undefined;
+        } else {
+            podcastFilePath = sourcePathToMemoryIndexPath(podcastFilePath);
+        }
         if (!podcastFilePath) {
             context.printer.writeError("No filepath or name provided");
             return;
@@ -300,8 +304,12 @@ export async function createKnowproPodcastCommands(
     }
     commands.kpPodcastImportVtt.metadata = podcastImportVttDef();
     async function podcastImportVtt(args: string[]) {
-        await podcastImport(args);
-        if (context.podcast) {
+        const namedArgs = parseNamedArguments(args, podcastImportVttDef());
+        await podcastImport(namedArgs);
+        if (!context.podcast) {
+            return;
+        }
+        if (!namedArgs.buildIndex) {
             context.printer.writeLine();
             context.printer.writeMessages(context.podcast.messages);
         }

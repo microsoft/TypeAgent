@@ -17,6 +17,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../commandHandlerContext.js";
 import {
+    createActionResultFromMarkdownDisplay,
     createActionResultFromTextDisplay,
     createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
@@ -37,7 +38,10 @@ import {
     translateRequest,
 } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
-import { clearActivityContext } from "../../execute/actionHandlers.js";
+import {
+    ClarifyEntityAction,
+    clearActivityContext,
+} from "../../execute/actionHandlers.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -55,6 +59,7 @@ async function executeDispatcherAction(
         | LookupAction
         | LookupActivity
         | ActivityActions
+        | ClarifyEntityAction
     >,
     context: ActionContext<CommandHandlerContext>,
 ) {
@@ -68,6 +73,8 @@ async function executeDispatcherAction(
                     const result = await clarifyWithLookup(action, context);
                     // If we fail to clarify with lookup, just ask the user.
                     return result ?? clarifyRequestAction(action, context);
+                case "clarifyEntities":
+                    return clarifyEntityAction(action, context);
             }
             break;
         case "dispatcher.lookup":
@@ -205,6 +212,28 @@ async function clarifyWithLookup(
         additionalActions: [translationResult.requestAction.actions[0].action],
         entities: [],
     };
+}
+
+function clarifyEntityAction(
+    action: ClarifyEntityAction,
+    context: ActionContext<CommandHandlerContext>,
+): ActionResult {
+    const { type, name, result } = action.parameters;
+
+    if (result.entities.length < 2) {
+        throw new Error(
+            "ClarifyEntityAction should not be called with empty or single entity.",
+        );
+    }
+
+    const question = [
+        `Multiple ${type.toLowerCase()} entities named '${name}' were found`,
+        ...result.entities.map((entity) => `- ${entity.name}`),
+        "", // markdown needs an extra line to start a new paragraph
+        `Please clarify which one you meant.`,
+    ];
+
+    return createActionResultFromMarkdownDisplay(question, result.entities);
 }
 
 export const dispatcherManifest: AppAgentManifest = {

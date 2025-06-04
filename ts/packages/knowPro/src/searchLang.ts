@@ -15,7 +15,7 @@ import {
     createSearchOptionsTypical,
     hasConversationResults,
     runSearchQuery,
-    runSearchQueryText,
+    runSearchQueryTextSimilarity,
     SearchOptions,
     SearchQueryExpr,
 } from "./search.js";
@@ -127,7 +127,7 @@ export async function searchConversationWithLanguage(
             options.fallbackRagOptions
         ) {
             const textSearchOptions = createTextQueryOptions(options);
-            const ragMatches = await runSearchQueryText(
+            const ragMatches = await runSearchQueryTextSimilarity(
                 conversation,
                 fallbackQuery ?? searchQuery,
                 textSearchOptions,
@@ -279,7 +279,7 @@ export function createLanguageSearchOptionsTypical(): LanguageSearchOptions {
     };
 }
 
-export type LanguageSearchDebugContext = {
+export interface LanguageSearchDebugContext {
     /**
      * Query returned by the LLM
      */
@@ -293,7 +293,7 @@ export type LanguageSearchDebugContext = {
      * was used
      */
     usedSimilarityFallback?: boolean[] | undefined;
-};
+}
 
 export function compileSearchQuery(
     conversation: IConversation,

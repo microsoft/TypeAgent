@@ -2,8 +2,14 @@
 
 Image dispatcher agent. This **sample agent** shows how to make calls to varying APIs to retrieve images and show them to the user. Currently the image agent calls Bing image search and Azure OpenAI Dall-E endpoints.
 
+&lt;Deprecated&gt;
+[Bing [Image] Search is being Deprecated August 2025](https://learn.microsoft.com/en-us/microsoftsearch/retirement-microsoft-search-bing).
+
 To experiment with lookups, please add your Bing API key to the root **.env** file with the following key:  
 **BING_API_KEY**
+
+&lt;/Deprecated&gt;
+
 To experiment with image generation models, please add your API key or configure your Dall-E endpoint in the root **.env** file with the following variable names: AZURE_OPENAI_API_KEY_DALLE, AZURE_OPENAI_ENDPOINT_DALLE. For identity based authentication to your enpoint specify the key as identity.
 
 ## Trademarks

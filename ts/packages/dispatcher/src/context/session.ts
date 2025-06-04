@@ -81,8 +81,14 @@ async function newSessionDir(instanceDir: string) {
     return fullDir;
 }
 
+/**
+ * Per session configuration to control various features of the dispatcher.
+ */
 export type DispatcherConfig = {
+    // the agent that handles NLP requests
     request: string;
+
+    // Translation configurations
     translation: {
         enabled: boolean;
         model: string;
@@ -114,7 +120,14 @@ export type DispatcherConfig = {
                 numInitialActions: number; // 0 means no limit
             };
         };
+        entity: {
+            resolve: boolean; // resolve entities in the request
+            clarify: boolean; // clarify entity names when multiple entities match
+            filter: boolean;
+        };
     };
+
+    // Execution configurations
     execution: {
         history: boolean;
     };
@@ -187,6 +200,11 @@ const defaultSessionConfig: SessionConfig = {
                 enabled: false,
                 numInitialActions: 5,
             },
+        },
+        entity: {
+            resolve: true,
+            filter: true,
+            clarify: false, // TODO: enable when it is ready.
         },
     },
     execution: {

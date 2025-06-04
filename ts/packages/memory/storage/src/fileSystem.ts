@@ -90,3 +90,8 @@ export function readAllLines(
     lines = lines.filter((l) => l.length > 0);
     return lines;
 }
+
+export function filePathToUrlString(filePath: string): string {
+    const url = new URL(`file://${filePath}`);
+    return url.toString();
+}
