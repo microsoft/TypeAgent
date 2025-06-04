@@ -7,12 +7,14 @@ from dataclasses import dataclass, field
 import heapq
 import math
 import sys
-from typing import Set, cast
+from typing import Literal, Set, cast
 
 from .interfaces import (
     ISemanticRefCollection,
     Knowledge,
     KnowledgeType,
+    MessageOrdinal,
+    ScoredMessageOrdinal,
     ScoredSemanticRefOrdinal,
     SemanticRef,
     SemanticRefOrdinal,
@@ -355,7 +357,35 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         ]
 
 
-# TODO: MessageAccumulator, intersectScoredMessageOrdinals
+class MessageAccumulator(MatchAccumulator[MessageOrdinal]):
+    def __init__(self, matches: list[Match[MessageOrdinal]] | None = None):
+        super().__init__()
+        if matches:
+            self.set_matches(matches)
+
+    def add(
+        self, value: MessageOrdinal, score: float, is_exact_match: bool = True
+    ) -> None:
+        match = self.get_match(value)
+        if match is None:
+            match = Match(value, score, 1, 0.0, 0)
+            self.set_match(match)
+        elif score > match.score:
+            match.score = score
+            # TODO: Question(Guido->Umesh): Why not increment hit_count always?
+            match.hit_count += 1
+
+    # TODO: add_messages_from_locations, add_messages_for_semantic_ref, add_range.
+    # TODO: add_scored_matches, intersect, smooth_scores.
+
+    def to_scored_message_ordinals(self) -> list[ScoredMessageOrdinal]:
+        sorted_matches = self.get_sorted_by_score()
+        return [ScoredMessageOrdinal(m.value, m.score) for m in sorted_matches]
+
+    # TODO: select_messages_in_budget, from_scored_ordinals.
+
+
+# TODO: intersectScoredMessageOrdinals
 
 
 @dataclass

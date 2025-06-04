@@ -7,6 +7,7 @@ from typing import Callable, Protocol
 
 from .collections import (
     MatchAccumulator,
+    MessageAccumulator,
     PropertyTermSet,
     SemanticRefAccumulator,
     TermSet,
@@ -25,6 +26,7 @@ from .interfaces import (
     KnowledgeType,
     MessageOrdinal,
     PropertySearchTerm,
+    ScoredMessageOrdinal,
     ScoredSemanticRefOrdinal,
     SearchTerm,
     SemanticRef,
@@ -592,7 +594,17 @@ def to_grouped_search_results(
 # TODO: MessagesFromKnowledgeExpr
 # TODO: SelectMessagesInCharBudget
 # TODO: RankMessagesBySimilarityExpr
-# TODO: GetScoredMessagesExpr
+
+
+class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
+    def __init__(self, src_expr: IQueryOpExpr[MessageAccumulator]) -> None:
+        self.src_expr = src_expr
+
+    def eval(self, context: QueryEvalContext) -> list[ScoredMessageOrdinal]:
+        matches = self.src_expr.eval(context)
+        return matches.to_scored_message_ordinals()
+
+
 # TODO: MatchMessagesBooleanExpr
 # TODO: MatchMessagesOrExpr
 # TODO: MatchMessagesAndExpr

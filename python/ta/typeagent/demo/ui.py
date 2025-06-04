@@ -33,7 +33,7 @@ from ..knowpro.query import (
     MatchTermsOrMaxExpr,
     QueryEvalContext,
 )
-from ..knowpro.search import SearchQueryExpr
+from ..knowpro.search import SearchQueryExpr, run_search_query, search_conversation
 from ..podcasts.podcast import Podcast
 
 from .search_query_schema import SearchQuery
@@ -83,44 +83,7 @@ def process_inputs(
         if query_text.lower() in ("exit", "quit", "q"):
             break
 
-        # Gradually turn the query text into something we can use to search.
-
-        # TODO: # 0. Recognize @-commands like "@search" and handle them specially.
-
-        # 1. With LLM help, translate to SearchQuery (a tree but not yet usable to query)
-        search_query = translate_text_to_search_query(
-            conversation, translator, query_text
-        )
-        if search_query is None:
-            print("Failed to translate command to search terms.")
-            continue
-        print(f"Search query:")
-        pprint(search_query, width=cap(200, shutil.get_terminal_size().columns))
-        print()
-
-        # 2. Translate the search query into something directly usable as a query.
-        query_exprs = translate_search_query(search_query)
-        if not query_exprs:
-            print("Failed to translate search query to query expressions.")
-            continue
-        print("Search query expressions:")
-        for expr in query_exprs:
-            pprint(expr, width=cap(200, shutil.get_terminal_size().columns))
-        print()
-
-        # 3. Search!
-        # xxx = search_conversation_with_language(conversation, query_text, search_query)
-
-        # query = compile_query(search_terms)
-        # if query is None:
-        #     print("Failed to compile search terms to query.")
-        #     continue
-        # print(f"Query: {query}")
-        # result: SemanticRefAccumulator | None = eval_query(query, context)
-        # if result is None:
-        #     print("Query execution failed.")
-        #     continue
-        # print(f"Results: {result.to_scored_semantic_refs()}")
+        asyncio.run(process_query(query_text, context.conversation, translator))
 
         print()
 
@@ -143,7 +106,48 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
         return line.strip()
 
 
-def translate_text_to_search_query(
+async def process_query(
+    query_text: str,
+    conversation: IConversation,
+    translator: typechat.TypeChatJsonTranslator[SearchQuery],
+):
+    line_width = cap(200, shutil.get_terminal_size().columns)
+
+    # Gradually turn the query text into something we can use to search.
+
+    # TODO: # 0. Recognize @-commands like "@search" and handle them specially.
+
+    # 1. With LLM help, translate to SearchQuery (a tree but not yet usable to query)
+    search_query = await translate_text_to_search_query(
+        conversation, translator, query_text
+    )
+    if search_query is None:
+        print("Failed to translate command to search terms.")
+        return
+    print("Search query:")
+    pprint(search_query, width=line_width)
+    print()
+
+    # 2. Translate the search query into something directly usable as a query.
+    query_exprs = translate_search_query_to_search_query_exprs(search_query)
+    if not query_exprs:
+        print("Failed to translate search query to query expressions.")
+        return
+    print("Search query expressions:")
+    for i, query_expr in enumerate(query_exprs, 1):
+        print(f"---------- {i} ----------")
+        pprint(query_expr, width=line_width)
+    print()
+
+    # 3. Search!
+    for i, query_expr in enumerate(query_exprs, 1):
+        print(f"Searching with expression {i}:")
+        result = await run_search_query(conversation, query_expr)
+        pprint(f"Results for expression {i}:")
+        pprint(result, width=line_width)
+
+
+async def translate_text_to_search_query(
     conversation: IConversation,
     translator: typechat.TypeChatJsonTranslator[SearchQuery],
     text: str,
@@ -152,8 +156,8 @@ def translate_text_to_search_query(
     time_range_preamble = get_time_range_prompt_section_for_conversation(conversation)
     if time_range_preamble is not None:
         prompt_preamble.append(time_range_preamble)
-    result: typechat.Result[SearchQuery] = asyncio.run(
-        translator.translate(text, prompt_preamble=prompt_preamble)
+    result: typechat.Result[SearchQuery] = await translator.translate(
+        text, prompt_preamble=prompt_preamble
     )
     if isinstance(result, typechat.Failure):
         print(f"Error translating {text!r}: {result.message}")
@@ -161,7 +165,7 @@ def translate_text_to_search_query(
     return result.value
 
 
-def translate_search_query(
+def translate_search_query_to_search_query_exprs(
     search_query: SearchQuery,
 ) -> list[SearchQueryExpr]:
     return SearchQueryCompiler().compile_query(search_query)
@@ -194,67 +198,6 @@ def get_time_range_for_conversation(
                 end=Datetime.fromisoformat(end) if end else None,
             )
     return None
-
-
-# ---------- From an earlier version ----------
-
-
-@dataclass
-class LanguageQueryExpr:
-    query_text: str
-    query: SearchQuery
-    query_expressions: list[SearchQueryExpr]
-
-
-def search_conversation_with_language(
-    conversation: IConversation, query_text, search_query: SearchQuery
-) -> LanguageQueryExpr | None:
-    query_expressions = compile_search_query(conversation, search_query)
-
-    return LanguageQueryExpr(query_text, search_query, query_expressions)
-
-
-def compile_search_query(conversation, search_query) -> list[SearchQueryExpr]:
-
-    return []
-
-
-# ---------- From an earlier version ----------
-
-
-def compile_query(
-    search_term: SearchTermGroupTypes,
-) -> IQueryOpExpr[SemanticRefAccumulator | None] | None:
-    if isinstance(search_term, SearchTermGroup):
-        table: dict[
-            Literal["and", "or", "or_max"],
-            type[MatchTermsAndExpr | MatchTermsOrExpr | MatchTermsOrMaxExpr],
-        ] = {
-            "and": MatchTermsAndExpr,
-            "or": MatchTermsOrExpr,
-            "or_max": MatchTermsOrMaxExpr,
-        }
-        txs: list[IQueryOpExpr[SemanticRefAccumulator | None]] = []
-        for term in search_term.terms:
-            tx = compile_query(term)
-            if tx is None:
-                print(f"Cannot compile {term} .")
-                return None
-            txs.append(tx)
-        return table[search_term.boolean_op](term_expressions=txs)
-
-    if isinstance(search_term, SearchTerm):
-        return MatchSearchTermExpr(search_term)
-
-    assert isinstance(search_term, PropertySearchTerm)
-    print("PropertySearchTerm not yet supported")
-    return None
-
-
-def eval_query(
-    query: IQueryOpExpr[SemanticRefAccumulator | None], context: QueryEvalContext
-) -> SemanticRefAccumulator | None:
-    return query.eval(context)
 
 
 if __name__ == "__main__":
