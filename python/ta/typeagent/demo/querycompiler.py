@@ -488,5 +488,4 @@ def create_property_search_term(
     property_value = SearchTerm(Term(value))
     if exact_match_value:
         property_value.related_terms = []
-    return PropertySearchTerm(
-        property_name, property_value)
+    return PropertySearchTerm(property_name, property_value)

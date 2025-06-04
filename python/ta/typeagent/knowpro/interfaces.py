@@ -542,6 +542,7 @@ class PropertySearchTerm:
     property_name: KnowledgePropertyName | SearchTerm
     property_value: SearchTerm
 
+
 @dataclass
 class SearchTermGroup:
     """A group of search terms."""
