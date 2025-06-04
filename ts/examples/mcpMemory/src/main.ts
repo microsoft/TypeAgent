@@ -27,18 +27,24 @@ async function addMcpCommands(
     commandHandlers: Record<string, CommandHandler>,
 ): Promise<void> {
     const scriptPath = fileURLToPath(new URL("server.js", import.meta.url));
+
     const context: McpMemoryContext = {
         memoryClient: new MemoryClient(() => createNodeClient({ scriptPath })),
         writer: new McpMemoryWriter(),
     };
 
     commandHandlers.ping = ping;
+    commandHandlers.answer = answer;
 
     async function ping(args: string[]) {
         const response = await context.memoryClient.ping();
         context.writer.writeLine(response);
     }
 
+    async function answer(args: string[]) {
+        const response = await context.memoryClient.getAnswer("books", args[0]);
+        context.writer.writeLine(response);
+    }
     return;
 }
 
