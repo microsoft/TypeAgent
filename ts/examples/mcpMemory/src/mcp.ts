@@ -58,7 +58,7 @@ export async function callTool<T extends Record<string, any>>(
     }
 }
 
-export async function getTextFromTool<T extends Record<string, any>>(
+export async function callTextTool<T extends Record<string, any>>(
     client: Client | McpClientFactory,
     name: string,
     request: T,
@@ -102,5 +102,5 @@ export async function callPingTool(
     client: Client | McpClientFactory,
     request: PingRequest,
 ): Promise<PingResponse> {
-    return await getTextFromTool<PingRequest>(client, "ping", request);
+    return await callTextTool<PingRequest>(client, "ping", request);
 }

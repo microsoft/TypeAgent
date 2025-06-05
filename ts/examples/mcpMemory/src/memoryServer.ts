@@ -8,33 +8,49 @@ import * as cm from "conversation-memory";
 import { addPingTool, toolResult } from "./mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
-function getAnswerSchema() {
-    return { memoryName: z.string(), query: z.string() };
+function rememberRequestSchema() {
+    return {
+        memoryName: z.string(),
+        memory: z.string(),
+        source: z.string().optional(),
+    };
 }
-const GetAnswerRequestSchema = z.object(getAnswerSchema());
+const RememberRequestSchema = z.object(rememberRequestSchema());
 
-export type GetAnswerRequest = z.infer<typeof GetAnswerRequestSchema>;
+function recallRequestSchema() {
+    return {
+        memoryName: z.string(),
+        query: z.string(),
+    };
+}
+const RecallRequestSchema = z.object(recallRequestSchema());
+
+export type RememberRequest = z.infer<typeof RememberRequestSchema>;
+export type RecallRequest = z.infer<typeof RecallRequestSchema>;
 
 export class MemoryServer {
     public server: McpServer;
     public memoryName: string | undefined;
     public memory?: cm.ConversationMemory | undefined;
 
+    /**
+     *
+     * @param baseDirPath The base directory where memories are stored. Directory must already exist
+     * @param name
+     * @param debugMode
+     */
     constructor(
-        public basePath: string,
-        name?: string,
+        public baseDirPath: string,
         debugMode: boolean = true,
     ) {
-        name ??= "Memory-Server";
-        this.server = new McpServer({ name, version: "1.0.0" });
+        this.server = new McpServer({
+            name: "Memory-Server",
+            version: "1.0.0",
+        });
         this.addTools();
         if (debugMode) {
             this.addDiagnosticTools();
         }
-    }
-
-    public addDiagnosticTools() {
-        addPingTool(this.server);
     }
 
     public async start(transport?: StdioServerTransport): Promise<void> {
@@ -42,15 +58,37 @@ export class MemoryServer {
         await this.server.connect(transport);
     }
 
-    protected addTools() {
+    private addTools() {
         this.server.tool(
-            "getAnswer",
-            getAnswerSchema(),
-            async (request: GetAnswerRequest) => this.getAnswer(request),
+            "remember",
+            rememberRequestSchema(),
+            async (request: RememberRequest) => this.remember(request),
+        );
+        this.server.tool(
+            "recall",
+            recallRequestSchema(),
+            async (request: RecallRequest) => this.recall(request),
         );
     }
 
-    public async getAnswer(request: GetAnswerRequest): Promise<CallToolResult> {
+    public async remember(request: RememberRequest): Promise<CallToolResult> {
+        let memory = await this.getMemory(request.memoryName);
+        if (!memory) {
+            return toolResult(`Memory ${request.memoryName} does not exist`);
+        }
+        const messageMeta = request.source
+            ? new cm.ConversationMessageMeta(request.source)
+            : undefined;
+
+        const message = new cm.ConversationMessage(request.memory, messageMeta);
+        const result = await memory.addMessage(message);
+        if (!result.success) {
+            return toolResult(result.message);
+        }
+        return toolResult(`Added memories to memory: ${request.memoryName}`);
+    }
+
+    public async recall(request: RecallRequest): Promise<CallToolResult> {
         let memory = await this.getMemory(request.memoryName);
         if (!memory) {
             return toolResult(`Memory ${request.memoryName} does not exist`);
@@ -72,6 +110,10 @@ export class MemoryServer {
         return toolResult(text);
     }
 
+    private addDiagnosticTools() {
+        addPingTool(this.server);
+    }
+
     private async getMemory(
         memoryName: string,
     ): Promise<cm.ConversationMemory> {
@@ -87,7 +129,7 @@ export class MemoryServer {
     ): Promise<cm.ConversationMemory> {
         const memory = await cm.createConversationMemory(
             {
-                dirPath: this.basePath,
+                dirPath: this.baseDirPath,
                 baseFileName: memoryName,
             },
             false,

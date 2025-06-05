@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { ensureDir } from "typeagent";
 import { MemoryServer } from "./memoryServer.js";
 import dotenv from "dotenv";
 
@@ -9,7 +10,10 @@ dotenv.config({ path: envPath });
 
 console.log("Starting Memory Server");
 
-const memoryServer = new MemoryServer("/data/testChat/knowpro/chat");
+const baseDirPath = "/data/testChat/knowpro/chat";
+await ensureDir(baseDirPath);
+
+const memoryServer = new MemoryServer(baseDirPath);
 await memoryServer.start();
 
 console.log("Exit Memory Server");
