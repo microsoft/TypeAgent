@@ -3,21 +3,30 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { IConversation } from "knowpro";
 import { z } from "zod";
 import * as cm from "conversation-memory";
+import { addPingTool } from "./mcp.js";
 
 export class MemoryServer {
     public server: McpServer;
-    public conversation?: IConversation | undefined;
+    public memoryName: string | undefined;
+    public memory?: cm.ConversationMemory | undefined;
 
     constructor(
         public basePath: string,
         name?: string,
+        debugMode: boolean = true,
     ) {
         name ??= "Memory-Server";
         this.server = new McpServer({ name, version: "1.0.0" });
         this.addTools();
+        if (debugMode) {
+            this.addDiagnosticTools();
+        }
+    }
+
+    public addDiagnosticTools() {
+        addPingTool(this.server);
     }
 
     public async start(transport?: StdioServerTransport): Promise<void> {
@@ -26,16 +35,6 @@ export class MemoryServer {
     }
 
     protected addTools() {
-        this.server.tool(
-            "ping",
-            { message: z.string() },
-            async ({ message }) => {
-                let response = message ? "PONG: " + message : "pong";
-                return {
-                    content: [{ type: "text", text: response }],
-                };
-            },
-        );
         this.server.tool(
             "getAnswer",
             { memoryName: z.string(), query: z.string() },
@@ -49,11 +48,11 @@ export class MemoryServer {
     }
 
     public async getAnswer(memoryName: string, query: string): Promise<string> {
-        let conversation = await this.loadMemory(memoryName);
-        if (!conversation) {
+        let memory = await this.getMemory(memoryName);
+        if (!memory) {
             return "No such memory";
         }
-        const result = await conversation.getAnswerFromLanguage(query);
+        const result = await memory.getAnswerFromLanguage(query);
         if (!result.success) {
             return result.message;
         }
@@ -70,16 +69,27 @@ export class MemoryServer {
         return text;
     }
 
-    private loadMemory(
+    private async getMemory(
         memoryName: string,
-    ): Promise<cm.ConversationMemory | undefined> {
-        console.log(`Loading ${this.basePath} ${memoryName}`);
-        return cm.createConversationMemory(
+    ): Promise<cm.ConversationMemory> {
+        if (memoryName === this.memoryName && this.memory) {
+            return this.memory;
+        }
+        this.memory = undefined;
+        return await this.loadMemory(memoryName);
+    }
+
+    private async loadMemory(
+        memoryName: string,
+    ): Promise<cm.ConversationMemory> {
+        const memory = await cm.createConversationMemory(
             {
                 dirPath: this.basePath,
                 baseFileName: memoryName,
             },
             false,
         );
+        this.memoryName = memoryName;
+        return memory;
     }
 }

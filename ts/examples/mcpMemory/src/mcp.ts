@@ -3,6 +3,9 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 export type Content = {
     type: string;
@@ -32,14 +35,54 @@ export async function createNodeClient(
     return client;
 }
 
-export async function callTool<T>(
-    clientFactory: McpClientFactory,
-    caller: (client: Client) => Promise<T>,
-): Promise<T> {
-    const client = await clientFactory();
+//-------------------
+//
+// TOOLS
+//
+//-------------------
+export async function callTool<T extends Record<string, any>>(
+    client: Client | McpClientFactory,
+    name: string,
+    request: T,
+) {
+    if (!(client instanceof Client)) {
+        client = await client();
+    }
     try {
-        return await caller(client);
+        return (await client.callTool({
+            name,
+            arguments: request,
+        })) as CallToolResult;
     } finally {
         client.close();
     }
+}
+
+export function pingSchema() {
+    return { message: z.string() };
+}
+const PingRequestSchema = z.object(pingSchema());
+
+export type PingRequest = z.infer<typeof PingRequestSchema>;
+export type PingResponse = string;
+
+export function addPingTool(server: McpServer) {
+    server.tool("ping", pingSchema(), async (pingRequest: PingRequest) => {
+        let response = pingRequest.message
+            ? "PONG: " + pingRequest.message
+            : "pong";
+        return {
+            content: [{ type: "text", text: response }],
+        };
+    });
+}
+
+export async function callPingTool(
+    client: Client | McpClientFactory,
+    request: PingRequest,
+): Promise<PingResponse> {
+    const result = await callTool(client, "ping", request);
+    return result.content.length > 0 && result.content[0].type == "text"
+        ? result.content[0].text
+        : "NO response";
 }

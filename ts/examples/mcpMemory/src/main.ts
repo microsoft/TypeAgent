@@ -10,7 +10,8 @@ import {
 import { MemoryClient } from "./memoryClient.js";
 import { fileURLToPath } from "url";
 import { ChalkWriter } from "examples-lib";
-import { createNodeClient } from "./mcp.js";
+import { callPingTool, createNodeClient } from "./mcp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 
 class McpMemoryWriter extends ChalkWriter {
     constructor() {
@@ -29,7 +30,7 @@ async function addMcpCommands(
     const scriptPath = fileURLToPath(new URL("server.js", import.meta.url));
 
     const context: McpMemoryContext = {
-        memoryClient: new MemoryClient(() => createNodeClient({ scriptPath })),
+        memoryClient: new MemoryClient(createClient),
         writer: new McpMemoryWriter(),
     };
 
@@ -37,7 +38,9 @@ async function addMcpCommands(
     commandHandlers.answer = answer;
 
     async function ping(args: string[]) {
-        const response = await context.memoryClient.ping();
+        const message = new Date().toISOString();
+        context.writer.writeLine(`PING ${message}`);
+        const response = await callPingTool(createClient, { message });
         context.writer.writeLine(response);
     }
 
@@ -46,6 +49,10 @@ async function addMcpCommands(
         context.writer.writeLine(response);
     }
     return;
+
+    function createClient(): Promise<Client> {
+        return createNodeClient({ scriptPath });
+    }
 }
 
 let commandHandlers: Record<string, CommandHandler> = {};
