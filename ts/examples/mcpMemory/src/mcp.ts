@@ -58,7 +58,30 @@ export async function callTool<T extends Record<string, any>>(
     }
 }
 
-export function pingSchema() {
+export async function getTextFromTool<T extends Record<string, any>>(
+    client: Client | McpClientFactory,
+    name: string,
+    request: T,
+): Promise<string> {
+    const result = await callTool<T>(client, name, request);
+    return result.content.length > 0 && result.content[0].type == "text"
+        ? result.content[0].text
+        : "NO response";
+}
+
+export function toolResult(result: string): CallToolResult {
+    return {
+        content: [{ type: "text", text: result }],
+    };
+}
+
+//------------------------
+//
+// PING TOOL
+//
+//------------------------
+
+function pingSchema() {
     return { message: z.string() };
 }
 const PingRequestSchema = z.object(pingSchema());
@@ -71,9 +94,7 @@ export function addPingTool(server: McpServer) {
         let response = pingRequest.message
             ? "PONG: " + pingRequest.message
             : "pong";
-        return {
-            content: [{ type: "text", text: response }],
-        };
+        return toolResult(response);
     });
 }
 
@@ -81,8 +102,5 @@ export async function callPingTool(
     client: Client | McpClientFactory,
     request: PingRequest,
 ): Promise<PingResponse> {
-    const result = await callTool(client, "ping", request);
-    return result.content.length > 0 && result.content[0].type == "text"
-        ? result.content[0].text
-        : "NO response";
+    return await getTextFromTool<PingRequest>(client, "ping", request);
 }

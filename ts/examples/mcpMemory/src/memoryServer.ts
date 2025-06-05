@@ -5,7 +5,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import * as cm from "conversation-memory";
-import { addPingTool } from "./mcp.js";
+import { addPingTool, toolResult } from "./mcp.js";
+import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+
+function getAnswerSchema() {
+    return { memoryName: z.string(), query: z.string() };
+}
+const GetAnswerRequestSchema = z.object(getAnswerSchema());
+
+export type GetAnswerRequest = z.infer<typeof GetAnswerRequestSchema>;
 
 export class MemoryServer {
     public server: McpServer;
@@ -37,24 +45,19 @@ export class MemoryServer {
     protected addTools() {
         this.server.tool(
             "getAnswer",
-            { memoryName: z.string(), query: z.string() },
-            async ({ memoryName, query }) => {
-                let response = await this.getAnswer(memoryName, query);
-                return {
-                    content: [{ type: "text", text: response }],
-                };
-            },
+            getAnswerSchema(),
+            async (request: GetAnswerRequest) => this.getAnswer(request),
         );
     }
 
-    public async getAnswer(memoryName: string, query: string): Promise<string> {
-        let memory = await this.getMemory(memoryName);
+    public async getAnswer(request: GetAnswerRequest): Promise<CallToolResult> {
+        let memory = await this.getMemory(request.memoryName);
         if (!memory) {
-            return "No such memory";
+            return toolResult(`Memory ${request.memoryName} does not exist`);
         }
-        const result = await memory.getAnswerFromLanguage(query);
+        const result = await memory.getAnswerFromLanguage(request.query);
         if (!result.success) {
-            return result.message;
+            return toolResult(result.message);
         }
         const responses = result.data;
         let text = "";
@@ -66,7 +69,7 @@ export class MemoryServer {
             text +=
                 answer.type === "Answered" ? answer.answer : answer.whyNoAnswer;
         }
-        return text;
+        return toolResult(text);
     }
 
     private async getMemory(
