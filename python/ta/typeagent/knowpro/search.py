@@ -2,8 +2,9 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass
-from tkinter import SE
-from typing import Callable, Literal, cast
+from typing import Any, Callable, Literal, TypeGuard, cast
+
+from .reltermsindex import resolve_related_terms
 
 from ..knowpro.kplib import ConcreteEntity
 
@@ -20,14 +21,18 @@ from .interfaces import (
     SearchTermGroup,
     SemanticRef,
     SemanticRefSearchResult,
+    Term,
     WhenFilter,
 )
 from .query import (
+    BooleanOp,
+    CompiledTermGroup,
     GetScopeExpr,
     GetScoredMessagesExpr,
     GroupByKnowledgeTypeExpr,
     GroupSearchResultsExpr,
     IQueryOpExpr,
+    IQueryTextRangeSelector,
     MatchPropertySearchTermExpr,
     MatchSearchTermExpr,
     MatchTagExpr,
@@ -38,8 +43,10 @@ from .query import (
     MatchTopicExpr,
     QueryEvalContext,
     SelectTopNKnowledgeGroupExpr,
+    TextRangeSelector,
     WhereSemanticRefExpr,
     is_conversation_searchable,
+    match_entity_name_or_type,
 )
 
 
@@ -155,17 +162,6 @@ def run_query[T](
     )
 
 
-# TODO: Move to compilelib.py
-type BooleanOp = Literal["and", "or", "or_max"]
-
-
-# TODO: Move to compilelib.py
-@dataclass
-class CompiledTermGroup:
-    boolean_op: BooleanOp
-    terms: list[SearchTerm]
-
-
 # NOTE: QueryCompiler instances are stateful, and not thread-safe.
 #       Create a new one for each query.
 class QueryCompiler:
@@ -254,7 +250,7 @@ class QueryCompiler:
     def compile_select(
         self,
         term_group: SearchTermGroup,
-        scope_expr: GetScopeExpr,
+        scope_expr: GetScopeExpr | None = None,
         options: None = None,  # TODO: SearchOptions | None = None
     ) -> IQueryOpExpr[SemanticRefAccumulator]:
         search_terms_used, select_expr = self.compile_search_group_terms(
@@ -339,7 +335,127 @@ class QueryCompiler:
                         tpvt.weight = self.entity_term_match_weight
                 return MatchPropertySearchTermExpr(term)
 
-    # TODO: ...
+    async def compile_scope(
+        self,
+        term_group: SearchTermGroup | None = None,
+        filter: WhenFilter | None = None,
+    ) -> GetScopeExpr | None:
+        scope_selectors: list[IQueryTextRangeSelector] = []
+
+        # First, use any provided date ranges to select scope
+        if filter and filter.date_range:
+            scope_selectors.append(TextRangesInDateRangeSelector(filter.date_range))
+
+        # Apply 'OUTER' scope
+        # If specific scoping terms were provided
+        if filter and filter.scope_defining_terms is not None:
+            self.add_terms_scope_selector(filter.scope_defining_terms, scope_selectors)
+        elif term_group is not None:
+            # Treat any actions as inherently scope selecting
+            action_terms_group = self.get_action_terms_from_search_group(term_group)
+            if action_terms_group is not None:
+                self.add_terms_scope_selector(action_terms_group, scope_selectors)
+
+        # Include any ranges directly provided by the caller
+        if filter and filter.text_ranges_in_scope:
+            scope_selectors.append(TextRangeSelector(filter.text_ranges_in_scope))
+
+        # Tags...
+        if filter and filter.tags:
+            self.add_terms_scope_selector(
+                create_tag_search_term_group(filter.tags), scope_selectors
+            )
+
+        # If a thread index is available...
+        threads = None
+        if self.secondary_indexes:
+            threads = self.secondary_indexes.threads
+        if filter and filter.thread_description and threads:
+            threads_in_scope = await threads.lookup_thread(filter.thread_description)
+            if threads_in_scope:
+                scope_selectors.append(
+                    ThreadSelector(
+                        [threads.threads[t.thread_ordinal] for t in threads_in_scope]
+                    )
+                )
+
+        return GetScopeExpr(scope_selectors) if scope_selectors else None
+
+    def add_terms_scope_selector(
+        self,
+        term_group: SearchTermGroup,
+        scope_selectors: list[IQueryTextRangeSelector],
+    ) -> None:
+        if term_group.terms:
+            search_terms_used, select_expr = self.compile_search_group_messages(
+                term_group
+            )
+            scope_selectors.append(TextRangesFromMessagesSelector(select_expr))
+            self.all_scope_search_terms.extend(search_terms_used)
+
+    # TODO: compile_where
+    # TODO: compile_message_rerank
+    # TODO: compile_message_similarity
+
+    def get_action_terms_from_search_group(
+        self,
+        search_group: SearchTermGroup,
+    ) -> SearchTermGroup | None:
+        action_group: SearchTermGroup | None = None
+        for term in search_group.terms:
+            if isinstance(term, PropertySearchTerm) and is_action_property_term(term):
+                action_group = action_group or SearchTermGroup(boolean_op="and")
+                action_group.terms.append(term)
+        return action_group
+
+    async def resolve_related_terms(
+        self,
+        compiled_terms: list[CompiledTermGroup],
+        dedupe: bool,
+        filter: WhenFilter | None = None,
+    ) -> None:
+        for ct in compiled_terms:
+            self.validate_and_prepare_search_terms(ct.terms)
+        if (
+            self.secondary_indexes is not None
+            and self.secondary_indexes.term_to_related_terms_index is not None
+        ):
+            await resolve_related_terms(
+                self.secondary_indexes.term_to_related_terms_index,
+                compiled_terms,
+                dedupe,
+            )
+            # Ensure that the resolved terms are valid etc.
+            for ct in compiled_terms:
+                self.validate_and_prepare_search_terms(ct.terms)
+
+    def validate_and_prepare_search_terms(self, terms: list[SearchTerm]) -> None:
+        for term in terms:
+            self.validate_and_prepare_search_term(term)
+
+    def validate_and_prepare_search_term(self, search_term: SearchTerm) -> bool:
+        if not self.validate_and_prepare_term(search_term.term):
+            return False
+        # Matching the term - exact match - counts for more than matching related terms
+        # Therefore, we boost any matches where the term matches directly...
+        if search_term.term is None:
+            search_term.term.weight = self.default_term_match_weight
+        if search_term.related_terms is not None:
+            for related_term in search_term.related_terms:
+                if not self.validate_and_prepare_term(related_term):
+                    return False
+                # If related term is *really* similar to the main term, score it the same
+                if (
+                    related_term.weight is not None
+                    and related_term.weight >= self.related_is_exact_threshold
+                ):
+                    related_term.weight = self.default_term_match_weight
+        return True
+
+    def validate_and_prepare_term(self, term: Term | None) -> bool:
+        if term:
+            term.text = term.text.lower()
+        return True
 
     def boost_entities(
         self,
@@ -373,3 +489,13 @@ def create_match_terms_boolean_expr(
             return MatchTermsOrMaxExpr(term_expressions, scope_expr)
         case _:
             raise ValueError(f"Unknown boolean op: {boolean_op}")
+
+
+# TODO: Move to compilelib.py
+# TODO: Just call isinstance!
+def is_property_term(term: SearchTerm) -> TypeGuard[PropertySearchTerm]:
+    return isinstance(term, PropertySearchTerm)
+
+
+def is_action_property_term(term: PropertySearchTerm) -> bool:
+    return term.property_name in ("subject", "verb", "object", "indirectObject")

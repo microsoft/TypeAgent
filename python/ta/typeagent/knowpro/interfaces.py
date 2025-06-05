@@ -569,6 +569,7 @@ class WhenFilter:
     knowledge_type: KnowledgeType | None = None
     date_range: DateRange | None = None
     thread_description: str | None = None
+    tags: list[str] | None = None
 
     # SCOPE DEFINITION
 

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from re import search
-from typing import Callable, Protocol
+from typing import Callable, Literal, Protocol
 
 from ..knowpro.kplib import ConcreteEntity
 
@@ -38,8 +38,21 @@ from .interfaces import (
     SemanticRefOrdinal,
     SemanticRefSearchResult,
     Term,
+    TextLocation,
+    TextRange,
 )
 from .propindex import PropertyNames, lookup_property_in_property_index
+
+
+# TODO: Move to compilelib.py
+type BooleanOp = Literal["and", "or", "or_max"]
+
+
+# TODO: Move to compilelib.py
+@dataclass
+class CompiledTermGroup:
+    boolean_op: BooleanOp
+    terms: list[SearchTerm]
 
 
 def is_conversation_searchable(conversation: IConversation) -> bool:
@@ -688,8 +701,10 @@ class IQueryTextRangeSelector(Protocol):
 class TextRangeSelector(IQueryTextRangeSelector):
     """A selector that evaluates to a pre-computed TextRangeCollection."""
 
-    def __init__(self, ranges_in_scope: TextRangeCollection) -> None:
-        self.text_ranges_in_scope = ranges_in_scope
+    text_ranges_in_scope: TextRangeCollection
+
+    def __init__(self, ranges_in_scope: list[TextRange]) -> None:
+        self.text_ranges_in_scope = TextRangeCollection(ranges_in_scope, True)
 
     def eval(
         self,
@@ -720,7 +735,37 @@ class GetScopeExpr(QueryOpExpr[TextRangesInScope]):
 # TODO: TextRangesPredicateSelector
 # TODO: TextRangesWithTagSelector
 # TODO: TextRangesFromSemanticRefsSelector
-# TODO: TextRangesFromMessagesSelector
+
+
+@dataclass
+class TextRangesFromMessagesSelector(IQueryTextRangeSelector):
+    source_expr: IQueryOpExpr[MessageAccumulator]
+
+    def eval(
+        self,
+        context: QueryEvalContext,
+        semantic_refs: SemanticRefAccumulator | None = None,
+    ) -> TextRangeCollection | None:
+        matches = self.source_expr.eval(context)
+        ranges_in_scope: list[TextRange] | None = None
+        if matches:
+            all_ordinals = sorted(matches.get_matched_values())
+            ranges_in_scope = text_ranges_from_message_ordinals(all_ordinals)
+        return TextRangeCollection(ranges_in_scope)
+
+
+# TODO: Move to messagelib.py
+def text_ranges_from_message_ordinals(
+    message_ordinals: list[MessageOrdinal],
+) -> list[TextRange]:
+    return [text_range_from_message(ordinal) for ordinal in message_ordinals]
+
+
+# TODO: Move to messagelib.py
+def text_range_from_message(message_ordinal: MessageOrdinal) -> TextRange:
+    return TextRange(start=TextLocation(message_ordinal))
+
+
 # TODO: ThreadSelector
 # TODO: to_grouped_search_results
 

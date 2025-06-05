@@ -461,10 +461,7 @@ class TestMatchPropertySearchTermExpr:
 class TestGetScopeExpr:
     def test_eval(self, eval_context: QueryEvalContext):
         """Test evaluating a scope expression."""
-        text_ranges = TextRangeCollection(
-            [TextRange(TextLocation(0, 0), TextLocation(0, 10))]
-        )
-
+        text_ranges = [TextRange(TextLocation(0, 0), TextLocation(0, 10))]
         selector = TextRangeSelector(text_ranges)
         expr = GetScopeExpr(range_selectors=[selector])
 

@@ -395,11 +395,14 @@ class TextRangeCollection(Iterable[TextRange]):
     def __init__(
         self,
         ranges: list[TextRange] | None = None,
+        ensure_sorted: bool = False,
     ) -> None:
-        if ranges is None:
-            ranges = []
-        self._ranges = ranges  # TODO: Maybe make a copy?
-        # TODO: Maybe sort? Or assert it's sorted?
+        if ensure_sorted:
+            self._ranges = []
+            if ranges:
+                self.add_ranges(ranges)
+        else:
+            self._ranges = ranges if ranges is not None else []
 
     def __len__(self) -> int:
         return len(self._ranges)

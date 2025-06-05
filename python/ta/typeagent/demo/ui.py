@@ -4,9 +4,10 @@
 import asyncio
 import io
 from pprint import pprint
-import readline  # type: ignore  # For its side-effect of turning on line editing in input().
+import readline
 import shutil
 import sys
+import traceback
 from typing import Any, Literal
 
 from pydantic.dataclasses import dataclass
@@ -51,10 +52,18 @@ def main() -> None:
     # TODO: change QueryEvalContext to take [TMessage, TTermToSemanticRefIndex].
     context = QueryEvalContext(conversation=pod)  # type: ignore
     print("TypeAgent demo UI 0.1 (type 'q' to exit)")
+    if sys.stdin.isatty():
+        try:
+            readline.read_history_file(".ui_history")
+        except FileNotFoundError:
+            pass  # Ignore if history file does not exist.
     try:
         process_inputs(translator, context, sys.stdin)  # type: ignore  # Why is stdin not a TextIOWrapper?!
     except KeyboardInterrupt:
         print()
+    finally:
+        if sys.stdin.isatty():
+            readline.write_history_file(".ui_history")
 
 
 def create_translator() -> typechat.TypeChatJsonTranslator[SearchQuery]:
@@ -83,7 +92,7 @@ def process_inputs(
         if query_text.lower() in ("exit", "quit", "q"):
             break
 
-        asyncio.run(process_query(query_text, context.conversation, translator))
+        asyncio.run(wrap_process_query(query_text, context.conversation, translator))
 
         print()
 
@@ -104,6 +113,14 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
             print()
             return None
         return line.strip()
+
+
+async def wrap_process_query(query_text, conversation, translator):
+    try:
+        await process_query(query_text, conversation, translator)
+    except Exception as exc:
+        traceback.print_exc()
+        # traceback.print_exception(type(exc), exc, exc.__traceback__.tb_next)
 
 
 async def process_query(
@@ -134,16 +151,16 @@ async def process_query(
         print("Failed to translate search query to query expressions.")
         return
     print("Search query expressions:")
-    for i, query_expr in enumerate(query_exprs, 1):
+    for i, query_expr in enumerate(query_exprs):
         print(f"---------- {i} ----------")
         pprint(query_expr, width=line_width)
     print()
 
     # 3. Search!
-    for i, query_expr in enumerate(query_exprs, 1):
+    for i, query_expr in enumerate(query_exprs):
         print(f"Searching with expression {i}:")
         result = await run_search_query(conversation, query_expr)
-        pprint(f"Results for expression {i}:")
+        print(f"Results for expression {i}:")
         pprint(result, width=line_width)
 
 

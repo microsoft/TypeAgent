@@ -2,7 +2,11 @@
 # Licensed under the MIT License.
 
 from typing import Callable
+
 from ..aitools.vectorbase import VectorBase
+
+from .collections import TermSet
+from .common import is_search_term_wildcard
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
@@ -17,7 +21,7 @@ from .interfaces import (
     ListIndexingResult,
     Term,
 )
-from .search import CompiledTermGroup
+from .query import CompiledTermGroup
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
@@ -128,9 +132,91 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
 
 
 async def resolve_related_terms(
-        related_terms_index: ITermToRelatedTermsIndex,
-        compiled_terms: CompiledTermGroup,
-        ensure_single_occurrence: bool = True,
-        should_resolve_fuzzy: Callable[[SearchTerm], bool] | None = None
+    related_terms_index: ITermToRelatedTermsIndex,
+    compiled_terms: list[CompiledTermGroup],
+    ensure_single_occurrence: bool = True,
+    should_resolve_fuzzy: Callable[[SearchTerm], bool] | None = None,
 ) -> None:
-    raise NotImplementedError("TODO")
+    all_search_terms = [term for ct in compiled_terms for term in ct.terms]
+    searchable_terms = TermSet()
+    search_terms_needing_related: list[SearchTerm] = []
+
+    for search_term in all_search_terms:
+        if is_search_term_wildcard(search_term):
+            continue
+        searchable_terms.add_or_union(search_term.term)
+        term_text = search_term.term.text
+        # Resolve any specific term to related term mappings
+        if (
+            related_terms_index.aliases is not None
+            and search_term.related_terms is None
+        ):
+            search_term.related_terms = related_terms_index.aliases.lookup_term(
+                term_text
+            )
+        # If no mappings to aliases, add to fuzzy retrieval list
+        if search_term.related_terms is None:
+            if should_resolve_fuzzy is None or should_resolve_fuzzy(search_term):
+                search_terms_needing_related.append(search_term)
+
+    if related_terms_index.fuzzy_index is not None and search_terms_needing_related:
+        related_terms_for_search_terms = (
+            await related_terms_index.fuzzy_index.lookup_terms(
+                [st.term.text for st in search_terms_needing_related]
+            )
+        )
+        for i, search_term in enumerate(search_terms_needing_related):
+            search_term.related_terms = related_terms_for_search_terms[i]
+
+    # Due to fuzzy matching, a search term may end with related terms that overlap with those of other search terms.
+    # This causes scoring problems... duplicate/redundant scoring that can cause items to seem more relevant than they are
+    # - The same related term can show up for different search terms but with different weights
+    # - related terms may also already be present as search terms
+    for ct in compiled_terms:
+        dedupe_related_terms(
+            ct.terms,
+            (
+                ct.boolean_op != "and"
+                if ensure_single_occurrence
+                else ensure_single_occurrence
+            ),
+        )
+
+
+def dedupe_related_terms(
+    search_terms: list[SearchTerm],
+    ensure_single_occurrence: bool,
+) -> None:
+    all_search_terms = TermSet()
+    all_related_terms: TermSet | None = None
+
+    # Collect all unique search and related terms.
+    # We end up with (term, maximum weight for term) pairs.
+    for st in search_terms:
+        all_search_terms.add(st.term)
+    if ensure_single_occurrence:
+        all_related_terms = TermSet()
+        for st in search_terms:
+            all_related_terms.add_or_union(st.related_terms)
+
+    for search_term in search_terms:
+        if search_term.related_terms is not None and len(search_term.related_terms) > 0:
+            unique_related_for_search_term: list[Term] = []
+            for candidate_related_term in search_term.related_terms:
+                if candidate_related_term in all_search_terms:
+                    # This related term is already a search term
+                    continue
+                if ensure_single_occurrence and all_related_terms is not None:
+                    # Each unique related term should be searched for only once,
+                    # and (if there were duplicates) assigned the maximum weight assigned to that term
+                    term_with_max_weight = all_related_terms.get(candidate_related_term)
+                    if (
+                        term_with_max_weight is not None
+                        and term_with_max_weight.weight == candidate_related_term.weight
+                    ):
+                        # Associate this related term with the current search term
+                        unique_related_for_search_term.append(term_with_max_weight)
+                        all_related_terms.remove(candidate_related_term)
+                else:
+                    unique_related_for_search_term.append(candidate_related_term)
+            search_term.related_terms = unique_related_for_search_term
