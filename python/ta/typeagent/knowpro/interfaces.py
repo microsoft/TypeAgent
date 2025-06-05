@@ -508,7 +508,7 @@ class SearchTerm:
 
 
 # Well-known knowledge properties.
-KnowledgePropertyName = Literal[
+type KnowledgePropertyName = Literal[
     "name",  # the name of an entity
     "type",  # the type of an entity
     "verb",  # the verb of an action
@@ -551,7 +551,7 @@ class SearchTermGroup:
     terms: list["SearchTermGroupTypes"] = field(default_factory=list)
 
 
-SearchTermGroupTypes = SearchTerm | PropertySearchTerm | SearchTermGroup
+type SearchTermGroupTypes = SearchTerm | PropertySearchTerm | SearchTermGroup
 
 
 @dataclass

@@ -1,11 +1,13 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+from typing import Callable
 from ..aitools.vectorbase import VectorBase
 from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
     ITermToRelatedTerms,
+    SearchTerm,
     TermToRelatedTermsData,
     ITermToRelatedTermsIndex,
     TermsToRelatedTermsDataItem,
@@ -15,6 +17,7 @@ from .interfaces import (
     ListIndexingResult,
     Term,
 )
+from .search import CompiledTermGroup
 
 
 class TermToRelatedTermsMap(ITermToRelatedTerms):
@@ -122,3 +125,12 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
             embeddings = text_embedding_data.get("embeddings")
             if embeddings is not None:
                 self._vector_base.deserialize(embeddings)
+
+
+async def resolve_related_terms(
+        related_terms_index: ITermToRelatedTermsIndex,
+        compiled_terms: CompiledTermGroup,
+        ensure_single_occurrence: bool = True,
+        should_resolve_fuzzy: Callable[[SearchTerm], bool] | None = None
+) -> None:
+    raise NotImplementedError("TODO")

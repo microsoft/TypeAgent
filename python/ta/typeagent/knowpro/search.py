@@ -1,24 +1,44 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from ast import Not
 from dataclasses import dataclass
+from tkinter import SE
+from typing import Callable, Literal, cast
 
+from ..knowpro.kplib import ConcreteEntity
+
+from .collections import SemanticRefAccumulator
 from .interfaces import (
     IConversation,
     IConversationSecondaryIndexes,
     KnowledgeType,
+    PropertySearchTerm,
     ScoredMessageOrdinal,
+    ScoredSemanticRefOrdinal,
     SearchSelectExpr,
+    SearchTerm,
     SearchTermGroup,
+    SemanticRef,
     SemanticRefSearchResult,
     WhenFilter,
 )
 from .query import (
+    GetScopeExpr,
     GetScoredMessagesExpr,
+    GroupByKnowledgeTypeExpr,
     GroupSearchResultsExpr,
     IQueryOpExpr,
+    MatchPropertySearchTermExpr,
+    MatchSearchTermExpr,
+    MatchTagExpr,
+    MatchTermsAndExpr,
+    MatchTermsBooleanExpr,
+    MatchTermsOrExpr,
+    MatchTermsOrMaxExpr,
+    MatchTopicExpr,
     QueryEvalContext,
+    SelectTopNKnowledgeGroupExpr,
+    WhereSemanticRefExpr,
     is_conversation_searchable,
 )
 
@@ -135,14 +155,40 @@ def run_query[T](
     )
 
 
+# TODO: Move to compilelib.py
+type BooleanOp = Literal["and", "or", "or_max"]
+
+
+# TODO: Move to compilelib.py
+@dataclass
+class CompiledTermGroup:
+    boolean_op: BooleanOp
+    terms: list[SearchTerm]
+
+
+# NOTE: QueryCompiler instances are stateful, and not thread-safe.
+#       Create a new one for each query.
 class QueryCompiler:
     def __init__(
         self,
         conversation: IConversation,
         secondary_indexes: IConversationSecondaryIndexes | None,
+        entity_term_match_weight: float = 100.0,
+        default_term_match_weight: float = 10.0,
+        related_is_exact_threshold: float = 0.95,
     ):
         self.conversation = conversation
         self.secondary_indexes = secondary_indexes
+        self.entity_term_match_weight = entity_term_match_weight
+        self.default_term_match_weight = default_term_match_weight
+        self.related_is_exact_threshold = related_is_exact_threshold
+        # All SearchTerms used which compiling the 'select' portion of the query.
+        self.all_search_terms: list[CompiledTermGroup] = []
+        # All search terms used while compiling predicates in the query.
+        self.all_predicate_search_terms: list[CompiledTermGroup] = []
+        self.all_scope_search_terms: list[CompiledTermGroup] = []
+
+    # NOTE: Everything is async because we sometimes use embeddings.
 
     async def compile_knowledge_query(
         self,
@@ -150,6 +196,12 @@ class QueryCompiler:
         filter: WhenFilter | None = None,
         options: None = None,  # TODO: SearchOptions | None = None
     ) -> GroupSearchResultsExpr:
+        query = await self.compile_query(terms, filter, options)
+
+        exact_match = False
+        if not exact_match:
+            await self.resolve_related_terms(self.all_search_terms, True)
+
         raise NotImplementedError(
             "QueryCompiler.compile_knowledge_query() isn't implemented yet."
         )
@@ -166,3 +218,158 @@ class QueryCompiler:
         raise NotImplementedError(
             "QueryCompiler.compile_message_query() isn't implemented yet."
         )
+
+    # TODO: compile_message_similarity_query
+
+    async def compile_query(
+        self,
+        search_term_group: SearchTermGroup,
+        filter: WhenFilter | None = None,
+        options: None = None,  # TODO: SearchOptions | None = None
+    ) -> IQueryOpExpr[dict[KnowledgeType, SemanticRefAccumulator]]:
+        select_expr = self.compile_select(
+            search_term_group,
+            await self.compile_scope(search_term_group, filter),
+            options,
+        )
+        # Constrain the select with scopes and 'where'.
+        if filter:
+            select_expr = WhereSemanticRefExpr(
+                select_expr,
+                self.compile_where(filter),
+            )
+        # And lastly, select 'TopN' and group knowledge by type.
+        tmp = GroupByKnowledgeTypeExpr(select_expr)
+        return SelectTopNKnowledgeGroupExpr(
+            tmp,
+            (
+                options.max_knowledge_matches
+                if options
+                and hasattr(options, "max_knowledge_matches")
+                and options.max_knowledge_matches
+                else None
+            ),
+        )
+
+    def compile_select(
+        self,
+        term_group: SearchTermGroup,
+        scope_expr: GetScopeExpr,
+        options: None = None,  # TODO: SearchOptions | None = None
+    ) -> IQueryOpExpr[SemanticRefAccumulator]:
+        search_terms_used, select_expr = self.compile_search_group_terms(
+            term_group, scope_expr
+        )
+        self.all_search_terms.extend(search_terms_used)
+        return select_expr
+
+    def compile_search_group_terms(
+        self,
+        search_group: SearchTermGroup,
+        scope_expr: GetScopeExpr | None = None,
+    ) -> tuple[list[CompiledTermGroup], IQueryOpExpr[SemanticRefAccumulator]]:
+        return self.compile_search_group(
+            search_group,
+            lambda term_exprs, boolean_op, scope: create_match_terms_boolean_expr(
+                term_exprs, boolean_op, scope
+            ),
+            scope_expr,
+        )
+
+    # TODO: compile_search_group_messages
+
+    def compile_search_group(
+        self,
+        search_group: SearchTermGroup,
+        create_op: Callable[
+            [list[IQueryOpExpr], BooleanOp, GetScopeExpr | None],
+            IQueryOpExpr[SemanticRefAccumulator],
+        ],
+        scope_expr: GetScopeExpr | None = None,
+    ) -> tuple[list[CompiledTermGroup], IQueryOpExpr[SemanticRefAccumulator]]:
+        t0_terms: list[SearchTerm] = []
+        compiled_terms: list[CompiledTermGroup] = [
+            CompiledTermGroup(boolean_op="and", terms=t0_terms)
+        ]
+        term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]] = []
+        for term in search_group.terms:
+            if isinstance(term, PropertySearchTerm):
+                term_expressions.append(self.compile_property_term(term))
+                if not isinstance(term.property_name, str):
+                    t0_terms.append(term.property_name)
+                t0_terms.append(term.property_value)
+            elif isinstance(term, SearchTermGroup):
+                nested_terms, group_expr = self.compile_search_group(term, create_op)
+                compiled_terms.extend(nested_terms)
+                term_expressions.append(group_expr)
+            else:
+                assert isinstance(
+                    term, SearchTerm
+                ), f"Unexpected term type: {type(term)}"
+                term_expressions.append(self.compile_search_term(term))
+                t0_terms.append(term)
+        bool_expr = create_op(term_expressions, search_group.boolean_op, scope_expr)
+        return (compiled_terms, bool_expr)
+
+    def compile_search_term(
+        self,
+        term: SearchTerm,
+    ) -> IQueryOpExpr[SemanticRefAccumulator | None]:
+        boost_weight = self.entity_term_match_weight / self.default_term_match_weight
+        return MatchSearchTermExpr(
+            term,
+            lambda term, sr, scored: self.boost_entities(
+                term, sr, scored, boost_weight
+            ),
+        )
+
+    def compile_property_term(
+        self,
+        term: PropertySearchTerm,
+    ) -> IQueryOpExpr[SemanticRefAccumulator | None]:
+        match term.property_name:
+            case "tag":
+                return MatchTagExpr(term.property_value)
+            case "topic":
+                return MatchTopicExpr(term.property_value)
+            case _:
+                if term.property_name in ("name", "type"):
+                    tpvt = term.property_value.term
+                    if tpvt.weight is None:
+                        tpvt.weight = self.entity_term_match_weight
+                return MatchPropertySearchTermExpr(term)
+
+    # TODO: ...
+
+    def boost_entities(
+        self,
+        search_term: SearchTerm,
+        sr: SemanticRef,
+        scored_ref: ScoredSemanticRefOrdinal,
+        boost_weight: float,
+    ) -> ScoredSemanticRefOrdinal:
+        if sr.knowledge_type == "entity" and match_entity_name_or_type(
+            search_term, cast(ConcreteEntity, sr)
+        ):
+            return ScoredSemanticRefOrdinal(
+                scored_ref.semantic_ref_ordinal,
+                scored_ref.score * boost_weight,
+            )
+        else:
+            return scored_ref
+
+
+def create_match_terms_boolean_expr(
+    term_expressions: list[IQueryOpExpr[SemanticRefAccumulator | None]],
+    boolean_op: BooleanOp,
+    scope_expr: GetScopeExpr | None = None,
+) -> MatchTermsBooleanExpr:
+    match boolean_op:
+        case "and":
+            return MatchTermsAndExpr(term_expressions, scope_expr)
+        case "or":
+            return MatchTermsOrExpr(term_expressions, scope_expr)
+        case "or_max":
+            return MatchTermsOrMaxExpr(term_expressions, scope_expr)
+        case _:
+            raise ValueError(f"Unknown boolean op: {boolean_op}")

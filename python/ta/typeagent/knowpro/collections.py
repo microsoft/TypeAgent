@@ -441,8 +441,7 @@ class TextRangeCollection(Iterable[TextRange]):
 
 @dataclass
 class TextRangesInScope:
-    def __init__(self, text_ranges: list[TextRangeCollection] | None = None):
-        self.text_ranges = text_ranges
+    text_ranges: list[TextRangeCollection] | None = None
 
     def add_text_ranges(
         self,

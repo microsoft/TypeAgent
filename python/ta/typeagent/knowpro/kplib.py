@@ -18,6 +18,7 @@ class Quantity:
     units: str
 
 
+# NOTE: Don't use `type`, pydantic doesn't like it.
 Value = str | float | bool | Quantity
 
 
@@ -79,6 +80,7 @@ class ActionParam:
     value: Value
 
 
+# NOTE: Don't use `type`, pydantic doesn't like it.
 VerbTense = Literal["past", "present", "future"]
 
 
