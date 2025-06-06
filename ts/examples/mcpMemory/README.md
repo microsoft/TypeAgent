@@ -1,6 +1,6 @@
 ## MCP Memory
 
-Sample code that demonstrates how to implement [Structured RAG and knowPro memory](../../packages/memory/conversation/README.md) as **MCP** [(model context protocol)](https://github.com/modelcontextprotocol/typescript-sdk) _tools_.
+Sample code that demonstrates how to implement Structured RAG and [knowPro](../../packages/knowPro/README.md) [conversation memory](../../packages/memory/conversation/README.md) as [**MCP**](https://github.com/modelcontextprotocol/typescript-sdk) _tools_.
 
 - Implements a simple [conversation-memory](../../packages/memory/conversation/src/conversationMemory.ts) [**MemoryServer**](./src/memoryServer.ts) with two basic tools: **remember and recall**.
 - MemoryServer is implemented using the [MCP Typescript SDK](https://github.com/modelcontextprotocol/typescript-sdk).
