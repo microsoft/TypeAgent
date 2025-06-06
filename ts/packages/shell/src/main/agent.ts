@@ -3,7 +3,6 @@
 
 import {
     ActionContext,
-    AppAction,
     AppAgent,
     AppAgentManifest,
     ParsedCommandParams,
@@ -22,12 +21,10 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { getLocalWhisperCommandHandlers } from "./localWhisperCommandHandler.js";
-import { ShellAction } from "./shellActionSchema.js";
 import { ShellWindow } from "./shellWindow.js";
 import { getObjectProperty, getObjectPropertyNames } from "common-utils";
 import { installAndRestart, updateHandlerTable } from "./commands/update.js";
 import { isProd } from "./index.js";
-import { fileURLToPath } from "node:url";
 
 export type ShellContext = {
     shellWindow: ShellWindow;
@@ -36,13 +33,6 @@ export type ShellContext = {
 const config: AppAgentManifest = {
     emojiChar: "🐚",
     description: "Shell",
-    schema: {
-        description: "Graphical user interface (shell) for the user.",
-        schemaFile: fileURLToPath(
-            new URL("../../src/main/shellActionSchema.ts", import.meta.url),
-        ),
-        schemaType: "ShellAction",
-    },
 };
 
 class ShellShowSettingsCommandHandler implements CommandHandlerNoParams {
@@ -195,69 +185,6 @@ function getThemeCommandHandlers(): CommandHandlerTable {
     };
 }
 
-class ShellOpenWebContentView implements CommandHandler {
-    public readonly description = "Show a new Web Content view";
-    public readonly parameters = {
-        args: {
-            site: {
-                description: "Alias or URL for the site of the open.",
-            },
-        },
-    } as const;
-    public async run(
-        context: ActionContext<ShellContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const agentContext = context.sessionContext.agentContext;
-        let targetUrl: URL;
-        switch (params.args.site.toLowerCase()) {
-            case "paleobiodb":
-                targetUrl = new URL("https://paleobiodb.org/navigator/");
-
-                break;
-            case "crossword":
-                targetUrl = new URL(
-                    "https://aka.ms/typeagent/sample-crossword",
-                );
-
-                break;
-            case "commerce":
-                targetUrl = new URL("https://www.target.com/");
-                break;
-
-            case "turtlegraphics":
-                targetUrl = new URL("http://localhost:9000/");
-                break;
-
-            default:
-                try {
-                    const port =
-                        await context.sessionContext.getSharedLocalHostPort(
-                            params.args.site,
-                        );
-                    targetUrl = new URL(`http://localhost:${port}`);
-                } catch {
-                    try {
-                        targetUrl = new URL(params.args.site);
-                    } catch (e) {
-                        throw new Error(
-                            `Unable to open '${params.args.site}': ${e}`,
-                        );
-                    }
-                }
-                break;
-        }
-        agentContext.shellWindow.openInlineBrowser(targetUrl);
-    }
-}
-
-class ShellCloseWebContentView implements CommandHandlerNoParams {
-    public readonly description = "Close the new Web Content view";
-    public async run(context: ActionContext<ShellContext>) {
-        context.sessionContext.agentContext.shellWindow.closeInlineBrowser();
-    }
-}
-
 const handlers: CommandHandlerTable = {
     description: "Shell settings command",
     commands: {
@@ -280,8 +207,6 @@ const handlers: CommandHandlerTable = {
             },
         },
         topmost: new ShellSetTopMostCommandHandler(),
-        open: new ShellOpenWebContentView(),
-        close: new ShellCloseWebContentView(),
         localWhisper: getLocalWhisperCommandHandlers(),
         theme: getThemeCommandHandlers(),
         update: updateHandlerTable,
@@ -305,29 +230,6 @@ export function createShellAgentProvider(shellWindow: ShellWindow) {
             return {
                 shellWindow,
             };
-        },
-        async executeAction(
-            action: AppAction,
-            context: ActionContext<ShellContext>,
-        ) {
-            const shellAction = action as ShellAction;
-            switch (shellAction.actionName) {
-                case "openCanvas":
-                    const openCmd = new ShellOpenWebContentView();
-                    const parameters = {
-                        args: {
-                            site: shellAction.parameters.site,
-                        },
-                    };
-                    openCmd.run(context, parameters as any);
-                    break;
-                case "closeCanvas":
-                    const closeCmd = new ShellCloseWebContentView();
-                    closeCmd.run(context);
-                    break;
-            }
-
-            return undefined;
         },
         ...getCommandInterface(handlers),
     };

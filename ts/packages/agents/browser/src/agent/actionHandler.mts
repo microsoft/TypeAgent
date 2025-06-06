@@ -9,10 +9,12 @@ import {
     AppAgent,
     AppAgentEvent,
     AppAgentInitSettings,
+    ParsedCommandParams,
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
     getBoardSchema,
@@ -27,10 +29,14 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 import {
+    CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
+
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:browser:action");
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
@@ -224,6 +230,67 @@ async function updateBrowserContext(
     }
 }
 
+async function resolveWebSite(
+    context: ActionContext<BrowserActionContext>,
+    site: string,
+): Promise<string> {
+    switch (site.toLowerCase()) {
+        case "paleobiodb":
+            return "https://paleobiodb.org/navigator/";
+
+        case "crossword":
+            return "https://aka.ms/typeagent/sample-crossword";
+
+        case "commerce":
+            return "https://www.target.com/";
+
+        case "turtlegraphics":
+            return "http://localhost:9000/";
+        default:
+            try {
+                const port =
+                    await context.sessionContext.getSharedLocalHostPort(site);
+                return `http://localhost:${port}`;
+            } catch (e) {
+                debug(
+                    `Unable to find local host port for '${site}'. Trying as URL. ${e}`,
+                );
+                try {
+                    return new URL(site).toString();
+                } catch (e) {
+                    throw new Error(`Unable to find '${site}': ${e}`);
+                }
+            }
+    }
+}
+
+async function openWebPage(
+    context: ActionContext<BrowserActionContext>,
+    site: string,
+) {
+    if (context.sessionContext.agentContext.browserControl) {
+        context.actionIO.setDisplay("Opening web page.");
+        await context.sessionContext.agentContext.browserControl.openWebPage(
+            await resolveWebSite(context, site),
+        );
+        return createActionResult("Web page opened successfully.");
+    }
+    throw new Error(
+        "Browser control is not available. Please launch a browser first.",
+    );
+}
+
+async function closeWebPage(context: ActionContext<BrowserActionContext>) {
+    if (context.sessionContext.agentContext.browserControl) {
+        context.actionIO.setDisplay("Closing web page.");
+        await context.sessionContext.agentContext.browserControl.closeWebPage();
+        return createActionResult("Web page closed successfully.");
+    }
+    throw new Error(
+        "Browser control is not available. Please launch a browser first.",
+    );
+}
+
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
@@ -236,26 +303,11 @@ async function executeBrowserAction(
     context: ActionContext<BrowserActionContext>,
 ) {
     if (action.schemaName === "browser") {
-        if (action.actionName === "openWebPage") {
-            if (context.sessionContext.agentContext.browserControl) {
-                context.actionIO.setDisplay("Opening web page.");
-                await context.sessionContext.agentContext.browserControl.openWebPage(
-                    action.parameters.site,
-                );
-                return createActionResult("Web page opened successfully.");
-            }
-            throw new Error(
-                "Browser control is not available. Please launch a browser first.",
-            );
-        } else if (action.actionName === "closeWebPage") {
-            if (context.sessionContext.agentContext.browserControl) {
-                context.actionIO.setDisplay("Closing web page.");
-                await context.sessionContext.agentContext.browserControl.closeWebPage();
-                return createActionResult("Web page closed successfully.");
-            }
-            throw new Error(
-                "Browser control is not available. Please launch a browser first.",
-            );
+        switch (action.actionName) {
+            case "openWebPage":
+                return openWebPage(context, action.parameters.site);
+            case "closeWebPage":
+                return closeWebPage(context);
         }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
@@ -460,7 +512,7 @@ export async function createAutomationBrowser(isVisible?: boolean) {
     );
 }
 
-class OpenStandaloneBrowserHandler implements CommandHandlerNoParams {
+class OpenStandaloneAutomationBrowserHandler implements CommandHandlerNoParams {
     public readonly description = "Open a standalone browser instance";
     public async run(context: ActionContext<BrowserActionContext>) {
         if (context.sessionContext.agentContext.browserProcess) {
@@ -471,7 +523,7 @@ class OpenStandaloneBrowserHandler implements CommandHandlerNoParams {
     }
 }
 
-class OpenHiddenBrowserHandler implements CommandHandlerNoParams {
+class OpenHiddenAutomationBrowserHandler implements CommandHandlerNoParams {
     public readonly description = "Open a hidden/headless browser instance";
     public async run(context: ActionContext<BrowserActionContext>) {
         if (context.sessionContext.agentContext.browserProcess) {
@@ -491,17 +543,61 @@ class CloseBrowserHandler implements CommandHandlerNoParams {
     }
 }
 
+class OpenWebPageHandler implements CommandHandler {
+    public readonly description = "Show a new Web Content view";
+    public readonly parameters = {
+        args: {
+            site: {
+                description: "Alias or URL for the site of the open.",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const result = await openWebPage(context, params.args.site);
+        if (result.error) {
+            displayError(result.error, context);
+            return;
+        }
+        context.actionIO.setDisplay(result.displayContent);
+    }
+}
+
+class CloseWebPageHandler implements CommandHandlerNoParams {
+    public readonly description = "Close the new Web Content view";
+    public async run(context: ActionContext<BrowserActionContext>) {
+        const result = await closeWebPage(context);
+        if (result.error) {
+            displayError(result.error, context);
+            return;
+        }
+        context.actionIO.setDisplay(result.displayContent);
+    }
+}
+
 export const handlers: CommandHandlerTable = {
     description: "Browser App Agent Commands",
     commands: {
-        launch: {
-            description: "Launch a browser session",
-            defaultSubCommand: "standalone",
+        auto: {
+            description: "Run the browser automation",
+            defaultSubCommand: "launch",
             commands: {
-                hidden: new OpenHiddenBrowserHandler(),
-                standalone: new OpenStandaloneBrowserHandler(),
+                launch: {
+                    description: "Launch a browser session",
+                    defaultSubCommand: "standalone",
+                    commands: {
+                        hidden: new OpenHiddenAutomationBrowserHandler(),
+                        standalone:
+                            new OpenStandaloneAutomationBrowserHandler(),
+                    },
+                },
+                close: new CloseBrowserHandler(),
             },
         },
-        close: new CloseBrowserHandler(),
+
+        open: new OpenWebPageHandler(),
+        close: new CloseWebPageHandler(),
     },
 };

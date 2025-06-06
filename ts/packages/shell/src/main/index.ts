@@ -307,7 +307,7 @@ async function initializeDispatcher(
             clientId: getClientId(),
             clientIO,
             constructionProvider: getDefaultConstructionProvider(),
-            allowSharedLocalView: ["shell"],
+            allowSharedLocalView: ["browser"],
             portBase: isProd ? 9001 : 9050,
         });
 
