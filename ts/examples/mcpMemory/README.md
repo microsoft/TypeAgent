@@ -13,6 +13,7 @@ The example explores adding and recalling memories.
 - The exploration is similar to that explored in the [knowpro sample](../chat/README.md)
 
 Memories are stored on your filesystem in folder path: /data/testChat/knowpro/chat
+Sample inputs: [input.txt](./src/input.txt)
 
 ## Trademarks
 
