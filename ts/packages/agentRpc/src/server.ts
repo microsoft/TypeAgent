@@ -26,14 +26,40 @@ import {
     AgentContextInvokeFunctions,
     AgentInvokeFunctions,
     ContextParams,
+    OptionsFunctionCallBack,
 } from "./types.js";
 import { createRpc } from "./rpc.js";
-import { ChannelProvider } from "./common.js";
+import { ChannelProvider, RpcChannel } from "./common.js";
 import {
     base64ToUint8Array,
     uint8ArrayToBase64,
     createLimiter,
+    setObjectProperty,
 } from "common-utils";
+
+function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
+    const optionsChannel: RpcChannel = channelProvider.createChannel(
+        `options:${name}`,
+    );
+    return createRpc<OptionsFunctionCallBack>(optionsChannel);
+}
+
+function populateOptionsFunctions(
+    rpc: ReturnType<typeof createOptionsRpc>,
+    options: any,
+    optionsCallback: {
+        id: number;
+        functions: string[];
+    },
+) {
+    const { id, functions } = optionsCallback;
+    const obj = { options };
+    for (const name of functions) {
+        setObjectProperty(obj, "options", name, (...args: any[]) => {
+            return rpc.invoke("callback", { name, id, args });
+        });
+    }
+}
 
 export function createAgentRpcServer(
     name: string,
@@ -42,12 +68,40 @@ export function createAgentRpcServer(
 ) {
     const channelName = `agent:${name}`;
     const channel = channelProvider.createChannel(channelName);
+    let optionsRpc: ReturnType<typeof createOptionsRpc> | undefined;
+
     const agentInvokeHandlers: AgentInvokeFunctions = {
-        async initializeAgentContext(
-            settings?: AppAgentInitSettings,
-        ): Promise<unknown> {
+        async initializeAgentContext(param: {
+            settings?: AppAgentInitSettings | undefined;
+            optionsCallBack?:
+                | {
+                      id: number;
+                      functions: string[];
+                  }
+                | undefined;
+        }): Promise<unknown> {
             if (agent.initializeAgentContext === undefined) {
                 throw new Error("Invalid invocation of initializeAgentContext");
+            }
+            const { settings, optionsCallBack } = param;
+            if (optionsCallBack !== undefined) {
+                if (
+                    settings === undefined ||
+                    typeof settings.options !== "object" ||
+                    settings.options === null
+                ) {
+                    throw new Error(
+                        "Internal Error: options must be an object or null with optionsCallBack",
+                    );
+                }
+                if (optionsRpc === undefined) {
+                    optionsRpc = createOptionsRpc(channelProvider, name);
+                }
+                populateOptionsFunctions(
+                    optionsRpc,
+                    settings.options,
+                    optionsCallBack,
+                );
             }
             const agentContext = await agent.initializeAgentContext?.(settings);
             return {

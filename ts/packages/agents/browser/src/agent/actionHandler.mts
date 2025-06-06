@@ -8,6 +8,7 @@ import {
     ActionResult,
     AppAgent,
     AppAgentEvent,
+    AppAgentInitSettings,
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -47,6 +48,7 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
+import { BrowserControl } from "./interface.mjs";
 
 export function instantiate(): AppAgent {
     return {
@@ -58,6 +60,7 @@ export function instantiate(): AppAgent {
 }
 
 export type BrowserActionContext = {
+    browserControl?: BrowserControl | undefined;
     webSocket?: WebSocket | undefined;
     webAgentChannels?: WebAgentChannels | undefined;
     crossWordState?: Crossword | undefined;
@@ -67,8 +70,13 @@ export type BrowserActionContext = {
     allowDynamicAgentDomains?: string[];
 };
 
-async function initializeBrowserContext(): Promise<BrowserActionContext> {
-    return {};
+async function initializeBrowserContext(
+    settings?: AppAgentInitSettings,
+): Promise<BrowserActionContext> {
+    const browserControl = settings?.options as BrowserControl | undefined;
+    return {
+        browserControl,
+    };
 }
 
 async function updateBrowserContext(
@@ -227,6 +235,29 @@ async function executeBrowserAction(
 
     context: ActionContext<BrowserActionContext>,
 ) {
+    if (action.schemaName === "browser") {
+        if (action.actionName === "openWebPage") {
+            if (context.sessionContext.agentContext.browserControl) {
+                context.actionIO.setDisplay("Opening web page.");
+                await context.sessionContext.agentContext.browserControl.openWebPage(
+                    action.parameters.site,
+                );
+                return createActionResult("Web page opened successfully.");
+            }
+            throw new Error(
+                "Browser control is not available. Please launch a browser first.",
+            );
+        } else if (action.actionName === "closeWebPage") {
+            if (context.sessionContext.agentContext.browserControl) {
+                context.actionIO.setDisplay("Closing web page.");
+                await context.sessionContext.agentContext.browserControl.closeWebPage();
+                return createActionResult("Web page closed successfully.");
+            }
+            throw new Error(
+                "Browser control is not available. Please launch a browser first.",
+            );
+        }
+    }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
     if (webSocketEndpoint) {

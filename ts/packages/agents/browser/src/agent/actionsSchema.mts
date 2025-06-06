@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 export type BrowserActions =
-    | OpenWebSite
-    | Close
+    | OpenWebPage
+    | CloseWebPage
     | GoBack
     | GoForward
     | ScrollDown
@@ -19,9 +19,9 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage;
 
-// show/open/display web site in the current view.
-export type OpenWebSite = {
-    actionName: "openWebSite";
+// show/open/display web page in the current view.
+export type OpenWebPage = {
+    actionName: "openWebPage";
     parameters: {
         // Alias or URL for the site of the open.
         site:
@@ -37,8 +37,8 @@ export type OpenWebSite = {
 };
 
 // Close the current web site view
-export type Close = {
-    actionName: "close";
+export type CloseWebPage = {
+    actionName: "closeWebPage";
 };
 
 export type Search = {

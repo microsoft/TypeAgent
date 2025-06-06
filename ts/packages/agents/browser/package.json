@@ -14,7 +14,8 @@
   "sideEffects": false,
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
-    "./agent/handlers": "./dist/agent/actionHandler.mjs"
+    "./agent/handlers": "./dist/agent/actionHandler.mjs",
+    "./agent/interface": "./dist/agent/interface.mjs"
   },
   "main": "index.js",
   "scripts": {
