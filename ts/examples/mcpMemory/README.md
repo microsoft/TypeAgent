@@ -1,18 +1,21 @@
 ## MCP Memory
 
-Sample code and early exploration of using [knowpro memory](../../packages/memory/conversation/README.md) with **MCP**[(model context protocol)](https://github.com/modelcontextprotocol/typescript-sdk).
+Sample code that demonstrates how to implement [Structured RAG and knowPro memory](../../packages/memory/conversation/README.md) as **MCP** [(model context protocol)](https://github.com/modelcontextprotocol/typescript-sdk) _tools_.
 
-The example explores adding and recalling memories.
-
-- Currently explores the [conversation-memory](../../packages/memory/conversation/src/conversationMemory.ts) only
-  - Uses the StdioServerTransport, which spins up the MemoryServer in **node** and shuts it down **for each request**. This impacts performance as Azure OpenAI credentials must be fetched anew each time.
-  - For stateful behavior and very fast performance, create a version of this app that uses an Http transport instead.
-  - Memory Server is launched using the [server.js](./src/server.ts)
-- Type @help for a list of commands.
+- Implements a simple [conversation-memory](../../packages/memory/conversation/src/conversationMemory.ts) [**MemoryServer**](./src/memoryServer.ts) with two basic tools: **remember and recall**.
+- MemoryServer is implemented using the [MCP Typescript SDK](https://github.com/modelcontextprotocol/typescript-sdk).
+  - MemoryServer currently uses the _stateless_ StdioServerTransport and node.js host for simplicity.
+  - For stateful behavior and _very fast performance_, create a version of MemoryServer that uses a express host with http transport instead.
+  - MemoryServer is launched in node.js using the [server.js](./src/server.ts) script.
+- MemoryServer _tools_ are called using the app CLI.
+  - Type @help for a list of commands.
   - Commands are implemented in [main.ts](./src/main.ts)
-- The exploration is similar to that explored in the [knowpro sample](../chat/README.md)
+- You can find more detailed examples of using [knowPro](../../packages/knowPro/README.md) and [Structured RAG](../../../docs/content/architecture/memory.md) in the [knowPro sample](../chat/README.md).
 
-Memories are stored on your filesystem in folder path: /data/testChat/knowpro/chat
+**Note**: Memories are stored on your filesystem in folder path: /data/testChat/knowpro/chat
+
+### Usage
+
 Sample inputs: [input.txt](./src/input.txt)
 
 ## Trademarks
