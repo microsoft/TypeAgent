@@ -88,7 +88,7 @@ export function createModels(): Models {
     return models;
 }
 
-export async function createChatMemoryContext(
+export async function createKnowProContext(
     completionCallback?: (req: any, resp: any) => void,
 ): Promise<ChatContext> {
     const storePath = `${OUTPUT_DIR}/testChat`;

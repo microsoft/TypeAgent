@@ -25,7 +25,7 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai } from "aiclient";
 import { downloadArxivPapers } from "./pdfDownLoader.js";
 import {
-    createChatMemoryContext,
+    createKnowProContext,
     createKnowproCommands,
 } from "./srag/pdfKnowproMem.js";
 import { AppPrinter } from "./printer.js";
@@ -96,7 +96,7 @@ export async function interactiveAppLoop(
     const model = openai.createJsonChatModel("GPT_4", ["PdfDownloader"]);
     const pdfDownloader = createPDFDownloadTranslator(model);
 
-    let context = await createChatMemoryContext(captureTokenStats);
+    let context = await createKnowProContext(captureTokenStats);
     let showTokenStats = false;
     let printer = context.printer;
 
