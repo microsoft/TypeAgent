@@ -51,6 +51,7 @@ import {
     setUpdateConfigPath,
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
+import type { BrowserControl } from "browser-typeagent/agent/interface";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -279,12 +280,24 @@ async function initializeDispatcher(
             },
         };
 
+        const browserControl: BrowserControl = {
+            async openWebPage(url: string) {
+                return shellWindow.openInlineBrowser(new URL(url));
+            },
+            async closeWebPage() {
+                shellWindow.closeInlineBrowser();
+            },
+        };
+
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {
             appAgentProviders: [
                 createShellAgentProvider(shellWindow),
                 ...getDefaultAppAgentProviders(instanceDir),
             ],
+            agentInitOptions: {
+                browser: browserControl,
+            },
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
             persistSession: true,
             persistDir: instanceDir,
@@ -294,7 +307,7 @@ async function initializeDispatcher(
             clientId: getClientId(),
             clientIO,
             constructionProvider: getDefaultConstructionProvider(),
-            allowSharedLocalView: ["shell"],
+            allowSharedLocalView: ["browser"],
             portBase: isProd ? 9001 : 9050,
         });
 

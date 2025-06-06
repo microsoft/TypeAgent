@@ -133,9 +133,15 @@ export type AgentCallFunctions = {
 };
 
 export type AgentInvokeFunctions = {
-    initializeAgentContext: (
-        settings?: AppAgentInitSettings,
-    ) => Promise<unknown>;
+    initializeAgentContext: (param: {
+        settings: AppAgentInitSettings | undefined;
+        optionsCallBack:
+            | {
+                  id: number;
+                  functions: string[];
+              }
+            | undefined;
+    }) => Promise<unknown>;
     updateAgentContext: (
         param: Partial<ContextParams> & {
             enable: boolean;
@@ -208,4 +214,12 @@ export type ContextParams = {
 export type ActionContextParams = ContextParams & {
     actionContextId: number;
     activityContext: ActivityContext | undefined;
+};
+
+export type OptionsFunctionCallBack = {
+    callback(param: {
+        name: string;
+        id: number;
+        args: unknown[];
+    }): Promise<unknown>;
 };
