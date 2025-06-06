@@ -5,6 +5,7 @@ import {
     AppAgent,
     SessionContext,
     AppAgentManifest,
+    AppAgentInitSettings,
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "./commandHandlerContext.js";
 import {
@@ -102,6 +103,7 @@ export class AppAgentManager implements ActionConfigProvider {
         cacheDir: string | undefined,
         private readonly portBase: number,
         private readonly allowSharedLocalView?: string[],
+        private readonly agentInitOptions?: Record<string, unknown>,
     ) {
         this.actionSchemaFileCache = new ActionSchemaFileCache(
             cacheDir
@@ -636,13 +638,20 @@ export class AppAgentManager implements ActionConfigProvider {
         const appAgent = await this.ensureAppAgent(record);
         let agentContext: unknown | undefined;
         if (appAgent.initializeAgentContext !== undefined) {
-            let settings =
+            const options = this.agentInitOptions?.[record.name];
+            let settings: AppAgentInitSettings | undefined =
                 record.port !== undefined
                     ? {
                           localHostPort: record.port,
                       }
                     : undefined;
 
+            if (options !== undefined) {
+                if (settings === undefined) {
+                    settings = {};
+                }
+                settings.options = options;
+            }
             agentContext = await callEnsureError(() =>
                 appAgent.initializeAgentContext!(settings),
             );

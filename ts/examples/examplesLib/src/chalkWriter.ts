@@ -3,6 +3,7 @@
 
 import {
     ConsoleWriter,
+    getInteractiveIO,
     InteractiveIo,
     ListOptions,
     StopWatch,
@@ -19,7 +20,10 @@ export class ChalkWriter extends ConsoleWriter {
     private _io: InteractiveIo;
     private _color: ChalkColor;
 
-    constructor(io: InteractiveIo) {
+    constructor(io?: InteractiveIo) {
+        if (!io) {
+            io = getInteractiveIO();
+        }
         super(io.stdout);
         this._io = io;
         this._color = {};
