@@ -151,7 +151,11 @@ export async function generateAnswer(
         contextOptions,
     );
     const contextContent = answerContextToString(context);
-    if (contextContent.length <= generator.settings.maxCharsInBudget) {
+    const chunking = contextOptions?.chunking ?? true;
+    if (
+        contextContent.length <= generator.settings.maxCharsInBudget ||
+        !chunking
+    ) {
         // Context is small enough
         return generator.generateAnswer(question, contextContent);
     }
@@ -208,6 +212,7 @@ export async function generateAnswerInChunks(
 
     let chunkAnswers: answerSchema.AnswerResponse[] = [];
     const structuredChunks = getStructuredChunks(chunks);
+    let hasStructuredAnswer = false;
     if (structuredChunks.length > 0) {
         const structuredAnswers = await runGenerateAnswers(
             answerGenerator,
@@ -219,9 +224,10 @@ export async function generateAnswerInChunks(
             return structuredAnswers;
         }
         chunkAnswers.push(...structuredAnswers.data);
+        hasStructuredAnswer = hasAnswer(chunkAnswers);
     }
 
-    if (!hasAnswer(chunkAnswers) || !answerGenerator.settings.fastStop) {
+    if (!hasStructuredAnswer || !answerGenerator.settings.fastStop) {
         // Generate partial answers from each message chunk
         const messageChunks = chunks.filter(
             (c) => c.messages !== undefined && c.messages.length > 0,
