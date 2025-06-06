@@ -27,7 +27,7 @@ export type InteractiveAppSettings = {
     /**
      * Invoked when input is available
      */
-    inputHandler: InputHandler;
+    inputHandler?: InputHandler;
     /**
      * Invoked when an interactive command is issued
      */
@@ -246,7 +246,9 @@ class InteractiveApp {
                     );
                 }
             } else {
-                await this._settings.inputHandler(line, this._stdio);
+                if (this._settings.inputHandler) {
+                    await this._settings.inputHandler(line, this._stdio);
+                }
             }
         } catch (error) {
             this._stdio.writer.writeLine(
@@ -281,6 +283,8 @@ class InteractiveApp {
         settings.stopCommands ??= ["quit", "exit"];
         settings.multiline ??= false;
         settings.multilineTerminator ??= "@@";
+        settings.inputHandler ??= (l, io) =>
+            defaultInputHandler(l, io, settings.handlers);
 
         return settings;
     }
@@ -321,6 +325,29 @@ class InteractiveApp {
             }
         }
     }
+}
+
+export async function defaultInputHandler(
+    line: string,
+    io: InteractiveIo,
+    handlers?: Record<string, CommandHandler>,
+): Promise<void> {
+    if (line.length > 0) {
+        const args = line.split(" ");
+        if (args.length > 0) {
+            const cmdName = args[0];
+            io.writer.writeLine(`Did you mean @${cmdName}?`);
+            io.writer.writeLine("Commands must be prefixed with @");
+            io.writer.writeLine();
+            if (
+                handlers !== undefined &&
+                displayClosestCommands(cmdName, handlers, io)
+            ) {
+                return;
+            }
+        }
+    }
+    io.writer.writeLine("Enter @help for a list of commands");
 }
 
 /**

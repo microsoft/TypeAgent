@@ -1,0 +1,38 @@
+{
+  "name": "memory-mcp",
+  "version": "0.0.1",
+  "description": "Memory MCP experiment.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/mcpMemory"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "conversation-memory": "workspace:*",
+    "dotenv": "^16.3.1",
+    "examples-lib": "workspace:*",
+    "interactive-app": "workspace:*",
+    "knowpro": "workspace:*",
+    "typeagent": "workspace:*",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.2.5",
+    "rimraf": "^5.0.5",
+    "typescript": "~5.4.5"
+  }
+}

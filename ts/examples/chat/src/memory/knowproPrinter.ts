@@ -15,6 +15,17 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         super();
     }
 
+    public writeNumbered(
+        array: any[],
+        writer: (printer: KnowProPrinter, item: any) => void,
+    ) {
+        for (let i = 0; i < array.length; ++i) {
+            this.write(`${i}. `);
+            writer(this, array[i]);
+        }
+        return this;
+    }
+
     public writeTerm(term: kp.Term): KnowProPrinter {
         if (term.weight) {
             this.writeLine(`${term.text} [${term.weight}]`);
