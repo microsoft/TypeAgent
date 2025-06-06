@@ -481,6 +481,8 @@ export async function createKnowproCommands(
             },
         );
         if (searchResult !== undefined) {
+            const options = createAnswerOptions(namedArgs);
+            options.chunking = false;
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
@@ -492,7 +494,7 @@ export async function createKnowproCommands(
                         context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
-                createAnswerOptions(namedArgs),
+                options,
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -915,67 +917,3 @@ export async function createKnowproCommands(
 export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
-
-/*
-export async function generateMultipartAnswer(
-    conversation: kp.IConversation,
-    generator: kp.IAnswerGenerator,
-    question: string,
-    searchResults: kp.ConversationSearchResult[],
-    progress?: asyncArray.ProcessProgress<
-        kp.AnswerContext,
-        Result<kp.AnswerResponse>
-    >,
-    contextOptions?: kp.AnswerContextOptions,
-): Promise<Result<kp.AnswerResponse>> {
-    if (searchResults.length === 0) {
-        return error("No search results");
-    }
-    if (searchResults.length === 1) {
-        const searchResult = await kp.generateAnswer(
-            conversation,
-            generator,
-            searchResults[0].rawSearchQuery ?? question,
-            searchResults[0],
-            progress,
-            contextOptions,
-        );
-        return searchResult;
-    }
-
-    let preamble: PromptSection[] | undefined;
-    let lastAnswer: Result<kp.AnswerResponse> | undefined;
-    for (let i = 0; i < searchResults.length; ++i) {
-        const searchResult = searchResults[i];
-        const userQuestion = searchResult.rawSearchQuery ?? question;
-        lastAnswer = await kp.generateAnswer(
-            conversation,
-            generator,
-            question,
-            searchResult,
-            progress,
-            contextOptions,
-            preamble,
-        );
-        if (!lastAnswer.success) {
-            return lastAnswer;
-        }
-        const lastAnswerText =
-            lastAnswer.data.type === "Answered"
-                ? lastAnswer.data.answer
-                : lastAnswer.data.whyNoAnswer;
-        if (lastAnswerText) {
-            preamble ??= [];
-            preamble.push({
-                role: "user",
-                content: userQuestion,
-            });
-            preamble.push({
-                role: "assistant",
-                content: lastAnswerText,
-            });
-        }
-    }
-    return lastAnswer !== undefined ? lastAnswer : error("No answer");
-}
-*/

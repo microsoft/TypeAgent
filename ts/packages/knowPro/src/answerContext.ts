@@ -153,4 +153,5 @@ export type AnswerContextOptions = {
     entitiesTopK?: number | undefined;
     topicsTopK?: number | undefined;
     messagesTopK?: number | undefined;
+    chunking?: boolean | undefined;
 };
