@@ -506,12 +506,7 @@ export function getRelevantMessagesForAnswer(
         if (message.textChunks.length === 0) {
             continue;
         }
-        const relevantMessage: contextSchema.RelevantMessage = {
-            messageText:
-                message.textChunks.length === 1
-                    ? message.textChunks[0]
-                    : message.textChunks,
-        };
+        const relevantMessage: contextSchema.RelevantMessage = {};
         const meta = message.metadata;
         if (meta) {
             relevantMessage.from = meta.source;
@@ -520,6 +515,10 @@ export function getRelevantMessagesForAnswer(
         if (message.timestamp) {
             relevantMessage.timestamp = new Date(message.timestamp);
         }
+        relevantMessage.messageText =
+            message.textChunks.length === 1
+                ? message.textChunks[0]
+                : message.textChunks;
         relevantMessages.push(relevantMessage);
         if (topK !== undefined && topK > 0 && relevantMessages.length >= topK) {
             break;

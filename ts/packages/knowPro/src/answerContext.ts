@@ -103,6 +103,9 @@ export class AnswerContextChunkBuilder {
     private *chunkMessages() {
         if (this.context.messages && this.context.messages.length > 0) {
             for (const message of this.context.messages) {
+                if (!message.messageText) {
+                    continue;
+                }
                 const messageChunks = kpLib.splitLargeTextIntoChunks(
                     message.messageText,
                     this.maxCharsPerChunk,
