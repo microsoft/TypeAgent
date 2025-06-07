@@ -125,7 +125,7 @@ async def wrap_process_query(query_text, conversation, translator):
 
 async def process_query(
     query_text: str,
-    conversation: IConversation,
+    conversation: IConversation[IMessage, Any],
     translator: typechat.TypeChatJsonTranslator[SearchQuery],
 ):
     line_width = cap(200, shutil.get_terminal_size().columns)
@@ -159,9 +159,32 @@ async def process_query(
     # 3. Search!
     for i, query_expr in enumerate(query_exprs):
         print(f"Searching with expression {i}:")
-        result = await run_search_query(conversation, query_expr)
-        print(f"Results for expression {i}:")
-        pprint(result, width=line_width)
+        results = await run_search_query(conversation, query_expr)
+        if results is None:
+            print(f"No results for expression {i}.")
+        else:
+            print(f"Results for expression {i}:")
+            # pprint(results, width=line_width)
+            for result in results:
+                print(f"Raw query: {result.raw_query_text}")
+                if result.message_matches:
+                    print("Message matches:", result.message_matches)
+                if result.knowledge_matches:
+                    print("Knowledge matches:")
+                    for key, value in result.knowledge_matches.items():
+                        print(f"Type {key}:")
+                        print(f"  {value.term_matches}")
+                        for scored_sem_ref_ord in value.semantic_ref_matches:
+                            score = scored_sem_ref_ord.score
+                            sem_ref_ord = scored_sem_ref_ord.semantic_ref_ordinal
+                            if conversation.semantic_refs is None:
+                                print(f"  Ord: {sem_ref_ord} (score {score})")
+                            else:
+                                sem_ref = conversation.semantic_refs[sem_ref_ord]
+                                msg_ord = sem_ref.range.start.message_ordinal
+                                chunk_ord = sem_ref.range.start.chunk_ordinal
+                                msg = conversation.messages[msg_ord]
+                                print(f"  SemRef score {score:2.1f}: {msg.text_chunks[chunk_ord]!r:<50.50s}  {sem_ref.knowledge}")
 
 
 async def translate_text_to_search_query(
