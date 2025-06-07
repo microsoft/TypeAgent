@@ -3,7 +3,6 @@
 
 import * as kp from "knowpro";
 import {
-    addStandardHandlers,
     arg,
     argBool,
     argNum,
@@ -45,10 +44,10 @@ export async function runKnowproMemory(): Promise<void> {
 
     const commands: Record<string, CommandHandler> = {};
     await createKnowproCommands(commands);
-    addStandardHandlers(commands);
     await runConsole({
         inputHandler,
         handlers: commands,
+        addStandardHandlers: true,
     });
 
     async function inputHandler(
