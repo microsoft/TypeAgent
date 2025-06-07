@@ -247,10 +247,16 @@ class TermEmbeddingIndex(ITermEmbeddingIndex):
         self._texts.clear()
 
     def serialize(self) -> TextEmbeddingIndexData:
-        raise NotImplementedError("TODO")
+        return TextEmbeddingIndexData(
+            textItems=self._texts,
+            embeddings=self._vectorbase.serialize(),
+        )
 
     def deserialize(self, data: TextEmbeddingIndexData | None) -> None:
-        raise NotImplementedError("TODO")
+        self.clear()
+        if data is not None:
+            self._texts = data.get("textItems", [])
+            self._vectorbase.deserialize(data.get("embeddings"))
 
     async def add_terms(
         self, texts: list[str], event_handler: IndexingEventHandlers | None = None
