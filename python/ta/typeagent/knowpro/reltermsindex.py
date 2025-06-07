@@ -1,9 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-from typing import Callable
+from collections.abc import Sequence
+from typing import Callable, Protocol
 
-from ..aitools.vectorbase import VectorBase
+from ..aitools.vectorbase import ScoredOrdinal, TextEmbeddingIndexSettings, VectorBase
 
 from .collections import TermSet
 from .common import is_search_term_wildcard
@@ -11,6 +12,7 @@ from .importing import ConversationSettings, RelatedTermIndexSettings
 from .interfaces import (
     IConversation,
     ITermToRelatedTerms,
+    ITermToRelatedTermsFuzzy,
     SearchTerm,
     TermToRelatedTermsData,
     ITermToRelatedTermsIndex,
@@ -91,7 +93,7 @@ async def build_related_terms_index(
         fuzzy_index = csi.term_to_related_terms_index.fuzzy_index
         all_terms = csr.get_terms()
         if fuzzy_index and all_terms:
-            await fuzzy_index.add_keys(all_terms)
+            await fuzzy_index.add_terms(all_terms)
         return ListIndexingResult(len(all_terms))
     else:
         return ListIndexingResult(0)
@@ -101,34 +103,29 @@ class RelatedTermsIndex(ITermToRelatedTermsIndex):
     def __init__(self, settings: RelatedTermIndexSettings):
         self.settings = settings
         self._alias_map = TermToRelatedTermsMap()
-        self._vector_base = VectorBase(settings.embedding_index_settings)
+        self._term_index = TermEmbeddingIndex(settings.embedding_index_settings)
 
     @property
     def aliases(self) -> TermToRelatedTermsMap:
         return self._alias_map
 
     @property
-    def fuzzy_index(self) -> VectorBase:
-        return self._vector_base
+    def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None:
+        return self._term_index
 
     def serialize(self) -> TermsToRelatedTermsIndexData:
         return TermsToRelatedTermsIndexData(
             aliasData=self._alias_map.serialize(),
-            textEmbeddingData=TextEmbeddingIndexData(
-                textItems=[],  # TODO: Put values here!
-                embeddings=self._vector_base.serialize(),
-            ),
+            textEmbeddingData=self._term_index.serialize(),
         )
 
     def deserialize(self, data: TermsToRelatedTermsIndexData) -> None:
         self._alias_map.clear()
-        self._vector_base.clear()
+        self._term_index.clear()
         self._alias_map.deserialize(data.get("aliasData"))
         text_embedding_data = data.get("textEmbeddingData")
         if text_embedding_data is not None:
-            embeddings = text_embedding_data.get("embeddings")
-            if embeddings is not None:
-                self._vector_base.deserialize(embeddings)
+            self._term_index.deserialize(text_embedding_data)
 
 
 async def resolve_related_terms(
@@ -220,3 +217,72 @@ def dedupe_related_terms(
                 else:
                     unique_related_for_search_term.append(candidate_related_term)
             search_term.related_terms = unique_related_for_search_term
+
+
+class ITermEmbeddingIndex(ITermToRelatedTermsFuzzy, Protocol):
+    def serialize(self) -> TextEmbeddingIndexData:
+        raise NotImplementedError
+
+    def deserialize(self, data: TextEmbeddingIndexData) -> None:
+        raise NotImplementedError
+
+
+# TODO: Inherit from TextEmbeddingCache too.
+class TermEmbeddingIndex(ITermEmbeddingIndex):
+    # The Python version wraps a VectorBase
+
+    def __init__(
+        self,
+        settings: TextEmbeddingIndexSettings | None = None,
+        data: TextEmbeddingIndexData | None = None,
+    ):
+        self.settings = settings
+        self._vectorbase = VectorBase(settings)
+        self._texts: list[str] = []
+        if data:
+            self.deserialize(data)
+
+    def clear(self) -> None:
+        self._vectorbase.clear()
+        self._texts.clear()
+
+    def serialize(self) -> TextEmbeddingIndexData:
+        raise NotImplementedError("TODO")
+
+    def deserialize(self, data: TextEmbeddingIndexData | None) -> None:
+        raise NotImplementedError("TODO")
+
+    async def add_terms(
+        self, texts: list[str], event_handler: IndexingEventHandlers | None = None
+    ) -> ListIndexingResult:
+        await self._vectorbase.add_keys(texts)
+        self._texts.extend(texts)
+        return ListIndexingResult(len(texts))
+
+    async def lookup_term(
+        self, text: str, max_hits: int | None = None, min_score: float | None = None
+    ) -> list[Term]:
+        matches = await self._vectorbase.fuzzy_lookup(
+            text, max_hits=max_hits, min_score=min_score
+        )
+        return self.matches_to_terms(matches)
+
+    async def lookup_terms(
+        self,
+        texts: list[str],
+        max_hits: int | None = None,
+        min_score: float | None = None,
+    ) -> list[list[Term]]:
+        matches = [
+            await self._vectorbase.fuzzy_lookup(
+                text, max_hits=max_hits, min_score=min_score
+            )
+            for text in texts
+        ]
+        return [self.matches_to_terms(m) for m in matches]
+
+    def matches_to_terms(self, matches: list[ScoredOrdinal]) -> list[Term]:
+        return [
+            Term(text=self._texts[match.ordinal], weight=match.score)
+            for match in matches
+        ]

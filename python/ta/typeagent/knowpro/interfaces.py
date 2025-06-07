@@ -339,24 +339,24 @@ class ITermToRelatedTerms(Protocol):
 
 class ITermToRelatedTermsFuzzy(Protocol):
     async def add_terms(
-        self, terms: Sequence[str], event_handler: "IndexingEventHandlers | None" = None
+        self, texts: list[str], event_handler: "IndexingEventHandlers | None" = None
     ) -> "ListIndexingResult":
         raise NotImplementedError
 
     async def lookup_term(
         self,
         text: str,
-        max_matches: int | None = None,
-        threshold_score: float | None = None,
+        max_hits: int | None = None,
+        min_score: float | None = None,
     ) -> list[Term]:
         raise NotImplementedError
 
     async def lookup_terms(
         self,
-        text_array: Sequence[str],
-        max_matches: int | None = None,
-        threshold_score: float | None = None,
-    ) -> list[Sequence[Term]]:
+        texts: list[str],
+        max_hits: int | None = None,
+        min_score: float | None = None,
+    ) -> list[list[Term]]:
         raise NotImplementedError
 
 
@@ -366,7 +366,7 @@ class ITermToRelatedTermsIndex(Protocol):
         raise NotImplementedError
 
     @property
-    def fuzzy_index(self) -> VectorBase | None:
+    def fuzzy_index(self) -> ITermToRelatedTermsFuzzy | None:
         raise NotImplementedError
 
     def serialize(self) -> "TermsToRelatedTermsIndexData":
