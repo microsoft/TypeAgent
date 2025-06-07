@@ -135,22 +135,22 @@ async def process_query(
     # TODO: # 0. Recognize @-commands like "@search" and handle them specially.
 
     # 1. With LLM help, translate to SearchQuery (a tree but not yet usable to query)
+    print("Search query:")
     search_query = await translate_text_to_search_query(
         conversation, translator, query_text
     )
     if search_query is None:
         print("Failed to translate command to search terms.")
         return
-    print("Search query:")
     pprint(search_query, width=line_width)
     print()
 
     # 2. Translate the search query into something directly usable as a query.
+    print("Search query expressions:")
     query_exprs = translate_search_query_to_search_query_exprs(search_query)
     if not query_exprs:
         print("Failed to translate search query to query expressions.")
         return
-    print("Search query expressions:")
     for i, query_expr in enumerate(query_exprs):
         print(f"---------- {i} ----------")
         pprint(query_expr, width=line_width)

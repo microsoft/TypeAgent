@@ -194,13 +194,17 @@ class QueryCompiler:
     ) -> GroupSearchResultsExpr:
         query = await self.compile_query(terms, filter, options)
 
-        exact_match = False
+        exact_match = (
+            options.exact_match
+            if options is not None and options.exact_match is not None
+            else False
+        )
         if not exact_match:
             await self.resolve_related_terms(self.all_search_terms, True)
+            await self.resolve_related_terms(self.all_predicate_search_terms, False)
+            await self.resolve_related_terms(self.all_scope_search_terms, False)
 
-        raise NotImplementedError(
-            "QueryCompiler.compile_knowledge_query() isn't implemented yet."
-        )
+        return GroupSearchResultsExpr(query)
 
     async def compile_message_query(
         self,
@@ -465,7 +469,7 @@ class QueryCompiler:
         boost_weight: float,
     ) -> ScoredSemanticRefOrdinal:
         if sr.knowledge_type == "entity" and match_entity_name_or_type(
-            search_term, cast(ConcreteEntity, sr)
+            search_term, cast(ConcreteEntity, sr.knowledge)
         ):
             return ScoredSemanticRefOrdinal(
                 scored_ref.semantic_ref_ordinal,

@@ -530,8 +530,9 @@ class MatchPropertySearchTermExpr(MatchTermExpr):
                     property_name,
                     property_value.text,
                 )
-                matches.add_term_matches(property_value, semantic_refs, True)
-                context.matched_property_terms.add(property_name, property_value)
+                if semantic_refs:
+                    matches.add_term_matches(property_value, semantic_refs, True)
+                    context.matched_property_terms.add(property_name, property_value)
         else:
             # To prevent over-counting, ensure this related_prop_val was not already used to match terms earlier
             if not context.matched_property_terms.has(property_name, related_prop_val):
@@ -540,16 +541,17 @@ class MatchPropertySearchTermExpr(MatchTermExpr):
                     property_name,
                     related_prop_val.text,
                 )
-                # This will only consider semantic refs that were not already matched by this expression.
-                # In other words, if a semantic ref already matched due to the term 'novel',
-                # don't also match it because it matched the related term 'book'
-                matches.add_term_matches_if_new(
-                    property_value,
-                    semantic_refs,
-                    False,
-                    related_prop_val.weight,
-                )
-                context.matched_property_terms.add(property_name, related_prop_val)
+                if semantic_refs:
+                    # This will only consider semantic refs that were not already matched by this expression.
+                    # In other words, if a semantic ref already matched due to the term 'novel',
+                    # don't also match it because it matched the related term 'book'
+                    matches.add_term_matches_if_new(
+                        property_value,
+                        semantic_refs,
+                        False,
+                        related_prop_val.weight,
+                    )
+                    context.matched_property_terms.add(property_name, related_prop_val)
 
     def lookup_property(
         self,

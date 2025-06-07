@@ -69,21 +69,35 @@ class MatchAccumulator[T]:
 
     # TODO: Rename to add_exact if we ever add add_related
     def add(self, value: T, score: float, is_exact_match: bool = True) -> None:
-        assert is_exact_match, "Only exact matches are supported"
-        existing = self.get_match(value)
-        if existing is not None:
-            existing.hit_count += 1
-            existing.score += score
+        existing_match = self.get_match(value)
+        if existing_match is not None:
+            if is_exact_match:
+                existing_match.hit_count += 1
+                existing_match.score += score
+            else:
+                existing_match.related_hit_count += 1
+                existing_match.related_score += score
         else:
-            self.set_match(
-                Match(
-                    value=value,
-                    hit_count=1,
-                    score=score,
-                    related_hit_count=0,
-                    related_score=0,
+            if is_exact_match:
+                self.set_match(
+                    Match(
+                        value,
+                        hit_count=1,
+                        score=score,
+                        related_hit_count=0,
+                        related_score=0.0,
+                    )
                 )
-            )
+            else:
+                self.set_match(
+                    Match(
+                        value,
+                        hit_count=1,
+                        score=0.0,
+                        related_hit_count=1,
+                        related_score=score,
+                    )
+                )
 
     def add_union(self, other: "MatchAccumulator[T]") -> None:
         """Add matches from another collection of matches."""
