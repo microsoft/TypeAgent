@@ -8,37 +8,29 @@ import readline
 import shutil
 import sys
 import traceback
-from typing import Any, Literal
+from typing import Any
 
-from pydantic.dataclasses import dataclass
 import typechat
 
 from ..aitools.auth import load_dotenv
-from ..knowpro.collections import SemanticRefAccumulator
 from ..knowpro.convknowledge import create_typechat_model
 from ..knowpro.interfaces import (
     DateRange,
     Datetime,
     IConversation,
     IMessage,
-    PropertySearchTerm,
-    SearchTerm,
-    SearchTermGroup,
-    SearchTermGroupTypes,
+    SemanticRef,
+    Topic,
 )
+from ..knowpro.kplib import Action, ActionParam, ConcreteEntity, Quantity
 from ..knowpro.query import (
-    IQueryOpExpr,
-    MatchSearchTermExpr,
-    MatchTermsAndExpr,
-    MatchTermsOrExpr,
-    MatchTermsOrMaxExpr,
     QueryEvalContext,
 )
-from ..knowpro.search import SearchQueryExpr, run_search_query, search_conversation
+from ..knowpro.search import SearchQueryExpr, run_search_query
 from ..podcasts.podcast import Podcast
 
-from .search_query_schema import SearchQuery
-from .querycompiler import SearchQueryCompiler, date_range_from_datetime_range
+from .search_query_schema import ActionTerm, SearchQuery
+from .querycompiler import SearchQueryCompiler
 
 cap = min  # More readable name for capping a value at some limit
 
@@ -50,7 +42,7 @@ def main() -> None:
     pod = Podcast.read_from_file(file)
     assert pod is not None, f"Failed to load podcast from {file!r}"
     # TODO: change QueryEvalContext to take [TMessage, TTermToSemanticRefIndex].
-    context = QueryEvalContext(conversation=pod)  # type: ignore
+    context = QueryEvalContext(conversation=pod)  # type: ignore  # See TODO above
     print("TypeAgent demo UI 0.1 (type 'q' to exit)")
     if sys.stdin.isatty():
         try:
@@ -184,7 +176,11 @@ async def process_query(
                                 msg_ord = sem_ref.range.start.message_ordinal
                                 chunk_ord = sem_ref.range.start.chunk_ordinal
                                 msg = conversation.messages[msg_ord]
-                                print(f"  SemRef score {score:2.1f}: {msg.text_chunks[chunk_ord]!r:<50.50s}  {sem_ref.knowledge}")
+                                print(
+                                    f"  {score:4.1f} {msg_ord:3d}  "
+                                    f"{repr(msg.text_chunks[chunk_ord].strip())[1:-1]:<50.50s}  "
+                                    f"{summarize_knowledge(sem_ref)}"
+                                )
 
 
 async def translate_text_to_search_query(
@@ -209,6 +205,57 @@ def translate_search_query_to_search_query_exprs(
     search_query: SearchQuery,
 ) -> list[SearchQueryExpr]:
     return SearchQueryCompiler().compile_query(search_query)
+
+
+def summarize_knowledge(sem_ref: SemanticRef) -> str:
+    """Summarize the knowledge in a SemanticRef."""
+    knowledge = sem_ref.knowledge
+    if knowledge is None:
+        return "<No knowledge>"
+    match sem_ref.knowledge_type:
+        case "entity":
+            entity = knowledge
+            assert isinstance(entity, ConcreteEntity)
+            res = [f"{entity.name} [{', '.join(entity.type)}]"]
+            if entity.facets:
+                for facet in entity.facets:
+                    value = facet.value
+                    if isinstance(value, Quantity):
+                        value = f"{value.amount} {value.units}"
+                    res.append(f"<{facet.name}:{value}>")
+            return " ".join(res)
+        case "action":
+            action = knowledge
+            assert isinstance(action, Action)
+            res = []
+            res.append("/".join(repr(verb) for verb in action.verbs))
+            if action.verb_tense:
+                res.append(f"[{action.verb_tense}]")
+            if action.subject_entity_name != "none":
+                res.append(f"subj={action.subject_entity_name!r}")
+            if action.object_entity_name != "none":
+                res.append(f"obj={action.object_entity_name!r}")
+            if action.indirect_object_entity_name != "none":
+                res.append(f"ind_obj={action.indirect_object_entity_name}")
+            if action.params:
+                for param in action.params:
+                    if isinstance(param, ActionParam):
+                        res.append(f"<{param.name}:{param.value}>")
+                    else:
+                        res.append(f"<{param}>")
+            if action.subject_entity_facet is not None:
+                res.append(f"subj_facet={action.subject_entity_facet}")
+            return " ".join(res)
+        case "topic":
+            topic = knowledge
+            assert isinstance(topic, Topic)
+            return repr(topic.text)
+        case "tag":
+            tag = knowledge
+            assert isinstance(tag, str)
+            return f"#{tag}"
+        case _:
+            return str(sem_ref.knowledge)
 
 
 # TODO: Move to conversation.py
