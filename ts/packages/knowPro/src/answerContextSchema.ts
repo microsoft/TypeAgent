@@ -31,5 +31,5 @@ export type RelevantMessage = {
     to?: EntityNames | undefined;
     timestamp?: Date | undefined;
     // Text chunks in this message
-    messageText: string | string[];
+    messageText?: string | string[] | undefined;
 };

@@ -37,7 +37,11 @@ export function createInteractiveIO(): InteractiveIo {
 
 export type ListOptions = {
     title?: string | undefined;
-    type: "ol" | "ul" | "plain" | "csv";
+    type:
+        | "ol" // Ordered list - numbered
+        | "ul" // Unordered list - bullets
+        | "plain"
+        | "csv"; // List in csv format
 };
 
 /**
