@@ -163,7 +163,7 @@ async def process_query(
                     print("Message matches:", result.message_matches)
                 if result.knowledge_matches:
                     print("Knowledge matches:")
-                    for key, value in result.knowledge_matches.items():
+                    for key, value in sorted(result.knowledge_matches.items()):
                         print(f"Type {key}:")
                         print(f"  {value.term_matches}")
                         for scored_sem_ref_ord in value.semantic_ref_matches:
