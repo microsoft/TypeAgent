@@ -43,7 +43,7 @@ def add_facet(
         if facet.value is not None:
             property_index.add_property(
                 PropertyNames.FacetValue.value,
-                str(facet),
+                str(facet.value),
                 semantic_ref_ordinal,
             )
 
