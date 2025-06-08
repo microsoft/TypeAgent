@@ -70,10 +70,7 @@ class Collection[T, TOrdinal: int](ICollection[T, TOrdinal]):
         self.items.extend(items)
 
 
-class SemanticRefCollection(
-    Collection[SemanticRef, SemanticRefOrdinal],
-    ICollection[SemanticRef, SemanticRefOrdinal],
-):
+class SemanticRefCollection(Collection[SemanticRef, SemanticRefOrdinal]):
     """A collection of semantic references."""
 
 

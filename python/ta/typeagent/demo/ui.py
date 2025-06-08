@@ -82,6 +82,7 @@ def process_inputs(
         if not query_text:
             continue
         if query_text.lower() in ("exit", "quit", "q"):
+            readline.remove_history_item(readline.get_current_history_length() - 1)
             break
 
         asyncio.run(wrap_process_query(query_text, context.conversation, translator))
@@ -177,7 +178,8 @@ async def process_query(
                                 chunk_ord = sem_ref.range.start.chunk_ordinal
                                 msg = conversation.messages[msg_ord]
                                 print(
-                                    f"  {score:4.1f} {msg_ord:3d}  "
+                                    f"({score:4.1f}) {msg_ord:3d}: "
+                                    f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
                                     f"{repr(msg.text_chunks[chunk_ord].strip())[1:-1]:<50.50s}  "
                                     f"{summarize_knowledge(sem_ref)}"
                                 )

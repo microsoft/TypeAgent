@@ -61,6 +61,7 @@ def is_conversation_searchable(conversation: IConversation) -> bool:
     A conversation is searchable if it has a semantic reference index
     and semantic references initialized.
     """
+    # TODO: also require secondary indices, once we have removed non-index based retrieval to test.
     return (
         conversation.semantic_ref_index is not None
         and conversation.semantic_refs is not None

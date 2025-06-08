@@ -5,6 +5,9 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Callable
 
+from typechat import Failure
+
+from . import convknowledge, importing, kplib, secindex
 from .interfaces import (
     # Interfaces.
     IConversation,
@@ -27,7 +30,8 @@ from .interfaces import (
     TextRange,
     Topic,
 )
-from . import convknowledge, importing, kplib, secindex
+from .knowledge import extract_knowledge_from_text_batch
+from .storage import SemanticRefCollection
 
 
 # TODO: Doesn't exist any more? But used in timestampindex.py currently
@@ -69,13 +73,9 @@ def default_knowledge_validator(
 
 
 async def add_batch_to_semantic_ref_index[
-    TMessage: IMessage,
-    TTermToSemanticRefIndex: ITermToSemanticRefIndex,
+    TMessage: IMessage, TTermToSemanticRefIndex: ITermToSemanticRefIndex
 ](
-    conversation: IConversation[
-        TMessage,
-        TTermToSemanticRefIndex,
-    ],
+    conversation: IConversation[TMessage, TTermToSemanticRefIndex],
     batch: list[TextLocation],
     knowledge_extractor: convknowledge.KnowledgeExtractor,
     event_handler: IndexingEventHandlers | None = None,
@@ -87,22 +87,36 @@ async def add_batch_to_semantic_ref_index[
     indexing_result = TextIndexingResult()
 
     text_batch = [
-        messages[tl.message_ordinal].text_chunks[tl.chunk_ordinal or 0].strip()
+        messages[tl.message_ordinal].text_chunks[tl.chunk_ordinal].strip()
         for tl in batch
     ]
 
-    # TODO: extract_knowledge_from_text_batch
-    # knowledge_results = await extract_knowledge_from_text_batch(
-    #     knowledge_extractor,
-    #     text_batch,
-    #     len(text_batch),
-    # )
-    # for i, knowledge_result in enumerate(knowledge_results):
-    #     if not knowledge_result.success:
-    #         indexing_result.error = knowledge_result.error
-    #         return indexing_result
-    #     text_location = batch[i]
-    #     knowledge = knowledge_result.data
+    knowledge_results = await extract_knowledge_from_text_batch(
+        knowledge_extractor,
+        text_batch,
+        len(text_batch),
+    )
+    for i, knowledge_result in enumerate(knowledge_results):
+        if isinstance(knowledge_result, Failure):
+            indexing_result.error = knowledge_result.message
+            return indexing_result
+        text_location = batch[i]
+        knowledge = knowledge_result.value
+        breakpoint()  # TODO: add_knowledge_to_semantic_ref_index()
+        add_knowledge_to_semantic_ref_index(
+            conversation,
+            text_location.message_ordinal,
+            text_location.chunk_ordinal,
+            knowledge,
+            terms_added,
+        )
+        indexing_result.completed_upto = text_location
+        if (
+            event_handler
+            and event_handler.on_knowledge_extracted
+            and not event_handler.on_knowledge_extracted(text_location, knowledge)
+        ):
+            break
 
     return indexing_result
 
@@ -392,9 +406,8 @@ def begin_indexing[
 ) -> None:
     if conversation.semantic_ref_index is None:
         conversation.semantic_ref_index = ConversationIndex()  # type: ignore  # TODO: Why doesn't strict mode like this?
-    # TODO: implement .storage.SemanticRefCollection
-    # if conversation.semantic_refs is None:
-    #     conversation.semantic_refs = SemanticRefCollection()
+    if conversation.semantic_refs is None:
+        conversation.semantic_refs = SemanticRefCollection()
 
 
 def dump(
