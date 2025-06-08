@@ -56,6 +56,18 @@ class SearchQueryExpr:
 
 
 @dataclass
+class SearchOptions:
+    max_knowledge_matches: int | None = None
+    exact_match: bool = False
+    max_message_matches: int | None = None
+    # The maximum # of total message characters to select
+    # The query processor will ensure that the cumulative character count of message matches
+    # is less than this number
+    max_chars_in_budget: int | None = None
+    threshold_score: float | None = None
+
+
+@dataclass
 class ConversationSearchResult:
     message_matches: list[ScoredMessageOrdinal]
     knowledge_matches: dict[KnowledgeType, SemanticRefSearchResult]
@@ -66,9 +78,10 @@ async def search_conversation(
     conversation: IConversation,
     search_term_group: SearchTermGroup,
     when_filter: WhenFilter | None = None,
-    options: None = None,  # TODO: SearchOptions | None = None
+    options: SearchOptions | None = None,
     raw_search_query: str | None = None,
 ) -> ConversationSearchResult | None:
+    options = options or SearchOptions()
     knowledge_matches = await search_conversation_knowledge(
         conversation, search_term_group, when_filter, options
     )
@@ -91,9 +104,10 @@ async def search_conversation_knowledge(
     conversation: IConversation,
     search_term_group: SearchTermGroup,
     when_filter: WhenFilter | None = None,
-    options: None = None,  # TODO: SearchOptions | None = None
+    options: SearchOptions | None = None,
 ) -> dict[KnowledgeType, SemanticRefSearchResult] | None:
     """Search a conversation for knowledge that matches the given search terms and filter."""
+    options = options or SearchOptions()
     if not is_conversation_searchable(conversation):
         return None
     compiler = QueryCompiler(
@@ -111,8 +125,9 @@ async def search_conversation_knowledge(
 async def run_search_query(
     conversation: IConversation,
     query: SearchQueryExpr,
-    options: None = None,  # TODO: SearchOptions | None = None
+    options: SearchOptions | None = None,
 ) -> list[ConversationSearchResult] | None:
+    options = options or SearchOptions()
     results: list[ConversationSearchResult] = []
     for expr in query.select_expressions:
         search_results = await search_conversation(
@@ -127,9 +142,12 @@ async def run_search_query(
     return results
 
 
+# TODO: run_search_query_by_text_similarity
+
+
 def run_query[T](
     conversation: IConversation,
-    options: None,  # TODO: SearchOptions | None
+    options: SearchOptions | None,
     query: IQueryOpExpr[T],
 ) -> T:
     secondary_indexes = conversation.secondary_indexes
@@ -172,7 +190,7 @@ class QueryCompiler:
         self,
         terms: SearchTermGroup,
         filter: WhenFilter | None = None,
-        options: None = None,  # TODO: SearchOptions | None = None
+        options: SearchOptions | None = None,
     ) -> GroupSearchResultsExpr:
         query = await self.compile_query(terms, filter, options)
 
@@ -190,16 +208,27 @@ class QueryCompiler:
 
     async def compile_message_query(
         self,
-        knowledge_matches: (
+        knowledge: (
             IQueryOpExpr[dict[KnowledgeType, SemanticRefSearchResult]]
             | dict[KnowledgeType, SemanticRefSearchResult]
         ),
-        options: None = None,  # TODO: SearchOptions | None = None,
+        options: SearchOptions | None = None,
         raw_query_text: str | None = None,
-    ) -> GetScoredMessagesExpr:
-        raise NotImplementedError(
-            "QueryCompiler.compile_message_query() isn't implemented yet."
-        )
+    ) -> IQueryOpExpr:
+        query: IQueryOpExpr = MessagesFromKnowledgeExpr(knowledge)
+        if options is not None:
+            query = await self.compile_message_re_rank(
+                query,
+                raw_query_text,
+                options,
+            )
+            if options.max_chars_in_budget and options.max_chars_in_budget > 0:
+                query = SelectMessagesInCharBudget(
+                    query,
+                    options.max_chars_in_budget,
+                )
+
+        return GetScoredMessagesExpr(query)
 
     # TODO: compile_message_similarity_query
 
@@ -207,7 +236,7 @@ class QueryCompiler:
         self,
         search_term_group: SearchTermGroup,
         filter: WhenFilter | None = None,
-        options: None = None,  # TODO: SearchOptions | None = None
+        options: SearchOptions | None = None,
     ) -> IQueryOpExpr[dict[KnowledgeType, SemanticRefAccumulator]]:
         select_expr = self.compile_select(
             search_term_group,
@@ -237,7 +266,7 @@ class QueryCompiler:
         self,
         term_group: SearchTermGroup,
         scope_expr: GetScopeExpr | None = None,
-        options: None = None,  # TODO: SearchOptions | None = None
+        options: SearchOptions | None = None,
     ) -> IQueryOpExpr[SemanticRefAccumulator]:
         search_terms_used, select_expr = self.compile_search_group_terms(
             term_group, scope_expr

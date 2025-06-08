@@ -86,7 +86,7 @@ class ITermToSemanticRefIndex(Protocol):
         self,
         term: str,
         semantic_ref_ordinal: SemanticRefOrdinal | ScoredSemanticRefOrdinal,
-    ) -> None:
+    ) -> str:
         raise NotImplementedError
 
     def remove_term(self, term: str, semantic_ref_ordinal: SemanticRefOrdinal) -> None:
