@@ -5,6 +5,7 @@ import * as kp from "knowpro";
 import * as ms from "memory-storage";
 import { WebsiteMessage, WebsiteMessageSerializer } from "./websiteMessage.js";
 import { Result, success, error, PromptSection } from "typechat";
+import * as cm from "conversation-memory";
 
 export interface WebsiteMemorySettings {
     languageModel: any;
@@ -71,26 +72,6 @@ export class WebsiteMemory implements kp.IConversation {
         );
         this.semanticRefs = storageProvider.createSemanticRefCollection();
         this.semanticRefIndex = new kp.ConversationIndex();
-        
-        // Create minimal but valid conversation settings 
-        if (!this.settings.conversationSettings) {
-            this.settings.conversationSettings = {
-                semanticRefIndexSettings: {
-                    autoExtractKnowledge: true,
-                },
-                relatedTermIndexSettings: {
-                    embeddingIndexSettings: {
-                        embeddingSize: this.settings.embeddingSize || 1536,
-                    },
-                },
-                messageTextIndexSettings: {
-                    embeddingIndexSettings: {
-                        embeddingSize: this.settings.embeddingSize || 1536,
-                    },
-                },
-            } as any;
-        }
-        
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
@@ -303,27 +284,15 @@ export function createWebsiteMemorySettings(
     embeddingModel?: any,
     embeddingSize?: number,
 ): WebsiteMemorySettings {
-    // Use provided models or create defaults
-    const langModel = languageModel || null;
-    const embedModel = embeddingModel || null;
-    const embedSize = embeddingSize || 1536;
+    // Create proper memory settings like email memory does
+    const settings = cm.createMemorySettings(64);
     
-    let conversationSettings: any = null;
+    // Override with provided models if available
+    if (languageModel) settings.languageModel = languageModel;
+    if (embeddingModel) settings.embeddingModel = embeddingModel;
+    if (embeddingSize) settings.embeddingSize = embeddingSize;
     
-    // Only create conversation settings if we have valid models
-    if (langModel && embedModel) {
-        conversationSettings = kp.createConversationSettings(embedModel, embedSize);
-        conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
-            kp.createKnowledgeExtractor(langModel);
-    }
-    
-    const settings: WebsiteMemorySettings = {
-        languageModel: langModel,
-        embeddingModel: embedModel,
-        embeddingSize: embedSize,
-        conversationSettings: conversationSettings,
-    };
-    return settings;
+    return settings as WebsiteMemorySettings;
 }
 
 export async function createWebsiteMemory(
