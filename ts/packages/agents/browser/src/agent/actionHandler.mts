@@ -273,7 +273,19 @@ async function openWebPage(
         await context.sessionContext.agentContext.browserControl.openWebPage(
             await resolveWebSite(context, site),
         );
-        return createActionResult("Web page opened successfully.");
+        const result = createActionResult("Web page opened successfully.");
+
+        result.activityContext = {
+            activityName: "browsingWebPage",
+            description: "Browsing a web page",
+            state: {
+                site: site,
+            },
+            activityEndAction: {
+                actionName: "closeWebPage",
+            },
+        };
+        return result;
     }
     throw new Error(
         "Browser control is not available. Please launch a browser first.",
@@ -284,7 +296,9 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     if (context.sessionContext.agentContext.browserControl) {
         context.actionIO.setDisplay("Closing web page.");
         await context.sessionContext.agentContext.browserControl.closeWebPage();
-        return createActionResult("Web page closed successfully.");
+        const result = createActionResult("Web page closed successfully.");
+        result.activityContext = null; // clear the activity context.
+        return result;
     }
     throw new Error(
         "Browser control is not available. Please launch a browser first.",
@@ -562,6 +576,7 @@ class OpenWebPageHandler implements CommandHandler {
             return;
         }
         context.actionIO.setDisplay(result.displayContent);
+        // REVIEW: command doesn't set the activity context
     }
 }
 
@@ -574,6 +589,8 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
             return;
         }
         context.actionIO.setDisplay(result.displayContent);
+
+        // REVIEW: command doesn't clear the activity context
     }
 }
 

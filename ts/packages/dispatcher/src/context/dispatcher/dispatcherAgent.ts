@@ -38,10 +38,7 @@ import {
     translateRequest,
 } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
-import {
-    ClarifyEntityAction,
-    clearActivityContext,
-} from "../../execute/actionHandlers.js";
+import { ClarifyEntityAction } from "../../execute/actionHandlers.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -108,11 +105,18 @@ async function executeDispatcherAction(
         case "dispatcher.activity":
             switch (action.actionName) {
                 case "exitActivity":
+                    const result =
+                        createActionResultFromTextDisplay("Ok.  What's next?");
+
                     const systemContext = context.sessionContext.agentContext;
-                    clearActivityContext(systemContext);
-                    return createActionResultFromTextDisplay(
-                        "Ok.  What's next?",
-                    );
+                    const endAction =
+                        systemContext.activityContext?.activityEndAction;
+                    if (endAction !== undefined) {
+                        result.additionalActions = [endAction];
+                    }
+                    result.activityContext = null; // clear the activity context.
+
+                    return result;
             }
             break;
     }

@@ -198,6 +198,7 @@ export type ActivityContext<T = Record<string, unknown>> = {
     description: string;
     state: T;
     openLocalView?: boolean | undefined;
+    activityEndAction?: AppAction | undefined;
 };
 
 export interface ActionContext<T = void> {
