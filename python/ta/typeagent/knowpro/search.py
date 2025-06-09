@@ -38,6 +38,7 @@ from .query import (
     MatchTermsOrExpr,
     MatchTermsOrMaxExpr,
     MatchTopicExpr,
+    MessagesFromKnowledgeExpr,
     QueryEvalContext,
     SelectTopNKnowledgeGroupExpr,
     TextRangeSelector,

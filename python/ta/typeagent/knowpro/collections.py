@@ -239,6 +239,11 @@ def add_smooth_related_score_to_match_score[T](match: Match[T]) -> None:
         match.score += smooth_related_score
 
 
+def smooth_match_score(match: Match) -> None:
+    if match.hit_count > 0:
+        match.score = get_smooth_score(match.score, match.hit_count)
+
+
 type KnowledgePredicate[T: Knowledge] = Callable[[T], bool]
 
 
@@ -389,8 +394,26 @@ class MessageAccumulator(MatchAccumulator[MessageOrdinal]):
             # TODO: Question(Guido->Umesh): Why not increment hit_count always?
             match.hit_count += 1
 
-    # TODO: add_messages_from_locations, add_messages_for_semantic_ref, add_range.
-    # TODO: add_scored_matches, intersect, smooth_scores.
+    # TODO: add_messages_from_locations
+
+    def add_messages_for_semantic_ref(
+        self,
+        semantic_ref: SemanticRef,
+        score: float,
+    ) -> None:
+        message_ordinal_start = semantic_ref.range.start.message_ordinal
+        if semantic_ref.range.end is not None:
+            message_ordinal_end = semantic_ref.range.end.message_ordinal
+            for message_ordinal in range(message_ordinal_start, message_ordinal_end):
+                self.add(message_ordinal, score)
+        else:
+            self.add(message_ordinal_start, score)
+
+    # TODO: add_range, add_scored_matches, intersect.
+
+    def smooth_scores(self) -> None:
+        for match in self:
+            smooth_match_score(match)
 
     def to_scored_message_ordinals(self) -> list[ScoredMessageOrdinal]:
         sorted_matches = self.get_sorted_by_score()

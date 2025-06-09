@@ -786,7 +786,22 @@ def to_grouped_search_results(
     return semantic_ref_matches
 
 
-# TODO: MessagesFromKnowledgeExpr
+@dataclass
+class MessagesFromKnowledgeExpr(QueryOpExpr[MessageAccumulator]):
+    src_expr: (
+        IQueryOpExpr[dict[KnowledgeType, SemanticRefSearchResult]]
+        | dict[KnowledgeType, SemanticRefSearchResult]
+    )
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        knowledge = (
+            self.src_expr
+            if isinstance(self.src_expr, dict)
+            else self.src_expr.eval(context)
+        )
+        return message_matches_from_knowledge_matches(context.semantic_refs, knowledge)
+
+
 # TODO: SelectMessagesInCharBudget
 # TODO: RankMessagesBySimilarityExpr
 
@@ -806,4 +821,27 @@ class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
 # TODO: MatchMessagesOrMaxExpr
 # TODO: MatchMessagesBySimilarityExpr
 # TODO: NoOpExpr
-# TODO: message_matches_from_knowledge_matches
+
+
+def message_matches_from_knowledge_matches(
+    semantic_refs: ISemanticRefCollection,
+    knowledge_matches: dict[KnowledgeType, SemanticRefSearchResult],
+    intersect_across_knowledge_types: bool = True,
+) -> MessageAccumulator:
+    message_matches = MessageAccumulator()
+    knowledge_type_hit_count = 0  # How many types of knowledge matched?
+    for knowledge_type, matches_by_type in knowledge_matches.items():
+        if matches_by_type and matches_by_type.semantic_ref_matches:
+            knowledge_type_hit_count += 1
+            for match in matches_by_type.semantic_ref_matches:
+                message_matches.add_messages_for_semantic_ref(
+                    semantic_refs[match.semantic_ref_ordinal],
+                    match.score,
+                )
+    if intersect_across_knowledge_types and knowledge_type_hit_count > 0:
+        # Intersect the sets of messages that matched each knowledge type
+        relevant_messages = message_matches.get_with_hit_count(knowledge_type_hit_count)
+        if relevant_messages:
+            message_matches = MessageAccumulator(relevant_messages)
+    message_matches.smooth_scores()
+    return message_matches
