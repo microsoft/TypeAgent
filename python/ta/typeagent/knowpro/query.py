@@ -377,15 +377,10 @@ type ScoreBoosterType = Callable[
 ]
 
 
+@dataclass
 class MatchSearchTermExpr(MatchTermExpr):
-    def __init__(
-        self,
-        search_term: SearchTerm,
-        score_booster: ScoreBoosterType | None = None,
-    ) -> None:
-        super().__init__()
-        self.search_term = search_term
-        self.score_booster = score_booster
+    search_term: SearchTerm
+    score_booster: ScoreBoosterType | None = None
 
     def accumulate_matches(
         self, context: QueryEvalContext, matches: SemanticRefAccumulator
@@ -572,9 +567,10 @@ class MatchPropertySearchTermExpr(MatchTermExpr):
             )
 
 
-@dataclass
 class MatchTagExpr(MatchSearchTermExpr):
-    tag_term: SearchTerm
+    def __init__(self, tag_term: SearchTerm):
+        self.tag_term = tag_term
+        super().__init__(tag_term)
 
     def lookup_term(
         self, context: QueryEvalContext, term: Term
@@ -591,9 +587,10 @@ class MatchTagExpr(MatchSearchTermExpr):
             )
 
 
-@dataclass
 class MatchTopicExpr(MatchSearchTermExpr):
-    topic: SearchTerm
+    def __init__(self, topic: SearchTerm):
+        self.topic = topic
+        super().__init__(topic)
 
     def lookup_term(
         self, context: QueryEvalContext, term: Term
