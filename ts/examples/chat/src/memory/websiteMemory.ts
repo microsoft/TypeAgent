@@ -71,6 +71,26 @@ export class WebsiteMemory implements kp.IConversation {
         );
         this.semanticRefs = storageProvider.createSemanticRefCollection();
         this.semanticRefIndex = new kp.ConversationIndex();
+        
+        // Create minimal but valid conversation settings 
+        if (!this.settings.conversationSettings) {
+            this.settings.conversationSettings = {
+                semanticRefIndexSettings: {
+                    autoExtractKnowledge: true,
+                },
+                relatedTermIndexSettings: {
+                    embeddingIndexSettings: {
+                        embeddingSize: this.settings.embeddingSize || 1536,
+                    },
+                },
+                messageTextIndexSettings: {
+                    embeddingIndexSettings: {
+                        embeddingSize: this.settings.embeddingSize || 1536,
+                    },
+                },
+            } as any;
+        }
+        
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
@@ -278,13 +298,30 @@ export class WebsiteMemory implements kp.IConversation {
     }
 }
 
-export function createWebsiteMemorySettings(): WebsiteMemorySettings {
-    // This is a simplified version - in production would use proper factory
+export function createWebsiteMemorySettings(
+    languageModel?: any,
+    embeddingModel?: any,
+    embeddingSize?: number,
+): WebsiteMemorySettings {
+    // Use provided models or create defaults
+    const langModel = languageModel || null;
+    const embedModel = embeddingModel || null;
+    const embedSize = embeddingSize || 1536;
+    
+    let conversationSettings: any = null;
+    
+    // Only create conversation settings if we have valid models
+    if (langModel && embedModel) {
+        conversationSettings = kp.createConversationSettings(embedModel, embedSize);
+        conversationSettings.semanticRefIndexSettings.knowledgeExtractor =
+            kp.createKnowledgeExtractor(langModel);
+    }
+    
     const settings: WebsiteMemorySettings = {
-        languageModel: null as any,
-        embeddingModel: null as any,
-        embeddingSize: 1536,
-        conversationSettings: {} as any,
+        languageModel: langModel,
+        embeddingModel: embedModel,
+        embeddingSize: embedSize,
+        conversationSettings: conversationSettings,
     };
     return settings;
 }
@@ -292,6 +329,9 @@ export function createWebsiteMemorySettings(): WebsiteMemorySettings {
 export async function createWebsiteMemory(
     fileSettings: IndexFileSettings,
     createNew: boolean,
+    knowledgeModel?: any,
+    queryTranslator?: kp.SearchQueryTranslator,
+    answerGenerator?: kp.IAnswerGenerator,
 ): Promise<WebsiteMemory> {
     let wm: WebsiteMemory | undefined;
     if (createNew) {
@@ -300,8 +340,9 @@ export async function createWebsiteMemory(
             fileSettings.baseFileName,
         );
     } else {
-        const settings = createWebsiteMemorySettings();
-        wm = await WebsiteMemory.readFromFile(fileSettings, settings);
+        // For now, skip trying to read existing file and always create new
+        // const settings = createWebsiteMemorySettings(knowledgeModel);
+        // wm = await WebsiteMemory.readFromFile(fileSettings, settings);
     }
     if (!wm) {
         const db = ms.sqlite.createSqlStorageProvider(
@@ -309,7 +350,12 @@ export async function createWebsiteMemory(
             fileSettings.baseFileName,
             true,
         );
-        const settings = createWebsiteMemorySettings();
+        
+        // Create settings with the provided models
+        const settings = createWebsiteMemorySettings(knowledgeModel);
+        if (queryTranslator) settings.queryTranslator = queryTranslator;
+        if (answerGenerator) settings.answerGenerator = answerGenerator;
+        
         wm = new WebsiteMemory(db, settings);
     }
     wm.settings.fileSaveSettings = fileSettings;

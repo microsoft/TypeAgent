@@ -104,12 +104,12 @@ export async function importChromeBookmarks(
 
         // Process bookmark bar, other bookmarks, and synced bookmarks
         const rootFolders = [
-            { folder: bookmarksData.roots.bookmark_bar, path: "Bookmarks Bar" },
-            { folder: bookmarksData.roots.other, path: "Other Bookmarks" },
-            { folder: bookmarksData.roots.synced, path: "Mobile Bookmarks" },
+            { folder: bookmarksData.roots.bookmark_bar, folderPath: "Bookmarks Bar" },
+            { folder: bookmarksData.roots.other, folderPath: "Other Bookmarks" },
+            { folder: bookmarksData.roots.synced, folderPath: "Mobile Bookmarks" },
         ];
 
-        for (const { folder, path: folderPath } of rootFolders) {
+        for (const { folder, folderPath } of rootFolders) {
             if (options?.folder && !folderPath.includes(options.folder)) {
                 continue;
             }

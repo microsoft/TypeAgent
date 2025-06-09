@@ -82,7 +82,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
     private websiteToKnowledge(): kpLib.KnowledgeResponse {
         const entities: any[] = [];
-        const topics: any[] = [];
+        const topics: string[] = [];
         const actions: any[] = [];
         const inverseActions: any[] = [];
 
@@ -90,51 +90,40 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (this.domain) {
             entities.push({
                 name: this.domain,
-                type: "website",
-                value: this.domain,
+                type: ["website", "domain"],
             });
         }
 
         // Add title as topic if available
         if (this.title) {
-            topics.push({
-                name: this.title,
-                type: "webpage_title",
-            });
+            topics.push(this.title);
         }
 
         // Add folder as topic if it's a bookmark
         if (this.folder && this.websiteSource === "bookmark") {
-            topics.push({
-                name: this.folder,
-                type: "bookmark_folder",
-            });
+            topics.push(this.folder);
         }
 
         // Add page type as topic
         if (this.pageType) {
-            topics.push({
-                name: this.pageType,
-                type: "page_type",
-            });
+            topics.push(this.pageType);
         }
 
         // Add keywords as topics
         if (this.keywords) {
             for (const keyword of this.keywords) {
-                topics.push({
-                    name: keyword,
-                    type: "keyword",
-                });
+                topics.push(keyword);
             }
         }
 
         // Add action based on source
         const actionVerb = this.websiteSource === "bookmark" ? "bookmarked" : "visited";
         actions.push({
-            verb: actionVerb,
-            subject: this.url,
-            object: this.displayTitle,
+            verbs: [actionVerb],
+            verbTense: "past",
+            subjectEntityName: "user", // The user performed the action
+            objectEntityName: this.domain || this.url,
+            indirectObjectEntityName: "none",
         });
 
         return {

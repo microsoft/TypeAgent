@@ -187,6 +187,9 @@ export async function createKnowproWebsiteCommands(
                     baseFileName: path.basename(websiteIndexPath, path.extname(websiteIndexPath)),
                 },
                 namedArgs.createNew,
+                kpContext.knowledgeModel,
+                kpContext.queryTranslator,
+                kpContext.answerGenerator,
             );
             clock.stop();
             if (context.website) {
