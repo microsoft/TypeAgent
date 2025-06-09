@@ -51,6 +51,7 @@ export type ActionManifest = {
 
 export type AppAgentInitSettings = {
     localHostPort?: number; // the assigned port to use to serve the view if localHostPort is true in the manifest
+    options?: unknown; // additional options specific for the agent initialization
 };
 
 export type ResolveEntityResult = {
@@ -197,6 +198,7 @@ export type ActivityContext<T = Record<string, unknown>> = {
     description: string;
     state: T;
     openLocalView?: boolean | undefined;
+    activityEndAction?: AppAction | undefined;
 };
 
 export interface ActionContext<T = void> {

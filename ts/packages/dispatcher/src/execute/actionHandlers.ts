@@ -1164,18 +1164,42 @@ export async function executeActions(
         }
 
         if (result.activityContext !== undefined) {
-            if (actionQueue.length > 0) {
-                throw new Error(
-                    `Cannot start an activity when there are pending actions.`,
-                );
-            }
-
             if (result.activityContext === null) {
+                debugActions(
+                    `Clear activity: ${JSON.stringify(systemContext.activityContext, undefined, 2)}`,
+                );
                 clearActivityContext(systemContext);
             } else {
+                if (actionQueue.length > 0) {
+                    throw new Error(
+                        `Cannot start an activity when there are pending actions.`,
+                    );
+                }
+
                 // TODO: validation
-                const { activityName, description, state, openLocalView } =
-                    result.activityContext;
+                const {
+                    activityName,
+                    description,
+                    state,
+                    openLocalView,
+                    activityEndAction,
+                } = result.activityContext;
+
+                if (activityEndAction !== undefined) {
+                    if (activityEndAction.schemaName === undefined) {
+                        activityEndAction.schemaName = action.schemaName;
+                    } else {
+                        if (
+                            getAppAgentName(activityEndAction.schemaName) !==
+                            appAgentName
+                        ) {
+                            throw new Error(
+                                `Activity end action schema name '${activityEndAction.schemaName}' does not match the activity app agent name '${appAgentName}'.`,
+                            );
+                        }
+                    }
+                }
+
                 const prevOpenLocalView =
                     systemContext.activityContext?.openLocalView;
                 systemContext.activityContext = {
@@ -1184,7 +1208,12 @@ export async function executeActions(
                     description,
                     state,
                     openLocalView: prevOpenLocalView || openLocalView,
+                    activityEndAction,
                 };
+
+                debugActions(
+                    `Starting activity: ${JSON.stringify(systemContext.activityContext, undefined, 2)}`,
+                );
                 systemContext.agents.toggleTransient(
                     DispatcherActivityName,
                     true,

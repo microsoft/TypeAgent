@@ -2,20 +2,14 @@
 // Licensed under the MIT License.
 
 export type BrowserActions =
-    | OpenTab
-    | CloseTab
-    | SwitchToTabByText
-    | SwitchToTabByPosition
-    | CloseWindow
+    | OpenWebPage
+    | CloseWebPage
     | GoBack
     | GoForward
     | ScrollDown
     | ScrollUp
     | FollowLinkByText
     | FollowLinkByPosition
-    | OpenFromHistory
-    | OpenFromBookmarks
-    | AddToBookmarks
     | Search
     | ReadPageContent
     | StopReadPageContent
@@ -25,30 +19,26 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage;
 
-// This opens a new tab in an existing browser window.
-// IMPORTANT: This does NOT launch new browser windows.
-export type OpenTab = {
-    actionName: "openTab";
+// show/open/display web page in the current view.
+export type OpenWebPage = {
+    actionName: "openWebPage";
     parameters: {
-        url?: string; // full URL to website
-        query?: string;
+        // Alias or URL for the site of the open.
+        site:
+            | "paelobiodb"
+            | "crossword"
+            | "commerce"
+            | "montage"
+            | "markdown"
+            | "planViewer"
+            | "turtleGraphics"
+            | string;
     };
 };
 
-// This closes a tab in an existing browser window.
-// IMPORTANT: This does NOT close browser programs.
-export type CloseTab = {
-    actionName: "closeTab";
-    parameters: {
-        title?: string;
-    };
-};
-
-export type CloseWindow = {
-    actionName: "closeWindow";
-    parameters: {
-        title?: string;
-    };
+// Close the current web site view
+export type CloseWebPage = {
+    actionName: "closeWebPage";
 };
 
 export type Search = {
@@ -72,29 +62,6 @@ export type ScrollDown = {
 
 export type ScrollUp = {
     actionName: "scrollUp";
-};
-
-// Switch to an open tab, based on the tab's title
-// Example:
-//  user: Switch to the Haiti tab
-//  agent: {
-//     "actionName": "switchToTabByText",
-//     "parameters": {
-//        "keywords": "Haiti"
-//     }
-//  }
-export type SwitchToTabByText = {
-    actionName: "switchToTabByText";
-    parameters: {
-        keywords: string; // text that shows up as part of the tab title. Remove filler words such as "the", "article", "link","page" etc.
-    };
-};
-
-export type SwitchToTabByPosition = {
-    actionName: "switchToTabByPosition";
-    parameters: {
-        position: number;
-    };
 };
 
 // follow a link on the page to open a related page or article
@@ -122,22 +89,6 @@ export type FollowLinkByPosition = {
     };
 };
 
-export type OpenFromHistory = {
-    actionName: "openFromHistory";
-    parameters: {
-        keywords: string; // text that shows up as part of the link. Remove filler words such as "the", "article", "link","page" etc.
-        startDate?: ApproxDatetime;
-        endDate?: ApproxDatetime;
-    };
-};
-
-export type OpenFromBookmarks = {
-    actionName: "openFromBookmarks";
-    parameters: {
-        keywords: string; // text that shows up as part of the link. Remove filler words such as "the", "article", "link","page" etc.
-    };
-};
-
 export type ZoomIn = {
     actionName: "zoomIn";
 };
@@ -148,13 +99,6 @@ export type ZoomOut = {
 
 export type ZoomReset = {
     actionName: "zoomReset";
-};
-
-export type AddToBookmarks = {
-    actionName: "addToBookmarks";
-    parameters: {
-        url: string;
-    };
 };
 
 export type ReadPageContent = {
@@ -172,10 +116,3 @@ export type CaptureScreenshot = {
 export type ReloadPage = {
     actionName: "reloadPage";
 };
-
-export interface ApproxDatetime {
-    // Default: "unknown"
-    displayText: string;
-    // If precise timestamp can be set
-    timestamp?: string;
-}

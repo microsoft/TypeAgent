@@ -1,0 +1,9 @@
+# Sample inputs 
+
+@remember --memory "Jane Austen wrote Pride and Prejudice, Sense and Sensibility, Emma"
+
+@remember --memory "Charles Dickens wrote David Copperfield, Oliver Twist, Great Expectations"
+
+@recall --query "List all books"
+
+@recall --query "List all books by Charles Dickens"

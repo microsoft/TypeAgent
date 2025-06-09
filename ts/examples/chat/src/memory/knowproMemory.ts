@@ -3,7 +3,6 @@
 
 import * as kp from "knowpro";
 import {
-    addStandardHandlers,
     arg,
     argBool,
     argNum,
@@ -22,7 +21,7 @@ import {
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
 } from "../common.js";
-import { dateTime, ensureDir } from "typeagent";
+import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import {
@@ -36,7 +35,9 @@ import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
+import { createKnowproWebsiteCommands } from "./knowproWebsite.js";
 import { Result } from "typechat";
+import { conversation as knowLib } from "knowledge-processor";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -44,10 +45,10 @@ export async function runKnowproMemory(): Promise<void> {
 
     const commands: Record<string, CommandHandler> = {};
     await createKnowproCommands(commands);
-    addStandardHandlers(commands);
     await runConsole({
         inputHandler,
         handlers: commands,
+        addStandardHandlers: true,
     });
 
     async function inputHandler(
@@ -115,6 +116,7 @@ export async function createKnowproCommands(
     await createKnowproDataFrameCommands(context, commands);
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
+    await createKnowproWebsiteCommands(context, commands);
     /*
      * CREATE GENERAL COMMANDS that are common to all memory types
      * These include: (a) search (b) answer generation (c) enumeration
@@ -127,6 +129,7 @@ export async function createKnowproCommands(
     commands.kpEntities = entities;
     commands.kpTopics = topics;
     commands.kpMessages = showMessages;
+    commands.kpAbstractMessage = abstract;
 
     /*----------------
      * COMMANDS
@@ -479,6 +482,8 @@ export async function createKnowproCommands(
             },
         );
         if (searchResult !== undefined) {
+            const options = createAnswerOptions(namedArgs);
+            options.chunking = false;
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
@@ -490,7 +495,7 @@ export async function createKnowproCommands(
                         context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
-                createAnswerOptions(namedArgs),
+                options,
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -521,11 +526,18 @@ export async function createKnowproCommands(
             await searchTerms(args);
         } else {
             if (conversation.semanticRefs !== undefined) {
-                const entities = kp.filterCollection(
+                const entityRefs = kp.filterCollection(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "entity",
                 );
-                context.printer.writeSemanticRefs(entities);
+                let concreteEntities = entityRefs.map(
+                    (e) => e.knowledge as knowLib.ConcreteEntity,
+                );
+                concreteEntities = kp.mergeConcreteEntities(concreteEntities);
+                concreteEntities.sort((x, y) => x.name.localeCompare(y.name));
+                context.printer.writeNumbered(concreteEntities, (printer, ce) =>
+                    printer.writeEntity(ce).writeLine(),
+                );
             }
         }
     }
@@ -548,12 +560,92 @@ export async function createKnowproCommands(
             await searchTerms(args);
         } else {
             if (conversation.semanticRefs !== undefined) {
-                const entities = kp.filterCollection(
+                const topicRefs = kp.filterCollection(
                     conversation.semanticRefs,
                     (sr) => sr.knowledgeType === "topic",
                 );
-                context.printer.writeSemanticRefs(entities);
+                let topics = topicRefs.map(
+                    (t) => (t.knowledge as kp.Topic).text,
+                );
+                topics = kp.mergeTopics(topics);
+                topics.sort();
+                context.printer.writeList(topics, { type: "ol" });
             }
+        }
+    }
+
+    function abstractDef(): CommandMetadata {
+        return {
+            description: "Return an abstract of the message",
+            args: {
+                ordinal: argNum("Message ordinal number"),
+            },
+            options: {
+                showMessage: argBool("Show the message", false),
+            },
+        };
+    }
+    commands.kpAbstractMessage.metadata = abstractDef();
+    async function abstract(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const semanticRefs = context.conversation?.semanticRefs;
+        if (!semanticRefs) {
+            context.printer.writeError("No semantic refs");
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, abstractDef());
+        const ordinal = namedArgs.ordinal;
+        const message = context.conversation?.messages.get(ordinal);
+        if (!message) {
+            context.printer.writeError(`No message with ordinal ${ordinal}`);
+            return;
+        }
+        const semanticRefsInMessage = new collections.MultiMap<
+            kp.KnowledgeType,
+            kp.ScoredSemanticRefOrdinal
+        >();
+        // This is not optimal. Demo only
+        for (const sr of semanticRefs) {
+            if (sr.range.start.messageOrdinal === ordinal) {
+                semanticRefsInMessage.add(sr.knowledgeType, {
+                    score: 1.0,
+                    semanticRefOrdinal: sr.semanticRefOrdinal,
+                });
+            }
+        }
+        context.printer.writeHeading("Message Abstract");
+        let topicMatches = semanticRefsInMessage.get("topic");
+        if (topicMatches && topicMatches.length > 0) {
+            const topics = kp.getDistinctTopicMatches(
+                semanticRefs,
+                topicMatches,
+            );
+            context.printer.writeInColor(chalk.cyan, "TOPICS");
+            for (const topic of topics) {
+                context.printer.write("- ");
+                context.printer.writeTopic(topic.knowledge as kp.Topic);
+            }
+            context.printer.writeLine();
+        }
+
+        let entityMatches = semanticRefsInMessage.get("entity");
+        if (entityMatches && entityMatches.length > 0) {
+            const entities = kp.getDistinctEntityMatches(
+                semanticRefs,
+                entityMatches,
+            );
+            context.printer.writeInColor(chalk.cyan, "ENTITIES");
+            for (const entity of entities) {
+                context.printer.writeEntity(
+                    entity.knowledge as knowLib.ConcreteEntity,
+                );
+                context.printer.writeLine();
+            }
+        }
+        if (namedArgs.showMessage) {
+            context.printer.writeMessage(message);
         }
     }
 
@@ -826,67 +918,3 @@ export async function createKnowproCommands(
 export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
-
-/*
-export async function generateMultipartAnswer(
-    conversation: kp.IConversation,
-    generator: kp.IAnswerGenerator,
-    question: string,
-    searchResults: kp.ConversationSearchResult[],
-    progress?: asyncArray.ProcessProgress<
-        kp.AnswerContext,
-        Result<kp.AnswerResponse>
-    >,
-    contextOptions?: kp.AnswerContextOptions,
-): Promise<Result<kp.AnswerResponse>> {
-    if (searchResults.length === 0) {
-        return error("No search results");
-    }
-    if (searchResults.length === 1) {
-        const searchResult = await kp.generateAnswer(
-            conversation,
-            generator,
-            searchResults[0].rawSearchQuery ?? question,
-            searchResults[0],
-            progress,
-            contextOptions,
-        );
-        return searchResult;
-    }
-
-    let preamble: PromptSection[] | undefined;
-    let lastAnswer: Result<kp.AnswerResponse> | undefined;
-    for (let i = 0; i < searchResults.length; ++i) {
-        const searchResult = searchResults[i];
-        const userQuestion = searchResult.rawSearchQuery ?? question;
-        lastAnswer = await kp.generateAnswer(
-            conversation,
-            generator,
-            question,
-            searchResult,
-            progress,
-            contextOptions,
-            preamble,
-        );
-        if (!lastAnswer.success) {
-            return lastAnswer;
-        }
-        const lastAnswerText =
-            lastAnswer.data.type === "Answered"
-                ? lastAnswer.data.answer
-                : lastAnswer.data.whyNoAnswer;
-        if (lastAnswerText) {
-            preamble ??= [];
-            preamble.push({
-                role: "user",
-                content: userQuestion,
-            });
-            preamble.push({
-                role: "assistant",
-                content: lastAnswerText,
-            });
-        }
-    }
-    return lastAnswer !== undefined ? lastAnswer : error("No answer");
-}
-*/

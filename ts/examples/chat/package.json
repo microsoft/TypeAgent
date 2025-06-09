@@ -21,7 +21,7 @@
     "runchat": "node dist/main.js memory",
     "runcode": "node dist/main.js code",
     "runcodememory": "node dist/main.js codeMemory",
-    "runtests": "node dist/main.js tests",
+    "runknowProc": "node dist/main.js knowledgeProc",
     "tsc": "tsc -p src"
   },
   "dependencies": {

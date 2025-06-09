@@ -199,6 +199,9 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
     portBase?: number; // default to 9001
 
+    // Agent specific initialization options.
+    agentInitOptions?: Record<string, unknown>; // agent specific initialization options.
+
     // Logging options
     metrics?: boolean; // default to false
     collectCommandResult?: boolean; // default to false
@@ -418,6 +421,7 @@ export async function initializeCommandHandlerContext(
             cacheDir,
             portBase,
             options?.allowSharedLocalView,
+            options?.agentInitOptions,
         );
         const constructionProvider = options?.constructionProvider;
         const context: CommandHandlerContext = {
