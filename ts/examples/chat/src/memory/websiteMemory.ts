@@ -58,7 +58,7 @@ export class WebsiteMemory implements kp.IConversation {
     public indexingState: IndexingState;
     public nameTag: string = "";
     public tags: string[] = [];
-    
+
     private noiseTerms: Set<string> = new Set();
 
     constructor(
@@ -245,7 +245,8 @@ export class WebsiteMemory implements kp.IConversation {
             this.semanticRefIndex = new kp.ConversationIndex();
         }
         if (this.semanticRefs === undefined) {
-            this.semanticRefs = this.storageProvider.createSemanticRefCollection();
+            this.semanticRefs =
+                this.storageProvider.createSemanticRefCollection();
         }
     }
 
@@ -286,12 +287,12 @@ export function createWebsiteMemorySettings(
 ): WebsiteMemorySettings {
     // Create proper memory settings like email memory does
     const settings = cm.createMemorySettings(64);
-    
+
     // Override with provided models if available
     if (languageModel) settings.languageModel = languageModel;
     if (embeddingModel) settings.embeddingModel = embeddingModel;
     if (embeddingSize) settings.embeddingSize = embeddingSize;
-    
+
     return settings as WebsiteMemorySettings;
 }
 
@@ -319,12 +320,12 @@ export async function createWebsiteMemory(
             fileSettings.baseFileName,
             true,
         );
-        
+
         // Create settings with the provided models
         const settings = createWebsiteMemorySettings(knowledgeModel);
         if (queryTranslator) settings.queryTranslator = queryTranslator;
         if (answerGenerator) settings.answerGenerator = answerGenerator;
-        
+
         wm = new WebsiteMemory(db, settings);
     }
     wm.settings.fileSaveSettings = fileSettings;

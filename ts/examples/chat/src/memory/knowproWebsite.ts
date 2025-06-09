@@ -21,14 +21,14 @@ import {
 } from "./knowproCommon.js";
 import chalk from "chalk";
 import { WebsiteMemory, createWebsiteMemory } from "./websiteMemory.js";
-import { 
-    importChromeBookmarks, 
+import {
+    importChromeBookmarks,
     importChromeHistory,
     importEdgeBookmarks,
     importEdgeHistory,
     getDefaultBrowserPaths,
     determinePageType,
-    ImportOptions 
+    ImportOptions,
 } from "./websiteImport.js";
 import { importWebsiteVisit, WebsiteVisitInfo } from "./websiteMessage.js";
 
@@ -66,9 +66,14 @@ export async function createKnowproWebsiteCommands(
                 title: arg("Page title"),
                 content: arg("Page content or description"),
                 updateIndex: argBool("Automatically update index", true),
-                source: arg("Source type: bookmark | history | reading_list", "bookmark"),
+                source: arg(
+                    "Source type: bookmark | history | reading_list",
+                    "bookmark",
+                ),
                 folder: arg("Bookmark folder name"),
-                pageType: arg("Page type: news | documentation | commerce | social | travel | development | general"),
+                pageType: arg(
+                    "Page type: news | documentation | commerce | social | travel | development | general",
+                ),
             },
         };
     }
@@ -79,19 +84,24 @@ export async function createKnowproWebsiteCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, websiteAddDef());
-        
+
         const visitInfo: WebsiteVisitInfo = {
             url: namedArgs.url,
-            source: (namedArgs.source as "bookmark" | "history" | "reading_list") || "bookmark",
+            source:
+                (namedArgs.source as "bookmark" | "history" | "reading_list") ||
+                "bookmark",
         };
-        
+
         visitInfo.visitDate = new Date().toISOString();
         if (namedArgs.title) visitInfo.title = namedArgs.title;
         if (namedArgs.folder) visitInfo.folder = namedArgs.folder;
         if (namedArgs.pageType) {
             visitInfo.pageType = namedArgs.pageType;
         } else {
-            visitInfo.pageType = determinePageType(namedArgs.url, namedArgs.title);
+            visitInfo.pageType = determinePageType(
+                namedArgs.url,
+                namedArgs.title,
+            );
         }
 
         if (visitInfo.source === "bookmark") {
@@ -99,13 +109,13 @@ export async function createKnowproWebsiteCommands(
         }
 
         const websiteMessage = importWebsiteVisit(visitInfo, namedArgs.content);
-        
+
         context.printer.writeLine(`Adding website: ${visitInfo.url}`);
         const result = await websiteMemory.addMessages(
             websiteMessage,
             namedArgs.updateIndex,
         );
-        
+
         if (!result.success) {
             context.printer.writeError(result.message);
             return;
@@ -121,7 +131,9 @@ export async function createKnowproWebsiteCommands(
         };
     }
     commands.kpWebsiteBuildIndex.metadata = websiteBuildIndexDef();
-    async function websiteBuildIndex(args: string[] | NamedArgs): Promise<void> {
+    async function websiteBuildIndex(
+        args: string[] | NamedArgs,
+    ): Promise<void> {
         const websiteMemory = ensureMemoryLoaded();
         if (!websiteMemory) {
             return;
@@ -140,7 +152,7 @@ export async function createKnowproWebsiteCommands(
             progress,
             countToIndex,
         );
-        
+
         try {
             const clock = new StopWatch();
             clock.start();
@@ -184,7 +196,10 @@ export async function createKnowproWebsiteCommands(
             context.website = await createWebsiteMemory(
                 {
                     dirPath: path.dirname(websiteIndexPath),
-                    baseFileName: path.basename(websiteIndexPath, path.extname(websiteIndexPath)),
+                    baseFileName: path.basename(
+                        websiteIndexPath,
+                        path.extname(websiteIndexPath),
+                    ),
                 },
                 namedArgs.createNew,
                 kpContext.knowledgeModel,
@@ -194,11 +209,15 @@ export async function createKnowproWebsiteCommands(
             clock.stop();
             if (context.website) {
                 context.printer.writeTiming(chalk.gray, clock);
-                context.printer.writeLine(`Loaded website memory: ${namedArgs.name}`);
+                context.printer.writeLine(
+                    `Loaded website memory: ${namedArgs.name}`,
+                );
                 kpContext.conversation = context.website;
             }
         } catch (error) {
-            context.printer.writeError(`Could not create website memory: ${error}`);
+            context.printer.writeError(
+                `Could not create website memory: ${error}`,
+            );
         }
     }
 
@@ -222,10 +241,10 @@ export async function createKnowproWebsiteCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, websiteAddBookmarksDef());
-        
+
         // For now, let's hardcode the path since namedArgs.path is a function
         let bookmarksPath: string | undefined = undefined; // namedArgs.path would be a function call
-        
+
         const defaultPaths = getDefaultBrowserPaths();
         if (namedArgs.source === "chrome") {
             bookmarksPath = defaultPaths.chrome.bookmarks as string;
@@ -238,12 +257,16 @@ export async function createKnowproWebsiteCommands(
 
         try {
             if (!bookmarksPath) {
-                context.printer.writeError("Could not determine bookmarks path");
+                context.printer.writeError(
+                    "Could not determine bookmarks path",
+                );
                 return;
             }
-            
-            context.printer.writeLine(`Importing bookmarks from ${namedArgs.source} at ${bookmarksPath}`);
-            
+
+            context.printer.writeLine(
+                `Importing bookmarks from ${namedArgs.source} at ${bookmarksPath}`,
+            );
+
             const importOptions: Partial<ImportOptions> = {
                 source: namedArgs.source as "chrome" | "edge",
                 type: "bookmarks",
@@ -260,9 +283,15 @@ export async function createKnowproWebsiteCommands(
 
             let websites: WebsiteVisitInfo[] = [];
             if (namedArgs.source === "chrome") {
-                websites = await importChromeBookmarks(bookmarksPath, importOptions);
+                websites = await importChromeBookmarks(
+                    bookmarksPath,
+                    importOptions,
+                );
             } else if (namedArgs.source === "edge") {
-                websites = await importEdgeBookmarks(bookmarksPath, importOptions);
+                websites = await importEdgeBookmarks(
+                    bookmarksPath,
+                    importOptions,
+                );
             }
 
             if (websites.length === 0) {
@@ -270,30 +299,36 @@ export async function createKnowproWebsiteCommands(
                 return;
             }
 
-            context.printer.writeLine(`Found ${websites.length} bookmarks to import`);
-            
-            const websiteMessages = websites.map(info => importWebsiteVisit(info));
-            
+            context.printer.writeLine(
+                `Found ${websites.length} bookmarks to import`,
+            );
+
+            const websiteMessages = websites.map((info) =>
+                importWebsiteVisit(info),
+            );
+
             let progress = new ProgressBar(context.printer, 1);
             const eventHandler = createIndexingEventHandler(
                 context.printer,
                 progress,
                 websiteMessages.length,
             );
-            
+
             const result = await websiteMemory.addMessages(
                 websiteMessages,
                 namedArgs.updateIndex,
                 eventHandler,
             );
             progress.complete();
-            
+
             if (!result.success) {
                 context.printer.writeError(result.message);
                 return;
             }
-            
-            context.printer.writeLine(`Successfully imported ${websites.length} bookmarks`);
+
+            context.printer.writeLine(
+                `Successfully imported ${websites.length} bookmarks`,
+            );
         } catch (error) {
             context.printer.writeError(`Failed to import bookmarks: ${error}`);
         }
@@ -318,10 +353,10 @@ export async function createKnowproWebsiteCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, websiteAddHistoryDef());
-        
+
         // For now, let's hardcode the path since namedArgs.path is a function
         let historyPath: string | undefined = undefined; // namedArgs.path would be a function call
-        
+
         const defaultPaths = getDefaultBrowserPaths();
         if (namedArgs.source === "chrome") {
             historyPath = defaultPaths.chrome.history as string;
@@ -334,13 +369,19 @@ export async function createKnowproWebsiteCommands(
 
         try {
             if (!historyPath) {
-                context.printer.writeError("Could not determine history database path");
+                context.printer.writeError(
+                    "Could not determine history database path",
+                );
                 return;
             }
-            
-            context.printer.writeLine(`Importing history from ${namedArgs.source} at ${historyPath}`);
-            context.printer.writeLine("Note: Please close Chrome before importing history to avoid database lock issues.");
-            
+
+            context.printer.writeLine(
+                `Importing history from ${namedArgs.source} at ${historyPath}`,
+            );
+            context.printer.writeLine(
+                "Note: Please close Chrome before importing history to avoid database lock issues.",
+            );
+
             const importOptions: Partial<ImportOptions> = {
                 source: namedArgs.source as "chrome" | "edge",
                 type: "history",
@@ -356,40 +397,51 @@ export async function createKnowproWebsiteCommands(
 
             let websites: WebsiteVisitInfo[] = [];
             if (namedArgs.source === "chrome") {
-                websites = await importChromeHistory(historyPath, importOptions);
+                websites = await importChromeHistory(
+                    historyPath,
+                    importOptions,
+                );
             } else if (namedArgs.source === "edge") {
                 websites = await importEdgeHistory(historyPath, importOptions);
             }
 
             if (websites.length === 0) {
-                context.printer.writeError("No history entries found to import");
+                context.printer.writeError(
+                    "No history entries found to import",
+                );
                 return;
             }
 
-            context.printer.writeLine(`Found ${websites.length} history entries to import`);
-            
-            const websiteMessages = websites.map(info => importWebsiteVisit(info));
-            
+            context.printer.writeLine(
+                `Found ${websites.length} history entries to import`,
+            );
+
+            const websiteMessages = websites.map((info) =>
+                importWebsiteVisit(info),
+            );
+
             let progress = new ProgressBar(context.printer, 1);
             const eventHandler = createIndexingEventHandler(
                 context.printer,
                 progress,
                 websiteMessages.length,
             );
-            
+
             const result = await websiteMemory.addMessages(
                 websiteMessages,
                 namedArgs.updateIndex,
                 eventHandler,
             );
             progress.complete();
-            
+
             if (!result.success) {
                 context.printer.writeError(result.message);
                 return;
             }
-            
-            context.printer.writeLine(`Successfully imported ${websites.length} history entries`);
+
+            context.printer.writeLine(
+                `Successfully imported ${websites.length} history entries`,
+            );
         } catch (error) {
             context.printer.writeError(`Failed to import history: ${error}`);
         }
@@ -406,45 +458,54 @@ export async function createKnowproWebsiteCommands(
         if (!websiteMemory) {
             return;
         }
-        
+
         const totalMessages = websiteMemory.messages.length;
-        const indexedMessages = websiteMemory.indexingState.lastMessageOrdinal + 1;
-        
+        const indexedMessages =
+            websiteMemory.indexingState.lastMessageOrdinal + 1;
+
         context.printer.writeLine(`Website Memory Statistics:`);
         context.printer.writeLine(`  Total visits: ${totalMessages}`);
         context.printer.writeLine(`  Indexed visits: ${indexedMessages}`);
-        context.printer.writeLine(`  Pending indexing: ${totalMessages - indexedMessages}`);
-        
+        context.printer.writeLine(
+            `  Pending indexing: ${totalMessages - indexedMessages}`,
+        );
+
         // Count by source type
         const sourceCounts = new Map<string, number>();
         const domainCounts = new Map<string, number>();
         const pageTypeCounts = new Map<string, number>();
-        
+
         for (let i = 0; i < totalMessages; i++) {
             const message = websiteMemory.messages.get(i);
             if (message) {
                 const source = message.metadata.websiteSource;
                 sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
-                
+
                 if (message.metadata.domain) {
                     const domain = message.metadata.domain;
-                    domainCounts.set(domain, (domainCounts.get(domain) || 0) + 1);
+                    domainCounts.set(
+                        domain,
+                        (domainCounts.get(domain) || 0) + 1,
+                    );
                 }
-                
+
                 if (message.metadata.pageType) {
                     const pageType = message.metadata.pageType;
-                    pageTypeCounts.set(pageType, (pageTypeCounts.get(pageType) || 0) + 1);
+                    pageTypeCounts.set(
+                        pageType,
+                        (pageTypeCounts.get(pageType) || 0) + 1,
+                    );
                 }
             }
         }
-        
+
         if (sourceCounts.size > 0) {
             context.printer.writeLine(`\nBy Source:`);
             for (const [source, count] of sourceCounts.entries()) {
                 context.printer.writeLine(`  ${source}: ${count}`);
             }
         }
-        
+
         if (domainCounts.size > 0) {
             context.printer.writeLine(`\nTop Domains:`);
             const sortedDomains = Array.from(domainCounts.entries())
@@ -454,7 +515,7 @@ export async function createKnowproWebsiteCommands(
                 context.printer.writeLine(`  ${domain}: ${count} visits`);
             }
         }
-        
+
         if (pageTypeCounts.size > 0) {
             context.printer.writeLine(`\nBy Page Type:`);
             for (const [pageType, count] of pageTypeCounts.entries()) {

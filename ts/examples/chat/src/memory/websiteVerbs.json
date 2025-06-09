@@ -1,34 +1,42 @@
 [
-    {
-        "term": "visit",
-        "relatedTerms": ["browse", "navigate", "go to", "open", "access", "view", "load"]
-    },
-    {
-        "term": "bookmark",
-        "relatedTerms": ["save", "favorite", "star", "mark", "pin", "keep"]
-    },
-    {
-        "term": "read",
-        "relatedTerms": ["view", "browse", "scan", "peruse", "check", "look at"]
-    },
-    {
-        "term": "search",
-        "relatedTerms": ["find", "look for", "query", "seek", "hunt"]
-    },
-    {
-        "term": "download",
-        "relatedTerms": ["save", "get", "fetch", "pull", "retrieve"]
-    },
-    {
-        "term": "share",
-        "relatedTerms": ["send", "forward", "post", "distribute", "spread"]
-    },
-    {
-        "term": "scroll",
-        "relatedTerms": ["browse", "skim", "scan", "navigate"]
-    },
-    {
-        "term": "click",
-        "relatedTerms": ["select", "choose", "pick", "tap", "press"]
-    }
+  {
+    "term": "visit",
+    "relatedTerms": [
+      "browse",
+      "navigate",
+      "go to",
+      "open",
+      "access",
+      "view",
+      "load"
+    ]
+  },
+  {
+    "term": "bookmark",
+    "relatedTerms": ["save", "favorite", "star", "mark", "pin", "keep"]
+  },
+  {
+    "term": "read",
+    "relatedTerms": ["view", "browse", "scan", "peruse", "check", "look at"]
+  },
+  {
+    "term": "search",
+    "relatedTerms": ["find", "look for", "query", "seek", "hunt"]
+  },
+  {
+    "term": "download",
+    "relatedTerms": ["save", "get", "fetch", "pull", "retrieve"]
+  },
+  {
+    "term": "share",
+    "relatedTerms": ["send", "forward", "post", "distribute", "spread"]
+  },
+  {
+    "term": "scroll",
+    "relatedTerms": ["browse", "skim", "scan", "navigate"]
+  },
+  {
+    "term": "click",
+    "relatedTerms": ["select", "choose", "pick", "tap", "press"]
+  }
 ]

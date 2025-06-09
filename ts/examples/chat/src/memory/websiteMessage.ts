@@ -42,17 +42,25 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         if (visitInfo.title !== undefined) this.title = visitInfo.title;
         if (visitInfo.domain !== undefined) this.domain = visitInfo.domain;
         else this.domain = this.extractDomain(visitInfo.url);
-        if (visitInfo.visitDate !== undefined) this.visitDate = visitInfo.visitDate;
-        if (visitInfo.bookmarkDate !== undefined) this.bookmarkDate = visitInfo.bookmarkDate;
+        if (visitInfo.visitDate !== undefined)
+            this.visitDate = visitInfo.visitDate;
+        if (visitInfo.bookmarkDate !== undefined)
+            this.bookmarkDate = visitInfo.bookmarkDate;
         this.websiteSource = visitInfo.source;
         if (visitInfo.folder !== undefined) this.folder = visitInfo.folder;
-        if (visitInfo.pageType !== undefined) this.pageType = visitInfo.pageType;
-        if (visitInfo.keywords !== undefined) this.keywords = visitInfo.keywords;
-        if (visitInfo.description !== undefined) this.description = visitInfo.description;
+        if (visitInfo.pageType !== undefined)
+            this.pageType = visitInfo.pageType;
+        if (visitInfo.keywords !== undefined)
+            this.keywords = visitInfo.keywords;
+        if (visitInfo.description !== undefined)
+            this.description = visitInfo.description;
         if (visitInfo.favicon !== undefined) this.favicon = visitInfo.favicon;
-        if (visitInfo.visitCount !== undefined) this.visitCount = visitInfo.visitCount;
-        if (visitInfo.lastVisitTime !== undefined) this.lastVisitTime = visitInfo.lastVisitTime;
-        if (visitInfo.typedCount !== undefined) this.typedCount = visitInfo.typedCount;
+        if (visitInfo.visitCount !== undefined)
+            this.visitCount = visitInfo.visitCount;
+        if (visitInfo.lastVisitTime !== undefined)
+            this.lastVisitTime = visitInfo.lastVisitTime;
+        if (visitInfo.typedCount !== undefined)
+            this.typedCount = visitInfo.typedCount;
     }
 
     public get source() {
@@ -117,7 +125,8 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         }
 
         // Add action based on source
-        const actionVerb = this.websiteSource === "bookmark" ? "bookmarked" : "visited";
+        const actionVerb =
+            this.websiteSource === "bookmark" ? "bookmarked" : "visited";
         actions.push({
             verbs: [actionVerb],
             verbTense: "past",
@@ -154,11 +163,15 @@ export class WebsiteMessage implements kp.IMessage {
         this.knowledge = knowledge;
         this.deletionInfo = deletionInfo;
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
-        
+
         if (isNew) {
-            pageContent = websiteToTextChunks(pageContent, metadata.title, metadata.url);
+            pageContent = websiteToTextChunks(
+                pageContent,
+                metadata.title,
+                metadata.url,
+            );
         }
-        
+
         if (Array.isArray(pageContent)) {
             this.textChunks = pageContent;
         } else {
@@ -179,17 +192,25 @@ export class WebsiteMessage implements kp.IMessage {
             entities: [...metaKnowledge.entities, ...this.knowledge.entities],
             topics: [...metaKnowledge.topics, ...this.knowledge.topics],
             actions: [...metaKnowledge.actions, ...this.knowledge.actions],
-            inverseActions: [...metaKnowledge.inverseActions, ...this.knowledge.inverseActions],
+            inverseActions: [
+                ...metaKnowledge.inverseActions,
+                ...this.knowledge.inverseActions,
+            ],
         };
     }
 }
 
-export function importWebsiteVisit(visitInfo: WebsiteVisitInfo, pageContent?: string): WebsiteMessage {
+export function importWebsiteVisit(
+    visitInfo: WebsiteVisitInfo,
+    pageContent?: string,
+): WebsiteMessage {
     const meta = new WebsiteMeta(visitInfo);
     return new WebsiteMessage(meta, pageContent || visitInfo.description || "");
 }
 
-export class WebsiteMessageSerializer implements kp.JsonSerializer<WebsiteMessage> {
+export class WebsiteMessageSerializer
+    implements kp.JsonSerializer<WebsiteMessage>
+{
     public serialize(value: WebsiteMessage): string {
         return JSON.stringify(value);
     }
@@ -203,17 +224,23 @@ export class WebsiteMessageSerializer implements kp.JsonSerializer<WebsiteMessag
         };
         if (jMeta.title !== undefined) visitInfo.title = jMeta.title;
         if (jMeta.domain !== undefined) visitInfo.domain = jMeta.domain;
-        if (jMeta.visitDate !== undefined) visitInfo.visitDate = jMeta.visitDate;
-        if (jMeta.bookmarkDate !== undefined) visitInfo.bookmarkDate = jMeta.bookmarkDate;
+        if (jMeta.visitDate !== undefined)
+            visitInfo.visitDate = jMeta.visitDate;
+        if (jMeta.bookmarkDate !== undefined)
+            visitInfo.bookmarkDate = jMeta.bookmarkDate;
         if (jMeta.folder !== undefined) visitInfo.folder = jMeta.folder;
         if (jMeta.pageType !== undefined) visitInfo.pageType = jMeta.pageType;
         if (jMeta.keywords !== undefined) visitInfo.keywords = jMeta.keywords;
-        if (jMeta.description !== undefined) visitInfo.description = jMeta.description;
+        if (jMeta.description !== undefined)
+            visitInfo.description = jMeta.description;
         if (jMeta.favicon !== undefined) visitInfo.favicon = jMeta.favicon;
-        if (jMeta.visitCount !== undefined) visitInfo.visitCount = jMeta.visitCount;
-        if (jMeta.lastVisitTime !== undefined) visitInfo.lastVisitTime = jMeta.lastVisitTime;
-        if (jMeta.typedCount !== undefined) visitInfo.typedCount = jMeta.typedCount;
-        
+        if (jMeta.visitCount !== undefined)
+            visitInfo.visitCount = jMeta.visitCount;
+        if (jMeta.lastVisitTime !== undefined)
+            visitInfo.lastVisitTime = jMeta.lastVisitTime;
+        if (jMeta.typedCount !== undefined)
+            visitInfo.typedCount = jMeta.typedCount;
+
         const meta = new WebsiteMeta(visitInfo);
         return new WebsiteMessage(
             meta,
@@ -239,7 +266,11 @@ function websiteToTextChunks(
     }
 }
 
-function joinTitleUrlAndContent(pageContent: string, title?: string, url?: string): string {
+function joinTitleUrlAndContent(
+    pageContent: string,
+    title?: string,
+    url?: string,
+): string {
     let result = "";
     if (title) {
         result += `Title: ${title}\n`;

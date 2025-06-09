@@ -52,7 +52,7 @@ export interface EdgeBookmark {
 
 async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
     try {
-        const data = fs.readFileSync(filePath, 'utf8');
+        const data = fs.readFileSync(filePath, "utf8");
         return JSON.parse(data) as T;
     } catch (error) {
         console.error(`Error reading JSON file ${filePath}:`, error);
@@ -93,27 +93,45 @@ export async function importChromeBookmarks(
     options?: Partial<ImportOptions>,
 ): Promise<WebsiteVisitInfo[]> {
     try {
-        const bookmarksData = await readJsonFile<ChromeBookmarkRoot>(bookmarksPath);
+        const bookmarksData =
+            await readJsonFile<ChromeBookmarkRoot>(bookmarksPath);
         if (!bookmarksData) {
             throw new Error("Could not read Chrome bookmarks file");
         }
 
         const websites: WebsiteVisitInfo[] = [];
         const now = Date.now();
-        const cutoffDate = options?.days ? now - (options.days * 24 * 60 * 60 * 1000) : 0;
+        const cutoffDate = options?.days
+            ? now - options.days * 24 * 60 * 60 * 1000
+            : 0;
 
         // Process bookmark bar, other bookmarks, and synced bookmarks
         const rootFolders = [
-            { folder: bookmarksData.roots.bookmark_bar, folderPath: "Bookmarks Bar" },
-            { folder: bookmarksData.roots.other, folderPath: "Other Bookmarks" },
-            { folder: bookmarksData.roots.synced, folderPath: "Mobile Bookmarks" },
+            {
+                folder: bookmarksData.roots.bookmark_bar,
+                folderPath: "Bookmarks Bar",
+            },
+            {
+                folder: bookmarksData.roots.other,
+                folderPath: "Other Bookmarks",
+            },
+            {
+                folder: bookmarksData.roots.synced,
+                folderPath: "Mobile Bookmarks",
+            },
         ];
 
         for (const { folder, folderPath } of rootFolders) {
             if (options?.folder && !folderPath.includes(options.folder)) {
                 continue;
             }
-            extractBookmarks(folder, folderPath, websites, cutoffDate, options?.limit);
+            extractBookmarks(
+                folder,
+                folderPath,
+                websites,
+                cutoffDate,
+                options?.limit,
+            );
         }
 
         return websites.slice(0, options?.limit);
@@ -135,9 +153,10 @@ function extractBookmarks(
     if (limit && websites.length >= limit) return;
 
     if (bookmark.type === "url" && bookmark.url) {
-        const bookmarkDate = bookmark.date_added ? 
-            chromeTimeToDate(bookmark.date_added) : undefined;
-        
+        const bookmarkDate = bookmark.date_added
+            ? chromeTimeToDate(bookmark.date_added)
+            : undefined;
+
         if (cutoffDate && bookmarkDate) {
             const bookmarkTime = new Date(bookmarkDate).getTime();
             if (bookmarkTime < cutoffDate) return;
@@ -156,7 +175,9 @@ function extractBookmarks(
         }
         websites.push(visitInfo);
     } else if (bookmark.type === "folder" && bookmark.children) {
-        const folderPath = currentPath ? `${currentPath}/${bookmark.name}` : bookmark.name;
+        const folderPath = currentPath
+            ? `${currentPath}/${bookmark.name}`
+            : bookmark.name;
         for (const child of bookmark.children) {
             extractBookmarks(child, folderPath, websites, cutoffDate, limit);
             if (limit && websites.length >= limit) break;
@@ -174,7 +195,9 @@ export async function importChromeHistory(
     try {
         // Check if the history file exists
         if (!fs.existsSync(historyDbPath)) {
-            throw new Error(`Chrome history database not found at: ${historyDbPath}`);
+            throw new Error(
+                `Chrome history database not found at: ${historyDbPath}`,
+            );
         }
 
         // Chrome may have the database locked, so we'll copy it first
@@ -182,7 +205,9 @@ export async function importChromeHistory(
         try {
             fs.copyFileSync(historyDbPath, tempDbPath);
         } catch (error) {
-            throw new Error(`Cannot access Chrome history database. Make sure Chrome is closed. Error: ${error}`);
+            throw new Error(
+                `Cannot access Chrome history database. Make sure Chrome is closed. Error: ${error}`,
+            );
         }
 
         const websites: WebsiteVisitInfo[] = [];
@@ -193,8 +218,8 @@ export async function importChromeHistory(
             db = new sqlite.default(tempDbPath, { readonly: true });
 
             // Calculate date filter if specified
-            const cutoffTime = options?.days 
-                ? Date.now() * 1000 - (options.days * 24 * 60 * 60 * 1000 * 1000) // Chrome uses microseconds
+            const cutoffTime = options?.days
+                ? Date.now() * 1000 - options.days * 24 * 60 * 60 * 1000 * 1000 // Chrome uses microseconds
                 : 0;
 
             // Build the SQL query
@@ -224,8 +249,10 @@ export async function importChromeHistory(
                 params.push(options.limit);
             }
 
-            console.log(`Executing Chrome history query with ${params.length} parameters`);
-            
+            console.log(
+                `Executing Chrome history query with ${params.length} parameters`,
+            );
+
             // Execute the query
             const stmt = db.prepare(query);
             const rows = stmt.all(...params) as ChromeHistoryEntry[];
@@ -234,7 +261,11 @@ export async function importChromeHistory(
 
             // Convert rows to WebsiteVisitInfo
             for (const row of rows) {
-                if (!row.url || row.url.startsWith('chrome://') || row.url.startsWith('chrome-extension://')) {
+                if (
+                    !row.url ||
+                    row.url.startsWith("chrome://") ||
+                    row.url.startsWith("chrome-extension://")
+                ) {
                     continue; // Skip Chrome internal URLs
                 }
 
@@ -260,7 +291,6 @@ export async function importChromeHistory(
                     break;
                 }
             }
-
         } finally {
             // Clean up: close database and remove temp file
             if (db) {
@@ -269,13 +299,14 @@ export async function importChromeHistory(
             try {
                 fs.unlinkSync(tempDbPath);
             } catch (error) {
-                console.warn(`Could not delete temporary database file: ${tempDbPath}`);
+                console.warn(
+                    `Could not delete temporary database file: ${tempDbPath}`,
+                );
             }
         }
 
         console.log(`Successfully imported ${websites.length} history entries`);
         return websites;
-
     } catch (error) {
         throw new Error(`Failed to import Chrome history: ${error}`);
     }
@@ -290,7 +321,9 @@ export async function importEdgeHistory(
 ): Promise<WebsiteVisitInfo[]> {
     // Edge uses a similar SQLite structure to Chrome
     // For now, we can reuse the Chrome import logic as Edge history has similar schema
-    console.log("Using Chrome history import logic for Edge (similar database schema)");
+    console.log(
+        "Using Chrome history import logic for Edge (similar database schema)",
+    );
     return importChromeHistory(historyDbPath, options);
 }
 export async function importEdgeBookmarks(
@@ -311,35 +344,71 @@ export function getDefaultBrowserPaths(): { chrome: any; edge: any } {
     if (os === "win32") {
         return {
             chrome: {
-                bookmarks: path.join(userHome, "AppData/Local/Google/Chrome/User Data/Default/Bookmarks"),
-                history: path.join(userHome, "AppData/Local/Google/Chrome/User Data/Default/History"),
+                bookmarks: path.join(
+                    userHome,
+                    "AppData/Local/Google/Chrome/User Data/Default/Bookmarks",
+                ),
+                history: path.join(
+                    userHome,
+                    "AppData/Local/Google/Chrome/User Data/Default/History",
+                ),
             },
             edge: {
-                bookmarks: path.join(userHome, "AppData/Local/Microsoft/Edge/User Data/Default/Bookmarks"),
-                history: path.join(userHome, "AppData/Local/Microsoft/Edge/User Data/Default/History"),
+                bookmarks: path.join(
+                    userHome,
+                    "AppData/Local/Microsoft/Edge/User Data/Default/Bookmarks",
+                ),
+                history: path.join(
+                    userHome,
+                    "AppData/Local/Microsoft/Edge/User Data/Default/History",
+                ),
             },
         };
     } else if (os === "darwin") {
         return {
             chrome: {
-                bookmarks: path.join(userHome, "Library/Application Support/Google/Chrome/Default/Bookmarks"),
-                history: path.join(userHome, "Library/Application Support/Google/Chrome/Default/History"),
+                bookmarks: path.join(
+                    userHome,
+                    "Library/Application Support/Google/Chrome/Default/Bookmarks",
+                ),
+                history: path.join(
+                    userHome,
+                    "Library/Application Support/Google/Chrome/Default/History",
+                ),
             },
             edge: {
-                bookmarks: path.join(userHome, "Library/Application Support/Microsoft Edge/Default/Bookmarks"),
-                history: path.join(userHome, "Library/Application Support/Microsoft Edge/Default/History"),
+                bookmarks: path.join(
+                    userHome,
+                    "Library/Application Support/Microsoft Edge/Default/Bookmarks",
+                ),
+                history: path.join(
+                    userHome,
+                    "Library/Application Support/Microsoft Edge/Default/History",
+                ),
             },
         };
     } else {
         // Linux
         return {
             chrome: {
-                bookmarks: path.join(userHome, ".config/google-chrome/Default/Bookmarks"),
-                history: path.join(userHome, ".config/google-chrome/Default/History"),
+                bookmarks: path.join(
+                    userHome,
+                    ".config/google-chrome/Default/Bookmarks",
+                ),
+                history: path.join(
+                    userHome,
+                    ".config/google-chrome/Default/History",
+                ),
             },
             edge: {
-                bookmarks: path.join(userHome, ".config/microsoft-edge/Default/Bookmarks"),
-                history: path.join(userHome, ".config/microsoft-edge/Default/History"),
+                bookmarks: path.join(
+                    userHome,
+                    ".config/microsoft-edge/Default/Bookmarks",
+                ),
+                history: path.join(
+                    userHome,
+                    ".config/microsoft-edge/Default/History",
+                ),
             },
         };
     }
@@ -354,38 +423,69 @@ export function determinePageType(url: string, title?: string): string {
     const titleLower = title?.toLowerCase() || "";
 
     // News sites
-    if (domain.includes("news") || domain.includes("cnn") || domain.includes("bbc") || 
-        domain.includes("reuters") || domain.includes("npr") || domain.includes("guardian")) {
+    if (
+        domain.includes("news") ||
+        domain.includes("cnn") ||
+        domain.includes("bbc") ||
+        domain.includes("reuters") ||
+        domain.includes("npr") ||
+        domain.includes("guardian")
+    ) {
         return "news";
     }
 
     // Documentation sites
-    if (domain.includes("docs") || domain.includes("documentation") || 
-        urlLower.includes("/docs/") || titleLower.includes("documentation")) {
+    if (
+        domain.includes("docs") ||
+        domain.includes("documentation") ||
+        urlLower.includes("/docs/") ||
+        titleLower.includes("documentation")
+    ) {
         return "documentation";
     }
 
     // Shopping/commerce
-    if (domain.includes("amazon") || domain.includes("shop") || domain.includes("store") ||
-        domain.includes("ebay") || urlLower.includes("/shop/") || urlLower.includes("/cart/")) {
+    if (
+        domain.includes("amazon") ||
+        domain.includes("shop") ||
+        domain.includes("store") ||
+        domain.includes("ebay") ||
+        urlLower.includes("/shop/") ||
+        urlLower.includes("/cart/")
+    ) {
         return "commerce";
     }
 
     // Social media
-    if (domain.includes("twitter") || domain.includes("facebook") || domain.includes("linkedin") ||
-        domain.includes("instagram") || domain.includes("reddit")) {
+    if (
+        domain.includes("twitter") ||
+        domain.includes("facebook") ||
+        domain.includes("linkedin") ||
+        domain.includes("instagram") ||
+        domain.includes("reddit")
+    ) {
         return "social";
     }
 
     // Travel
-    if (domain.includes("booking") || domain.includes("expedia") || domain.includes("travel") ||
-        domain.includes("airbnb") || titleLower.includes("travel")) {
+    if (
+        domain.includes("booking") ||
+        domain.includes("expedia") ||
+        domain.includes("travel") ||
+        domain.includes("airbnb") ||
+        titleLower.includes("travel")
+    ) {
         return "travel";
     }
 
     // Development/tech
-    if (domain.includes("github") || domain.includes("stackoverflow") || domain.includes("dev") ||
-        titleLower.includes("api") || titleLower.includes("tutorial")) {
+    if (
+        domain.includes("github") ||
+        domain.includes("stackoverflow") ||
+        domain.includes("dev") ||
+        titleLower.includes("api") ||
+        titleLower.includes("tutorial")
+    ) {
         return "development";
     }
 
