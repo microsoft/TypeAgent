@@ -41,6 +41,7 @@ from .query import (
     MatchTopicExpr,
     MessagesFromKnowledgeExpr,
     QueryEvalContext,
+    RankMessagesBySimilarityExpr,
     SelectTopNKnowledgeGroupExpr,
     TextRangeSelector,
     WhereSemanticRefExpr,

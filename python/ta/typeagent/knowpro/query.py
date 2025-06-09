@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from re import search
 from typing import Callable, Literal, Protocol
 
-from ..knowpro.kplib import ConcreteEntity
+from ..aitools.embeddings import NormalizedEmbedding
 
 from .collections import (
     Match,
@@ -41,6 +41,8 @@ from .interfaces import (
     TextLocation,
     TextRange,
 )
+from .kplib import ConcreteEntity
+from .messageindex import IMessageTextEmbeddingIndex
 from .propindex import PropertyNames, lookup_property_in_property_index
 
 
@@ -803,7 +805,55 @@ class MessagesFromKnowledgeExpr(QueryOpExpr[MessageAccumulator]):
 
 
 # TODO: SelectMessagesInCharBudget
-# TODO: RankMessagesBySimilarityExpr
+@dataclass
+class RankMessagesBySimilarityExpr(QueryOpExpr[MessageAccumulator]):
+    src_expr: IQueryOpExpr[MessageAccumulator]
+    embedding: NormalizedEmbedding
+    max_messages: int | None = None
+    threshold_score: float | None = None
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        matches = self.src_expr.eval(context)
+        if self.max_messages is not None and len(matches) <= self.max_messages:
+            return matches
+
+        # Try to use the message embedding index for re-ranking if available.
+        message_index = (
+            None
+            if context.conversation.secondary_indexes is None
+            else context.conversation.secondary_indexes.message_index
+        )
+        if isinstance(message_index, IMessageTextEmbeddingIndex):
+            message_ordinals = self._get_message_ordinals_in_index(
+                message_index, matches
+            )
+            if len(message_ordinals) == len(matches):
+                matches.clear_matches()
+                ranked_messages = message_index.lookup_in_subset_by_embedding(
+                    self.embedding,
+                    message_ordinals,
+                    self.max_messages,
+                    self.threshold_score,
+                )
+                for match in ranked_messages:
+                    matches.add(match.message_ordinal, match.score)
+                return matches
+
+        if self.max_messages is not None:
+            # Can't re rank, so just take the top K from what we already have.
+            matches.select_top_n_scoring(self.max_messages)
+        return matches
+
+    def _get_message_ordinals_in_index(
+        self, message_index, matches: MessageAccumulator
+    ):
+        message_ordinals: list[MessageOrdinal] = []
+        index_size = len(message_index)
+        for message_ordinal in matches.get_matched_values():
+            if message_ordinal >= index_size:
+                break
+            message_ordinals.append(message_ordinal)
+        return message_ordinals
 
 
 class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
