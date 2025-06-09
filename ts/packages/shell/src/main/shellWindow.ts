@@ -40,8 +40,6 @@ export class ShellWindow {
     private readonly contentLoadP: Promise<void>[];
     private readonly handlers = new Map<string, (event: any) => void>();
     private readonly settings: ShellSettingManager;
-    private dispatcherReady: boolean = false;
-    private retryCount: number = 0;
     private closing: boolean = false;
     constructor(shellSettings: ShellSettings, instanceDir: string) {
         if (ShellWindow.instance !== undefined) {
@@ -153,14 +151,12 @@ export class ShellWindow {
 
         // open the canvas if it was previously open
         if (user.canvas) {
-            try {
-                this.openInlineBrowser(new URL(user.canvas));
-            } catch (e) {
+            this.openInlineBrowser(new URL(user.canvas)).catch((e) => {
                 // Don't care if this failed.
                 debugShellError(
                     `Failed to open canvas URL ${user.canvas} on app start: ${e}`,
                 );
-            }
+            });
         }
 
         globalShortcut.register("Alt+Right", () => {
@@ -291,7 +287,7 @@ export class ShellWindow {
     // ================================================================
     // Inline browser
     // ================================================================
-    public openInlineBrowser(targetUrl: URL) {
+    public async openInlineBrowser(targetUrl: URL) {
         const mainWindow = this.mainWindow;
         const mainWindowSize = mainWindow.getBounds();
         let newWindow: boolean = false;
@@ -318,70 +314,36 @@ export class ShellWindow {
             this.updateContentSize();
         }
 
+        const targetUrlString = targetUrl.toString();
         // only open the requested canvas if it isn't already opened
-        if (this.targetUrl !== targetUrl.toString() || newWindow) {
-            inlineWebContentView.webContents
-                .loadURL(targetUrl.toString())
-                .catch((reason) => {
-                    this.openInlineBrowserRetry(
-                        reason,
-                        targetUrl,
-                        inlineWebContentView,
-                    );
-                });
-
-            this.targetUrl = targetUrl.toString();
+        if (this.targetUrl !== targetUrlString || newWindow) {
+            this.targetUrl = targetUrlString;
             // indicate in the settings which canvas is open
-            this.setUserSettingValue("canvas", targetUrl.toString());
+            this.setUserSettingValue("canvas", targetUrlString);
+
+            if (
+                this.dispatcherReadyPromise !== undefined &&
+                targetUrlString.startsWith("http://localhost")
+            ) {
+                await this.dispatcherReadyPromise;
+            }
+
+            return inlineWebContentView.webContents.loadURL(targetUrlString);
         }
     }
 
-    /*
-     * Retries to open localhost URLs once the dispatcher has loaded
-     */
-    public openInlineBrowserRetry(
-        reason: any,
-        targetUrl: URL,
-        inlineWebContentView: WebContentsView,
-    ) {
-        // try again since the host process might not be ready
-        if (!this.dispatcherReady) {
-            setTimeout(() => {
-                this.openInlineBrowserRetry(
-                    { code: "ERR_CONNECTION_REFUSED" },
-                    targetUrl,
-                    inlineWebContentView,
-                );
-            }, 500);
-        } else if (
-            reason.code === "ERR_CONNECTION_REFUSED" &&
-            this.retryCount < 3 &&
-            (targetUrl
-                .toString()
-                .toLowerCase()
-                .startsWith("http://localhost") ||
-                targetUrl
-                    .toString()
-                    .toLowerCase()
-                    .startsWith("https://localhost"))
-        ) {
-            this.retryCount++;
-            setTimeout(() => {
-                inlineWebContentView.webContents
-                    .loadURL(targetUrl.toString())
-                    .catch((reason) => {
-                        this.openInlineBrowserRetry(
-                            reason,
-                            targetUrl,
-                            inlineWebContentView,
-                        );
-                    });
-            }, 500);
-        }
-    }
-
+    private dispatcherReady: (() => void) | undefined;
+    private dispatcherReadyPromise: Promise<void> | undefined = new Promise(
+        (resolve) => {
+            this.dispatcherReady = () => {
+                resolve();
+                this.dispatcherReady = undefined;
+                this.dispatcherReadyPromise = undefined;
+            };
+        },
+    );
     public dispatcherInitialized() {
-        this.dispatcherReady = true;
+        this.dispatcherReady?.();
     }
 
     public closeInlineBrowser(save: boolean = true) {
