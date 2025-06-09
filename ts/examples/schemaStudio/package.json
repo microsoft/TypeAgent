@@ -18,7 +18,8 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
-    "tsc": "tsc -p src"
+    "tsc": "tsc -p src",
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "action-schema": "workspace:*",

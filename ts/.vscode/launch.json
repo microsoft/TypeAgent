@@ -108,6 +108,15 @@
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
+      "name": "Launch SchemaStudio",
+      "type": "node",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/examples/schemaStudio/src/main.ts",
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },    
+    {
       "name": "Launch Chat Tests",
       "type": "node",
       "request": "launch",
@@ -250,18 +259,17 @@
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
     {
-      "name": "Knowledge Visualizier (Main process)",
+      "name": "Knowledge Visualizier",
       "type": "node",
       "request": "launch",
-      "cwd": "${workspaceRoot}/packages/knowledgeVisualizer",
-      "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite",
-      "windows": {
-        "runtimeExecutable": "${workspaceRoot}/packages/knowledgeVisualizer/node_modules/.bin/electron-vite.cmd"
-      },
-      "runtimeArgs": ["--sourcemap"],
-      "env": {
-        "REMOTE_DEBUGGING_PORT": "9222"
-      }
+      "cwd": "${workspaceFolder}/packages/knowledgeVisualizer",
+      "program": "./node_modules/.bin/webpack",
+      "args": [
+        "--config",
+        "webpack.config.js"
+      ],
+      "autoAttachChildProcesses": true,
+      "stopOnEntry": false
     },
     {
       "type": "node",
