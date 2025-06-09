@@ -481,7 +481,7 @@ def create_property_search_term(
     exact_match_value: bool = False,
 ) -> PropertySearchTerm:
     property_name: KnowledgePropertyName | SearchTerm
-    if name in KnowledgePropertyName.__value__:
+    if name in KnowledgePropertyName.__value__.__args__:
         property_name = cast(KnowledgePropertyName, name)
     else:
         property_name = SearchTerm(Term(name))
