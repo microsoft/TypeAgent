@@ -128,18 +128,17 @@ class MessageTextIndex(IMessageTextEmbeddingIndex):
         # TODO: Find a prettier API to get an embedding rather than using _vector_base?
         return await self.text_location_index._vector_base.get_embedding(text)  # type: ignore  # Must use internal.
 
-    # TODO: Waiting for text_location_index.lookup_in_subset_by_embeddings.
-    # def lookup_in_subset_by_embedding(
-    #     self,
-    #     text_embedding: NormalizedEmbedding,
-    #     ordinals_to_search: list[MessageOrdinal],
-    #     max_matches: int | None = None,
-    #     threshold_score: float | None = None,
-    # ) -> list[ScoredMessageOrdinal]:
-    #     scored_text_locations = self.text_location_index.lookup_in_subset_by_embedding(
-    #         text_embedding, ordinals_to_search, max_matches, threshold_score
-    #     )
-    #     return self.to_scored_message_ordinals(scored_text_locations)
+    def lookup_in_subset_by_embedding(
+        self,
+        text_embedding: NormalizedEmbedding,
+        ordinals_to_search: list[MessageOrdinal],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredMessageOrdinal]:
+        scored_text_locations = self.text_location_index.lookup_in_subset_by_embedding(
+            text_embedding, ordinals_to_search, max_matches, threshold_score
+        )
+        return self.to_scored_message_ordinals(scored_text_locations)
 
     def to_scored_message_ordinals(
         self, scored_locations: list[ScoredTextLocation]

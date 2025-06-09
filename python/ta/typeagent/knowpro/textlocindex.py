@@ -2,9 +2,11 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
+from ..aitools.embeddings import NormalizedEmbedding
 from ..aitools.vectorbase import VectorBase
+
 from .importing import TextEmbeddingIndexSettings
 from .interfaces import (
     TextToTextLocationIndexData,
@@ -107,7 +109,39 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
         *args: Any,
         **kwds: Any,
     ) -> Any:
-        raise NotImplementedError
+        raise NotImplementedError("TODO")
+
+    def lookup_by_embedding(
+        self,
+        text_embedding: NormalizedEmbedding,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+        predicate: Callable[[int], bool] | None = None,
+    ) -> list[ScoredTextLocation]:
+        raise NotImplementedError("TODO: _vector_base -> _embedding_index")
+        matches = self._embedding_index.get_indexes_of_nearest(
+            text_embedding,
+            max_matches,
+            threshold_score,
+            predicate,
+        )
+        return self.to_scored_locations(matches)
+
+    def lookup_in_subset_by_embedding(
+        self,
+        text_embedding: NormalizedEmbedding,
+        ordinals_to_match: list[int],
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+    ) -> list[ScoredTextLocation]:
+        raise NotImplementedError("TODO: _vector_base -> _embedding_index")
+        matches = self._embedding_index.get_indexes_of_nearest_in_subset(
+            text_embedding,
+            ordinals_to_match,
+            max_matches,
+            threshold_score,
+        )
+        return self.to_scored_locations(matches)
 
     def serialize(self) -> TextToTextLocationIndexData:
         return TextToTextLocationIndexData(
