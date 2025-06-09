@@ -21,6 +21,7 @@ from .interfaces import (
     WhenFilter,
 )
 from .kplib import ConcreteEntity
+from .messageindex import IMessageTextEmbeddingIndex
 from .query import (
     BooleanOp,
     CompiledTermGroup,
@@ -410,7 +411,39 @@ class QueryCompiler:
             self.all_scope_search_terms.extend(search_terms_used)
 
     # TODO: compile_where
-    # TODO: compile_message_rerank
+
+    async def compile_message_re_rank(
+        self,
+        src_expr: IQueryOpExpr,
+        raw_query_text: str | None = None,
+        options: SearchOptions | None = None,
+    ) -> IQueryOpExpr:
+        message_index = (
+            self.conversation.secondary_indexes.message_index
+            if self.conversation.secondary_indexes
+            else None
+        )
+        if (
+            raw_query_text is not None
+            and isinstance(message_index, IMessageTextEmbeddingIndex)
+            and len(message_index) > 0
+        ):
+            embedding = await message_index.generate_embedding(raw_query_text)
+            return RankMessagesBySimilarityExpr(
+                src_expr,
+                embedding,
+                options.max_message_matches if options else None,
+                options.threshold_score if options else None,
+            )
+        elif (
+            options
+            and options.max_message_matches is not None
+            and options.max_message_matches > 0
+        ):
+            return SelectTopNExpr(src_expr, options.max_message_matches)
+        else:
+            return NoOpExpr(src_expr)
+
     # TODO: compile_message_similarity
 
     def get_action_terms_from_search_group(

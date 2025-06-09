@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterable
+from typing import Callable
 
 from ..aitools.embeddings import NormalizedEmbedding
 from .importing import MessageTextIndexSettings
@@ -38,7 +39,19 @@ async def build_message_index[
 
 
 class IMessageTextEmbeddingIndex(IMessageTextIndex):
+    def __len__(self) -> int:
+        raise NotImplementedError
+
     async def generate_embedding(self, text: str) -> NormalizedEmbedding:
+        raise NotImplementedError
+
+    def lookup_by_embedding(
+        self,
+        text_embedding: NormalizedEmbedding,
+        max_matches: int | None = None,
+        threshold_score: float | None = None,
+        predicate: Callable[[MessageOrdinal], bool] | None = None,
+    ) -> list[ScoredMessageOrdinal]:
         raise NotImplementedError
 
     def lookup_in_subset_by_embedding(
