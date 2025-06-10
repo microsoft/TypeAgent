@@ -42,11 +42,12 @@ export default {
                 // Filter native module for platform and arch.
                 "!node_modules/koffi/build/koffi",
                 "node_modules/koffi/build/koffi/${platform}_${arch}",
-                `!node_modules/@azure/msal-node-runtime/dist/${arch === "ia32" ? "x64" : "x86"}`,
-                "!node_modules/@azure/msal-node-extensions/bin",
-                "node_modules/@azure/msal-node-extensions/bin/${arch}",
                 "!node_modules/@img",
                 "node_modules/@img/sharp*-${platform}*-${arch}/**/*",
+                // appropriate native module already copied to the dist directory at install time. Ignore the original location.
+                `!node_modules/@azure/msal-node-runtime/dist/*/*`,
+                // Only windows needs it, exclude all of it here and add it back in the win section
+                "!node_modules/@azure/msal-node-extensions/bin",
             ],
         },
     ],
@@ -61,6 +62,13 @@ export default {
         appId: `Microsoft.TypeAgentShell`,
         executableName: name,
         icon: "build/win/icon.png",
+        files: [
+            {
+                filter: [
+                    "node_modules/@azure/msal-node-extensions/bin/${arch}",
+                ],
+            },
+        ],
     },
     nsis: {
         artifactName: name + "-${version}-${platform}-${arch}-setup.${ext}",
