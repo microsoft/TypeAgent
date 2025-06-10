@@ -40,8 +40,10 @@ from .query import (
     MatchTermsOrMaxExpr,
     MatchTopicExpr,
     MessagesFromKnowledgeExpr,
+    NoOpExpr,
     QueryEvalContext,
     RankMessagesBySimilarityExpr,
+    SelectTopNExpr,
     SelectTopNKnowledgeGroupExpr,
     TextRangeSelector,
     WhereSemanticRefExpr,
@@ -90,6 +92,7 @@ async def search_conversation(
     )
     if knowledge_matches is None:
         return None
+    # return ConversationSearchResult([], knowledge_matches, raw_search_query)
     # Future: Combine knowledge and message queries into single query tree.
     compiler = QueryCompiler(conversation, conversation.secondary_indexes)
     message_query = await compiler.compile_message_query(

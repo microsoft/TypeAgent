@@ -448,8 +448,8 @@ class MatchPropertySearchTermExpr(MatchTermExpr):
         self,
         property_search_term: PropertySearchTerm,
     ):
-        super().__init__()
         self.property_search_term = property_search_term
+        super().__init__()
 
     def accumulate_matches(
         self, context: QueryEvalContext, matches: SemanticRefAccumulator
@@ -672,6 +672,7 @@ class WhereSemanticRefExpr(QueryOpExpr[SemanticRefAccumulator]):
             semantic_ref = context.get_semantic_ref(match.value)
             if not predicate.eval(context, semantic_ref):
                 return False
+
         return True
 
 
@@ -867,7 +868,15 @@ class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
 # TODO: MatchMessagesAndExpr
 # TODO: MatchMessagesOrMaxExpr
 # TODO: MatchMessagesBySimilarityExpr
-# TODO: NoOpExpr
+
+
+class NoOpExpr[T](QueryOpExpr[T]):
+    def __init__(self, src_expr: IQueryOpExpr[T]) -> None:
+        self.src_expr = src_expr
+        super().__init__()
+
+    def eval(self, context: QueryEvalContext) -> T:
+        return self.src_expr.eval(context)
 
 
 def message_matches_from_knowledge_matches(
