@@ -1,18 +1,19 @@
 @echo off
 setlocal  
-set reportDir=/data/testChat/nyc/coverage
-set tempDir=/data/testChat/nyc/tempDir
-set dataDir=\data\testChat\nyc\data
-set testFilePath=testAll.txt
 
-echo %cd%  
+set outDir = \data\testChat\nyc
+del /Q /S %outDir%
+set reportDir=%outDir%\coverage
+set tempDir=%outDir%\tempDir
+set dataDir=%outDir%\data
+set testFilePath=%~dp0\testAll.txt
 
 if not exist %dataDir% (
   md %dataDir%
 )
-xcopy /y Episode_53_AdrianTchaikovsky.txt %dataDir%\
+xcopy /y %~dp0\Episode_53_AdrianTchaikovsky.txt %dataDir%\
 
-call ..\node_modules\.bin\nyc --report-dir %reportDir% --temp-dir %tempDir% node ../dist/main.js memory batch --filePath %testFilePath% 
+call %~dp0\..\node_modules\.bin\c8 -c %~dp0\..\.nycrc --report-dir %reportDir% --temp-dir %tempDir% node %~dp0\..\dist\main.js memory batch --filePath %testFilePath% 
 
 goto :Done  
 
