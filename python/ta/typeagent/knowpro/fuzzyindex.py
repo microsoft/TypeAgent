@@ -20,24 +20,29 @@ class Scored:
 class EmbeddingIndex:
     """Index for storing and querying embeddings efficiently."""
 
-    def __init__(self, embeddings: list[NormalizedEmbedding] | None = None):
+    # TODO: Don't use self._vector_base._vectors directly; use VectorBase methods.
+
+    def __init__(self, embeddings: NormalizedEmbeddings | None = None):
         """Initialize the embedding index.
 
         Args:
-            embeddings: Optional list of embeddings to initialize with
+            embeddings: Optional 2D array of embeddings to initialize with
         """
         # Use VectorBase for storage and operations on embeddings
-        settings = TextEmbeddingIndexSettings() if embeddings is None else None
+        settings = TextEmbeddingIndexSettings()
         self._vector_base = VectorBase(settings)
 
         # Initialize with embeddings if provided
-        if embeddings:
+        if embeddings is not None:
             for embedding in embeddings:
                 self._vector_base.add_embedding(None, embedding)
 
     def __len__(self) -> int:
         """Get the number of embeddings in the index."""
         return len(self._vector_base)
+
+    async def get_embedding(self, key: str, cache: bool = True) -> NormalizedEmbedding:
+        return await self._vector_base.get_embedding(key, cache)
 
     def get(self, pos: int) -> NormalizedEmbedding:
         """Get the embedding at the specified position.

@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from ..aitools.embeddings import NormalizedEmbedding
 from ..aitools.vectorbase import VectorBase
@@ -148,6 +148,12 @@ class TextToTextLocationIndex(ITextToTextLocationIndex):
             ScoredTextLocation(self._text_locations[match.item], match.score)
             for match in matches
         ]
+
+    async def generate_embedding(
+        self, text: str, cache: bool = True
+    ) -> NormalizedEmbedding:
+        """Generate an embedding for the given text."""
+        return await self._embedding_index._vector_base.get_embedding(text, cache)
 
     def lookup_by_embedding(
         self,
