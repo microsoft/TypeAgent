@@ -84,6 +84,9 @@ def process_inputs(
         if query_text.lower() in ("exit", "quit", "q"):
             readline.remove_history_item(readline.get_current_history_length() - 1)
             break
+        if query_text == "pdb":
+            breakpoint()
+            continue
 
         asyncio.run(wrap_process_query(query_text, context.conversation, translator))
 
