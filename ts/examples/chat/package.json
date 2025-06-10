@@ -47,6 +47,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "7.6.11",
     "copyfiles": "^2.4.1",
+    "nyc": "17.1.0",
     "rimraf": "^6.0.1"
   },
   "engines": {

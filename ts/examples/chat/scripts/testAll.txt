@@ -1,0 +1,54 @@
+
+# Index Episode 53
+@kpPodcastImport --filePath "/data/testChat/nyc/data/Episode_53_AdrianTchaikovsky.txt" --startAt "May 2023" --length 10 --maxMessages 18 --batchSize 6
+
+# SearchTerms
+@kpSearchTerms novel
+@kpSearchTerms book movie
+
+# @kpSearchTerms "EMPIRE IN BLACK AND GOLD" "Children of Time"
+
+# @kpSearchTerms novel "EMPIRE IN BLACK AND GOLD" --ktype entity
+
+# @kpSearchTerms "Memory Kids"
+
+# @kpSearchTerms --type book --name "EMPIRE IN BLACK AND GOLD"
+
+# @kpSearchTerms --type book --name "EMPIRE IN BLACK AND GOLD" --exact true
+
+# @kpSearchTerms --topic "Science Fiction" --startMinute 0 --endMinute 15
+
+# @kpSearchTerms --subject "kevin" --verb say --object Adrian
+
+# @kpSearchTerms --subject "christina" --verb say --object Umesh
+
+# @kpSearchTerms --subject "Christina" --verb say --object Adrian --name "Children of Memory" --ktype entity
+
+# Search 
+# @kpSearch --query "List all books"
+
+# @kpSearch --query "List all books they talked about in the first 5 minutes"
+
+# @kpSearch --query "List all books and movies"
+
+# @kpSearch --query "Summarize what Kevin said to Adrian"
+
+# @kpSearch --query "What did Adrian say to Kevin?" --ktype action
+
+# @kpSearch --query "What did Adrian say about Children of Memory?"
+
+# @kpSearch --query "What did Adrian say about Skynet to Kevin?"
+
+# @kpSearch --query "What topics related to science fiction?" --ktype topic
+
+# @kpSearch --query "What topics on computer based intelligence?"
+
+# Answer
+# @kpAnswer --query "List all books"
+
+# @kpAnswer --query "List all book titles" --knowledgeTopK 50
+
+# @kpAnswer --query "List all book titles,movie and author names"
+
+# @kpAnswer --query "List all book titles from the first 15 minutes"
+

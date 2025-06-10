@@ -1,0 +1,12 @@
+{
+  "extension": [".js", ".ts"],
+  "include": [
+    "./node_modules/knowpro/dist/*.js",
+    "./node_modules/knowpro/src/*.ts"
+  ],
+  "exclude": ["**/*.d.ts"],
+  "reporter": ["text", "html"],
+  "sourceMap": true,
+  "instrument": true,
+  "excludeNodeModules": false
+}
