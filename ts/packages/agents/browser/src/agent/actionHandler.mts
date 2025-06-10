@@ -10,6 +10,7 @@ import {
     AppAgentEvent,
     AppAgentInitSettings,
     ParsedCommandParams,
+    ResolveEntityResult,
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -48,7 +49,7 @@ import {
 } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
-import { BrowserActions } from "./actionsSchema.mjs";
+import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
 import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
@@ -61,6 +62,7 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeBrowserContext,
         updateAgentContext: updateBrowserContext,
         executeAction: executeBrowserAction,
+        resolveEntity,
         ...getCommandInterface(handlers),
     };
 }
@@ -230,8 +232,33 @@ async function updateBrowserContext(
     }
 }
 
-async function resolveWebSite(
-    context: ActionContext<BrowserActionContext>,
+async function resolveEntity(
+    type: string,
+    name: string,
+    context: SessionContext<BrowserActionContext>,
+): Promise<ResolveEntityResult | undefined> {
+    if (type === "WebPage") {
+        try {
+            const url = await resolveWebPage(context, name);
+            if (url) {
+                return {
+                    match: "exact",
+                    entities: [
+                        {
+                            name,
+                            type: ["WebPage"],
+                            uniqueId: url,
+                        },
+                    ],
+                };
+            }
+        } catch {}
+    }
+    return undefined;
+}
+
+async function resolveWebPage(
+    context: SessionContext<BrowserActionContext>,
     site: string,
 ): Promise<string> {
     switch (site.toLowerCase()) {
@@ -248,8 +275,7 @@ async function resolveWebSite(
             return "http://localhost:9000/";
         default:
             try {
-                const port =
-                    await context.sessionContext.getSharedLocalHostPort(site);
+                const port = await context.getSharedLocalHostPort(site);
                 return `http://localhost:${port}`;
             } catch (e) {
                 debug(
@@ -266,12 +292,20 @@ async function resolveWebSite(
 
 async function openWebPage(
     context: ActionContext<BrowserActionContext>,
-    site: string,
+    action: TypeAgentAction<OpenWebPage>,
 ) {
     if (context.sessionContext.agentContext.browserControl) {
         context.actionIO.setDisplay("Opening web page.");
+        const siteEntity = action.entities?.site;
+        const url =
+            siteEntity?.type[0] === "WebPage"
+                ? siteEntity.uniqueId!
+                : await resolveWebPage(
+                      context.sessionContext,
+                      action.parameters.site,
+                  );
         await context.sessionContext.agentContext.browserControl.openWebPage(
-            await resolveWebSite(context, site),
+            url,
         );
         const result = createActionResult("Web page opened successfully.");
 
@@ -279,7 +313,7 @@ async function openWebPage(
             activityName: "browsingWebPage",
             description: "Browsing a web page",
             state: {
-                site: site,
+                siteUrl: url,
             },
             activityEndAction: {
                 actionName: "closeWebPage",
@@ -319,7 +353,7 @@ async function executeBrowserAction(
     if (action.schemaName === "browser") {
         switch (action.actionName) {
             case "openWebPage":
-                return openWebPage(context, action.parameters.site);
+                return openWebPage(context, action);
             case "closeWebPage":
                 return closeWebPage(context);
         }
@@ -570,7 +604,13 @@ class OpenWebPageHandler implements CommandHandler {
         context: ActionContext<BrowserActionContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        const result = await openWebPage(context, params.args.site);
+        const result = await openWebPage(context, {
+            actionName: "openWebPage",
+            schemaName: "browser",
+            parameters: {
+                site: params.args.site,
+            },
+        });
         if (result.error) {
             displayError(result.error, context);
             return;
