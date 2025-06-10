@@ -9,19 +9,11 @@ import {
 import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
-    ActionIO,
-    AppAgentEvent,
-    SessionContext,
     ActionResult,
-    DisplayContent,
     ActionContext,
-    DisplayAppendMode,
     ParsedCommandParams,
     ParameterDefinitions,
     Entity,
-    AppAgentManifest,
-    AppAgent,
-    TypeAgentAction,
     AppAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -35,11 +27,9 @@ import {
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
 import { MatchResult, PromptEntity } from "agent-cache";
-import { getStorage } from "./storageImpl.js";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
 import { conversation } from "knowledge-processor";
-import { makeClientIOMessage } from "../context/interactiveIO.js";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
     DispatcherActivityName,
@@ -53,13 +43,12 @@ import {
 } from "../translation/translateRequest.js";
 import { getActionSchema } from "../internal.js";
 import { validateAction } from "action-schema";
-import { IndexManager } from "../context/indexManager.js";
-import { IndexData } from "image-memory";
 import {
     PendingAction,
     resolveEntities,
     toPendingActions,
 } from "./pendingActions.js";
+import { getActionContext } from "./actionContext.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -69,232 +58,6 @@ export function getSchemaNamePrefix(
 ) {
     const config = systemContext.agents.getActionConfig(schemaName);
     return `[${config.emojiChar} ${schemaName}] `;
-}
-
-export type ActionContextWithClose = {
-    actionContext: ActionContext<unknown>;
-    actionIndex: number | undefined;
-    closeActionContext: () => void;
-};
-
-function getActionContext(
-    appAgentName: string,
-    systemContext: CommandHandlerContext,
-    requestId: string,
-    actionIndex?: number,
-    action?: TypeAgentAction | string[],
-): ActionContextWithClose {
-    let context = systemContext;
-    const sessionContext = context.agents.getSessionContext(appAgentName);
-    context.clientIO.setDisplayInfo(
-        appAgentName,
-        requestId,
-        actionIndex,
-        action,
-    );
-    const actionIO: ActionIO = {
-        setDisplay(content: DisplayContent): void {
-            context.clientIO.setDisplay(
-                makeClientIOMessage(
-                    context,
-                    content,
-                    requestId,
-                    appAgentName,
-                    actionIndex,
-                ),
-            );
-        },
-        appendDisplay(
-            content: DisplayContent,
-            mode: DisplayAppendMode = "inline",
-        ): void {
-            context.clientIO.appendDisplay(
-                makeClientIOMessage(
-                    context,
-                    content,
-                    requestId,
-                    appAgentName,
-                    actionIndex,
-                ),
-                mode,
-            );
-        },
-        takeAction(action: string, data: unknown): void {
-            context.clientIO.takeAction(action, data);
-        },
-        appendDiagnosticData(data): void {
-            context.clientIO.appendDiagnosticData(requestId, data);
-        },
-    };
-    const actionContext: ActionContext<unknown> = {
-        streamingContext: undefined,
-        activityContext:
-            // Only make activityContext available if the action is from the same agent.
-            context.activityContext?.appAgentName === appAgentName
-                ? structuredClone(context.activityContext)
-                : undefined,
-        get sessionContext() {
-            return sessionContext;
-        },
-        get actionIO() {
-            return actionIO;
-        },
-    };
-    return {
-        actionContext,
-        actionIndex,
-        closeActionContext: () => {
-            closeContextObject(actionIO);
-            closeContextObject(actionContext);
-            // This will cause undefined except if context is access for the rare case
-            // the implementation function are saved.
-            (context as any) = undefined;
-        },
-    };
-}
-
-function closeContextObject(o: any) {
-    const descriptors = Object.getOwnPropertyDescriptors(o);
-    for (const [name] of Object.entries(descriptors)) {
-        // TODO: Note this doesn't prevent the function continue to be call if is saved.
-        Object.defineProperty(o, name, {
-            get: () => {
-                throw new Error("Context is closed.");
-            },
-        });
-    }
-}
-
-export function createSessionContext<T = unknown>(
-    name: string,
-    agentContext: T,
-    context: CommandHandlerContext,
-    allowDynamicAgent: boolean,
-): SessionContext<T> {
-    const sessionDirPath = context.session.getSessionDirPath();
-    const storage = sessionDirPath
-        ? getStorage(name, sessionDirPath)
-        : undefined;
-    const instanceStorage = context.persistDir
-        ? getStorage(name, context.persistDir)
-        : undefined;
-    const dynamicAgentNames = new Set<string>();
-    const addDynamicAgent = allowDynamicAgent
-        ? (agentName: string, manifest: AppAgentManifest, appAgent: AppAgent) =>
-              // acquire the lock to prevent change the state while we are processing a command or removing dynamic agent.
-              // WARNING: deadlock if this is call because we are processing a request
-              context.commandLock(async () => {
-                  await context.agents.addDynamicAgent(
-                      agentName,
-                      manifest,
-                      appAgent,
-                  );
-                  dynamicAgentNames.add(agentName);
-                  // Update the enable state to reflect the new agent
-                  context.agents.setState(context, context.session.getConfig());
-              })
-        : () => {
-              throw new Error("Permission denied: cannot add dynamic agent");
-          };
-
-    const removeDynamicAgent = allowDynamicAgent
-        ? (agentName: string) =>
-              // acquire the lock to prevent change the state while we are processing a command or adding dynamic agent.
-              // WARNING: deadlock if this is called while we are processing a request
-              context.commandLock(async () => {
-                  if (!dynamicAgentNames.delete(agentName)) {
-                      throw new Error(
-                          `Permission denied: dynamic agent '${agentName}' not added by this agent`,
-                      );
-                  }
-                  dynamicAgentNames.delete(agentName);
-                  return context.agents.removeAgent(agentName);
-              })
-        : () => {
-              throw new Error("Permission denied: cannot remove dynamic agent");
-          };
-    const sessionContext: SessionContext<T> = {
-        get agentContext() {
-            return agentContext;
-        },
-        get sessionStorage() {
-            return storage;
-        },
-        get instanceStorage() {
-            return instanceStorage;
-        },
-        notify(event: AppAgentEvent, message: string) {
-            context.clientIO.notify(event, undefined, message, name);
-        },
-        async toggleTransientAgent(subAgentName: string, enable: boolean) {
-            if (!subAgentName.startsWith(`${name}.`)) {
-                throw new Error(`Invalid sub agent name: ${subAgentName}`);
-            }
-            const state = context.agents.getTransientState(subAgentName);
-            if (state === undefined) {
-                throw new Error(
-                    `Transient sub agent not found: ${subAgentName}`,
-                );
-            }
-
-            if (state === enable) {
-                return;
-            }
-
-            // acquire the lock to prevent change the state while we are processing a command.
-            // WARNING: deadlock if this is call because we are processing a request
-            return context.commandLock(async () => {
-                context.agents.toggleTransient(subAgentName, enable);
-                // Because of the embedded switcher, we need to clear the cache.
-                context.translatorCache.clear();
-                if (enable) {
-                    // REVIEW: is switch current translator the right behavior?
-                    context.lastActionSchemaName = subAgentName;
-                } else if (context.lastActionSchemaName === subAgentName) {
-                    context.lastActionSchemaName = name;
-                }
-            });
-        },
-        addDynamicAgent,
-        removeDynamicAgent,
-        getSharedLocalHostPort: async (agentName: string) => {
-            const localHostPort = await context.agents.getSharedLocalHostPort(
-                name,
-                agentName,
-            );
-            if (localHostPort === undefined) {
-                throw new Error(
-                    `Agent '${agentName}' does not have a shared local host port.`,
-                );
-            }
-            return localHostPort;
-        },
-        indexes(type: string): Promise<any[]> {
-            return new Promise<IndexData[]>((resolve, reject) => {
-                const iidx: IndexData[] =
-                    IndexManager.getInstance().indexes.filter((value) => {
-                        return type === "all" || value.source === type;
-                    });
-
-                resolve(iidx);
-            });
-        },
-        popupQuestion(
-            message: string,
-            choices: string[] = ["Yes", "No"], // default choices
-            defaultId?: number,
-        ): Promise<number> {
-            return context.clientIO.popupQuestion(
-                message,
-                choices,
-                defaultId,
-                name,
-            );
-        },
-    };
-
-    (sessionContext as any).conversationManager = context.conversationManager;
-    return sessionContext;
 }
 
 function getStreamingActionContext(
@@ -709,7 +472,7 @@ export async function executeActions(
     }
 }
 
-export async function clearActivityContext(
+async function clearActivityContext(
     context: CommandHandlerContext,
 ): Promise<void> {
     const activityContext = context.activityContext;

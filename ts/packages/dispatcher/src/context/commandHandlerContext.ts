@@ -53,10 +53,7 @@ import {
     ConstructionProvider,
 } from "../agentProvider/agentProvider.js";
 import { RequestMetricsManager } from "../utils/metrics.js";
-import {
-    ActionContextWithClose,
-    getSchemaNamePrefix,
-} from "../execute/actionHandlers.js";
+import { getSchemaNamePrefix } from "../execute/actionHandlers.js";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
 
 import {
@@ -73,6 +70,7 @@ import { CommandResult } from "../dispatcher.js";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
+import { ActionContextWithClose } from "../execute/actionContext.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
