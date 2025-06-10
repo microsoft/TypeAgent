@@ -1,54 +1,441 @@
 
+#
+# PODCASTS
+#
+
 # Index Episode 53
 @kpPodcastImport --filePath "/data/testChat/nyc/data/Episode_53_AdrianTchaikovsky.txt" --startAt "May 2023" --length 10 --maxMessages 18 --batchSize 6
 
+# Load existing Index
+@kpPodcastLoadSample
+
 # SearchTerms
-@kpSearchTerms novel
+@kpSearchTerms book
+
+@kpSearchTerms movie
+
+@kpSearchTerms book novel
+
 @kpSearchTerms book movie
 
-# @kpSearchTerms "EMPIRE IN BLACK AND GOLD" "Children of Time"
+@kpSearchTerms book movie --distinct true
 
-# @kpSearchTerms novel "EMPIRE IN BLACK AND GOLD" --ktype entity
+@kpSearchTerms novel "EMPIRE IN BLACK AND GOLD"
 
-# @kpSearchTerms "Memory Kids"
+@kpSearchTerms book "EMPIRE IN BLACK AND GOLD"
 
-# @kpSearchTerms --type book --name "EMPIRE IN BLACK AND GOLD"
+@kpSearchTerms "novel;book" "EMPIRE IN BLACK AND GOLD"
 
-# @kpSearchTerms --type book --name "EMPIRE IN BLACK AND GOLD" --exact true
+@kpSearchTerms "EMPIRE IN BLACK AND GOLD" novel --ktype entity
 
-# @kpSearchTerms --topic "Science Fiction" --startMinute 0 --endMinute 15
+@kpSearchTerms "EMPIRE IN BLACK" "Children Memory" --ktype entity
 
-# @kpSearchTerms --subject "kevin" --verb say --object Adrian
+@kpSearchTerms novel "EMPIRE IN BLACK AND GOLD" "Children of Time"
 
-# @kpSearchTerms --subject "christina" --verb say --object Umesh
+@kpSearchTerms "EMPIRE IN BLACK AND GOLD" "Children of Time"
 
-# @kpSearchTerms --subject "Christina" --verb say --object Adrian --name "Children of Memory" --ktype entity
+@kpSearchTerms book "EMPIRE IN BLACK AND GOLD" "Children of Time" --ktype entity
+
+@kpSearchTerms "EMPIRE IN BLACK AND GOLD" "Children of Ruin" "Children of Memory" --ktype entity
+
+@kpSearchTerms --type book --ktype entity --startMinute 0 --endMinute 15
+
+@kpSearchTerms book --ktype entity --startMinute 0 --endMinute 15
+
+@kpSearchTerms "EMPIRE IN BLACK AND GOLD" --ktype entity
+
+@kpSearchTerms --type BOOK --ktype entity
+
+@kpSearchTerms "Children of Time" --ktype entity
+
+@kpSearchTerms "Child of Times" --ktype entity
+
+@kpSearchTerms "EMPIRE IN BLACK AND GOLD" "Children of Time"
+
+@kpSearchTerms novel "EMPIRE IN BLACK AND GOLD" --ktype entity
+
+@kpSearchTerms "EMPIRE IN BLACK AND GOLD" "Children of Time" novel --ktype entity
+
+@kpSearchTerms --name "Arthur C CLarke" --ktype entity
+
+@kpSearchTerms --name "EMPIRE IN BLACK; Children of Ruin Memory; wall-e" --type "novel; movie" --published 2008
+
+@kpSearchTerms --type novel --name "EMPIRE IN BLACK AND GOLD"
+
+@kpSearchTerms --name "EMPIRE IN BLACK AND GOLD" --type novel 
+
+@kpSearchTerms "Memory Kids"
+
+@kpSearchTerms "Memory Kids" "Ruined Kids"
+
+@kpSearchTerms book story --ktype entity
+
+@kpSearchTerms --type book --category fantasy
+
+@kpSearchTerms --type book --genre fantasy
+
+@kpSearchTerms --type book --genre "science fiction"
+
+@kpPodcastLoad --name "Episode_53_AdrianTchaikovsky" 
+
+@kpSearchTerms --subject "kevin" --verb say --object Adrian
+
+@kpSearchTerms --subject "christina" --verb say --object Adrian 
+
+@kpSearchTerms --subject "christina" --verb say --object Umesh
+
+@kpSearchTerms --subject "kevin" --verb say --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "kevin" --verb mention --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "Kevin" --verb say --object Adrian --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "Kevin" --verb say --object Umesh --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "Christina" --verb say --object Adrian --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "Adrian Tchaikovsky" --object "Kevin Scott" --name "Children of Memory" --exact true --ktype entity
+
+@kpSearchTerms --subject "Adrian Tchaikovsky" --object "Kevin Scott" --name "Children of Food" --exact true --ktype entity
+
+@kpSearchTerms --subject "kevin" --verb say --object "Profiles of the Future" --ktype entity
+
+@kpSearchTerms "Profiles of the Future" --subject "kevin" --ktype topic
+
+@kpSearchTerms "Profiles of the Future" --subject "Christina" --ktype topic
+
+@kpSearchTerms "Profiles of the Future" --subject "Adrian" --ktype entity
+
+@kpSearchTerms --subject "Kevin" --verb write --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "Kevin" --verb say --object Umesh --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "christina" --verb say --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --subject "kevin" --verb say --name "Profiles of the Future" --ktype entity --startMinute 50 --endMinute 55
+
+@kpSearchTerms --subject "kevin" --verb say --name "Profiles of the Future" --ktype entity --startMinute 45 --endMinute 49
+
+@kpSearchTerms "Profiles of the Future" --ktype entity --startMinute 50 --endMinute 55
+
+@kpSearchTerms "Profiles of the Future" --ktype entity --startMinute 45 --endMinute 49
+
+@kpSearchTerms "Profiles of the Future" --ktype entity --startMinute 45 --endMinute 46
+
+@kpSearchTerms "Profiles of the Future" --ktype entity --startDate "May 01 2023 00:50:00" --endDate "May 01 2023 00:55:00"
+
+@kpSearchTerms "Profiles of the Future" --ktype entity --startDate "May 01 2023 00:45:00" --endDate "May 01 2023 00:49:00"
+
+@kpSearchTerms --type book --ktype entity --startDate "May 01 2023 00:01:00" --endDate "May 01 2023 00:15:00"
+
+@kpSearchTerms --type novel --ktype entity --startMinute 45 --endMinute 46
+
+@kpSearchTerms --subject "Kevin Scott" --verb say --object "Christina"
+@kpSearchTerms --subject "Kevin Scott" --verb say
+@kpSearchTerms --subject "Kevin Scott" --verb say --type book --ktype entity
+
+@kpSearchTerms "Butlerian Jihad" --subject "kevin" --verb mention --ktype entity
+@kpSearchTerms "Butlerian Jihad" --subject "kevin" --verb alter --ktype entity
+
+@kpSearchTerms "Skynet" --ktype topic --subject Adrian
+@kpSearchTerms "Skynet" --ktype topic --subject Kevin
+
+@kpSearchTerms --subject "Adrian" --name "Warhammer Miniatures" --ktype entity
+@kpSearchTerms --subject "Christina" --object Kevin --name "Warhammer" --ktype entity
+
+@kpSearchTerms --subject "umesh" --verb say --name "Profiles of the Future" --ktype entity
+
+@kpSearchTerms --verb welcome
+@kpSearchTerms --subject Kevin
+@kpSearchTerms --subject Kevin --verb welcome --usePropertyIndex true
 
 # Search 
-# @kpSearch --query "List all books"
+@kpSearch --query "List all books"
 
-# @kpSearch --query "List all books they talked about in the first 5 minutes"
+@kpSearch --query "List all books" --ktype entity
 
-# @kpSearch --query "List all books and movies"
+@kpSearch --query "List all books" --showMessages true
 
-# @kpSearch --query "Summarize what Kevin said to Adrian"
+@kpSearch --query "List all books and movies"
 
-# @kpSearch --query "What did Adrian say to Kevin?" --ktype action
+@kpSearch --query "List all books and also list all movies"
 
-# @kpSearch --query "What did Adrian say about Children of Memory?"
+@kpSearch --query "List all books that are also movies" --ktype entity
 
-# @kpSearch --query "What did Adrian say about Skynet to Kevin?"
+@kpAnswer --query "List all books by Adrian"
 
-# @kpSearch --query "What topics related to science fiction?" --ktype topic
+@kpAnswer --query "What books have Adrian as an author?"		
 
-# @kpSearch --query "What topics on computer based intelligence?"
+@kpSearch --query "What did Adrian say about Skynet?"
 
+@kpSearch --query "What did Christina say about Skynet?"
+
+@kpSearch --query "How did Adrian fix Skynet?"
+
+@kpSearch --query "Do we have anything on the novel empire in black and gold?" --ktype entity
+
+@kpSearch --query "Do we have anything on empire of black and gold?" --ktype entity
+
+@kpSearch --query "Do we have anything on empire of black and gold or children of ruin?" --ktype entity
+
+@kpSearch --query "Do we have anything on the novel empire in black and gold?" --ktype entity --showMessages true
+
+@kpSearch --query "Did Kevin talk about 'Profiles of the Future'?"
+
+@kpSearch --query "Did Kevin talk about 'Profiles of the Future'?" --showMessages true
+
+@kpSearch --query "Did Kevin talk about 'Profiles of the Future' with Adrian?"
+
+@kpSearch --query "Did Umesh talk about 'Profiles of the Future'?" --showMessages true
+
+@kpSearch --query "Did Kevin talk about 'Profiles of the Future' with Umesh?"
+
+@kpSearch --query "What did Adrian say?" --ktype action
+
+@kpSearch --query "What did Adrian say to Kevin?" --ktype action
+
+@kpSearch --query "What did Adrian say to Umesh?" --ktype action
+
+@kpSearch --query "What did Adrian talk to Kevin about?"
+
+@kpSearch --query "What did Adrian say to Kevin and Umesh?"
+
+@kpSearch --query "What did Adrian say to Kevin and Christina?"
+
+@kpSearch --query "What did Adrian say about Children of Memory?"
+
+@kpSearch --query "What did Kevin say about Children of Time?" --ktype entity
+
+@kpSearch --query "What did Christine say about Catch-22?" --ktype entity
+
+@kpSearch --query "What did Kevin say about Children of Clocks?" --showMessages true --exactScope true
+
+@kpSearch --query "Did Christina mention Children of Time?" --showMessages true
+
+@kpSearch --query "Did Christina mention Children of Memory?" --showMessages true --exactScope true
+
+@kpSearch --query "What did Adrian say about Children of Time?"
+
+@kpSearch --query "What did Kevin say to Adrian about 'Children of Time'?"
+
+@kpSearch --query "What did Adrian say about Children of Time to Kevin?"
+
+@kpSearch --query "What did Adrian say about Children of Memory to Kevin?"
+
+@kpSearch --query "What did Adrian say about Mothers of Memory to Kevin?"
+
+@kpSearch --query "What did Adrian say about Children of Memory to Kevin?" --showMessages true
+
+@kpSearch --query "What did Adrian say about Skynet?"
+
+@kpSearch --query "What did Adrian say about Skynet to Kevin?"
+
+@kpSearch --query "What did Adrian talk about Children of Memory?"
+
+@kpSearch --query "What did Adrian say about Children of Memory?" --ktype action
+
+@kpSearch --query "Tell me what Kevin said about 'portids'?"
+
+@kpSearch --query "What the hell are portids?" --showMessages true
+
+@kpSearch --query "List all book titles"
+
+@kpSearch --query "List all book titles" --distinct true
+
+@kpSearch --query "List all automobiles"
+
+@kpSearch --query "List all book titles containing Empire"
+
+@kpSearch --query "Show me movies that are also books" --ktype entity
+
+@kpSearch --query "What books have name 'Children of'"
+
+@kpSearch --query "Who is Magnus Carlsen?"
+
+@kpSearch --query "List all book between minutes 1 and 15?"
+
+@kpSearch --query "List all book titles containing Empire of"
+
+@kpSearch --query "List all book titles Black and Gold"
+
+@kpSearch --query "What did Kevin say to Adrian about Profiles of the Future?" --ktype entity
+
+@kpSearch --query "University of Washington?" --ktype entity
+
+@kpSearch --query "David Baker university?" --ktype entity
+
+@kpSearch --query "List all book titles with 'Black and Gold'"
+
+@kpSearch --query "What did Adrian say to Kevin about ChatGPT and the impact of AI?" --showMessages true
+
+@kpSearch --query "Did Adrian say anything to Kevin about ChatGPT?" --showMessages true
+
+@kpSearch --query "paint warhammer miniatures" --showMessages true
+
+@kpSearch --query "Adrian hobbies" --ktype entity --showMessages true
+
+@kpSearch --query "What is Adrian's career?" --ktype entity --distinct true
+
+@kpSearch --query "Was there any laughter?" 
+
+@kpSearch --query "Did Kevin laugh?" --showMessages true
+
+@kpSearch --query "What topics on artficial intelligence?" --ktype topic
+
+@kpSearch --query "What topics on computer based intelligence?" --ktype topic
+
+@kpSearch --query "What did Adrian say to Kevin about the Laws of Robotics?" --showMessages true
+
+@kpSearch --query "What did Christina say to Kevin about the Laws of Robotics?" --showMessages true
+
+@kpSearch --query "Did Adrian talk about Skynet?"
+
+@kpSearch --query "Did Adrian say anything Skynet?"
+
+@kpSearch --query "What are 'corvids'?"
+
+@kpSearch --query "Tell me what Kevin said about 'corvids'?" --showMessages true
+
+@kpSearch --query "Who wrote The Final Architecture series?"
+
+@kpSearch --query "Tell me about Children of Memory" --ktype entity --showMessages true
+
+@kpSearch --query "Tell me what Kevin said about 'portids' from Children of Time?" --showMessages true
+
+@kpSearch --query "Tell me about 'corvids' and 'portids'" --showMessages true
+
+@kpSearch --query "Tell me what Umesh said about 'corvids' and 'portids'" --showMessages true
+
+@kpSearch --query "What did Adrian talk to Kevin and Christina about?"
+
+@kpSearch --query "Where did Adrian study?"
+
+@kpSearch --query "Summarize what Adrian said about spiders?"
+	
+@kpSearch --query "What did Adrian say about Children of Memory to Kevin?"
+
+@kpSearch --query "List all book titles from the first 15 minutes"
+
+#
 # Answer
-# @kpAnswer --query "List all books"
+#
+@kpAnswer --query "List the names of all books"
 
-# @kpAnswer --query "List all book titles" --knowledgeTopK 50
+@kpAnswer --query "List all books"
 
-# @kpAnswer --query "List all book titles,movie and author names"
+@kpAnswer --query "List all book titles" --knowledgeTopK 50
 
-# @kpAnswer --query "List all book titles from the first 15 minutes"
+@kpAnswer --query "List all book titles,movie and author names"
+
+@kpAnswer --query "List all book titles from the first 15 minutes"
+
+@kpAnswer --query "List all book titles mentioned in the first 15 minutes"
+
+@kpAnswer --query "List all books that are also movies"
+
+@kpAnswer --query "List all movies"
+
+@kpAnswer --query "List all books whose names start with Children"
+ 
+@kpAnswer --query "List all books and movies"
+
+@kpAnswer --query "List all books that are also movies"
+
+@kpAnswer --query "List what Adrian said about spiders?"
+
+@kpAnswer --query "Summarize the discussion on science fiction"
+
+@kpAnswer --query "Summarize what Adrian said about spiders?"
+
+@kpAnswer --query "When did we talk about Children of Time?"
+
+@kpAnswer --query "When did we talk about Profiles of the Future? What time?"
+
+@kpAnswer --query "Who mentioned Profiles of the Future and at what time?"
+
+@kpAnswer --query "What did Adrian say about Children of Memory?"
+
+@kpAnswer --query "Who wrote The Final Architecture series?"
+
+@kpAnswer --query "How did Asimov get referenced?"
+
+@kpAnswer --query "Who said that Adrian studied at the 'University of Reading'?"
+
+@kpAnswer --query "What did Kevin say about Profiles of the Future?"
+
+@kpAnswer --query "What did Adrian say about Profiles of the Future?"
+
+@kpAnswer --query "Did Kevin talk about 'Profiles of the Future' with Adrian?"
+
+@kpAnswer --query "Did Kevin talk about 'Profiles of the Future' with Christina?"
+
+@kpAnswer --query "Did Kevin talk about 'Profiles of the Future' with Umesh?"
+
+@kpAnswer --query "Give me an overview of Portids"
+
+@kpAnswer --query "Tell me what Kevin said about 'portids'?"
+
+@kpAnswer --query "Where did Adrian study?"
+
+@kpAnswer --query "What was the name of Adrian's first books?"
+
+@kpAnswer --query "What was the name of Adrian's first book?"
+
+@kpAnswer --query "Who mentioned the University of Reading?"
+
+@kpAnswer --query "What did Adrian say about Skynet?"
+
+@kpAnswer --query "Adrian talked about Skynet. What did he say?"
+
+@kpAnswer --query "What was Adrian's sentiment when he talked about Skynet?"
+
+@kpAnswer --query "What books did Adrian write?"
+
+@kpAnswer --query "Summarize Kevin's thoughts on Artificial Intelligence?"
+
+@kpAnswer --query "Summarize Kevin's thoughts on AI?"
+
+@kpAnswer --query "Summarize Adrian's thoughts to Kevin?"
+
+@kpAnswer --query "Summarize Adrian's ideas about the Terminator?"
+
+@kpAnswer --query "What are Adrian's interests and hobbies?"
+
+@kpAnswer --query "What are some of Adrian's interests?"
+
+@kpAnswer --query "What does Adrian paint?"
+
+@kpAnswer --query "Who is Magnus Carlsen?"
+
+@kpAnswer --query "What was the name of that chess grandmaster they discussed?"
+
+@kpAnswer --query "What was Adrian's first book?"
+
+@kpAnswer --query "List all novels published in 2008"
+
+@kpAnswer --query "What points did they make about Skynet?"
+
+@kpAnswer --query "How long did Adrian struggle before he got published?"
+
+@kpAnswer --query "Who mentioned the 'University of Reading'?"
+
+@kpSearch --query "What points did they make about Skynet?"
+
+@kpAnswer --query "Where did Adrian study?"
+
+@kpAnswer --query "What did Christina say about Skynet?"
+
+@kpAnswer --query "What points did Adrian make while discussing Skynet?"
+
+@kpAnswer --query "Corvids? What the hell are they?"
+
+@kpAnswer --query "Who was that chess grandmaster we talked about?"
+
+@kpAnswer --query "What did Kevin say about Children of Clocks and Kids of Ruin?"
+
+@kpAnswer --query "Give me a list of animals"
+
+@kpAnswer --query "What were we saying about Starship troopers?"
+
+@kpAnswer --query "Who studied zoology and pyschology"
 
