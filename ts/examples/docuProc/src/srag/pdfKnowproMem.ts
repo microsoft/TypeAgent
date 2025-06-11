@@ -59,6 +59,12 @@ export type ChatContext = {
     printer: AppPrinter;
 };
 
+export function createKnowledgeModel() {
+    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+    chatModelSettings.retryPauseMs = 10000;
+    return openai.createJsonChatModel(chatModelSettings, ["doc-memory"]);
+}
+
 export function createModels(): Models {
     const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
     chatModelSettings.retryPauseMs = 10000;
@@ -68,9 +74,7 @@ export function createModels(): Models {
     embeddingModelSettings.retryPauseMs = 25 * 1000;
 
     const models: Models = {
-        chatModel: openai.createJsonChatModel(chatModelSettings, [
-            "doc-memory",
-        ]),
+        chatModel: createKnowledgeModel(),
         answerModel: openai.createChatModel(),
         embeddingModel: knowLib.createEmbeddingCache(
             openai.createEmbeddingModel(embeddingModelSettings),
@@ -124,7 +128,6 @@ export async function createKnowProContext(
 
 export type KnowProContext = {
     knowledgeModel: ChatModel;
-    knowledgeActions: knowLib.conversation.KnowledgeActionTranslator;
     basePath: string;
     printer: KPPrinter;
     pdfIndex: pi.PdfKnowproIndex | undefined;
@@ -140,10 +143,6 @@ export async function createKnowproCommands(
     const knowledgeModel = chatContext.models.chatModel;
     const context: KnowProContext = {
         knowledgeModel,
-        knowledgeActions:
-            knowLib.conversation.createKnowledgeActionTranslator(
-                knowledgeModel,
-            ),
         pdfIndex: undefined,
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
         answerGenerator: new kp.AnswerGenerator(
