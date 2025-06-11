@@ -358,6 +358,7 @@ async function ensureAgent(groundingConfig: bingWithGrounding.ApiSettings, proje
 
         // try to create the agent
         agent = await project.agents.createAgent("gpt-4o", {
+            name: "TypeAgent_URLResolverAgent",
             description: "Auto created URL Resolution Agent",
             instructions: `
 You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.
