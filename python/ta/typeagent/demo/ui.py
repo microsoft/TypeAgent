@@ -7,7 +7,7 @@ import readline
 import shutil
 import sys
 import traceback
-from typing import Any
+from typing import Any, cast
 
 from black import format_str, FileMode
 import typechat
@@ -19,18 +19,16 @@ from ..knowpro.interfaces import (
     Datetime,
     IConversation,
     IMessage,
+    ITermToSemanticRefIndex,
     SemanticRef,
     Topic,
 )
 from ..knowpro.kplib import Action, ActionParam, ConcreteEntity, Quantity
-from ..knowpro.query import (
-    QueryEvalContext,
-)
+from ..knowpro.query import QueryEvalContext
 from ..knowpro.search import SearchQueryExpr, run_search_query
+from ..knowpro.searchlang import SearchQueryCompiler
+from ..knowpro.search_query_schema import SearchQuery
 from ..podcasts.podcast import Podcast
-
-from .search_query_schema import ActionTerm, SearchQuery
-from .querycompiler import SearchQueryCompiler
 
 cap = min  # More readable name for capping a value at some limit
 
@@ -46,12 +44,12 @@ def pretty_print(obj: object) -> None:
 
 def main() -> None:
     load_dotenv()
-    translator = create_translator()
+    model = create_typechat_model()
+    translator = create_translator(model)
     file = "testdata/Episode_53_AdrianTchaikovsky_index"
     pod = Podcast.read_from_file(file)
     assert pod is not None, f"Failed to load podcast from {file!r}"
-    # TODO: change QueryEvalContext to take [TMessage, TTermToSemanticRefIndex].
-    context = QueryEvalContext(conversation=pod)  # type: ignore  # See TODO above
+    context = QueryEvalContext(pod)
     print("TypeAgent demo UI 0.1 (type 'q' to exit)")
     if sys.stdin.isatty():
         try:
@@ -59,7 +57,7 @@ def main() -> None:
         except FileNotFoundError:
             pass  # Ignore if history file does not exist.
     try:
-        process_inputs(translator, context, sys.stdin)  # type: ignore  # Why is stdin not a TextIOWrapper?!
+        process_inputs(translator, context, cast(io.TextIOWrapper, sys.stdin))
     except KeyboardInterrupt:
         print()
     finally:
@@ -67,22 +65,19 @@ def main() -> None:
             readline.write_history_file(".ui_history")
 
 
-def create_translator() -> typechat.TypeChatJsonTranslator[SearchQuery]:
-    model = create_typechat_model()  # TODO: Move out of here.
-    schema = SearchQuery  # TODO: Use SearchTermGroup when ready.
+def create_translator(
+    model: typechat.TypeChatLanguageModel,
+) -> typechat.TypeChatJsonTranslator[SearchQuery]:
+    schema = SearchQuery
     validator = typechat.TypeChatValidator[schema](schema)
-    translator = typechat.TypeChatJsonTranslator[schema](model, validator, schema)
-    # schema_text = translator._schema_str.rstrip()  # type: ignore  # No other way.
-    # print(f"TypeScript schema for {schema.__name__}:\n{schema_text}\n")
-    return translator
+    return typechat.TypeChatJsonTranslator[schema](model, validator, schema)
 
 
-def process_inputs(
+def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     translator: typechat.TypeChatJsonTranslator[SearchQuery],
-    context: QueryEvalContext,
+    context: QueryEvalContext[TMessage, TIndex],
     stream: io.TextIOWrapper,
 ) -> None:
-    conversation = context.conversation
     ps1 = "--> "
     while True:
         query_text = read_one_line(ps1, stream)
@@ -120,7 +115,12 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
         return line.strip()
 
 
-async def wrap_process_query(query_text, conversation, translator):
+async def wrap_process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
+    query_text: str,
+    conversation: IConversation[TMessage, TIndex],
+    translator: typechat.TypeChatJsonTranslator[SearchQuery],
+) -> None:
+    """Wrap the process_query function to handle exceptions."""
     try:
         await process_query(query_text, conversation, translator)
     except Exception as exc:
@@ -128,9 +128,9 @@ async def wrap_process_query(query_text, conversation, translator):
         # traceback.print_exception(type(exc), exc, exc.__traceback__.tb_next)
 
 
-async def process_query(
+async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     query_text: str,
-    conversation: IConversation[IMessage, Any],
+    conversation: IConversation[TMessage, TIndex],
     translator: typechat.TypeChatJsonTranslator[SearchQuery],
 ):
     # Gradually turn the query text into something we can use to search.
@@ -195,8 +195,10 @@ async def process_query(
                                 )
 
 
-async def translate_text_to_search_query(
-    conversation: IConversation,
+async def translate_text_to_search_query[
+    TMessage: IMessage, TIndex: ITermToSemanticRefIndex
+](
+    conversation: IConversation[TMessage, TIndex],
     translator: typechat.TypeChatJsonTranslator[SearchQuery],
     text: str,
 ) -> SearchQuery | None:
@@ -271,8 +273,10 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
 
 
 # TODO: Move to conversation.py
-def get_time_range_prompt_section_for_conversation(
-    conversation: IConversation,
+def get_time_range_prompt_section_for_conversation[
+    TMessage: IMessage, TIndex: ITermToSemanticRefIndex
+](
+    conversation: IConversation[TMessage, TIndex],
 ) -> typechat.PromptSection | None:
     time_range = get_time_range_for_conversation(conversation)
     if time_range is not None:
@@ -284,8 +288,10 @@ def get_time_range_prompt_section_for_conversation(
 
 
 # TODO: Move to conversation.py
-def get_time_range_for_conversation(
-    conversation: IConversation[IMessage, Any],
+def get_time_range_for_conversation[
+    TMessage: IMessage, TIndex: ITermToSemanticRefIndex
+](
+    conversation: IConversation[TMessage, TIndex],
 ) -> DateRange | None:
     messages = conversation.messages
     if len(messages) > 0:
