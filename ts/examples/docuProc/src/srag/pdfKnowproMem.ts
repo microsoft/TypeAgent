@@ -152,6 +152,8 @@ export async function createKnowproCommands(
         printer: new KPPrinter(),
     };
 
+    const DefaultMaxToDisplay = 25;
+
     await ensureDir(context.basePath);
     commands.kpPdfImport = pdfImport;
     commands.kpPdfSave = pdfSave;
@@ -355,15 +357,25 @@ export async function createKnowproCommands(
                 description ??
                 "Search current knowPro conversation by manually providing terms as arguments",
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 25),
+                maxToDisplay: argNum(
+                    "Maximum matches to display",
+                    DefaultMaxToDisplay,
+                ),
                 displayAsc: argBool("Display results in ascending order", true),
+                startMinute: argNum("Starting at minute."),
+                endMinute: argNum("Ending minute."),
+                startDate: arg("Starting at this date"),
+                endDate: arg("Ending at this date"),
                 andTerms: argBool("'And' all terms. Default is 'or", false),
                 exact: argBool("Exact match only. No related terms", false),
-                distinct: argBool("Show distinct results", false),
+                distinct: argBool("Show distinct results", true),
+                orderBy: arg("Order by: score | timestamp | ordinal"),
             },
         };
         if (kType === undefined) {
-            meta.options!.ktype = arg("Knowledge type");
+            meta.options!.ktype = arg(
+                "Knowledge type: entity | topic | action | tag",
+            );
         }
 
         return meta;
