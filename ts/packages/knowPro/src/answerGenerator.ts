@@ -121,6 +121,7 @@ export type AnswerGeneratorSettings = {
      * Additional instructions for the model
      */
     modelInstructions?: PromptSection[] | undefined;
+    includeContextSchema?: boolean | undefined;
 };
 
 /**
@@ -323,7 +324,10 @@ export class AnswerGenerator implements IAnswerGenerator {
         prompt.push(
             createContextPrompt(
                 this.contextTypeName,
-                this.contextSchema,
+                this.settings.includeContextSchema !== undefined &&
+                    this.settings.includeContextSchema
+                    ? this.contextSchema
+                    : "",
                 contextContent,
             ).content as string,
         );
@@ -618,11 +622,11 @@ function createContextPrompt(
     context: string,
 ): PromptSection {
     let content =
-        `[ANSWER CONTEXT] for answering user questions is a JSON object of type ${typeName} according to the following TypeScript definitions:\n` +
-        `\`\`\`\n${schema}\`\`\`\n` +
-        `[ANSWER CONTEXT]\n` +
-        `===\n${context}\n===\n`;
-
+        schema && schema.length > 0
+            ? `[ANSWER CONTEXT] for answering user questions is a JSON object of type ${typeName} according to the following TypeScript definitions:\n` +
+              `\`\`\`\n${schema}\`\`\`\n`
+            : "";
+    content += `[ANSWER CONTEXT]\n` + `===\n${context}\n===\n`;
     return {
         role: "user",
         content,

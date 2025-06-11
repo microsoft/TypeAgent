@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    argBool,
     argNum,
     CommandHandler,
     CommandMetadata,
@@ -15,6 +16,7 @@ import { getLangSearchResult } from "./knowproCommon.js";
 import {
     appendFileNameSuffix,
     changeFileExt,
+    getAbsolutePath,
     readJsonFile,
     writeJsonFile,
 } from "typeagent";
@@ -31,6 +33,7 @@ export async function createKnowproTestCommands(
 ) {
     commands.kpTestSearchBatch = searchBatch;
     commands.kpTestBatch = testBatch;
+    commands.kpLoadTest = loadTest;
 
     function searchBatchDef(): CommandMetadata {
         return {
@@ -150,6 +153,37 @@ export async function createKnowproTestCommands(
             await writeJsonFile(destPath, errors);
         }
         context.printer.writeLine(`${i} tests, ${errors.length} errors`);
+    }
+
+    function loadTestDef(): CommandMetadata {
+        return {
+            description: "Load index used by unit tests",
+            options: {
+                secondaryIndex: argBool("Use secondary indexes", true),
+            },
+        };
+    }
+    commands.kpLoadTest.metadata = loadTestDef();
+    async function loadTest(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, loadTestDef());
+        let samplePath = "../../../../packages/knowPro/test/data    ";
+        samplePath = getAbsolutePath(samplePath, import.meta.url);
+
+        const cData = await kp.readConversationDataFromFile(
+            samplePath,
+            "Episode_53_AdrianTchaikovsky_index",
+            1536,
+        );
+        if (cData) {
+            const conversation = await kp.createConversationFromData(
+                cData,
+                kp.createConversationSettings(),
+            );
+            if (!namedArgs.secondaryIndex) {
+                conversation.secondaryIndexes = undefined;
+            }
+            context.conversation = conversation;
+        }
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {
