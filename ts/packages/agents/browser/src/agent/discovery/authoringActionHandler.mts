@@ -41,10 +41,17 @@ export function createSchemaAuthoringAgent(
             console.log(`Executing action: ${action.actionName}`);
             switch (action.actionName) {
                 case "createOrUpdateWebPlan":
-                    const result = await handleUpdateWebPlan(
+                    let result = await handleUpdateWebPlan(
                         action,
                         actionContext,
                     );
+                    result.activityContext = {
+                        activityName: "editingWebPlan",
+                        description: "Editing a Web Plan",
+                        state: {
+                            webPlan: webPlanDraft,
+                        },
+                    };
                     return result;
                     break;
                 case "runCurrentWebPlan":
