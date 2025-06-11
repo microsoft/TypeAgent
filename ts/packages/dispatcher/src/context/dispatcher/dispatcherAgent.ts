@@ -38,7 +38,7 @@ import {
     translateRequest,
 } from "../../translation/translateRequest.js";
 import { ActivityActions } from "./schema/activityActionSchema.js";
-import { ClarifyEntityAction } from "../../execute/actionHandlers.js";
+import { ClarifyEntityAction } from "../../execute/pendingActions.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",

@@ -17,7 +17,7 @@ import {
     ActionSchemaFile,
 } from "../translation/actionConfigProvider.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
-import { createSessionContext } from "../execute/actionHandlers.js";
+import { createSessionContext } from "../execute/sessionContext.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
