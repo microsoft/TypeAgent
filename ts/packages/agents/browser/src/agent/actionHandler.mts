@@ -36,7 +36,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 
 import registerDebug from "debug";
-const debug = registerDebug("typeagent:browser:action");
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
@@ -55,6 +54,12 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "./interface.mjs";
+import { bingWithGrounding } from "aiclient";
+import { AIProjectClient } from "@azure/ai-projects";
+import { DefaultAzureCredential } from "@azure/identity";
+import { Agent, MessageContentUnion, ThreadMessage } from "@azure/ai-agents";
+
+const debug = registerDebug("typeagent:browser:action");
 
 export function instantiate(): AppAgent {
     return {
@@ -234,6 +239,8 @@ async function resolveWebSite(
     context: ActionContext<BrowserActionContext>,
     site: string,
 ): Promise<string> {
+    debug(`Resolving site '${site}'`);
+
     switch (site.toLowerCase()) {
         case "paleobiodb":
             return "https://paleobiodb.org/navigator/";
@@ -247,21 +254,134 @@ async function resolveWebSite(
         case "turtlegraphics":
             return "http://localhost:9000/";
         default:
-            try {
-                const port =
-                    await context.sessionContext.getSharedLocalHostPort(site);
+
+            // get local agent
+            const port = await context.sessionContext.getSharedLocalHostPort(site);
+
+            if (port !== undefined) {
+                debug(`Resolved local site on PORT ${port}`);
                 return `http://localhost:${port}`;
-            } catch (e) {
-                debug(
-                    `Unable to find local host port for '${site}'. Trying as URL. ${e}`,
-                );
-                try {
-                    return new URL(site).toString();
-                } catch (e) {
-                    throw new Error(`Unable to find '${site}': ${e}`);
+            }
+
+            // try to resolve URL using LLM + internet search
+            const url = await resolveURLWithSearch(site);
+
+            if (url) {
+                return url;
+            }
+
+            // can't get a URL
+            throw new Error(`Unable to find a URL for: '${site}'`);
+    }
+}
+
+let groundingConfig: bingWithGrounding.ApiSettings | undefined;
+async function resolveURLWithSearch(site: string) : Promise<string | undefined> {
+    
+    if (!groundingConfig) {
+        groundingConfig = bingWithGrounding.apiSettingsFromEnv();
+    }
+
+    const project = new AIProjectClient(
+        groundingConfig.endpoint!,
+        new DefaultAzureCredential(),
+    );    
+    
+    const agent = await ensureAgent(groundingConfig, project); 
+
+    if (!agent) {
+        throw new Error("No agent found for Bing with Grounding. Please check your configuration.");
+    }
+
+    const thread = await project.agents.threads.create();
+
+    // the question that needs answering
+    await project.agents.messages.create(
+        thread.id,
+        "user",
+        site,
+    );
+
+    // Create run
+    const run = await project.agents.runs.createAndPoll(thread.id, 
+        agent.id, 
+        {
+            pollingOptions: {
+                intervalInMs: 500,
+            },
+            onResponse: (response): void => {
+                console.log(`Received response with status: ${response.status}`);
+            },
+        });
+
+    const msgs: ThreadMessage[] = [];
+    if (run.status === "completed") {
+        if (run.completedAt) {
+            // Retrieve messages
+            const messages = await project.agents.messages.list(thread.id, {
+                order: "asc",
+            });
+
+            // accumulate assistant messages                
+            for await (const m of messages) {
+                if (m.role === "assistant") {
+                    // TODO: handle multi-modal content
+                    const content: MessageContentUnion | undefined = m.content.find(
+                        (c) => c.type === "text" && "text" in c,
+                    );
+                    if (content) {
+                        msgs.push(m);
+                    }
                 }
             }
+        }
     }
+
+    // delete the thread we just created since we are currently one and done
+    project.agents.threads.delete(thread.id);
+
+    // return assistant messages
+    return msgs.join("\n");    
+}
+
+/*
+ * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
+ */
+async function ensureAgent(groundingConfig: bingWithGrounding.ApiSettings, project: AIProjectClient) : Promise<Agent | undefined> {
+    
+    let agent : Agent | undefined;
+
+    try {
+        agent = await project.agents.getAgent(groundingConfig.agent!);
+    } catch (e) {
+        // try to create the agent
+        agent = await project.agents.createAgent("gpt-4o", {
+            description: "Auto created URL Resolution Agent",
+            instructions: `
+You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.
+
+Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
+
+interface Response {
+    originalRequest: string;
+    url: string;
+    urlsEvaluated: string[];
+    explanation: string;
+    bingSearchQuery: string;
+}
+            `,
+            tools: [ {
+                type: "bing_grounding",
+                bingGrounding: {
+                    searchConfigurations: [
+                        // TODO: populate
+                    ]
+                }
+            } ]
+        });
+    }
+
+    return agent;
 }
 
 async function openWebPage(
