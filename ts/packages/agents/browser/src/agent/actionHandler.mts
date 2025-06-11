@@ -81,6 +81,14 @@ export type BrowserActionContext = {
     allowDynamicAgentDomains?: string[];
 };
 
+export interface urlResolutionAction {
+    originalRequest: string;
+    url: string;
+    urlsEvaluated: string[];
+    explanation: string;
+    bingSearchQuery: string;
+}
+
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
 ): Promise<BrowserActionContext> {
@@ -282,6 +290,7 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
         groundingConfig = bingWithGrounding.apiSettingsFromEnv();
     }
 
+    let retVal: string = site;
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
         new DefaultAzureCredential(),
@@ -293,55 +302,63 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
         throw new Error("No agent found for Bing with Grounding. Please check your configuration.");
     }
 
-    const thread = await project.agents.threads.create();
+    try {
+        const thread = await project.agents.threads.create();
 
-    // the question that needs answering
-    await project.agents.messages.create(
-        thread.id,
-        "user",
-        site,
-    );
+        // the question that needs answering
+        await project.agents.messages.create(
+            thread.id,
+            "user",
+            site,
+        );
 
-    // Create run
-    const run = await project.agents.runs.createAndPoll(thread.id, 
-        agent.id, 
-        {
-            pollingOptions: {
-                intervalInMs: 500,
-            },
-            onResponse: (response): void => {
-                console.log(`Received response with status: ${response.status}`);
-            },
-        });
-
-    const msgs: ThreadMessage[] = [];
-    if (run.status === "completed") {
-        if (run.completedAt) {
-            // Retrieve messages
-            const messages = await project.agents.messages.list(thread.id, {
-                order: "asc",
+        // Create run
+        const run = await project.agents.runs.createAndPoll(thread.id, 
+            agent.id, 
+            {
+                pollingOptions: {
+                    intervalInMs: 500,
+                },
+                onResponse: (response): void => {
+                    console.log(`Received response with status: ${response.status}`);
+                },
             });
 
-            // accumulate assistant messages                
-            for await (const m of messages) {
-                if (m.role === "assistant") {
-                    // TODO: handle multi-modal content
-                    const content: MessageContentUnion | undefined = m.content.find(
-                        (c) => c.type === "text" && "text" in c,
-                    );
-                    if (content) {
-                        msgs.push(m);
+        const msgs: ThreadMessage[] = [];
+        if (run.status === "completed") {
+            if (run.completedAt) {
+                // Retrieve messages
+                const messages = await project.agents.messages.list(thread.id, {
+                    order: "asc",
+                });
+
+                // accumulate assistant messages                
+                for await (const m of messages) {
+                    if (m.role === "assistant") {
+                        // TODO: handle multi-modal content
+                        const content: MessageContentUnion | undefined = m.content.find(
+                            (c) => c.type === "text" && "text" in c,
+                        );
+                        if (content) {
+                            msgs.push(m);
+                            let txt: string = (content as any).text.value as string;
+                            txt = txt.replaceAll("```json", "").replaceAll("```", "")
+                            const url = JSON.parse(txt) as urlResolutionAction;
+                            retVal = url.url;
+                        }
                     }
                 }
             }
         }
+
+        // delete the thread we just created since we are currently one and done
+        project.agents.threads.delete(thread.id);
+    } catch (e) {
+        debug(`Error resolving URL with search: ${e}`);
     }
 
-    // delete the thread we just created since we are currently one and done
-    project.agents.threads.delete(thread.id);
-
     // return assistant messages
-    return msgs.join("\n");    
+    return retVal;    
 }
 
 /*
@@ -349,15 +366,22 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
  */
 async function ensureAgent(groundingConfig: bingWithGrounding.ApiSettings, project: AIProjectClient) : Promise<Agent | undefined> {
     
-    let agent : Agent | undefined;
-
     try {
-        agent = await project.agents.getAgent("TypeAgent_URLResolverAgent");
+        return await project.agents.getAgent(groundingConfig.urlResolutionAgentId!);
     } catch (e) {
-        const bingTool = ToolUtility.createBingGroundingTool([{ connectionId: "bingwithgrounding" }]);
+        return await createAgent(groundingConfig, project);
+    }
+}
+
+async function createAgent(groundingConfig: bingWithGrounding.ApiSettings, project: AIProjectClient) : Promise<Agent> {
+    try {
+        // connection id is in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/typeagent-test-agent/connections/<CONNECTION NAME>>
+        const bingTool = ToolUtility.createBingGroundingTool([{ 
+            connectionId: groundingConfig.connectionId!, 
+        }]);
 
         // try to create the agent
-        agent = await project.agents.createAgent("gpt-4o", {
+        return await project.agents.createAgent("gpt-4o", {
             name: "TypeAgent_URLResolverAgent",
             description: "Auto created URL Resolution Agent",
             instructions: `
@@ -371,13 +395,13 @@ interface Response {
     urlsEvaluated: string[];
     explanation: string;
     bingSearchQuery: string;
-}
-            `,
+}`,
             tools: [ bingTool.definition ],
         });
+    } catch (e) {
+        debug(`Error creating agent: ${e}`);
+        throw e;
     }
-
-    return agent;
 }
 
 async function openWebPage(
