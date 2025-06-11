@@ -57,7 +57,7 @@ import { BrowserControl } from "./interface.mjs";
 import { bingWithGrounding } from "aiclient";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
-import { Agent, MessageContentUnion, ThreadMessage } from "@azure/ai-agents";
+import { Agent, MessageContentUnion, ThreadMessage, ToolUtility } from "@azure/ai-agents";
 
 const debug = registerDebug("typeagent:browser:action");
 
@@ -255,19 +255,19 @@ async function resolveWebSite(
             return "http://localhost:9000/";
         default:
 
+            // try to resolve URL using LLM + internet search
+            const url = await resolveURLWithSearch(site);
+
+            if (url) {
+                return url;
+            }
+
             // get local agent
             const port = await context.sessionContext.getSharedLocalHostPort(site);
 
             if (port !== undefined) {
                 debug(`Resolved local site on PORT ${port}`);
                 return `http://localhost:${port}`;
-            }
-
-            // try to resolve URL using LLM + internet search
-            const url = await resolveURLWithSearch(site);
-
-            if (url) {
-                return url;
             }
 
             // can't get a URL
@@ -352,8 +352,10 @@ async function ensureAgent(groundingConfig: bingWithGrounding.ApiSettings, proje
     let agent : Agent | undefined;
 
     try {
-        agent = await project.agents.getAgent(groundingConfig.agent!);
+        agent = await project.agents.getAgent("TypeAgent_URLResolverAgent");
     } catch (e) {
+        const bingTool = ToolUtility.createBingGroundingTool([{ connectionId: "bingwithgrounding" }]);
+
         // try to create the agent
         agent = await project.agents.createAgent("gpt-4o", {
             description: "Auto created URL Resolution Agent",
@@ -370,14 +372,7 @@ interface Response {
     bingSearchQuery: string;
 }
             `,
-            tools: [ {
-                type: "bing_grounding",
-                bingGrounding: {
-                    searchConfigurations: [
-                        // TODO: populate
-                    ]
-                }
-            } ]
+            tools: [ bingTool.definition ],
         });
     }
 
