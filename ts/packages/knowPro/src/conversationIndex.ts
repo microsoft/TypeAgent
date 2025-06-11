@@ -228,6 +228,7 @@ export type KnowledgeValidator = (
     knowledge: Knowledge,
 ) => boolean;
 
+// TODO: update: pass in TextLocation instead of messageOrdinal + chunkOrdinal
 export function addKnowledgeToSemanticRefIndex(
     conversation: IConversation,
     messageOrdinal: MessageOrdinal,
@@ -333,7 +334,7 @@ async function addBatchToSemanticRefIndex(
         addKnowledgeToSemanticRefIndex(
             conversation,
             textLocation.messageOrdinal,
-            textLocation.charOrdinal ?? 0,
+            textLocation.chunkOrdinal ?? 0,
             knowledge,
             termsAdded,
         );

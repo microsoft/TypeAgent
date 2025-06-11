@@ -121,6 +121,7 @@ export type AnswerGeneratorSettings = {
      * Additional instructions for the model
      */
     modelInstructions?: PromptSection[] | undefined;
+    includeContextSchema?: boolean | undefined;
 };
 
 /**
@@ -151,7 +152,11 @@ export async function generateAnswer(
         contextOptions,
     );
     const contextContent = answerContextToString(context);
-    if (contextContent.length <= generator.settings.maxCharsInBudget) {
+    const chunking = contextOptions?.chunking ?? true;
+    if (
+        contextContent.length <= generator.settings.maxCharsInBudget ||
+        !chunking
+    ) {
         // Context is small enough
         return generator.generateAnswer(question, contextContent);
     }
@@ -208,6 +213,7 @@ export async function generateAnswerInChunks(
 
     let chunkAnswers: answerSchema.AnswerResponse[] = [];
     const structuredChunks = getStructuredChunks(chunks);
+    let hasStructuredAnswer = false;
     if (structuredChunks.length > 0) {
         const structuredAnswers = await runGenerateAnswers(
             answerGenerator,
@@ -219,9 +225,10 @@ export async function generateAnswerInChunks(
             return structuredAnswers;
         }
         chunkAnswers.push(...structuredAnswers.data);
+        hasStructuredAnswer = hasAnswer(chunkAnswers);
     }
 
-    if (!hasAnswer(chunkAnswers) || !answerGenerator.settings.fastStop) {
+    if (!hasStructuredAnswer || !answerGenerator.settings.fastStop) {
         // Generate partial answers from each message chunk
         const messageChunks = chunks.filter(
             (c) => c.messages !== undefined && c.messages.length > 0,
@@ -317,7 +324,10 @@ export class AnswerGenerator implements IAnswerGenerator {
         prompt.push(
             createContextPrompt(
                 this.contextTypeName,
-                this.contextSchema,
+                this.settings.includeContextSchema !== undefined &&
+                    this.settings.includeContextSchema
+                    ? this.contextSchema
+                    : "",
                 contextContent,
             ).content as string,
         );
@@ -500,12 +510,7 @@ export function getRelevantMessagesForAnswer(
         if (message.textChunks.length === 0) {
             continue;
         }
-        const relevantMessage: contextSchema.RelevantMessage = {
-            messageText:
-                message.textChunks.length === 1
-                    ? message.textChunks[0]
-                    : message.textChunks,
-        };
+        const relevantMessage: contextSchema.RelevantMessage = {};
         const meta = message.metadata;
         if (meta) {
             relevantMessage.from = meta.source;
@@ -514,6 +519,10 @@ export function getRelevantMessagesForAnswer(
         if (message.timestamp) {
             relevantMessage.timestamp = new Date(message.timestamp);
         }
+        relevantMessage.messageText =
+            message.textChunks.length === 1
+                ? message.textChunks[0]
+                : message.textChunks;
         relevantMessages.push(relevantMessage);
         if (topK !== undefined && topK > 0 && relevantMessages.length >= topK) {
             break;
@@ -613,11 +622,11 @@ function createContextPrompt(
     context: string,
 ): PromptSection {
     let content =
-        `[ANSWER CONTEXT] for answering user questions is a JSON object of type ${typeName} according to the following TypeScript definitions:\n` +
-        `\`\`\`\n${schema}\`\`\`\n` +
-        `[ANSWER CONTEXT]\n` +
-        `===\n${context}\n===\n`;
-
+        schema && schema.length > 0
+            ? `[ANSWER CONTEXT] for answering user questions is a JSON object of type ${typeName} according to the following TypeScript definitions:\n` +
+              `\`\`\`\n${schema}\`\`\`\n`
+            : "";
+    content += `[ANSWER CONTEXT]\n` + `===\n${context}\n===\n`;
     return {
         role: "user",
         content,

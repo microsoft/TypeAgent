@@ -17,7 +17,7 @@ import {
     ActionSchemaFile,
 } from "../translation/actionConfigProvider.js";
 import { getAppAgentName } from "../translation/agentTranslators.js";
-import { createSessionContext } from "../execute/actionHandlers.js";
+import { createSessionContext } from "../execute/sessionContext.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
 import registerDebug from "debug";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
@@ -139,8 +139,8 @@ export class AppAgentManager implements ActionConfigProvider {
         // about whether agent exists or not.
         if (
             record === undefined ||
-            (!this.allowSharedLocalView?.includes(requester) &&
-                record.manifest.sharedLocalView?.includes(requester) !== true)
+            (!this.allowSharedLocalView?.includes(requester) && // host declare allowed agents to share
+                record.manifest.sharedLocalView?.includes(requester) !== true) // agent declared allowed agents to share.
         ) {
             throw new Error(
                 `Agent '${requester}' is not allowed to access '${target}' local view.`,

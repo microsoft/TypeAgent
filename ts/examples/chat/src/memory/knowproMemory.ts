@@ -3,7 +3,6 @@
 
 import * as kp from "knowpro";
 import {
-    addStandardHandlers,
     arg,
     argBool,
     argNum,
@@ -36,6 +35,7 @@ import { createKnowproImageCommands } from "./knowproImage.js";
 import { createKnowproPodcastCommands } from "./knowproPodcast.js";
 import { createKnowproTestCommands } from "./knowproTest.js";
 import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
+import { createKnowproWebsiteCommands } from "./knowproWebsite.js";
 import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
 
@@ -45,10 +45,10 @@ export async function runKnowproMemory(): Promise<void> {
 
     const commands: Record<string, CommandHandler> = {};
     await createKnowproCommands(commands);
-    addStandardHandlers(commands);
     await runConsole({
         inputHandler,
         handlers: commands,
+        addStandardHandlers: true,
     });
 
     async function inputHandler(
@@ -116,6 +116,7 @@ export async function createKnowproCommands(
     await createKnowproDataFrameCommands(context, commands);
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
+    await createKnowproWebsiteCommands(context, commands);
     /*
      * CREATE GENERAL COMMANDS that are common to all memory types
      * These include: (a) search (b) answer generation (c) enumeration
@@ -481,6 +482,8 @@ export async function createKnowproCommands(
             },
         );
         if (searchResult !== undefined) {
+            const options = createAnswerOptions(namedArgs);
+            options.chunking = false;
             const answerResult = await kp.generateAnswer(
                 context.conversation!,
                 context.answerGenerator,
@@ -492,7 +495,7 @@ export async function createKnowproCommands(
                         context.printer.writeJsonInColor(chalk.gray, chunk);
                     }
                 },
-                createAnswerOptions(namedArgs),
+                options,
             );
             context.printer.writeLine();
             if (answerResult.success) {
@@ -915,67 +918,3 @@ export async function createKnowproCommands(
 export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
-
-/*
-export async function generateMultipartAnswer(
-    conversation: kp.IConversation,
-    generator: kp.IAnswerGenerator,
-    question: string,
-    searchResults: kp.ConversationSearchResult[],
-    progress?: asyncArray.ProcessProgress<
-        kp.AnswerContext,
-        Result<kp.AnswerResponse>
-    >,
-    contextOptions?: kp.AnswerContextOptions,
-): Promise<Result<kp.AnswerResponse>> {
-    if (searchResults.length === 0) {
-        return error("No search results");
-    }
-    if (searchResults.length === 1) {
-        const searchResult = await kp.generateAnswer(
-            conversation,
-            generator,
-            searchResults[0].rawSearchQuery ?? question,
-            searchResults[0],
-            progress,
-            contextOptions,
-        );
-        return searchResult;
-    }
-
-    let preamble: PromptSection[] | undefined;
-    let lastAnswer: Result<kp.AnswerResponse> | undefined;
-    for (let i = 0; i < searchResults.length; ++i) {
-        const searchResult = searchResults[i];
-        const userQuestion = searchResult.rawSearchQuery ?? question;
-        lastAnswer = await kp.generateAnswer(
-            conversation,
-            generator,
-            question,
-            searchResult,
-            progress,
-            contextOptions,
-            preamble,
-        );
-        if (!lastAnswer.success) {
-            return lastAnswer;
-        }
-        const lastAnswerText =
-            lastAnswer.data.type === "Answered"
-                ? lastAnswer.data.answer
-                : lastAnswer.data.whyNoAnswer;
-        if (lastAnswerText) {
-            preamble ??= [];
-            preamble.push({
-                role: "user",
-                content: userQuestion,
-            });
-            preamble.push({
-                role: "assistant",
-                content: lastAnswerText,
-            });
-        }
-    }
-    return lastAnswer !== undefined ? lastAnswer : error("No answer");
-}
-*/

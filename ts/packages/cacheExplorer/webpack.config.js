@@ -16,7 +16,7 @@ export default {
             directory: path.join(dirName, "public"),
         },
         compress: true,
-        port: 9000,
+        port: 9100,
     },
     entry: path.resolve(dirName, "src", "site", "index.ts"),
     module: {

@@ -19,6 +19,9 @@ export type BrowserActions =
     | CaptureScreenshot
     | ReloadPage;
 
+export type WebPage = string;
+export type BrowserEntities = WebPage;
+
 // show/open/display web page in the current view.
 export type OpenWebPage = {
     actionName: "openWebPage";
@@ -32,7 +35,7 @@ export type OpenWebPage = {
             | "markdown"
             | "planViewer"
             | "turtleGraphics"
-            | string;
+            | WebPage;
     };
 };
 
