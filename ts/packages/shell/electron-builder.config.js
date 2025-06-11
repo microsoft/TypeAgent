@@ -78,7 +78,6 @@ export default {
     },
     mac: {
         appId: `com.microsoft.typeagentshell`,
-        entitlementsInherit: "build/entitlements.mac.plist",
         extendInfo: {
             NSCameraUsageDescription:
                 "Application requests access to the device's camera.",
