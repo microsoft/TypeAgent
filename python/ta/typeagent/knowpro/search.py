@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, TypeGuard, cast
+from typing import Callable, TypeGuard, cast
 
 from .collections import SemanticRefAccumulator
 from .interfaces import (
@@ -220,7 +220,7 @@ class QueryCompiler:
         ),
         options: SearchOptions | None = None,
         raw_query_text: str | None = None,
-    ) -> IQueryOpExpr:
+    ) -> GetScoredMessagesExpr:
         query: IQueryOpExpr = MessagesFromKnowledgeExpr(knowledge)
         if options is not None:
             query = await self.compile_message_re_rank(
