@@ -56,6 +56,7 @@
     "readline": "^1.3.0",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
+    "website-memory": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {

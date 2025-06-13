@@ -51,7 +51,13 @@ import {
 } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
-import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
+import {
+    BrowserActions,
+    OpenWebPage,
+    ImportWebsiteData,
+    SearchWebsites,
+    GetWebsiteStats,
+} from "./actionsSchema.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
 import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
@@ -67,6 +73,8 @@ import {
     ThreadMessage,
     ToolUtility,
 } from "@azure/ai-agents";
+import * as website from "website-memory";
+import { openai, TextEmbeddingModel } from "aiclient";
 
 const debug = registerDebug("typeagent:browser:action");
 
@@ -89,6 +97,8 @@ export type BrowserActionContext = {
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
+    websiteCollection?: website.WebsiteCollection | undefined;
+    fuzzyMatchingModel?: TextEmbeddingModel | undefined;
 };
 
 export interface urlResolutionAction {
@@ -121,6 +131,27 @@ async function updateBrowserContext(
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
+        }
+
+        // Initialize website collection if not already present
+        if (!context.agentContext.websiteCollection) {
+            try {
+                // For now, create a new empty website collection
+                // TODO: Integrate with index system when "website" type is supported
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
+                debug("Created new empty website collection");
+            } catch (error) {
+                debug("Unable to initialize website collection:", error);
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
+            }
+        }
+
+        // Initialize fuzzy matching model for website search
+        if (!context.agentContext.fuzzyMatchingModel) {
+            context.agentContext.fuzzyMatchingModel =
+                openai.createEmbeddingModel();
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -518,6 +549,300 @@ async function closeWebPage(context: ActionContext<BrowserActionContext>) {
     );
 }
 
+async function importWebsiteData(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<ImportWebsiteData>,
+) {
+    try {
+        context.actionIO.setDisplay("Importing website data...");
+
+        const { source, type, limit, days, folder } = action.parameters;
+        const defaultPaths = website.getDefaultBrowserPaths();
+
+        let filePath: string;
+        if (source === "chrome") {
+            filePath =
+                type === "bookmarks"
+                    ? defaultPaths.chrome.bookmarks
+                    : defaultPaths.chrome.history;
+        } else {
+            filePath =
+                type === "bookmarks"
+                    ? defaultPaths.edge.bookmarks
+                    : defaultPaths.edge.history;
+        }
+
+        const progressCallback = (
+            current: number,
+            total: number,
+            item: string,
+        ) => {
+            if (current % 100 === 0) {
+                // Update every 100 items
+                context.actionIO.setDisplay(
+                    `Importing... ${current}/${total}: ${item.substring(0, 50)}...`,
+                );
+            }
+        };
+
+        // Build options object with only defined values
+        const importOptions: any = {};
+        if (limit !== undefined) importOptions.limit = limit;
+        if (days !== undefined) importOptions.days = days;
+        if (folder !== undefined) importOptions.folder = folder;
+
+        const websites = await website.importWebsites(
+            source,
+            type,
+            filePath,
+            importOptions,
+            progressCallback,
+        );
+
+        if (!context.sessionContext.agentContext.websiteCollection) {
+            context.sessionContext.agentContext.websiteCollection =
+                new website.WebsiteCollection();
+        }
+
+        context.sessionContext.agentContext.websiteCollection.addWebsites(
+            websites,
+        );
+        await context.sessionContext.agentContext.websiteCollection.buildIndex();
+
+        const result = createActionResult(
+            `Successfully imported ${websites.length} ${type} from ${source}.`,
+        );
+        return result;
+    } catch (error: any) {
+        return createActionResult(
+            `Failed to import website data: ${error.message}`,
+            true,
+        );
+    }
+}
+
+async function searchWebsites(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<SearchWebsites>,
+) {
+    try {
+        const websiteCollection =
+            context.sessionContext.agentContext.websiteCollection;
+        if (!websiteCollection || websiteCollection.messages.length === 0) {
+            return createActionResult(
+                "No website data available. Please import website data first.",
+                true,
+            );
+        }
+
+        context.actionIO.setDisplay("Searching websites...");
+
+        const {
+            query,
+            domain,
+            pageType,
+            source,
+            limit = 10,
+            minScore = 0.5,
+        } = action.parameters;
+
+        // Build search filters
+        const searchFilters = [query];
+        if (domain) searchFilters.push(domain);
+        if (pageType) searchFilters.push(pageType);
+
+        // Use the improved search function
+        let matchedWebsites = await findRequestedWebsites(
+            searchFilters,
+            context.sessionContext.agentContext,
+            false,
+            minScore,
+        );
+
+        // Apply additional filters
+        if (source) {
+            matchedWebsites = matchedWebsites.filter(
+                (site) => site.metadata.websiteSource === source,
+            );
+        }
+
+        // Limit results
+        matchedWebsites = matchedWebsites.slice(0, limit);
+
+        if (matchedWebsites.length === 0) {
+            return createActionResult(
+                "No websites found matching the search criteria.",
+            );
+        }
+
+        const resultText = matchedWebsites
+            .map((site, i) => {
+                const metadata = site.metadata;
+                return `${i + 1}. ${metadata.title || metadata.url}\n   URL: ${metadata.url}\n   Domain: ${metadata.domain} | Type: ${metadata.pageType} | Source: ${metadata.websiteSource}\n`;
+            })
+            .join("\n");
+
+        return createActionResult(
+            `Found ${matchedWebsites.length} websites:\n\n${resultText}`,
+        );
+    } catch (error: any) {
+        return createActionResult(
+            `Failed to search websites: ${error.message}`,
+            true,
+        );
+    }
+}
+
+async function getWebsiteStats(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<GetWebsiteStats>,
+) {
+    try {
+        const websiteCollection =
+            context.sessionContext.agentContext.websiteCollection;
+        if (!websiteCollection || websiteCollection.messages.length === 0) {
+            return createActionResult(
+                "No website data available. Please import website data first.",
+                true,
+            );
+        }
+
+        const { groupBy = "domain", limit = 10 } = action.parameters || {};
+        const websites = websiteCollection.messages.getAll();
+
+        let stats: { [key: string]: number } = {};
+        let totalCount = websites.length;
+
+        for (const site of websites) {
+            const metadata = site.metadata;
+            let key: string;
+
+            switch (groupBy) {
+                case "domain":
+                    key = metadata.domain || "unknown";
+                    break;
+                case "pageType":
+                    key = metadata.pageType || "general";
+                    break;
+                case "source":
+                    key = metadata.websiteSource;
+                    break;
+                default:
+                    key = metadata.domain || "unknown";
+            }
+
+            stats[key] = (stats[key] || 0) + 1;
+        }
+
+        // Sort by count and limit
+        const sortedStats = Object.entries(stats)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, limit);
+
+        let resultText = `Website Statistics (Total: ${totalCount} sites)\n\n`;
+        resultText += `Top ${groupBy}s:\n`;
+
+        for (const [key, count] of sortedStats) {
+            const percentage = ((count / totalCount) * 100).toFixed(1);
+            resultText += `  ${key}: ${count} sites (${percentage}%)\n`;
+        }
+
+        // Add some additional stats
+        if (groupBy !== "source") {
+            const sourceCounts = { bookmark: 0, history: 0, reading_list: 0 };
+            for (const site of websites) {
+                sourceCounts[site.metadata.websiteSource]++;
+            }
+            resultText += `\nBy Source:\n`;
+            for (const [source, count] of Object.entries(sourceCounts)) {
+                if (count > 0) {
+                    const percentage = ((count / totalCount) * 100).toFixed(1);
+                    resultText += `  ${source}: ${count} sites (${percentage}%)\n`;
+                }
+            }
+        }
+
+        return createActionResult(resultText);
+    } catch (error: any) {
+        return createActionResult(
+            `Failed to get website stats: ${error.message}`,
+            true,
+        );
+    }
+}
+
+/**
+ * Find websites matching search criteria, similar to findRequestedImages in montage agent
+ */
+async function findRequestedWebsites(
+    searchFilters: string[],
+    context: BrowserActionContext,
+    exactMatch: boolean = false,
+    minScore: number = 0.5,
+): Promise<website.Website[]> {
+    if (!context.websiteCollection) {
+        return [];
+    }
+
+    const websites = context.websiteCollection.messages.getAll();
+    const results: { website: website.Website; score: number }[] = [];
+
+    for (const site of websites) {
+        const metadata = site.metadata;
+        let score = 0;
+
+        for (const filter of searchFilters) {
+            const filterLower = filter.toLowerCase();
+
+            // Check title match
+            if (
+                metadata.title &&
+                metadata.title.toLowerCase().includes(filterLower)
+            ) {
+                score += exactMatch ? 1.0 : 0.8;
+            }
+
+            // Check domain match
+            if (
+                metadata.domain &&
+                metadata.domain.toLowerCase().includes(filterLower)
+            ) {
+                score += exactMatch ? 1.0 : 0.6;
+            }
+
+            // Check URL match
+            if (metadata.url.toLowerCase().includes(filterLower)) {
+                score += exactMatch ? 1.0 : 0.4;
+            }
+
+            // Check page type match
+            if (
+                metadata.pageType &&
+                metadata.pageType.toLowerCase().includes(filterLower)
+            ) {
+                score += exactMatch ? 1.0 : 0.5;
+            }
+
+            // Check folder path for bookmarks
+            if (
+                metadata.folder &&
+                metadata.folder.toLowerCase().includes(filterLower)
+            ) {
+                score += exactMatch ? 1.0 : 0.3;
+            }
+        }
+
+        if (score >= minScore) {
+            results.push({ website: site, score });
+        }
+    }
+
+    // Sort by score descending
+    results.sort((a, b) => b.score - a.score);
+
+    return results.map((r) => r.website);
+}
+
 async function executeBrowserAction(
     action:
         | TypeAgentAction<BrowserActions, "browser">
@@ -535,6 +860,12 @@ async function executeBrowserAction(
                 return openWebPage(context, action);
             case "closeWebPage":
                 return closeWebPage(context);
+            case "importWebsiteData":
+                return importWebsiteData(context, action);
+            case "searchWebsites":
+                return searchWebsites(context, action);
+            case "getWebsiteStats":
+                return getWebsiteStats(context, action);
         }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
@@ -813,6 +1144,172 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
     }
 }
 
+class ImportWebsiteDataHandler implements CommandHandler {
+    public readonly description =
+        "Import website data from browser history or bookmarks";
+    public readonly parameters = {
+        args: {
+            source: {
+                description: "Browser source: chrome or edge",
+            },
+            type: {
+                description: "Data type: history or bookmarks",
+            },
+            limit: {
+                description: "Maximum number of items to import (optional)",
+                optional: true,
+            },
+            days: {
+                description:
+                    "Number of days back to import (optional, for history)",
+                optional: true,
+            },
+            folder: {
+                description:
+                    "Specific bookmark folder to import (optional, for bookmarks)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const parameters: any = {
+            source: params.args.source as "chrome" | "edge",
+            type: params.args.type as "history" | "bookmarks",
+        };
+
+        if (params.args.limit) {
+            parameters.limit = parseInt(params.args.limit);
+        }
+        if (params.args.days) {
+            parameters.days = parseInt(params.args.days);
+        }
+        if (params.args.folder) {
+            parameters.folder = params.args.folder;
+        }
+
+        const result = await importWebsiteData(context, {
+            actionName: "importWebsiteData",
+            schemaName: "browser",
+            parameters,
+        });
+        if (result.error) {
+            displayError(result.error, context);
+            return;
+        }
+        context.actionIO.setDisplay(result.displayContent);
+    }
+}
+
+class SearchWebsitesHandler implements CommandHandler {
+    public readonly description = "Search through imported website data";
+    public readonly parameters = {
+        args: {
+            query: {
+                description: "Search query",
+            },
+            domain: {
+                description: "Filter by domain (optional)",
+                optional: true,
+            },
+            pageType: {
+                description: "Filter by page type (optional)",
+                optional: true,
+            },
+            source: {
+                description: "Filter by source: bookmark or history (optional)",
+                optional: true,
+            },
+            limit: {
+                description: "Maximum number of results (optional, default 10)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const parameters: any = {
+            query: params.args.query,
+        };
+
+        if (params.args.domain) {
+            parameters.domain = params.args.domain;
+        }
+        if (params.args.pageType) {
+            parameters.pageType = params.args.pageType;
+        }
+        if (params.args.source) {
+            parameters.source = params.args.source as "bookmark" | "history";
+        }
+        if (params.args.limit) {
+            parameters.limit = parseInt(params.args.limit);
+        }
+
+        const result = await searchWebsites(context, {
+            actionName: "searchWebsites",
+            schemaName: "browser",
+            parameters,
+        });
+        if (result.error) {
+            displayError(result.error, context);
+            return;
+        }
+        context.actionIO.setDisplay(result.displayContent);
+    }
+}
+
+class GetWebsiteStatsHandler implements CommandHandler {
+    public readonly description = "Get statistics about imported website data";
+    public readonly parameters = {
+        args: {
+            groupBy: {
+                description:
+                    "Group by: domain, pageType, or source (optional, default domain)",
+                optional: true,
+            },
+            limit: {
+                description:
+                    "Maximum number of groups to show (optional, default 10)",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const parameters: any = {};
+
+        if (params.args.groupBy) {
+            parameters.groupBy = params.args.groupBy as
+                | "domain"
+                | "pageType"
+                | "source";
+        }
+        if (params.args.limit) {
+            parameters.limit = parseInt(params.args.limit);
+        }
+
+        const result = await getWebsiteStats(context, {
+            actionName: "getWebsiteStats",
+            schemaName: "browser",
+            parameters,
+        });
+        if (result.error) {
+            displayError(result.error, context);
+            return;
+        }
+        context.actionIO.setDisplay(result.displayContent);
+    }
+}
+
 export const handlers: CommandHandlerTable = {
     description: "Browser App Agent Commands",
     commands: {
@@ -835,5 +1332,13 @@ export const handlers: CommandHandlerTable = {
 
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
+        website: {
+            description: "Website memory commands",
+            commands: {
+                import: new ImportWebsiteDataHandler(),
+                search: new SearchWebsitesHandler(),
+                stats: new GetWebsiteStatsHandler(),
+            },
+        },
     },
 };
