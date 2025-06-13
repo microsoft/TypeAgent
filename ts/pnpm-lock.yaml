@@ -2565,6 +2565,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      conversation-memory:
+        specifier: workspace:*
+        version: link:../memory/conversation
       interactive-app:
         specifier: workspace:*
         version: link:../interactiveApp

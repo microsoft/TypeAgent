@@ -556,11 +556,13 @@ export function parseNamedArguments(
 export type TypedArgValue = string | number | boolean;
 
 export function parseTypedArguments<T extends Record<string, TypedArgValue>>(
-    rawArgs: string[],
+    rawArgs: string[] | NamedArgs,
     metadata: CommandMetadata,
     result?: T | undefined,
 ): T {
-    const namedArgs = parseNamedArguments(rawArgs, metadata);
+    const namedArgs = Array.isArray(rawArgs)
+        ? parseNamedArguments(rawArgs, metadata)
+        : rawArgs;
     const typedArgs: Partial<any> = result ?? {};
     for (const key in namedArgs) {
         const value = namedArgs[key];
