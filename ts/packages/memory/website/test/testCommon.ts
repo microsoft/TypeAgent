@@ -1,17 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    createConversationSettings,
-    createKnowledgeExtractor,
-} from "knowpro";
+import { createConversationSettings, createKnowledgeExtractor } from "knowpro";
 import {
     createTestChatModel,
     createTestEmbeddingModel,
     NullEmbeddingModel,
 } from "test-lib";
 import { WebsiteCollection } from "../src/websiteCollection.js";
-import { Website, WebsiteVisitInfo, importWebsiteVisit } from "../src/websiteMeta.js";
+import {
+    Website,
+    WebsiteVisitInfo,
+    importWebsiteVisit,
+} from "../src/websiteMeta.js";
 import fs from "fs";
 import path from "path";
 
@@ -55,7 +56,7 @@ export function getTestBookmarks(): TestWebsiteInfo[] {
             folder: "News",
             pageType: "news",
             bookmarkDate: "2024-01-05T09:15:00.000Z",
-        }
+        },
     ];
 }
 
@@ -87,7 +88,7 @@ export function getTestHistory(): TestWebsiteInfo[] {
             pageType: "news",
             visitDate: "2024-01-18T13:20:00.000Z",
             visitCount: 3,
-        }
+        },
     ];
 }
 
@@ -110,46 +111,48 @@ export function createOnlineWebsiteSettings() {
 
 export function createTestWebsiteCollection(
     websites: TestWebsiteInfo[],
-    online: boolean = false
+    online: boolean = false,
 ): WebsiteCollection {
     const collection = new WebsiteCollection("test-collection");
-    
+
     // Convert test data to Website objects
-    const websiteObjects: Website[] = websites.map(info => {
+    const websiteObjects: Website[] = websites.map((info) => {
         const visitInfo: WebsiteVisitInfo = {
             url: info.url,
             title: info.title,
             domain: info.domain,
             source: info.source,
         };
-        
+
         if (info.pageType) visitInfo.pageType = info.pageType;
         if (info.folder) visitInfo.folder = info.folder;
         if (info.visitCount) visitInfo.visitCount = info.visitCount;
         if (info.bookmarkDate) visitInfo.bookmarkDate = info.bookmarkDate;
         if (info.visitDate) visitInfo.visitDate = info.visitDate;
-        
+
         return importWebsiteVisit(visitInfo);
     });
-    
+
     collection.addWebsites(websiteObjects);
-    
+
     // Update settings
     if (online) {
         Object.assign(collection.settings, createOnlineWebsiteSettings());
     } else {
         Object.assign(collection.settings, createOfflineWebsiteSettings());
     }
-    
+
     return collection;
 }
 
 export async function loadTestWebsiteCollection(
     maxWebsites?: number,
-    online: boolean = false
+    online: boolean = false,
 ): Promise<WebsiteCollection> {
     const testWebsites = getAllTestWebsites();
-    const websites = maxWebsites ? testWebsites.slice(0, maxWebsites) : testWebsites;
+    const websites = maxWebsites
+        ? testWebsites.slice(0, maxWebsites)
+        : testWebsites;
     return createTestWebsiteCollection(websites, online);
 }
 
@@ -158,7 +161,7 @@ export function createSampleChromeBookmarks() {
         roots: {
             bookmark_bar: {
                 id: "1",
-                name: "Bookmarks Bar", 
+                name: "Bookmarks Bar",
                 type: "folder" as const,
                 children: [
                     {
@@ -179,24 +182,24 @@ export function createSampleChromeBookmarks() {
                                 type: "url" as const,
                                 url: "https://docs.microsoft.com/typescript",
                                 date_added: "13370728742000000",
-                            }
-                        ]
-                    }
-                ]
+                            },
+                        ],
+                    },
+                ],
             },
             other: {
                 id: "5",
                 name: "Other Bookmarks",
                 type: "folder" as const,
-                children: []
+                children: [],
             },
             synced: {
-                id: "6", 
+                id: "6",
                 name: "Mobile Bookmarks",
                 type: "folder" as const,
-                children: []
-            }
-        }
+                children: [],
+            },
+        },
     };
 }
 

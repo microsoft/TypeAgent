@@ -26,12 +26,17 @@ import { createEmbeddingCache } from "knowledge-processor";
 import { openai, TextEmbeddingModel } from "aiclient";
 import sqlite from "better-sqlite3";
 import * as ms from "memory-storage";
-import { VisitFrequencyTable, WebsiteCategoryTable, BookmarkFolderTable } from "./tables.js";
+import {
+    VisitFrequencyTable,
+    WebsiteCategoryTable,
+    BookmarkFolderTable,
+} from "./tables.js";
 import { Website } from "./websiteMeta.js";
 import path from "node:path";
 import fs from "node:fs";
 
-export interface WebsiteCollectionData extends IConversationDataWithIndexes<Website> {}
+export interface WebsiteCollectionData
+    extends IConversationDataWithIndexes<Website> {}
 
 export class WebsiteCollection
     implements IConversation, dataFrame.IConversationWithDataFrame
@@ -95,8 +100,11 @@ export class WebsiteCollection
      */
     public addMetadataToDataFrames() {
         if (this.semanticRefIndex) {
-            const domainVisits = new Map<string, { count: number; lastVisit: string; }>();
-            
+            const domainVisits = new Map<
+                string,
+                { count: number; lastVisit: string }
+            >();
+
             let index = 0;
             for (const website of this.messages) {
                 const sourceRef: dataFrame.RowSourceRef = {
@@ -112,8 +120,11 @@ export class WebsiteCollection
                 if (website.metadata.domain) {
                     const existing = domainVisits.get(website.metadata.domain);
                     const visitCount = website.metadata.visitCount || 1;
-                    const lastVisit = website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString();
-                    
+                    const lastVisit =
+                        website.metadata.visitDate ||
+                        website.metadata.bookmarkDate ||
+                        new Date().toISOString();
+
                     if (existing) {
                         existing.count += visitCount;
                         if (lastVisit > existing.lastVisit) {
@@ -129,27 +140,34 @@ export class WebsiteCollection
 
                 // Add website categories
                 if (this.websiteCategories && website.metadata.pageType) {
-                    const categoryRow: dataFrame.DataFrameRow = { 
-                        sourceRef, 
+                    const categoryRow: dataFrame.DataFrameRow = {
+                        sourceRef,
                         record: {
-                            domain: website.metadata.domain || website.metadata.url,
+                            domain:
+                                website.metadata.domain || website.metadata.url,
                             category: website.metadata.pageType,
                             confidence: 0.8, // Default confidence
-                        }
+                        },
                     };
                     this.websiteCategories.addRows(categoryRow);
                 }
 
                 // Add bookmark folder information
-                if (this.bookmarkFolders && website.metadata.websiteSource === "bookmark" && website.metadata.folder) {
+                if (
+                    this.bookmarkFolders &&
+                    website.metadata.websiteSource === "bookmark" &&
+                    website.metadata.folder
+                ) {
                     const folderRow: dataFrame.DataFrameRow = {
                         sourceRef,
                         record: {
                             folderPath: website.metadata.folder,
                             url: website.metadata.url,
                             title: website.metadata.title || "",
-                            dateAdded: website.metadata.bookmarkDate || new Date().toISOString(),
-                        }
+                            dateAdded:
+                                website.metadata.bookmarkDate ||
+                                new Date().toISOString(),
+                        },
                     };
                     this.bookmarkFolders.addRows(folderRow);
                 }
@@ -161,12 +179,16 @@ export class WebsiteCollection
             if (this.visitFrequency) {
                 for (const [domain, data] of domainVisits) {
                     const visitRow: dataFrame.DataFrameRow = {
-                        sourceRef: { range: { start: { messageOrdinal: 0, chunkOrdinal: 0 } } },
+                        sourceRef: {
+                            range: {
+                                start: { messageOrdinal: 0, chunkOrdinal: 0 },
+                            },
+                        },
                         record: {
                             domain: domain,
                             visitCount: data.count,
                             lastVisitDate: data.lastVisit,
-                        }
+                        },
                     };
                     this.visitFrequency.addRows(visitRow);
                 }
@@ -184,13 +206,13 @@ export class WebsiteCollection
 
         this.addMetadataToIndex();
         this.addMetadataToDataFrames();
-        
+
         const indexingResult: IndexingResults = {
             semanticRefs: {
                 completedUpto: { messageOrdinal: this.messages.length - 1 },
             },
         };
-        
+
         indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
             this,
             this.settings,

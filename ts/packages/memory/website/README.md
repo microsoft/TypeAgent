@@ -19,9 +19,9 @@ import { WebsiteCollection, importWebsites } from "website-memory";
 
 // Import Chrome bookmarks
 const websites = await importWebsites(
-    "chrome", 
-    "bookmarks", 
-    "/path/to/bookmarks"
+  "chrome",
+  "bookmarks",
+  "/path/to/bookmarks",
 );
 
 const collection = new WebsiteCollection();
@@ -51,9 +51,9 @@ import { IndexManager } from "dispatcher";
 
 // Create a website index
 await IndexManager.getInstance().createIndex(
-    "my-websites", 
-    "website", 
-    "/path/to/browser/data"
+  "my-websites",
+  "website",
+  "/path/to/browser/data",
 );
 ```
 
@@ -65,6 +65,7 @@ await IndexManager.getInstance().createIndex(
 ## Data Structures
 
 ### Website Visit Info
+
 - URL and title
 - Domain and page type classification
 - Visit frequency and timestamps
@@ -72,6 +73,7 @@ await IndexManager.getInstance().createIndex(
 - Source tracking (bookmark vs history)
 
 ### Data Frames
+
 - **Visit Frequency**: Track domain popularity
 - **Website Categories**: Automatic categorization (news, development, etc.)
 - **Bookmark Folders**: Hierarchical bookmark organization
@@ -79,6 +81,7 @@ await IndexManager.getInstance().createIndex(
 ## Integration
 
 This package integrates with:
+
 - **Knowledge Processor**: For semantic indexing and search
 - **Dispatcher**: For background indexing service management
 - **TypeAgent**: For conversational queries over website data
@@ -92,15 +95,16 @@ The package includes comprehensive Jest tests:
 npm test
 
 # Run offline tests only (no API keys required)
-npm run test:offline  
+npm run test:offline
 
 # Run online tests only (requires API keys)
 npm run test:online
 ```
 
 ### Test Categories
+
 - **Collection Tests**: WebsiteCollection functionality
-- **Import Tests**: Browser data import capabilities  
+- **Import Tests**: Browser data import capabilities
 - **DataFrame Tests**: SQL storage and queries
 - **Indexing Tests**: Semantic indexing and search
 

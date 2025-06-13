@@ -145,27 +145,39 @@ if (
         // For website indexing, the location should be a browser data file path
         if (!fs.existsSync(index.location)) {
             debug(`The supplied file '${index.location}' does not exist.`);
-            
+
             // Try to find default paths if none specified
             if (index.location === "default") {
                 const defaultPaths = getDefaultBrowserPaths();
                 let foundPath = "";
-                
+
                 // Try to find available browser data
                 if (index.browserType === "chrome") {
-                    if (index.sourceType === "bookmarks" && fs.existsSync(defaultPaths.chrome.bookmarks)) {
+                    if (
+                        index.sourceType === "bookmarks" &&
+                        fs.existsSync(defaultPaths.chrome.bookmarks)
+                    ) {
                         foundPath = defaultPaths.chrome.bookmarks;
-                    } else if (index.sourceType === "history" && fs.existsSync(defaultPaths.chrome.history)) {
+                    } else if (
+                        index.sourceType === "history" &&
+                        fs.existsSync(defaultPaths.chrome.history)
+                    ) {
                         foundPath = defaultPaths.chrome.history;
                     }
                 } else if (index.browserType === "edge") {
-                    if (index.sourceType === "bookmarks" && fs.existsSync(defaultPaths.edge.bookmarks)) {
+                    if (
+                        index.sourceType === "bookmarks" &&
+                        fs.existsSync(defaultPaths.edge.bookmarks)
+                    ) {
                         foundPath = defaultPaths.edge.bookmarks;
-                    } else if (index.sourceType === "history" && fs.existsSync(defaultPaths.edge.history)) {
+                    } else if (
+                        index.sourceType === "history" &&
+                        fs.existsSync(defaultPaths.edge.history)
+                    ) {
                         foundPath = defaultPaths.edge.history;
                     }
                 }
-                
+
                 if (foundPath) {
                     index.location = foundPath;
                     debug(`Using default browser data path: ${foundPath}`);
@@ -187,10 +199,10 @@ if (
         try {
             // Import website data
             websites = new WebsiteCollection();
-            
+
             const browserType = index.browserType || "chrome";
             const sourceType = index.sourceType || "bookmarks";
-            
+
             const importedWebsites = await importWebsites(
                 browserType,
                 sourceType,
@@ -202,7 +214,9 @@ if (
             // Add websites to collection
             websites.addWebsites(importedWebsites);
 
-            debug(`Imported ${importedWebsites.length} websites from ${browserType} ${sourceType}`);
+            debug(
+                `Imported ${importedWebsites.length} websites from ${browserType} ${sourceType}`,
+            );
 
             // build the index
             buildIndex(websites, true);
@@ -226,29 +240,31 @@ if (
         if (buildIndexPromise === undefined) {
             buildIndexPromise = websites.buildIndex();
 
-            buildIndexPromise.then(async (value: IndexingResults) => {
-                debug(`Found ${websites!.messages.length} websites`);
+            buildIndexPromise
+                .then(async (value: IndexingResults) => {
+                    debug(`Found ${websites!.messages.length} websites`);
 
-                await websites?.writeToFile(index!.path, "index");
+                    await websites?.writeToFile(index!.path, "index");
 
-                debug(`Index saved to ${index!.path}`);
+                    debug(`Index saved to ${index!.path}`);
 
-                index!.state = "finished";
+                    index!.state = "finished";
 
-                index!.sizeOnDisk = (
-                    await getFolderSize(index!.path as string)
-                ).size;
+                    index!.sizeOnDisk = (
+                        await getFolderSize(index!.path as string)
+                    ).size;
 
-                sendIndexStatus();
+                    sendIndexStatus();
 
-                // reset indexing building promise
-                buildIndexPromise = undefined;
-            }).catch((error) => {
-                debug(`Error building index: ${error}`);
-                index!.state = "error";
-                sendIndexStatus();
-                buildIndexPromise = undefined;
-            });
+                    // reset indexing building promise
+                    buildIndexPromise = undefined;
+                })
+                .catch((error) => {
+                    debug(`Error building index: ${error}`);
+                    index!.state = "error";
+                    sendIndexStatus();
+                    buildIndexPromise = undefined;
+                });
         }
     }
 

@@ -145,9 +145,9 @@ export class IndexManager {
      * Create the website index for the specified location
      */
     private async createWebsiteIndex(
-        name: string, 
-        location: string, 
-        options?: { sourceType?: string; browserType?: string }
+        name: string,
+        location: string,
+        options?: { sourceType?: string; browserType?: string },
     ) {
         // For website indexing, location can be "default" to use default browser paths
         // or a specific file path to browser data
@@ -169,8 +169,10 @@ export class IndexManager {
             state: "new",
             progress: 0,
             sizeOnDisk: 0,
-            sourceType: options?.sourceType as "bookmarks" | "history" || "bookmarks",
-            browserType: options?.browserType as "chrome" | "edge" || "chrome",
+            sourceType:
+                (options?.sourceType as "bookmarks" | "history") || "bookmarks",
+            browserType:
+                (options?.browserType as "chrome" | "edge") || "chrome",
         };
 
         // start indexing
@@ -202,7 +204,7 @@ export class IndexManager {
         return new Promise<ChildProcess | undefined>((resolve, reject) => {
             try {
                 let serviceRoot: string;
-                
+
                 // Determine which indexing service to use based on source type
                 if (index.source === "website") {
                     serviceRoot = getPackageFilePath(
@@ -214,7 +216,7 @@ export class IndexManager {
                         "./node_modules/image-memory/dist/indexingService.js",
                     );
                 }
-                
+
                 const childProcess = fork(serviceRoot);
 
                 IndexManager.getInstance().indexingServices.set(

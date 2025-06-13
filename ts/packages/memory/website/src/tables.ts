@@ -18,7 +18,7 @@ export class VisitFrequencyTable extends ms.sqlite.SqliteDataFrame {
             ["domain", { type: "string" }],
             ["visitCount", { type: "number" }],
             ["lastVisitDate", { type: "string" }],
-            ["averageTimeSpent", { type: "number", optional: true }]
+            ["averageTimeSpent", { type: "number", optional: true }],
         ]);
     }
 
@@ -44,7 +44,7 @@ export class WebsiteCategoryTable extends ms.sqlite.SqliteDataFrame {
         super(db, "websiteCategories", [
             ["domain", { type: "string" }],
             ["category", { type: "string" }],
-            ["confidence", { type: "number" }]
+            ["confidence", { type: "number" }],
         ]);
     }
 
@@ -81,7 +81,7 @@ export class BookmarkFolderTable extends ms.sqlite.SqliteDataFrame {
             ["folderPath", { type: "string" }],
             ["url", { type: "string" }],
             ["title", { type: "string" }],
-            ["dateAdded", { type: "string" }]
+            ["dateAdded", { type: "string" }],
         ]);
     }
 

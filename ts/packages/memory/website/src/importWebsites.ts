@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebsiteVisitInfo, Website, importWebsiteVisit } from "./websiteMeta.js";
+import {
+    WebsiteVisitInfo,
+    Website,
+    importWebsiteVisit,
+} from "./websiteMeta.js";
 import path from "path";
 import fs from "fs";
 import * as sqlite from "better-sqlite3";
@@ -201,7 +205,16 @@ function extractBookmarks(
             ? `${currentPath}/${bookmark.name}`
             : bookmark.name;
         for (const child of bookmark.children) {
-            extractBookmarks(child, folderPath, websites, cutoffDate, limit, progressCallback, processedRef, total);
+            extractBookmarks(
+                child,
+                folderPath,
+                websites,
+                cutoffDate,
+                limit,
+                progressCallback,
+                processedRef,
+                total,
+            );
             if (limit && websites.length >= limit) break;
         }
     }
@@ -285,7 +298,7 @@ export async function importChromeHistory(
             // Convert rows to WebsiteVisitInfo
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
-                
+
                 if (
                     !row.url ||
                     row.url.startsWith("chrome://") ||
@@ -381,22 +394,38 @@ export async function importWebsites(
     switch (source) {
         case "chrome":
             if (type === "bookmarks") {
-                visitInfos = await importChromeBookmarks(filePath, options, progressCallback);
+                visitInfos = await importChromeBookmarks(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
             } else if (type === "history") {
-                visitInfos = await importChromeHistory(filePath, options, progressCallback);
+                visitInfos = await importChromeHistory(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
             }
             break;
         case "edge":
             if (type === "bookmarks") {
-                visitInfos = await importEdgeBookmarks(filePath, options, progressCallback);
+                visitInfos = await importEdgeBookmarks(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
             } else if (type === "history") {
-                visitInfos = await importEdgeHistory(filePath, options, progressCallback);
+                visitInfos = await importEdgeHistory(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
             }
             break;
     }
 
     // Convert WebsiteVisitInfo to Website objects
-    return visitInfos.map(visitInfo => importWebsiteVisit(visitInfo));
+    return visitInfos.map((visitInfo) => importWebsiteVisit(visitInfo));
 }
 
 /**
