@@ -22,12 +22,7 @@ import {
     getIndexingState,
     addMessagesToCollection,
     buildCollectionIndex,
-    getDefaultBrowserPaths,
-    determinePageType,
-    ImportOptions,
-    importWebsites,
 } from "./websiteMemory.js";
-import { importWebsiteVisit, WebsiteVisitInfo } from "./websiteMessage.js";
 import * as website from "website-memory";
 
 export type KnowProWebsiteContext = {
@@ -83,7 +78,7 @@ export async function createKnowproWebsiteCommands(
         }
         const namedArgs = parseNamedArguments(args, websiteAddDef());
 
-        const visitInfo: WebsiteVisitInfo = {
+        const visitInfo: website.WebsiteVisitInfo = {
             url: namedArgs.url,
             source: (namedArgs.source as "bookmark" | "history") || "bookmark",
         };
@@ -94,7 +89,7 @@ export async function createKnowproWebsiteCommands(
         if (namedArgs.pageType) {
             visitInfo.pageType = namedArgs.pageType;
         } else {
-            visitInfo.pageType = determinePageType(
+            visitInfo.pageType = website.determinePageType(
                 namedArgs.url,
                 namedArgs.title,
             );
@@ -104,7 +99,10 @@ export async function createKnowproWebsiteCommands(
             visitInfo.bookmarkDate = visitInfo.visitDate;
         }
 
-        const websiteMessage = importWebsiteVisit(visitInfo, namedArgs.content);
+        const websiteMessage = website.importWebsiteVisit(
+            visitInfo,
+            namedArgs.content,
+        );
 
         context.printer.writeLine(`Adding website: ${visitInfo.url}`);
         const result = await addMessagesToCollection(
@@ -233,7 +231,7 @@ export async function createKnowproWebsiteCommands(
         // For now, let's hardcode the path since namedArgs.path is a function
         let bookmarksPath: string | undefined = undefined; // namedArgs.path would be a function call
 
-        const defaultPaths = getDefaultBrowserPaths();
+        const defaultPaths = website.getDefaultBrowserPaths();
         if (namedArgs.source === "chrome") {
             bookmarksPath = defaultPaths.chrome.bookmarks as string;
         } else if (namedArgs.source === "edge") {
@@ -255,7 +253,7 @@ export async function createKnowproWebsiteCommands(
                 `Importing bookmarks from ${namedArgs.source} at ${bookmarksPath}`,
             );
 
-            const importOptions: Partial<ImportOptions> = {
+            const importOptions: Partial<website.ImportOptions> = {
                 source: namedArgs.source as "chrome" | "edge",
                 type: "bookmarks",
             };
@@ -271,14 +269,14 @@ export async function createKnowproWebsiteCommands(
 
             let websites: website.Website[] = [];
             if (namedArgs.source === "chrome") {
-                websites = await importWebsites(
+                websites = await website.importWebsites(
                     "chrome",
                     "bookmarks",
                     bookmarksPath,
                     importOptions,
                 );
             } else if (namedArgs.source === "edge") {
-                websites = await importWebsites(
+                websites = await website.importWebsites(
                     "edge",
                     "bookmarks",
                     bookmarksPath,
@@ -342,7 +340,7 @@ export async function createKnowproWebsiteCommands(
         // For now, let's hardcode the path since namedArgs.path is a function
         let historyPath: string | undefined = undefined; // namedArgs.path would be a function call
 
-        const defaultPaths = getDefaultBrowserPaths();
+        const defaultPaths = website.getDefaultBrowserPaths();
         if (namedArgs.source === "chrome") {
             historyPath = defaultPaths.chrome.history as string;
         } else if (namedArgs.source === "edge") {
@@ -367,7 +365,7 @@ export async function createKnowproWebsiteCommands(
                 "Note: Please close Chrome before importing history to avoid database lock issues.",
             );
 
-            const importOptions: Partial<ImportOptions> = {
+            const importOptions: Partial<website.ImportOptions> = {
                 source: namedArgs.source as "chrome" | "edge",
                 type: "history",
             };
@@ -382,14 +380,14 @@ export async function createKnowproWebsiteCommands(
 
             let websites: website.Website[] = [];
             if (namedArgs.source === "chrome") {
-                websites = await importWebsites(
+                websites = await website.importWebsites(
                     "chrome",
                     "history",
                     historyPath,
                     importOptions,
                 );
             } else if (namedArgs.source === "edge") {
-                websites = await importWebsites(
+                websites = await website.importWebsites(
                     "edge",
                     "history",
                     historyPath,

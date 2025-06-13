@@ -4,15 +4,7 @@
 import * as website from "website-memory";
 import { Result, success } from "typechat";
 
-// Re-export types and classes from the website-memory package
-export const WebsiteCollection = website.WebsiteCollection;
-export const importWebsites = website.importWebsites;
-export const getDefaultBrowserPaths = website.getDefaultBrowserPaths;
-export const determinePageType = website.determinePageType;
-
-export type WebsiteVisitInfo = website.WebsiteVisitInfo;
-export type ImportOptions = website.ImportOptions;
-
+// Simplified website memory creation function
 export async function createWebsiteMemory(
     dirPath: string,
     baseFileName: string,
@@ -74,7 +66,6 @@ export async function addMessagesToCollection(
     }
 }
 
-// Helper function for building index with progress tracking
 export async function buildCollectionIndex(
     collection: website.WebsiteCollection,
 ): Promise<
