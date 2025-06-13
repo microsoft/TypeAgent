@@ -1,0 +1,48 @@
+{
+  "name": "website-memory",
+  "version": "0.0.1",
+  "description": "Using structured RAG to implement website visit memory",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/memory/website"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"src/**/*Schema*.ts\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "aiclient": "workspace:*",
+    "better-sqlite3": "11.9.1",
+    "common-utils": "workspace:*",
+    "debug": "^4.4.0",
+    "get-folder-size": "^5.0.0",
+    "knowledge-processor": "workspace:*",
+    "knowpro": "workspace:*",
+    "memory-storage": "workspace:*",
+    "telemetry": "workspace:*",
+    "typeagent": "workspace:*",
+    "typechat": "^0.1.1"
+  },
+  "devDependencies": {    
+    "@types/better-sqlite3": "7.6.11",
+    "@types/debug": "^4.1.12",
+    "copyfiles": "^2.4.1",
+    "dotenv": "^16.3.1",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
