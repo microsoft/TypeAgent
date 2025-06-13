@@ -302,8 +302,7 @@ async function resolveWebPage(
             }
 
             // get local agent
-            const port =
-                await context.getSharedLocalHostPort(site);
+            const port = await context.getSharedLocalHostPort(site);
 
             if (port !== undefined) {
                 debug(`Resolved local site on PORT ${port}`);
