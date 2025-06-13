@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { describeIf, hasTestKeys } from "test-lib";
 import { VisitFrequencyTable, WebsiteCategoryTable, BookmarkFolderTable } from "../src/tables.js";
 import {
     createTestWebsiteCollection,
@@ -16,7 +17,10 @@ import {
 } from "./verify.js";
 import * as ms from "memory-storage";
 
-describe("websiteDataFrames", () => {
+describeIf(
+    "websiteDataFrames",
+    () => hasTestKeys(),
+    () => {
     test("create dataframes", () => {
         const db = ms.sqlite.createDatabase(":memory:", true);
         
