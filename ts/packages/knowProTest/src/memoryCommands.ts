@@ -25,10 +25,11 @@ export function execSearchCommand(
 export async function execGetAnswerCommand(
     context: KnowproContext,
     args: string[] | NamedArgs,
+    searchResponse?: SearchResponse,
 ) {
     const request = parseTypedArguments<GetAnswerRequest>(
         args,
         getAnswerRequestDef(),
     );
-    return context.execAnswerRequest(request);
+    return context.execGetAnswerRequest(request, searchResponse);
 }

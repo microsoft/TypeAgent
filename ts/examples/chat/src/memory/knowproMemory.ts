@@ -13,6 +13,7 @@ import {
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
+    parseTypedArguments,
     runConsole,
     StopWatch,
 } from "interactive-app";
@@ -258,7 +259,7 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
-        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        const [searchResults, debugContext] = await execAnswerSearch(namedArgs);
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -306,7 +307,7 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, answerDef());
-        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        const [searchResults, debugContext] = await execAnswerSearch(namedArgs);
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -322,6 +323,20 @@ export async function createKnowproCommands(
             context.printer.writeLine("No matches");
             return;
         }
+
+        await context.execGetAnswerRequest(
+            parseTypedArguments<kpTest.GetAnswerRequest>(
+                args,
+                kpTest.getAnswerRequestDef(),
+            ),
+            undefined,
+            (i: number, q: string, answer) => {
+                writeAnswer(i, answer, debugContext);
+                return;
+            },
+        );
+        context.printer.writeLine();
+        /*
         context.answerGenerator.settings.fastStop = namedArgs.fastStop;
         if (!namedArgs.messages) {
             // Don't include raw message text... try answering only with knowledge
@@ -356,6 +371,7 @@ export async function createKnowproCommands(
             );
             writeAnswer(i, answerResult, debugContext);
         }
+            */
     }
 
     function searchRagDef(): CommandMetadata {
@@ -598,7 +614,7 @@ export async function createKnowproCommands(
      * @param namedArgs
      * @returns
      */
-    async function runAnswerSearch(
+    async function execAnswerSearch(
         namedArgs: NamedArgs,
     ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
         const response = await kpTest.execSearchCommand(context, namedArgs);

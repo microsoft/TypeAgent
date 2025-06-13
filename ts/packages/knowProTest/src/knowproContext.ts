@@ -11,6 +11,7 @@ import {
     SearchRequest,
     SearchResponse,
 } from "./requests.js";
+import { Result } from "typechat";
 
 export class KnowproContext {
     public knowledgeModel: ChatModel;
@@ -80,10 +81,14 @@ export class KnowproContext {
         return { searchResults, debugContext };
     }
 
-    public async execAnswerRequest(
+    public async execGetAnswerRequest(
         request: GetAnswerRequest,
         searchResponse?: SearchResponse,
-        progressCallback?: () => void,
+        progressCallback?: (
+            index: number,
+            question: string,
+            answer: Result<kp.AnswerResponse>,
+        ) => void,
     ): Promise<GetAnswerResponse> {
         const conversation = this.ensureConversationLoaded();
         searchResponse =
@@ -124,10 +129,13 @@ export class KnowproContext {
                     this.answerGenerator,
                     question,
                     searchResult,
-                    progressCallback,
+                    undefined,
                     options,
                 );
                 response.answerResponses.push(answerResult);
+                if (progressCallback) {
+                    progressCallback(i, question, answerResult);
+                }
             }
         } finally {
             this.answerGenerator.settings.fastStop = fastStopSav;
