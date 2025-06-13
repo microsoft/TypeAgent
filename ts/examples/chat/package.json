@@ -38,6 +38,7 @@
     "interactive-app": "workspace:*",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
+    "knowpro-test": "workspace:*",
     "memory-providers": "workspace:*",
     "memory-storage": "workspace:*",
     "typeagent": "workspace:*",

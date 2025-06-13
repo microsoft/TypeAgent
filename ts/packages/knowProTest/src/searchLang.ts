@@ -35,7 +35,7 @@ export function collectLangSearchResults(
     };
 }
 
-export function getKnowledgeResults(
+function getKnowledgeResults(
     cr: kp.ConversationSearchResult,
     lr: LangSearchResult,
 ) {

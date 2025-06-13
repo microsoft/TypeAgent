@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
+import * as kpTest from "knowpro-test";
 import {
     arg,
     argBool,
@@ -15,7 +16,7 @@ import {
     runConsole,
     StopWatch,
 } from "interactive-app";
-import { ChatModel, openai } from "aiclient";
+import { ChatModel } from "aiclient";
 import {
     argToDate,
     parseFreeAndNamedArguments,
@@ -80,16 +81,10 @@ export type KnowproContext = {
     answerGenerator: kp.AnswerGenerator;
 };
 
-export function createKnowledgeModel() {
-    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
-    chatModelSettings.retryPauseMs = 10000;
-    return openai.createJsonChatModel(chatModelSettings, ["knowproMemory"]);
-}
-
 export async function createKnowproCommands(
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
-    const knowledgeModel = createKnowledgeModel();
+    const knowledgeModel = kpTest.createKnowledgeModel();
     const context: KnowproContext = {
         knowledgeModel,
         queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),

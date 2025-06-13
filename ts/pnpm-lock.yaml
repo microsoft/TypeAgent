@@ -112,6 +112,9 @@ importers:
       knowpro:
         specifier: workspace:*
         version: link:../../packages/knowPro
+      knowpro-test:
+        specifier: workspace:*
+        version: link:../../packages/knowProTest
       memory-providers:
         specifier: workspace:*
         version: link:../memoryProviders
@@ -2571,6 +2574,9 @@ importers:
       typeagent:
         specifier: workspace:*
         version: link:../typeagent
+      typechat:
+        specifier: 0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
     devDependencies:
       copyfiles:
         specifier: ^2.4.1
