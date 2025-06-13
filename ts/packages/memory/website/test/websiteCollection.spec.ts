@@ -24,7 +24,7 @@ import {
 describeIf(
     "websiteCollection.offline",
     () => hasTestKeys(),
-    
+    () => {
     test("create empty collection", () => {
         const collection = createTestWebsiteCollection([]);
         expect(collection).toBeDefined();
