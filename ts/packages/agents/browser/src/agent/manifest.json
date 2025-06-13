@@ -1,6 +1,6 @@
 {
   "emojiChar": "🌐",
-  "defaultEnabled": false,
+  "defaultEnabled": true,
   "description": "Agent that allows you control an existing browser window",
   "schema": {
     "description": "Browser agent that allows you control an existing browser window and perform actions such as opening a new tab, closing a tab, scrolling, zooming and navigating to a specific URL.",

@@ -26,7 +26,8 @@ export type BrowserEntities = WebPage;
 export type OpenWebPage = {
     actionName: "openWebPage";
     parameters: {
-        // Alias or URL for the site of the open.
+        // Name or description of the site to search for and open
+        // Do NOT put URL here unless the user request specified the URL.
         site:
             | "paelobiodb"
             | "crossword"

@@ -308,7 +308,7 @@ export async function executeActions(
 
     // Even if the action is not executed, resolve the entities for the commandResult.
     const actionQueue: PendingAction[] = await toPendingActions(
-        systemContext,
+        context,
         actions,
         entities,
     );
@@ -335,7 +335,7 @@ export async function executeActions(
             const requestAction = translationResult.requestAction;
             actionQueue.unshift(
                 ...(await toPendingActions(
-                    systemContext,
+                    context,
                     requestAction.actions,
                     requestAction.history?.entities,
                 )),
@@ -391,11 +391,7 @@ export async function executeActions(
                 );
                 // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
                 actionQueue.unshift(
-                    ...(await toPendingActions(
-                        systemContext,
-                        actions,
-                        undefined,
-                    )),
+                    ...(await toPendingActions(context, actions, undefined)),
                 );
             } catch (e) {
                 throw new Error(
