@@ -127,6 +127,9 @@ importers:
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
+      website-memory:
+        specifier: workspace:*
+        version: link:../../packages/memory/website
     devDependencies:
       '@types/better-sqlite3':
         specifier: 7.6.11
