@@ -82,3 +82,26 @@ This package integrates with:
 - **Knowledge Processor**: For semantic indexing and search
 - **Dispatcher**: For background indexing service management
 - **TypeAgent**: For conversational queries over website data
+
+## Testing
+
+The package includes comprehensive Jest tests:
+
+```bash
+# Run all tests
+npm test
+
+# Run offline tests only (no API keys required)
+npm run test:offline  
+
+# Run online tests only (requires API keys)
+npm run test:online
+```
+
+### Test Categories
+- **Collection Tests**: WebsiteCollection functionality
+- **Import Tests**: Browser data import capabilities  
+- **DataFrame Tests**: SQL storage and queries
+- **Indexing Tests**: Semantic indexing and search
+
+See `test/README.md` for detailed test documentation.
