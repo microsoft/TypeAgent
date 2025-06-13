@@ -852,23 +852,27 @@ export function addBatchHandler(app: InteractiveApp) {
             io.writer.writeLine(`${batchFilePath} not found.`);
             return;
         }
-        const lines = (
-            await fs.promises.readFile(batchFilePath, "utf-8")
-        ).split(/\r?\n/);
+        const lines = getBatchFileLines(batchFilePath, namedArgs.commentPrefix);
         for (const line of lines) {
-            if (line && !line.startsWith(namedArgs.commentPrefix)) {
-                if (namedArgs.echo) {
-                    io.writer.writeLine(line);
-                }
-                if (!(await app.processInput(line))) {
-                    break;
-                }
-                io.writer.writeLine();
+            if (namedArgs.echo) {
+                io.writer.writeLine(line);
             }
+            if (!(await app.processInput(line))) {
+                break;
+            }
+            io.writer.writeLine();
         }
     }
 
     return;
+}
+
+export function getBatchFileLines(
+    batchFilePath: string,
+    commentPrefix = "#",
+): string[] {
+    const lines = fs.readFileSync(batchFilePath, "utf-8").split(/\r?\n/);
+    return lines.filter((line) => line && !line.startsWith(commentPrefix));
 }
 
 function getDescription(handler: CommandHandler): string | undefined {
