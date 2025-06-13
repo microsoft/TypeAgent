@@ -57,7 +57,12 @@ import { BrowserControl } from "./interface.mjs";
 import { bingWithGrounding } from "aiclient";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
-import { Agent, MessageContentUnion, ThreadMessage, ToolUtility } from "@azure/ai-agents";
+import {
+    Agent,
+    MessageContentUnion,
+    ThreadMessage,
+    ToolUtility,
+} from "@azure/ai-agents";
 
 const debug = registerDebug("typeagent:browser:action");
 
@@ -262,7 +267,6 @@ async function resolveWebSite(
         case "turtlegraphics":
             return "http://localhost:9000/";
         default:
-
             // try to resolve URL using LLM + internet search
             const url = await resolveURLWithSearch(site);
 
@@ -271,7 +275,8 @@ async function resolveWebSite(
             }
 
             // get local agent
-            const port = await context.sessionContext.getSharedLocalHostPort(site);
+            const port =
+                await context.sessionContext.getSharedLocalHostPort(site);
 
             if (port !== undefined) {
                 debug(`Resolved local site on PORT ${port}`);
@@ -284,8 +289,7 @@ async function resolveWebSite(
 }
 
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
-async function resolveURLWithSearch(site: string) : Promise<string | undefined> {
-    
+async function resolveURLWithSearch(site: string): Promise<string | undefined> {
     if (!groundingConfig) {
         groundingConfig = bingWithGrounding.apiSettingsFromEnv();
     }
@@ -294,27 +298,26 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
         new DefaultAzureCredential(),
-    );    
-    
-    const agent = await ensureAgent(groundingConfig, project); 
+    );
+
+    const agent = await ensureAgent(groundingConfig, project);
 
     if (!agent) {
-        throw new Error("No agent found for Bing with Grounding. Please check your configuration.");
+        throw new Error(
+            "No agent found for Bing with Grounding. Please check your configuration.",
+        );
     }
 
     try {
         const thread = await project.agents.threads.create();
 
         // the question that needs answering
-        await project.agents.messages.create(
-            thread.id,
-            "user",
-            site,
-        );
+        await project.agents.messages.create(thread.id, "user", site);
 
         // Create run
-        const run = await project.agents.runs.createAndPoll(thread.id, 
-            agent.id, 
+        const run = await project.agents.runs.createAndPoll(
+            thread.id,
+            agent.id,
             {
                 pollingOptions: {
                     intervalInMs: 500,
@@ -322,7 +325,8 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
                 onResponse: (response): void => {
                     debug(`Received response with status: ${response.status}`);
                 },
-            });
+            },
+        );
 
         const msgs: ThreadMessage[] = [];
         if (run.status === "completed") {
@@ -332,17 +336,21 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
                     order: "asc",
                 });
 
-                // accumulate assistant messages                
+                // accumulate assistant messages
                 for await (const m of messages) {
                     if (m.role === "assistant") {
                         // TODO: handle multi-modal content
-                        const content: MessageContentUnion | undefined = m.content.find(
-                            (c) => c.type === "text" && "text" in c,
-                        );
+                        const content: MessageContentUnion | undefined =
+                            m.content.find(
+                                (c) => c.type === "text" && "text" in c,
+                            );
                         if (content) {
                             msgs.push(m);
-                            let txt: string = (content as any).text.value as string;
-                            txt = txt.replaceAll("```json", "").replaceAll("```", "")
+                            let txt: string = (content as any).text
+                                .value as string;
+                            txt = txt
+                                .replaceAll("```json", "")
+                                .replaceAll("```", "");
                             const url = JSON.parse(txt) as urlResolutionAction;
                             retVal = url.url;
                         }
@@ -358,27 +366,36 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
     }
 
     // return assistant messages
-    return retVal;    
+    return retVal;
 }
 
 /*
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
-async function ensureAgent(groundingConfig: bingWithGrounding.ApiSettings, project: AIProjectClient) : Promise<Agent | undefined> {
-    
+async function ensureAgent(
+    groundingConfig: bingWithGrounding.ApiSettings,
+    project: AIProjectClient,
+): Promise<Agent | undefined> {
     try {
-        return await project.agents.getAgent(groundingConfig.urlResolutionAgentId!);
+        return await project.agents.getAgent(
+            groundingConfig.urlResolutionAgentId!,
+        );
     } catch (e) {
         return await createAgent(groundingConfig, project);
     }
 }
 
-async function createAgent(groundingConfig: bingWithGrounding.ApiSettings, project: AIProjectClient) : Promise<Agent> {
+async function createAgent(
+    groundingConfig: bingWithGrounding.ApiSettings,
+    project: AIProjectClient,
+): Promise<Agent> {
     try {
         // connection id is in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/typeagent-test-agent/connections/<CONNECTION NAME>>
-        const bingTool = ToolUtility.createBingGroundingTool([{ 
-            connectionId: groundingConfig.connectionId!, 
-        }]);
+        const bingTool = ToolUtility.createBingGroundingTool([
+            {
+                connectionId: groundingConfig.connectionId!,
+            },
+        ]);
 
         // try to create the agent
         return await project.agents.createAgent("gpt-4o", {
@@ -396,7 +413,7 @@ interface Response {
     explanation: string;
     bingSearchQuery: string;
 }`,
-            tools: [ bingTool.definition ],
+            tools: [bingTool.definition],
         });
     } catch (e) {
         debug(`Error creating agent: ${e}`);

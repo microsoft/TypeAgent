@@ -32,7 +32,13 @@ export function apiSettingsFromEnv(
     return {
         endpoint: getEnvSetting(env, EnvVars.BING_WITH_GROUNDING_ENDPOINT),
         agent: getEnvSetting(env, EnvVars.BING_WITH_GROUNDING_AGENT_ID),
-        urlResolutionAgentId: getEnvSetting(env, EnvVars.BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID),
-        connectionId: getEnvSetting(env, EnvVars.BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID)
+        urlResolutionAgentId: getEnvSetting(
+            env,
+            EnvVars.BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID,
+        ),
+        connectionId: getEnvSetting(
+            env,
+            EnvVars.BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID,
+        ),
     };
 }
