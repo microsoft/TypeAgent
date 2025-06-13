@@ -336,42 +336,6 @@ export async function createKnowproCommands(
             },
         );
         context.printer.writeLine();
-        /*
-        context.answerGenerator.settings.fastStop = namedArgs.fastStop;
-        if (!namedArgs.messages) {
-            // Don't include raw message text... try answering only with knowledge
-            searchResults.data.forEach((r) => (r.messageMatches = []));
-        }
-        const choices = namedArgs.choices?.split(";");
-        const progressCallback = (
-            chunk: kp.AnswerContext,
-            index: number,
-            result: Result<kp.AnswerResponse>,
-        ) => {
-            if (namedArgs.debug) {
-                context.printer.writeLine();
-                context.printer.writeJsonInColor(chalk.gray, chunk);
-            }
-        };
-        const options = createAnswerOptions(namedArgs);
-        for (let i = 0; i < searchResults.data.length; ++i) {
-            const searchResult = searchResults.data[i];
-            let question =
-                searchResult.rawSearchQuery ?? debugContext.searchText;
-            if (choices && choices.length > 0) {
-                question = kp.createMultipleChoiceQuestion(question, choices);
-            }
-            const answerResult = await kp.generateAnswer(
-                context.conversation!,
-                context.answerGenerator,
-                question,
-                searchResult,
-                progressCallback,
-                options,
-            );
-            writeAnswer(i, answerResult, debugContext);
-        }
-            */
     }
 
     function searchRagDef(): CommandMetadata {
