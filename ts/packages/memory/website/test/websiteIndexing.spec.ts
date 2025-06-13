@@ -17,7 +17,11 @@ import {
     verifyWebsiteDataFrames,
 } from "./verify.js";
 
-describe("websiteIndexing.offline", () => {
+
+describeIf(
+    "websiteIndexing.offline",
+    () => hasTestKeys(),
+    () => {
     test("basic indexing", async () => {
         const collection = createTestWebsiteCollection(getAllTestWebsites());
         const results = await collection.buildIndex();
