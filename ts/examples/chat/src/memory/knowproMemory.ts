@@ -240,42 +240,17 @@ export async function createKnowproCommands(
         }
     }
 
-    function searchDefBase(): CommandMetadata {
-        return {
-            description:
-                "Search using natural language and old knowlege-processor search filters",
-            args: {
-                query: arg("Search query"),
-            },
-            options: {
-                maxToDisplay: argNum(
-                    "Maximum matches to display",
-                    DefaultMaxToDisplay,
-                ),
-                exact: argBool("Exact match only. No related terms", false),
-                ktype: arg("Knowledge type"),
-                distinct: argBool("Show distinct results", false),
-            },
-        };
-    }
-    function searchDef(): CommandMetadata {
-        const def = searchDefBase();
-        def.description = "Search using natural language";
+    function searchDef(base?: CommandMetadata): CommandMetadata {
+        const def = kpTest.searchRequestDef();
         def.options ??= {};
-        def.options.showKnowledge = argBool("Show knowledge matches", true);
-        def.options.showMessages = argBool("Show message matches", false);
-        def.options.messageTopK = argNum("How many top K message matches", 25);
-        def.options.charBudget = argNum("Maximum characters in budget");
-        def.options.applyScope = argBool("Apply scopes", true);
-        def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
         def.options.maxToDisplay = argNum(
             "Maximum to display",
             DefaultMaxToDisplay,
         );
-        def.options.thread = arg("Thread description");
-        def.options.tag = arg("Tag to filter by");
+        def.options.showKnowledge = argBool("Show knowledge matches", true);
+        def.options.showMessages = argBool("Show message matches", false);
         return def;
     }
     commands.kpSearch.metadata = searchDef();
@@ -653,7 +628,7 @@ export async function createKnowproCommands(
             namedArgs,
             metadata,
         );
-        return await kpTest.runSearchRequest(context, request);
+        return await kpTest.execSearch(context, request);
     }
 
     function writeSearchResult(

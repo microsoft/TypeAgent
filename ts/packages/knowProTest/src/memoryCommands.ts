@@ -4,25 +4,55 @@ import * as kp from "knowpro";
 import * as cm from "conversation-memory";
 import { Result } from "typechat";
 import { KnowproContext } from "./knowproContext.js";
+import {
+    arg,
+    argBool,
+    argNum,
+    CommandMetadata,
+    NamedArgs,
+    parseTypedArguments,
+} from "interactive-app";
 
 export interface SearchRequest {
+    // Required
     query: string;
-    ktype: kp.KnowledgeType;
-    fallback?: boolean | undefined;
-    tag?: string | undefined;
-    thread?: string | undefined;
+    // Optional
+    applyScope?: boolean | undefined;
+    charBudget?: number | undefined;
     exact?: boolean | undefined;
     exactScope?: boolean | undefined;
-    applyScope?: boolean | undefined;
+    fallback?: boolean | undefined;
+    ktype: kp.KnowledgeType;
     messageTopK?: number | undefined;
-    charBudget?: number | undefined;
+    tag?: string | undefined;
+    thread?: string | undefined;
+}
+
+export function searchRequestDef(): CommandMetadata {
+    return {
+        description: "Search using natural language",
+        args: {
+            query: arg("Search query"),
+        },
+        options: {
+            applyScope: argBool("Apply scopes", true),
+            charBudget: argNum("Maximum characters in budget"),
+            exact: argBool("Exact match only. No related terms", false),
+            exactScope: argBool("Exact scope", false),
+            fallback: argBool("Fallback to text similarity matching", true),
+            ktype: arg("Knowledge type"),
+            messageTopK: argNum("How many top K message matches", 25),
+            tag: arg("Tag to filter by"),
+            thread: arg("Thread description"),
+        },
+    };
 }
 
 export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
 
-export async function runSearchRequest(
+export async function execSearch(
     context: KnowproContext,
     request: SearchRequest,
 ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
@@ -64,6 +94,17 @@ export async function runSearchRequest(
               );
 
     return [searchResults, debugContext];
+}
+
+export function execSearchCommand(
+    context: KnowproContext,
+    args: string[] | NamedArgs,
+): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
+    const request = parseTypedArguments<SearchRequest>(
+        args,
+        searchRequestDef(),
+    );
+    return execSearch(context, request);
 }
 
 export interface AnswerRequest extends SearchRequest {}

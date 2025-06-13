@@ -572,6 +572,28 @@ export function parseTypedArguments<T extends Record<string, any>>(
     return typedArgs as T;
 }
 
+export function compareNamedArgs(x: NamedArgs, y: NamedArgs): boolean {
+    const keysX = Object.keys(x).sort();
+    const keysY = Object.keys(y).sort();
+    if (keysX.length !== keysY.length) {
+        return false;
+    }
+    for (let i = 0; i < keysX.length; ++i) {
+        const key = keysX[i];
+        if (key !== keysY[i]) {
+            return false;
+        }
+        const valueX = x[key];
+        if (typeof valueX !== "function") {
+            const valueY = y[key];
+            if (valueX !== valueY) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 export type CommandMetadata = {
     description?: string;
     args?: Record<string, ArgDef>;
