@@ -952,6 +952,9 @@ importers:
       jsonpath:
         specifier: ^1.1.1
         version: 1.1.1
+      knowpro:
+        specifier: workspace:*
+        version: link:../../knowPro
       prismjs:
         specifier: ^1.30.0
         version: 1.30.0

@@ -97,7 +97,7 @@ class IndexCreateCommandHandler implements CommandHandler {
                 description: "The type of index to create [image, email]",
                 char: "t",
                 type: "string",
-                enum: ["image", "email"],
+                enum: ["image", "email", "website"],
                 default: "image",
             },
             name: {

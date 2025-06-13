@@ -159,7 +159,7 @@ export interface SessionContext<T = unknown> {
     getSharedLocalHostPort(agentName: string): Promise<number>;
 
     // Experimental: get the available indexes
-    indexes(type: "image" | "email" | "all"): Promise<any[]>;
+    indexes(type: "image" | "email" | "website" | "all"): Promise<any[]>;
 }
 
 // TODO: only utf8 & base64 is supported for now.
