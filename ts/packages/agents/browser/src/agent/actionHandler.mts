@@ -15,7 +15,10 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { displayError } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayError,
+    displayStatus,
+} from "@typeagent/agent-sdk/helpers/display";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
     getBoardSchema,
@@ -294,19 +297,28 @@ async function resolveWebPage(
         case "turtlegraphics":
             return "http://localhost:9000/";
         default:
+            if (URL.canParse(site)) {
+                // if the site is a valid URL, return it directly
+                debug(`Site is a valid URL: ${site}`);
+                return site;
+            }
+
+            try {
+                // get local agent
+                const port = await context.getSharedLocalHostPort(site);
+
+                if (port !== undefined) {
+                    debug(`Resolved local site on PORT ${port}`);
+                    return `http://localhost:${port}`;
+                }
+            } catch (e) {
+                debug(`Unable to find local host port for '${site}. ${e}'`);
+            }
             // try to resolve URL using LLM + internet search
             const url = await resolveURLWithSearch(site);
 
             if (url) {
                 return url;
-            }
-
-            // get local agent
-            const port = await context.getSharedLocalHostPort(site);
-
-            if (port !== undefined) {
-                debug(`Resolved local site on PORT ${port}`);
-                return `http://localhost:${port}`;
             }
 
             // can't get a URL
@@ -452,7 +464,10 @@ async function openWebPage(
     action: TypeAgentAction<OpenWebPage>,
 ) {
     if (context.sessionContext.agentContext.browserControl) {
-        context.actionIO.setDisplay("Opening web page.");
+        displayStatus(
+            `Opening web page for ${action.parameters.site}.`,
+            context,
+        );
         const siteEntity = action.entities?.site;
         const url =
             siteEntity?.type[0] === "WebPage"
@@ -461,6 +476,13 @@ async function openWebPage(
                       context.sessionContext,
                       action.parameters.site,
                   );
+
+        if (url !== action.parameters.site) {
+            displayStatus(
+                `Opening web page for ${action.parameters.site} at ${url}.`,
+                context,
+            );
+        }
         await context.sessionContext.agentContext.browserControl.openWebPage(
             url,
         );
