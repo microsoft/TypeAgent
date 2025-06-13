@@ -15,26 +15,24 @@ import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import path from "path";
 import { ensureDir } from "typeagent";
-import {
-    createIndexingEventHandler,
-    memoryNameToIndexPath,
-} from "./knowproCommon.js";
+import { memoryNameToIndexPath } from "./knowproCommon.js";
 import chalk from "chalk";
-import { WebsiteMemory, createWebsiteMemory } from "./websiteMemory.js";
 import {
-    importChromeBookmarks,
-    importChromeHistory,
-    importEdgeBookmarks,
-    importEdgeHistory,
+    createWebsiteMemory,
+    getIndexingState,
+    addMessagesToCollection,
+    buildCollectionIndex,
     getDefaultBrowserPaths,
     determinePageType,
     ImportOptions,
-} from "./websiteImport.js";
+    importWebsites,
+} from "./websiteMemory.js";
 import { importWebsiteVisit, WebsiteVisitInfo } from "./websiteMessage.js";
+import * as website from "website-memory";
 
 export type KnowProWebsiteContext = {
     printer: KnowProPrinter;
-    website?: WebsiteMemory | undefined;
+    website?: website.WebsiteCollection | undefined;
     basePath: string;
 };
 
@@ -79,17 +77,15 @@ export async function createKnowproWebsiteCommands(
     }
     commands.kpWebsiteAdd.metadata = websiteAddDef();
     async function websiteAdd(args: string[]) {
-        const websiteMemory = ensureMemoryLoaded();
-        if (!websiteMemory) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
             return;
         }
         const namedArgs = parseNamedArguments(args, websiteAddDef());
 
         const visitInfo: WebsiteVisitInfo = {
             url: namedArgs.url,
-            source:
-                (namedArgs.source as "bookmark" | "history" | "reading_list") ||
-                "bookmark",
+            source: (namedArgs.source as "bookmark" | "history") || "bookmark",
         };
 
         visitInfo.visitDate = new Date().toISOString();
@@ -111,7 +107,8 @@ export async function createKnowproWebsiteCommands(
         const websiteMessage = importWebsiteVisit(visitInfo, namedArgs.content);
 
         context.printer.writeLine(`Adding website: ${visitInfo.url}`);
-        const result = await websiteMemory.addMessages(
+        const result = await addMessagesToCollection(
+            websiteCollection,
             websiteMessage,
             namedArgs.updateIndex,
         );
@@ -134,29 +131,25 @@ export async function createKnowproWebsiteCommands(
     async function websiteBuildIndex(
         args: string[] | NamedArgs,
     ): Promise<void> {
-        const websiteMemory = ensureMemoryLoaded();
-        if (!websiteMemory) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
             return;
         }
         parseNamedArguments(args, websiteBuildIndexDef()); // Parse but don't use for now
         context.printer.writeLine(`Building website index`);
-        const ordinalStartAt = websiteMemory.indexingState.lastMessageOrdinal;
-        const countToIndex = websiteMemory.messages.length - ordinalStartAt;
+        const indexingState = getIndexingState(websiteCollection);
+        const ordinalStartAt = indexingState.lastMessageOrdinal;
+        const countToIndex = websiteCollection.messages.length - ordinalStartAt;
         context.printer.writeLine(
             `OrdinalStartAt: ${ordinalStartAt + 1} / ${countToIndex}`,
         );
 
         let progress = new ProgressBar(context.printer, countToIndex);
-        const eventHandler = createIndexingEventHandler(
-            context.printer,
-            progress,
-            countToIndex,
-        );
 
         try {
             const clock = new StopWatch();
             clock.start();
-            const result = await websiteMemory.buildIndex(eventHandler);
+            const result = await buildCollectionIndex(websiteCollection);
             clock.stop();
             progress.complete();
             context.printer.writeTiming(chalk.gray, clock, "Build index");
@@ -236,8 +229,8 @@ export async function createKnowproWebsiteCommands(
     }
     commands.kpWebsiteAddBookmarks.metadata = websiteAddBookmarksDef();
     async function websiteAddBookmarks(args: string[]) {
-        const websiteMemory = ensureMemoryLoaded();
-        if (!websiteMemory) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
             return;
         }
         const namedArgs = parseNamedArguments(args, websiteAddBookmarksDef());
@@ -281,14 +274,18 @@ export async function createKnowproWebsiteCommands(
                 importOptions.days = parseInt(daysStr);
             }
 
-            let websites: WebsiteVisitInfo[] = [];
+            let websites: website.Website[] = [];
             if (namedArgs.source === "chrome") {
-                websites = await importChromeBookmarks(
+                websites = await importWebsites(
+                    "chrome",
+                    "bookmarks",
                     bookmarksPath,
                     importOptions,
                 );
             } else if (namedArgs.source === "edge") {
-                websites = await importEdgeBookmarks(
+                websites = await importWebsites(
+                    "edge",
+                    "bookmarks",
                     bookmarksPath,
                     importOptions,
                 );
@@ -303,21 +300,14 @@ export async function createKnowproWebsiteCommands(
                 `Found ${websites.length} bookmarks to import`,
             );
 
-            const websiteMessages = websites.map((info) =>
-                importWebsiteVisit(info),
-            );
+            const websiteMessages = websites;
 
             let progress = new ProgressBar(context.printer, 1);
-            const eventHandler = createIndexingEventHandler(
-                context.printer,
-                progress,
-                websiteMessages.length,
-            );
 
-            const result = await websiteMemory.addMessages(
+            const result = await addMessagesToCollection(
+                websiteCollection,
                 websiteMessages,
                 namedArgs.updateIndex,
-                eventHandler,
             );
             progress.complete();
 
@@ -348,8 +338,8 @@ export async function createKnowproWebsiteCommands(
     }
     commands.kpWebsiteAddHistory.metadata = websiteAddHistoryDef();
     async function websiteAddHistory(args: string[]) {
-        const websiteMemory = ensureMemoryLoaded();
-        if (!websiteMemory) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
             return;
         }
         const namedArgs = parseNamedArguments(args, websiteAddHistoryDef());
@@ -395,14 +385,21 @@ export async function createKnowproWebsiteCommands(
                 importOptions.days = parseInt(daysStr);
             }
 
-            let websites: WebsiteVisitInfo[] = [];
+            let websites: website.Website[] = [];
             if (namedArgs.source === "chrome") {
-                websites = await importChromeHistory(
+                websites = await importWebsites(
+                    "chrome",
+                    "history",
                     historyPath,
                     importOptions,
                 );
             } else if (namedArgs.source === "edge") {
-                websites = await importEdgeHistory(historyPath, importOptions);
+                websites = await importWebsites(
+                    "edge",
+                    "history",
+                    historyPath,
+                    importOptions,
+                );
             }
 
             if (websites.length === 0) {
@@ -416,21 +413,14 @@ export async function createKnowproWebsiteCommands(
                 `Found ${websites.length} history entries to import`,
             );
 
-            const websiteMessages = websites.map((info) =>
-                importWebsiteVisit(info),
-            );
+            const websiteMessages = websites;
 
             let progress = new ProgressBar(context.printer, 1);
-            const eventHandler = createIndexingEventHandler(
-                context.printer,
-                progress,
-                websiteMessages.length,
-            );
 
-            const result = await websiteMemory.addMessages(
+            const result = await addMessagesToCollection(
+                websiteCollection,
                 websiteMessages,
                 namedArgs.updateIndex,
-                eventHandler,
             );
             progress.complete();
 
@@ -454,14 +444,14 @@ export async function createKnowproWebsiteCommands(
     }
     commands.kpWebsiteStats.metadata = websiteStatsDef();
     async function websiteStats(args: string[]) {
-        const websiteMemory = ensureMemoryLoaded();
-        if (!websiteMemory) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
             return;
         }
 
-        const totalMessages = websiteMemory.messages.length;
-        const indexedMessages =
-            websiteMemory.indexingState.lastMessageOrdinal + 1;
+        const totalMessages = websiteCollection.messages.length;
+        const indexingState = getIndexingState(websiteCollection);
+        const indexedMessages = indexingState.lastMessageOrdinal + 1;
 
         context.printer.writeLine(`Website Memory Statistics:`);
         context.printer.writeLine(`  Total visits: ${totalMessages}`);
@@ -476,7 +466,7 @@ export async function createKnowproWebsiteCommands(
         const pageTypeCounts = new Map<string, number>();
 
         for (let i = 0; i < totalMessages; i++) {
-            const message = websiteMemory.messages.get(i);
+            const message = websiteCollection.messages.get(i);
             if (message) {
                 const source = message.metadata.websiteSource;
                 sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
@@ -538,7 +528,8 @@ export async function createKnowproWebsiteCommands(
 
     function closeWebsite() {
         if (context.website) {
-            context.website.close();
+            // WebsiteCollection doesn't have a close method like the old WebsiteMemory
+            // So we just clear the reference
             context.website = undefined;
         }
     }
