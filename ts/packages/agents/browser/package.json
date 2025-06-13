@@ -48,6 +48,7 @@
     "dompurify": "^3.2.5",
     "html-to-text": "^9.0.5",
     "jsonpath": "^1.1.1",
+    "knowpro": "workspace:*",
     "prismjs": "^1.30.0",
     "puppeteer": "^23.8.0",
     "puppeteer-extra": "^3.3.6",

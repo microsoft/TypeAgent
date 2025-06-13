@@ -75,6 +75,7 @@ import {
 } from "@azure/ai-agents";
 import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
+import * as kp from "knowpro";
 
 const debug = registerDebug("typeagent:browser:action");
 
@@ -345,6 +346,14 @@ async function resolveWebPage(
             } catch (e) {
                 debug(`Unable to find local host port for '${site}. ${e}'`);
             }
+
+            // try to resolve URL using website visit history first
+            const historyUrl = await resolveURLWithHistory(context, site);
+            if (historyUrl) {
+                debug(`Resolved URL from history: ${historyUrl}`);
+                return historyUrl;
+            }
+
             // try to resolve URL using LLM + internet search
             const url = await resolveURLWithSearch(site);
 
@@ -355,6 +364,307 @@ async function resolveWebPage(
             // can't get a URL
             throw new Error(`Unable to find a URL for: '${site}'`);
     }
+}
+
+/**
+ * Resolve URL using website visit history (bookmarks, browser history)
+ * This provides a more personalized alternative to web search
+ */
+async function resolveURLWithHistory(
+    context: SessionContext<BrowserActionContext>,
+    site: string,
+): Promise<string | undefined> {
+    debug(`Attempting to resolve '${site}' using website visit history`);
+
+    const websiteCollection = context.agentContext.websiteCollection;
+    if (!websiteCollection || websiteCollection.messages.length === 0) {
+        debug("No website collection available or empty");
+        return undefined;
+    }
+
+    try {
+        // Use knowpro searchConversationKnowledge for semantic search
+        const matches = await kp.searchConversationKnowledge(
+            websiteCollection,
+            // search group
+            {
+                booleanOp: "or", // Use OR to be more permissive
+                terms: siteQueryToSearchTerms(site),
+            },
+            // when filter
+            {
+                // No specific knowledge type filter - search across all types
+            },
+            // options
+            {
+                exactMatch: false, // Allow fuzzy matching
+            },
+        );
+
+        if (!matches || matches.size === 0) {
+            debug(`No semantic matches found in history for query: '${site}'`);
+            return undefined;
+        }
+
+        debug(`Found ${matches.size} semantic matches for: '${site}'`);
+
+        const candidates: { url: string; score: number; metadata: any }[] = [];
+        const processedMessages = new Set<number>();
+
+        matches.forEach((match: kp.SemanticRefSearchResult) => {
+            match.semanticRefMatches.forEach(
+                (refMatch: kp.ScoredSemanticRefOrdinal) => {
+                    if (refMatch.score >= 0.3) {
+                        // Lower threshold for broader matching
+                        const semanticRef: kp.SemanticRef | undefined =
+                            websiteCollection.semanticRefs.get(
+                                refMatch.semanticRefOrdinal,
+                            );
+                        if (semanticRef) {
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
+                            if (
+                                messageOrdinal !== undefined &&
+                                !processedMessages.has(messageOrdinal)
+                            ) {
+                                processedMessages.add(messageOrdinal);
+
+                                const website =
+                                    websiteCollection.messages.get(
+                                        messageOrdinal,
+                                    );
+                                if (website && website.metadata) {
+                                    const metadata = website.metadata;
+                                    let totalScore = refMatch.score;
+
+                                    // Apply additional scoring based on special patterns and recency
+                                    totalScore += calculateWebsiteScore(
+                                        site,
+                                        metadata,
+                                    );
+
+                                    candidates.push({
+                                        url: metadata.url,
+                                        score: totalScore,
+                                        metadata: metadata,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                },
+            );
+        });
+
+        if (candidates.length === 0) {
+            debug(`No qualifying candidates found for query: '${site}'`);
+            return undefined;
+        }
+
+        // Sort by total score (highest first) and remove duplicates
+        const uniqueCandidates = new Map<
+            string,
+            { url: string; score: number; metadata: any }
+        >();
+        candidates.forEach((candidate) => {
+            const existing = uniqueCandidates.get(candidate.url);
+            if (!existing || candidate.score > existing.score) {
+                uniqueCandidates.set(candidate.url, candidate);
+            }
+        });
+
+        const sortedCandidates = Array.from(uniqueCandidates.values()).sort(
+            (a, b) => b.score - a.score,
+        );
+
+        const bestMatch = sortedCandidates[0];
+
+        debug(
+            `Found best match from history (score: ${bestMatch.score.toFixed(2)}): '${bestMatch.metadata.title || bestMatch.url}' -> ${bestMatch.url}`,
+        );
+        debug(
+            `Match details: domain=${bestMatch.metadata.domain}, source=${bestMatch.metadata.websiteSource}`,
+        );
+
+        return bestMatch.url;
+    } catch (error) {
+        debug(`Error searching website history: ${error}`);
+        return undefined;
+    }
+}
+
+/**
+ * Convert site query to knowpro search terms
+ */
+function siteQueryToSearchTerms(site: string): any[] {
+    const terms: any[] = [];
+    const siteQuery = site.toLowerCase().trim();
+
+    // Add the main query as a search term
+    terms.push({ term: { text: siteQuery } });
+
+    // Add individual words if it's a multi-word query
+    const words = siteQuery.split(/\s+/).filter((word) => word.length > 2);
+    words.forEach((word) => {
+        if (word !== siteQuery) {
+            terms.push({ term: { text: word } });
+        }
+    });
+
+    // Add special pattern variations
+    const specialPatterns = getSpecialPatternVariations(siteQuery);
+    specialPatterns.forEach((pattern) => {
+        terms.push({ term: { text: pattern } });
+    });
+
+    return terms;
+}
+
+/**
+ * Get special pattern variations for common site abbreviations
+ */
+function getSpecialPatternVariations(query: string): string[] {
+    const patterns: string[] = [];
+
+    const expansions: { [key: string]: string[] } = {
+        gh: ["github"],
+        github: ["gh"],
+        gpt: ["chatgpt", "openai"],
+        chatgpt: ["gpt", "openai"],
+        docs: ["documentation", "api"],
+        documentation: ["docs", "api"],
+        npm: ["npmjs"],
+        stack: ["stackoverflow"],
+        stackoverflow: ["stack"],
+        yt: ["youtube"],
+        youtube: ["yt"],
+        ms: ["microsoft"],
+        microsoft: ["ms"],
+    };
+
+    if (expansions[query]) {
+        patterns.push(...expansions[query]);
+    }
+
+    return patterns;
+}
+
+/**
+ * Calculate additional scoring based on website metadata
+ */
+function calculateWebsiteScore(query: string, metadata: any): number {
+    let score = 0;
+    const queryLower = query.toLowerCase();
+
+    const title = metadata.title?.toLowerCase() || "";
+    const domain = metadata.domain?.toLowerCase() || "";
+    const url = metadata.url.toLowerCase();
+    const folder = metadata.folder?.toLowerCase() || "";
+
+    // Direct domain matches get highest boost
+    if (
+        domain === queryLower ||
+        domain === `www.${queryLower}` ||
+        domain.endsWith(`.${queryLower}`)
+    ) {
+        score += 3.0;
+    } else if (domain.includes(queryLower)) {
+        score += 2.0;
+    }
+
+    // Title matches
+    if (title.includes(queryLower)) {
+        score += 1.5;
+    }
+
+    // URL path matches
+    if (url.includes(queryLower)) {
+        score += 1.0;
+    }
+
+    // Bookmark folder matches
+    if (metadata.websiteSource === "bookmark" && folder.includes(queryLower)) {
+        score += 1.0;
+    }
+
+    // Special pattern handling
+    if (handleSpecialSitePatterns(queryLower, metadata)) {
+        score += 2.0;
+    }
+
+    // Recency bonus
+    if (metadata.visitDate || metadata.bookmarkDate) {
+        const visitDate = new Date(metadata.visitDate || metadata.bookmarkDate);
+        const daysSinceVisit =
+            (Date.now() - visitDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceVisit < 7) score += 0.5;
+        else if (daysSinceVisit < 30) score += 0.3;
+    }
+
+    // Frequency bonus
+    if (metadata.visitCount && metadata.visitCount > 5) {
+        score += Math.min(metadata.visitCount / 20, 0.5);
+    }
+
+    return score;
+}
+
+/**
+ * Handle special patterns for common site queries
+ */
+function handleSpecialSitePatterns(query: string, metadata: any): boolean {
+    const domain = metadata.domain?.toLowerCase() || "";
+    const title = metadata.title?.toLowerCase() || "";
+
+    // Handle common abbreviations and alternate names
+    const patterns = [
+        { queries: ["gh", "github"], domains: ["github.com"] },
+        {
+            queries: ["gpt", "chatgpt", "openai"],
+            domains: ["chat.openai.com", "openai.com"],
+        },
+        {
+            queries: ["docs", "documentation"],
+            titleKeywords: ["documentation", "docs", "api"],
+        },
+        { queries: ["npm"], domains: ["npmjs.com", "npmjs.org"] },
+        { queries: ["stackoverflow", "stack"], domains: ["stackoverflow.com"] },
+        { queries: ["youtube", "yt"], domains: ["youtube.com"] },
+        { queries: ["google"], domains: ["google.com"] },
+        {
+            queries: ["microsoft", "ms"],
+            domains: ["microsoft.com", "docs.microsoft.com"],
+        },
+        {
+            queries: ["azure"],
+            domains: ["portal.azure.com", "azure.microsoft.com"],
+        },
+        { queries: ["reddit"], domains: ["reddit.com"] },
+        { queries: ["twitter", "x"], domains: ["twitter.com", "x.com"] },
+        { queries: ["linkedin"], domains: ["linkedin.com"] },
+        { queries: ["facebook", "fb"], domains: ["facebook.com"] },
+    ];
+
+    for (const pattern of patterns) {
+        if (pattern.queries.includes(query)) {
+            // Check domain patterns
+            if (
+                pattern.domains &&
+                pattern.domains.some((d) => domain.includes(d))
+            ) {
+                return true;
+            }
+            // Check title patterns
+            if (
+                pattern.titleKeywords &&
+                pattern.titleKeywords.some((k) => title.includes(k))
+            ) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
@@ -772,7 +1082,8 @@ async function getWebsiteStats(
 }
 
 /**
- * Find websites matching search criteria, similar to findRequestedImages in montage agent
+ * Find websites matching search criteria using knowpro search utilities
+ * Updated to use semantic search instead of simple string matching
  */
 async function findRequestedWebsites(
     searchFilters: string[],
@@ -780,67 +1091,193 @@ async function findRequestedWebsites(
     exactMatch: boolean = false,
     minScore: number = 0.5,
 ): Promise<website.Website[]> {
-    if (!context.websiteCollection) {
+    if (
+        !context.websiteCollection ||
+        context.websiteCollection.messages.length === 0
+    ) {
         return [];
     }
 
-    const websites = context.websiteCollection.messages.getAll();
-    const results: { website: website.Website; score: number }[] = [];
+    try {
+        // Use knowpro searchConversationKnowledge for semantic search
+        const matches = await kp.searchConversationKnowledge(
+            context.websiteCollection,
+            // search group
+            {
+                booleanOp: "or", // Use OR to match any of the search filters
+                terms: searchFiltersToSearchTerms(searchFilters),
+            },
+            // when filter
+            {
+                // No specific knowledge type filter - search across all types
+            },
+            // options
+            {
+                exactMatch: exactMatch,
+            },
+        );
 
-    for (const site of websites) {
-        const metadata = site.metadata;
-        let score = 0;
-
-        for (const filter of searchFilters) {
-            const filterLower = filter.toLowerCase();
-
-            // Check title match
-            if (
-                metadata.title &&
-                metadata.title.toLowerCase().includes(filterLower)
-            ) {
-                score += exactMatch ? 1.0 : 0.8;
-            }
-
-            // Check domain match
-            if (
-                metadata.domain &&
-                metadata.domain.toLowerCase().includes(filterLower)
-            ) {
-                score += exactMatch ? 1.0 : 0.6;
-            }
-
-            // Check URL match
-            if (metadata.url.toLowerCase().includes(filterLower)) {
-                score += exactMatch ? 1.0 : 0.4;
-            }
-
-            // Check page type match
-            if (
-                metadata.pageType &&
-                metadata.pageType.toLowerCase().includes(filterLower)
-            ) {
-                score += exactMatch ? 1.0 : 0.5;
-            }
-
-            // Check folder path for bookmarks
-            if (
-                metadata.folder &&
-                metadata.folder.toLowerCase().includes(filterLower)
-            ) {
-                score += exactMatch ? 1.0 : 0.3;
-            }
+        if (!matches || matches.size === 0) {
+            debug(
+                `No semantic matches found for search filters: ${searchFilters.join(", ")}`,
+            );
+            return [];
         }
 
-        if (score >= minScore) {
-            results.push({ website: site, score });
+        debug(
+            `Found ${matches.size} semantic matches for search filters: ${searchFilters.join(", ")}`,
+        );
+
+        const results: { website: website.Website; score: number }[] = [];
+        const processedMessages = new Set<number>();
+
+        matches.forEach((match: kp.SemanticRefSearchResult) => {
+            match.semanticRefMatches.forEach(
+                (refMatch: kp.ScoredSemanticRefOrdinal) => {
+                    if (refMatch.score >= minScore) {
+                        const semanticRef: kp.SemanticRef | undefined =
+                            context.websiteCollection!.semanticRefs.get(
+                                refMatch.semanticRefOrdinal,
+                            );
+                        if (semanticRef) {
+                            const messageOrdinal =
+                                semanticRef.range.start.messageOrdinal;
+                            if (
+                                messageOrdinal !== undefined &&
+                                !processedMessages.has(messageOrdinal)
+                            ) {
+                                processedMessages.add(messageOrdinal);
+
+                                const websiteData =
+                                    context.websiteCollection!.messages.get(
+                                        messageOrdinal,
+                                    );
+                                if (websiteData) {
+                                    let totalScore = refMatch.score;
+
+                                    // Apply additional scoring based on metadata matches
+                                    totalScore +=
+                                        calculateAdditionalWebsiteScore(
+                                            searchFilters,
+                                            websiteData.metadata,
+                                        );
+
+                                    results.push({
+                                        website: websiteData,
+                                        score: totalScore,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                },
+            );
+        });
+
+        // Sort by score (highest first) and remove duplicates
+        const uniqueResults = new Map<
+            string,
+            { website: website.Website; score: number }
+        >();
+        results.forEach((result) => {
+            const url = result.website.metadata.url;
+            const existing = uniqueResults.get(url);
+            if (!existing || result.score > existing.score) {
+                uniqueResults.set(url, result);
+            }
+        });
+
+        const sortedResults = Array.from(uniqueResults.values()).sort(
+            (a, b) => b.score - a.score,
+        );
+
+        debug(
+            `Filtered to ${sortedResults.length} unique websites after scoring`,
+        );
+
+        return sortedResults.map((r) => r.website);
+    } catch (error) {
+        debug(`Error in semantic website search: ${error}`);
+        // Fallback to empty results
+        return [];
+    }
+}
+
+/**
+ * Convert search filters to knowpro search terms
+ */
+function searchFiltersToSearchTerms(filters: string[]): any[] {
+    const terms: any[] = [];
+
+    filters.forEach((filter) => {
+        // Add the main filter as a search term
+        terms.push({ term: { text: filter } });
+
+        // Add individual words if it's a multi-word filter
+        const words = filter
+            .toLowerCase()
+            .split(/\s+/)
+            .filter((word) => word.length > 2);
+        words.forEach((word) => {
+            if (word !== filter.toLowerCase()) {
+                terms.push({ term: { text: word } });
+            }
+        });
+    });
+
+    return terms;
+}
+
+/**
+ * Calculate additional scoring based on website metadata for search results
+ */
+function calculateAdditionalWebsiteScore(
+    searchFilters: string[],
+    metadata: any,
+): number {
+    let score = 0;
+
+    const title = metadata.title?.toLowerCase() || "";
+    const domain = metadata.domain?.toLowerCase() || "";
+    const url = metadata.url.toLowerCase();
+    const folder = metadata.folder?.toLowerCase() || "";
+
+    for (const filter of searchFilters) {
+        const filterLower = filter.toLowerCase();
+
+        // Direct domain matches get high boost
+        if (domain.includes(filterLower)) {
+            score += 1.0;
+        }
+
+        // Title matches
+        if (title.includes(filterLower)) {
+            score += 0.8;
+        }
+
+        // URL matches
+        if (url.includes(filterLower)) {
+            score += 0.4;
+        }
+
+        // Folder matches for bookmarks
+        if (
+            metadata.websiteSource === "bookmark" &&
+            folder.includes(filterLower)
+        ) {
+            score += 0.6;
+        }
+
+        // Page type matches
+        if (
+            metadata.pageType &&
+            metadata.pageType.toLowerCase().includes(filterLower)
+        ) {
+            score += 0.5;
         }
     }
 
-    // Sort by score descending
-    results.sort((a, b) => b.score - a.score);
-
-    return results.map((r) => r.website);
+    return score;
 }
 
 async function executeBrowserAction(
