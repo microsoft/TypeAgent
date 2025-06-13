@@ -13,7 +13,6 @@ import {
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
-    parseTypedArguments,
     runConsole,
     StopWatch,
 } from "interactive-app";
@@ -259,10 +258,7 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
-        const [searchResults, debugContext] = await runAnswerSearch(
-            namedArgs,
-            searchDef(),
-        );
+        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -302,22 +298,7 @@ export async function createKnowproCommands(
 
     function answerDef(): CommandMetadata {
         const def = searchDef();
-        def.description = "Get answers to natural language questions";
-        def.options!.messages = argBool("Include messages", true);
-        def.options!.fallback = argBool(
-            "Fallback to text similarity matching",
-            true,
-        );
-        def.options!.fastStop = argBool(
-            "Ignore messages if knowledge produces answers",
-            true,
-        );
-        def.options!.knowledgeTopK = argNum(
-            "How many top K knowledge matches",
-            DefaultKnowledgeTopK,
-        );
-        def.options!.choices = arg("Answer choices, separated by ';'");
-        return def;
+        return kpTest.getAnswerRequestDef(def, DefaultKnowledgeTopK);
     }
     commands.kpAnswer.metadata = answerDef();
     async function answer(args: string[]): Promise<void> {
@@ -325,10 +306,7 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, answerDef());
-        const [searchResults, debugContext] = await runAnswerSearch(
-            namedArgs,
-            answerDef(),
-        );
+        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -622,13 +600,9 @@ export async function createKnowproCommands(
      */
     async function runAnswerSearch(
         namedArgs: NamedArgs,
-        metadata: CommandMetadata,
     ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
-        const request = parseTypedArguments<kpTest.SearchRequest>(
-            namedArgs,
-            metadata,
-        );
-        return await context.execSearchRequest(request);
+        const response = await kpTest.execSearchCommand(context, namedArgs);
+        return [response.searchResults, response.debugContext];
     }
 
     function writeSearchResult(

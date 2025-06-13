@@ -4,12 +4,13 @@
 import { ChatModel, openai } from "aiclient";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
-import { SearchRequest } from "./requests.js";
-import { Result } from "typechat";
-
-export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
-    searchText: string;
-}
+import {
+    AnswerDebugContext,
+    GetAnswerRequest,
+    GetAnswerResponse,
+    SearchRequest,
+    SearchResponse,
+} from "./requests.js";
 
 export class KnowproContext {
     public knowledgeModel: ChatModel;
@@ -38,7 +39,7 @@ export class KnowproContext {
 
     public async execSearchRequest(
         request: SearchRequest,
-    ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
+    ): Promise<SearchResponse> {
         const conversation = this.ensureConversationLoaded();
         const searchText = request.query;
         const debugContext: AnswerDebugContext = { searchText };
@@ -76,7 +77,63 @@ export class KnowproContext {
                       debugContext,
                   );
 
-        return [searchResults, debugContext];
+        return { searchResults, debugContext };
+    }
+
+    public async execAnswerRequest(
+        request: GetAnswerRequest,
+        searchResponse?: SearchResponse,
+        progressCallback?: () => void,
+    ): Promise<GetAnswerResponse> {
+        const conversation = this.ensureConversationLoaded();
+        searchResponse =
+            searchResponse ?? (await this.execSearchRequest(request));
+        const searchResults = searchResponse.searchResults;
+        if (!searchResults.success) {
+            return { ...searchResponse };
+        }
+        const response: GetAnswerResponse = {
+            ...searchResponse,
+        };
+        if (!kp.hasConversationResults(searchResults.data)) {
+            return response;
+        }
+        const fastStopSav = this.answerGenerator.settings.fastStop;
+        if (request.fastStop) {
+            this.answerGenerator.settings.fastStop = request.fastStop;
+        }
+        try {
+            if (!request.messages) {
+                // Don't include raw message text... try answering only with knowledge
+                searchResults.data.forEach((r) => (r.messageMatches = []));
+            }
+            const choices = request.choices?.split(";");
+            const options = createAnswerOptions(request);
+            response.answerResponses ??= [];
+            for (let i = 0; i < searchResults.data.length; ++i) {
+                const searchResult = searchResults.data[i];
+                let question = searchResult.rawSearchQuery ?? request.query;
+                if (choices && choices.length > 0) {
+                    question = kp.createMultipleChoiceQuestion(
+                        question,
+                        choices,
+                    );
+                }
+                const answerResult = await kp.generateAnswer(
+                    conversation,
+                    this.answerGenerator,
+                    question,
+                    searchResult,
+                    progressCallback,
+                    options,
+                );
+                response.answerResponses.push(answerResult);
+            }
+        } finally {
+            this.answerGenerator.settings.fastStop = fastStopSav;
+        }
+
+        return response;
     }
 }
 
@@ -110,5 +167,19 @@ function createSearchOptions(request: SearchRequest): kp.SearchOptions {
     options.exactMatch = request.exact;
     options.maxMessageMatches = request.messageTopK;
     options.maxCharsInBudget = request.charBudget;
+    return options;
+}
+
+function createAnswerOptions(
+    namedArgs: GetAnswerRequest,
+): kp.AnswerContextOptions {
+    let topK = namedArgs.knowledgeTopK;
+    if (topK === undefined) {
+        return {};
+    }
+    const options: kp.AnswerContextOptions = {
+        entitiesTopK: topK,
+        topicsTopK: topK,
+    };
     return options;
 }

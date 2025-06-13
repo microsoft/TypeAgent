@@ -3,6 +3,7 @@
 
 import { CommandMetadata, arg, argBool, argNum } from "interactive-app";
 import * as kp from "knowpro";
+import { Result } from "typechat";
 
 export interface SearchRequest {
     // Required
@@ -39,15 +40,27 @@ export function searchRequestDef(): CommandMetadata {
     };
 }
 
-export interface AnswerRequest extends SearchRequest {
+export interface SearchResponse {
+    debugContext: AnswerDebugContext;
+    searchResults: Result<kp.ConversationSearchResult[]>;
+}
+
+export interface GetAnswerRequest extends SearchRequest {
     messages?: boolean | undefined;
     fastStop?: boolean | undefined;
     knowledgeTopK?: number | undefined;
     choices?: string | undefined;
 }
 
-export function answerRequestDef(knowledgeTopK = 50): CommandMetadata {
-    const def = searchRequestDef();
+export interface GetAnswerResponse extends SearchResponse {
+    answerResponses?: Result<kp.AnswerResponse>[];
+}
+
+export function getAnswerRequestDef(
+    searchDef?: CommandMetadata,
+    knowledgeTopK = 50,
+): CommandMetadata {
+    const def = searchDef ?? searchRequestDef();
     def.description = "Get answers to natural language questions";
     def.options ??= {};
     def.options.messages = argBool("Include messages", true);
@@ -61,4 +74,7 @@ export function answerRequestDef(knowledgeTopK = 50): CommandMetadata {
     );
     def.options.choices = arg("Answer choices, separated by ';'");
     return def;
+}
+export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
+    searchText: string;
 }

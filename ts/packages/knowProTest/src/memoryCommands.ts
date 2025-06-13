@@ -1,15 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import * as kp from "knowpro";
-import { Result } from "typechat";
-import { AnswerDebugContext, KnowproContext } from "./knowproContext.js";
+
+import { KnowproContext } from "./knowproContext.js";
 import { NamedArgs, parseTypedArguments } from "interactive-app";
-import { SearchRequest, searchRequestDef } from "./requests.js";
+import {
+    GetAnswerRequest,
+    getAnswerRequestDef,
+    SearchRequest,
+    searchRequestDef,
+    SearchResponse,
+} from "./requests.js";
 
 export function execSearchCommand(
     context: KnowproContext,
     args: string[] | NamedArgs,
-): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
+): Promise<SearchResponse> {
     const request = parseTypedArguments<SearchRequest>(
         args,
         searchRequestDef(),
@@ -17,4 +22,13 @@ export function execSearchCommand(
     return context.execSearchRequest(request);
 }
 
-export async function execAnswerRequest(context: KnowproContext) {}
+export async function execGetAnswerCommand(
+    context: KnowproContext,
+    args: string[] | NamedArgs,
+) {
+    const request = parseTypedArguments<GetAnswerRequest>(
+        args,
+        getAnswerRequestDef(),
+    );
+    return context.execAnswerRequest(request);
+}
