@@ -653,7 +653,7 @@ export async function createKnowproCommands(
             namedArgs,
             metadata,
         );
-        return await context.runAnswerSearch(request);
+        return await kpTest.runSearchRequest(context, request);
     }
 
     function writeSearchResult(

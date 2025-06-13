@@ -1,6 +1,6 @@
 # KnowProTest
 
-KnowProTest is **experimental sample code** used to build test evaluation tooling for the [KnowPro](../knowPro/README.md) package.
+KnowProTest is **experimental sample code and wrappers** used by [test apps](../../examples/chat/README.md) and evaluation tooling for the [KnowPro](../knowPro/README.md) package.
 
 ## Trademarks
 
