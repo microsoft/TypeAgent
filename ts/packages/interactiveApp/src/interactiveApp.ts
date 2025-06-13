@@ -553,9 +553,7 @@ export function parseNamedArguments(
     return namedArgs;
 }
 
-export type TypedArgValue = string | number | boolean;
-
-export function parseTypedArguments<T extends Record<string, TypedArgValue>>(
+export function parseTypedArguments<T extends Record<string, any>>(
     rawArgs: string[] | NamedArgs,
     metadata: CommandMetadata,
     result?: T | undefined,

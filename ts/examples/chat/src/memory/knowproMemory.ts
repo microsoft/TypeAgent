@@ -13,6 +13,7 @@ import {
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
+    parseTypedArguments,
     runConsole,
     StopWatch,
 } from "interactive-app";
@@ -24,10 +25,7 @@ import {
 import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import {
-    getLangSearchResult,
-    hasConversationResults,
-} from "./knowproCommon.js";
+import { hasConversationResults } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
@@ -287,7 +285,10 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
-        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        const [searchResults, debugContext] = await runAnswerSearch(
+            namedArgs,
+            searchDef(),
+        );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -350,7 +351,10 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, answerDef());
-        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        const [searchResults, debugContext] = await runAnswerSearch(
+            namedArgs,
+            answerDef(),
+        );
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -644,33 +648,13 @@ export async function createKnowproCommands(
      */
     async function runAnswerSearch(
         namedArgs: NamedArgs,
+        metadata: CommandMetadata,
     ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
-        const searchText = namedArgs.query;
-        const debugContext: AnswerDebugContext = { searchText };
-
-        const options: kp.LanguageSearchOptions = {
-            ...createSearchOptions(namedArgs),
-            compileOptions: {
-                exactScope: namedArgs.exactScope,
-                applyScope: namedArgs.applyScope,
-            },
-        };
-        options.exactMatch = namedArgs.exact;
-        if (namedArgs.fallback) {
-            options.fallbackRagOptions = {
-                maxMessageMatches: options.maxMessageMatches,
-                maxCharsInBudget: options.maxCharsInBudget,
-                thresholdScore: 0.7,
-            };
-        }
-        const langFilter = createLangFilter(undefined, namedArgs);
-        const searchResults = await getSearchResults(
-            searchText,
-            options,
-            langFilter,
-            debugContext,
+        const request = parseTypedArguments<kpTest.SearchRequest>(
+            namedArgs,
+            metadata,
         );
-        return [searchResults, debugContext];
+        return await context.runAnswerSearch(request);
     }
 
     function writeSearchResult(
@@ -705,23 +689,6 @@ export async function createKnowproCommands(
         } else {
             context.printer.writeError(answerResult.message);
         }
-    }
-
-    async function getSearchResults(
-        searchText: string,
-        options?: kp.LanguageSearchOptions,
-        langFilter?: kp.LanguageSearchFilter,
-        debugContext?: kp.LanguageSearchDebugContext,
-    ) {
-        const searchResults = getLangSearchResult(
-            context.conversation!,
-            context.queryTranslator,
-            searchText,
-            options,
-            langFilter,
-            debugContext,
-        );
-        return searchResults;
     }
 
     function createSearchGroup(
@@ -790,14 +757,6 @@ export async function createKnowproCommands(
         return filter;
     }
 
-    function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
-        let options = kp.createSearchOptions();
-        options.exactMatch = namedArgs.exact;
-        options.maxMessageMatches = namedArgs.messageTopK;
-        options.maxCharsInBudget = namedArgs.charBudget;
-        return options;
-    }
-
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
             return context.conversation;
@@ -848,25 +807,6 @@ export async function createKnowproCommands(
             }
         }
         return maxToDisplay;
-    }
-
-    function createLangFilter(
-        when: kp.WhenFilter | undefined,
-        namedArgs: NamedArgs,
-    ): kp.LanguageSearchFilter | undefined {
-        if (namedArgs.ktype) {
-            when ??= {};
-            when.knowledgeType = namedArgs.ktype;
-        }
-        if (namedArgs.tag) {
-            when ??= {};
-            when.tags = [namedArgs.tag];
-        }
-        if (namedArgs.thread) {
-            when ??= {};
-            when.threadDescription = namedArgs.thread;
-        }
-        return when;
     }
 
     function orderKnowledgeSearchResults(
