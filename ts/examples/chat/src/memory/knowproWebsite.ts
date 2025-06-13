@@ -187,13 +187,8 @@ export async function createKnowproWebsiteCommands(
         clock.start();
         try {
             context.website = await createWebsiteMemory(
-                {
-                    dirPath: path.dirname(websiteIndexPath),
-                    baseFileName: path.basename(
-                        websiteIndexPath,
-                        path.extname(websiteIndexPath),
-                    ),
-                },
+                path.dirname(websiteIndexPath),
+                path.basename(websiteIndexPath, path.extname(websiteIndexPath)),
                 namedArgs.createNew,
                 kpContext.knowledgeModel,
                 kpContext.queryTranslator,
