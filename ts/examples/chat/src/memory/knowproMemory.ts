@@ -628,7 +628,7 @@ export async function createKnowproCommands(
             namedArgs,
             metadata,
         );
-        return await kpTest.execSearch(context, request);
+        return await context.execSearchRequest(request);
     }
 
     function writeSearchResult(
