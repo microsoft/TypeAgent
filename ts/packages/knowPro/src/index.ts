@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 export * from "./interfaces.js";
-export * from "./import.js";
 export * from "./conversation.js";
 export * from "./conversationIndex.js";
 export * from "./secondaryIndexes.js";
@@ -33,3 +32,5 @@ export * from "./answerContext.js";
 
 export * from "./storage.js";
 export * as dataFrame from "./dataFrame/index.js";
+
+export { createConversationFromData } from "./common.js";

@@ -1,0 +1,5 @@
+{
+  "extension": [".js", ".ts"],
+  "reporter": ["text", "html"],
+  "allowExternal": true
+}
