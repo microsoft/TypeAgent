@@ -973,6 +973,9 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+      website-memory:
+        specifier: workspace:*
+        version: link:../../memory/website
       ws:
         specifier: ^8.17.1
         version: 8.18.2

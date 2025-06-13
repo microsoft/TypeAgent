@@ -38,6 +38,7 @@
     "@azure/identity": "^4.10.0",
     "@mozilla/readability": "^0.6.0",
     "@typeagent/agent-sdk": "workspace:*",
+    "website-memory": "workspace:*",
     "action-schema": "workspace:*",
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
