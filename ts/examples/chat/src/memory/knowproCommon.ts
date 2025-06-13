@@ -109,17 +109,6 @@ export function createIndexingEventHandler(
     };
 }
 
-export function hasConversationResults(
-    results: kp.ConversationSearchResult[],
-): boolean {
-    if (results.length === 0) {
-        return false;
-    }
-    return results.some((r) => {
-        return r.knowledgeMatches.size > 0 || r.messageMatches.length > 0;
-    });
-}
-
 const IndexFileSuffix = "_index.json";
 export function sourcePathToMemoryIndexPath(
     sourcePath: string,

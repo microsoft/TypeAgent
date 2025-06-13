@@ -25,7 +25,6 @@ import {
 import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import { hasConversationResults } from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
@@ -299,7 +298,7 @@ export async function createKnowproCommands(
                 context.printer.writeDebugContext(debugContext);
             });
         }
-        if (!hasConversationResults(searchResults.data)) {
+        if (!kp.hasConversationResults(searchResults.data)) {
             context.printer.writeLine();
             context.printer.writeLine("No matches");
             if (namedArgs.exactScope) {
@@ -365,7 +364,7 @@ export async function createKnowproCommands(
                 context.printer.writeDebugContext(debugContext);
             });
         }
-        if (!hasConversationResults(searchResults.data)) {
+        if (!kp.hasConversationResults(searchResults.data)) {
             context.printer.writeLine();
             context.printer.writeLine("No matches");
             return;
