@@ -7,6 +7,7 @@ import {
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
+    parseTypedArguments,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { argDestFile, argSourceFile, isJsonEqual } from "../common.js";
@@ -97,6 +98,11 @@ export async function createKnowproTestCommands(
         }
 
         const namedArgs = parseNamedArguments(args, testBatchDef());
+
+        type BatchArgs = { srcPath: string; startAt?: number; count?: number };
+        const bt = parseTypedArguments<BatchArgs>(args, testBatchDef());
+        context.printer.writeJson(bt);
+
         const baseResults = await readJsonFile<LangSearchResults[]>(
             namedArgs.srcPath,
         );

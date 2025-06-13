@@ -329,7 +329,7 @@ export class AnswerGenerator implements IAnswerGenerator {
                     ? this.contextSchema
                     : "",
                 contextContent,
-            ).content as string,
+            ),
         );
         const promptText = prompt.join("\n");
         return this.answerTranslator.translate(
@@ -620,15 +620,12 @@ function createContextPrompt(
     typeName: string,
     schema: string,
     context: string,
-): PromptSection {
+): string {
     let content =
         schema && schema.length > 0
             ? `[ANSWER CONTEXT] for answering user questions is a JSON object of type ${typeName} according to the following TypeScript definitions:\n` +
               `\`\`\`\n${schema}\`\`\`\n`
             : "";
     content += `[ANSWER CONTEXT]\n` + `===\n${context}\n===\n`;
-    return {
-        role: "user",
-        content,
-    };
+    return content;
 }

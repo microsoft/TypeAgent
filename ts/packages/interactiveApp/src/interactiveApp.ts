@@ -336,7 +336,7 @@ export interface ArgDef {
     defaultValue?: any | undefined;
 }
 
-function makeArg(
+export function makeArg(
     description: string | undefined,
     type: ArgType,
     defaultValue?: any | undefined,
@@ -376,6 +376,14 @@ export function argNum(
     defaultValue?: number | undefined,
 ): ArgDef {
     return makeArg(description, "number", defaultValue);
+}
+
+export function optional<T>(
+    description: string,
+    type: ArgType,
+    defaultValue?: any | undefined,
+) {
+    return makeArg(description, type, defaultValue);
 }
 
 /**
@@ -545,6 +553,25 @@ export function parseNamedArguments(
     return namedArgs;
 }
 
+export type TypedArgValue = string | number | boolean;
+
+export function parseTypedArguments<T extends Record<string, TypedArgValue>>(
+    rawArgs: string[],
+    metadata: CommandMetadata,
+    result?: T | undefined,
+): T {
+    const namedArgs = parseNamedArguments(rawArgs, metadata);
+    const typedArgs: Partial<any> = result ?? {};
+    for (const key in namedArgs) {
+        const value = namedArgs[key];
+        if (value !== undefined && typeof value !== "function") {
+            typedArgs[key] = value;
+        }
+    }
+
+    return typedArgs as T;
+}
+
 export type CommandMetadata = {
     description?: string;
     args?: Record<string, ArgDef>;
@@ -554,6 +581,7 @@ export type CommandMetadata = {
 export type CommandResult = string | undefined | void;
 
 export type CommandHandler = CommandHandler1 | CommandHandler2;
+
 /**
  * Command handler
  */

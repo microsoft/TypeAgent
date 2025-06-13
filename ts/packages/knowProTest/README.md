@@ -1,8 +1,6 @@
-# testLib
+# KnowProTest
 
-testLib is **sample code** used by package unit tests.
-
-Contains wrappers for **jest** and other common scenarios that TypeAgent unit tests must handle.
+KnowProTest is **experimental sample code** used to build test evaluation tooling for the [KnowPro](../knowPro/README.md) package.
 
 ## Trademarks
 
