@@ -16,7 +16,6 @@ import {
     runConsole,
     StopWatch,
 } from "interactive-app";
-import { ChatModel } from "aiclient";
 import {
     argToDate,
     parseFreeAndNamedArguments,
@@ -72,29 +71,19 @@ export async function runKnowproMemory(): Promise<void> {
     }
 }
 
-export type KnowproContext = {
-    knowledgeModel: ChatModel;
-    basePath: string;
-    printer: KnowProPrinter;
-    conversation?: kp.IConversation | undefined;
-    queryTranslator: kp.SearchQueryTranslator;
-    answerGenerator: kp.AnswerGenerator;
-};
+export class KnowproContext extends kpTest.KnowproContext {
+    public printer: KnowProPrinter;
+
+    constructor() {
+        super();
+        this.printer = new KnowProPrinter();
+    }
+}
 
 export async function createKnowproCommands(
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
-    const knowledgeModel = kpTest.createKnowledgeModel();
-    const context: KnowproContext = {
-        knowledgeModel,
-        queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
-        answerGenerator: new kp.AnswerGenerator(
-            kp.createAnswerGeneratorSettings(knowledgeModel),
-        ),
-        basePath: "/data/testChat/knowpro",
-        printer: new KnowProPrinter(),
-    };
-
+    const context: KnowproContext = new KnowproContext();
     const DefaultMaxToDisplay = 25;
     const DefaultKnowledgeTopK = 50;
     const MessageCountLarge = 1000;
