@@ -320,7 +320,7 @@ async function resolveURLWithSearch(site: string) : Promise<string | undefined> 
                     intervalInMs: 500,
                 },
                 onResponse: (response): void => {
-                    console.log(`Received response with status: ${response.status}`);
+                    debug(`Received response with status: ${response.status}`);
                 },
             });
 
@@ -649,7 +649,7 @@ export async function createAutomationBrowser(isVisible?: boolean) {
                 });
 
                 childProcess.on("exit", (code) => {
-                    console.log("Browser instance exited with code:", code);
+                    debug("Browser instance exited with code:", code);
                 });
             } catch (e: any) {
                 console.error(e);
