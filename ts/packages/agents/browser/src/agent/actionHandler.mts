@@ -100,6 +100,7 @@ export type BrowserActionContext = {
     allowDynamicAgentDomains?: string[];
     websiteCollection?: website.WebsiteCollection | undefined;
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
+    indexes: website.IndexData[];
 };
 
 export interface urlResolutionAction {
@@ -116,6 +117,7 @@ async function initializeBrowserContext(
     const browserControl = settings?.options as BrowserControl | undefined;
     return {
         browserControl,
+        indexes: [],
     };
 }
 
@@ -134,16 +136,28 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
-        // Initialize website collection if not already present
+        // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
-            try {
-                // For now, create a new empty website collection
-                // TODO: Integrate with index system when "website" type is supported
+            context.agentContext.indexes = await context.indexes("website");
+
+            // TODO: allow the browser agent to switch between website indexes
+            // TODO: handle the case where the website index is locked
+            // TODO: handle website index that has been updated since we loaded it
+            if (context.agentContext.indexes.length > 0) {
+                // For now just load the first website index
                 context.agentContext.websiteCollection =
-                    new website.WebsiteCollection();
-                debug("Created new empty website collection");
-            } catch (error) {
-                debug("Unable to initialize website collection:", error);
+                    await website.WebsiteCollection.readFromFile(
+                        context.agentContext.indexes[0].path,
+                        "index",
+                    );
+                debug(
+                    `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
+                );
+            } else {
+                debug(
+                    "Unable to load website index, please create one using the @index command or import website data.",
+                );
+                // Create empty collection as fallback
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
             }
