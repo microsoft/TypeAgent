@@ -2,19 +2,24 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import { execBatch, execGetAnswerCommand } from "./memoryCommands.js";
+import { execGetAnswerCommand } from "./memoryCommands.js";
+import { getCommandArgs } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
 import { Result, success } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
 import {
     dotProduct,
     generateTextEmbeddingsWithRetry,
+    readJsonFile,
+    ScoredItem,
     writeJsonFile,
 } from "typeagent";
+import { getBatchFileLines } from "interactive-app";
 
 export type QuestionAnswer = {
     question: string;
     answer: string;
+    cmd?: string | undefined;
 };
 
 export async function getAnswerBatch(
@@ -23,17 +28,41 @@ export async function getAnswerBatch(
     destFilePath?: string,
     cb?: (index: number, qa: QuestionAnswer) => void,
 ): Promise<Result<QuestionAnswer[]>> {
-    const results = await execBatch(batchFilePath, async (index, args) => {
-        const response = await getQuestionAnswer(context, args);
-        if (response.success && cb) {
-            cb(index, response.data);
+    const batchLines = getBatchFileLines(batchFilePath);
+    const results: QuestionAnswer[] = [];
+    for (let i = 0; i < batchLines.length; ++i) {
+        const cmd = batchLines[i];
+        const args = getCommandArgs(cmd);
+        if (args.length === 0) {
+            continue;
         }
-        return response;
-    });
-    if (results.success && destFilePath) {
-        await writeJsonFile(destFilePath, results.data);
+        const response = await getQuestionAnswer(context, args);
+        if (!response.success) {
+            return response;
+        }
+        response.data.cmd = cmd;
+        results.push(response.data);
+        if (cb) {
+            cb(i, response.data);
+        }
     }
-    return results;
+    if (destFilePath) {
+        await writeJsonFile(destFilePath, results);
+    }
+    return success(results);
+}
+
+export async function verifyQuestionAnswerBatch(
+    context: KnowproContext,
+    batchFilePath: string,
+): Promise<ScoredItem<QuestionAnswer>[]> {
+    let questionAnswers = await readJsonFile<QuestionAnswer[]>(batchFilePath);
+    if (questionAnswers === undefined || questionAnswers.length === 0) {
+        return [];
+    }
+    questionAnswers = questionAnswers.filter((q) => q.cmd && q.cmd.length > 0);
+    for (let i = 0; i < questionAnswers.length; ++i) {}
+    return [];
 }
 
 export async function compareQuestionAnswer(

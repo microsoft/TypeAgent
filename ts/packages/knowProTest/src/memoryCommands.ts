@@ -2,12 +2,7 @@
 // Licensed under the MIT License.
 
 import { KnowproContext } from "./knowproContext.js";
-import {
-    getBatchFileLines,
-    NamedArgs,
-    parseCommandLine,
-    parseTypedArguments,
-} from "interactive-app";
+import { NamedArgs, parseTypedArguments } from "interactive-app";
 import {
     GetAnswerRequest,
     getAnswerRequestDef,
@@ -16,7 +11,6 @@ import {
     searchRequestDef,
     SearchResponse,
 } from "./requests.js";
-import { Result, success } from "typechat";
 
 export function execSearchCommand(
     context: KnowproContext,
@@ -38,31 +32,4 @@ export async function execGetAnswerCommand(
         getAnswerRequestDef(),
     );
     return context.execGetAnswerRequest(request);
-}
-
-export async function execBatch<T>(
-    batchFilePath: string,
-    cb: (index: number, args: string[]) => Promise<Result<T>>,
-): Promise<Result<T[]>> {
-    const batchLines = getBatchFileLines(batchFilePath);
-    const results: T[] = [];
-    let i = 0;
-    for (const line of batchLines) {
-        const args = parseCommandLine(line);
-        if (args === null || args.length === 0) {
-            continue;
-        }
-        if (args[0].startsWith("@")) {
-            args.shift();
-        }
-        if (args && args.length > 0) {
-            const result = await cb(i, args);
-            if (!result.success) {
-                return result;
-            }
-            results.push(result.data);
-            ++i;
-        }
-    }
-    return success(results);
 }
