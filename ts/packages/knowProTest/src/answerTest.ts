@@ -6,7 +6,11 @@ import { execBatch, execGetAnswerCommand } from "./memoryCommands.js";
 import { KnowproContext } from "./knowproContext.js";
 import { Result, success } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
-import { dotProduct, generateTextEmbeddingsWithRetry } from "typeagent";
+import {
+    dotProduct,
+    generateTextEmbeddingsWithRetry,
+    writeJsonFile,
+} from "typeagent";
 
 export type QuestionAnswer = {
     question: string;
@@ -16,8 +20,10 @@ export type QuestionAnswer = {
 export async function getAnswerBatch(
     context: KnowproContext,
     batchFilePath: string,
+    destFilePath?: string,
+    cb?: (index: number, question: string, answer: string) => void,
 ): Promise<Result<QuestionAnswer[]>> {
-    const results = await execBatch(batchFilePath, async (args) => {
+    const results = await execBatch(batchFilePath, async (index, args) => {
         const response = await execGetAnswerCommand(context, args);
         if (!response.searchResponse.searchResults.success) {
             return response.searchResponse.searchResults;
@@ -25,12 +31,19 @@ export async function getAnswerBatch(
         if (!response.answerResponses.success) {
             return response.answerResponses;
         }
+        const answer = flattenAnswers(response.answerResponses.data);
+        if (cb) {
+            cb(index, response.searchResponse.debugContext.searchText, answer);
+        }
         const qa: QuestionAnswer = {
             question: response.searchResponse.debugContext.searchText,
-            answer: flattenAnswers(response.answerResponses.data),
+            answer,
         };
         return success(qa);
     });
+    if (results.success && destFilePath) {
+        await writeJsonFile(destFilePath, results.data);
+    }
     return results;
 }
 
@@ -52,28 +65,6 @@ export async function compareQuestionAnswer(
     return dotProduct(embeddings[0], embeddings[1]);
 }
 
-export async function compareAnswers(
-    questionAnswers: QuestionAnswer[],
-    expected: QuestionAnswer[],
-    similarityModel: TextEmbeddingModel,
-    threshold: number = 0.9,
-): Promise<number[]> {
-    if (questionAnswers.length !== expected.length) {
-        throw new Error("Length mismatch");
-    }
-    let scores: number[] = [];
-    for (let i = 0; i < questionAnswers.length; ++i) {
-        scores.push(
-            await compareQuestionAnswer(
-                questionAnswers[i],
-                expected[i],
-                similarityModel,
-            ),
-        );
-    }
-    return scores;
-}
-
 function flattenAnswers(answerResponses: kp.AnswerResponse[]) {
     let answers: string[] = [];
     for (const answerResponse of answerResponses) {
@@ -82,7 +73,7 @@ function flattenAnswers(answerResponses: kp.AnswerResponse[]) {
                 ? answerResponse.answer
                 : answerResponse.whyNoAnswer;
         if (answer) {
-            answers.push(answerResponse.type);
+            answers.push(answer);
         }
     }
     return answers.join("\n");

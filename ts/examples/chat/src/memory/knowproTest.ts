@@ -13,6 +13,7 @@ import { KnowproContext } from "./knowproMemory.js";
 import { argDestFile, argSourceFile, isJsonEqual } from "../common.js";
 import { readBatchFile } from "examples-lib";
 import * as kp from "knowpro";
+import * as kpTest from "knowpro-test";
 import { getLangSearchResult } from "./knowproCommon.js";
 import {
     appendFileNameSuffix,
@@ -35,6 +36,7 @@ export async function createKnowproTestCommands(
     commands.kpTestSearchBatch = searchBatch;
     commands.kpTestBatch = testBatch;
     commands.kpLoadTest = loadTest;
+    commands.kpTestAnswerBatch = answerBatch;
 
     function searchBatchDef(): CommandMetadata {
         return {
@@ -190,6 +192,36 @@ export async function createKnowproTestCommands(
             }
             context.conversation = conversation;
         }
+    }
+
+    function answerBatchDef(): CommandMetadata {
+        return {
+            description: "Run a batch of language queries and save answers",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                destPath: argDestFile(),
+            },
+        };
+    }
+    commands.kpTestAnswerBatch.metadata = answerBatchDef();
+    async function answerBatch(args: string[]) {
+        const namedArgs = parseNamedArguments(args, answerBatchDef());
+        const srcPath = namedArgs.srcPath;
+        const destPath =
+            namedArgs.destPath ??
+            changeFileExt(srcPath, "json", "answer_results");
+        await kpTest.getAnswerBatch(
+            context,
+            namedArgs.srcPath,
+            destPath,
+            (index, question, answer) => {
+                context.printer.writeLine(`${index + 1}. ${question}`);
+                context.printer.writeInColor(chalk.green, answer);
+                context.printer.writeLine();
+            },
+        );
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {
