@@ -10,7 +10,9 @@ import {
     SearchRequest,
     searchRequestDef,
     SearchResponse,
-} from "./requests.js";
+} from "./types.js";
+
+export type BatchCallback<T> = (value: T, index: number, total: number) => void;
 
 export function execSearchCommand(
     context: KnowproContext,

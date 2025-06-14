@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import { execGetAnswerCommand } from "./memoryCommands.js";
+import { BatchCallback, execGetAnswerCommand } from "./memoryCommands.js";
 import { getCommandArgs } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
 import { Result, success } from "typechat";
@@ -11,10 +11,10 @@ import {
     dotProduct,
     generateTextEmbeddingsWithRetry,
     readJsonFile,
-    ScoredItem,
     writeJsonFile,
 } from "typeagent";
 import { getBatchFileLines } from "interactive-app";
+import { SimilarityComparison } from "./types.js";
 
 export type QuestionAnswer = {
     question: string;
@@ -26,7 +26,7 @@ export async function getAnswerBatch(
     context: KnowproContext,
     batchFilePath: string,
     destFilePath?: string,
-    cb?: (index: number, qa: QuestionAnswer) => void,
+    cb?: BatchCallback<QuestionAnswer>,
 ): Promise<Result<QuestionAnswer[]>> {
     const batchLines = getBatchFileLines(batchFilePath);
     const results: QuestionAnswer[] = [];
@@ -43,7 +43,7 @@ export async function getAnswerBatch(
         response.data.cmd = cmd;
         results.push(response.data);
         if (cb) {
-            cb(i, response.data);
+            cb(response.data, i, batchLines.length);
         }
     }
     if (destFilePath) {
@@ -52,33 +52,68 @@ export async function getAnswerBatch(
     return success(results);
 }
 
+export type QuestionAnswerComparison = {
+    score: number;
+    actual: QuestionAnswer;
+    expected: QuestionAnswer;
+};
+
 export async function verifyQuestionAnswerBatch(
     context: KnowproContext,
     batchFilePath: string,
-): Promise<ScoredItem<QuestionAnswer>[]> {
+    similarityModel: TextEmbeddingModel,
+    cb?: BatchCallback<SimilarityComparison<QuestionAnswer>>,
+): Promise<Result<SimilarityComparison<QuestionAnswer>[]>> {
+    let results: SimilarityComparison<QuestionAnswer>[] = [];
     let questionAnswers = await readJsonFile<QuestionAnswer[]>(batchFilePath);
     if (questionAnswers === undefined || questionAnswers.length === 0) {
-        return [];
+        return success(results);
     }
-    questionAnswers = questionAnswers.filter((q) => q.cmd && q.cmd.length > 0);
-    for (let i = 0; i < questionAnswers.length; ++i) {}
-    return [];
+    for (let i = 0; i < questionAnswers.length; ++i) {
+        const expected = questionAnswers[i];
+        const args = getCommandArgs(expected.cmd);
+        if (args.length === 0) {
+            continue;
+        }
+        const response = await getQuestionAnswer(context, args);
+        if (!response.success) {
+            return response;
+        }
+        const actual = response.data;
+        const score = await compareQuestionAnswer(
+            actual,
+            expected,
+            similarityModel,
+        );
+        const result: SimilarityComparison<QuestionAnswer> = {
+            actual,
+            expected,
+            score,
+        };
+        results.push(result);
+        if (cb) {
+            cb(result, i, questionAnswers.length);
+        }
+    }
+    return success(results);
 }
 
 export async function compareQuestionAnswer(
-    qa: QuestionAnswer,
+    actual: QuestionAnswer,
     expected: QuestionAnswer,
     similarityModel: TextEmbeddingModel,
 ): Promise<number> {
-    if (qa.question !== expected.question) {
+    if (actual.question !== expected.question) {
         return 0;
     }
-    if (qa.answer === expected.answer) {
+    const actualAnswer = actual.answer.toLowerCase();
+    const expectedAnswer = expected.answer.toLowerCase();
+    if (actualAnswer === expectedAnswer) {
         return 1.0;
     }
     const embeddings = await generateTextEmbeddingsWithRetry(similarityModel, [
-        qa.answer,
-        expected.answer,
+        actualAnswer,
+        expectedAnswer,
     ]);
     return dotProduct(embeddings[0], embeddings[1]);
 }

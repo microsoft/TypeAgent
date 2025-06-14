@@ -76,6 +76,13 @@ export function getAnswerRequestDef(
     def.options.choices = arg("Answer choices, separated by ';'");
     return def;
 }
+
 export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
+
+export type SimilarityComparison<T> = {
+    actual: T;
+    expected: T;
+    score: number;
+};

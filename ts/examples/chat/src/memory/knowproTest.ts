@@ -24,6 +24,7 @@ import {
 } from "typeagent";
 import { Result, success } from "typechat";
 import chalk from "chalk";
+import { openai } from "aiclient";
 
 /**
  * Test related commands
@@ -37,6 +38,7 @@ export async function createKnowproTestCommands(
     commands.kpTestBatch = testBatch;
     commands.kpLoadTest = loadTest;
     commands.kpTestAnswerBatch = answerBatch;
+    commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
 
     function searchBatchDef(): CommandMetadata {
         return {
@@ -207,6 +209,9 @@ export async function createKnowproTestCommands(
     }
     commands.kpTestAnswerBatch.metadata = answerBatchDef();
     async function answerBatch(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
         const namedArgs = parseNamedArguments(args, answerBatchDef());
         const srcPath = namedArgs.srcPath;
         const destPath =
@@ -215,10 +220,40 @@ export async function createKnowproTestCommands(
             context,
             namedArgs.srcPath,
             destPath,
-            (index, qa) => {
-                context.printer.writeLine(`${index + 1}. ${qa.question}`);
+            (qa, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                context.printer.writeLine(qa.question);
                 context.printer.writeInColor(chalk.green, qa.answer);
-                context.printer.writeLine();
+            },
+        );
+    }
+
+    function testAnswerBatchDef(): CommandMetadata {
+        return {
+            description: "Verify a batch of language query answers",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                threshold: argNum("threshold", 0.85),
+            },
+        };
+    }
+    commands.kpTestVerifyAnswerBatch.metadata = testAnswerBatchDef();
+    async function verifyAnswerBatch(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, testAnswerBatchDef());
+        const srcPath = namedArgs.srcPath;
+        const model = openai.createEmbeddingModel();
+        await kpTest.verifyQuestionAnswerBatch(
+            context,
+            srcPath,
+            model,
+            (result, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                writeAnswerScore(result, namedArgs.threshold);
             },
         );
     }
@@ -229,6 +264,24 @@ export async function createKnowproTestCommands(
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
+    }
+
+    function writeAnswerScore(
+        result: kpTest.SimilarityComparison<kpTest.QuestionAnswer>,
+        threshold: number,
+    ) {
+        const color =
+            result.score === 1.0
+                ? chalk.greenBright
+                : result.score >= threshold
+                  ? chalk.gray
+                  : chalk.redBright;
+        context.printer.writeInColor(color, result.actual.question);
+
+        if (result.score < threshold) {
+            context.printer.writeJsonInColor(chalk.redBright, result.actual);
+            context.printer.writeJsonInColor(chalk.green, result.expected);
+        }
     }
 
     return;

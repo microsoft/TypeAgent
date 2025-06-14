@@ -10,7 +10,7 @@ import {
     GetAnswerResponse,
     SearchRequest,
     SearchResponse,
-} from "./requests.js";
+} from "./types.js";
 import { error, Result, success } from "typechat";
 
 export class KnowproContext {

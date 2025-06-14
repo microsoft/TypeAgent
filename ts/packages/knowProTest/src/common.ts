@@ -12,14 +12,17 @@ export function ensureDirSync(folderPath: string): string {
     return folderPath;
 }
 
-export function getCommandArgs(line: string): string[] {
-    const args = parseCommandLine(line);
-    if (args !== null && args.length > 0) {
-        if (args[0].startsWith("@")) {
-            args.shift();
+export function getCommandArgs(line: string | undefined): string[] {
+    if (line !== undefined && line.length > 0) {
+        const args = parseCommandLine(line);
+        if (args !== null && args.length > 0) {
+            if (args[0].startsWith("@")) {
+                args.shift();
+            }
+            return args;
         }
     }
-    return args ?? [];
+    return [];
 }
 
 export async function execCommandLine<T>(
