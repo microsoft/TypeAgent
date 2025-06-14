@@ -11,9 +11,6 @@ import traceback
 from typing import cast
 
 from black import format_str, FileMode
-from click import File
-from colorama import AnsiToWin32
-import typechat
 
 from ..aitools.auth import load_dotenv
 from ..knowpro.convknowledge import create_typechat_model
