@@ -210,15 +210,14 @@ export async function createKnowproTestCommands(
         const namedArgs = parseNamedArguments(args, answerBatchDef());
         const srcPath = namedArgs.srcPath;
         const destPath =
-            namedArgs.destPath ??
-            changeFileExt(srcPath, "json", "answer_results");
+            namedArgs.destPath ?? changeFileExt(srcPath, ".json", "_results");
         await kpTest.getAnswerBatch(
             context,
             namedArgs.srcPath,
             destPath,
-            (index, question, answer) => {
-                context.printer.writeLine(`${index + 1}. ${question}`);
-                context.printer.writeInColor(chalk.green, answer);
+            (index, qa) => {
+                context.printer.writeLine(`${index + 1}. ${qa.question}`);
+                context.printer.writeInColor(chalk.green, qa.answer);
                 context.printer.writeLine();
             },
         );

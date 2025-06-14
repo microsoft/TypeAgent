@@ -21,25 +21,14 @@ export async function getAnswerBatch(
     context: KnowproContext,
     batchFilePath: string,
     destFilePath?: string,
-    cb?: (index: number, question: string, answer: string) => void,
+    cb?: (index: number, qa: QuestionAnswer) => void,
 ): Promise<Result<QuestionAnswer[]>> {
     const results = await execBatch(batchFilePath, async (index, args) => {
-        const response = await execGetAnswerCommand(context, args);
-        if (!response.searchResponse.searchResults.success) {
-            return response.searchResponse.searchResults;
+        const response = await getQuestionAnswer(context, args);
+        if (response.success && cb) {
+            cb(index, response.data);
         }
-        if (!response.answerResponses.success) {
-            return response.answerResponses;
-        }
-        const answer = flattenAnswers(response.answerResponses.data);
-        if (cb) {
-            cb(index, response.searchResponse.debugContext.searchText, answer);
-        }
-        const qa: QuestionAnswer = {
-            question: response.searchResponse.debugContext.searchText,
-            answer,
-        };
-        return success(qa);
+        return response;
     });
     if (results.success && destFilePath) {
         await writeJsonFile(destFilePath, results.data);
@@ -63,6 +52,25 @@ export async function compareQuestionAnswer(
         expected.answer,
     ]);
     return dotProduct(embeddings[0], embeddings[1]);
+}
+
+async function getQuestionAnswer(
+    context: KnowproContext,
+    args: string[],
+): Promise<Result<QuestionAnswer>> {
+    const response = await execGetAnswerCommand(context, args);
+    if (!response.searchResponse.searchResults.success) {
+        return response.searchResponse.searchResults;
+    }
+    if (!response.answerResponses.success) {
+        return response.answerResponses;
+    }
+    const answer = flattenAnswers(response.answerResponses.data);
+    const qa: QuestionAnswer = {
+        question: response.searchResponse.debugContext.searchText,
+        answer,
+    };
+    return success(qa);
 }
 
 function flattenAnswers(answerResponses: kp.AnswerResponse[]) {
