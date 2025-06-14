@@ -100,7 +100,7 @@ export type BrowserActionContext = {
     allowDynamicAgentDomains?: string[];
     websiteCollection?: website.WebsiteCollection | undefined;
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
-    indexes: website.IndexData[];
+    index: website.IndexData | undefined;
 };
 
 export interface urlResolutionAction {
@@ -117,7 +117,7 @@ async function initializeBrowserContext(
     const browserControl = settings?.options as BrowserControl | undefined;
     return {
         browserControl,
-        indexes: [],
+        index:undefined,
     };
 }
 
@@ -138,16 +138,13 @@ async function updateBrowserContext(
 
         // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
-            context.agentContext.indexes = await context.indexes("website");
+            const websiteIndexes  = await context.indexes("website");
 
-            // TODO: allow the browser agent to switch between website indexes
-            // TODO: handle the case where the website index is locked
-            // TODO: handle website index that has been updated since we loaded it
-            if (context.agentContext.indexes.length > 0) {
-                // For now just load the first website index
+            if (websiteIndexes.length > 0) {
+                context.agentContext.index = websiteIndexes[0]
                 context.agentContext.websiteCollection =
                     await website.WebsiteCollection.readFromFile(
-                        context.agentContext.indexes[0].path,
+                        websiteIndexes[0].path,
                         "index",
                     );
                 debug(
@@ -525,42 +522,7 @@ function siteQueryToSearchTerms(site: string): any[] {
         }
     });
 
-    // Add special pattern variations
-    const specialPatterns = getSpecialPatternVariations(siteQuery);
-    specialPatterns.forEach((pattern) => {
-        terms.push({ term: { text: pattern } });
-    });
-
     return terms;
-}
-
-/**
- * Get special pattern variations for common site abbreviations
- */
-function getSpecialPatternVariations(query: string): string[] {
-    const patterns: string[] = [];
-
-    const expansions: { [key: string]: string[] } = {
-        gh: ["github"],
-        github: ["gh"],
-        gpt: ["chatgpt", "openai"],
-        chatgpt: ["gpt", "openai"],
-        docs: ["documentation", "api"],
-        documentation: ["docs", "api"],
-        npm: ["npmjs"],
-        stack: ["stackoverflow"],
-        stackoverflow: ["stack"],
-        yt: ["youtube"],
-        youtube: ["yt"],
-        ms: ["microsoft"],
-        microsoft: ["ms"],
-    };
-
-    if (expansions[query]) {
-        patterns.push(...expansions[query]);
-    }
-
-    return patterns;
 }
 
 /**
@@ -601,11 +563,6 @@ function calculateWebsiteScore(query: string, metadata: any): number {
         score += 1.0;
     }
 
-    // Special pattern handling
-    if (handleSpecialSitePatterns(queryLower, metadata)) {
-        score += 2.0;
-    }
-
     // Recency bonus
     if (metadata.visitDate || metadata.bookmarkDate) {
         const visitDate = new Date(metadata.visitDate || metadata.bookmarkDate);
@@ -623,63 +580,6 @@ function calculateWebsiteScore(query: string, metadata: any): number {
     return score;
 }
 
-/**
- * Handle special patterns for common site queries
- */
-function handleSpecialSitePatterns(query: string, metadata: any): boolean {
-    const domain = metadata.domain?.toLowerCase() || "";
-    const title = metadata.title?.toLowerCase() || "";
-
-    // Handle common abbreviations and alternate names
-    const patterns = [
-        { queries: ["gh", "github"], domains: ["github.com"] },
-        {
-            queries: ["gpt", "chatgpt", "openai"],
-            domains: ["chat.openai.com", "openai.com"],
-        },
-        {
-            queries: ["docs", "documentation"],
-            titleKeywords: ["documentation", "docs", "api"],
-        },
-        { queries: ["npm"], domains: ["npmjs.com", "npmjs.org"] },
-        { queries: ["stackoverflow", "stack"], domains: ["stackoverflow.com"] },
-        { queries: ["youtube", "yt"], domains: ["youtube.com"] },
-        { queries: ["google"], domains: ["google.com"] },
-        {
-            queries: ["microsoft", "ms"],
-            domains: ["microsoft.com", "docs.microsoft.com"],
-        },
-        {
-            queries: ["azure"],
-            domains: ["portal.azure.com", "azure.microsoft.com"],
-        },
-        { queries: ["reddit"], domains: ["reddit.com"] },
-        { queries: ["twitter", "x"], domains: ["twitter.com", "x.com"] },
-        { queries: ["linkedin"], domains: ["linkedin.com"] },
-        { queries: ["facebook", "fb"], domains: ["facebook.com"] },
-    ];
-
-    for (const pattern of patterns) {
-        if (pattern.queries.includes(query)) {
-            // Check domain patterns
-            if (
-                pattern.domains &&
-                pattern.domains.some((d) => domain.includes(d))
-            ) {
-                return true;
-            }
-            // Check title patterns
-            if (
-                pattern.titleKeywords &&
-                pattern.titleKeywords.some((k) => title.includes(k))
-            ) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
 
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
 async function resolveURLWithSearch(site: string): Promise<string | undefined> {
