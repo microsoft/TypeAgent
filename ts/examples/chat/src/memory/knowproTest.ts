@@ -235,7 +235,7 @@ export async function createKnowproTestCommands(
                 srcPath: argSourceFile(),
             },
             options: {
-                threshold: argNum("threshold", 0.85),
+                threshold: argNum("threshold", 0.9),
             },
         };
     }
@@ -271,11 +271,7 @@ export async function createKnowproTestCommands(
         threshold: number,
     ) {
         const color =
-            result.score === 1.0
-                ? chalk.greenBright
-                : result.score >= threshold
-                  ? chalk.gray
-                  : chalk.redBright;
+            result.score >= threshold ? chalk.greenBright : chalk.redBright;
         context.printer.writeInColor(color, result.actual.question);
 
         if (result.score < threshold) {
