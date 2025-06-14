@@ -26,22 +26,31 @@ We have several stages (someof which loop):
 
 1. Parse natural language into a `SearchQuery`. (_searchlang.py_)
 2. Transform this to a `SearchQueryExpr`. (_search.py_)
-3. In `search_conversation`:
-   a. compile to `GroupSearchResultsExpr` and run that query.
-   b. compile to `IQueryOpExpr` and run that query.
+3. In `search_conversation` (in _search.py_):
+   a. compile to `GetScoredMessageExpr` and run that query.
+   b. compile to `GroupSearchResultsExpr` and run that query.
    c. Combine the results into a `ConversationSearchResult`.
-4. Turn the results into human language.
+4. Turn the results into human language, using an prompt that
+   asks the model to generate an answer from the context
+   (messages and knowledge from 3c) and he original raw query.
+   a. There may be multiple search results; if so, another prompt
+      is used to combine the answers.
+   b. Similarly, the context from a single search result may be
+      too large for a model's token buffer. In that case we split
+      the contexts into multiple requests and combine the answers
+      in the same way.
 
-All of these stages are at least partially implemented,
+All of these stages are at least partially implemented
+(though only the simplest form of answer generation),
 so we have some end-to-end functionality.
 
 The TODO items include:
 
 - Move out of `demo` into `knowpro` what blongs there.
-- Complete the implementation of each stage (b is missing a lot).
-- Combine multiple human answers into a single "best" one.
+- Complete the implementation of each stage (3b is missing a lot).
+- Combine multiple human answers into a single "best" one (4a).
 - Split large contexts to avoid overflowing the answer generator's
-  context buffer.
+  context buffer (4b).
 - Fix all the TODOs left in the code.
 - Redesign the whole pipeline now that I understand the archtecture better.
 
