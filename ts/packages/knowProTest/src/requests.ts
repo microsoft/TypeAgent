@@ -52,8 +52,9 @@ export interface GetAnswerRequest extends SearchRequest {
     choices?: string | undefined;
 }
 
-export interface GetAnswerResponse extends SearchResponse {
-    answerResponses?: Result<kp.AnswerResponse>[];
+export interface GetAnswerResponse {
+    searchResponse: SearchResponse;
+    answerResponses: Result<kp.AnswerResponse[]>;
 }
 
 export function getAnswerRequestDef(

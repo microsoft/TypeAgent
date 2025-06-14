@@ -11,7 +11,7 @@ import {
     SearchRequest,
     SearchResponse,
 } from "./requests.js";
-import { Result } from "typechat";
+import { error, Result, success } from "typechat";
 
 export class KnowproContext {
     public knowledgeModel: ChatModel;
@@ -94,12 +94,13 @@ export class KnowproContext {
         searchResponse =
             searchResponse ?? (await this.execSearchRequest(request));
         const searchResults = searchResponse.searchResults;
-        if (!searchResults.success) {
-            return { ...searchResponse };
-        }
         const response: GetAnswerResponse = {
-            ...searchResponse,
+            searchResponse,
+            answerResponses: error("Not initialized"),
         };
+        if (!searchResults.success) {
+            return response;
+        }
         if (!kp.hasConversationResults(searchResults.data)) {
             return response;
         }
@@ -107,6 +108,7 @@ export class KnowproContext {
         if (request.fastStop) {
             this.answerGenerator.settings.fastStop = request.fastStop;
         }
+        let answerResponses: kp.AnswerResponse[] = [];
         try {
             if (!request.messages) {
                 // Don't include raw message text... try answering only with knowledge
@@ -114,7 +116,6 @@ export class KnowproContext {
             }
             const choices = request.choices?.split(";");
             const options = createAnswerOptions(request);
-            response.answerResponses ??= [];
             for (let i = 0; i < searchResults.data.length; ++i) {
                 const searchResult = searchResults.data[i];
                 let question = searchResult.rawSearchQuery ?? request.query;
@@ -132,7 +133,11 @@ export class KnowproContext {
                     undefined,
                     options,
                 );
-                response.answerResponses.push(answerResult);
+                if (!answerResult.success) {
+                    response.answerResponses = answerResult;
+                    return response;
+                }
+                answerResponses.push(answerResult.data);
                 if (progressCallback) {
                     progressCallback(i, question, answerResult);
                 }
@@ -140,7 +145,7 @@ export class KnowproContext {
         } finally {
             this.answerGenerator.settings.fastStop = fastStopSav;
         }
-
+        response.answerResponses = success(answerResponses);
         return response;
     }
 }
