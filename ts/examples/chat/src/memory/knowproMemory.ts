@@ -324,12 +324,12 @@ export async function createKnowproCommands(
             return;
         }
 
-        await context.execGetAnswerRequest(
+        await context.getAnswersForSearchResults(
             parseTypedArguments<kpTest.GetAnswerRequest>(
                 args,
                 kpTest.getAnswerRequestDef(),
             ),
-            undefined,
+            searchResults.data,
             (i: number, q: string, answer) => {
                 writeAnswer(i, answer, debugContext);
                 return;

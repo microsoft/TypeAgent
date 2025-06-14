@@ -32,13 +32,12 @@ export function execSearchCommand(
 export async function execGetAnswerCommand(
     context: KnowproContext,
     args: string[] | NamedArgs,
-    searchResponse?: SearchResponse,
 ): Promise<GetAnswerResponse> {
     const request = parseTypedArguments<GetAnswerRequest>(
         args,
         getAnswerRequestDef(),
     );
-    return context.execGetAnswerRequest(request, searchResponse);
+    return context.execGetAnswerRequest(request);
 }
 
 export async function execBatch<T>(

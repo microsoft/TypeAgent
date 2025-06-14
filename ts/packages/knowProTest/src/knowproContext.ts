@@ -83,16 +83,13 @@ export class KnowproContext {
 
     public async execGetAnswerRequest(
         request: GetAnswerRequest,
-        searchResponse?: SearchResponse,
         progressCallback?: (
             index: number,
             question: string,
             answer: Result<kp.AnswerResponse>,
         ) => void,
     ): Promise<GetAnswerResponse> {
-        const conversation = this.ensureConversationLoaded();
-        searchResponse =
-            searchResponse ?? (await this.execSearchRequest(request));
+        const searchResponse = await this.execSearchRequest(request);
         const searchResults = searchResponse.searchResults;
         const response: GetAnswerResponse = {
             searchResponse,
@@ -104,6 +101,25 @@ export class KnowproContext {
         if (!kp.hasConversationResults(searchResults.data)) {
             return response;
         }
+        const answerResponses = await this.getAnswersForSearchResults(
+            request,
+            searchResults.data,
+            progressCallback,
+        );
+        response.answerResponses = answerResponses;
+        return response;
+    }
+
+    public async getAnswersForSearchResults(
+        request: GetAnswerRequest,
+        searchResults: kp.ConversationSearchResult[],
+        progressCallback?: (
+            index: number,
+            question: string,
+            answer: Result<kp.AnswerResponse>,
+        ) => void,
+    ): Promise<Result<kp.AnswerResponse[]>> {
+        const conversation = this.ensureConversationLoaded();
         const fastStopSav = this.answerGenerator.settings.fastStop;
         if (request.fastStop) {
             this.answerGenerator.settings.fastStop = request.fastStop;
@@ -112,12 +128,12 @@ export class KnowproContext {
         try {
             if (!request.messages) {
                 // Don't include raw message text... try answering only with knowledge
-                searchResults.data.forEach((r) => (r.messageMatches = []));
+                searchResults.forEach((r) => (r.messageMatches = []));
             }
             const choices = request.choices?.split(";");
             const options = createAnswerOptions(request);
-            for (let i = 0; i < searchResults.data.length; ++i) {
-                const searchResult = searchResults.data[i];
+            for (let i = 0; i < searchResults.length; ++i) {
+                const searchResult = searchResults[i];
                 let question = searchResult.rawSearchQuery ?? request.query;
                 if (choices && choices.length > 0) {
                     question = kp.createMultipleChoiceQuestion(
@@ -134,8 +150,7 @@ export class KnowproContext {
                     options,
                 );
                 if (!answerResult.success) {
-                    response.answerResponses = answerResult;
-                    return response;
+                    return answerResult;
                 }
                 answerResponses.push(answerResult.data);
                 if (progressCallback) {
@@ -145,8 +160,7 @@ export class KnowproContext {
         } finally {
             this.answerGenerator.settings.fastStop = fastStopSav;
         }
-        response.answerResponses = success(answerResponses);
-        return response;
+        return success(answerResponses);
     }
 }
 
