@@ -51,10 +51,7 @@ import {
 } from "./webTypeAgent.mjs";
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
-import {
-    BrowserActions,
-    OpenWebPage,
-} from "./actionsSchema.mjs";
+import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteData,
@@ -119,7 +116,7 @@ async function initializeBrowserContext(
     const browserControl = settings?.options as BrowserControl | undefined;
     return {
         browserControl,
-        index:undefined,
+        index: undefined,
     };
 }
 
@@ -140,10 +137,10 @@ async function updateBrowserContext(
 
         // Load the website index from disk
         if (!context.agentContext.websiteCollection) {
-            const websiteIndexes  = await context.indexes("website");
+            const websiteIndexes = await context.indexes("website");
 
             if (websiteIndexes.length > 0) {
-                context.agentContext.index = websiteIndexes[0]
+                context.agentContext.index = websiteIndexes[0];
                 context.agentContext.websiteCollection =
                     await website.WebsiteCollection.readFromFile(
                         websiteIndexes[0].path,
@@ -379,8 +376,6 @@ async function resolveWebPage(
     }
 }
 
-
-        
 let groundingConfig: bingWithGrounding.ApiSettings | undefined;
 async function resolveURLWithSearch(site: string): Promise<string | undefined> {
     if (!groundingConfig) {
@@ -874,172 +869,6 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
     }
 }
 
-class ImportWebsiteDataHandler implements CommandHandler {
-    public readonly description =
-        "Import website data from browser history or bookmarks";
-    public readonly parameters = {
-        args: {
-            source: {
-                description: "Browser source: chrome or edge",
-            },
-            type: {
-                description: "Data type: history or bookmarks",
-            },
-            limit: {
-                description: "Maximum number of items to import (optional)",
-                optional: true,
-            },
-            days: {
-                description:
-                    "Number of days back to import (optional, for history)",
-                optional: true,
-            },
-            folder: {
-                description:
-                    "Specific bookmark folder to import (optional, for bookmarks)",
-                optional: true,
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const parameters: any = {
-            source: params.args.source as "chrome" | "edge",
-            type: params.args.type as "history" | "bookmarks",
-        };
-
-        if (params.args.limit) {
-            parameters.limit = parseInt(params.args.limit);
-        }
-        if (params.args.days) {
-            parameters.days = parseInt(params.args.days);
-        }
-        if (params.args.folder) {
-            parameters.folder = params.args.folder;
-        }
-
-        const result = await importWebsiteData(context, {
-            actionName: "importWebsiteData",
-            schemaName: "browser",
-            parameters,
-        });
-        if (result.error) {
-            displayError(result.error, context);
-            return;
-        }
-        context.actionIO.setDisplay(result.displayContent);
-    }
-}
-
-class SearchWebsitesHandler implements CommandHandler {
-    public readonly description = "Search through imported website data";
-    public readonly parameters = {
-        args: {
-            query: {
-                description: "Search query",
-            },
-            domain: {
-                description: "Filter by domain (optional)",
-                optional: true,
-            },
-            pageType: {
-                description: "Filter by page type (optional)",
-                optional: true,
-            },
-            source: {
-                description: "Filter by source: bookmark or history (optional)",
-                optional: true,
-            },
-            limit: {
-                description: "Maximum number of results (optional, default 10)",
-                optional: true,
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const parameters: any = {
-            query: params.args.query,
-        };
-
-        if (params.args.domain) {
-            parameters.domain = params.args.domain;
-        }
-        if (params.args.pageType) {
-            parameters.pageType = params.args.pageType;
-        }
-        if (params.args.source) {
-            parameters.source = params.args.source as "bookmark" | "history";
-        }
-        if (params.args.limit) {
-            parameters.limit = parseInt(params.args.limit);
-        }
-
-        const result = await searchWebsites(context, {
-            actionName: "searchWebsites",
-            schemaName: "browser",
-            parameters,
-        });
-        if (result.error) {
-            displayError(result.error, context);
-            return;
-        }
-        context.actionIO.setDisplay(result.displayContent);
-    }
-}
-
-class GetWebsiteStatsHandler implements CommandHandler {
-    public readonly description = "Get statistics about imported website data";
-    public readonly parameters = {
-        args: {
-            groupBy: {
-                description:
-                    "Group by: domain, pageType, or source (optional, default domain)",
-                optional: true,
-            },
-            limit: {
-                description:
-                    "Maximum number of groups to show (optional, default 10)",
-                optional: true,
-            },
-        },
-    } as const;
-
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const parameters: any = {};
-
-        if (params.args.groupBy) {
-            parameters.groupBy = params.args.groupBy as
-                | "domain"
-                | "pageType"
-                | "source";
-        }
-        if (params.args.limit) {
-            parameters.limit = parseInt(params.args.limit);
-        }
-
-        const result = await getWebsiteStats(context, {
-            actionName: "getWebsiteStats",
-            schemaName: "browser",
-            parameters,
-        });
-        if (result.error) {
-            displayError(result.error, context);
-            return;
-        }
-        context.actionIO.setDisplay(result.displayContent);
-    }
-}
-
 export const handlers: CommandHandlerTable = {
     description: "Browser App Agent Commands",
     commands: {
@@ -1062,13 +891,5 @@ export const handlers: CommandHandlerTable = {
 
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
-        website: {
-            description: "Website memory commands",
-            commands: {
-                import: new ImportWebsiteDataHandler(),
-                search: new SearchWebsitesHandler(),
-                stats: new GetWebsiteStatsHandler(),
-            },
-        },
     },
 };

@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-
 import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { ImportWebsiteData, SearchWebsites, GetWebsiteStats } from "./actionsSchema.mjs";
+import {
+    ImportWebsiteData,
+    SearchWebsites,
+    GetWebsiteStats,
+} from "./actionsSchema.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
 import registerDebug from "debug";
@@ -98,7 +101,7 @@ export async function resolveURLWithHistory(
 
                                     // Apply additional scoring based on special patterns and recency
                                     totalScore += calculateWebsiteScore(
-                                        site,
+                                        [site],
                                         metadata,
                                     );
 
@@ -176,53 +179,61 @@ function siteQueryToSearchTerms(site: string): any[] {
 /**
  * Calculate additional scoring based on website metadata
  */
-export function calculateWebsiteScore(query: string, metadata: any): number {
+export function calculateWebsiteScore(
+    searchFilters: string[],
+    metadata: any,
+): number {
     let score = 0;
-    const queryLower = query.toLowerCase();
 
     const title = metadata.title?.toLowerCase() || "";
     const domain = metadata.domain?.toLowerCase() || "";
     const url = metadata.url.toLowerCase();
     const folder = metadata.folder?.toLowerCase() || "";
 
-    // Direct domain matches get highest boost
-    if (
-        domain === queryLower ||
-        domain === `www.${queryLower}` ||
-        domain.endsWith(`.${queryLower}`)
-    ) {
-        score += 3.0;
-    } else if (domain.includes(queryLower)) {
-        score += 2.0;
-    }
+    for (const filter of searchFilters) {
+        const queryLower = filter.toLowerCase();
 
-    // Title matches
-    if (title.includes(queryLower)) {
-        score += 1.5;
-    }
+        // Direct domain matches get highest boost
+        if (
+            domain === queryLower ||
+            domain === `www.${queryLower}` ||
+            domain.endsWith(`.${queryLower}`)
+        ) {
+            score += 3.0;
+        } else if (domain.includes(queryLower)) {
+            score += 2.0;
+        }
 
-    // URL path matches
-    if (url.includes(queryLower)) {
-        score += 1.0;
-    }
+        if (title.includes(queryLower)) {
+            score += 1.5;
+        }
 
-    // Bookmark folder matches
-    if (metadata.websiteSource === "bookmark" && folder.includes(queryLower)) {
-        score += 1.0;
-    }
+        if (url.includes(queryLower)) {
+            score += 1.0;
+        }
 
-    // Recency bonus
-    if (metadata.visitDate || metadata.bookmarkDate) {
-        const visitDate = new Date(metadata.visitDate || metadata.bookmarkDate);
-        const daysSinceVisit =
-            (Date.now() - visitDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysSinceVisit < 7) score += 0.5;
-        else if (daysSinceVisit < 30) score += 0.3;
-    }
+        if (
+            metadata.websiteSource === "bookmark" &&
+            folder.includes(queryLower)
+        ) {
+            score += 1.0;
+        }
 
-    // Frequency bonus
-    if (metadata.visitCount && metadata.visitCount > 5) {
-        score += Math.min(metadata.visitCount / 20, 0.5);
+        // Recency bonus
+        if (metadata.visitDate || metadata.bookmarkDate) {
+            const visitDate = new Date(
+                metadata.visitDate || metadata.bookmarkDate,
+            );
+            const daysSinceVisit =
+                (Date.now() - visitDate.getTime()) / (1000 * 60 * 60 * 24);
+            if (daysSinceVisit < 7) score += 0.5;
+            else if (daysSinceVisit < 30) score += 0.3;
+        }
+
+        // Frequency bonus
+        if (metadata.visitCount && metadata.visitCount > 5) {
+            score += Math.min(metadata.visitCount / 20, 0.5);
+        }
     }
 
     return score;
@@ -301,11 +312,10 @@ export async function findRequestedWebsites(
                                     let totalScore = refMatch.score;
 
                                     // Apply additional scoring based on metadata matches
-                                    totalScore +=
-                                        calculateAdditionalWebsiteScore(
-                                            searchFilters,
-                                            websiteData.metadata,
-                                        );
+                                    totalScore += calculateWebsiteScore(
+                                        searchFilters,
+                                        websiteData.metadata,
+                                    );
 
                                     results.push({
                                         website: websiteData,
@@ -371,58 +381,6 @@ function searchFiltersToSearchTerms(filters: string[]): any[] {
     });
 
     return terms;
-}
-
-/**
- * Calculate additional scoring based on website metadata for search results
- */
-function calculateAdditionalWebsiteScore(
-    searchFilters: string[],
-    metadata: any,
-): number {
-    let score = 0;
-
-    const title = metadata.title?.toLowerCase() || "";
-    const domain = metadata.domain?.toLowerCase() || "";
-    const url = metadata.url.toLowerCase();
-    const folder = metadata.folder?.toLowerCase() || "";
-
-    for (const filter of searchFilters) {
-        const filterLower = filter.toLowerCase();
-
-        // Direct domain matches get high boost
-        if (domain.includes(filterLower)) {
-            score += 1.0;
-        }
-
-        // Title matches
-        if (title.includes(filterLower)) {
-            score += 0.8;
-        }
-
-        // URL matches
-        if (url.includes(filterLower)) {
-            score += 0.4;
-        }
-
-        // Folder matches for bookmarks
-        if (
-            metadata.websiteSource === "bookmark" &&
-            folder.includes(filterLower)
-        ) {
-            score += 0.6;
-        }
-
-        // Page type matches
-        if (
-            metadata.pageType &&
-            metadata.pageType.toLowerCase().includes(filterLower)
-        ) {
-            score += 0.5;
-        }
-    }
-
-    return score;
 }
 
 /**
