@@ -393,7 +393,7 @@ export class AppAgentManager implements ActionConfigProvider {
     public getAppAgent(appAgentName: string): AppAgent {
         const record = this.getRecord(appAgentName);
         if (record.appAgent === undefined) {
-            throw new Error(`App agent' ${appAgentName}' is not initialized`);
+            throw new Error(`App agent '${appAgentName}' is not initialized`);
         }
         return record.appAgent;
     }

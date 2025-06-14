@@ -144,7 +144,7 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     }
 }
 
-export class WebsiteMessage implements kp.IMessage {
+export class Website implements kp.IMessage {
     public textChunks: string[];
     public tags: string[];
     public timestamp: string | undefined;
@@ -203,54 +203,9 @@ export class WebsiteMessage implements kp.IMessage {
 export function importWebsiteVisit(
     visitInfo: WebsiteVisitInfo,
     pageContent?: string,
-): WebsiteMessage {
+): Website {
     const meta = new WebsiteMeta(visitInfo);
-    return new WebsiteMessage(meta, pageContent || visitInfo.description || "");
-}
-
-export class WebsiteMessageSerializer
-    implements kp.JsonSerializer<WebsiteMessage>
-{
-    public serialize(value: WebsiteMessage): string {
-        return JSON.stringify(value);
-    }
-
-    public deserialize(json: string): WebsiteMessage {
-        const jMsg: WebsiteMessage = JSON.parse(json);
-        const jMeta: WebsiteMeta = jMsg.metadata;
-        const visitInfo: WebsiteVisitInfo = {
-            url: jMeta.url,
-            source: jMeta.websiteSource,
-        };
-        if (jMeta.title !== undefined) visitInfo.title = jMeta.title;
-        if (jMeta.domain !== undefined) visitInfo.domain = jMeta.domain;
-        if (jMeta.visitDate !== undefined)
-            visitInfo.visitDate = jMeta.visitDate;
-        if (jMeta.bookmarkDate !== undefined)
-            visitInfo.bookmarkDate = jMeta.bookmarkDate;
-        if (jMeta.folder !== undefined) visitInfo.folder = jMeta.folder;
-        if (jMeta.pageType !== undefined) visitInfo.pageType = jMeta.pageType;
-        if (jMeta.keywords !== undefined) visitInfo.keywords = jMeta.keywords;
-        if (jMeta.description !== undefined)
-            visitInfo.description = jMeta.description;
-        if (jMeta.favicon !== undefined) visitInfo.favicon = jMeta.favicon;
-        if (jMeta.visitCount !== undefined)
-            visitInfo.visitCount = jMeta.visitCount;
-        if (jMeta.lastVisitTime !== undefined)
-            visitInfo.lastVisitTime = jMeta.lastVisitTime;
-        if (jMeta.typedCount !== undefined)
-            visitInfo.typedCount = jMeta.typedCount;
-
-        const meta = new WebsiteMeta(visitInfo);
-        return new WebsiteMessage(
-            meta,
-            jMsg.textChunks,
-            jMsg.tags,
-            jMsg.knowledge,
-            jMsg.deletionInfo,
-            false,
-        );
-    }
+    return new Website(meta, pageContent || visitInfo.description || "");
 }
 
 function websiteToTextChunks(

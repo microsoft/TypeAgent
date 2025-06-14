@@ -1,0 +1,12 @@
+[
+    {
+        "request": "Open the portugal consulate website",
+        "action": {
+            "schemaName": "browser",
+            "actionName": "openWebPage",
+            "parameters": {
+                "site": "portugal consulate"
+            }
+        }
+    }
+]
