@@ -132,6 +132,7 @@ async def run_search_query(
     conversation: IConversation,
     query: SearchQueryExpr,
     options: SearchOptions | None = None,
+    original_query_text: str | None = None,
 ) -> list[ConversationSearchResult] | None:
     options = options or SearchOptions()
     results: list[ConversationSearchResult] = []
@@ -141,7 +142,7 @@ async def run_search_query(
             expr.search_term_group,
             expr.when,
             options,
-            query.raw_query,
+            original_query_text or query.raw_query,
         )
         if search_results is not None:
             results.append(search_results)
