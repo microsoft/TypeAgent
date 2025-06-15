@@ -93,6 +93,7 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             readline.remove_history_item(readline.get_current_history_length() - 1)
             break
         if query_text == "pdb":
+            breakpoint()  # Do not remove -- 'pdb' should enter the debugger.
             continue
 
         asyncio.run(wrap_process_query(query_text, context.conversation, translator))
@@ -142,7 +143,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
 
     # 1. With LLM help, translate to SearchQuery (a tree but not yet usable to query)
     print("Search query:")
-    search_query = await translate_text_to_search_query(
+    search_query: SearchQuery | None = await translate_text_to_search_query(
         conversation, translator, query_text
     )
     if search_query is None:
@@ -153,7 +154,9 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
 
     # 2. Translate the search query into something directly usable as a query.
     print("Search query expressions:")
-    query_exprs = translate_search_query_to_search_query_exprs(search_query)
+    query_exprs: list[SearchQueryExpr] = translate_search_query_to_search_query_exprs(
+        search_query
+    )
     if not query_exprs:
         print("Failed to translate search query to query expressions.")
         return
@@ -174,7 +177,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                 print(f"Result {i}.{j}:")
                 print()
                 # pretty_print(result)
-                # print_result(result, conversation)
+                print_result(result, conversation)
                 answer = await generate_answer(result, conversation)
                 if answer.type == "NoAnswer":
                     print("Failure:", answer.whyNoAnswer)
