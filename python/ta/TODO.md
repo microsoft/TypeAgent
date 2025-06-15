@@ -5,7 +5,7 @@
 - `TODO` comments
 - `raise NotImplementedError` with TODO in arg or comment
 
-### Cleanup:
+## Cleanup:
 
 - Remove a bunch of `XxxData` TypedDicts that can be dealt with using
   `deserialize_object` and `serialize_object`
