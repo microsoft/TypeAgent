@@ -7,11 +7,13 @@ import {
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
+    parseTypedArguments,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { argDestFile, argSourceFile, isJsonEqual } from "../common.js";
 import { readBatchFile } from "examples-lib";
 import * as kp from "knowpro";
+import * as kpTest from "knowpro-test";
 import { getLangSearchResult } from "./knowproCommon.js";
 import {
     appendFileNameSuffix,
@@ -22,6 +24,7 @@ import {
 } from "typeagent";
 import { Result, success } from "typechat";
 import chalk from "chalk";
+import { openai } from "aiclient";
 
 /**
  * Test related commands
@@ -34,6 +37,8 @@ export async function createKnowproTestCommands(
     commands.kpTestSearchBatch = searchBatch;
     commands.kpTestBatch = testBatch;
     commands.kpLoadTest = loadTest;
+    commands.kpTestAnswerBatch = answerBatch;
+    commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
 
     function searchBatchDef(): CommandMetadata {
         return {
@@ -97,6 +102,11 @@ export async function createKnowproTestCommands(
         }
 
         const namedArgs = parseNamedArguments(args, testBatchDef());
+
+        type BatchArgs = { srcPath: string; startAt?: number; count?: number };
+        const bt = parseTypedArguments<BatchArgs>(args, testBatchDef());
+        context.printer.writeJson(bt);
+
         const baseResults = await readJsonFile<LangSearchResults[]>(
             namedArgs.srcPath,
         );
@@ -186,12 +196,88 @@ export async function createKnowproTestCommands(
         }
     }
 
+    function answerBatchDef(): CommandMetadata {
+        return {
+            description: "Run a batch of language queries and save answers",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                destPath: argDestFile(),
+            },
+        };
+    }
+    commands.kpTestAnswerBatch.metadata = answerBatchDef();
+    async function answerBatch(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, answerBatchDef());
+        const srcPath = namedArgs.srcPath;
+        const destPath =
+            namedArgs.destPath ?? changeFileExt(srcPath, ".json", "_results");
+        await kpTest.getAnswerBatch(
+            context,
+            namedArgs.srcPath,
+            destPath,
+            (qa, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                context.printer.writeLine(qa.question);
+                context.printer.writeInColor(chalk.green, qa.answer);
+            },
+        );
+    }
+
+    function testAnswerBatchDef(): CommandMetadata {
+        return {
+            description: "Verify a batch of language query answers",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                threshold: argNum("threshold", 0.9),
+            },
+        };
+    }
+    commands.kpTestVerifyAnswerBatch.metadata = testAnswerBatchDef();
+    async function verifyAnswerBatch(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, testAnswerBatchDef());
+        const srcPath = namedArgs.srcPath;
+        const model = openai.createEmbeddingModel();
+        await kpTest.verifyQuestionAnswerBatch(
+            context,
+            srcPath,
+            model,
+            (result, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                writeAnswerScore(result, namedArgs.threshold);
+            },
+        );
+    }
+
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
             return context.conversation;
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
+    }
+
+    function writeAnswerScore(
+        result: kpTest.SimilarityComparison<kpTest.QuestionAnswer>,
+        threshold: number,
+    ) {
+        const color =
+            result.score >= threshold ? chalk.greenBright : chalk.redBright;
+        context.printer.writeInColor(color, result.actual.question);
+
+        if (result.score < threshold) {
+            context.printer.writeJsonInColor(chalk.redBright, result.actual);
+            context.printer.writeJsonInColor(chalk.green, result.expected);
+        }
     }
 
     return;

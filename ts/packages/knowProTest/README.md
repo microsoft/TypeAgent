@@ -1,8 +1,11 @@
-# testLib
+# KnowProTest
 
-testLib is **sample code** used by package unit tests.
+KnowProTest is **experimental sample code and wrappers** used by [test apps](../../examples/chat/README.md) and evaluation tooling for the [KnowPro](../knowPro/README.md) package.
 
-Contains wrappers for **jest** and other common scenarios that TypeAgent unit tests must handle.
+The [KnowProContext](./src/knowproContext.ts) class also demonstrates the following KnowPro use cases:
+
+- Searching memory: _execSearchRequest_ method.
+- Answering a question using memory: _execGetAnswerRequest_ method.
 
 ## Trademarks
 

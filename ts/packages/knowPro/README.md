@@ -18,6 +18,7 @@ Note: the TypeAgent **Dispatcher** currently implements **Agent Memory** using a
 
 Examples of using the above APIs can be found here:
 
+- [KnowProwTest](../knowProTest/README.md)
 - [KnowPro + Memory examples](../../examples/chat/README.md)
 - [Memory implementations](../memory/README.md)
 
