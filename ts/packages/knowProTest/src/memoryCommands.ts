@@ -116,45 +116,65 @@ export async function execGetAnswersForSearchResults(
         answer: Result<kp.AnswerResponse>,
     ) => void,
 ): Promise<Result<kp.AnswerResponse[]>> {
+    let answerResponses: kp.AnswerResponse[] = [];
+    if (!request.messages) {
+        // Don't include raw message text... try answering only with knowledge
+        searchResults.forEach((r) => (r.messageMatches = []));
+    }
+    const choices = request.choices?.split(";");
+    const options = createAnswerOptions(request);
+    for (let i = 0; i < searchResults.length; ++i) {
+        const searchResult = searchResults[i];
+        let question = searchResult.rawSearchQuery ?? request.query;
+        if (choices && choices.length > 0) {
+            question = kp.createMultipleChoiceQuestion(question, choices);
+        }
+        const answerResult = await getAnswerFromSearchResult(
+            context,
+            request,
+            searchResult,
+            choices,
+            options,
+        );
+        if (!answerResult.success) {
+            return answerResult;
+        }
+        answerResponses.push(answerResult.data);
+        if (progressCallback) {
+            progressCallback(i, question, answerResult);
+        }
+    }
+    return success(answerResponses);
+}
+
+async function getAnswerFromSearchResult(
+    context: KnowproContext,
+    request: GetAnswerRequest,
+    searchResult: kp.ConversationSearchResult,
+    choices: string[] | undefined,
+    options: kp.AnswerContextOptions,
+): Promise<Result<kp.AnswerResponse>> {
     const conversation = context.ensureConversationLoaded();
     const fastStopSav = context.answerGenerator.settings.fastStop;
     if (request.fastStop) {
         context.answerGenerator.settings.fastStop = request.fastStop;
     }
-    let answerResponses: kp.AnswerResponse[] = [];
     try {
-        if (!request.messages) {
-            // Don't include raw message text... try answering only with knowledge
-            searchResults.forEach((r) => (r.messageMatches = []));
+        let question = searchResult.rawSearchQuery ?? request.query;
+        if (choices && choices.length > 0) {
+            question = kp.createMultipleChoiceQuestion(question, choices);
         }
-        const choices = request.choices?.split(";");
-        const options = createAnswerOptions(request);
-        for (let i = 0; i < searchResults.length; ++i) {
-            const searchResult = searchResults[i];
-            let question = searchResult.rawSearchQuery ?? request.query;
-            if (choices && choices.length > 0) {
-                question = kp.createMultipleChoiceQuestion(question, choices);
-            }
-            const answerResult = await kp.generateAnswer(
-                conversation,
-                context.answerGenerator,
-                question,
-                searchResult,
-                undefined,
-                options,
-            );
-            if (!answerResult.success) {
-                return answerResult;
-            }
-            answerResponses.push(answerResult.data);
-            if (progressCallback) {
-                progressCallback(i, question, answerResult);
-            }
-        }
+        return await kp.generateAnswer(
+            conversation,
+            context.answerGenerator,
+            question,
+            searchResult,
+            undefined,
+            options,
+        );
     } finally {
         context.answerGenerator.settings.fastStop = fastStopSav;
     }
-    return success(answerResponses);
 }
 
 function createLangFilter(
