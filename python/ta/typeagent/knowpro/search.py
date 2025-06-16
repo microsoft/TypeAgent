@@ -468,6 +468,8 @@ class QueryCompiler:
         dedupe: bool,
         filter: WhenFilter | None = None,
     ) -> None:
+        if not compiled_terms:
+            return
         for ct in compiled_terms:
             self.validate_and_prepare_search_terms(ct.terms)
         if (
@@ -492,7 +494,7 @@ class QueryCompiler:
             return False
         # Matching the term - exact match - counts for more than matching related terms
         # Therefore, we boost any matches where the term matches directly...
-        if search_term.term is None:
+        if search_term.term.weight is None:
             search_term.term.weight = self.default_term_match_weight
         if search_term.related_terms is not None:
             for related_term in search_term.related_terms:
@@ -506,6 +508,12 @@ class QueryCompiler:
                     related_term.weight = self.default_term_match_weight
         return True
 
+    # Currently, just changes the case of a term
+    #  But here, we may do other things like:
+    # - Check for noise terms
+    # - Do additional rewriting
+    # - Additional checks that *reject* certain search terms
+    # Return false if the term should be rejected
     def validate_and_prepare_term(self, term: Term | None) -> bool:
         if term:
             term.text = term.text.lower()
