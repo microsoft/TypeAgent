@@ -25,6 +25,7 @@ import {
 import { Result, success } from "typechat";
 import chalk from "chalk";
 import { openai } from "aiclient";
+import fs from "fs";
 
 /**
  * Test related commands
@@ -235,7 +236,10 @@ export async function createKnowproTestCommands(
                 srcPath: argSourceFile(),
             },
             options: {
-                threshold: argNum("threshold", 0.9),
+                similarity: argNum(
+                    "Similarity: Generated answer must have at least this similarity to baseline",
+                    0.9,
+                ),
             },
         };
     }
@@ -245,17 +249,26 @@ export async function createKnowproTestCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, testAnswerBatchDef());
+        const minSimilarity = namedArgs.similarity;
         const srcPath = namedArgs.srcPath;
+        if (!fs.existsSync(srcPath)) {
+            context.printer.writeError("File not found");
+            return;
+        }
+
         const model = openai.createEmbeddingModel();
-        await kpTest.verifyQuestionAnswerBatch(
+        const results = await kpTest.verifyQuestionAnswerBatch(
             context,
             srcPath,
             model,
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
-                writeAnswerScore(result, namedArgs.threshold);
+                writeAnswerScore(result, minSimilarity);
             },
         );
+        if (!results.success) {
+            context.printer.writeError(results.message);
+        }
     }
 
     function ensureConversationLoaded(): kp.IConversation | undefined {

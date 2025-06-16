@@ -331,7 +331,7 @@ export class AnswerGenerator implements IAnswerGenerator {
                 contextContent,
             ),
         );
-        const promptText = prompt.join("\n");
+        const promptText = prompt.join("\n\n");
         return this.answerTranslator.translate(
             promptText,
             this.settings.modelInstructions,
@@ -603,7 +603,9 @@ function createRelevantKnowledge(
 function createQuestionPrompt(question: string): string {
     let prompt: string[] = [
         "The following is a user question:",
-        `===\n${question}\n===`, // Leave the '/n' here
+        "===",
+        question,
+        "===",
         "- The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
         "- Answer the user question PRECISELY using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
         "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in [ANSWER CONTEXT].",
