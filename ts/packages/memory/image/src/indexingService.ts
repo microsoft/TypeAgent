@@ -17,7 +17,7 @@ import getFolderSize from "get-folder-size";
 const debug = registerDebug("typeagent:indexingService");
 
 // The type of data being indexed
-export type IndexSource = "image" | "email";
+export type IndexSource = "image" | "email" | "website";
 
 // The meta data about the index
 // TODO: add token stats

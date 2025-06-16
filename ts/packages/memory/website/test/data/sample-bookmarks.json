@@ -1,0 +1,87 @@
+{
+  "roots": {
+    "bookmark_bar": {
+      "id": "1",
+      "name": "Bookmarks Bar",
+      "type": "folder",
+      "date_added": "13370728742000000",
+      "date_modified": "0",
+      "children": [
+        {
+          "id": "2",
+          "name": "TypeAgent Repository",
+          "type": "url",
+          "url": "https://github.com/microsoft/TypeAgent",
+          "date_added": "13370728742000000"
+        },
+        {
+          "id": "3",
+          "name": "Development",
+          "type": "folder",
+          "date_added": "13370728742000000",
+          "children": [
+            {
+              "id": "4",
+              "name": "TypeScript Documentation",
+              "type": "url",
+              "url": "https://docs.microsoft.com/typescript",
+              "date_added": "13370728742000000"
+            },
+            {
+              "id": "5",
+              "name": "Stack Overflow",
+              "type": "url",
+              "url": "https://stackoverflow.com/questions/tagged/typescript",
+              "date_added": "13370728742000000"
+            }
+          ]
+        },
+        {
+          "id": "6",
+          "name": "News",
+          "type": "folder",
+          "date_added": "13370728742000000",
+          "children": [
+            {
+              "id": "7",
+              "name": "BBC Technology",
+              "type": "url",
+              "url": "https://news.bbc.com/technology",
+              "date_added": "13370728742000000"
+            }
+          ]
+        }
+      ]
+    },
+    "other": {
+      "id": "8",
+      "name": "Other Bookmarks",
+      "type": "folder",
+      "date_added": "13370728742000000",
+      "children": [
+        {
+          "id": "9",
+          "name": "Research",
+          "type": "folder",
+          "date_added": "13370728742000000",
+          "children": [
+            {
+              "id": "10",
+              "name": "AI Research Papers",
+              "type": "url",
+              "url": "https://arxiv.org/list/cs.AI/recent",
+              "date_added": "13370728742000000"
+            }
+          ]
+        }
+      ]
+    },
+    "synced": {
+      "id": "11",
+      "name": "Mobile Bookmarks",
+      "type": "folder",
+      "date_added": "13370728742000000",
+      "children": []
+    }
+  }
+}

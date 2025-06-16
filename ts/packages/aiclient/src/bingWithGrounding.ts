@@ -6,6 +6,8 @@ import { getEnvSetting } from "./common.js";
 export type ApiSettings = {
     endpoint?: string;
     agent?: string;
+    urlResolutionAgentId?: string;
+    connectionId?: string;
 };
 
 /**
@@ -14,6 +16,8 @@ export type ApiSettings = {
 export enum EnvVars {
     BING_WITH_GROUNDING_ENDPOINT = "BING_WITH_GROUNDING_ENDPOINT",
     BING_WITH_GROUNDING_AGENT_ID = "BING_WITH_GROUNDING_AGENT_ID",
+    BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID = "BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID",
+    BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID = "BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID",
 }
 
 /**
@@ -28,5 +32,13 @@ export function apiSettingsFromEnv(
     return {
         endpoint: getEnvSetting(env, EnvVars.BING_WITH_GROUNDING_ENDPOINT),
         agent: getEnvSetting(env, EnvVars.BING_WITH_GROUNDING_AGENT_ID),
+        urlResolutionAgentId: getEnvSetting(
+            env,
+            EnvVars.BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID,
+        ),
+        connectionId: getEnvSetting(
+            env,
+            EnvVars.BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID,
+        ),
     };
 }

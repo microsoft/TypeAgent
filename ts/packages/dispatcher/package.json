@@ -64,6 +64,7 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
+    "website-memory": "workspace:*",
     "ws": "^8.17.1"
   },
   "devDependencies": {
