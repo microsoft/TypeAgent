@@ -4,6 +4,7 @@
 import asyncio
 from dataclasses import asdict
 import io
+import re
 import readline
 import shutil
 import sys
@@ -43,7 +44,7 @@ def pretty_print(obj: object) -> None:
     Only works if the repr() is a valid Python expression.
     """
     line_width = cap(200, shutil.get_terminal_size().columns)
-    print(format_str(repr(obj), mode=FileMode(line_length=line_width)))
+    print(format_str(repr(obj), mode=FileMode(line_length=line_width)).rstrip())
 
 
 def main() -> None:
@@ -87,26 +88,34 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
         query_text = read_one_line(ps1, stream)
         if query_text is None:  # EOF
             break
-        if not query_text:
-            continue
-        if query_text.lower() in ("exit", "quit", "q"):
-            readline.remove_history_item(readline.get_current_history_length() - 1)
-            break
-        if query_text == "pdb":
-            pretty_print(
-                asyncio.run(
-                    context.conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index.lookup_term(  # type: ignore
-                        "novel"
+        match query_text:  # Already stripped
+            case "":
+                continue
+            case "exit" | "q" | "quit":
+                readline.remove_history_item(readline.get_current_history_length() - 1)
+                break
+            case "pdb":
+                pretty_print(
+                    asyncio.run(
+                        context.conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index.lookup_term(  # type: ignore
+                            "novel"
+                        )
                     )
                 )
-            )
-            print("Entering debugger; end with 'c' or 'continue'.")
-            breakpoint()  # Do not remove -- 'pdb' should enter the debugger.
-            continue
-
-        asyncio.run(wrap_process_query(query_text, context.conversation, translator))
-
-        print()
+                print("Entering debugger; end with 'c' or 'continue'.")
+                breakpoint()  # Do not remove -- 'pdb' should enter the debugger.
+            case _ if re.match(r"^\d+$", query_text):
+                msg_ord = int(query_text)
+                messages = context.conversation.messages
+                if msg_ord < 0 or msg_ord >= len(messages):
+                    print(f"Message ordinal {msg_ord} out of range({len(messages)}).")
+                    continue
+                pretty_print(messages[msg_ord])
+            case _:
+                asyncio.run(
+                    wrap_process_query(query_text, context.conversation, translator)
+                )
+                print()
 
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
@@ -199,7 +208,19 @@ def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
 ) -> None:
     print(f"Raw query: {result.raw_query_text}")
     if result.message_matches:
-        print("Message matches:", result.message_matches)
+        print("Message matches:")
+        for scored_ord in sorted(
+            result.message_matches, key=lambda x: x.score, reverse=True
+        ):
+            score = scored_ord.score
+            msg_ord = scored_ord.message_ordinal
+            msg = conversation.messages[msg_ord]
+            text = " ".join(msg.text_chunks).strip()
+            print(
+                f"({score:4.1f}) {msg_ord:3d}: "
+                f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
+                f"{repr(text)[1:-1]:<150.150s}  "
+            )
     if result.knowledge_matches:
         print("Knowledge matches:")
         for key, value in sorted(result.knowledge_matches.items()):
