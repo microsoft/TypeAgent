@@ -324,7 +324,8 @@ export async function createKnowproCommands(
             return;
         }
 
-        await context.getAnswersForSearchResults(
+        await kpTest.execGetAnswersForSearchResults(
+            context,
             parseTypedArguments<kpTest.GetAnswerRequest>(
                 args,
                 kpTest.getAnswerRequestDef(),
@@ -581,7 +582,7 @@ export async function createKnowproCommands(
     async function execAnswerSearch(
         namedArgs: NamedArgs,
     ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
-        const response = await kpTest.execSearchCommand(context, namedArgs);
+        const response = await kpTest.execSearchRequest(context, namedArgs);
         return [response.searchResults, response.debugContext];
     }
 

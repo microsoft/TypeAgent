@@ -76,7 +76,13 @@ export function memoryNameToIndexPath(
     return path.join(basePath, memoryName + IndexFileSuffix);
 }
 
-export function isNamedArgs(obj: any): obj is NamedArgs {
+export function shouldParseRequest(
+    obj: string[] | NamedArgs | any,
+): obj is string[] | NamedArgs {
+    return Array.isArray(obj) || isNamedArgs(obj);
+}
+
+function isNamedArgs(obj: any): obj is NamedArgs {
     if (typeof obj === "object") {
         const na = obj as NamedArgs;
         return na.bind !== undefined && na.value !== undefined;

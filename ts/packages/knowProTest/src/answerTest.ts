@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import { BatchCallback, execGetAnswerCommand } from "./memoryCommands.js";
+import { BatchCallback, execGetAnswerRequest } from "./memoryCommands.js";
 import { getCommandArgs } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
 import { error, Result, success } from "typechat";
@@ -122,7 +122,7 @@ async function getQuestionAnswer(
     context: KnowproContext,
     args: string[],
 ): Promise<Result<QuestionAnswer>> {
-    const response = await execGetAnswerCommand(context, args);
+    const response = await execGetAnswerRequest(context, args);
     if (!response.searchResponse.searchResults.success) {
         return response.searchResponse.searchResults;
     }
