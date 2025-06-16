@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import { BatchCallback, execGetAnswerRequest } from "./memoryCommands.js";
+import { BatchCallback, execGetAnswerRequest } from "./knowproCommands.js";
 import { getCommandArgs } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
 import { error, Result, success } from "typechat";

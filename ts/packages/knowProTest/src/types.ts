@@ -51,6 +51,7 @@ export interface GetAnswerRequest extends SearchRequest {
     fastStop?: boolean | undefined;
     knowledgeTopK?: number | undefined;
     choices?: string | undefined;
+    searchResponse?: SearchResponse | undefined;
 }
 
 export interface GetAnswerResponse {

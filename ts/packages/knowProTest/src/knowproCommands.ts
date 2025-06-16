@@ -84,7 +84,10 @@ export async function execGetAnswerRequest(
             getAnswerRequestDef(),
         );
     }
-    const searchResponse = await execSearchRequest(context, request);
+
+    const searchResponse = request.searchResponse
+        ? request.searchResponse
+        : await execSearchRequest(context, request);
     const searchResults = searchResponse.searchResults;
     const response: GetAnswerResponse = {
         searchResponse,
@@ -96,7 +99,7 @@ export async function execGetAnswerRequest(
     if (!kp.hasConversationResults(searchResults.data)) {
         return response;
     }
-    const answerResponses = await execGetAnswersForSearchResults(
+    const answerResponses = await getAnswersForSearchResults(
         context,
         request,
         searchResults.data,
@@ -106,7 +109,7 @@ export async function execGetAnswerRequest(
     return response;
 }
 
-export async function execGetAnswersForSearchResults(
+async function getAnswersForSearchResults(
     context: KnowproContext,
     request: GetAnswerRequest,
     searchResults: kp.ConversationSearchResult[],

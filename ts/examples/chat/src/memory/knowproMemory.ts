@@ -259,7 +259,12 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
-        const [searchResults, debugContext] = await execAnswerSearch(namedArgs);
+        const searchResponse = await kpTest.execSearchRequest(
+            context,
+            namedArgs,
+        );
+        const searchResults = searchResponse.searchResults;
+        const debugContext = searchResponse.debugContext;
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -307,7 +312,12 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, answerDef());
-        const [searchResults, debugContext] = await execAnswerSearch(namedArgs);
+        const searchResponse = await kpTest.execSearchRequest(
+            context,
+            namedArgs,
+        );
+        const searchResults = searchResponse.searchResults;
+        const debugContext = searchResponse.debugContext;
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -324,13 +334,14 @@ export async function createKnowproCommands(
             return;
         }
 
-        await kpTest.execGetAnswersForSearchResults(
+        const getAnswerRequest = parseTypedArguments<kpTest.GetAnswerRequest>(
+            args,
+            kpTest.getAnswerRequestDef(),
+        );
+        getAnswerRequest.searchResponse = searchResponse;
+        await kpTest.execGetAnswerRequest(
             context,
-            parseTypedArguments<kpTest.GetAnswerRequest>(
-                args,
-                kpTest.getAnswerRequestDef(),
-            ),
-            searchResults.data,
+            getAnswerRequest,
             (i: number, q: string, answer) => {
                 writeAnswer(i, answer, debugContext);
                 return;
@@ -573,18 +584,6 @@ export async function createKnowproCommands(
     /*---------- 
       End COMMANDS
     ------------*/
-
-    /**
-     * Run a search whose results are then used to generate answers
-     * @param namedArgs
-     * @returns
-     */
-    async function execAnswerSearch(
-        namedArgs: NamedArgs,
-    ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
-        const response = await kpTest.execSearchRequest(context, namedArgs);
-        return [response.searchResults, response.debugContext];
-    }
 
     function writeSearchResult(
         namedArgs: NamedArgs,
