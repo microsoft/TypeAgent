@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import fs from "fs";
-import { parseCommandLine } from "interactive-app";
+import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
+import path from "path";
+import { getFileName } from "typeagent";
 import { error, Result } from "typechat";
 
 export function ensureDirSync(folderPath: string): string {
@@ -40,4 +42,51 @@ export async function execCommandLine<T>(
     }
 
     return error("No args");
+}
+
+export function argSourceFile(defaultValue?: string | undefined): ArgDef {
+    return {
+        description: "Path to source file",
+        type: "path",
+        defaultValue,
+    };
+}
+
+export function addFileNameSuffixToPath(sourcePath: string, suffix: string) {
+    return path.join(
+        path.dirname(sourcePath),
+        getFileName(sourcePath) + suffix,
+    );
+}
+
+const IndexFileSuffix = "_index.json";
+export function sourcePathToMemoryIndexPath(
+    sourcePath: string,
+    indexFilePath?: string,
+): string {
+    return (
+        indexFilePath ?? addFileNameSuffixToPath(sourcePath, IndexFileSuffix)
+    );
+}
+
+export function memoryNameToIndexPath(
+    basePath: string,
+    memoryName: string,
+): string {
+    return path.join(basePath, memoryName + IndexFileSuffix);
+}
+
+export function shouldParseRequest(
+    obj: string[] | NamedArgs | any,
+): obj is string[] | NamedArgs {
+    return Array.isArray(obj) || isNamedArgs(obj);
+}
+
+function isNamedArgs(obj: any): obj is NamedArgs {
+    if (typeof obj === "object") {
+        const na = obj as NamedArgs;
+        return na.bind !== undefined && na.value !== undefined;
+    }
+
+    return false;
 }

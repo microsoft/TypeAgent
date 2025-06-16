@@ -484,6 +484,10 @@ class SearchQueryCompiler {
             when.dateRange = dateRangeFromDateTimeRange(filter.timeRange);
         }
         if (this.langSearchFilter) {
+            if (this.langSearchFilter.knowledgeType) {
+                when ??= {};
+                when.knowledgeType = this.langSearchFilter.knowledgeType;
+            }
             if (
                 this.langSearchFilter.tags &&
                 this.langSearchFilter.tags.length > 0

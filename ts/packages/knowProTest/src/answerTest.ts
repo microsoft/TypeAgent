@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import { BatchCallback, execGetAnswerCommand } from "./memoryCommands.js";
+import { BatchCallback, execGetAnswerRequest } from "./knowproCommands.js";
 import { getCommandArgs } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
-import { Result, success } from "typechat";
+import { error, Result, success } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
 import {
     dotProduct,
@@ -67,7 +67,7 @@ export async function verifyQuestionAnswerBatch(
     let results: SimilarityComparison<QuestionAnswer>[] = [];
     let questionAnswers = await readJsonFile<QuestionAnswer[]>(batchFilePath);
     if (questionAnswers === undefined || questionAnswers.length === 0) {
-        return success(results);
+        return error(`${batchFilePath} does not contain QuestionAnswer[]`);
     }
     for (let i = 0; i < questionAnswers.length; ++i) {
         const expected = questionAnswers[i];
@@ -122,7 +122,7 @@ async function getQuestionAnswer(
     context: KnowproContext,
     args: string[],
 ): Promise<Result<QuestionAnswer>> {
-    const response = await execGetAnswerCommand(context, args);
+    const response = await execGetAnswerRequest(context, args);
     if (!response.searchResponse.searchResults.success) {
         return response.searchResponse.searchResults;
     }

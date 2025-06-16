@@ -5,4 +5,5 @@ export * from "./types.js";
 export * from "./knowproContext.js";
 export * from "./searchTest.js";
 export * from "./answerTest.js";
-export * from "./memoryCommands.js";
+export * from "./knowproCommands.js";
+export * from "./podcastCommands.js";
