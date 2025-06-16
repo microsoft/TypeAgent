@@ -4,6 +4,7 @@
 import { CommandMetadata, arg, argBool, argNum } from "interactive-app";
 import * as kp from "knowpro";
 import { Result } from "typechat";
+import { argSourceFile } from "./common.js";
 
 export interface SearchRequest {
     // Required
@@ -75,6 +76,21 @@ export function getAnswerRequestDef(
     );
     def.options.choices = arg("Answer choices, separated by ';'");
     return def;
+}
+
+export interface PodcastLoadRequest {
+    filePath?: string | undefined;
+    name?: string | undefined;
+}
+
+export function podcastLoadDef(): CommandMetadata {
+    return {
+        description: "Load existing Podcast memory",
+        options: {
+            filePath: argSourceFile(),
+            name: arg("Podcast name"),
+        },
+    };
 }
 
 export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
