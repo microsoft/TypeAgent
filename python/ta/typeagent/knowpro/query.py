@@ -442,14 +442,9 @@ class MatchSearchTermExpr(MatchTermExpr):
                 context.matched_terms.add(related_term)
 
 
+@dataclass
 class MatchPropertySearchTermExpr(MatchTermExpr):
-
-    def __init__(
-        self,
-        property_search_term: PropertySearchTerm,
-    ):
-        self.property_search_term = property_search_term
-        super().__init__()
+    property_search_term: PropertySearchTerm
 
     def accumulate_matches(
         self, context: QueryEvalContext, matches: SemanticRefAccumulator
