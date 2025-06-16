@@ -93,6 +93,14 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             readline.remove_history_item(readline.get_current_history_length() - 1)
             break
         if query_text == "pdb":
+            pretty_print(
+                asyncio.run(
+                    context.conversation.secondary_indexes.term_to_related_terms_index.fuzzy_index.lookup_term(  # type: ignore
+                        "novel"
+                    )
+                )
+            )
+            print("Entering debugger; end with 'c' or 'continue'.")
             breakpoint()  # Do not remove -- 'pdb' should enter the debugger.
             continue
 
