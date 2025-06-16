@@ -158,7 +158,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
 
     # TODO: # 0. Recognize @-commands like "@search" and handle them specially.
 
-    # 1. With LLM help, translate to SearchQuery (a tree but not yet usable to query)
+    # 1. With LLM help, translate text to SearchQuery.
     print("Search query:")
     search_query: SearchQuery | None = await translate_text_to_search_query(
         conversation, translator, query_text
@@ -169,7 +169,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     pretty_print(search_query)
     print()
 
-    # 2. Translate the search query into something directly usable as a query.
+    # 2. Translate SearchQuery to SearchQueryExpr using SearchQueryCompiler.
     print("Search query expressions:")
     query_exprs: list[SearchQueryExpr] = translate_search_query_to_search_query_exprs(
         search_query
@@ -217,7 +217,7 @@ def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             msg = conversation.messages[msg_ord]
             text = " ".join(msg.text_chunks).strip()
             print(
-                f"({score:4.1f}) {msg_ord:3d}: "
+                f"({score:5.1f}){msg_ord:4d}: "
                 f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
                 f"{repr(text)[1:-1]:<150.150s}  "
             )
@@ -237,7 +237,7 @@ def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                     chunk_ord = sem_ref.range.start.chunk_ordinal
                     msg = conversation.messages[msg_ord]
                     print(
-                        f"({score:4.1f}) {msg_ord:3d}: "
+                        f"({score:5.1f}){msg_ord:4d}: "
                         f"{msg.speaker:>15.15s}: "  # type: ignore  # It's a PodcastMessage
                         f"{repr(msg.text_chunks[chunk_ord].strip())[1:-1]:<50.50s}  "
                         f"{summarize_knowledge(sem_ref)}"
