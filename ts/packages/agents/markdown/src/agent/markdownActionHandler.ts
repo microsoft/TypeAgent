@@ -138,6 +138,14 @@ async function handleMarkdownAction(
                     });
                 }
                 result = createActionResult("Document opened");
+                result.activityContext = {
+                    activityName: "editingMarkdown",
+                    description: "Editing a Markdown document",
+                    state: {
+                        fileName: newFileName,
+                    },
+                    openLocalView: true,
+                };
             }
             break;
         }

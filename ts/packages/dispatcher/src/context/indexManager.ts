@@ -9,6 +9,7 @@ import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 import path from "node:path";
 import { ensureDir, isDirectoryPath } from "typeagent";
 import { IndexData, IndexSource } from "image-memory";
+import { IndexData as WebsiteIndexData } from "website-memory";
 
 const debug = registerDebug("typeagent:indexManager");
 
@@ -25,6 +26,7 @@ export class IndexManager {
     //private cacheRoot: string;
     private static imageRoot: string | undefined;
     private static emailRoot: string | undefined;
+    private static websiteRoot: string | undefined;
 
     public static getInstance = (): IndexManager => {
         if (!IndexManager.instance) {
@@ -51,6 +53,9 @@ export class IndexManager {
 
         IndexManager.emailRoot = path.join(IndexManager.rootPath, "email");
         ensureDirectory(IndexManager.emailRoot!);
+
+        IndexManager.websiteRoot = path.join(IndexManager.rootPath, "website");
+        ensureDirectory(IndexManager.websiteRoot!);
 
         indexesToLoad.forEach((value) => {
             // restart any indexing that's not done
@@ -83,11 +88,15 @@ export class IndexManager {
         name: string,
         source: IndexSource,
         location: string,
+        options?: { sourceType?: string; browserType?: string },
     ): Promise<boolean> {
         // spin up the correct indexer based on the request
         switch (source) {
             case "image":
                 await this.createImageIndex(name, location);
+                break;
+            case "website":
+                await this.createWebsiteIndex(name, location, options);
                 break;
             case "email":
                 throw new Error("Email indexing is not implemented yet.");
@@ -132,6 +141,44 @@ export class IndexManager {
         this.startIndexingService(index);
     }
 
+    /*
+     * Create the website index for the specified location
+     */
+    private async createWebsiteIndex(
+        name: string,
+        location: string,
+        options?: { sourceType?: string; browserType?: string },
+    ) {
+        // For website indexing, location can be "default" to use default browser paths
+        // or a specific file path to browser data
+        if (location !== "default" && !existsSync(location)) {
+            throw new Error(`Location '${location}' does not exist.`);
+        }
+
+        const dirName = getUniqueFileName(IndexManager.websiteRoot!, "index");
+        const folder = await ensureDir(
+            path.join(IndexManager.websiteRoot!, dirName),
+        );
+
+        const index: WebsiteIndexData = {
+            source: "website",
+            name,
+            location,
+            size: 0,
+            path: folder,
+            state: "new",
+            progress: 0,
+            sizeOnDisk: 0,
+            sourceType:
+                (options?.sourceType as "bookmarks" | "history") || "bookmarks",
+            browserType:
+                (options?.browserType as "chrome" | "edge") || "chrome",
+        };
+
+        // start indexing
+        this.startIndexingService(index);
+    }
+
     public deleteIndex(name: string): boolean {
         this.indexingServices.forEach((childProc, index) => {
             if (index.name == name) {
@@ -156,9 +203,20 @@ export class IndexManager {
     ): Promise<ChildProcess | undefined> {
         return new Promise<ChildProcess | undefined>((resolve, reject) => {
             try {
-                const serviceRoot = getPackageFilePath(
-                    "./node_modules/image-memory/dist/indexingService.js",
-                );
+                let serviceRoot: string;
+
+                // Determine which indexing service to use based on source type
+                if (index.source === "website") {
+                    serviceRoot = getPackageFilePath(
+                        "./node_modules/website-memory/dist/indexingService.js",
+                    );
+                } else {
+                    // Default to image memory service
+                    serviceRoot = getPackageFilePath(
+                        "./node_modules/image-memory/dist/indexingService.js",
+                    );
+                }
+
                 const childProcess = fork(serviceRoot);
 
                 IndexManager.getInstance().indexingServices.set(

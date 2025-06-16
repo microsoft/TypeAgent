@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebsiteVisitInfo } from "./websiteMessage.js";
+import {
+    WebsiteVisitInfo,
+    Website,
+    importWebsiteVisit,
+} from "./websiteMeta.js";
 import path from "path";
 import fs from "fs";
 import * as sqlite from "better-sqlite3";
@@ -50,6 +54,13 @@ export interface EdgeBookmark {
     children?: EdgeBookmark[];
 }
 
+// Progress callback for import operations
+export type ImportProgressCallback = (
+    current: number,
+    total: number,
+    item: string,
+) => void;
+
 async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
     try {
         const data = fs.readFileSync(filePath, "utf8");
@@ -91,6 +102,7 @@ function extractDomain(url: string): string {
 export async function importChromeBookmarks(
     bookmarksPath: string,
     options?: Partial<ImportOptions>,
+    progressCallback?: ImportProgressCallback,
 ): Promise<WebsiteVisitInfo[]> {
     try {
         const bookmarksData =
@@ -121,6 +133,9 @@ export async function importChromeBookmarks(
             },
         ];
 
+        let processedRef = { count: 0 };
+        const totalEstimate = 1000; // Rough estimate, will be updated
+
         for (const { folder, folderPath } of rootFolders) {
             if (options?.folder && !folderPath.includes(options.folder)) {
                 continue;
@@ -131,6 +146,9 @@ export async function importChromeBookmarks(
                 websites,
                 cutoffDate,
                 options?.limit,
+                progressCallback,
+                processedRef,
+                totalEstimate,
             );
         }
 
@@ -149,6 +167,9 @@ function extractBookmarks(
     websites: WebsiteVisitInfo[],
     cutoffDate: number,
     limit?: number,
+    progressCallback?: ImportProgressCallback,
+    processedRef?: { count: number },
+    total?: number,
 ): void {
     if (limit && websites.length >= limit) return;
 
@@ -174,12 +195,26 @@ function extractBookmarks(
             visitInfo.bookmarkDate = bookmarkDate;
         }
         websites.push(visitInfo);
+
+        if (progressCallback && processedRef && total !== undefined) {
+            processedRef.count++;
+            progressCallback(processedRef.count, total, bookmark.name);
+        }
     } else if (bookmark.type === "folder" && bookmark.children) {
         const folderPath = currentPath
             ? `${currentPath}/${bookmark.name}`
             : bookmark.name;
         for (const child of bookmark.children) {
-            extractBookmarks(child, folderPath, websites, cutoffDate, limit);
+            extractBookmarks(
+                child,
+                folderPath,
+                websites,
+                cutoffDate,
+                limit,
+                progressCallback,
+                processedRef,
+                total,
+            );
             if (limit && websites.length >= limit) break;
         }
     }
@@ -191,6 +226,7 @@ function extractBookmarks(
 export async function importChromeHistory(
     historyDbPath: string,
     options?: Partial<ImportOptions>,
+    progressCallback?: ImportProgressCallback,
 ): Promise<WebsiteVisitInfo[]> {
     try {
         // Check if the history file exists
@@ -260,7 +296,9 @@ export async function importChromeHistory(
             console.log(`Found ${rows.length} history entries`);
 
             // Convert rows to WebsiteVisitInfo
-            for (const row of rows) {
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+
                 if (
                     !row.url ||
                     row.url.startsWith("chrome://") ||
@@ -286,6 +324,10 @@ export async function importChromeHistory(
                 if (row.typed_count) visitInfo.typedCount = row.typed_count;
 
                 websites.push(visitInfo);
+
+                if (progressCallback) {
+                    progressCallback(i + 1, rows.length, row.title || row.url);
+                }
 
                 if (options?.limit && websites.length >= options.limit) {
                     break;
@@ -318,20 +360,72 @@ export async function importChromeHistory(
 export async function importEdgeHistory(
     historyDbPath: string,
     options?: Partial<ImportOptions>,
+    progressCallback?: ImportProgressCallback,
 ): Promise<WebsiteVisitInfo[]> {
     // Edge uses a similar SQLite structure to Chrome
     // For now, we can reuse the Chrome import logic as Edge history has similar schema
     console.log(
         "Using Chrome history import logic for Edge (similar database schema)",
     );
-    return importChromeHistory(historyDbPath, options);
+    return importChromeHistory(historyDbPath, options, progressCallback);
 }
+
 export async function importEdgeBookmarks(
     bookmarksPath: string,
     options?: Partial<ImportOptions>,
+    progressCallback?: ImportProgressCallback,
 ): Promise<WebsiteVisitInfo[]> {
     console.warn("Edge bookmark import not yet implemented");
     return [];
+}
+
+/**
+ * Import websites from various sources and convert to Website objects
+ */
+export async function importWebsites(
+    source: "chrome" | "edge",
+    type: "bookmarks" | "history",
+    filePath: string,
+    options?: Partial<ImportOptions>,
+    progressCallback?: ImportProgressCallback,
+): Promise<Website[]> {
+    let visitInfos: WebsiteVisitInfo[] = [];
+
+    switch (source) {
+        case "chrome":
+            if (type === "bookmarks") {
+                visitInfos = await importChromeBookmarks(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
+            } else if (type === "history") {
+                visitInfos = await importChromeHistory(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
+            }
+            break;
+        case "edge":
+            if (type === "bookmarks") {
+                visitInfos = await importEdgeBookmarks(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
+            } else if (type === "history") {
+                visitInfos = await importEdgeHistory(
+                    filePath,
+                    options,
+                    progressCallback,
+                );
+            }
+            break;
+    }
+
+    // Convert WebsiteVisitInfo to Website objects
+    return visitInfos.map((visitInfo) => importWebsiteVisit(visitInfo));
 }
 
 /**

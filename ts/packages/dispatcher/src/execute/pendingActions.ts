@@ -16,12 +16,17 @@ import {
     PromptEntity,
 } from "agent-cache";
 import { getAppAgentName } from "../internal.js";
-import { ResolveEntityResult, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    ResolveEntityResult,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { DispatcherClarifyName } from "../context/dispatcher/dispatcherUtils.js";
 import { AppAgentManager } from "../context/appAgentManager.js";
 import registerDebug from "debug";
 import { filterEntitySelection } from "../translation/entityResolution.js";
+import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 const debugActionEntities = registerDebug(
     "typeagent:dispatcher:actions:entities",
 );
@@ -204,10 +209,11 @@ function toPromptEntityNameMap(entities: PromptEntity[] | undefined) {
 }
 
 function createParameterEntityResolver(
-    agents: AppAgentManager,
+    context: ActionContext<CommandHandlerContext>,
     entities: PromptEntity[] | undefined,
     options?: ParameterEntityResolverOptions,
 ): ParameterEntityResolver {
+    const agents = context.sessionContext.agentContext.agents;
     const resultEntityMap = new Set<string>();
     const clarifyEntities: ClarifyResolvedEntity[] = [];
     const promptEntityMap = toPromptEntityMap(entities);
@@ -274,6 +280,10 @@ function createParameterEntityResolver(
                 if (entitySchema === undefined) {
                     return;
                 }
+                if (!agents.isActionActive(appAgentName)) {
+                    // Don't resolve entities with agent if action is not active.
+                    return;
+                }
                 const agent = agents.getAppAgent(appAgentName);
                 if (agent.resolveEntity === undefined) {
                     throw new Error(
@@ -283,6 +293,7 @@ function createParameterEntityResolver(
                 debugActionEntities(
                     `Resolving ${fieldType.name} entity with agent ${appAgentName}: ${value}`,
                 );
+                displayStatus(`Resolving ${fieldType.name}: ${value}`, context);
                 const result = await agent.resolveEntity(
                     fieldType.name,
                     value,
@@ -486,16 +497,17 @@ export type ClarifyEntityAction = {
 };
 
 export async function toPendingActions(
-    context: CommandHandlerContext,
+    context: ActionContext<CommandHandlerContext>,
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
 ): Promise<PendingAction[]> {
     let resultEntityResolver: EntityResolver | undefined;
-    const agents = context.agents;
+    const systemContext = context.sessionContext.agentContext;
+    const agents = systemContext.agents;
     const entityResolver = createParameterEntityResolver(
-        agents,
+        context,
         entities,
-        context.session.getConfig().translation.entity,
+        systemContext.session.getConfig().translation.entity,
     );
     const pendingActions: PendingAction[] = [];
 

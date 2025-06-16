@@ -15,7 +15,10 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
-import { displayError } from "@typeagent/agent-sdk/helpers/display";
+import {
+    displayError,
+    displayStatus,
+} from "@typeagent/agent-sdk/helpers/display";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
     getBoardSchema,
@@ -37,7 +40,6 @@ import {
 } from "@typeagent/agent-sdk/helpers/command";
 
 import registerDebug from "debug";
-const debug = registerDebug("typeagent:browser:action");
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
@@ -50,12 +52,31 @@ import {
 import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
+import {
+    resolveURLWithHistory,
+    importWebsiteData,
+    searchWebsites,
+    getWebsiteStats,
+} from "./websiteMemory.mjs";
 import { CrosswordActions } from "./crossword/schema/userActions.mjs";
 import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "./interface.mjs";
+import { bingWithGrounding } from "aiclient";
+import { AIProjectClient } from "@azure/ai-projects";
+import { DefaultAzureCredential } from "@azure/identity";
+import {
+    Agent,
+    MessageContentUnion,
+    ThreadMessage,
+    ToolUtility,
+} from "@azure/ai-agents";
+import * as website from "website-memory";
+import { openai, TextEmbeddingModel } from "aiclient";
+
+const debug = registerDebug("typeagent:browser:action");
 
 export function instantiate(): AppAgent {
     return {
@@ -76,7 +97,18 @@ export type BrowserActionContext = {
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
+    websiteCollection?: website.WebsiteCollection | undefined;
+    fuzzyMatchingModel?: TextEmbeddingModel | undefined;
+    index: website.IndexData | undefined;
 };
+
+export interface urlResolutionAction {
+    originalRequest: string;
+    url: string;
+    urlsEvaluated: string[];
+    explanation: string;
+    bingSearchQuery: string;
+}
 
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
@@ -84,6 +116,7 @@ async function initializeBrowserContext(
     const browserControl = settings?.options as BrowserControl | undefined;
     return {
         browserControl,
+        index: undefined,
     };
 }
 
@@ -100,6 +133,36 @@ async function updateBrowserContext(
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
+        }
+
+        // Load the website index from disk
+        if (!context.agentContext.websiteCollection) {
+            const websiteIndexes = await context.indexes("website");
+
+            if (websiteIndexes.length > 0) {
+                context.agentContext.index = websiteIndexes[0];
+                context.agentContext.websiteCollection =
+                    await website.WebsiteCollection.readFromFile(
+                        websiteIndexes[0].path,
+                        "index",
+                    );
+                debug(
+                    `Loaded website index with ${context.agentContext.websiteCollection?.messages.length || 0} websites`,
+                );
+            } else {
+                debug(
+                    "Unable to load website index, please create one using the @index command or import website data.",
+                );
+                // Create empty collection as fallback
+                context.agentContext.websiteCollection =
+                    new website.WebsiteCollection();
+            }
+        }
+
+        // Initialize fuzzy matching model for website search
+        if (!context.agentContext.fuzzyMatchingModel) {
+            context.agentContext.fuzzyMatchingModel =
+                openai.createEmbeddingModel();
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -261,6 +324,8 @@ async function resolveWebPage(
     context: SessionContext<BrowserActionContext>,
     site: string,
 ): Promise<string> {
+    debug(`Resolving site '${site}'`);
+
     switch (site.toLowerCase()) {
         case "paleobiodb":
             return "https://paleobiodb.org/navigator/";
@@ -274,19 +339,173 @@ async function resolveWebPage(
         case "turtlegraphics":
             return "http://localhost:9000/";
         default:
+            if (URL.canParse(site)) {
+                // if the site is a valid URL, return it directly
+                debug(`Site is a valid URL: ${site}`);
+                return site;
+            }
+
             try {
+                // get local agent
                 const port = await context.getSharedLocalHostPort(site);
-                return `http://localhost:${port}`;
+
+                if (port !== undefined) {
+                    debug(`Resolved local site on PORT ${port}`);
+                    return `http://localhost:${port}`;
+                }
             } catch (e) {
-                debug(
-                    `Unable to find local host port for '${site}'. Trying as URL. ${e}`,
-                );
-                try {
-                    return new URL(site).toString();
-                } catch (e) {
-                    throw new Error(`Unable to find '${site}': ${e}`);
+                debug(`Unable to find local host port for '${site}. ${e}'`);
+            }
+
+            // try to resolve URL using website visit history first
+            const historyUrl = await resolveURLWithHistory(context, site);
+            if (historyUrl) {
+                debug(`Resolved URL from history: ${historyUrl}`);
+                return historyUrl;
+            }
+
+            // try to resolve URL using LLM + internet search
+            const url = await resolveURLWithSearch(site);
+
+            if (url) {
+                return url;
+            }
+
+            // can't get a URL
+            throw new Error(`Unable to find a URL for: '${site}'`);
+    }
+}
+
+let groundingConfig: bingWithGrounding.ApiSettings | undefined;
+async function resolveURLWithSearch(site: string): Promise<string | undefined> {
+    if (!groundingConfig) {
+        groundingConfig = bingWithGrounding.apiSettingsFromEnv();
+    }
+
+    let retVal: string = site;
+    const project = new AIProjectClient(
+        groundingConfig.endpoint!,
+        new DefaultAzureCredential(),
+    );
+
+    const agent = await ensureAgent(groundingConfig, project);
+
+    if (!agent) {
+        throw new Error(
+            "No agent found for Bing with Grounding. Please check your configuration.",
+        );
+    }
+
+    try {
+        const thread = await project.agents.threads.create();
+
+        // the question that needs answering
+        await project.agents.messages.create(thread.id, "user", site);
+
+        // Create run
+        const run = await project.agents.runs.createAndPoll(
+            thread.id,
+            agent.id,
+            {
+                pollingOptions: {
+                    intervalInMs: 500,
+                },
+                onResponse: (response): void => {
+                    debug(`Received response with status: ${response.status}`);
+                },
+            },
+        );
+
+        const msgs: ThreadMessage[] = [];
+        if (run.status === "completed") {
+            if (run.completedAt) {
+                // Retrieve messages
+                const messages = await project.agents.messages.list(thread.id, {
+                    order: "asc",
+                });
+
+                // accumulate assistant messages
+                for await (const m of messages) {
+                    if (m.role === "assistant") {
+                        // TODO: handle multi-modal content
+                        const content: MessageContentUnion | undefined =
+                            m.content.find(
+                                (c) => c.type === "text" && "text" in c,
+                            );
+                        if (content) {
+                            msgs.push(m);
+                            let txt: string = (content as any).text
+                                .value as string;
+                            txt = txt
+                                .replaceAll("```json", "")
+                                .replaceAll("```", "");
+                            const url = JSON.parse(txt) as urlResolutionAction;
+                            retVal = url.url;
+                        }
+                    }
                 }
             }
+        }
+
+        // delete the thread we just created since we are currently one and done
+        project.agents.threads.delete(thread.id);
+    } catch (e) {
+        debug(`Error resolving URL with search: ${e}`);
+    }
+
+    // return assistant messages
+    return retVal;
+}
+
+/*
+ * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
+ */
+async function ensureAgent(
+    groundingConfig: bingWithGrounding.ApiSettings,
+    project: AIProjectClient,
+): Promise<Agent | undefined> {
+    try {
+        return await project.agents.getAgent(
+            groundingConfig.urlResolutionAgentId!,
+        );
+    } catch (e) {
+        return await createAgent(groundingConfig, project);
+    }
+}
+
+async function createAgent(
+    groundingConfig: bingWithGrounding.ApiSettings,
+    project: AIProjectClient,
+): Promise<Agent> {
+    try {
+        // connection id is in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/typeagent-test-agent/connections/<CONNECTION NAME>>
+        const bingTool = ToolUtility.createBingGroundingTool([
+            {
+                connectionId: groundingConfig.connectionId!,
+            },
+        ]);
+
+        // try to create the agent
+        return await project.agents.createAgent("gpt-4o", {
+            name: "TypeAgent_URLResolverAgent",
+            description: "Auto created URL Resolution Agent",
+            instructions: `
+You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.
+
+Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
+
+interface Response {
+    originalRequest: string;
+    url: string;
+    urlsEvaluated: string[];
+    explanation: string;
+    bingSearchQuery: string;
+}`,
+            tools: [bingTool.definition],
+        });
+    } catch (e) {
+        debug(`Error creating agent: ${e}`);
+        throw e;
     }
 }
 
@@ -295,7 +514,10 @@ async function openWebPage(
     action: TypeAgentAction<OpenWebPage>,
 ) {
     if (context.sessionContext.agentContext.browserControl) {
-        context.actionIO.setDisplay("Opening web page.");
+        displayStatus(
+            `Opening web page for ${action.parameters.site}.`,
+            context,
+        );
         const siteEntity = action.entities?.site;
         const url =
             siteEntity?.type[0] === "WebPage"
@@ -304,6 +526,13 @@ async function openWebPage(
                       context.sessionContext,
                       action.parameters.site,
                   );
+
+        if (url !== action.parameters.site) {
+            displayStatus(
+                `Opening web page for ${action.parameters.site} at ${url}.`,
+                context,
+            );
+        }
         await context.sessionContext.agentContext.browserControl.openWebPage(
             url,
         );
@@ -356,6 +585,12 @@ async function executeBrowserAction(
                 return openWebPage(context, action);
             case "closeWebPage":
                 return closeWebPage(context);
+            case "importWebsiteData":
+                return importWebsiteData(context, action);
+            case "searchWebsites":
+                return searchWebsites(context, action);
+            case "getWebsiteStats":
+                return getWebsiteStats(context, action);
         }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
@@ -543,7 +778,7 @@ export async function createAutomationBrowser(isVisible?: boolean) {
                 });
 
                 childProcess.on("exit", (code) => {
-                    console.log("Browser instance exited with code:", code);
+                    debug("Browser instance exited with code:", code);
                 });
             } catch (e: any) {
                 console.error(e);
