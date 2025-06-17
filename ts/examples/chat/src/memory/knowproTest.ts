@@ -24,7 +24,7 @@ export async function createKnowproTestCommands(
     context: KnowproContext,
     commands: Record<string, CommandHandler>,
 ) {
-    commands.kpLoadTest = loadTest;
+    commands.kpLoadTestIndex = loadTestIndex;
     commands.kpTestSearchBatch = searchBatch;
     commands.kpTestVerifySearchBatch = verifySearchBatch;
     commands.kpTestAnswerBatch = answerBatch;
@@ -55,9 +55,13 @@ export async function createKnowproTestCommands(
             context,
             namedArgs.srcPath,
             destPath,
-            (sr, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                context.printer.writeLine(sr.searchText);
+            (srResult, index, total) => {
+                if (srResult.success) {
+                    context.printer.writeProgress(index + 1, total);
+                    context.printer.writeLine(srResult.data.searchText);
+                } else {
+                    context.printer.writeError(srResult.message);
+                }
             },
         );
         if (!results.success) {
@@ -90,7 +94,11 @@ export async function createKnowproTestCommands(
             srcPath,
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
-                writeSearchScore(result);
+                if (result.success) {
+                    writeSearchScore(result.data);
+                } else {
+                    context.printer.writeError(result.message);
+                }
             },
         );
         if (!results.success) {
@@ -122,10 +130,17 @@ export async function createKnowproTestCommands(
             context,
             namedArgs.srcPath,
             destPath,
-            (qa, index, total) => {
+            (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
-                context.printer.writeLine(qa.question);
-                context.printer.writeInColor(chalk.green, qa.answer);
+                if (result.success) {
+                    context.printer.writeLine(result.data.question);
+                    context.printer.writeInColor(
+                        chalk.green,
+                        result.data.answer,
+                    );
+                } else {
+                    context.printer.writeError(result.message);
+                }
             },
         );
     }
@@ -160,7 +175,11 @@ export async function createKnowproTestCommands(
             model,
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
-                writeAnswerScore(result, minSimilarity);
+                if (result.success) {
+                    writeAnswerScore(result.data, minSimilarity);
+                } else {
+                    context.printer.writeError(result.message);
+                }
             },
         );
         if (!results.success) {
@@ -168,7 +187,7 @@ export async function createKnowproTestCommands(
         }
     }
 
-    function loadTestDef(): CommandMetadata {
+    function loadTestIndexDef(): CommandMetadata {
         return {
             description: "Load index used by unit tests",
             options: {
@@ -176,9 +195,9 @@ export async function createKnowproTestCommands(
             },
         };
     }
-    commands.kpLoadTest.metadata = loadTestDef();
-    async function loadTest(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, loadTestDef());
+    commands.kpLoadTestIndex.metadata = loadTestIndexDef();
+    async function loadTestIndex(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, loadTestIndexDef());
         let samplePath = "../../../../packages/knowPro/test/data    ";
         samplePath = getAbsolutePath(samplePath, import.meta.url);
 
