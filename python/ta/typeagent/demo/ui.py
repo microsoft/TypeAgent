@@ -26,8 +26,8 @@ from ..knowpro.interfaces import (
     Topic,
 )
 from ..knowpro.kplib import Action, ActionParam, ConcreteEntity, Quantity
-from ..knowpro.query import QueryEvalContext
-from ..knowpro.search import ConversationSearchResult, SearchQueryExpr, run_search_query
+from ..knowpro.query import GroupSearchResultsExpr, QueryEvalContext
+from ..knowpro.search import ConversationSearchResult, QueryCompiler, SearchQueryExpr, run_search_query
 from ..knowpro.searchlang import SearchQueryCompiler
 from ..knowpro.search_query_schema import SearchQuery
 from ..podcasts.podcast import Podcast
@@ -186,6 +186,10 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     for i, query_expr in enumerate(query_exprs):
         print(f"Query expression {i}:")
         pretty_print(query_expr)
+        print(f"Knowledge query for expression {i}:")
+        knowledge_query = await translate_knowledge_query(conversation, query_expr)
+        pretty_print(knowledge_query)
+
         results = await run_search_query(conversation, query_expr)
         if results is None:
             print(f"No results for expression {i}.")
@@ -363,6 +367,18 @@ def translate_search_query_to_search_query_exprs(
     search_query: SearchQuery,
 ) -> list[SearchQueryExpr]:
     return SearchQueryCompiler().compile_query(search_query)
+
+
+async def translate_knowledge_query(
+    conversation: IConversation,
+    query_expr: SearchQueryExpr
+) -> GroupSearchResultsExpr:
+    compiler = QueryCompiler(
+        conversation, conversation.secondary_indexes
+    )
+    return await compiler.compile_knowledge_query(
+        query_expr.select_expressions[0].search_term_group
+    )
 
 
 def summarize_knowledge(sem_ref: SemanticRef) -> str:
