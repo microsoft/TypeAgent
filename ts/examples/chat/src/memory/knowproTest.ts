@@ -167,7 +167,11 @@ export async function createKnowproTestCommands(
             model,
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
-                writeAnswerScore(result, minSimilarity);
+                if (result.success) {
+                    writeAnswerScore(result.data, minSimilarity);
+                } else {
+                    context.printer.writeError(result.message);
+                }
             },
         );
         if (!results.success) {

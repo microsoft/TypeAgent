@@ -65,7 +65,8 @@ export async function verifyQuestionAnswerBatch(
     context: KnowproContext,
     batchFilePath: string,
     similarityModel: TextEmbeddingModel,
-    cb?: BatchCallback<SimilarityComparison<QuestionAnswer>>,
+    cb?: BatchCallback<Result<SimilarityComparison<QuestionAnswer>>>,
+    stopOnError: boolean = false,
 ): Promise<Result<SimilarityComparison<QuestionAnswer>[]>> {
     let results: SimilarityComparison<QuestionAnswer>[] = [];
     let questionAnswers = await readJsonFile<QuestionAnswer[]>(batchFilePath);
@@ -80,23 +81,29 @@ export async function verifyQuestionAnswerBatch(
             continue;
         }
         const response = await getQuestionAnswer(context, args);
-        if (!response.success) {
-            return response;
-        }
-        const actual = response.data;
-        const score = await compareQuestionAnswer(
-            actual,
-            expected,
-            similarityModel,
-        );
-        const result: SimilarityComparison<QuestionAnswer> = {
-            actual,
-            expected,
-            score,
-        };
-        results.push(result);
-        if (cb) {
-            cb(result, i, questionAnswers.length);
+        if (response.success) {
+            const actual = response.data;
+            const score = await compareQuestionAnswer(
+                actual,
+                expected,
+                similarityModel,
+            );
+            const result: SimilarityComparison<QuestionAnswer> = {
+                actual,
+                expected,
+                score,
+            };
+            results.push(result);
+            if (cb) {
+                cb(success(result), i, questionAnswers.length);
+            }
+        } else {
+            if (cb) {
+                cb(response, i, questionAnswers.length);
+            }
+            if (stopOnError) {
+                return response;
+            }
         }
     }
     return success(results);
