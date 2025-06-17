@@ -9,7 +9,7 @@ import readline
 import shutil
 import sys
 import traceback
-from typing import cast
+from typing import Any, cast
 
 from black import format_str, FileMode
 import typechat
@@ -251,7 +251,7 @@ async def generate_answer[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     translator = create_translator(model, AnswerResponse)
     assert context.raw_query_text is not None, "Raw query text must not be None"
     request = f"{create_question_prompt(context.raw_query_text)}\n\n{create_context_prompt(make_context(context, conversation))}"
-    # print(request)
+    # print("="*50 + "\n" + request + "\n" + "="*50)gf
     result = await translator.translate(request)
     if isinstance(result, typechat.Failure):
         return AnswerResponse(type="NoAnswer", answer=None, whyNoAnswer=result.message)
@@ -281,10 +281,27 @@ def create_context_prompt(context: AnswerContext) -> str:
     prompt = [
         "[ANSWER CONTEXT]",
         "===",
-        format_str(str(asdict(context)), mode=FileMode(line_length=200)),
+        format_str(str(dictify(context)), mode=FileMode(line_length=200)),
         "===",
     ]
     return "\n".join(prompt)
+
+
+def dictify(object: object) -> Any:
+    """Convert an object to a dictionary, recursively."""
+    if ann := getattr(object.__class__, "__annotations__", None):
+        return {k: dictify(v) for k in ann if (v := getattr(object, k, None)) is not None}
+    elif isinstance(object, dict):
+        return {k: dictify(v) for k, v in object.items() if v is not None}
+    elif isinstance(object, list):
+        return [dictify(item) for item in object]
+    elif hasattr(object, "__dict__"):
+        return {k: dictify(v) for k, v in object.__dict__.items() if v is not None}  #  if not k.startswith("_")
+    else:
+        if isinstance(object, float) and object.is_integer():
+            return int(object)
+        else:
+            return object
 
 
 def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
