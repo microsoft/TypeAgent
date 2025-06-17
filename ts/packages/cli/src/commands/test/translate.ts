@@ -103,10 +103,8 @@ function getTokenUsageStr(usage: ai.CompletionUsageStats, count: number = 1) {
 export default class TestTranslateCommand extends Command {
     static args = {
         files: Args.string({
-            files: Args.string({
-                description:
-                    "List of test data files. Default to all test files in the config.json.",
-            }),
+            description:
+                "List of test data files. Default to all test files in the config.json.",
         }),
     };
     static flags = {
