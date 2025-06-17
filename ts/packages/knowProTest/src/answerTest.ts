@@ -27,7 +27,8 @@ export async function runAnswerBatch(
     context: KnowproContext,
     batchFilePath: string,
     destFilePath?: string,
-    cb?: BatchCallback<QuestionAnswer>,
+    cb?: BatchCallback<Result<QuestionAnswer>>,
+    stopOnError: boolean = false,
 ): Promise<Result<QuestionAnswer[]>> {
     const batchLines = getBatchFileLines(batchFilePath);
     const results: QuestionAnswer[] = [];
@@ -38,13 +39,14 @@ export async function runAnswerBatch(
             continue;
         }
         const response = await getQuestionAnswer(context, args);
-        if (!response.success) {
-            return response;
-        }
-        response.data.cmd = cmd;
-        results.push(response.data);
         if (cb) {
-            cb(response.data, i, batchLines.length);
+            cb(response, i, batchLines.length);
+        }
+        if (response.success) {
+            response.data.cmd = cmd;
+            results.push(response.data);
+        } else if (stopOnError) {
+            return response;
         }
     }
     if (destFilePath) {
