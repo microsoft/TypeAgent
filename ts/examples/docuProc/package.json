@@ -28,6 +28,7 @@
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "cheerio": "1.0.0-rc.12",
+    "conversation-memory": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "fast-xml-parser": "4.5.1",
