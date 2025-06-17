@@ -16,7 +16,7 @@ import {
     StopWatch,
     InteractiveIo,
 } from "interactive-app";
-import { dateTime, ensureDir, getFileName } from "typeagent";
+import { collections, dateTime, ensureDir, getFileName } from "typeagent";
 
 import { ChatModel, TextEmbeddingModel, openai } from "aiclient";
 import {
@@ -154,6 +154,7 @@ export async function createKnowproCommands(
     };
 
     const DefaultMaxToDisplay = 25;
+    const DefaultKnowledgeTopK = 50;
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
 
@@ -165,6 +166,12 @@ export async function createKnowproCommands(
     commands.kpSearchTerms = searchTerms;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
+    commands.kpSearchRag = searchRag;
+    commands.kpAnswerRag = answerRag;
+    commands.kpTopics = topics;
+    commands.kpEntities = entities;
+    commands.kpMessages = showMessages;
+    commands.kpAbstractMessage = abstract;
 
     function adjustMaxToDisplay(maxToDisplay: number) {
         if (
@@ -545,6 +552,343 @@ export async function createKnowproCommands(
         }
     }
 
+    function answerDef(): CommandMetadata {
+        const def = searchDef();
+        def.description = "Get answers to natural language questions";
+        def.options!.messages = argBool("Include messages", true);
+        def.options!.fallback = argBool(
+            "Fallback to text similarity matching",
+            true,
+        );
+        def.options!.fastStop = argBool(
+            "Ignore messages if knowledge produces answers",
+            true,
+        );
+        def.options!.knowledgeTopK = argNum(
+            "How many top K knowledge matches",
+            DefaultKnowledgeTopK,
+        );
+        def.options!.choices = arg("Answer choices, separated by ';'");
+        return def;
+    }
+    commands.kpAnswer.metadata = answerDef();
+    async function answer(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, answerDef());
+        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        if (!searchResults.success) {
+            context.printer.writeError(searchResults.message);
+            return;
+        }
+        if (namedArgs.debug) {
+            context.printer.writeInColor(chalk.gray, () => {
+                context.printer.writeLine();
+                context.printer.writeDebugContext(debugContext);
+            });
+        }
+        if (!hasConversationResults(searchResults.data)) {
+            context.printer.writeLine();
+            context.printer.writeLine("No matches");
+            return;
+        }
+        context.answerGenerator.settings.fastStop = namedArgs.fastStop;
+        if (!namedArgs.messages) {
+            // Don't include raw message text... try answering only with knowledge
+            searchResults.data.forEach((r) => (r.messageMatches = []));
+        }
+        const choices = namedArgs.choices?.split(";");
+        const progressCallback = (
+            chunk: kp.AnswerContext,
+            index: number,
+            result: Result<kp.AnswerResponse>,
+        ) => {
+            if (namedArgs.debug) {
+                context.printer.writeLine();
+                context.printer.writeJsonInColor(chalk.gray, chunk);
+            }
+        };
+        const options = createAnswerOptions(namedArgs);
+        for (let i = 0; i < searchResults.data.length; ++i) {
+            const searchResult = searchResults.data[i];
+            let question =
+                searchResult.rawSearchQuery ?? debugContext.searchText;
+            if (choices && choices.length > 0) {
+                question = kp.createMultipleChoiceQuestion(question, choices);
+            }
+            const answerResult = await kp.generateAnswer(
+                context.conversation!,
+                context.answerGenerator,
+                question,
+                searchResult,
+                progressCallback,
+                options,
+            );
+            writeAnswer(i, answerResult, debugContext);
+        }
+    }
+
+    function searchRagDef(): CommandMetadata {
+        return {
+            description: "Text similarity search",
+            args: {
+                query: arg("Search query"),
+            },
+            options: {
+                maxToDisplay: argNum(
+                    "Maximum matches to display",
+                    DefaultMaxToDisplay,
+                ),
+                minScore: argNum("Min threshold score", 0.7),
+                charBudget: argNum("Character budget", 1024 * 16),
+            },
+        };
+    }
+    commands.kpSearchRag.metadata = searchRagDef();
+    async function searchRag(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, searchRagDef());
+        const matches = await kp.searchConversationRag(
+            context.conversation!,
+            namedArgs.query,
+            {
+                thresholdScore: namedArgs.minScore,
+                maxCharsInBudget: namedArgs.charBudget,
+            },
+        );
+        if (matches !== undefined) {
+            context.printer.writeConversationSearchResult(
+                context.conversation!,
+                matches,
+                false,
+                true,
+                adjustMaxToDisplay(namedArgs.maxToDisplay),
+                true,
+            );
+        } else {
+            context.printer.writeLine("No matches");
+        }
+    }
+
+    function answerRagDef(): CommandMetadata {
+        const def = searchRagDef();
+        def.description = "Answer using classic RAG";
+        return def;
+    }
+    commands.kpAnswerRag.metadata = answerRagDef();
+    async function answerRag(args: string[]): Promise<void> {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, answerRagDef());
+        const searchResult = await kp.searchConversationRag(
+            context.conversation!,
+            namedArgs.query,
+            {
+                thresholdScore: namedArgs.minScore,
+                maxCharsInBudget: namedArgs.charBudget,
+            },
+        );
+        if (searchResult !== undefined) {
+            const options = createAnswerOptions(namedArgs);
+            options.chunking = false;
+            const answerResult = await kp.generateAnswer(
+                context.conversation!,
+                context.answerGenerator,
+                searchResult.rawSearchQuery ?? namedArgs.query,
+                searchResult,
+                (chunk, _, result) => {
+                    if (namedArgs.debug) {
+                        context.printer.writeLine();
+                        context.printer.writeJsonInColor(chalk.gray, chunk);
+                    }
+                },
+                options,
+            );
+            context.printer.writeLine();
+            if (answerResult.success) {
+                context.printer.writeAnswer(answerResult.data, true);
+            } else {
+                context.printer.writeError(answerResult.message);
+            }
+        } else {
+            context.printer.writeLine("No matches");
+        }
+    }
+
+    function entitiesDef(): CommandMetadata {
+        return searchTermsDef(
+            "Search entities in current conversation",
+            "entity",
+        );
+    }
+    commands.kpEntities.metadata = entitiesDef();
+    async function entities(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("entity");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const entityRefs = kp.filterCollection(
+                    conversation.semanticRefs,
+                    (sr) => sr.knowledgeType === "entity",
+                );
+                let concreteEntities = entityRefs.map(
+                    (e) => e.knowledge as knowLib.conversation.ConcreteEntity,
+                );
+                concreteEntities = kp.mergeConcreteEntities(concreteEntities);
+                concreteEntities.sort((x, y) => x.name.localeCompare(y.name));
+                context.printer.writeNumbered(concreteEntities, (printer, ce) =>
+                    printer.writeEntity(ce).writeLine(),
+                );
+            }
+        }
+    }
+
+    function topicsDef(): CommandMetadata {
+        return searchTermsDef(
+            "Search topics only in current conversation",
+            "topic",
+        );
+    }
+    commands.kpTopics.metadata = topicsDef();
+    async function topics(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        if (args.length > 0) {
+            args.push("--ktype");
+            args.push("topic");
+            await searchTerms(args);
+        } else {
+            if (conversation.semanticRefs !== undefined) {
+                const topicRefs = kp.filterCollection(
+                    conversation.semanticRefs,
+                    (sr) => sr.knowledgeType === "topic",
+                );
+                let topics = topicRefs.map(
+                    (t) => (t.knowledge as kp.Topic).text,
+                );
+                topics = kp.mergeTopics(topics);
+                topics.sort();
+                context.printer.writeList(topics, { type: "ol" });
+            }
+        }
+    }
+
+    function abstractDef(): CommandMetadata {
+        return {
+            description: "Return an abstract of the message",
+            args: {
+                ordinal: argNum("Message ordinal number"),
+            },
+            options: {
+                showMessage: argBool("Show the message", false),
+            },
+        };
+    }
+    commands.kpAbstractMessage.metadata = abstractDef();
+    async function abstract(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const semanticRefs = context.conversation?.semanticRefs;
+        if (!semanticRefs) {
+            context.printer.writeError("No semantic refs");
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, abstractDef());
+        const ordinal = namedArgs.ordinal;
+        const message = context.conversation?.messages.get(ordinal);
+        if (!message) {
+            context.printer.writeError(`No message with ordinal ${ordinal}`);
+            return;
+        }
+        const semanticRefsInMessage = new collections.MultiMap<
+            kp.KnowledgeType,
+            kp.ScoredSemanticRefOrdinal
+        >();
+        // This is not optimal. Demo only
+        for (const sr of semanticRefs) {
+            if (sr.range.start.messageOrdinal === ordinal) {
+                semanticRefsInMessage.add(sr.knowledgeType, {
+                    score: 1.0,
+                    semanticRefOrdinal: sr.semanticRefOrdinal,
+                });
+            }
+        }
+        context.printer.writeHeading("Message Abstract");
+        let topicMatches = semanticRefsInMessage.get("topic");
+        if (topicMatches && topicMatches.length > 0) {
+            const topics = kp.getDistinctTopicMatches(
+                semanticRefs,
+                topicMatches,
+            );
+            context.printer.writeInColor(chalk.cyan, "TOPICS");
+            for (const topic of topics) {
+                context.printer.write("- ");
+                context.printer.writeTopic(topic.knowledge as kp.Topic);
+            }
+            context.printer.writeLine();
+        }
+
+        let entityMatches = semanticRefsInMessage.get("entity");
+        if (entityMatches && entityMatches.length > 0) {
+            const entities = kp.getDistinctEntityMatches(
+                semanticRefs,
+                entityMatches,
+            );
+            context.printer.writeInColor(chalk.cyan, "ENTITIES");
+            for (const entity of entities) {
+                context.printer.writeEntity(
+                    entity.knowledge as knowLib.conversation.ConcreteEntity,
+                );
+                context.printer.writeLine();
+            }
+        }
+        if (namedArgs.showMessage) {
+            context.printer.writeMessage(message);
+        }
+    }
+
+    function showMessagesDef(): CommandMetadata {
+        return {
+            description: "Show messages in the loaded conversation",
+            options: {
+                startAt: argNum("Ordinal to start at"),
+                count: argNum("Number of messages to display"),
+            },
+        };
+    }
+    commands.kpMessages.metadata = showMessagesDef();
+    async function showMessages(args: string[]) {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, showMessagesDef());
+        const startAt =
+            namedArgs.startAt && namedArgs.startAt > 0 ? namedArgs.startAt : 0;
+        const count =
+            namedArgs.count && namedArgs.count > 0
+                ? namedArgs.count
+                : conversation.messages.length;
+        const messages = conversation.messages.getSlice(
+            startAt,
+            startAt + count,
+        );
+        context.printer.writeMessages(messages, startAt);
+    }
+
     async function runAnswerSearch(
         namedArgs: NamedArgs,
     ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
@@ -576,93 +920,48 @@ export async function createKnowproCommands(
         return [searchResults, debugContext];
     }
 
-    function answerDefNew(): CommandMetadata {
-        const def = searchDef();
-        def.description = "Get answers to natural language questions";
-        def.options!.messages = argBool("Include messages", true);
-        def.options!.fallback = argBool(
-            "Fallback to text similarity matching",
-            true,
-        );
-        def.options!.fastStop = argBool(
-            "Ignore messages if knowledge produces answers",
-            true,
-        );
-        return def;
-    }
-    commands.kpAnswer.metadata = answerDefNew();
-    async function answer(args: string[]): Promise<void> {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, answerDefNew());
-        const searchText = namedArgs.query;
-        const debugContext: kp.LanguageSearchDebugContext = {};
-
-        const options: kp.LanguageSearchOptions = {
-            ...createSearchOptions(namedArgs),
-            compileOptions: {
-                exactScope: namedArgs.exactScope,
-                applyScope: namedArgs.applyScope,
-            },
-        };
-        options.exactMatch = namedArgs.exact;
-        if (namedArgs.fallback) {
-            options.fallbackRagOptions = {
-                maxMessageMatches: options.maxMessageMatches,
-                maxCharsInBudget: options.maxCharsInBudget,
-                thresholdScore: 0.8,
-            };
-        }
-
-        const searchResults = await kp.searchConversationWithLanguage(
-            context.conversation!,
-            searchText,
-            context.queryTranslator,
-            options,
-            undefined,
-            debugContext,
-        );
-        if (!searchResults.success) {
-            context.printer.writeError(searchResults.message);
-            return;
-        }
-        if (namedArgs.debug) {
-            context.printer.writeInColor(chalk.gray, () => {
-                context.printer.writeLine();
-                context.printer.writeDebugContext(debugContext);
-            });
-        }
-        if (!hasConversationResults(searchResults.data)) {
-            context.printer.writeLine();
-            context.printer.writeLine("No matches");
-            return;
-        }
-        for (const searchResult of searchResults.data) {
-            if (!namedArgs.messages) {
-                // Don't include raw message text... try answering only with knowledge
-                searchResult.messageMatches = [];
-            }
-            context.answerGenerator.settings.fastStop = namedArgs.fastStop;
-            const answerResult = await kp.generateAnswer(
-                context.conversation!,
-                context.answerGenerator,
-                searchText,
-                searchResult,
-                (chunk, _, result) => {
-                    if (namedArgs.debug) {
-                        context.printer.writeLine();
-                        context.printer.writeJsonInColor(chalk.gray, chunk);
-                    }
-                },
+    function writeAnswer(
+        queryIndex: number,
+        answerResult: Result<kp.AnswerResponse>,
+        debugContext: AnswerDebugContext,
+    ) {
+        context.printer.writeLine();
+        if (answerResult.success) {
+            context.printer.writeAnswer(
+                answerResult.data,
+                debugContext.usedSimilarityFallback![queryIndex],
             );
-            context.printer.writeLine();
-            if (answerResult.success) {
-                context.printer.writeAnswer(answerResult.data);
-            } else {
-                context.printer.writeError(answerResult.message);
+        } else {
+            context.printer.writeError(answerResult.message);
+        }
+    }
+
+    function createAnswerOptions(
+        namedArgs: NamedArgs,
+    ): kp.AnswerContextOptions {
+        let topK = namedArgs.knowledgeTopK;
+        if (topK === undefined) {
+            return {};
+        }
+        const options: kp.AnswerContextOptions = {
+            entitiesTopK: topK,
+            topicsTopK: topK,
+        };
+        options.entitiesTopK = adjustKnowledgeTopK(options.entitiesTopK);
+        return options;
+    }
+
+    function adjustKnowledgeTopK(topK?: number | undefined) {
+        if (topK !== undefined && topK === DefaultKnowledgeTopK) {
+            // Scale topK depending on the size of the conversation
+            const numMessages = context.conversation!.messages.length;
+            if (numMessages >= MessageCountLarge) {
+                topK = topK * 4;
+            } else if (numMessages >= MessageCountMedium) {
+                topK = topK * 2;
             }
         }
+        return topK;
     }
 
     function writeSearchResult(
