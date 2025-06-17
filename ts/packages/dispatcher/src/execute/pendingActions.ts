@@ -84,7 +84,7 @@ async function getParameterArrayEntities(
     if (elementActualType === undefined) {
         throw new Error("Unresolved reference");
     }
-    return Promise.all(
+    const result = await Promise.all(
         value.map((v, i) =>
             getParameterEntities(
                 action,
@@ -98,6 +98,11 @@ async function getParameterArrayEntities(
             ),
         ),
     );
+    if (result.every((r) => r === undefined)) {
+        // Don't return empty array if no entities are found.
+        return undefined;
+    }
+    return result;
 }
 
 function resolvePromptEntity(
