@@ -186,7 +186,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
         # print(f"Query expression {i} before running:")
         # pretty_print(query_expr)
 
-        results = await run_search_query(conversation, query_expr)
+        results = await run_search_query(conversation, query_expr, original_query_text=query_text)
         print(f"Query expression {i} after running a search query:")
         pretty_print(query_expr)
         for j, result in enumerate(results, 1):
