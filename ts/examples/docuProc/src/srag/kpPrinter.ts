@@ -139,15 +139,34 @@ export class KPPrinter extends AppPrinter {
         this.writeInColor(color, timing);
     }
 
-    public writeSelectExpr(selectExpr: kp.SearchSelectExpr) {
-        this.writeInColor(chalk.gray, () => {
-            this.writeHeading("Compiled query");
-            this.writeJson(selectExpr);
-            this.writeLine();
-        });
+    public writeSelectExpr(
+        selectExpr: kp.SearchSelectExpr,
+        verbose: boolean = true,
+    ) {
+        if (verbose) {
+            this.writeInColor(chalk.gray, () => {
+                this.writeHeading("Compiled query");
+                this.writeJson(selectExpr);
+                this.writeLine();
+            });
+        } else {
+            const json = JSON.stringify(
+                selectExpr,
+                (key, value) =>
+                    key === "relatedTerms" || key === "weight"
+                        ? undefined
+                        : value,
+                2,
+            );
+            this.writeInColor(chalk.gray, () => {
+                this.writeHeading("Compiled query");
+                this.writeLine(json);
+                this.writeLine();
+            });
+        }
     }
 
-    public writeNaturalLanguageContext(context: kp.LanguageSearchDebugContext) {
+    public writeDebugContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
             this.writeJson(context.searchQuery);

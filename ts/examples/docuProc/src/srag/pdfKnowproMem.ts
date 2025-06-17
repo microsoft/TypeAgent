@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as cm from "conversation-memory";
 import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
 import {
     arg,
     argBool,
     argNum,
-    askYesNo,
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
@@ -35,6 +35,7 @@ import { argDestFile, argSourceFile } from "../common.js";
 import fs from "fs";
 import path from "path";
 import chalk from "chalk";
+import { Result } from "typechat";
 
 export type Models = {
     chatModel: ChatModel;
@@ -153,6 +154,8 @@ export async function createKnowproCommands(
     };
 
     const DefaultMaxToDisplay = 25;
+    const MessageCountLarge = 1000;
+    const MessageCountMedium = 500;
 
     await ensureDir(context.basePath);
     commands.kpPdfImport = pdfImport;
@@ -162,6 +165,22 @@ export async function createKnowproCommands(
     commands.kpSearchTerms = searchTerms;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
+
+    function adjustMaxToDisplay(maxToDisplay: number) {
+        if (
+            maxToDisplay !== undefined &&
+            maxToDisplay === DefaultMaxToDisplay
+        ) {
+            // Scale topK depending on the size of the conversation
+            const numMessages = context.conversation!.messages.length;
+            if (numMessages >= MessageCountLarge) {
+                maxToDisplay = maxToDisplay * 4;
+            } else if (numMessages >= MessageCountMedium) {
+                maxToDisplay = maxToDisplay * 2;
+            }
+        }
+        return maxToDisplay;
+    }
 
     function pdfImportDef(): CommandMetadata {
         return {
@@ -422,12 +441,16 @@ export async function createKnowproCommands(
                 },
             );
             timer.stop();
+
             if (matches && matches.size > 0) {
+                if (namedArgs.orderBy) {
+                    orderKnowledgeSearchResults(matches, namedArgs.orderBy);
+                }
                 context.printer.writeLine();
                 context.printer.writeKnowledgeSearchResults(
                     conversation,
                     matches,
-                    namedArgs.maxToDisplay,
+                    adjustMaxToDisplay(namedArgs.maxToDisplay),
                     namedArgs.distinct,
                 );
             } else {
@@ -439,7 +462,7 @@ export async function createKnowproCommands(
         }
     }
 
-    function searchDef(): CommandMetadata {
+    function searchDefBase(): CommandMetadata {
         return {
             description:
                 "Search using natural language and old knowlege-processor search filters",
@@ -447,7 +470,10 @@ export async function createKnowproCommands(
                 query: arg("Search query"),
             },
             options: {
-                maxToDisplay: argNum("Maximum matches to display", 25),
+                maxToDisplay: argNum(
+                    "Maximum matches to display",
+                    DefaultMaxToDisplay,
+                ),
                 exact: argBool("Exact match only. No related terms", false),
                 ktype: arg("Knowledge type"),
                 distinct: argBool("Show distinct results", false),
@@ -455,87 +481,103 @@ export async function createKnowproCommands(
         };
     }
 
-    function searchDefNew(): CommandMetadata {
-        const def = searchDef();
+    function searchDef(): CommandMetadata {
+        const def = searchDefBase();
         def.description = "Search using natural language";
         def.options ??= {};
         def.options.showKnowledge = argBool("Show knowledge matches", true);
         def.options.showMessages = argBool("Show message matches", false);
-        def.options.knowledgeTopK = argNum(
-            "How many top K knowledge matches",
-            50,
-        );
         def.options.messageTopK = argNum("How many top K message matches", 25);
-        def.options.charBudget = argNum("Maximum characters in budget", 8192);
+        def.options.charBudget = argNum("Maximum characters in budget");
         def.options.applyScope = argBool("Apply scopes", true);
         def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
+        def.options.maxToDisplay = argNum(
+            "Maximum to display",
+            DefaultMaxToDisplay,
+        );
+        def.options.thread = arg("Thread description");
+        def.options.tag = arg("Tag to filter by");
         return def;
     }
-    commands.kpSearch.metadata = searchDefNew();
+    commands.kpSearch.metadata = searchDef();
     async function search(args: string[], io: InteractiveIo): Promise<void> {
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, searchDefNew());
-        const textQuery = namedArgs.query;
-        const result = await kp.searchQueryFromLanguage(
-            context.conversation!,
-            context.queryTranslator,
-            textQuery,
-        );
-        if (!result.success) {
-            context.printer.writeError(result.message);
+        const namedArgs = parseNamedArguments(args, searchDef());
+        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        if (!searchResults.success) {
+            context.printer.writeError(searchResults.message);
             return;
         }
-        let exactScope = namedArgs.exactScope;
-        let retried = !exactScope;
-        const searchQuery = result.data;
-        context.printer.writeJson(searchQuery, true);
-        while (true) {
-            const searchQueryExpressions = kp.compileSearchQuery(
-                context.conversation!,
-                searchQuery,
-                {
-                    exactScope,
-                    applyScope: namedArgs.applyScope,
-                },
-            );
-            let countSelectMatches = 0;
-            for (const searchQueryExpr of searchQueryExpressions) {
+        if (namedArgs.debug) {
+            context.printer.writeInColor(chalk.gray, () => {
+                context.printer.writeLine();
+                context.printer.writeDebugContext(debugContext);
+            });
+        }
+        if (!hasConversationResults(searchResults.data)) {
+            context.printer.writeLine();
+            context.printer.writeLine("No matches");
+            if (namedArgs.exactScope) {
+                context.printer.writeInColor(
+                    chalk.gray,
+                    `--exactScope ${namedArgs.exactScope}`,
+                );
+            }
+            return;
+        }
+        for (let i = 0; i < searchResults.data.length; ++i) {
+            const searchQueryExpr = debugContext.searchQueryExpr![i];
+            if (!namedArgs.debug) {
+                // In debug mode, we already printed the entire debug context..
                 for (const selectExpr of searchQueryExpr.selectExpressions) {
-                    if (
-                        await evalSelectQueryExpr(
-                            searchQueryExpr,
-                            selectExpr,
-                            namedArgs,
-                        )
-                    ) {
-                        countSelectMatches++;
-                    }
+                    context.printer.writeSelectExpr(selectExpr, false);
                 }
             }
-            if (countSelectMatches === 0) {
-                context.printer.writeLine("No matches");
-            }
-            if (countSelectMatches > 0 || retried) {
-                break;
-            }
-            retried = await askYesNo(
-                io,
-                chalk.cyan("Using exact scope. Try fuzzy instead?"),
+            writeSearchResult(
+                namedArgs,
+                searchQueryExpr,
+                searchResults.data[i],
             );
-            if (retried) {
-                exactScope = false;
-            } else {
-                break;
-            }
         }
     }
 
+    async function runAnswerSearch(
+        namedArgs: NamedArgs,
+    ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
+        const searchText = namedArgs.query;
+        const debugContext: AnswerDebugContext = { searchText };
+
+        const options: kp.LanguageSearchOptions = {
+            ...createSearchOptions(namedArgs),
+            compileOptions: {
+                exactScope: namedArgs.exactScope,
+                applyScope: namedArgs.applyScope,
+            },
+        };
+        options.exactMatch = namedArgs.exact;
+        if (namedArgs.fallback) {
+            options.fallbackRagOptions = {
+                maxMessageMatches: options.maxMessageMatches,
+                maxCharsInBudget: options.maxCharsInBudget,
+                thresholdScore: 0.7,
+            };
+        }
+        const langFilter = createLangFilter(undefined, namedArgs);
+        const searchResults = await getSearchResults(
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
+        return [searchResults, debugContext];
+    }
+
     function answerDefNew(): CommandMetadata {
-        const def = searchDefNew();
+        const def = searchDef();
         def.description = "Get answers to natural language questions";
         def.options!.messages = argBool("Include messages", true);
         def.options!.fallback = argBool(
@@ -588,7 +630,7 @@ export async function createKnowproCommands(
         if (namedArgs.debug) {
             context.printer.writeInColor(chalk.gray, () => {
                 context.printer.writeLine();
-                context.printer.writeNaturalLanguageContext(debugContext);
+                context.printer.writeDebugContext(debugContext);
             });
         }
         if (!hasConversationResults(searchResults.data)) {
@@ -623,7 +665,89 @@ export async function createKnowproCommands(
         }
     }
 
-    async function evalSelectQueryExpr(
+    function writeSearchResult(
+        namedArgs: NamedArgs,
+        searchQueryExpr: kp.SearchQueryExpr,
+        searchResults: kp.ConversationSearchResult,
+    ): void {
+        context.printer.writeLine("####");
+        context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
+        context.printer.writeLine("####");
+        context.printer.writeConversationSearchResult(
+            context.conversation!,
+            searchResults,
+            namedArgs.showKnowledge,
+            namedArgs.showMessages,
+            adjustMaxToDisplay(namedArgs.maxToDisplay),
+            namedArgs.distinct,
+        );
+    }
+
+    function createLangFilter(
+        when: kp.WhenFilter | undefined,
+        namedArgs: NamedArgs,
+    ): kp.LanguageSearchFilter | undefined {
+        if (namedArgs.ktype) {
+            when ??= {};
+            when.knowledgeType = namedArgs.ktype;
+        }
+        if (namedArgs.tag) {
+            when ??= {};
+            when.tags = [namedArgs.tag];
+        }
+        if (namedArgs.thread) {
+            when ??= {};
+            when.threadDescription = namedArgs.thread;
+        }
+        return when;
+    }
+
+    async function getSearchResults(
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+        langFilter?: kp.LanguageSearchFilter,
+        debugContext?: kp.LanguageSearchDebugContext,
+    ) {
+        const searchResults = getLangSearchResult(
+            context.conversation!,
+            context.queryTranslator,
+            searchText,
+            options,
+            langFilter,
+            debugContext,
+        );
+        return searchResults;
+    }
+
+    async function getLangSearchResult(
+        conversation: kp.IConversation | cm.Memory,
+        queryTranslator: kp.SearchQueryTranslator,
+        searchText: string,
+        options?: kp.LanguageSearchOptions,
+        langFilter?: kp.LanguageSearchFilter,
+        debugContext?: kp.LanguageSearchDebugContext,
+    ) {
+        const searchResults =
+            conversation instanceof cm.Memory
+                ? await conversation.searchWithLanguage(
+                      searchText,
+                      options,
+                      langFilter,
+                      debugContext,
+                  )
+                : await kp.searchConversationWithLanguage(
+                      conversation,
+                      searchText,
+                      queryTranslator,
+                      options,
+                      langFilter,
+                      debugContext,
+                  );
+
+        return searchResults;
+    }
+
+    /*async function evalSelectQueryExpr(
         searchQueryExpr: kp.SearchQueryExpr,
         selectExpr: kp.SearchSelectExpr,
         namedArgs: NamedArgs,
@@ -658,7 +782,7 @@ export async function createKnowproCommands(
             namedArgs.distinct,
         );
         return true;
-    }
+    }*/
 
     function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
         let options = kp.createSearchOptions();
@@ -717,6 +841,35 @@ export async function createKnowproCommands(
         }
         return filter;
     }
+
+    function orderKnowledgeSearchResults(
+        results: Map<string, kp.SemanticRefSearchResult>,
+        orderBy: string,
+    ) {
+        let orderType: kp.ResultSortType | undefined;
+        switch (orderBy.toLowerCase()) {
+            default:
+                break;
+            case "score":
+                orderType = kp.ResultSortType.Score;
+                break;
+            case "timestamp":
+                orderType = kp.ResultSortType.Timestamp;
+                break;
+            case "ordinal":
+                orderType = kp.ResultSortType.Ordinal;
+                break;
+        }
+        if (orderType !== undefined) {
+            for (const kMatches of results.values()) {
+                kMatches.semanticRefMatches = kp.sortKnowledgeResults(
+                    context.conversation!,
+                    kMatches.semanticRefMatches,
+                    orderType,
+                );
+            }
+        }
+    }
 }
 
 function createSearchGroup(
@@ -750,6 +903,10 @@ export function hasConversationResults(
     return results.some((r) => {
         return r.knowledgeMatches.size > 0 || r.messageMatches.length > 0;
     });
+}
+
+export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
+    searchText: string;
 }
 
 export function createIndexingEventHandler(
