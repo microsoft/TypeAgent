@@ -7,22 +7,12 @@ import {
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
-    parseTypedArguments,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
-import { argDestFile, argSourceFile, isJsonEqual } from "../common.js";
-import { readBatchFile } from "examples-lib";
+import { argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
-import { getLangSearchResult } from "./knowproCommon.js";
-import {
-    appendFileNameSuffix,
-    changeFileExt,
-    getAbsolutePath,
-    readJsonFile,
-    writeJsonFile,
-} from "typeagent";
-import { Result, success } from "typechat";
+import { changeFileExt, getAbsolutePath } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
 
@@ -34,9 +24,9 @@ export async function createKnowproTestCommands(
     context: KnowproContext,
     commands: Record<string, CommandHandler>,
 ) {
-    commands.kpTestSearchBatch = searchBatch;
-    commands.kpTestBatch = testBatch;
     commands.kpLoadTest = loadTest;
+    commands.kpTestSearchBatch = searchBatch;
+    commands.kpTestVerifySearchBatch = verifySearchBatch;
     commands.kpTestAnswerBatch = answerBatch;
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
 
@@ -58,32 +48,24 @@ export async function createKnowproTestCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchBatchDef());
-        const searchBatch = readBatchFile(namedArgs.srcPath);
         const destPath =
             namedArgs.destPath ??
             changeFileExt(namedArgs.srcPath, ".json", "_results");
-        const results: LangSearchResults[] = [];
-        let i = 0;
-        for await (const searchResult of runLangSearchBatch(
-            context.conversation!,
-            context.queryTranslator,
-            searchBatch,
-        )) {
-            context.printer.writeLine(`${i + 1}. ${searchBatch[i]}`);
-            if (!searchResult.success) {
-                context.printer.writeError(searchResult.message);
-                return;
-            }
-            results.push(searchResult.data);
-            ++i;
-        }
-        if (destPath) {
-            context.printer.writeLine(`Saving results to ${destPath}`);
-            await writeJsonFile(destPath, results);
+        const results = await kpTest.runSearchBatch(
+            context,
+            namedArgs.srcPath,
+            destPath,
+            (sr, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                context.printer.writeLine(sr.searchText);
+            },
+        );
+        if (!results.success) {
+            context.printer.writeError(results.message);
         }
     }
 
-    function testBatchDef(): CommandMetadata {
+    function verifySearchBatchDef(): CommandMetadata {
         return {
             description: "Test previously query + saved batch results",
             args: {
@@ -95,74 +77,95 @@ export async function createKnowproTestCommands(
             },
         };
     }
-    commands.kpTestBatch.metadata = testBatchDef();
-    async function testBatch(args: string[]) {
+    commands.kpTestVerifySearchBatch.metadata = verifySearchBatchDef();
+    async function verifySearchBatch(args: string[]) {
         if (!ensureConversationLoaded()) {
             return;
         }
 
-        const namedArgs = parseNamedArguments(args, testBatchDef());
-
-        type BatchArgs = { srcPath: string; startAt?: number; count?: number };
-        const bt = parseTypedArguments<BatchArgs>(args, testBatchDef());
-        context.printer.writeJson(bt);
-
-        const baseResults = await readJsonFile<LangSearchResults[]>(
-            namedArgs.srcPath,
+        const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
+        const srcPath = namedArgs.srcPath;
+        const results = await kpTest.verifyLangSearchResultsBatch(
+            context,
+            srcPath,
+            (result, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                writeSearchScore(result);
+            },
         );
-        if (!baseResults || baseResults.length === 0) {
-            context.printer.writeError("No results in file");
+        if (!results.success) {
+            context.printer.writeError(results.message);
+        }
+    }
+
+    function answerBatchDef(): CommandMetadata {
+        return {
+            description: "Run a batch of language queries and save answers",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                destPath: argDestFile(),
+            },
+        };
+    }
+    commands.kpTestAnswerBatch.metadata = answerBatchDef();
+    async function answerBatch(args: string[]) {
+        if (!ensureConversationLoaded()) {
             return;
         }
-        const errors: LangSearchResults[] = [];
-        let searchBatch = baseResults.map((r) => r.searchText);
-        const startAt = namedArgs.startAt ?? 0;
-        const count = namedArgs.count ?? searchBatch.length;
-        searchBatch = searchBatch.slice(startAt, startAt + count);
-        let i = 0;
-        for await (const searchResult of runLangSearchBatch(
-            context.conversation!,
-            context.queryTranslator,
-            searchBatch,
-        )) {
-            const searchText = searchBatch[i];
-            const baseResult = baseResults[i + startAt];
-            context.printer.writeLine(`${i + 1}. ${searchText}`);
-            if (searchResult.success) {
-                let error = compareSearchExpr(
-                    searchResult.data.searchQueryExpr,
-                    baseResult.searchQueryExpr,
-                );
-                if (error !== undefined && error.length > 0) {
-                    context.printer.writeInColor(
-                        chalk.gray,
-                        `[${error}]: ${searchText}`,
-                    );
-                    context.printer.writeJsonInColor(
-                        chalk.gray,
-                        searchResult.data.searchQueryExpr,
-                    );
-                    context.printer.writeJsonInColor(
-                        chalk.gray,
-                        baseResult.searchQueryExpr,
-                    );
-                }
-                error = compareLangSearchResults(searchResult.data, baseResult);
-                if (error !== undefined && error.length > 0) {
-                    context.printer.writeError(`[${error}]: ${searchText}`);
-                    const errorResult = { ...searchResult.data, error };
-                    errors.push(errorResult);
-                }
-            } else {
-                context.printer.writeError(searchResult.message);
-            }
-            ++i;
+        const namedArgs = parseNamedArguments(args, answerBatchDef());
+        const srcPath = namedArgs.srcPath;
+        const destPath =
+            namedArgs.destPath ?? changeFileExt(srcPath, ".json", "_results");
+        await kpTest.runAnswerBatch(
+            context,
+            namedArgs.srcPath,
+            destPath,
+            (qa, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                context.printer.writeLine(qa.question);
+                context.printer.writeInColor(chalk.green, qa.answer);
+            },
+        );
+    }
+
+    function verifyAnswerBatchDef(): CommandMetadata {
+        return {
+            description: "Verify a batch of language query answers",
+            args: {
+                srcPath: argSourceFile(),
+            },
+            options: {
+                similarity: argNum(
+                    "Similarity: Generated answer must have at least this similarity to baseline",
+                    0.9,
+                ),
+            },
+        };
+    }
+    commands.kpTestVerifyAnswerBatch.metadata = verifyAnswerBatchDef();
+    async function verifyAnswerBatch(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
         }
-        if (errors.length > 0) {
-            const destPath = appendFileNameSuffix(namedArgs.srcPath, "_errors");
-            await writeJsonFile(destPath, errors);
+        const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
+        const minSimilarity = namedArgs.similarity;
+        const srcPath = namedArgs.srcPath;
+
+        const model = openai.createEmbeddingModel();
+        const results = await kpTest.verifyQuestionAnswerBatch(
+            context,
+            srcPath,
+            model,
+            (result, index, total) => {
+                context.printer.writeProgress(index + 1, total);
+                writeAnswerScore(result, minSimilarity);
+            },
+        );
+        if (!results.success) {
+            context.printer.writeError(results.message);
         }
-        context.printer.writeLine(`${i} tests, ${errors.length} errors`);
     }
 
     function loadTestDef(): CommandMetadata {
@@ -196,82 +199,38 @@ export async function createKnowproTestCommands(
         }
     }
 
-    function answerBatchDef(): CommandMetadata {
-        return {
-            description: "Run a batch of language queries and save answers",
-            args: {
-                srcPath: argSourceFile(),
-            },
-            options: {
-                destPath: argDestFile(),
-            },
-        };
-    }
-    commands.kpTestAnswerBatch.metadata = answerBatchDef();
-    async function answerBatch(args: string[]) {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, answerBatchDef());
-        const srcPath = namedArgs.srcPath;
-        const destPath =
-            namedArgs.destPath ?? changeFileExt(srcPath, ".json", "_results");
-        await kpTest.getAnswerBatch(
-            context,
-            namedArgs.srcPath,
-            destPath,
-            (qa, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                context.printer.writeLine(qa.question);
-                context.printer.writeInColor(chalk.green, qa.answer);
-            },
-        );
-    }
-
-    function testAnswerBatchDef(): CommandMetadata {
-        return {
-            description: "Verify a batch of language query answers",
-            args: {
-                srcPath: argSourceFile(),
-            },
-            options: {
-                similarity: argNum(
-                    "Similarity: Generated answer must have at least this similarity to baseline",
-                    0.9,
-                ),
-            },
-        };
-    }
-    commands.kpTestVerifyAnswerBatch.metadata = testAnswerBatchDef();
-    async function verifyAnswerBatch(args: string[]) {
-        if (!ensureConversationLoaded()) {
-            return;
-        }
-        const namedArgs = parseNamedArguments(args, testAnswerBatchDef());
-        const minSimilarity = namedArgs.similarity;
-        const srcPath = namedArgs.srcPath;
-
-        const model = openai.createEmbeddingModel();
-        const results = await kpTest.verifyQuestionAnswerBatch(
-            context,
-            srcPath,
-            model,
-            (result, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                writeAnswerScore(result, minSimilarity);
-            },
-        );
-        if (!results.success) {
-            context.printer.writeError(results.message);
-        }
-    }
-
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
             return context.conversation;
         }
         context.printer.writeError("No conversation loaded");
         return undefined;
+    }
+
+    function writeSearchScore(
+        result: kpTest.Comparison<kpTest.LangSearchResults>,
+    ): void {
+        const error = result.error;
+        if (error !== undefined && error.length > 0) {
+            context.printer.writeInColor(
+                chalk.redBright,
+                `[${error}]: ${result.actual.searchText}`,
+            );
+            context.printer.writeInColor(chalk.red, `Error: ${error}`);
+            context.printer.writeJsonInColor(
+                chalk.red,
+                result.actual.searchQueryExpr,
+            );
+            context.printer.writeJsonInColor(
+                chalk.green,
+                result.expected.searchQueryExpr,
+            );
+        } else {
+            context.printer.writeInColor(
+                chalk.greenBright,
+                result.actual.searchText,
+            );
+        }
     }
 
     function writeAnswerScore(
@@ -289,126 +248,4 @@ export async function createKnowproTestCommands(
     }
 
     return;
-}
-
-type LangSearchResults = {
-    searchText: string;
-    searchQueryExpr: kp.querySchema.SearchQuery;
-    results: LangSearchResult[];
-    error?: string | undefined;
-};
-
-type LangSearchResult = {
-    messageMatches: kp.MessageOrdinal[];
-    entityMatches?: kp.SemanticRefOrdinal[] | undefined;
-    topicMatches?: kp.SemanticRefOrdinal[] | undefined;
-    actionMatches?: kp.SemanticRefOrdinal[] | undefined;
-};
-
-async function* runLangSearchBatch(
-    conversation: kp.IConversation,
-    queryTranslator: kp.SearchQueryTranslator,
-    searchQueries: Iterable<string>,
-): AsyncIterableIterator<Result<LangSearchResults>> {
-    for (const searchText of searchQueries) {
-        const debugContext: kp.LanguageSearchDebugContext = {};
-        const searchResult = await getLangSearchResult(
-            conversation,
-            queryTranslator,
-            searchText,
-            undefined,
-            undefined,
-            debugContext,
-        );
-        if (searchResult.success) {
-            yield success({
-                searchText,
-                searchQueryExpr: debugContext.searchQuery!,
-                results: searchResult.data.map((cr) => {
-                    const lr: LangSearchResult = {
-                        messageMatches: cr.messageMatches.map(
-                            (m) => m.messageOrdinal,
-                        ),
-                    };
-                    getKnowledgeResults(cr, lr);
-                    return lr;
-                }),
-            });
-        } else {
-            yield searchResult;
-        }
-    }
-
-    function getKnowledgeResults(
-        cr: kp.ConversationSearchResult,
-        lr: LangSearchResult,
-    ) {
-        lr.entityMatches = getKnowledgeResult(cr, "entity");
-        lr.topicMatches = getKnowledgeResult(cr, "topic");
-        lr.actionMatches = getKnowledgeResult(cr, "action");
-    }
-
-    function getKnowledgeResult(
-        cr: kp.ConversationSearchResult,
-        type: kp.KnowledgeType,
-    ) {
-        return cr.knowledgeMatches
-            .get(type)
-            ?.semanticRefMatches.map((sr) => sr.semanticRefOrdinal);
-    }
-}
-
-function compareSearchExpr(
-    s1: kp.querySchema.SearchQuery,
-    s2: kp.querySchema.SearchQuery,
-): string | undefined {
-    if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
-        return "searchExpr Length";
-    }
-    for (let i = 0; i < s1.searchExpressions.length; ++i) {
-        if (
-            !isJsonEqual(
-                s1.searchExpressions[i].filters,
-                s2.searchExpressions[i].filters,
-            )
-        ) {
-            return "searchExpr Filter";
-        }
-    }
-    return undefined;
-}
-
-function compareLangSearchResults(
-    lr1: LangSearchResults,
-    lr2: LangSearchResults,
-): string | undefined {
-    if (lr1.results.length !== lr2.results.length) {
-        return "array";
-    }
-    for (let i = 0; i < lr1.results.length; ++i) {
-        const error = compareLangSearchResult(lr1.results[i], lr2.results[i]);
-        if (error !== undefined && error.length > 0) {
-            return error;
-        }
-    }
-    return undefined;
-}
-
-function compareLangSearchResult(
-    lr1: LangSearchResult,
-    lr2: LangSearchResult,
-): string | undefined {
-    if (!isJsonEqual(lr1.messageMatches, lr2.messageMatches)) {
-        return "message";
-    }
-    if (!isJsonEqual(lr1.entityMatches, lr2.entityMatches)) {
-        return "entity";
-    }
-    if (!isJsonEqual(lr1.topicMatches, lr2.topicMatches)) {
-        return "topic";
-    }
-    if (!isJsonEqual(lr1.actionMatches, lr2.actionMatches)) {
-        return "action";
-    }
-    return undefined;
 }

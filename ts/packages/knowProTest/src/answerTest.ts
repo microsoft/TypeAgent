@@ -2,7 +2,8 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import { BatchCallback, execGetAnswerRequest } from "./knowproCommands.js";
+import { execGetAnswerRequest } from "./knowproCommands.js";
+import { BatchCallback } from "./types.js";
 import { getCommandArgs } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
 import { error, Result, success } from "typechat";
@@ -22,7 +23,7 @@ export type QuestionAnswer = {
     cmd?: string | undefined;
 };
 
-export async function getAnswerBatch(
+export async function runAnswerBatch(
     context: KnowproContext,
     batchFilePath: string,
     destFilePath?: string,
@@ -69,6 +70,7 @@ export async function verifyQuestionAnswerBatch(
     if (questionAnswers === undefined || questionAnswers.length === 0) {
         return error(`${batchFilePath} does not contain QuestionAnswer[]`);
     }
+
     for (let i = 0; i < questionAnswers.length; ++i) {
         const expected = questionAnswers[i];
         const args = getCommandArgs(expected.cmd);
