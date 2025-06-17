@@ -183,26 +183,23 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
 
     # 3. Search!
     for i, query_expr in enumerate(query_exprs):
-        # print(f"Query expression {i}:")
+        # print(f"Query expression {i} before running:")
         # pretty_print(query_expr)
 
         results = await run_search_query(conversation, query_expr)
-        if results is None:
-            print(f"No results for expression {i}.")
-        else:
-            print(f"Query expression {i} after running a search query:")
-            pretty_print(query_expr)
-            for j, result in enumerate(results):
-                print(f"Query {i} result {j}:")
-                print()
-                # pretty_print(result)
-                # print_result(result, conversation)
-                answer = await generate_answer(result, conversation)
-                if answer.type == "NoAnswer":
-                    print("Failure:", answer.whyNoAnswer)
-                elif answer.type == "Answered":
-                    print(answer.answer)
-                print()
+        print(f"Query expression {i} after running a search query:")
+        pretty_print(query_expr)
+        for j, result in enumerate(results):
+            print(f"Query {i} result {j}:")
+            print()
+            # pretty_print(result)
+            print_result(result, conversation)
+            answer = await generate_answer(result, conversation)
+            if answer.type == "NoAnswer":
+                print("Failure:", answer.whyNoAnswer)
+            elif answer.type == "Answered":
+                print(answer.answer)
+            print()
 
 
 def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
@@ -383,6 +380,8 @@ def summarize_knowledge(sem_ref: SemanticRef) -> str:
                     value = facet.value
                     if isinstance(value, Quantity):
                         value = f"{value.amount} {value.units}"
+                    elif isinstance(value, float) and value.is_integer():
+                        value = int(value)
                     res.append(f"<{facet.name}:{value}>")
             return " ".join(res)
         case "action":

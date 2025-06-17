@@ -133,7 +133,7 @@ async def run_search_query(
     query: SearchQueryExpr,
     options: SearchOptions | None = None,
     original_query_text: str | None = None,
-) -> list[ConversationSearchResult] | None:
+) -> list[ConversationSearchResult]:
     options = options or SearchOptions()
     results: list[ConversationSearchResult] = []
     for expr in query.select_expressions:
