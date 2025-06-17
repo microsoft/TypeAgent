@@ -26,8 +26,8 @@ from ..knowpro.interfaces import (
     Topic,
 )
 from ..knowpro.kplib import Action, ActionParam, ConcreteEntity, Quantity
-from ..knowpro.query import GroupSearchResultsExpr, QueryEvalContext
-from ..knowpro.search import ConversationSearchResult, QueryCompiler, SearchQueryExpr, run_search_query
+from ..knowpro.query import QueryEvalContext
+from ..knowpro.search import ConversationSearchResult, SearchQueryExpr, run_search_query
 from ..knowpro.searchlang import SearchQueryCompiler
 from ..knowpro.search_query_schema import SearchQuery
 from ..podcasts.podcast import Podcast
@@ -172,7 +172,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     # 2. Translate SearchQuery to SearchQueryExpr using SearchQueryCompiler.
     print("Search query expressions:")
     query_exprs: list[SearchQueryExpr] = translate_search_query_to_search_query_exprs(
-        search_query
+        conversation, search_query
     )
     if not query_exprs:
         print("Failed to translate search query to query expressions.")
@@ -180,25 +180,23 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     # for i, query_expr in enumerate(query_exprs):
     #     print(f"---------- {i} ----------")
     #     pretty_print(query_expr)
-    print()
 
     # 3. Search!
     for i, query_expr in enumerate(query_exprs):
-        print(f"Query expression {i}:")
-        pretty_print(query_expr)
-        print(f"Knowledge query for expression {i}:")
-        knowledge_query = await translate_knowledge_query(conversation, query_expr)
-        pretty_print(knowledge_query)
+        # print(f"Query expression {i}:")
+        # pretty_print(query_expr)
 
         results = await run_search_query(conversation, query_expr)
         if results is None:
             print(f"No results for expression {i}.")
         else:
+            print(f"Query expression {i} after running a search query:")
+            pretty_print(query_expr)
             for j, result in enumerate(results):
-                print(f"Result {i}.{j}:")
+                print(f"Query {i} result {j}:")
                 print()
                 # pretty_print(result)
-                print_result(result, conversation)
+                # print_result(result, conversation)
                 answer = await generate_answer(result, conversation)
                 if answer.type == "NoAnswer":
                     print("Failure:", answer.whyNoAnswer)
@@ -364,21 +362,10 @@ async def translate_text_to_search_query[
 
 
 def translate_search_query_to_search_query_exprs(
+    conversation: IConversation,
     search_query: SearchQuery,
 ) -> list[SearchQueryExpr]:
-    return SearchQueryCompiler().compile_query(search_query)
-
-
-async def translate_knowledge_query(
-    conversation: IConversation,
-    query_expr: SearchQueryExpr
-) -> GroupSearchResultsExpr:
-    compiler = QueryCompiler(
-        conversation, conversation.secondary_indexes
-    )
-    return await compiler.compile_knowledge_query(
-        query_expr.select_expressions[0].search_term_group
-    )
+    return SearchQueryCompiler(conversation).compile_query(search_query)
 
 
 def summarize_knowledge(sem_ref: SemanticRef) -> str:
