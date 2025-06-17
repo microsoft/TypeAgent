@@ -489,8 +489,10 @@ async function createAgent(
         return await project.agents.createAgent("gpt-4o", {
             name: "TypeAgent_URLResolverAgent",
             description: "Auto created URL Resolution Agent",
+            temperature: 0.01,
             instructions: `
-You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.
+You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  
+Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain.
 
 Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
 
