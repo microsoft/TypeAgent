@@ -849,9 +849,9 @@ class RankMessagesBySimilarityExpr(QueryOpExpr[MessageAccumulator]):
         return message_ordinals
 
 
+@dataclass
 class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
-    def __init__(self, src_expr: IQueryOpExpr[MessageAccumulator]) -> None:
-        self.src_expr = src_expr
+    src_expr: IQueryOpExpr[MessageAccumulator]
 
     def eval(self, context: QueryEvalContext) -> list[ScoredMessageOrdinal]:
         matches = self.src_expr.eval(context)
