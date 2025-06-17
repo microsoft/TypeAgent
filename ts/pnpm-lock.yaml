@@ -241,6 +241,9 @@ importers:
       cheerio:
         specifier: 1.0.0-rc.12
         version: 1.0.0-rc.12
+      conversation-memory:
+        specifier: workspace:*
+        version: link:../../packages/memory/conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)

@@ -355,7 +355,9 @@ export async function downloadArxivSource(
             await fsp.writeFile(tmpPath, buf);
             await fsp.rename(tmpPath, paperTarFile);
 
-            console.log(`Downloaded LaTeX source: ${paperTarFile}`);
+            console.log(
+                `Downloaded LaTeX source for arxiv paper [${paper.id}]: ${paperTarFile}`,
+            );
             return paperTarFile;
         });
     } catch (err) {
@@ -457,7 +459,6 @@ export async function createFolderIfNotExists(
 ): Promise<void> {
     try {
         await fs.promises.mkdir(folderPath, { recursive: true });
-        console.log(`Folder '${folderPath}' is ready.`);
     } catch (error) {
         console.error("Error creating folder:", error);
     }

@@ -63,9 +63,16 @@ export class KPPrinter extends AppPrinter {
         return this;
     }
 
-    public writeMessages(messages: Iterable<kp.IMessage> | kp.IMessage[]) {
+    public writeMessages(
+        messages: Iterable<kp.IMessage> | kp.IMessage[],
+        ordinalStartAt = 0,
+    ) {
+        let i = ordinalStartAt;
         for (const message of messages) {
+            this.writeLine(`[${i}]`);
             this.writeMessage(message);
+            ++i;
+            this.writeLine();
         }
     }
 
@@ -139,15 +146,34 @@ export class KPPrinter extends AppPrinter {
         this.writeInColor(color, timing);
     }
 
-    public writeSelectExpr(selectExpr: kp.SearchSelectExpr) {
-        this.writeInColor(chalk.gray, () => {
-            this.writeHeading("Compiled query");
-            this.writeJson(selectExpr);
-            this.writeLine();
-        });
+    public writeSelectExpr(
+        selectExpr: kp.SearchSelectExpr,
+        verbose: boolean = true,
+    ) {
+        if (verbose) {
+            this.writeInColor(chalk.gray, () => {
+                this.writeHeading("Compiled query");
+                this.writeJson(selectExpr);
+                this.writeLine();
+            });
+        } else {
+            const json = JSON.stringify(
+                selectExpr,
+                (key, value) =>
+                    key === "relatedTerms" || key === "weight"
+                        ? undefined
+                        : value,
+                2,
+            );
+            this.writeInColor(chalk.gray, () => {
+                this.writeHeading("Compiled query");
+                this.writeLine(json);
+                this.writeLine();
+            });
+        }
     }
 
-    public writeNaturalLanguageContext(context: kp.LanguageSearchDebugContext) {
+    public writeDebugContext(context: kp.LanguageSearchDebugContext) {
         if (context.searchQuery) {
             this.writeHeading("Search Query");
             this.writeJson(context.searchQuery);
@@ -509,16 +535,33 @@ export class KPPrinter extends AppPrinter {
         this.writeLine();
     }
 
-    public writeAnswer(answerResponse: kp.AnswerResponse | undefined) {
+    public writeAnswer(
+        answerResponse: kp.AnswerResponse | undefined,
+        isFallback: boolean = false,
+    ) {
         if (answerResponse) {
             if (answerResponse.type === "NoAnswer") {
                 this.writeError("No answer");
             }
             if (answerResponse.answer) {
-                this.writeInColor(chalk.green, answerResponse.answer);
+                this.writeInColor(
+                    isFallback ? chalk.green : chalk.greenBright,
+                    answerResponse.answer,
+                );
             } else if (answerResponse.whyNoAnswer) {
                 this.writeError(answerResponse.whyNoAnswer);
             }
+        }
+        return this;
+    }
+
+    public writeNumbered(
+        array: any[],
+        writer: (printer: KPPrinter, item: any) => void,
+    ) {
+        for (let i = 0; i < array.length; ++i) {
+            this.write(`${i}. `);
+            writer(this, array[i]);
         }
         return this;
     }
