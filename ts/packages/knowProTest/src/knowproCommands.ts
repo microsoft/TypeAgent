@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import * as cm from "conversation-memory";
 import { KnowproContext } from "./knowproContext.js";
 import { NamedArgs, parseTypedArguments } from "interactive-app";
 import {
@@ -14,10 +13,8 @@ import {
     searchRequestDef,
     SearchResponse,
 } from "./types.js";
-import { shouldParseRequest } from "./common.js";
+import { getLangSearchResult, shouldParseRequest } from "./common.js";
 import { error, Result, success } from "typechat";
-
-export type BatchCallback<T> = (value: T, index: number, total: number) => void;
 
 export async function execSearchRequest(
     context: KnowproContext,
@@ -49,22 +46,14 @@ export async function execSearchRequest(
         };
     }
     const langFilter = createLangFilter(undefined, request);
-    const searchResults =
-        conversation instanceof cm.Memory
-            ? await conversation.searchWithLanguage(
-                  searchText,
-                  options,
-                  langFilter,
-                  debugContext,
-              )
-            : await kp.searchConversationWithLanguage(
-                  conversation,
-                  searchText,
-                  context.queryTranslator,
-                  options,
-                  langFilter,
-                  debugContext,
-              );
+    const searchResults = await getLangSearchResult(
+        conversation,
+        context.queryTranslator,
+        searchText,
+        options,
+        langFilter,
+        debugContext,
+    );
 
     return { searchResults, debugContext };
 }

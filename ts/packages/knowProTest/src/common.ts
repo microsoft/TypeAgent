@@ -6,6 +6,8 @@ import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
 import path from "path";
 import { getFileName } from "typeagent";
 import { error, Result } from "typechat";
+import * as kp from "knowpro";
+import * as cm from "conversation-memory";
 
 export function ensureDirSync(folderPath: string): string {
     if (!fs.existsSync(folderPath)) {
@@ -89,4 +91,67 @@ function isNamedArgs(obj: any): obj is NamedArgs {
     }
 
     return false;
+}
+
+export function isJsonEqual(x: any | undefined, y: any | undefined): boolean {
+    if (x === undefined && y === undefined) {
+        return true;
+    } else if (x !== undefined && y !== undefined) {
+        const jx = JSON.stringify(x);
+        const jy = JSON.stringify(y);
+        return jx === jy;
+    }
+    return false;
+}
+
+export function compareArray(
+    name: string,
+    x: any[] | undefined,
+    y: any[] | undefined,
+    sort: boolean = true,
+): string | undefined {
+    if (x === undefined && y === undefined) {
+        return undefined;
+    }
+    if (x === undefined || y === undefined || x.length != y.length) {
+        return `${name}: length mismatch`;
+    }
+    if (sort) {
+        x = [...x].sort();
+        y = [...y].sort();
+    }
+    for (let i = 0; i < x.length; ++i) {
+        if (x[i] !== y[i]) {
+            return `${name}[${i}]: ${x[i]} !== ${y[i]}`;
+        }
+    }
+    return undefined;
+}
+
+export async function getLangSearchResult(
+    conversation: kp.IConversation | cm.Memory,
+    queryTranslator: kp.SearchQueryTranslator,
+    searchText: string,
+    options?: kp.LanguageSearchOptions,
+    langFilter?: kp.LanguageSearchFilter,
+    debugContext?: kp.LanguageSearchDebugContext,
+) {
+    const searchResults =
+        conversation instanceof cm.Memory
+            ? await conversation.searchWithLanguage(
+                  searchText,
+                  options,
+                  langFilter,
+                  debugContext,
+              )
+            : await kp.searchConversationWithLanguage(
+                  conversation,
+                  searchText,
+                  queryTranslator,
+                  options,
+                  langFilter,
+                  debugContext,
+              );
+
+    return searchResults;
 }

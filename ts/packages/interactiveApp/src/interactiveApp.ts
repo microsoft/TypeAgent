@@ -5,6 +5,7 @@ import fs from "fs";
 import { InteractiveIo, getInteractiveIO } from "./InteractiveIo";
 import { exit } from "process";
 import readline from "readline";
+import path from "path";
 
 /**
  * Handler of command line inputs
@@ -837,10 +838,10 @@ export function addBatchHandler(app: InteractiveApp) {
             options: {
                 echo: argBool("Echo on or off", true),
                 commentPrefix: arg("Comments are prefix by this string", "#"),
-                logFilePath: {
-                    description: "Write commands and results to this file.",
-                    type: "path",
-                },
+                setCwd: argBool(
+                    "Set cwd to the directory batch file is in",
+                    false,
+                ),
             },
         };
     }
@@ -852,15 +853,28 @@ export function addBatchHandler(app: InteractiveApp) {
             io.writer.writeLine(`${batchFilePath} not found.`);
             return;
         }
-        const lines = getBatchFileLines(batchFilePath, namedArgs.commentPrefix);
-        for (const line of lines) {
-            if (namedArgs.echo) {
-                io.writer.writeLine(line);
+        const prevWd = namedArgs.setCwd ? process.cwd() : undefined;
+        try {
+            if (namedArgs.setCwd) {
+                process.chdir(path.dirname(batchFilePath));
             }
-            if (!(await app.processInput(line))) {
-                break;
+            const lines = getBatchFileLines(
+                batchFilePath,
+                namedArgs.commentPrefix,
+            );
+            for (const line of lines) {
+                if (namedArgs.echo) {
+                    io.writer.writeLine(line);
+                }
+                if (!(await app.processInput(line))) {
+                    break;
+                }
+                io.writer.writeLine();
             }
-            io.writer.writeLine();
+        } finally {
+            if (prevWd) {
+                process.chdir(prevWd);
+            }
         }
     }
 

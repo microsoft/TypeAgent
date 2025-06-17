@@ -98,8 +98,16 @@ export interface AnswerDebugContext extends kp.LanguageSearchDebugContext {
     searchText: string;
 }
 
+export type Comparison<T> = {
+    actual: T;
+    expected: T;
+    error?: string | undefined;
+};
+
 export type SimilarityComparison<T> = {
     actual: T;
     expected: T;
     score: number;
 };
+
+export type BatchCallback<T> = (value: T, index: number, total: number) => void;
