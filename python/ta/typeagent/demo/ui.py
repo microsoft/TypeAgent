@@ -177,23 +177,23 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     if not query_exprs:
         print("Failed to translate search query to query expressions.")
         return
-    # for i, query_expr in enumerate(query_exprs):
+    # for i, query_expr in enumerate(query_exprs, 1):
     #     print(f"---------- {i} ----------")
     #     pretty_print(query_expr)
 
     # 3. Search!
-    for i, query_expr in enumerate(query_exprs):
+    for i, query_expr in enumerate(query_exprs, 1):
         # print(f"Query expression {i} before running:")
         # pretty_print(query_expr)
 
         results = await run_search_query(conversation, query_expr)
         print(f"Query expression {i} after running a search query:")
         pretty_print(query_expr)
-        for j, result in enumerate(results):
+        for j, result in enumerate(results, 1):
             print(f"Query {i} result {j}:")
             print()
             # pretty_print(result)
-            print_result(result, conversation)
+            # print_result(result, conversation)
             answer = await generate_answer(result, conversation)
             if answer.type == "NoAnswer":
                 print("Failure:", answer.whyNoAnswer)
