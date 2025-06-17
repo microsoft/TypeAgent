@@ -51,6 +51,7 @@ async function runStudio(): Promise<void> {
         temperature,
         dedupeFile: dedupeFile_,
         template: createTemplateCommand(studio),
+        
     };
 
     studio.commands = commands;
