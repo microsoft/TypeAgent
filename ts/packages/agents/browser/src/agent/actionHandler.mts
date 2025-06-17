@@ -542,7 +542,7 @@ async function openWebPage(
             activityName: "browsingWebPage",
             description: "Browsing a web page",
             state: {
-                siteUrl: url,
+                site: siteEntity?.name,
             },
             activityEndAction: {
                 actionName: "closeWebPage",
