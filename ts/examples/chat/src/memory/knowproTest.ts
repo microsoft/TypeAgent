@@ -217,13 +217,10 @@ export async function createKnowproTestCommands(
                 `[${error}]: ${result.actual.searchText}`,
             );
             context.printer.writeInColor(chalk.red, `Error: ${error}`);
-            context.printer.writeJsonInColor(
-                chalk.red,
-                result.actual.searchQueryExpr,
-            );
+            context.printer.writeJsonInColor(chalk.red, result.actual.results);
             context.printer.writeJsonInColor(
                 chalk.green,
-                result.expected.searchQueryExpr,
+                result.expected.results,
             );
         } else {
             context.printer.writeInColor(

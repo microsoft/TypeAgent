@@ -6,7 +6,7 @@ import { KnowproContext } from "./knowproContext.js";
 import { readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import { BatchCallback, Comparison } from "./types.js";
-import { getCommandArgs, getLangSearchResult, isJsonEqual } from "./common.js";
+import { compareArray, getCommandArgs, getLangSearchResult } from "./common.js";
 import { getBatchFileLines } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 
@@ -238,6 +238,7 @@ function compareLangSearchResult(
     lr1: LangSearchResult,
     lr2: LangSearchResult,
 ): string | undefined {
+    /*
     if (!isJsonEqual(lr1.messageMatches, lr2.messageMatches)) {
         return "message";
     }
@@ -249,6 +250,23 @@ function compareLangSearchResult(
     }
     if (!isJsonEqual(lr1.actionMatches, lr2.actionMatches)) {
         return "action";
+    }
+        */
+    let error = compareArray("message", lr1.messageMatches, lr2.messageMatches);
+    if (error !== undefined) {
+        return error;
+    }
+    error = compareArray("entity", lr1.entityMatches, lr2.entityMatches);
+    if (error !== undefined) {
+        return error;
+    }
+    error = compareArray("topic", lr1.topicMatches, lr2.topicMatches);
+    if (error !== undefined) {
+        return error;
+    }
+    error = compareArray("action", lr1.actionMatches, lr2.actionMatches);
+    if (error !== undefined) {
+        return error;
     }
     return undefined;
 }
