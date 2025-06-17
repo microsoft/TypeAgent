@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import fs from "fs";
+import path from "path";
 
 export function readBatchFile(filePath: string, commentPrefix = "#"): string[] {
     const text = fs.readFileSync(filePath, "utf-8");
@@ -13,4 +14,11 @@ export function readBatchFile(filePath: string, commentPrefix = "#"): string[] {
     lines = lines.map((l) => l.trim());
     lines = lines.filter((l) => l.length > 0 && !l.startsWith(commentPrefix));
     return lines;
+}
+
+export function getAbsolutePath(relativePath: string): string {
+    if (path.isAbsolute(relativePath)) {
+        return relativePath;
+    }
+    return path.join(process.cwd(), relativePath);
 }
