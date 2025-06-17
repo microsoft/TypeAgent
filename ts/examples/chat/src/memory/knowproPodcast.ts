@@ -16,19 +16,15 @@ import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
+import * as kpTest from "knowpro-test";
 import fs from "fs";
 import path from "path";
 import {
     createIndexingEventHandler,
-    memoryNameToIndexPath,
+    //memoryNameToIndexPath,
     sourcePathToMemoryIndexPath,
 } from "./knowproCommon.js";
-import {
-    argDestFile,
-    argSourceFile,
-    argToDate,
-    copyFileToDir,
-} from "../common.js";
+import { argDestFile, argToDate, copyFileToDir } from "../common.js";
 import { ensureDir, getAbsolutePath, getFileName } from "typeagent";
 import chalk from "chalk";
 
@@ -141,44 +137,18 @@ export async function createKnowproPodcastCommands(
         context.printer.writeTiming(chalk.gray, clock, "Write to file");
     }
 
-    function podcastLoadDef(): CommandMetadata {
-        return {
-            description: "Load existing Podcast memory",
-            options: {
-                filePath: argSourceFile(),
-                name: arg("Podcast name"),
-            },
-        };
-    }
-    commands.kpPodcastLoad.metadata = podcastLoadDef();
+    commands.kpPodcastLoad.metadata = kpTest.podcastLoadDef();
     async function podcastLoad(args: string[]): Promise<void> {
-        const namedArgs = parseNamedArguments(args, podcastLoadDef());
-        let podcastFilePath = namedArgs.filePath;
-        if (!podcastFilePath) {
-            podcastFilePath = namedArgs.name
-                ? memoryNameToIndexPath(context.basePath, namedArgs.name)
-                : undefined;
-        } else {
-            podcastFilePath = sourcePathToMemoryIndexPath(podcastFilePath);
-        }
-        if (!podcastFilePath) {
-            context.printer.writeError("No filepath or name provided");
-            return;
-        }
         const clock = new StopWatch();
         clock.start();
-        const podcast = await cm.Podcast.readFromFile(
-            path.dirname(podcastFilePath),
-            getFileName(podcastFilePath),
-        );
+        const loadResult = await kpTest.execLoadPodcast(kpContext, args);
         clock.stop();
-        context.printer.writeTiming(chalk.gray, clock, "Read file");
-        if (!podcast) {
-            context.printer.writeLine("Podcast file not found");
+        context.printer.writeTiming(chalk.gray, clock, "Load podcast");
+        if (!loadResult.success) {
+            context.printer.writeError(loadResult.message);
             return;
         }
-        context.podcast = podcast;
-        kpContext.conversation = context.podcast;
+        context.podcast = loadResult.data;
         context.printer.writePodcastInfo(context.podcast);
     }
 

@@ -284,7 +284,7 @@ export class MatchAccumulator<T = any> {
     Unfortunately, a larger number of moderately related but noisy matches can overwhelm
     a small # of very good matches merely by having a larger totalScore.
     
-    2. We also want diminishing returns for too many hits. Too many hits which can be indicative of noise...as the
+    2. We also want diminishing returns for too many hits. Too many hits can be indicative of noise...as the
     they can indicate low entropy of the thing being matched: its too common-place. 
     We want to prevent runaway scores that result from too many matches
 

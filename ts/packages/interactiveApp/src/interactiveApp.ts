@@ -336,7 +336,7 @@ export interface ArgDef {
     defaultValue?: any | undefined;
 }
 
-function makeArg(
+export function makeArg(
     description: string | undefined,
     type: ArgType,
     defaultValue?: any | undefined,
@@ -376,6 +376,14 @@ export function argNum(
     defaultValue?: number | undefined,
 ): ArgDef {
     return makeArg(description, "number", defaultValue);
+}
+
+export function optional<T>(
+    description: string,
+    type: ArgType,
+    defaultValue?: any | undefined,
+) {
+    return makeArg(description, type, defaultValue);
 }
 
 /**
@@ -545,6 +553,47 @@ export function parseNamedArguments(
     return namedArgs;
 }
 
+export function parseTypedArguments<T extends Record<string, any>>(
+    rawArgs: string[] | NamedArgs,
+    metadata: CommandMetadata,
+    result?: T | undefined,
+): T {
+    const namedArgs = Array.isArray(rawArgs)
+        ? parseNamedArguments(rawArgs, metadata)
+        : rawArgs;
+    const typedArgs: Partial<any> = result ?? {};
+    for (const key in namedArgs) {
+        const value = namedArgs[key];
+        if (value !== undefined && typeof value !== "function") {
+            typedArgs[key] = value;
+        }
+    }
+
+    return typedArgs as T;
+}
+
+export function compareNamedArgs(x: NamedArgs, y: NamedArgs): boolean {
+    const keysX = Object.keys(x).sort();
+    const keysY = Object.keys(y).sort();
+    if (keysX.length !== keysY.length) {
+        return false;
+    }
+    for (let i = 0; i < keysX.length; ++i) {
+        const key = keysX[i];
+        if (key !== keysY[i]) {
+            return false;
+        }
+        const valueX = x[key];
+        if (typeof valueX !== "function") {
+            const valueY = y[key];
+            if (valueX !== valueY) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 export type CommandMetadata = {
     description?: string;
     args?: Record<string, ArgDef>;
@@ -554,6 +603,7 @@ export type CommandMetadata = {
 export type CommandResult = string | undefined | void;
 
 export type CommandHandler = CommandHandler1 | CommandHandler2;
+
 /**
  * Command handler
  */
@@ -802,23 +852,27 @@ export function addBatchHandler(app: InteractiveApp) {
             io.writer.writeLine(`${batchFilePath} not found.`);
             return;
         }
-        const lines = (
-            await fs.promises.readFile(batchFilePath, "utf-8")
-        ).split(/\r?\n/);
+        const lines = getBatchFileLines(batchFilePath, namedArgs.commentPrefix);
         for (const line of lines) {
-            if (line && !line.startsWith(namedArgs.commentPrefix)) {
-                if (namedArgs.echo) {
-                    io.writer.writeLine(line);
-                }
-                if (!(await app.processInput(line))) {
-                    break;
-                }
-                io.writer.writeLine();
+            if (namedArgs.echo) {
+                io.writer.writeLine(line);
             }
+            if (!(await app.processInput(line))) {
+                break;
+            }
+            io.writer.writeLine();
         }
     }
 
     return;
+}
+
+export function getBatchFileLines(
+    batchFilePath: string,
+    commentPrefix = "#",
+): string[] {
+    const lines = fs.readFileSync(batchFilePath, "utf-8").split(/\r?\n/);
+    return lines.filter((line) => line && !line.startsWith(commentPrefix));
 }
 
 function getDescription(handler: CommandHandler): string | undefined {

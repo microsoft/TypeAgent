@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
+import * as kpTest from "knowpro-test";
 import {
     arg,
     argBool,
@@ -12,10 +13,10 @@ import {
     InteractiveIo,
     NamedArgs,
     parseNamedArguments,
+    parseTypedArguments,
     runConsole,
     StopWatch,
 } from "interactive-app";
-import { ChatModel, openai } from "aiclient";
 import {
     argToDate,
     parseFreeAndNamedArguments,
@@ -24,10 +25,6 @@ import {
 import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import {
-    getLangSearchResult,
-    hasConversationResults,
-} from "./knowproCommon.js";
 import { createKnowproDataFrameCommands } from "./knowproDataFrame.js";
 import { createKnowproEmailCommands } from "./knowproEmail.js";
 import { createKnowproConversationCommands } from "./knowproConversation.js";
@@ -71,35 +68,19 @@ export async function runKnowproMemory(): Promise<void> {
     }
 }
 
-export type KnowproContext = {
-    knowledgeModel: ChatModel;
-    basePath: string;
-    printer: KnowProPrinter;
-    conversation?: kp.IConversation | undefined;
-    queryTranslator: kp.SearchQueryTranslator;
-    answerGenerator: kp.AnswerGenerator;
-};
+export class KnowproContext extends kpTest.KnowproContext {
+    public printer: KnowProPrinter;
 
-export function createKnowledgeModel() {
-    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
-    chatModelSettings.retryPauseMs = 10000;
-    return openai.createJsonChatModel(chatModelSettings, ["knowproMemory"]);
+    constructor() {
+        super();
+        this.printer = new KnowProPrinter();
+    }
 }
 
 export async function createKnowproCommands(
     commands: Record<string, CommandHandler>,
 ): Promise<void> {
-    const knowledgeModel = createKnowledgeModel();
-    const context: KnowproContext = {
-        knowledgeModel,
-        queryTranslator: kp.createSearchQueryTranslator(knowledgeModel),
-        answerGenerator: new kp.AnswerGenerator(
-            kp.createAnswerGeneratorSettings(knowledgeModel),
-        ),
-        basePath: "/data/testChat/knowpro",
-        printer: new KnowProPrinter(),
-    };
-
+    const context: KnowproContext = new KnowproContext();
     const DefaultMaxToDisplay = 25;
     const DefaultKnowledgeTopK = 50;
     const MessageCountLarge = 1000;
@@ -259,42 +240,17 @@ export async function createKnowproCommands(
         }
     }
 
-    function searchDefBase(): CommandMetadata {
-        return {
-            description:
-                "Search using natural language and old knowlege-processor search filters",
-            args: {
-                query: arg("Search query"),
-            },
-            options: {
-                maxToDisplay: argNum(
-                    "Maximum matches to display",
-                    DefaultMaxToDisplay,
-                ),
-                exact: argBool("Exact match only. No related terms", false),
-                ktype: arg("Knowledge type"),
-                distinct: argBool("Show distinct results", false),
-            },
-        };
-    }
-    function searchDef(): CommandMetadata {
-        const def = searchDefBase();
-        def.description = "Search using natural language";
+    function searchDef(base?: CommandMetadata): CommandMetadata {
+        const def = kpTest.searchRequestDef();
         def.options ??= {};
-        def.options.showKnowledge = argBool("Show knowledge matches", true);
-        def.options.showMessages = argBool("Show message matches", false);
-        def.options.messageTopK = argNum("How many top K message matches", 25);
-        def.options.charBudget = argNum("Maximum characters in budget");
-        def.options.applyScope = argBool("Apply scopes", true);
-        def.options.exactScope = argBool("Exact scope", false);
         def.options.debug = argBool("Show debug info", false);
         def.options.distinct = argBool("Show distinct results", true);
         def.options.maxToDisplay = argNum(
             "Maximum to display",
             DefaultMaxToDisplay,
         );
-        def.options.thread = arg("Thread description");
-        def.options.tag = arg("Tag to filter by");
+        def.options.showKnowledge = argBool("Show knowledge matches", true);
+        def.options.showMessages = argBool("Show message matches", false);
         return def;
     }
     commands.kpSearch.metadata = searchDef();
@@ -303,7 +259,12 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, searchDef());
-        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        const searchResponse = await kpTest.execSearchRequest(
+            context,
+            namedArgs,
+        );
+        const searchResults = searchResponse.searchResults;
+        const debugContext = searchResponse.debugContext;
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -314,7 +275,7 @@ export async function createKnowproCommands(
                 context.printer.writeDebugContext(debugContext);
             });
         }
-        if (!hasConversationResults(searchResults.data)) {
+        if (!kp.hasConversationResults(searchResults.data)) {
             context.printer.writeLine();
             context.printer.writeLine("No matches");
             if (namedArgs.exactScope) {
@@ -343,22 +304,7 @@ export async function createKnowproCommands(
 
     function answerDef(): CommandMetadata {
         const def = searchDef();
-        def.description = "Get answers to natural language questions";
-        def.options!.messages = argBool("Include messages", true);
-        def.options!.fallback = argBool(
-            "Fallback to text similarity matching",
-            true,
-        );
-        def.options!.fastStop = argBool(
-            "Ignore messages if knowledge produces answers",
-            true,
-        );
-        def.options!.knowledgeTopK = argNum(
-            "How many top K knowledge matches",
-            DefaultKnowledgeTopK,
-        );
-        def.options!.choices = arg("Answer choices, separated by ';'");
-        return def;
+        return kpTest.getAnswerRequestDef(def, DefaultKnowledgeTopK);
     }
     commands.kpAnswer.metadata = answerDef();
     async function answer(args: string[]): Promise<void> {
@@ -366,7 +312,12 @@ export async function createKnowproCommands(
             return;
         }
         const namedArgs = parseNamedArguments(args, answerDef());
-        const [searchResults, debugContext] = await runAnswerSearch(namedArgs);
+        const searchResponse = await kpTest.execSearchRequest(
+            context,
+            namedArgs,
+        );
+        const searchResults = searchResponse.searchResults;
+        const debugContext = searchResponse.debugContext;
         if (!searchResults.success) {
             context.printer.writeError(searchResults.message);
             return;
@@ -377,45 +328,26 @@ export async function createKnowproCommands(
                 context.printer.writeDebugContext(debugContext);
             });
         }
-        if (!hasConversationResults(searchResults.data)) {
+        if (!kp.hasConversationResults(searchResults.data)) {
             context.printer.writeLine();
             context.printer.writeLine("No matches");
             return;
         }
-        context.answerGenerator.settings.fastStop = namedArgs.fastStop;
-        if (!namedArgs.messages) {
-            // Don't include raw message text... try answering only with knowledge
-            searchResults.data.forEach((r) => (r.messageMatches = []));
-        }
-        const choices = namedArgs.choices?.split(";");
-        const progressCallback = (
-            chunk: kp.AnswerContext,
-            index: number,
-            result: Result<kp.AnswerResponse>,
-        ) => {
-            if (namedArgs.debug) {
-                context.printer.writeLine();
-                context.printer.writeJsonInColor(chalk.gray, chunk);
-            }
-        };
-        const options = createAnswerOptions(namedArgs);
-        for (let i = 0; i < searchResults.data.length; ++i) {
-            const searchResult = searchResults.data[i];
-            let question =
-                searchResult.rawSearchQuery ?? debugContext.searchText;
-            if (choices && choices.length > 0) {
-                question = kp.createMultipleChoiceQuestion(question, choices);
-            }
-            const answerResult = await kp.generateAnswer(
-                context.conversation!,
-                context.answerGenerator,
-                question,
-                searchResult,
-                progressCallback,
-                options,
-            );
-            writeAnswer(i, answerResult, debugContext);
-        }
+
+        const getAnswerRequest = parseTypedArguments<kpTest.GetAnswerRequest>(
+            args,
+            kpTest.getAnswerRequestDef(),
+        );
+        getAnswerRequest.searchResponse = searchResponse;
+        await kpTest.execGetAnswerRequest(
+            context,
+            getAnswerRequest,
+            (i: number, q: string, answer) => {
+                writeAnswer(i, answer, debugContext);
+                return;
+            },
+        );
+        context.printer.writeLine();
     }
 
     function searchRagDef(): CommandMetadata {
@@ -653,42 +585,6 @@ export async function createKnowproCommands(
       End COMMANDS
     ------------*/
 
-    /**
-     * Run a search whose results are then used to generate answers
-     * @param namedArgs
-     * @returns
-     */
-    async function runAnswerSearch(
-        namedArgs: NamedArgs,
-    ): Promise<[Result<kp.ConversationSearchResult[]>, AnswerDebugContext]> {
-        const searchText = namedArgs.query;
-        const debugContext: AnswerDebugContext = { searchText };
-
-        const options: kp.LanguageSearchOptions = {
-            ...createSearchOptions(namedArgs),
-            compileOptions: {
-                exactScope: namedArgs.exactScope,
-                applyScope: namedArgs.applyScope,
-            },
-        };
-        options.exactMatch = namedArgs.exact;
-        if (namedArgs.fallback) {
-            options.fallbackRagOptions = {
-                maxMessageMatches: options.maxMessageMatches,
-                maxCharsInBudget: options.maxCharsInBudget,
-                thresholdScore: 0.7,
-            };
-        }
-        const langFilter = createLangFilter(undefined, namedArgs);
-        const searchResults = await getSearchResults(
-            searchText,
-            options,
-            langFilter,
-            debugContext,
-        );
-        return [searchResults, debugContext];
-    }
-
     function writeSearchResult(
         namedArgs: NamedArgs,
         searchQueryExpr: kp.SearchQueryExpr,
@@ -721,23 +617,6 @@ export async function createKnowproCommands(
         } else {
             context.printer.writeError(answerResult.message);
         }
-    }
-
-    async function getSearchResults(
-        searchText: string,
-        options?: kp.LanguageSearchOptions,
-        langFilter?: kp.LanguageSearchFilter,
-        debugContext?: kp.LanguageSearchDebugContext,
-    ) {
-        const searchResults = getLangSearchResult(
-            context.conversation!,
-            context.queryTranslator,
-            searchText,
-            options,
-            langFilter,
-            debugContext,
-        );
-        return searchResults;
     }
 
     function createSearchGroup(
@@ -806,14 +685,6 @@ export async function createKnowproCommands(
         return filter;
     }
 
-    function createSearchOptions(namedArgs: NamedArgs): kp.SearchOptions {
-        let options = kp.createSearchOptions();
-        options.exactMatch = namedArgs.exact;
-        options.maxMessageMatches = namedArgs.messageTopK;
-        options.maxCharsInBudget = namedArgs.charBudget;
-        return options;
-    }
-
     function ensureConversationLoaded(): kp.IConversation | undefined {
         if (context.conversation) {
             return context.conversation;
@@ -864,25 +735,6 @@ export async function createKnowproCommands(
             }
         }
         return maxToDisplay;
-    }
-
-    function createLangFilter(
-        when: kp.WhenFilter | undefined,
-        namedArgs: NamedArgs,
-    ): kp.LanguageSearchFilter | undefined {
-        if (namedArgs.ktype) {
-            when ??= {};
-            when.knowledgeType = namedArgs.ktype;
-        }
-        if (namedArgs.tag) {
-            when ??= {};
-            when.tags = [namedArgs.tag];
-        }
-        if (namedArgs.thread) {
-            when ??= {};
-            when.threadDescription = namedArgs.thread;
-        }
-        return when;
     }
 
     function orderKnowledgeSearchResults(

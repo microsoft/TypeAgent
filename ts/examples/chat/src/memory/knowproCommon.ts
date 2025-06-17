@@ -59,65 +59,6 @@ export function textLocationToString(location: kp.TextLocation): string {
     return text;
 }
 
-export function termFilterToSearchGroup(
-    filter: knowLib.conversation.TermFilterV2,
-    and: boolean,
-): kp.SearchTermGroup {
-    const searchTermGroup: kp.SearchTermGroup = {
-        booleanOp: and ? "and" : "or",
-        terms: [],
-    };
-    if (filter.searchTerms && filter.searchTerms.length > 0) {
-        for (const st of filter.searchTerms) {
-            searchTermGroup.terms.push({ term: { text: st } });
-        }
-    }
-    return searchTermGroup;
-}
-
-export function termFilterToWhenFilter(
-    filter: knowLib.conversation.TermFilterV2,
-): kp.WhenFilter {
-    let when: kp.WhenFilter = {};
-    if (filter.timeRange) {
-        when.dateRange = {
-            start: knowLib.conversation.toStartDate(filter.timeRange.startDate),
-            end: knowLib.conversation.toStopDate(filter.timeRange.stopDate),
-        };
-    }
-    return when;
-}
-
-export function actionFilterToSearchGroup(
-    action: knowLib.conversation.ActionTerm,
-    and: boolean,
-): kp.SearchTermGroup {
-    const searchTermGroup: kp.SearchTermGroup = {
-        booleanOp: and ? "and" : "or",
-        terms: [],
-    };
-
-    if (action.verbs) {
-        searchTermGroup.terms.push(
-            ...action.verbs.words.map((v) => {
-                return kp.createPropertySearchTerm(kp.PropertyNames.Verb, v);
-            }),
-        );
-    }
-    if (action.subject !== "none") {
-        searchTermGroup.terms.push(
-            kp.createPropertySearchTerm(
-                kp.PropertyNames.Subject,
-                action.subject.subject,
-            ),
-        );
-    }
-    if (action.object) {
-        searchTermGroup.terms.push(kp.createSearchTerm(action.object));
-    }
-    return searchTermGroup;
-}
-
 export interface IMessageMetadata<TMeta = any> {
     metadata: TMeta;
 }
@@ -166,17 +107,6 @@ export function createIndexingEventHandler(
             return true;
         },
     };
-}
-
-export function hasConversationResults(
-    results: kp.ConversationSearchResult[],
-): boolean {
-    if (results.length === 0) {
-        return false;
-    }
-    return results.some((r) => {
-        return r.knowledgeMatches.size > 0 || r.messageMatches.length > 0;
-    });
 }
 
 const IndexFileSuffix = "_index.json";
