@@ -55,9 +55,13 @@ export async function createKnowproTestCommands(
             context,
             namedArgs.srcPath,
             destPath,
-            (sr, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                context.printer.writeLine(sr.searchText);
+            (srResult, index, total) => {
+                if (srResult.success) {
+                    context.printer.writeProgress(index + 1, total);
+                    context.printer.writeLine(srResult.data.searchText);
+                } else {
+                    context.printer.writeError(srResult.message);
+                }
             },
         );
         if (!results.success) {
@@ -90,7 +94,11 @@ export async function createKnowproTestCommands(
             srcPath,
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
-                writeSearchScore(result);
+                if (result.success) {
+                    writeSearchScore(result.data);
+                } else {
+                    context.printer.writeError(result.message);
+                }
             },
         );
         if (!results.success) {
