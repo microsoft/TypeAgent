@@ -25,7 +25,6 @@ import {
 import { Result, success } from "typechat";
 import chalk from "chalk";
 import { openai } from "aiclient";
-import fs from "fs";
 
 /**
  * Test related commands
@@ -251,10 +250,6 @@ export async function createKnowproTestCommands(
         const namedArgs = parseNamedArguments(args, testAnswerBatchDef());
         const minSimilarity = namedArgs.similarity;
         const srcPath = namedArgs.srcPath;
-        if (!fs.existsSync(srcPath)) {
-            context.printer.writeError("File not found");
-            return;
-        }
 
         const model = openai.createEmbeddingModel();
         const results = await kpTest.verifyQuestionAnswerBatch(
