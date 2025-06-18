@@ -144,7 +144,6 @@ class HistoryInsertCommandHandler implements CommandHandler {
             );
         }
 
-        console.log(history.getStrings());
         displayResult(
             `Inserted ${messageCount} input entries, ${currCount - prevCount} messages into chat history. Current total ${currCount} messages.`,
             context,

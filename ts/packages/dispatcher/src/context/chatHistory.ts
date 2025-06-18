@@ -399,8 +399,8 @@ const assistantInputSchema = sc.obj({
             activityName: sc.string(),
             description: sc.string(),
             openLocalView: sc.optional(sc.boolean()),
-            // state: sc.optional(sc.any()),
-            // activityEndAction: sc.optional(sc.any()),
+            state: sc.optional(sc.any()),
+            activityEndAction: sc.optional(sc.any()),
         }),
     ),
 });

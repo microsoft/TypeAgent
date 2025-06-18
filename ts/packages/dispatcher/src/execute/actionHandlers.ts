@@ -303,9 +303,6 @@ export function setActivityContext(
     systemContext: CommandHandlerContext,
 ) {
     if (resultActivityContext === null) {
-        debugActions(
-            `Clear activity: ${JSON.stringify(systemContext.activityContext, undefined, 2)}`,
-        );
         // Clear the activity context.
         clearActivityContext(systemContext);
         return undefined;
