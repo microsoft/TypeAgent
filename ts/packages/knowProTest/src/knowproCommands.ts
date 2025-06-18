@@ -136,6 +136,16 @@ export async function execGetAnswerRequest(
     return response;
 }
 
+/**
+ * Multiple query expressions can produce multiple search results
+ * Currently, we take each individual search result and generate a separate answer
+ * TODO: combine answers
+ * @param context
+ * @param request
+ * @param searchResults
+ * @param progressCallback
+ * @returns
+ */
 async function getAnswersForSearchResults(
     context: KnowproContext,
     request: GetAnswerRequest,
@@ -185,6 +195,7 @@ async function getAnswerFromSearchResult(
     searchResult: kp.ConversationSearchResult,
     choices: string[] | undefined,
     options: kp.AnswerContextOptions,
+    retryNoAnswer: boolean = true,
 ): Promise<Result<kp.AnswerResponse>> {
     const conversation = context.ensureConversationLoaded();
     const fastStopSav = context.answerGenerator.settings.fastStop;
@@ -212,6 +223,27 @@ async function getAnswerFromSearchResult(
                 ),
             maxAttempts,
         );
+        if (
+            retryNoAnswer &&
+            answerResult.success &&
+            answerResult.data.type === "NoAnswer"
+        ) {
+            answerResult = await async.getResultWithRetry(
+                () =>
+                    //
+                    // Generate an answer from search results
+                    //
+                    kp.generateAnswer(
+                        conversation,
+                        context.answerGenerator,
+                        question,
+                        searchResult,
+                        undefined,
+                        options,
+                    ),
+                maxAttempts,
+            );
+        }
         return answerResult;
     } finally {
         context.answerGenerator.settings.fastStop = fastStopSav;

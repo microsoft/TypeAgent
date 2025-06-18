@@ -246,7 +246,7 @@ export async function createKnowproTestCommands(
         if (error !== undefined && error.length > 0) {
             context.printer.writeInColor(
                 chalk.redBright,
-                `[${error}]: ${result.actual.searchText}`,
+                `[${error}]: ${result.expected.cmd!}`,
             );
             context.printer.writeInColor(chalk.red, `Error: ${error}`);
             if (verbose) {
@@ -274,10 +274,16 @@ export async function createKnowproTestCommands(
         threshold: number,
         verbose: boolean = false,
     ) {
-        const color =
-            result.score >= threshold ? chalk.greenBright : chalk.redBright;
-        context.printer.writeInColor(color, result.actual.question);
-
+        const isSimilar = result.score >= threshold;
+        context.printer.writeInColor(
+            isSimilar ? chalk.greenBright : chalk.redBright,
+            result.expected.cmd!,
+        );
+        if (!isSimilar) {
+            context.printer.writeError(
+                `Similarity ${result.score} / ${threshold}`,
+            );
+        }
         if (result.score < threshold && verbose) {
             context.printer.writeJsonInColor(chalk.redBright, result.actual);
             context.printer.writeJsonInColor(chalk.green, result.expected);
