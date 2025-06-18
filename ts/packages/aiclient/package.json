@@ -30,7 +30,9 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@azure/identity": "^4.9.1",
+    "@azure/ai-agents": "^1.0.0-beta.3",
+    "@azure/ai-projects": "^1.0.0-beta.8",
+    "@azure/identity": "^4.10.0",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "telemetry": "workspace:*",
