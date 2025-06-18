@@ -6,7 +6,12 @@ import { KnowproContext } from "./knowproContext.js";
 import { readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import { BatchCallback, Comparison } from "./types.js";
-import { compareArray, getCommandArgs, getLangSearchResult } from "./common.js";
+import {
+    compareArray,
+    getCommandArgs,
+    getLangSearchResult,
+    queryError,
+} from "./common.js";
 import { getBatchFileLines } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 
@@ -39,7 +44,10 @@ export async function runSearchBatch(
         if (args.length === 0) {
             continue;
         }
-        const response = await getSearchResults(context, args);
+        let response = await getSearchResults(context, args);
+        if (!response.success) {
+            response = queryError(cmd, response);
+        }
         if (cb) {
             cb(response, i, batchLines.length);
         }
@@ -109,7 +117,7 @@ export async function verifyLangSearchResultsBatch(
         if (args.length === 0) {
             continue;
         }
-        const response = await getSearchResults(context, args);
+        let response = await getSearchResults(context, args);
         if (response.success) {
             const actual = response.data;
             const error = compareLangSearchResults(actual, expected);
@@ -123,6 +131,7 @@ export async function verifyLangSearchResultsBatch(
                 cb(success(comparisonResult), i, expectedResults.length);
             }
         } else {
+            response = queryError(expected.cmd!, response);
             if (cb) {
                 cb(response, i, expectedResults.length);
             }

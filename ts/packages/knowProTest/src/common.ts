@@ -5,7 +5,7 @@ import fs from "fs";
 import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
 import path from "path";
 import { getFileName } from "typeagent";
-import { error, Result } from "typechat";
+import { error, Result, Error } from "typechat";
 import * as kp from "knowpro";
 import * as cm from "conversation-memory";
 
@@ -126,6 +126,10 @@ export function compareArray(
         }
     }
     return undefined;
+}
+
+export function queryError(query: string, result: Error): Error {
+    return error(`${query}\n${result.message}`);
 }
 
 export async function getLangSearchResult(

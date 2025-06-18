@@ -15,6 +15,7 @@ import {
 } from "./types.js";
 import { getLangSearchResult, shouldParseRequest } from "./common.js";
 import { error, Result, success } from "typechat";
+import { async } from "typeagent";
 
 export async function execSearchRequest(
     context: KnowproContext,
@@ -145,6 +146,7 @@ async function getAnswerFromSearchResult(
     searchResult: kp.ConversationSearchResult,
     choices: string[] | undefined,
     options: kp.AnswerContextOptions,
+    retry: boolean = true,
 ): Promise<Result<kp.AnswerResponse>> {
     const conversation = context.ensureConversationLoaded();
     const fastStopSav = context.answerGenerator.settings.fastStop;
@@ -156,14 +158,38 @@ async function getAnswerFromSearchResult(
         if (choices && choices.length > 0) {
             question = kp.createMultipleChoiceQuestion(question, choices);
         }
-        return await kp.generateAnswer(
-            conversation,
-            context.answerGenerator,
-            question,
-            searchResult,
-            undefined,
-            options,
+        const maxAttempts = 2;
+        let answerResult = await async.getResultWithRetry(
+            () =>
+                kp.generateAnswer(
+                    conversation,
+                    context.answerGenerator,
+                    question,
+                    searchResult,
+                    undefined,
+                    options,
+                ),
+            maxAttempts,
         );
+        if (
+            retry &&
+            answerResult.success &&
+            answerResult.data.type === "NoAnswer"
+        ) {
+            answerResult = await async.getResultWithRetry(
+                () =>
+                    kp.generateAnswer(
+                        conversation,
+                        context.answerGenerator,
+                        question,
+                        searchResult,
+                        undefined,
+                        options,
+                    ),
+                maxAttempts,
+            );
+        }
+        return answerResult;
     } finally {
         context.answerGenerator.settings.fastStop = fastStopSav;
     }
