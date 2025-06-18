@@ -85,7 +85,7 @@
       },
       "history": {
         "text": "- Ground beef or lamb\n- Onions\n- Carrots\n- Peas\n- Worcestershire sauce\n- Beef broth\n- Mashed potatoes\n- Butter\n",
-        "source": "chat",
+        "source": "dispatcher.lookup",
         "entities": [
           {
             "name": "shepherd's pie",

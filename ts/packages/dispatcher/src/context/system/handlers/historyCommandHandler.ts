@@ -14,6 +14,7 @@ import { checkOverwriteFile } from "../../../utils/commandHandlerUtils.js";
 import fs from "node:fs";
 import { expandHome } from "../../../utils/fsUtils.js";
 import { isChatHistoryInput } from "../../chatHistory.js";
+import { setActivityContext } from "../../../execute/actionHandlers.js";
 
 class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
@@ -133,6 +134,15 @@ class HistoryInsertCommandHandler implements CommandHandler {
         const prevCount = history.count();
         history.import(messages);
         const currCount = history.count();
+
+        const info = history.getLastActivityContextInfo();
+        if (info !== undefined) {
+            setActivityContext(
+                info.sourceSchemaName,
+                info.resultActivityContext,
+                systemContext,
+            );
+        }
 
         console.log(history.getStrings());
         displayResult(

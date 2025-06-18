@@ -1,12 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Entity } from "@typeagent/agent-sdk";
+import { ActionResultActivityContext, Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails, extractRelevantExifTags } from "common-utils";
 import { PromptSection } from "typechat";
 import { RequestId } from "./interactiveIO.js";
 import { normalizeParamString, PromptEntity } from "agent-cache";
 import { SchemaCreator as sc, validateType } from "action-schema";
+import { getAppAgentName } from "../internal.js";
 
 type UserEntry = {
     role: "user";
@@ -19,9 +20,10 @@ type AssistantEntry = {
     role: "assistant";
     text: string;
     id?: RequestId;
-    sourceAppAgentName: string;
+    sourceSchemaName: string;
     entities?: Entity[] | undefined;
     additionalInstructions?: string[] | undefined;
+    activityContext?: ActionResultActivityContext | undefined;
 };
 
 type ChatHistoryEntry = UserEntry | AssistantEntry;
@@ -31,6 +33,7 @@ type ChatHistoryInputAssistant = {
     source: string;
     entities?: Entity[];
     additionalInstructions?: string[];
+    activityContext?: ActionResultActivityContext;
 };
 
 type ChatHistoryInputEntry = {
@@ -45,9 +48,10 @@ function convertAssistantMessage(
     entries.push({
         role: "assistant",
         text: message.text,
-        sourceAppAgentName: message.source,
+        sourceSchemaName: message.source,
         entities: message.entities,
         additionalInstructions: message.additionalInstructions,
+        activityContext: message.activityContext,
     });
 }
 
@@ -91,12 +95,19 @@ export interface ChatHistory {
     addAssistantEntry(
         text: string,
         id: string | undefined,
-        sourceAppAgentName: string,
+        sourceSchemaName: string,
         entities?: Entity[],
         additionalInstructions?: string[],
+        activityContext?: ActionResultActivityContext,
     ): void;
     getCurrentInstructions(): string[] | undefined;
     getPromptSections(): PromptSection[];
+    getLastActivityContextInfo():
+        | {
+              resultActivityContext: ActionResultActivityContext;
+              sourceSchemaName: string;
+          }
+        | undefined;
     count(): number;
     delete(index: number): void;
     clear(): void;
@@ -199,6 +210,19 @@ export function createChatHistory(init: boolean): ChatHistory {
             }
             return instructions.length > 0 ? instructions : undefined;
         },
+        getLastActivityContextInfo() {
+            if (entries.length === 0) {
+                return undefined;
+            }
+            const last = entries[entries.length - 1];
+            return last.role === "assistant" &&
+                last.activityContext !== undefined
+                ? {
+                      sourceSchemaName: last.sourceSchemaName,
+                      resultActivityContext: last.activityContext,
+                  }
+                : undefined;
+        },
         addUserEntry(
             text: string,
             id: string | undefined,
@@ -216,18 +240,20 @@ export function createChatHistory(init: boolean): ChatHistory {
         addAssistantEntry(
             text: string,
             id: string | undefined,
-            sourceAppAgentName: string,
+            sourceSchemaName: string,
             entities?: Entity[],
             additionalInstructions?: string[],
+            activityContext?: ActionResultActivityContext,
         ): void {
             if (enabled) {
                 entries.push({
                     role: "assistant",
                     text,
                     id,
-                    sourceAppAgentName,
+                    sourceSchemaName,
                     entities: structuredClone(entities), // make a copy so that it doesn't get modified by others later.
                     additionalInstructions,
+                    activityContext: structuredClone(activityContext),
                 });
             }
         },
@@ -241,6 +267,7 @@ export function createChatHistory(init: boolean): ChatHistory {
                 if (entry.role === "user" || entry.entities === undefined) {
                     continue;
                 }
+                const appAgentName = getAppAgentName(entry.sourceSchemaName);
                 const promptEntities: PromptEntity[] = [];
                 for (const entity of entry.entities) {
                     // Multiple entities may have the same name ('Design meeting') but different
@@ -252,14 +279,13 @@ export function createChatHistory(init: boolean): ChatHistory {
                     let existing = uniqueEntities.get(uniqueIndex);
                     const promptEntity: PromptEntity = {
                         ...entity,
-                        sourceAppAgentName: entry.sourceAppAgentName,
+                        sourceAppAgentName: appAgentName,
                     };
                     if (existing) {
                         if (
                             existing.some(
                                 (e) =>
-                                    e.sourceAppAgentName ===
-                                        entry.sourceAppAgentName &&
+                                    e.sourceAppAgentName === appAgentName &&
                                     e.uniqueId === entity.uniqueId,
                             )
                         ) {
@@ -324,7 +350,7 @@ export function createChatHistory(init: boolean): ChatHistory {
                 } else if (currInput !== undefined) {
                     const assistantEntry: ChatHistoryInputAssistant = {
                         text: entry.text,
-                        source: entry.sourceAppAgentName,
+                        source: entry.sourceSchemaName,
                     };
                     if (entry.entities) {
                         assistantEntry.entities = structuredClone(
@@ -334,6 +360,9 @@ export function createChatHistory(init: boolean): ChatHistory {
                     if (entry.additionalInstructions) {
                         assistantEntry.additionalInstructions =
                             entry.additionalInstructions;
+                    }
+                    if (entry.activityContext) {
+                        assistantEntry.activityContext = entry.activityContext;
                     }
                     (currInput.assistant as any).push(assistantEntry);
                 }
@@ -365,6 +394,15 @@ const assistantInputSchema = sc.obj({
         ),
     ),
     additionalInstructions: sc.optional(sc.array(sc.string())),
+    activityContext: sc.optional(
+        sc.obj({
+            activityName: sc.string(),
+            description: sc.string(),
+            openLocalView: sc.optional(sc.boolean()),
+            // state: sc.optional(sc.any()),
+            // activityEndAction: sc.optional(sc.any()),
+        }),
+    ),
 });
 
 const messageInputSchema = sc.obj({
