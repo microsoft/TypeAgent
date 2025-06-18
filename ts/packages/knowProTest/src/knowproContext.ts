@@ -33,5 +33,12 @@ export class KnowproContext {
 export function createKnowledgeModel() {
     const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
     chatModelSettings.retryPauseMs = 10000;
-    return openai.createJsonChatModel(chatModelSettings, ["knowproTest"]);
+    const model = openai.createJsonChatModel(chatModelSettings, [
+        "knowproTest",
+    ]);
+    // Use 0 temperature and explicit seed to minimize variation
+    model.completionSettings.temperature = 0;
+    model.completionSettings.seed = 123;
+
+    return model;
 }
