@@ -136,9 +136,10 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                     continue
                 pretty_print(messages[msg_ord])
             case _:
-                asyncio.run(
-                    wrap_process_query(query_text, context.conversation, translator)
-                )
+                with timelog("Query processing"):
+                    asyncio.run(
+                        wrap_process_query(query_text, context.conversation, translator)
+                    )
 
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
@@ -288,7 +289,7 @@ async def generate_answer[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     translator = create_translator(model, AnswerResponse)
     assert context.raw_query_text is not None, "Raw query text must not be None"
     request = f"{create_question_prompt(context.raw_query_text)}\n\n{create_context_prompt(make_context(context, conversation))}"
-    # print("="*50 + "\n" + request + "\n" + "="*50)gf
+    # print("="*50 + "\n" + request + "\n" + "="*50)
     result = await translator.translate(request)
     if isinstance(result, typechat.Failure):
         return AnswerResponse(type="NoAnswer", answer=None, whyNoAnswer=result.message)
@@ -349,18 +350,18 @@ def dictify(object: object) -> Any:
 def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     context: ConversationSearchResult, conversation: IConversation[TMessage, TIndex]
 ) -> AnswerContext:
-    a = AnswerContext([], [], [])
-    a.entities = []
-    a.topics = []
-    a.messages = []
-    for smo in context.message_matches:
-        msg = conversation.messages[smo.message_ordinal]
+    answer_context = AnswerContext([], [], [])
+    answer_context.entities = []
+    answer_context.topics = []
+    answer_context.messages = []
+    for scored_msg_ord in context.message_matches:
+        msg = conversation.messages[scored_msg_ord.message_ordinal]
         # TODO: Dedupe messages
-        a.messages.append(
-            RelevantMessage(
-                from_=None,
-                to=None,
-                timestamp=None,
+        answer_context.messages.append(
+            RelevantMessage(  # TODO: type-safety
+                from_=msg.speaker,  # type: ignore  # It's a PodcastMessage
+                to=msg.listeners,  # type: ignore  # It's a PodcastMessage
+                timestamp=msg.timestamp,  # type: ignore  # It's a PodcastMessage
                 messageText=" ".join(msg.text_chunks),
             )
         )
@@ -374,7 +375,7 @@ def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                     ]
                     entity = cast(ConcreteEntity, sem_ref.knowledge)
                     # TODO: Dedupe entities
-                    a.entities.append(
+                    answer_context.entities.append(
                         RelevantKnowledge(
                             knowledge=asdict(entity),
                             origin=None,
@@ -384,7 +385,7 @@ def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                     )
             case "topic":
                 topic = cast(Topic, knowledge)
-                a.topics.append(
+                answer_context.topics.append(
                     RelevantKnowledge(
                         knowledge=asdict(topic),
                         origin=None,
@@ -394,7 +395,7 @@ def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                 )
             case _:
                 pass  # TODO: Actions and topics too???
-    return a
+    return answer_context
 
 
 async def combine_answers(
