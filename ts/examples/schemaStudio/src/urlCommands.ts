@@ -52,7 +52,7 @@ export function createURLCommands(studio: SchemaStudio): CommandHandler {
             const utterance = temp[0].trim();
             const site = temp[1].trim();
             
-            const resolved = await urlResolver.resolveURLWithSearch(site, groundingConfig);
+            const resolved = await urlResolver.resolveURLWithSearch(utterance, groundingConfig);
 
             io.writer.writeLine(`Resolved '${utterance}' to '${resolved}' (expected: ${site})`);
 
