@@ -1,14 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { bingWithGrounding } from "aiclient";
+import { bingWithGrounding, agents } from "aiclient";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import {
-    Agent,
     MessageContentUnion,
     ThreadMessage,
-    ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
 
@@ -30,7 +28,7 @@ export async function resolveURLWithSearch(site: string, groundingConfig: bingWi
         new DefaultAzureCredential(),
     );
 
-    const agent = await ensureAgent(groundingConfig, project);
+    const agent = await agents.ensureAgent(groundingConfig, project);
 
     if (!agent) {
         throw new Error(
@@ -97,58 +95,4 @@ export async function resolveURLWithSearch(site: string, groundingConfig: bingWi
 
     // return assistant messages
     return retVal;
-}
-
-/*
- * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
- */
-async function ensureAgent(
-    groundingConfig: bingWithGrounding.ApiSettings,
-    project: AIProjectClient,
-): Promise<Agent | undefined> {
-    try {
-        return await project.agents.getAgent(
-            groundingConfig.urlResolutionAgentId!,
-        );
-    } catch (e) {
-        return await createAgent(groundingConfig, project);
-    }
-}
-
-async function createAgent(
-    groundingConfig: bingWithGrounding.ApiSettings,
-    project: AIProjectClient,
-): Promise<Agent> {
-    try {
-        // connection id is in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/typeagent-test-agent/connections/<CONNECTION NAME>>
-        const bingTool = ToolUtility.createBingGroundingTool([
-            {
-                connectionId: groundingConfig.connectionId!,
-            },
-        ]);
-
-        // try to create the agent
-        return await project.agents.createAgent("gpt-4o", {
-            name: "TypeAgent_URLResolverAgent",
-            description: "Auto created URL Resolution Agent",
-            temperature: 0.01,
-            instructions: `
-You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  
-Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain.
-
-Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
-
-interface Response {
-    originalRequest: string;
-    url: string;
-    urlsEvaluated: string[];
-    explanation: string;
-    bingSearchQuery: string;
-}`,
-            tools: [bingTool.definition],
-        });
-    } catch (e) {
-        debug(`Error creating agent: ${e}`);
-        throw e;
-    }
 }

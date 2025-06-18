@@ -10,7 +10,9 @@ import {
 } from "interactive-app";
 import { SchemaStudio } from "./studio.js";
 import fs from "fs";
-import { bingWithGrounding, urlResolver } from "aiclient";
+import { bingWithGrounding, urlResolver, agents } from "aiclient";
+import { DefaultAzureCredential } from "@azure/identity";
+import { AIProjectClient } from "@azure/ai-projects";
 
 export function createURLCommands(studio: SchemaStudio): CommandHandler {
     const argDef: CommandMetadata = {
@@ -25,6 +27,11 @@ export function createURLCommands(studio: SchemaStudio): CommandHandler {
                 description: "If true, will process all URLs in the file",
                 type: "boolean",
                 defaultValue: true,
+            },
+            flushAgents: {
+                description: "Deletes all agents except the one in the api settings.",
+                type: "boolean",
+                defaultValue: false,
             }
         },
     };
@@ -33,7 +40,19 @@ export function createURLCommands(studio: SchemaStudio): CommandHandler {
         args: string[],
         io: InteractiveIo,
     ): Promise<CommandResult> {
+
         const namedArgs = parseNamedArguments(args, argDef);
+
+        if (namedArgs.flushAgents) {
+            io.writer.writeLine("Flushing agents...");
+            const project = new AIProjectClient(
+                bingWithGrounding.apiSettingsFromEnv().endpoint!,
+                new DefaultAzureCredential(),
+            );
+            await agents.flushAgents("TypeAgent_URLResolverAgent", [bingWithGrounding.apiSettingsFromEnv().urlResolutionAgentId!], project);
+            return;
+        }
+
 
         io.writer.writeLine(`Opening file: ${namedArgs.file}`);
         const urls = fs.readFileSync(namedArgs.file, "utf-8").split("\n"); 
