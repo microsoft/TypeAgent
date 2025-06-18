@@ -1,0 +1,172 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { Args, Command, Flags } from "@oclif/core";
+import { ClientIO, createDispatcher } from "agent-dispatcher";
+import { getDefaultAppAgentProviders } from "default-agent-provider";
+import { getChatModelNames } from "aiclient";
+import {
+    ChatHistoryInput,
+    getAllActionConfigProvider,
+} from "agent-dispatcher/internal";
+import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
+import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import fs from "node:fs";
+import { ChatHistoryEntry } from "../../../dispatcher/dist/context/chatHistory.js";
+
+const modelNames = await getChatModelNames();
+const instanceDir = getInstanceDir();
+const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
+const { schemaNames } = await getAllActionConfigProvider(
+    defaultAppAgentProviders,
+);
+
+async function readHistoryFile(filePath: string): Promise<ChatHistoryEntry[]> {
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`History file not found: ${filePath}`);
+    }
+
+    const history = await fs.promises.readFile(filePath, "utf8");
+    try {
+        return JSON.parse(history);
+    } catch (e) {
+        throw new Error(
+            `Failed to parse history file: ${filePath}. Error: ${e}`,
+        );
+    }
+}
+export default class ReplayCommand extends Command {
+    static args = {
+        history: Args.string({
+            description: "History file to replay.",
+            required: true,
+        }),
+    };
+
+    static flags = {
+        translate: Flags.boolean({
+            description: "Translate only, do not execute actions",
+            default: false,
+        }),
+        schema: Flags.string({
+            description: "Translator name",
+            options: schemaNames,
+            multiple: true,
+        }),
+        multiple: Flags.boolean({
+            description: "Include multiple action schema",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        model: Flags.string({
+            description: "Translation model to use",
+            options: modelNames,
+        }),
+        jsonSchema: Flags.boolean({
+            description: "Output JSON schema",
+            default: false, // follow DispatcherOptions default
+        }),
+        jsonSchemaFunction: Flags.boolean({
+            description: "Output JSON schema function",
+            default: false, // follow DispatcherOptions default
+            exclusive: ["jsonSchema"],
+        }),
+        jsonSchemaValidate: Flags.boolean({
+            description: "Validate the output when JSON schema is enabled",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        schemaOptimization: Flags.boolean({
+            description: "Enable schema optimization",
+        }),
+        switchEmbedding: Flags.boolean({
+            description: "Use embedding to determine the first schema to use",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        switchInline: Flags.boolean({
+            description: "Use inline switch schema to select schema group",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+        switchSearch: Flags.boolean({
+            description:
+                "Enable second chance full switch schema to find schema group",
+            default: true, // follow DispatcherOptions default
+            allowNo: true,
+        }),
+    };
+
+    static description = "Translate a request into action";
+    static example = [
+        `$ <%= config.bin %> <%= command.id %> 'play me some bach'`,
+    ];
+
+    async run(): Promise<void> {
+        const { args, flags } = await this.parse(ReplayCommand);
+
+        const history = await readHistoryFile(args.history);
+        await withConsoleClientIO(async (clientIO: ClientIO) => {
+            const dispatcher = await createDispatcher("cli run translate", {
+                appAgentProviders: defaultAppAgentProviders,
+                agents: {
+                    schemas: flags.schema,
+                    actions: !flags.translate,
+                    commands: ["dispatcher"],
+                },
+                translation: {
+                    model: flags.model,
+                    multiple: { enabled: flags.multiple },
+                    schema: {
+                        generation: {
+                            jsonSchema: flags.jsonSchema,
+                            jsonSchemaFunction: flags.jsonSchemaFunction,
+                            jsonSchemaValidate: flags.jsonSchemaValidate,
+                        },
+                        optimize: {
+                            enabled: flags.schemaOptimization,
+                        },
+                    },
+                    switch: {
+                        embedding: flags.switchEmbedding,
+                        inline: flags.switchInline,
+                        search: flags.switchSearch,
+                    },
+                },
+                execution: { history: flags.translate }, // don't generate chat history, the test manually imports them
+                explainer: { enabled: false },
+                cache: { enabled: false },
+                clientIO,
+                persistDir: instanceDir,
+                dblogging: true,
+                clientId: getClientId(),
+            });
+
+            try {
+                let insertHistory: ChatHistoryInput | undefined = undefined;
+                for (const entry of history) {
+                    if (entry.role === "user") {
+                        if (flags.translate && insertHistory !== undefined) {
+                            await dispatcher.processCommand(
+                                `@history insert ${JSON.stringify(insertHistory)}`,
+                            );
+                            insertHistory = undefined;
+                        }
+                        await dispatcher.processCommand(entry.text, entry.id);
+                        insertHistory = { user: entry.text, assistant: [] };
+                    } else if (insertHistory !== undefined) {
+                        (insertHistory.assistant as any[]).push({
+                            text: entry.text,
+                            source: entry.sourceAppAgentName,
+                            entities: entry.entities,
+                            additionalInstructions:
+                                entry.additionalInstructions,
+                        });
+                    }
+                }
+            } finally {
+                await dispatcher.close();
+            }
+        });
+    }
+}

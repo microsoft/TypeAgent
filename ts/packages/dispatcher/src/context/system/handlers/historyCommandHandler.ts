@@ -15,6 +15,9 @@ import { displayResult } from "@typeagent/agent-sdk/helpers/display";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ChatHistoryEntry } from "../../chatHistory.js";
 import { SchemaCreator as sc, validateType } from "action-schema";
+import { checkOverwriteFile } from "../../../utils/commandHandlerUtils.js";
+import fs from "node:fs";
+import { expandHome } from "../../../utils/fsUtils.js";
 
 class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
@@ -78,6 +81,39 @@ class HistoryDeleteCommandHandler implements CommandHandler {
             `Message ${index} deleted. ${systemContext.chatHistory.entries.length} messages remain in the chat history.`,
             context,
         );
+    }
+}
+
+class HistorySaveCommandHandler implements CommandHandler {
+    public readonly description: string = "Save the chat history to a file";
+    public readonly parameters = {
+        args: {
+            file: {
+                description: "File to save the chat history to",
+                type: "string",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        param: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const systemContext = context.sessionContext.agentContext;
+        const { file } = param.args;
+
+        if (!file) {
+            throw new Error("Filename is required to save chat history.");
+        }
+
+        const filename = expandHome(file);
+
+        await checkOverwriteFile(filename, systemContext);
+
+        await fs.promises.writeFile(
+            filename,
+            JSON.stringify(systemContext.chatHistory.entries, null, 2),
+        );
+        displayResult(`Chat history saved to ${filename}.`, context);
     }
 }
 
@@ -183,14 +219,14 @@ class HistoryInsertCommandHandler implements CommandHandler {
 
         validateType(chatHistoryInputSchema, messages);
 
-        systemContext.chatHistory.entries.push(
-            ...getChatHistoryInput(
-                messages as unknown as ChatHistoryInput | ChatHistoryInput[],
-            ),
+        const chatHistoryInput = getChatHistoryInput(
+            messages as unknown as ChatHistoryInput | ChatHistoryInput[],
         );
+        systemContext.chatHistory.entries.push(...chatHistoryInput);
 
+        const messageCount = Array.isArray(messages) ? messages.length : 1;
         displayResult(
-            `Inserted ${messages.length} messages to chat history. ${systemContext.chatHistory.entries.length} messages in total.`,
+            `Inserted ${messageCount} entries, ${chatHistoryInput.length} messages into chat history. ${systemContext.chatHistory.entries.length} messages in total.`,
             context,
         );
     }
@@ -205,6 +241,7 @@ export function getHistoryCommandHandlers(): CommandHandlerTable {
             clear: new HistoryClearCommandHandler(),
             delete: new HistoryDeleteCommandHandler(),
             insert: new HistoryInsertCommandHandler(),
+            save: new HistorySaveCommandHandler(),
         },
     };
 }

@@ -6,8 +6,12 @@ import * as kp from "knowpro";
 import { Result } from "typechat";
 import { argSourceFile } from "./common.js";
 
+/**
+ * A Parameterized search request to run against the index
+ * Includes several "test" flags that are mapped to their lower level equivalents
+ */
 export interface SearchRequest {
-    // Required
+    // Required args
     query: string;
     // Optional
     applyScope?: boolean | undefined;

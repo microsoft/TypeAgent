@@ -28,7 +28,8 @@ export async function runSearchBatch(
     context: KnowproContext,
     batchFilePath: string,
     destFilePath?: string,
-    cb?: BatchCallback<LangSearchResults>,
+    cb?: BatchCallback<Result<LangSearchResults>>,
+    stopOnError: boolean = false,
 ): Promise<Result<LangSearchResults[]>> {
     const batchLines = getBatchFileLines(batchFilePath);
     const results: LangSearchResults[] = [];
@@ -39,13 +40,14 @@ export async function runSearchBatch(
             continue;
         }
         const response = await getSearchResults(context, args);
-        if (!response.success) {
-            return response;
-        }
-        response.data.cmd = cmd;
-        results.push(response.data);
         if (cb) {
-            cb(response.data, i, batchLines.length);
+            cb(response, i, batchLines.length);
+        }
+        if (response.success) {
+            response.data.cmd = cmd;
+            results.push(response.data);
+        } else if (stopOnError) {
+            return response;
         }
     }
     if (destFilePath) {
@@ -91,7 +93,8 @@ export function collectLangSearchResults(
 export async function verifyLangSearchResultsBatch(
     context: KnowproContext,
     batchFilePath: string,
-    cb?: BatchCallback<Comparison<LangSearchResults>>,
+    cb?: BatchCallback<Result<Comparison<LangSearchResults>>>,
+    stopOnError: boolean = false,
 ): Promise<Result<Comparison<LangSearchResults>[]>> {
     const expectedResults =
         await readJsonFile<LangSearchResults[]>(batchFilePath);
@@ -107,19 +110,25 @@ export async function verifyLangSearchResultsBatch(
             continue;
         }
         const response = await getSearchResults(context, args);
-        if (!response.success) {
-            return response;
-        }
-        const actual = response.data;
-        const error = compareLangSearchResults(actual, expected);
-        let comparisonResult: Comparison<LangSearchResults> = {
-            actual,
-            expected,
-            error,
-        };
-        results.push(comparisonResult);
-        if (cb) {
-            cb(comparisonResult, i, expectedResults.length);
+        if (response.success) {
+            const actual = response.data;
+            const error = compareLangSearchResults(actual, expected);
+            let comparisonResult: Comparison<LangSearchResults> = {
+                actual,
+                expected,
+                error,
+            };
+            results.push(comparisonResult);
+            if (cb) {
+                cb(success(comparisonResult), i, expectedResults.length);
+            }
+        } else {
+            if (cb) {
+                cb(response, i, expectedResults.length);
+            }
+            if (stopOnError) {
+                return response;
+            }
         }
     }
     return success(results);

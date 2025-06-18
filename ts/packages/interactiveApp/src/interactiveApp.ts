@@ -840,7 +840,7 @@ export function addBatchHandler(app: InteractiveApp) {
                 commentPrefix: arg("Comments are prefix by this string", "#"),
                 setCwd: argBool(
                     "Set cwd to the directory batch file is in",
-                    false,
+                    true,
                 ),
             },
         };
