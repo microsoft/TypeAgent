@@ -60,6 +60,8 @@ so we have some end-to-end functionality.
 
 The TODO items include:
 
+- Use fallback query and other fallback stuff in search_conv*_w*_lang*.
+- Support debug context there.
 - Change the context to be text, including message texts and timestamps,
   rather than JSON (and especially not just semantic ref ordinals).
 - Property translate time range filters.
