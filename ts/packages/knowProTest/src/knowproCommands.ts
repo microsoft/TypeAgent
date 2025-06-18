@@ -199,7 +199,7 @@ async function getAnswerFromSearchResult(
 ): Promise<Result<kp.AnswerResponse>> {
     const conversation = context.ensureConversationLoaded();
     const fastStopSav = context.answerGenerator.settings.fastStop;
-    if (request.fastStop) {
+    if (request.fastStop !== undefined) {
         context.answerGenerator.settings.fastStop = request.fastStop;
     }
     try {
