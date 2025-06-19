@@ -5,6 +5,7 @@ import { ActionParamSpecs } from "./schemaConfig.js";
 
 export interface SchemaBase {
     type:
+        | "any"
         | "string"
         | "number"
         | "boolean"
@@ -14,6 +15,10 @@ export interface SchemaBase {
         | "array"
         | "type-reference"
         | "type-union";
+}
+
+export interface SchemaTypeAny extends SchemaBase {
+    type: "any";
 }
 
 export interface SchemaTypeString extends SchemaBase {
@@ -103,7 +108,8 @@ export type ResolvedSchemaType =
     | SchemaTypeStringUnion
     | SchemaTypeUnion
     | SchemaTypeObject
-    | SchemaTypeArray;
+    | SchemaTypeArray
+    | SchemaTypeAny;
 
 export type SchemaType = ResolvedSchemaType | SchemaTypeReference;
 

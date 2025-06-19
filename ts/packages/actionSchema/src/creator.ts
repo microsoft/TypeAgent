@@ -15,8 +15,12 @@ import {
     SchemaTypeBoolean,
     SchemaTypeString,
     SchemaTypeUnion,
+    SchemaTypeAny,
 } from "./type.js";
 
+export function any(): SchemaTypeAny {
+    return { type: "any" };
+}
 export function string(): SchemaTypeString;
 export function string(...union: (string | string[])[]): SchemaTypeStringUnion;
 export function string(

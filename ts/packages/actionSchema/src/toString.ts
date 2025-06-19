@@ -9,6 +9,8 @@ export function toStringSchemaType(
 ): string {
     let result: string;
     switch (type.type) {
+        case "any":
+            return "any";
         case "string":
             return "string";
         case "number":

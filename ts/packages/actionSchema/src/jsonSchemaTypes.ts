@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export type JsonSchema =
+    | JsonSchemaAny
     | JsonSchemaObject
     | JsonSchemaArray
     | JsonSchemaString
@@ -10,6 +11,11 @@ export type JsonSchema =
     | JsonSchemaNull
     | JsonSchemaUnion
     | JsonSchemaReference;
+
+export type JsonSchemaAny = {
+    type?: undefined;
+    description?: string;
+};
 
 export type JsonSchemaObject = {
     type: "object";
