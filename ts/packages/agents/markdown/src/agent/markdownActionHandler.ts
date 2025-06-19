@@ -465,6 +465,7 @@ async function handleMarkdownAction(
                     actionContext.sessionContext.agentContext.viewProcess.send({
                         type: "setFile",
                         filePath: fullPath,
+                        folderPath: path.dirname(fullPath!),
                     });
                 }
                 result = createActionResult("Document opened");
