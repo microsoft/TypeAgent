@@ -6,6 +6,7 @@ import { Plugin, PluginKey } from "prosemirror-state";
 import { InputRule } from "prosemirror-inputrules";
 import { visit } from "unist-util-visit";
 import mermaid from "mermaid";
+import DOMPurify from "dompurify";
 
 // Initialize Mermaid
 mermaid.initialize({
@@ -282,7 +283,7 @@ const mermaidRenderer = $prose(() => {
                             );
                             diagramContainer.innerHTML = "";
                             const svgContainer = document.createElement("div");
-                            svgContainer.innerHTML = svg;
+                            svgContainer.innerHTML = DOMPurify.sanitize(svg);
                             diagramContainer.appendChild(svgContainer);
                             errorContainer.style.display = "none";
                         } catch (error) {
@@ -291,7 +292,11 @@ const mermaidRenderer = $prose(() => {
                                 error instanceof Error
                                     ? error.message
                                     : "Unknown error";
-                            errorContainer.innerHTML = `<div class="mermaid-error-content"><strong>⚠️ Mermaid Error:</strong><p>${errorMessage}</p></div>`;
+                            const escapedErrorMessage =
+                                document.createTextNode(
+                                    errorMessage,
+                                ).textContent;
+                            errorContainer.innerHTML = `<div class="mermaid-error-content"><strong>⚠️ Mermaid Error:</strong><p>${escapedErrorMessage}</p></div>`;
                             errorContainer.style.display = "block";
                             diagramContainer.innerHTML = "";
                         }

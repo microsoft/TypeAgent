@@ -7,6 +7,7 @@ import { CollaborationManager } from "./collaborationManager.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import http from "http";
 import { WebSocketServer } from "ws";
 import * as Y from "yjs";
@@ -16,6 +17,7 @@ import * as awarenessProtocol from "y-protocols/awareness";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import registerDebug from "debug";
+import sanitizeFilename from "sanitize-filename";
 
 const debug = registerDebug("typeagent:markdown:service");
 
@@ -62,16 +64,34 @@ app.post(
         try {
             const { documentName } = req.body;
 
-            if (!documentName) {
-                res.status(400).json({ error: "Document name is required" });
+            if (!documentName || !/^[a-zA-Z0-9_]+$/.test(documentName)) {
+                res.status(400).json({
+                    error: "Invalid document name. Only alphanumeric characters and underscores are allowed.",
+                });
                 return;
             }
 
-            // Construct file path - in a real implementation, you'd have a documents directory
-            // For now, we'll assume documents are in the same directory as the current file
-            const documentPath = filePath
-                ? path.join(path.dirname(filePath), `${documentName}.md`)
-                : `${documentName}.md`;
+            // Construct file path
+            const sanitizedDocumentName = sanitizeFilename(documentName);
+
+            if (!sanitizedDocumentName) {
+                res.status(400).json({ error: "Invalid document name" });
+                return;
+            }
+
+            // Construct and normalize file path
+            const documentPath = path.resolve(
+                ROOT_DIR,
+                `${sanitizedDocumentName}.md`,
+            );
+
+            // Verify that the file path is within the safe root directory
+            if (!documentPath.startsWith(ROOT_DIR)) {
+                res.status(403).json({
+                    error: "Access to the specified path is forbidden.",
+                });
+                return;
+            }
 
             if (!fs.existsSync(documentPath)) {
                 // Create new document if it doesn't exist
@@ -80,14 +100,6 @@ app.post(
                     `# ${documentName}\n\nThis is a new document.\n`,
                 );
             }
-
-            // Stop watching old file
-            if (filePath) {
-                fs.unwatchFile(filePath);
-            }
-
-            // Set new file path
-            filePath = documentPath;
 
             // Initialize collaboration for new document
             const documentId = documentName;
@@ -98,12 +110,7 @@ app.post(
             collaborationManager.setDocumentContent(documentId, content);
 
             // Render to clients
-            renderFileToClients(filePath!);
-
-            // Watch new file for changes
-            fs.watchFile(filePath!, () => {
-                renderFileToClients(filePath!);
-            });
+            renderFileToClients(documentPath!);
 
             res.json({
                 success: true,
@@ -127,6 +134,8 @@ let collaborationManager: CollaborationManager;
 // UI Command routing state
 let commandCounter = 0;
 const pendingCommands = new Map<string, any>();
+const userHomeDir = os.homedir();
+const ROOT_DIR = path.join(userHomeDir, "Documents");
 
 // Streaming state for LLM responses
 const activeStreamingSessions = new Map<
@@ -330,20 +339,10 @@ app.get("/document", (req: Request, res: Response) => {
 
         res.send(content);
     } catch (error) {
-        // Fallback to reading from file if authoritative document fails
-        try {
-            const fileContent = fs.readFileSync(filePath, "utf-8");
-            debug(
-                `Fallback read content from file: ${filePath}, ${fileContent.length} chars`,
-            );
-
-            res.send(fileContent);
-        } catch (fileError) {
-            res.status(500).json({
-                error: "Failed to load document",
-                details: fileError,
-            });
-        }
+        res.status(500).json({
+            error: "Failed to load document",
+            details: error,
+        });
     }
 });
 
@@ -570,11 +569,6 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
             return;
         }
 
-        // Stop watching old file
-        if (filePath) {
-            fs.unwatchFile(filePath);
-        }
-
         // Set new file path
         filePath = newFilePath;
 
@@ -587,12 +581,7 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
         collaborationManager.setDocumentContent(documentId, content);
 
         // Render to clients
-        renderFileToClients(filePath!);
-
-        // Watch new file for changes
-        fs.watchFile(filePath!, () => {
-            renderFileToClients(filePath!);
-        });
+        renderFileToClients(newFilePath!);
 
         res.json({
             success: true,
@@ -1091,58 +1080,6 @@ async function streamRealAgentResponse(
     }
 }
 
-/**
- * Detect AI command from user request
- */
-/*
-function detectAICommand(
-    request: string,
-): "continue" | "diagram" | "augment" | "research" {
-    const lowerRequest = request.toLowerCase();
-
-    if (
-        lowerRequest.includes("/continue") ||
-        lowerRequest.includes("continue writing")
-    ) {
-        return "continue";
-    }
-    if (
-        lowerRequest.includes("/diagram") ||
-        lowerRequest.includes("create diagram")
-    ) {
-        return "diagram";
-    }
-    if (
-        lowerRequest.includes("/augment") ||
-        lowerRequest.includes("improve") ||
-        lowerRequest.includes("enhance")
-    ) {
-        return "augment";
-    }
-    if (
-        lowerRequest.includes("/research") ||
-        lowerRequest.includes("research")
-    ) {
-        return "research";
-    }
-
-    // Default to continue for general content requests
-    return "continue";
-}
-*/
-
-/**
- * Extract hint from user request
- */
-/*
-function extractHintFromRequest(request: string): string | undefined {
-    const match =
-        request.match(/\/continue\s+(.+)/i) ||
-        request.match(/continue writing\s+(.+)/i);
-    return match ? match[1].trim() : undefined;
-}
-*/
-
 async function forwardToMarkdownAgent(
     action: string,
     parameters: any,
@@ -1283,12 +1220,19 @@ function renderFileToClients(filePath: string) {
 
 process.on("message", (message: any) => {
     if (message.type == "setFile") {
-        if (filePath) {
-            fs.unwatchFile(filePath);
-        }
         if (message.filePath) {
+            // Resolve and validate the file path
+            const resolvedFilePath = path.resolve(
+                ROOT_DIR,
+                path.basename(message.filePath),
+            );
+            if (!resolvedFilePath.startsWith(ROOT_DIR)) {
+                debug("Invalid file path provided in message");
+                return;
+            }
+
             const oldFilePath = filePath;
-            filePath = message.filePath;
+            filePath = resolvedFilePath;
 
             // Initialize collaboration for this document using authoritative document
             const documentId = path.basename(message.filePath, ".md");
@@ -1297,8 +1241,8 @@ process.on("message", (message: any) => {
             const ydoc = getAuthoritativeDocument(documentId);
 
             // Load existing content into the authoritative document
-            if (fs.existsSync(message.filePath)) {
-                const content = fs.readFileSync(message.filePath, "utf-8");
+            if (fs.existsSync(resolvedFilePath)) {
+                const content = fs.readFileSync(resolvedFilePath, "utf-8");
 
                 // Set content directly in the authoritative Y.js document
                 const ytext = ydoc.getText("content");
@@ -1334,11 +1278,6 @@ process.on("message", (message: any) => {
 
             // initial render/reset for clients
             renderFileToClients(filePath!);
-
-            // watch file changes and render as needed
-            fs.watchFile(filePath!, () => {
-                renderFileToClients(filePath!);
-            });
         } else {
             // No file mode - initialize with default content using authoritative document
             filePath = null;
