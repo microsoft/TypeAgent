@@ -67,7 +67,7 @@ export function createURLCommands(studio: SchemaStudio): CommandHandler {
 
             io.writer.writeLine(`${passFail}: Resolved '${utterance}' to '${resolved}' (expected: ${site})`);
 
-            fs.appendFileSync("resolved.txt", `${passFail}\t${utterance}\t${site}\t${resolved}\n`);
+            fs.appendFileSync("examples/schemaStudio/data/resolved.txt", `${passFail}\t${utterance}\t${site}\t${resolved}\n`);
 
             // if (resolved?.toLocaleLowerCase().trim() === site.toLocaleLowerCase().trim()) {
             //     io.writer.write(`Resolved URL: ${resolved}`);
