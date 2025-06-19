@@ -6,8 +6,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Makrdown Preview</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>AI-Enhanced Markdown Editor</title>
+
+    <!-- Milkdown Theme -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@milkdown/theme-nord@7.3.6/style.css"
+    />
+
+    <!-- Existing feature support -->
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.7.0/github-markdown-light.min.css"
@@ -20,11 +27,51 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex@0.15.6/dist/katex.css"
     />
+    <!-- Font Awesome for icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
   </head>
   <body>
-    <div id="content" class="markdown-body"></div>
-    <script src="https://unpkg.com/mermaid@11.3.0/dist/mermaid.min.js"></script>
+    <div id="toolbar">
+      <div class="toolbar-section toolbar-left">
+        <span id="save-status" class="save-status"></span>
+      </div>
+      <div class="toolbar-section toolbar-right">
+        <button id="open-btn" class="icon-button" title="Open File">
+          <i class="fas fa-folder-open"></i>
+        </button>
+        <button id="export-btn" class="icon-button" title="Export File">
+          <i class="fas fa-download"></i>
+        </button>
+        <button id="share-btn" class="icon-button" title="Share Document">
+          <i class="fas fa-share-alt"></i>
+        </button>
+      </div>
+    </div>
+
+    <div id="editor-container">
+      <div id="editor"></div>
+    </div>
+
+    <!-- Hidden file input for opening files -->
+    <input
+      type="file"
+      id="file-input"
+      accept=".md,.markdown"
+      style="display: none"
+    />
+
+    <!-- Status and notifications -->
+    <div id="connection-status" class="status"></div>
+    <div id="collaboration-status" class="collaboration-status"></div>
+
+    <!-- External libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.15.6/dist/katex.min.js"></script>
+
+    <!-- Main application -->
+    <script type="module" src="./index.ts"></script>
   </body>
 </html>
