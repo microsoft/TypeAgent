@@ -22,6 +22,15 @@ export interface urlResolutionAction {
     bingSearchQuery: string;
 }
 
+export type SiteValidity = "Valid" | "Invalid" | "Unknown";
+
+export interface urlValidityAction {
+    originalRequest: string;
+    url: string;
+    urlValidity: SiteValidity;
+    explanation: string;
+}
+
 export async function resolveURLWithSearch(site: string, groundingConfig: bingWithGrounding.ApiSettings): Promise<string | undefined> {
 
     let retVal: string = site;
@@ -151,4 +160,115 @@ interface Response {
         debug(`Error creating agent: ${e}`);
         throw e;
     }
+}
+
+export async function validateURL(
+    utterance: string,
+    url: string,
+    groundingConfig: bingWithGrounding.ApiSettings,
+): Promise<urlValidityAction | undefined> {
+    debug(`Validating URL for utterance: ${utterance}, url: ${url}`);
+    
+    const project = new AIProjectClient(
+        groundingConfig.endpoint!,
+        new DefaultAzureCredential(),
+    );
+    
+
+    try {
+        // TODO: put agent in .env and grounding config
+        const agent = await project.agents.getAgent(
+            "asst_1nWjxBpIs0Z38YKUBsxlYnRZ",
+        );
+        const thread = await project.agents.threads.create();
+        
+        // the question that needs answering
+        await project.agents.messages.create(thread.id, "user", JSON.stringify({ request: utterance, url: url }));
+
+        let retryCount = 0;
+        const maxRetries = 3;
+        let success = false;
+        let lastResponse;
+
+        while (retryCount < maxRetries && !success) {
+            try {
+                // Create run
+                const run = await project.agents.runs.createAndPoll(
+                    thread.id,
+                    agent.id,
+                    {
+                        pollingOptions: {
+                            intervalInMs: 1000,
+                        },
+                        onResponse: (response): void => {
+                            lastResponse = response;
+                            
+                            debug(`Received response with status: ${response.status}`);
+
+                            if (response.status != 200) {
+                                process.stdout.write(response.bodyAsText!);
+                                debug(`Received response with status: ${response}`);
+                            }
+                        },
+                    },
+                );
+
+
+                const msgs: ThreadMessage[] = [];
+                if (run.status === "completed") {
+                    if (run.completedAt) {
+                        // Retrieve messages
+                        const messages = await project.agents.messages.list(thread.id, {
+                            order: "asc",
+                        });
+
+                        // accumulate assistant messages
+                        for await (const m of messages) {
+                            if (m.role === "assistant") {
+                                // TODO: handle multi-modal content
+                                const content: MessageContentUnion | undefined =
+                                    m.content.find(
+                                        (c) => c.type === "text" && "text" in c,
+                                    );
+                                if (content) {
+                                    msgs.push(m);
+                                    let txt: string = (content as any).text
+                                        .value as string;
+                                    txt = txt
+                                        .replaceAll("```json", "")
+                                        .replaceAll("```", "");
+                                    
+                                    // BUGBUG: only returns the first user message in the thread
+                                    return JSON.parse(txt) as urlValidityAction;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                success = true;
+
+            } catch (pollingError) {
+                /*
+                    Getting lots of 502s from Logic App for getting web page content.
+
+                    last_error: {
+                        code: 'tool_user_error',
+                        message: 'Error: http_client_error; HTTP error 502: Bad Gateway',
+                        debug_info: [Object]
+                    },                
+                */
+                retryCount++;
+                console.log(lastResponse);
+            }            
+        }
+
+        // delete the thread we just created since we are currently one and done
+        project.agents.threads.delete(thread.id);
+
+    } catch (e) {
+        debug(`Error validating URL: ${e}`);
+    }
+    
+    return undefined;
 }

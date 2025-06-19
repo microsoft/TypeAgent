@@ -496,6 +496,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.1(supports-color@8.1.1)
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -515,6 +518,9 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
