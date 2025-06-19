@@ -101,6 +101,8 @@ app.post(
                 );
             }
 
+            filePath = documentPath;
+            
             // Initialize collaboration for new document
             const documentId = documentName;
             collaborationManager.initializeDocument(documentId, documentPath);
@@ -108,9 +110,6 @@ app.post(
             // Load content into collaboration manager
             const content = fs.readFileSync(documentPath, "utf-8");
             collaborationManager.setDocumentContent(documentId, content);
-
-            // Render to clients
-            renderFileToClients(documentPath!);
 
             res.json({
                 success: true,
@@ -369,8 +368,6 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
             message: "Content saved to memory (no file mode)",
         });
 
-        // Notify clients via SSE of the change (WebSocket will auto-sync)
-        renderFileToClients("");
         return;
     }
 
@@ -391,9 +388,6 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
             `Saved content to both Y.js doc and file: ${filePath}, ${markdownContent.length} chars`,
         );
         res.json({ success: true });
-
-        // Notify clients of the change
-        renderFileToClients(filePath);
     } catch (error) {
         res.status(500).json({
             error: "Failed to save document",
@@ -420,7 +414,13 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         );
 
         // Use the provided file path or fall back to current filePath
-        const targetFilePath = requestFilePath || filePath;
+        let sanitizedFilePath = sanitizeFilename(requestFilePath || filePath);
+        const resolvedFilePath = path.resolve(ROOT_DIR, sanitizedFilePath);
+        if (!resolvedFilePath.startsWith(ROOT_DIR)) {
+            res.status(403).json({ error: "Invalid file path" });
+            return;
+        }
+        const targetFilePath = resolvedFilePath;
         const targetDocumentId =
             documentId ||
             (filePath ? path.basename(filePath, ".md") : "default");
@@ -564,24 +564,27 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
     try {
         const { filePath: newFilePath } = req.body;
 
-        if (!newFilePath || !fs.existsSync(newFilePath)) {
-            res.status(404).json({ error: "File not found" });
+        if (!newFilePath) {
+            res.status(400).json({ error: "File path is required" });
+            return;
+        }
+
+        const resolvedPath = path.resolve(ROOT_DIR, newFilePath);
+        if (!resolvedPath.startsWith(ROOT_DIR) || !fs.existsSync(resolvedPath)) {
+            res.status(403).json({ error: "Access to the file is forbidden or file not found" });
             return;
         }
 
         // Set new file path
-        filePath = newFilePath;
+        filePath = resolvedPath;
 
         // Initialize collaboration for new document
-        const documentId = path.basename(newFilePath, ".md");
-        collaborationManager.initializeDocument(documentId, newFilePath);
+        const documentId = path.basename(resolvedPath, ".md");
+        collaborationManager.initializeDocument(documentId, resolvedPath);
 
         // Load content into collaboration manager
-        const content = fs.readFileSync(newFilePath, "utf-8");
+        const content = fs.readFileSync(resolvedPath, "utf-8");
         collaborationManager.setDocumentContent(documentId, content);
-
-        // Render to clients
-        renderFileToClients(newFilePath!);
 
         res.json({
             success: true,
@@ -1196,28 +1199,6 @@ app.get("/events", (req: Request, res: Response) => {
 // Serve static files AFTER API routes to avoid conflicts
 app.use(express.static(staticPath));
 
-function renderFileToClients(filePath: string) {
-    // SSE should only send JSON events, not HTML content
-    // HTML content is served via HTTP endpoints, not SSE
-
-    const documentName = filePath ? path.basename(filePath, ".md") : "default";
-
-    // Send a JSON event to notify clients of document changes
-    const event = {
-        type: "documentUpdated",
-        documentName: documentName,
-        timestamp: Date.now(),
-    };
-
-    clients.forEach((client) => {
-        try {
-            client.write(`data: ${JSON.stringify(event)}\n\n`);
-        } catch (error) {
-            console.error("[SSE] Failed to send event to client:", error);
-        }
-    });
-}
-
 process.on("message", (message: any) => {
     if (message.type == "setFile") {
         if (message.filePath) {
@@ -1275,9 +1256,6 @@ process.on("message", (message: any) => {
                     );
                 });
             }
-
-            // initial render/reset for clients
-            renderFileToClients(filePath!);
         } else {
             // No file mode - initialize with default content using authoritative document
             filePath = null;
@@ -1341,9 +1319,6 @@ Start typing to see the editor in action!
                     `Authoritative Y.js document ${documentId} already has content: ${ytext.length} chars`,
                 );
             }
-
-            // Initial render for clients with default content
-            renderFileToClients("");
         }
     } else if (message.type == "applyOperations") {
         // Send operations to frontend

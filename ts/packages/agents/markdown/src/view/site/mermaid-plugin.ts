@@ -292,11 +292,8 @@ const mermaidRenderer = $prose(() => {
                                 error instanceof Error
                                     ? error.message
                                     : "Unknown error";
-                            const escapedErrorMessage =
-                                document.createTextNode(
-                                    errorMessage,
-                                ).textContent;
-                            errorContainer.innerHTML = `<div class="mermaid-error-content"><strong>⚠️ Mermaid Error:</strong><p>${escapedErrorMessage}</p></div>`;
+                            const sanitizedErrorMessage = DOMPurify.sanitize(errorMessage);;
+                            errorContainer.innerHTML = `<div class="mermaid-error-content"><strong>⚠️ Mermaid Error:</strong><p>${sanitizedErrorMessage}</p></div>`;
                             errorContainer.style.display = "block";
                             diagramContainer.innerHTML = "";
                         }
