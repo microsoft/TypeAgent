@@ -46,6 +46,7 @@ from .query import (
     SelectTopNExpr,
     SelectTopNKnowledgeGroupExpr,
     TextRangeSelector,
+    TextRangesInDateRangeSelector,
     WhereSemanticRefExpr,
     is_conversation_searchable,
     match_entity_name_or_type,

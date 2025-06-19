@@ -21,6 +21,8 @@ from .collections import (
 )
 from .common import is_search_term_wildcard
 from .interfaces import (
+    Datetime,
+    DateRange,
     IConversation,
     IMessage,
     IMessageCollection,
@@ -70,7 +72,29 @@ def is_conversation_searchable(conversation: IConversation) -> bool:
     )
 
 
-# TODO: get_text_range_for_date_range
+def get_text_range_for_date_range(
+    conversation: IConversation,
+    date_range: DateRange,
+) -> TextRange | None:
+    messages = conversation.messages
+    message_count = len(messages)
+    range_start_ordinal: MessageOrdinal = -1
+    range_end_ordinal = range_start_ordinal
+    for message in messages:
+        if Datetime.fromisoformat(message.timestamp) in date_range:
+            if range_start_ordinal < 0:
+                range_start_ordinal = message.ordinal
+            range_end_ordinal = message.ordinal
+        else:
+            if range_start_ordinal >= 0:
+                # We have a range, so break.
+                break
+    if range_start_ordinal >= 0:
+        return TextRange(
+            start=TextLocation(range_start_ordinal),
+            end=TextLocation(range_end_ordinal + 1),
+        )
+    return None
 
 
 def get_matching_term_for_text(search_term: SearchTerm, text: str) -> Term | None:
@@ -729,7 +753,37 @@ class GetScopeExpr(QueryOpExpr[TextRangesInScope]):
 
 
 # TODO: SelectInScopeExpr
-# TODO: TextRangesInDateRangeSelector
+
+
+@dataclass
+class TextRangesInDateRangeSelector(IQueryTextRangeSelector):
+    date_range_in_scope: DateRange
+
+    def eval(
+        self,
+        context: QueryEvalContext,
+        semantic_refs: SemanticRefAccumulator | None = None,
+    ) -> TextRangeCollection | None:
+        """Evaluate the selector and return text ranges in the specified date range."""
+        text_ranges_in_scope = TextRangeCollection()
+
+        if context.timestamp_index is not None:
+            text_ranges = context.timestamp_index.lookup_range(
+                self.date_range_in_scope,
+            )
+            for time_range in text_ranges:
+                text_ranges_in_scope.add_range(time_range.range)
+        else:
+            text_range = get_text_range_for_date_range(
+                context.conversation,
+                self.date_range_in_scope,
+            )
+            if text_range is not None:
+                text_ranges_in_scope.add_range(text_range)
+
+        return text_ranges_in_scope
+
+
 # TODO: TextRangesPredicateSelector
 # TODO: TextRangesWithTagSelector
 # TODO: TextRangesFromSemanticRefsSelector
