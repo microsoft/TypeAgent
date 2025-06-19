@@ -58,10 +58,10 @@ All of these stages are at least partially implemented
 (though only the simplest form of answer generation),
 so we have some end-to-end functionality.
 
-The TODO items include:
+The TODO items include (in no particular order):
 
+- Fix handling of datetime range queries.
 - Use fallback query and other fallback stuff in search_conv*_w*_lang*.
-- Support debug context there.
 - Change the context to be text, including message texts and timestamps,
   rather than JSON (and especially not just semantic ref ordinals).
 - Property translate time range filters.

@@ -71,7 +71,7 @@ class LanguageQueryCompileOptions:
     exact_scope: bool = False  # Is fuzzy matching enabled when applying scope?
     verb_scope: bool = True
     term_filter: Callable[[str], bool] | None = None  # To ignore noise terms
-    # Debug flags
+    # Debug flags:
     apply_scope: bool = True  # False to turn off scope matching entirely
 
 
@@ -82,15 +82,26 @@ class LanguageSearchOptions(SearchOptions):
     model_instructions: list[typechat.PromptSection] | None = None
 
 
+@dataclass
+class LanguageSearchDebugContext:
+    # Query returned by the LLM:
+    search_query: SearchQuery | None = None
+    # What search_query was compiled into:
+    search_query_expr: list[SearchQueryExpr] | None = None
+    # For each expr in searchQueryExpr, returns if a raw text similarity match was used:
+    # TODO: used_similarity_fallback: list[bool] | None = None
+
+
 # NOTE: Arguments 2 and 3 are reversed compared to the TypeScript version
 # for consistency with other similar functions in this file.
 async def search_conversation_with_language(
+    # TODO: Add comments to the parameters (copy from @param in TS code).
     conversation: IConversation,
     query_translator: SearchQueryTranslator,
     search_text: str,
     options: LanguageSearchOptions | None = None,
     lang_search_filter: LanguageSearchFilter | None = None,
-    # debug_context: ...  # TODO?
+    debug_context: LanguageSearchDebugContext | None = None,
 ) -> typechat.Result[list[ConversationSearchResult]]:
     lang_query_result = await search_query_expr_from_language(
         conversation,
@@ -98,12 +109,13 @@ async def search_conversation_with_language(
         search_text,
         options,
         lang_search_filter,
-        # debug_context,  # TODO?
+        debug_context,
     )
     if not isinstance(lang_query_result, typechat.Success):
         return lang_query_result
     search_query_exprs = lang_query_result.value.query_expressions
-    # TODO: Use debug_context.
+    if debug_context:
+        debug_context.search_query_expr = search_query_exprs
     # TODO: Compile fallback query.
     search_results: list[ConversationSearchResult] = []
     for search_query_expr in search_query_exprs:
@@ -117,12 +129,13 @@ async def search_conversation_with_language(
 
 
 async def search_query_expr_from_language(
+    # TODO: Add comments to the parameters (copy from @param in TS code).
     conversation: IConversation,
     translator: SearchQueryTranslator,
     query_text: str,
     options: LanguageSearchOptions | None = None,
     lang_search_filter: LanguageSearchFilter | None = None,
-    # debug_context: ...  # TODO?
+    debug_context: LanguageSearchDebugContext | None = None,
 ) -> typechat.Result[LanguageQueryExpr]:
     query_result = await search_query_from_language(
         conversation,
@@ -133,7 +146,8 @@ async def search_query_expr_from_language(
     if not isinstance(query_result, typechat.Success):
         return query_result
     query = query_result.value
-    # TODO: Use debug_context.
+    if debug_context:
+        debug_context.search_query = query
     options = options or LanguageSearchOptions()
     query_expressions = compile_search_query(
         conversation,
