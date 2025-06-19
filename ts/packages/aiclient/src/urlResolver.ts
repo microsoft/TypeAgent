@@ -30,7 +30,7 @@ export async function resolveURLWithSearch(site: string, groundingConfig: bingWi
         new DefaultAzureCredential(),
     );
 
-    const agent = await ensureAgent(groundingConfig, project);
+    const agent = await ensureResolverAgent(groundingConfig, project);
 
     if (!agent) {
         throw new Error(
@@ -102,7 +102,7 @@ export async function resolveURLWithSearch(site: string, groundingConfig: bingWi
 /*
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
-async function ensureAgent(
+async function ensureResolverAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
 ): Promise<Agent | undefined> {
@@ -111,11 +111,11 @@ async function ensureAgent(
             groundingConfig.urlResolutionAgentId!,
         );
     } catch (e) {
-        return await createAgent(groundingConfig, project);
+        return await createResolverAgent(groundingConfig, project);
     }
 }
 
-async function createAgent(
+async function createResolverAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
 ): Promise<Agent> {

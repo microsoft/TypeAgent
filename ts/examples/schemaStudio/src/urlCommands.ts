@@ -47,16 +47,27 @@ export function createURLCommands(studio: SchemaStudio): CommandHandler {
         const groundingConfig = bingWithGrounding.apiSettingsFromEnv();
 
         // Start checking each URL
+        let passCount = 0;
+        let failCount = 0; 
         for (const url of urls) {
             const temp = url.split("\t"); 
             const utterance = temp[0].trim();
             const site = temp[1].trim();
             
             const resolved = await urlResolver.resolveURLWithSearch(utterance, groundingConfig);
+            let passFail = "";
 
-            io.writer.writeLine(`Resolved '${utterance}' to '${resolved}' (expected: ${site})`);
+            if (resolved !== site) {
+                passFail = "FAIL";
+                failCount++;
+            } else {
+                passFail = "PASS";
+                passCount++;
+            }
 
-            fs.appendFileSync("resolved.txt", `${utterance}\t${site}\t${resolved}\n`);
+            io.writer.writeLine(`${passFail}: Resolved '${utterance}' to '${resolved}' (expected: ${site})`);
+
+            fs.appendFileSync("resolved.txt", `${passFail}\t${utterance}\t${site}\t${resolved}\n`);
 
             // if (resolved?.toLocaleLowerCase().trim() === site.toLocaleLowerCase().trim()) {
             //     io.writer.write(`Resolved URL: ${resolved}`);
@@ -77,6 +88,9 @@ export function createURLCommands(studio: SchemaStudio): CommandHandler {
             // For now, we just log the utterance and site
             //io.writer.write(`Utterance: ${utterance}, Site: ${site}`);
         }
+
+        io.writer.writeLine("URL resolution complete. Results written to resolved.txt");
+        io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
 
         // const list = await generateOutputTemplate(
         //     studio.model,
