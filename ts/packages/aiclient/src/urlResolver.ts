@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { bingWithGrounding } from "aiclient";
+import { agents, bingWithGrounding } from "aiclient";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import {
@@ -115,29 +115,15 @@ async function ensureResolverAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
 ): Promise<Agent | undefined> {
-    try {
-        return await project.agents.getAgent(
-            groundingConfig.urlResolutionAgentId!,
-        );
-    } catch (e) {
-        return await createResolverAgent(groundingConfig, project);
-    }
-}
 
-async function createResolverAgent(
-    groundingConfig: bingWithGrounding.ApiSettings,
-    project: AIProjectClient,
-): Promise<Agent> {
-    try {
-        // connection id is in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/typeagent-test-agent/connections/<CONNECTION NAME>>
-        const bingTool = ToolUtility.createBingGroundingTool([
-            {
-                connectionId: groundingConfig.connectionId!,
-            },
-        ]);
 
-        // try to create the agent
-        return await project.agents.createAgent("gpt-4o", {
+    // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
+
+    return await agents.ensureAgent(
+        groundingConfig.validatorAgentId!, 
+        project,
+        {
+            model: "gpt-4o",
             name: "TypeAgent_URLResolverAgent",
             description: "Auto created URL Resolution Agent",
             temperature: 0.01,
@@ -154,12 +140,60 @@ interface Response {
     explanation: string;
     bingSearchQuery: string;
 }`,
-            tools: [bingTool.definition],
-        });
-    } catch (e) {
-        debug(`Error creating agent: ${e}`);
-        throw e;
-    }
+            tools: [ToolUtility.createBingGroundingTool([
+                {
+                    connectionId: groundingConfig.connectionId!,
+                },
+            ]).definition],
+        }
+    );
+}
+
+/*
+ * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
+ */
+async function ensureValidatorAgent(
+    groundingConfig: bingWithGrounding.ApiSettings,
+    project: AIProjectClient,
+): Promise<Agent | undefined> {
+
+
+    // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
+
+    return await agents.ensureAgent(
+        groundingConfig.validatorAgentId!, 
+        project,
+        {
+            model: "gpt-4o",
+            name: "TypeAgent_URLValidatorAgent",
+            description: "Auto created URL Validation Agent",
+            temperature: 0.01,
+            instructions: `
+You are an agent that gets information from the user that includes the web page they requested and the URL they went to.  You are responsible for determining if the provided URL is the one the user requested.   Use the GetHTTPSEndpoint_Tool to get the HTML of the page to ensure the user's intent is being fullfilled.  Call the GetHTTPSEndpoint_Tool to get the HTML of the page to make sure it's what the user wants.
+
+The user's request is supplied as a JSON that conforms to the following TypeScript type:
+
+interface Request {
+  request: string;
+  url: string;
+}
+
+Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
+
+interface Response {
+ originalRequest: string;
+ url: string;
+ urlValidity: "valid" | "invalid" | "indeterminate";
+ explanation: string;
+ httpRequestContent: string;
+}`,
+            tools: [ToolUtility.createBingGroundingTool([
+                {
+                    connectionId: groundingConfig.httpEndpointLogicAppConnectionId!,
+                },
+            ]).definition],
+        }
+    );
 }
 
 export async function validateURL(
@@ -176,10 +210,7 @@ export async function validateURL(
     
 
     try {
-        // TODO: put agent in .env and grounding config
-        const agent = await project.agents.getAgent(
-            "asst_1nWjxBpIs0Z38YKUBsxlYnRZ",
-        );
+        const agent = await ensureValidatorAgent(groundingConfig, project);
         const thread = await project.agents.threads.create();
         
         // the question that needs answering
@@ -195,7 +226,7 @@ export async function validateURL(
                 // Create run
                 const run = await project.agents.runs.createAndPoll(
                     thread.id,
-                    agent.id,
+                    agent!.id,
                     {
                         pollingOptions: {
                             intervalInMs: 1000,
