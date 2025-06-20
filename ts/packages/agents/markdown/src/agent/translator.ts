@@ -63,6 +63,8 @@ export class MarkdownAgent<T extends object> {
     getMarkdownUpdatePrompts(
         currentMarkdown: string | undefined,
         intent: string,
+        cursorPosition?: number,
+        context?: any, // Already deserialized from JSON string
     ) {
         let contentPrompt = [];
         if (currentMarkdown) {
@@ -77,12 +79,26 @@ export class MarkdownAgent<T extends object> {
             });
         }
 
+        // Add cursor position context if available
+        let positionPrompt = [];
+        if (typeof cursorPosition === 'number' && cursorPosition >= 0) {
+            positionPrompt.push({
+                type: "text",
+                text: `
+            The user's cursor is currently at position ${cursorPosition} in the document. 
+            When inserting content, consider this position for context-aware placement.
+            Position 0 means the beginning of the document.
+            `,
+            });
+        }
+
         const promptSections = [
             {
                 type: "text",
                 text: `You are a virtual assistant that helps users edit markdown documents.`,
             },
             ...contentPrompt,
+            ...positionPrompt,
             {
                 type: "text",
                 text: `
@@ -105,10 +121,12 @@ export class MarkdownAgent<T extends object> {
         return promptSections;
     }
 
-    async updateDocument(currentMarkdown: string | undefined, intent: string) {
+    async updateDocument(currentMarkdown: string | undefined, intent: string, cursorPosition?: number, context?: any) {
         const promptSections = this.getMarkdownUpdatePrompts(
             currentMarkdown,
             intent,
+            cursorPosition,
+            context,
         );
 
         this.translator.createRequestPrompt = (input: string) => {
@@ -116,7 +134,6 @@ export class MarkdownAgent<T extends object> {
             return "";
         };
 
-        debug("Prompt Sections: ",  promptSections )
         const response = await this.translator.translate("", [
             { role: "user", content: promptSections as MultimodalPromptContent[] },
         ]);
@@ -127,6 +144,8 @@ export class MarkdownAgent<T extends object> {
         currentMarkdown: string | undefined,
         intent: string,
         onChunk: (chunk: string) => void,
+        cursorPosition?: number,
+        context?: any, // Already deserialized from JSON string
     ) {
         debug("Starting streaming updateDocument");
 
@@ -135,6 +154,8 @@ export class MarkdownAgent<T extends object> {
         const streamingPrompt = this.getStreamingPrompts(
             currentMarkdown,
             intent,
+            cursorPosition,
+            context,
         );
 
         try {
@@ -181,6 +202,7 @@ export class MarkdownAgent<T extends object> {
             const operations = this.convertContentToOperations(
                 accumulatedContent,
                 intent,
+                cursorPosition,
             );
 
             return {
@@ -212,6 +234,7 @@ export class MarkdownAgent<T extends object> {
             const operations = this.convertContentToOperations(
                 accumulatedContent,
                 intent,
+                cursorPosition,
             );
 
             return {
@@ -224,26 +247,32 @@ export class MarkdownAgent<T extends object> {
         }
     }
 
-    getStreamingPrompts(currentMarkdown: string | undefined, intent: string) {
+    getStreamingPrompts(currentMarkdown: string | undefined, intent: string, cursorPosition?: number, context?: any) {
         let contextPrompt = "";
         if (currentMarkdown) {
             contextPrompt = `\n\nCurrent document content:\n${currentMarkdown}\n\n`;
         }
 
+        // Add cursor position context
+        let positionPrompt = "";
+        if (typeof cursorPosition === 'number' && cursorPosition >= 0) {
+            positionPrompt = `The user's cursor is at position ${cursorPosition} in the document. `;
+        }
+
         return [
             {
                 role: "user" as const,
-                content: `You are a helpful assistant that generates markdown content based on user requests.${contextPrompt}User request: ${intent}\n\nPlease generate the requested content directly as markdown text. Do not include any explanations or metadata, just the content that should be added to the document:`,
+                content: `You are a helpful assistant that generates markdown content based on user requests.${contextPrompt}${positionPrompt}User request: ${intent}\n\nPlease generate the requested content directly as markdown text. Do not include any explanations or metadata, just the content that should be added to the document:`,
             },
         ];
     }
 
-    convertContentToOperations(content: string, intent: string) {
+    convertContentToOperations(content: string, intent: string, cursorPosition?: number) {
         // Convert generated content to operations format
         const operations = [
             {
                 type: "insert",
-                position: 0, // Will be set by the handler based on cursor position
+                position: cursorPosition || 0, // Use the actual cursor position
                 content: [
                     {
                         type: "paragraph",

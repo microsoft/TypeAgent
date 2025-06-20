@@ -243,22 +243,28 @@ async function sendUICommandToAgent(
 ): Promise<any> {
     return new Promise((resolve, reject) => {
         const requestId = `ui_cmd_${++commandCounter}`;
+        
+        debug(`[VIEW] Sending UI command to agent: ${command}, requestId: ${requestId}, cursorPosition: ${parameters.context?.position}, context: ${parameters.context ? 'serialized' : 'none'}`);
+        
         const timeout = setTimeout(() => {
             pendingCommands.delete(requestId);
+            debug(`[VIEW] Command ${requestId} timed out after 90 seconds`);
             reject(new Error("Agent command timeout"));
-        }, 30000); // 30 second timeout for LLM operations
+        }, 90000); // 90 second timeout for LLM operations
 
         // Store resolver for this request
         pendingCommands.set(requestId, { resolve, reject, timeout });
 
         // Send command to agent process (parent)
+
         process.send?.({
             type: "uiCommand",
             requestId: requestId,
             command: command,
             parameters: {
                 originalRequest: parameters.originalRequest,
-                context: parameters.context,
+                context: parameters.context ? JSON.stringify(parameters.context) : undefined,
+                cursorPosition: parameters.context?.position, // Explicit cursor position
             },
             timestamp: Date.now(),
         });
@@ -275,11 +281,15 @@ async function sendUICommandToAgentWithStreaming(
 ): Promise<any> {
     return new Promise((resolve, reject) => {
         const requestId = `ui_cmd_${++commandCounter}`;
+        
+        debug(`[VIEW] Sending streaming UI command to agent: ${command}, requestId: ${requestId}, streamId: ${streamId}, cursorPosition: ${parameters.context?.position}, context: ${parameters.context ? 'serialized' : 'none'}`);
+        
         const timeout = setTimeout(() => {
             pendingCommands.delete(requestId);
             activeStreamingSessions.delete(streamId);
+            debug(`[VIEW] Streaming command ${requestId} timed out after 120 seconds`);
             reject(new Error("Agent command timeout"));
-        }, 60000); // 60 second timeout for streaming LLM operations
+        }, 120000); // 120 second timeout for streaming LLM operations
 
         // Store resolver for this request
         pendingCommands.set(requestId, { resolve, reject, timeout, streamId });
@@ -291,7 +301,8 @@ async function sendUICommandToAgentWithStreaming(
             command: command,
             parameters: {
                 originalRequest: parameters.originalRequest,
-                context: parameters.context,
+                context: parameters.context ? JSON.stringify(parameters.context) : undefined,
+                cursorPosition: parameters.context?.position, // Explicit cursor position
                 streamId: streamId,
                 enableStreaming: true,
             },
@@ -307,7 +318,7 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
     markdown: string;
     positionInfo: { position: number; selection?: { from: number; to: number } };
 }> {
-    const maxRetries = 2;
+    const maxRetries = 3; // Increased from 2 to 3
     
     return new Promise((resolve, reject) => {
         const requestId = `markdown_req_${++markdownRequestCounter}`;
@@ -316,16 +327,16 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
             
             if (retryCount < maxRetries && clients.length > 0) {
                 debug(`[MARKDOWN-REQUEST] Timeout, retrying (${retryCount + 1}/${maxRetries})`);
-                // Retry after a short delay
+                // Retry after a longer delay for better reliability
                 setTimeout(() => {
                     requestMarkdownFromClient(retryCount + 1)
                         .then(resolve)
                         .catch(reject);
-                }, 1000);
+                }, 2000 + (retryCount * 1000)); // Exponential backoff: 2s, 3s, 4s
             } else {
                 reject(new Error("Client markdown request timeout"));
             }
-        }, 5000); // 5 second timeout
+        }, 8000); // 8 second timeout (increased from 5s)
 
         // Store resolver for this request
         pendingMarkdownRequests.set(requestId, { resolve, reject, timeout });
@@ -368,10 +379,11 @@ function shouldCommandStream(originalRequest: string): boolean {
     const request = originalRequest.toLowerCase().trim();
 
     // Stream these commands for better UX
-    const streamingCommands = ["/continue", "/augment"];
+    // const streamingCommands = ["/continue"];
+    const streamingCommands = ["/continue2"];
 
     // Don't stream these commands (need complete response)
-    const nonStreamingCommands = ["/diagram", "/test:diagram"];
+    const nonStreamingCommands = ["/diagram","/augment", "/test:diagram"];
 
     // Check non-streaming first (takes precedence)
     if (nonStreamingCommands.some((cmd) => request.startsWith(cmd))) {
@@ -1602,6 +1614,17 @@ Start typing to see the editor in action!
                     content = yText.toString();
                     source = "yjs-fallback";
                     debug(`[VIEW] Retrieved content from Y.js fallback: ${content.length} chars`);
+                    
+                    // If Y.js is also empty, try reading from file as last resort
+                    if (!content && filePath && fs.existsSync(filePath)) {
+                        try {
+                            content = fs.readFileSync(filePath, "utf-8");
+                            source = "file-fallback";
+                            debug(`[VIEW] Retrieved content from file fallback: ${content.length} chars`);
+                        } catch (fileError) {
+                            debug(`[VIEW] File fallback also failed: ${fileError}`);
+                        }
+                    }
                 }
 
                 debug(`[VIEW] Sending document content to agent (source: ${source}, ${content.length} chars)`);
@@ -1627,12 +1650,16 @@ Start typing to see the editor in action!
         })();
     } else if (message.type === "uiCommandResult") {
         // Handle UI command results from agent
+        debug(`[VIEW] Received uiCommandResult for ${message.requestId}, success: ${message.result?.success}`);
+        
         const pending = pendingCommands.get(message.requestId);
         if (pending) {
             clearTimeout(pending.timeout);
             pendingCommands.delete(message.requestId);
             pending.resolve(message.result);
-            debug(`[VIEW] Received result for ${message.requestId}`);
+            debug(`[VIEW] Resolved pending command ${message.requestId}`);
+        } else {
+            debug(`[VIEW] No pending command found for ${message.requestId}`);
         }
     } else if (message.type === "streamingContent") {
         // Handle streaming content chunk from agent

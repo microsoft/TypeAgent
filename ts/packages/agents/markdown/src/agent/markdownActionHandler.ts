@@ -51,7 +51,7 @@ async function handleUICommand(
     parameters: any,
     context: ActionContext<MarkdownActionContext>,
 ): Promise<UICommandResult> {
-    debug(`[AGENT] Processing UI command: ${command}`);
+    debug(`[AGENT] Processing UI command: ${command}, cursorPosition: ${parameters.cursorPosition}, context: ${parameters.context ? 'received' : 'none'}, originalRequest: ${parameters.originalRequest}`);
 
     try {
         // Check if streaming is enabled for this command
@@ -69,6 +69,8 @@ async function handleUICommand(
                 actionName: "streamingUpdateDocument",
                 parameters: {
                     originalRequest: parameters.originalRequest,
+                    context: parameters.context, // Already serialized by view
+                    cursorPosition: parameters.cursorPosition, // Explicit position
                 },
             };
 
@@ -92,6 +94,8 @@ async function handleUICommand(
                 actionName: "updateDocument",
                 parameters: {
                     originalRequest: parameters.originalRequest,
+                    context: parameters.context, // Already serialized by view
+                    cursorPosition: parameters.cursorPosition, // Explicit position
                 },
             };
 
@@ -210,6 +214,7 @@ async function handleUICommandViaIPC(
     message: any,
     agentContext: MarkdownActionContext,
 ): Promise<UICommandResult> {
+    debug("Recieved UI command ", message)
     // Create minimal action context for UI commands
     const actionContext = {
         sessionContext: {
@@ -276,6 +281,8 @@ async function updateMarkdownContext(
                 );
             }
         }
+
+        setCurrentAgentContext(context.agentContext);
     } else {
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
@@ -332,6 +339,21 @@ async function handleStreamingMarkdownAction(
             "originalRequest" in action.parameters
                 ? action.parameters.originalRequest
                 : "";
+        
+        const cursorPosition = "cursorPosition" in action.parameters
+            ? action.parameters.cursorPosition
+            : undefined;
+        
+        const context = "context" in action.parameters && action.parameters.context
+            ? (() => {
+                try {
+                    return JSON.parse(action.parameters.context);
+                } catch (error) {
+                    debug(`[AGENT] Failed to parse context JSON: ${error}, using undefined`);
+                    return undefined;
+                }
+            })()
+            : undefined;
 
         const response = await agent.updateDocumentWithStreaming(
             markdownContent,
@@ -340,6 +362,8 @@ async function handleStreamingMarkdownAction(
                 // Send chunk to view process for streaming to client
                 sendStreamingChunkToView(streamId, chunk, actionContext);
             },
+            cursorPosition,
+            context,
         );
 
         if (response.success) {
@@ -533,9 +557,31 @@ async function handleMarkdownAction(
             }
 
             // Handle synchronous requests through the agent
+            const originalRequest =
+                "originalRequest" in action.parameters
+                    ? action.parameters.originalRequest
+                    : "";
+            
+            const cursorPosition = "cursorPosition" in action.parameters
+                ? action.parameters.cursorPosition
+                : undefined;
+            
+            const context = "context" in action.parameters && action.parameters.context
+                ? (() => {
+                    try {
+                        return JSON.parse(action.parameters.context);
+                    } catch (error) {
+                        debug(`[AGENT] Failed to parse context JSON: ${error}, using undefined`);
+                        return undefined;
+                    }
+                })()
+                : undefined;
+
             const response = await agent.updateDocument(
                 markdownContent,
-                action.parameters.originalRequest,
+                originalRequest,
+                cursorPosition,
+                context,
             );
 
             if (response.success) {
@@ -758,7 +804,7 @@ async function getDocumentContentFromView(
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             reject(new Error("Timeout getting document content from view"));
-        }, 8000);
+        }, 15000); // 15 second timeout
 
         const responseHandler = (message: any) => {
             if (message.type === "documentContent") {
@@ -820,7 +866,7 @@ export async function createViewServiceHost(filePath: string, port: number) {
                     filePath: path.basename(filePath),
                 });
 
-                childProcess.on("message", function (message) {
+                childProcess.on("message", function (message: any) {
                     if (message === "Success") {
                         resolve(childProcess);
                     } else if (message === "Failure") {
@@ -850,16 +896,17 @@ let currentAgentContext: MarkdownActionContext | null = null;
 // Store agent context for UI command processing
 export function setCurrentAgentContext(context: MarkdownActionContext) {
     currentAgentContext = context;
-}
 
-// Handle UI commands from view process
-if (typeof process !== "undefined" && process.on) {
-    process.on("message", (message: any) => {
+    const viewProcess = context.viewProcess;
+
+     if( typeof viewProcess !== "undefined" && viewProcess.on) {
+    viewProcess.on("message", (message: any) => {
         if (message.type === "uiCommand" && currentAgentContext) {
-            debug(`[AGENT] Received UI command: ${message.command}`);
+            debug(`[AGENT] Received UI command: ${message.command}, requestId: ${message.requestId}, cursorPosition: ${message.parameters?.cursorPosition}, context: ${message.parameters?.context ? 'serialized' : 'none'}`);
 
             handleUICommandViaIPC(message, currentAgentContext)
                 .then((result) => {
+                    debug(`[AGENT] UI command ${message.requestId} completed successfully`);
                     process.send?.({
                         type: "uiCommandResult",
                         requestId: message.requestId,
@@ -867,6 +914,7 @@ if (typeof process !== "undefined" && process.on) {
                     });
                 })
                 .catch((error) => {
+                    debug(`[AGENT] UI command ${message.requestId} failed: ${error.message}`);
                     process.send?.({
                         type: "uiCommandResult",
                         requestId: message.requestId,
@@ -881,4 +929,5 @@ if (typeof process !== "undefined" && process.on) {
                 });
         }
     });
+}
 }
