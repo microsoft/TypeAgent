@@ -828,7 +828,7 @@ export function addBatchHandler(app: InteractiveApp) {
 
     function batchDef(): CommandMetadata {
         return {
-            description: "Run a batch file",
+            description: "Run a batch file of commands",
             args: {
                 filePath: {
                     description: "Batch file path.",

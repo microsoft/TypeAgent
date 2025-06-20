@@ -48,6 +48,16 @@ You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 @kpAnswer --query "List the names of all books"
 ```
 
+### Batching commands
+
+You can place commands in a text file and run them as a batch by using the **batch** command.
+
+```
+@batch --filePath <>
+```
+
+Type batch --? for options.
+
 ### Notes
 
 - Requires file system access. Creates test directories under **/data/testChat**
