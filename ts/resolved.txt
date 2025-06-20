@@ -1,0 +1,155 @@
+get the wikipedia page for wikipedia	wikipedia.org	https://en.wikipedia.org/wiki/Wikipedia
+get the wikipedia page for youtube	youtube.com	https://en.wikipedia.org/wiki/YouTube
+get the wikipedia page for instagram	instagram.com	https://en.wikipedia.org/wiki/Instagram
+get the wikipedia page for google	google.com	https://en.wikipedia.org/wiki/Google
+get the wikipedia page for facebook	facebook.com	https://en.wikipedia.org/wiki/Facebook
+get the wikipedia page for reddit	reddit.com	https://en.wikipedia.org/wiki/Reddit
+get the wikipedia page for imdb	imdb.com	https://en.wikipedia.org/wiki/IMDb
+get the wikipedia page for merriam-webster	merriam-webster.com	https://en.wikipedia.org/wiki/Merriam-Webster
+get the wikipedia page for apple	apple.com	https://en.wikipedia.org/wiki/Apple
+get the wikipedia page for cambridge	cambridge.org	https://en.wikipedia.org/wiki/Cambridge
+get the wikipedia page for amazon	amazon.com	https://en.wikipedia.org/wiki/Amazon_(company)
+get the wikipedia page for pinterest	pinterest.com	https://en.wikipedia.org/wiki/Pinterest
+get the wikipedia page for tripadvisor	tripadvisor.com	https://en.wikipedia.org/wiki/Tripadvisor
+get the wikipedia page for britannica	britannica.com	https://en.wikipedia.org/wiki/Encyclop%C3%A6dia_Britannica
+get the wikipedia page for x	x.com	https://en.wikipedia.org/wiki/X
+get the wikipedia page for fandom	fandom.com	https://en.wikipedia.org/wiki/Fandom_(website)
+get the wikipedia page for twitter	twitter.com	https://en.wikipedia.org/wiki/Twitter
+get the wikipedia page for yelp	yelp.com	https://en.wikipedia.org/wiki/Yelp
+get the wikipedia page for espn	espn.com	https://en.wikipedia.org/wiki/ESPN
+get the wikipedia page for tiktok	tiktok.com	https://en.wikipedia.org/wiki/TikTok
+get the wikipedia page for linkedin	linkedin.com	https://en.wikipedia.org/wiki/LinkedIn
+get the wikipedia page for clevelandclinic	clevelandclinic.org	https://en.wikipedia.org/wiki/Cleveland_Clinic
+get the wikipedia page for espncricinfo	espncricinfo.com	https://en.wikipedia.org/wiki/ESPNcricinfo
+get the wikipedia page for yahoo	yahoo.com	https://en.wikipedia.org/wiki/Yahoo
+get the wikipedia page for quora	quora.com	https://en.wikipedia.org/wiki/Quora
+get the wikipedia page for cricbuzz	cricbuzz.com	https://en.wikipedia.org/wiki/Cricbuzz
+get the wikipedia page for amazon	amazon.in	https://en.wikipedia.org/wiki/Amazon_(company)
+get the wikipedia page for mayoclinic	mayoclinic.org	https://en.wikipedia.org/wiki/Mayo_Clinic
+get the wikipedia page for dictionary	dictionary.com	https://en.wikipedia.org/wiki/Dictionary
+get the wikipedia page for weather	weather.com	https://en.wikipedia.org/wiki/Weather
+get the wikipedia page for booking	booking.com	https://en.wikipedia.org/wiki/Booking.com
+get the wikipedia page for pornhub	pornhub.com	get the wikipedia page for pornhub
+get the wikipedia page for nih	nih.gov	https://en.wikipedia.org/wiki/National_Institutes_of_Health
+get the wikipedia page for accuweather	accuweather.com	https://en.wikipedia.org/wiki/AccuWeather
+get the wikipedia page for byjus	byjus.com	https://en.wikipedia.org/wiki/Byju%27s
+get the wikipedia page for collinsdictionary	collinsdictionary.com	https://en.wikipedia.org/wiki/Collins_English_Dictionary
+get the wikipedia page for healthline	healthline.com	https://en.wikipedia.org/wiki/Healthline
+get the wikipedia page for xe	xe.com	https://en.wikipedia.org/wiki/XE.com
+get the wikipedia page for moneycontrol	moneycontrol.com	https://en.wikipedia.org/wiki/Network18_Group#Digital_and_publishing_divisions
+get the wikipedia page for yahoo	yahoo.co.jp	https://en.wikipedia.org/wiki/Yahoo
+get the wikipedia page for microsoft	microsoft.com	https://en.wikipedia.org/wiki/Microsoft
+get the wikipedia page for wise	wise.com	https://en.wikipedia.org/wiki/Wise_(company)
+get the wikipedia page for wiktionary	wiktionary.org	https://en.wikipedia.org/wiki/Wiktionary
+get the wikipedia page for rottentomatoes	rottentomatoes.com	https://en.wikipedia.org/wiki/Rotten_Tomatoes
+get the wikipedia page for whatsapp	whatsapp.com	https://en.wikipedia.org/wiki/WhatsApp
+get the wikipedia page for indiatimes	indiatimes.com	https://en.wikipedia.org/wiki/Indiatimes_shopping
+get the wikipedia page for globo	globo.com	https://en.wikipedia.org/wiki/Grupo_Globo
+get the wikipedia page for spotify	spotify.com	https://en.wikipedia.org/wiki/Spotify
+get the wikipedia page for walmart	walmart.com	https://en.wikipedia.org/wiki/Walmart
+get the wikipedia page for deepl	deepl.com	https://en.wikipedia.org/wiki/DeepL_Translator
+get the wikipedia page for webmd	webmd.com	get the wikipedia page for webmd
+get the wikipedia page for timeanddate	timeanddate.com	
+get the wikipedia page for indeed	indeed.com	https://en.wikipedia.org/wiki/Indeed
+get the wikipedia page for netflix	netflix.com	https://en.wikipedia.org/wiki/Netflix
+get the wikipedia page for xvideos	xvideos.com	get the wikipedia page for xvideos
+get the wikipedia page for xhamster	xhamster.desi	get the wikipedia page for xhamster
+get the wikipedia page for desivocabulary	vocabulary.com	
+get the wikipedia page for rakuten	rakuten.co.jp	https://en.wikipedia.org/wiki/Rakuten
+get the wikipedia page for flipkart	flipkart.com	https://en.wikipedia.org/wiki/Flipkart
+get the wikipedia page for bbc	bbc.com	get the wikipedia page for bbc
+get the wikipedia page for justdial	justdial.com	https://en.wikipedia.org/wiki/Justdial
+get the wikipedia page for shabdkosh	shabdkosh.com	https://hi.wikipedia.org/wiki/%E0%A4%B6%E0%A4%AC%E0%A5%8D%E0%A4%A6%E0%A4%95%E0%A5%8B%E0%A4%B6
+get the wikipedia page for adobe	adobe.com	https://en.wikipedia.org/wiki/Adobe_Inc.
+get the wikipedia page for detik	detik.com	https://en.wikipedia.org/wiki/Detik.com
+get the wikipedia page for nytimes	nytimes.com	https://en.wikipedia.org/wiki/The_New_York_Times
+get the wikipedia page for bbc	bbc.co.uk	https://en.wikipedia.org/wiki/BBC
+get the wikipedia page for homedepot	homedepot.com	https://en.wikipedia.org/wiki/Home_Depot
+get the wikipedia page for makemytrip	makemytrip.com	https://en.wikipedia.org/wiki/MakeMyTrip
+get the wikipedia page for reverso	reverso.net	https://en.wikipedia.org/wiki/Reverso_(language_tools)
+get the wikipedia page for uol	uol.com.br	https://en.wikipedia.org/wiki/Universo_Online
+get the wikipedia page for tripadvisor	tripadvisor.in	https://en.wikipedia.org/wiki/Tripadvisor
+get the wikipedia page for medlineplus	medlineplus.gov	https://en.wikipedia.org/wiki/MedlinePlus
+get the wikipedia page for nba	nba.com	https://en.wikipedia.org/wiki/National_Basketball_Association
+get the wikipedia page for medicalnewstoday	medicalnewstoday.com	https://en.wikipedia.org/wiki/Medical_News_Today
+get the wikipedia page for amazon	amazon.co.jp	https://en.wikipedia.org/wiki/Amazon_(company)
+get the wikipedia page for hotels	hotels.com	https://en.wikipedia.org/wiki/Hotel
+get the wikipedia page for istockphoto	istockphoto.com	https://en.wikipedia.org/wiki/IStock
+get the wikipedia page for rapidtables	rapidtables.com	
+get the wikipedia page for genius	genius.com	https://en.wikipedia.org/wiki/Genius_(company)
+get the wikipedia page for tabelog	tabelog.com	https://en.wikipedia.org/wiki/Tabelog
+get the wikipedia page for ebay	ebay.com	https://en.wikipedia.org/wiki/EBay
+get the wikipedia page for thesaurus	thesaurus.com	https://en.wikipedia.org/wiki/Thesaurus
+get the wikipedia page for groww	groww.in	https://en.wikipedia-on-ipfs.org/wiki/Groww
+get the wikipedia page for canva	canva.com	https://en.wikipedia.org/wiki/Canva
+get the wikipedia page for uefa	uefa.com	https://en.wikipedia.org/wiki/UEFA
+get the wikipedia page for mlb	mlb.com	https://en.wikipedia.org/wiki/Major_League_Baseball
+get the wikipedia page for investopedia	investopedia.com	https://en.wikipedia.org/wiki/Investopedia
+get the wikipedia page for olympics	olympics.com	https://en.wikipedia.org/wiki/Olympic_Games
+get the wikipedia page for www.nhs	www.nhs.uk	https://en.wikipedia.org/wiki/National_Health_Service
+get the wikipedia page for google	google.co.in	https://en.wikipedia.org/wiki/Google
+get the wikipedia page for amazon	amazon.de	https://en.wikipedia.org/wiki/Amazon_(company)
+get the wikipedia page for namu	namu.wiki	https://en.wikipedia.org/wiki/Namu
+get the wikipedia page for screener	screener.in	https://en.wikipedia.org/wiki/Screener_(promotional)
+get the wikipedia page for hindustantimes	hindustantimes.com	get the wikipedia page for hindustantimes
+get the wikipedia page for xnxx	xnxx.com	get the wikipedia page for xnxx
+get the wikipedia page for sciencedirect	sciencedirect.com	https://en.wikipedia.org/wiki/ScienceDirect
+get the wikipedia page for primevideo	primevideo.com	https://en.wikipedia.org/wiki/Amazon_Prime_Video
+get the wikipedia page for expedia	expedia.com	https://en.wikipedia.org/wiki/Expedia
+get the wikipedia page for xosodaiphat	xosodaiphat.com	
+get the wikipedia page for study	study.com	https://en.wikipedia.org/wiki/Study
+get the wikipedia page for etsy	etsy.com	https://en.wikipedia.org/wiki/Etsy
+get the wikipedia page for allrecipes	allrecipes.com	https://en.wikipedia.org/wiki/Allrecipes
+get the wikipedia page for amazon	amazon.co.uk	https://en.wikipedia.org/wiki/Amazon_(company)
+get the wikipedia page for target	target.com	https://en.wikipedia.org/wiki/Target_Corporation
+get the wikipedia page for shutterstock	shutterstock.com	https://en.wikipedia.org/wiki/Shutterstock
+get the wikipedia page for mercadolivre	mercadolivre.com.br	https://en.wikipedia.org/wiki/Mercado_Libre
+get the wikipedia page for forbes	forbes.com	https://en.wikipedia.org/wiki/Forbes
+get the wikipedia page for github	github.com	https://en.wikipedia.org/wiki/Github
+get the wikipedia page for sofascore	sofascore.com	https://en.wikipedia.org/wiki/Sofascore
+get the wikipedia page for tokopedia	tokopedia.com	https://en.wikipedia.org/wiki/Tokopedia
+get the wikipedia page for waze	waze.com	https://en.wikipedia.org/wiki/Waze
+get the wikipedia page for ndtv	ndtv.com	https://en.wikipedia.org/wiki/NDTV
+get the wikipedia page for tripadvisor	tripadvisor.co.uk	https://en.wikipedia.org/wiki/Tripadvisor
+get the wikipedia page for cookpad	cookpad.com	https://en.wikipedia.org/wiki/Cookpad
+get the wikipedia page for unsplash	unsplash.com	https://en.wikipedia.org/wiki/Unsplash
+get the wikipedia page for xhamster	xhamster.com	get the wikipedia page for xhamster
+get the wikipedia page for shopee	shopee.co.id	https://en.wikipedia.org/wiki/Shopee
+get the wikipedia page for dpbossss.services	dpbossss.services	
+get the wikipedia page for mapquest	mapquest.com	https://en.wikipedia.org/wiki/MapQuest
+get the wikipedia page for nfl	nfl.com	https://en.wikipedia.org/wiki/National_Football_League
+get the wikipedia page for usatoday	usatoday.com	https://en.wikipedia.org/wiki/USA_Today
+get the wikipedia page for unitconverters	unitconverters.net	https://en.wikipedia.org/wiki/Conversion_of_units
+get the wikipedia page for zillow	zillow.com	https://en.wikipedia.org/wiki/Zillow
+get the wikipedia page for freepik	freepik.com	https://en.wikipedia.org/wiki/Freepik
+get the wikipedia page for kompas	kompas.com	https://en.wikipedia.org/wiki/Kompas
+get the wikipedia page for steampowered	steampowered.com	https://en.wikipedia.org/wiki/Steam_(service)
+get the wikipedia page for marketwatch	marketwatch.com	https://en.wikipedia.org/wiki/MarketWatch
+get the wikipedia page for kumparan	kumparan.com	https://id.wikipedia.org/wiki/Kumparan_(situs_web)
+get the wikipedia page for investing	investing.com	https://en.wikipedia.org/wiki/Investment
+get the wikipedia page for geeksforgeeks	geeksforgeeks.org	
+get the wikipedia page for ikea	ikea.com	https://en.wikipedia.org/wiki/IKEA
+get the wikipedia page for premierleague	premierleague.com	https://en.wikipedia.org/wiki/Premier_League
+get the wikipedia page for cnn	cnn.com	https://en.wikipedia.org/wiki/CNN
+get the wikipedia page for google	google.co.id	https://en.wikipedia.org/wiki/Google
+get the wikipedia page for mcdonalds	mcdonalds.com	https://en.wikipedia.org/wiki/McDonald%27s
+get the wikipedia page for zomato	zomato.com	https://en.wikipedia.org/wiki/Zomato
+get the wikipedia page for theguardian	theguardian.com	https://en.wikipedia.org/wiki/The_Guardian
+get the wikipedia page for 1mg	1mg.com	https://en.wikipedia.org/wiki/Tata_1mg
+get the wikipedia page for usnews	usnews.com	https://en.wikipedia.org/wiki/U.S._News_%26_World_Report
+get the wikipedia page for cuemath	cuemath.com	
+get the wikipedia page for rae	rae.es	https://en.wikipedia.org/wiki/Rae_(given_name)
+get the wikipedia page for openai	openai.com	https://en.wikipedia.org/wiki/OpenAI
+get the wikipedia page for cbsnews	cbsnews.com	https://en.wikipedia.org/wiki/CBS_News
+get the wikipedia page for easyhindityping	easyhindityping.com	
+get the wikipedia page for satta-king-fast	satta-king-fast.com	
+get the wikipedia page for testbook	testbook.com	https://en.wikipedia.org/wiki/Testbook
+get the wikipedia page for people	people.com	https://en.wikipedia.org/wiki/People
+get the wikipedia page for hinkhoj	hinkhoj.com	
+get the wikipedia page for skysports	skysports.com	https://en.wikipedia.org/wiki/Sky_Sports
+get the wikipedia page for nike	nike.com	https://en.wikipedia.org/wiki/Nike,_Inc.
+get the wikipedia page for wordreference	wordreference.com	https://en.wikipedia.org/wiki/WordReference.com
+get the wikipedia page for myntra	myntra.com	https://en.wikipedia.org/wiki/Myntra
+get the wikipedia page for samsung	samsung.com	https://en.wikipedia.org/wiki/Samsung
+get the wikipedia page for scribd	scribd.com	https://en.wikipedia.org/wiki/Scribd
+get the wikipedia page for cbssports	cbssports.com	https://en.wikipedia.org/wiki/CBS_Sports

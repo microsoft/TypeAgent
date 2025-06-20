@@ -96,6 +96,11 @@ export function createURLValidateCommands(studio: SchemaStudio): CommandHandler 
                 description: "If true, will process all URLs in the file",
                 type: "boolean",
                 defaultValue: true,
+            },
+            flushAgents: {
+                description: "Deletes all agents except the one in the api settings.",
+                type: "boolean",
+                defaultValue: false,
             }
         },
     };
@@ -104,7 +109,19 @@ export function createURLValidateCommands(studio: SchemaStudio): CommandHandler 
         args: string[],
         io: InteractiveIo,
     ): Promise<CommandResult> {
+
         const namedArgs = parseNamedArguments(args, argDef);
+
+        if (namedArgs.flushAgents) {
+            io.writer.writeLine("Flushing agents...");
+            const project = new AIProjectClient(
+                bingWithGrounding.apiSettingsFromEnv().endpoint!,
+                new DefaultAzureCredential(),
+            );
+            await agents.flushAgents("TypeAgent_URLResolverAgent", [bingWithGrounding.apiSettingsFromEnv().urlResolutionAgentId!], project);
+            return;
+        }
+
 
         io.writer.writeLine(`Opening file: ${namedArgs.file}`);
         const urls = fs.readFileSync(namedArgs.file, "utf-8").split("\n"); 
