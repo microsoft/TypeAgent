@@ -307,8 +307,12 @@ export const slashCommandPreview = $prose(() => {
                             // The instruction part - everything after the command and spaces
                             const instructionText = match[2].trim();
                             if (instructionText) {
-                                const instructionStart = lineText.indexOf(instructionText, cmd.commandEnd);
-                                const instructionEnd = instructionStart + instructionText.length;
+                                const instructionStart = lineText.indexOf(
+                                    instructionText,
+                                    cmd.commandEnd,
+                                );
+                                const instructionEnd =
+                                    instructionStart + instructionText.length;
                                 const instructionDecoration = Decoration.inline(
                                     lineStart + instructionStart,
                                     lineStart + instructionEnd,

@@ -449,10 +449,10 @@ async function handleMarkdownAction(
                 result = createActionResult("Opening document ...");
 
                 let newFileName = action.parameters.name.trim();
-                if(!newFileName.endsWith(".md")){
+                if (!newFileName.endsWith(".md")) {
                     newFileName += ".md";
                 }
-                
+
                 actionContext.sessionContext.agentContext.currentFileName =
                     newFileName;
 
@@ -801,7 +801,7 @@ export async function createViewServiceHost(filePath: string, port: number) {
                     env: {
                         ...process.env,
                         TYPEAGENT_MARKDOWN_ROOT: folderPath,
-                    }
+                    },
                 });
 
                 childProcess.send({

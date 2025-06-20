@@ -129,37 +129,55 @@ export class EditorManager {
             editor.action((ctx) => {
                 try {
                     const collabService = ctx.get(collabServiceCtx);
-                    
+
                     // Bind to new document and awareness
                     collabService
                         .bindDoc(this.state.yjsDoc!)
                         .setAwareness(this.state.websocketProvider!.awareness)
                         .connect();
-                    
-                    console.log("[EDITOR] Collaboration connected to new document room");
-                    
+
+                    console.log(
+                        "[EDITOR] Collaboration connected to new document room",
+                    );
+
                     // Add awareness debugging
                     const awareness = this.state.websocketProvider!.awareness;
-                    
-                    awareness.on('change', (changes: any) => {
+
+                    awareness.on("change", (changes: any) => {
                         console.log("[AWARENESS] Awareness changed:", changes);
-                        console.log("[AWARENESS] Current states:", awareness.getStates());
+                        console.log(
+                            "[AWARENESS] Current states:",
+                            awareness.getStates(),
+                        );
                     });
-                    
-                    awareness.on('update', (update: any, origin: any) => {
-                        console.log("[AWARENESS] Awareness update:", update, "origin:", origin);
+
+                    awareness.on("update", (update: any, origin: any) => {
+                        console.log(
+                            "[AWARENESS] Awareness update:",
+                            update,
+                            "origin:",
+                            origin,
+                        );
                     });
-                    
+
                     // Wait for connection to be established
                     setTimeout(() => {
                         console.log("[EDITOR] Collaboration setup complete");
-                        console.log("[AWARENESS] Local client ID:", awareness.clientID);
-                        console.log("[AWARENESS] All client states:", awareness.getStates());
+                        console.log(
+                            "[AWARENESS] Local client ID:",
+                            awareness.clientID,
+                        );
+                        console.log(
+                            "[AWARENESS] All client states:",
+                            awareness.getStates(),
+                        );
                         resolve();
                     }, 100);
-                    
                 } catch (error) {
-                    console.error("[EDITOR] Error setting up collaboration:", error);
+                    console.error(
+                        "[EDITOR] Error setting up collaboration:",
+                        error,
+                    );
                     resolve(); // Continue even if setup fails
                 }
             });
@@ -171,14 +189,19 @@ export class EditorManager {
             editor.action((ctx) => {
                 try {
                     const collabService = ctx.get(collabServiceCtx);
-                    
+
                     // Disconnect from current collaboration
                     collabService.disconnect();
-                    
-                    console.log("[EDITOR] Disconnected from previous collaboration");
+
+                    console.log(
+                        "[EDITOR] Disconnected from previous collaboration",
+                    );
                     resolve();
                 } catch (error) {
-                    console.warn("[EDITOR] Error disconnecting collaboration:", error);
+                    console.warn(
+                        "[EDITOR] Error disconnecting collaboration:",
+                        error,
+                    );
                     resolve(); // Continue even if disconnect fails
                 }
             });
@@ -187,28 +210,31 @@ export class EditorManager {
 
     private setupAwarenessForNewDocument(): void {
         if (!this.state.websocketProvider) return;
-        
+
         const awareness = this.state.websocketProvider.awareness;
-        
+
         // Clear any lingering awareness state from previous document
         awareness.setLocalState(null);
-        
+
         // Set awareness state in the format expected by Milkdown collaboration
         const userInfo = {
             name: `User-${Math.floor(Math.random() * 1000)}`,
             color: `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`,
             colorLight: `hsl(${Math.floor(Math.random() * 360)}, 70%, 90%)`,
         };
-        
+
         // Use the format that Milkdown/Y.js collaboration expects
-        awareness.setLocalStateField('user', userInfo);
-        
-        console.log("[EDITOR] Awareness state reset for new document:", userInfo);
-        
+        awareness.setLocalStateField("user", userInfo);
+
+        console.log(
+            "[EDITOR] Awareness state reset for new document:",
+            userInfo,
+        );
+
         // Force awareness update to ensure other clients see this user
         setTimeout(() => {
             // Trigger awareness change to ensure it's broadcast
-            awareness.setLocalStateField('cursor', null);
+            awareness.setLocalStateField("cursor", null);
         }, 200);
     }
 
@@ -296,7 +322,7 @@ export class EditorManager {
 
             if (this.state.yjsDoc && this.state.websocketProvider) {
                 await this.setupCollaboration(this.state.editor);
-                
+
                 // 🔧 FIX: Reset awareness state for clean transition
                 // Wait a bit more to ensure collaboration is fully connected
                 setTimeout(() => {

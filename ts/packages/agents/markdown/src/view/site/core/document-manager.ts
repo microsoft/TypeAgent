@@ -536,8 +536,6 @@ export class DocumentManager {
             // Extract document name from filename (without extension)
             const documentName = file.name.replace(/\.(md|markdown)$/i, "");
 
-            
-
             // Switch to the new document (this handles collaboration reconnection)
             await this.switchToDocument(documentName);
 

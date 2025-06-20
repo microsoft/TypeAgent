@@ -71,7 +71,7 @@ app.post(
                 return;
             }
 
-            debug("Switch document called with parameter ", documentName)
+            debug("Switch document called with parameter ", documentName);
 
             // Construct file path
             const sanitizedDocumentName = sanitizeFilename(documentName);
@@ -87,7 +87,7 @@ app.post(
                 `${sanitizedDocumentName}.md`,
             );
 
-            debug("Sanitized document path ", documentPath)
+            debug("Sanitized document path ", documentPath);
             // Verify that the file path is within the safe root directory
             if (!documentPath.startsWith(ROOT_DIR)) {
                 res.status(403).json({
@@ -108,11 +108,14 @@ app.post(
 
             // Initialize collaboration for new document
             const documentId = sanitizedDocumentName;
-            collaborationManager.initializeDocument(sanitizedDocumentName, documentPath);
+            collaborationManager.initializeDocument(
+                sanitizedDocumentName,
+                documentPath,
+            );
 
             // Load content into collaboration manager
             const content = fs.readFileSync(documentPath, "utf-8");
-            debug("Raw content: ", content)
+            debug("Raw content: ", content);
             // collaborationManager.setDocumentContent(documentId, content);
 
             const ydoc = getAuthoritativeDocument(documentId);
@@ -145,7 +148,8 @@ let collaborationManager: CollaborationManager;
 let commandCounter = 0;
 const pendingCommands = new Map<string, any>();
 const userHomeDir = os.homedir();
-const ROOT_DIR = process.env.TYPEAGENT_MARKDOWN_ROOT || path.join(userHomeDir, "Documents");
+const ROOT_DIR =
+    process.env.TYPEAGENT_MARKDOWN_ROOT || path.join(userHomeDir, "Documents");
 
 // Streaming state for LLM responses
 const activeStreamingSessions = new Map<
@@ -423,8 +427,8 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
 
         // Use the provided file path or fall back to current filePath
         let sanitizedFilePath = sanitizeFilename(documentId || filePath);
-        if(!sanitizedFilePath.endsWith(".md")){
-                    sanitizedFilePath += ".md";
+        if (!sanitizedFilePath.endsWith(".md")) {
+            sanitizedFilePath += ".md";
         }
 
         const resolvedFilePath = path.resolve(ROOT_DIR, sanitizedFilePath);
@@ -435,7 +439,9 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         const targetFilePath = resolvedFilePath;
         const targetDocumentId =
             documentId ||
-            (sanitizedFilePath ? path.basename(sanitizedFilePath, ".md") : "default");
+            (sanitizedFilePath
+                ? path.basename(sanitizedFilePath, ".md")
+                : "default");
 
         if (!targetFilePath) {
             // Memory-only mode: save to authoritative Y.js document
