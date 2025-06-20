@@ -417,9 +417,6 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             return;
         }
 
-        console.log(
-            `[AUTO-SAVE] Received auto-save request for document: ${documentId}`,
-        );
         debug(
             `Auto-save request received for document: ${documentId}, path: ${requestFilePath}, content: ${content.length} chars`,
         );
@@ -431,11 +428,6 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         }
 
         const resolvedFilePath = path.resolve(ROOT_DIR, sanitizedFilePath);
-
-        console.log(
-            `[AUTO-SAVE] Sanitized file name: ${sanitizedFilePath} and resolved path ${resolvedFilePath}`,
-        );
-
         if (!resolvedFilePath.startsWith(ROOT_DIR)) {
             res.status(403).json({ error: "Invalid file path" });
             return;
