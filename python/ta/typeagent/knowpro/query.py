@@ -915,8 +915,12 @@ class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
 
 @dataclass
 class MatchMessagesBooleanExpr(IQueryOpExpr[MessageAccumulator]):
-    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
-        raise NotImplementedError
+    term_expressions: list[
+        IQueryOpExpr[SemanticRefAccumulator | MessageAccumulator | None]
+    ]
+
+    def begin_match(self, context: QueryEvalContext) -> None:
+        context.clear_matched_terms()
 
     def accumulate_messages(
         self,
@@ -935,27 +939,42 @@ class MatchMessagesBooleanExpr(IQueryOpExpr[MessageAccumulator]):
 
 @dataclass
 class MatchMessagesOrExpr(MatchMessagesBooleanExpr):
-    term_expressions: list[
-        IQueryOpExpr[SemanticRefAccumulator | MessageAccumulator | None]
-    ]
 
     def eval(self, context: QueryEvalContext) -> MessageAccumulator:
-        raise NotImplementedError("TODO")
+        self.begin_match(context)
+
+        all_matches: MessageAccumulator | None = None
+        for match_expr in self.term_expressions:
+            matches = match_expr.eval(context)
+            if not matches:
+                continue
+            if isinstance(matches, SemanticRefAccumulator):
+                message_matches = self.accumulate_messages(context, matches)
+            else:
+                message_matches = matches
+            if all_matches is not None:
+                all_matches.add_union(message_matches)
+            else:
+                all_matches = message_matches
+        if all_matches is not None:
+            all_matches.calculate_total_score()
+        else:
+            all_matches = MessageAccumulator()
+        return all_matches
 
 
 @dataclass
 class MatchMessagesAndExpr(MatchMessagesBooleanExpr):
-    term_expressions: list[
-        IQueryOpExpr[SemanticRefAccumulator | MessageAccumulator | None]
-    ]
 
     def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        self.begin_match(context)
+
         all_matches: MessageAccumulator | None = None
         all_done = False
-        for term in self.term_expressions:
-            matches = term.eval(context)
+        for match_expr in self.term_expressions:
+            matches = match_expr.eval(context)
             if not matches:
-                # If any term does not match, the AND fails.
+                # If any expr does not match, the AND fails.
                 break
             if isinstance(matches, SemanticRefAccumulator):
                 message_matches = self.accumulate_messages(context, matches)
@@ -973,14 +992,13 @@ class MatchMessagesAndExpr(MatchMessagesBooleanExpr):
             # If we did not break, all terms matched.
             all_done = True
 
-        if all_matches:
+        if all_matches is not None:
             if all_done:
                 all_matches.calculate_total_score()
                 all_matches.select_with_hit_count(len(self.term_expressions))
             else:
                 all_matches.clear_matches()
-
-        if all_matches is None:
+        else:
             all_matches = MessageAccumulator()
         return all_matches
 
