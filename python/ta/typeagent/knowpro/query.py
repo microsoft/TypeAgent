@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 from abc import ABC, abstractmethod
+from ast import Not
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from re import search
@@ -912,11 +913,36 @@ class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
         return matches.to_scored_message_ordinals()
 
 
-# TODO: MatchMessagesBooleanExpr
-# TODO: MatchMessagesOrExpr
-# TODO: MatchMessagesAndExpr
-# TODO: MatchMessagesOrMaxExpr
-# TODO: MatchMessagesBySimilarityExpr
+@dataclass
+class MatchMessagesBooleanExpr(IQueryOpExpr[MessageAccumulator]):
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        raise NotImplementedError("TODO")
+
+
+@dataclass
+class MatchMessagesOrExpr(MatchMessagesBooleanExpr):
+    term_expressions: list[IQueryOpExpr[MessageAccumulator | None]]
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        raise NotImplementedError("TODO")
+
+
+@dataclass
+class MatchMessagesAndExpr(MatchMessagesBooleanExpr):
+    term_expressions: list[IQueryOpExpr[MessageAccumulator | None]]
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        raise NotImplementedError("TODO")
+
+
+@dataclass
+class MatchMessagesOrMaxExpr(MatchMessagesOrExpr):
+    pass  # TODO
+
+
+@dataclass
+class MatchMessagesBySimilarityExpr:
+    pass  # TODO
 
 
 class NoOpExpr[T](QueryOpExpr[T]):
