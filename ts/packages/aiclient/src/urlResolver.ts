@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { bingWithGrounding, agents } from "aiclient";
+import { bingWithGrounding } from "aiclient";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import {
+    Agent,
     MessageContentUnion,
     ThreadMessage,
+    ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
 

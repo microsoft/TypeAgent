@@ -10,9 +10,11 @@ import {
 } from "interactive-app";
 import { SchemaStudio } from "./studio.js";
 import fs from "fs";
-import { bingWithGrounding, urlResolver } from "aiclient";
+import { bingWithGrounding, agents, urlResolver } from "aiclient";
 import { urlValidityAction } from "../../../packages/aiclient/dist/urlResolver.js";
 import registerDebug from "debug";
+import { DefaultAzureCredential } from "@azure/identity";
+import { AIProjectClient } from "@azure/ai-projects";
 
 export function createURLResolverCommands(studio: SchemaStudio): CommandHandler {
     const argDef: CommandMetadata = {
