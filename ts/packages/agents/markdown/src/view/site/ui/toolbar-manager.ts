@@ -3,7 +3,7 @@
 
 import { DocumentManager } from "../core/document-manager";
 import { getElementById } from "../utils";
-import { editorViewCtx } from "@milkdown/core";
+//import { editorViewCtx } from "@milkdown/core";
 
 export class ToolbarManager {
     private documentManager: DocumentManager | null = null;
@@ -75,20 +75,14 @@ export class ToolbarManager {
             // Try to get content from the editor manager first (most current)
             const editorManager = this.documentManager.getEditorManager();
             if (editorManager) {
-                const editor = editorManager.getEditor();
+                const editor = editorManager.getCrepeEditor();
                 if (editor) {
                     content = await this.getEditorMarkdownContent(editor);
                 } else {
-                    console.warn(
-                        "[EXPORT] No editor available, falling back to server",
-                    );
-                    content = await this.documentManager.getDocumentContent();
+                    console.warn("[EXPORT] No editor available");
                 }
             } else {
-                console.warn(
-                    "[EXPORT] No editor manager available, falling back to server",
-                );
-                content = await this.documentManager.getDocumentContent();
+                console.warn("[EXPORT] No editor manager available");
             }
 
             const blob = new Blob([content], { type: "text/markdown" });
@@ -113,20 +107,13 @@ export class ToolbarManager {
     }
 
     /**
-     * Get markdown content directly from the editor using proper API
+     * Get markdown content from the editor
      */
     private async getEditorMarkdownContent(editor: any): Promise<string> {
         return new Promise((resolve) => {
             try {
-                editor.action((ctx: any) => {
-                    const view = ctx.get(editorViewCtx);
-
-                    // Get the entire document as markdown
-                    // Using textContent as fallback, but ideally we'd use a proper markdown serializer
-                    const content = view.state.doc.textContent || "";
-
-                    resolve(content);
-                });
+                const content = editor.getMarkdown() || "";
+                resolve(content);
             } catch (error) {
                 console.error(
                     "[EXPORT-API] Failed to get editor content:",

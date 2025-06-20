@@ -194,65 +194,6 @@ export class DocumentManager {
                 );
                 break;
 
-            case "documentUpdated":
-                console.log(`[SSE] Document updated: ${data.documentName}`);
-                console.log(
-                    `[SSE] Document updated timestamp: ${data.timestamp}`,
-                );
-
-                // Document content was updated - WebSocket should handle the sync
-                // But let's add a fallback check in case WebSocket fails
-                if (this.editorManager) {
-                    console.log(
-                        `[SSE-FALLBACK] Checking WebSocket connection status...`,
-                    );
-                    const collaborationManager = this.getCollaborationManager();
-
-                    if (
-                        collaborationManager &&
-                        !collaborationManager.isConnected()
-                    ) {
-                        console.log(
-                            `[SSE-FALLBACK] WebSocket disconnected, triggering content refresh from SSE event`,
-                        );
-
-                        // Fallback: manually refresh content from server
-                        try {
-                            await this.getDocumentContent();
-                            // Note: We don't set content directly to avoid conflicts, just log for debugging
-                            console.log(
-                                `[SSE-FALLBACK] Server content available for sync`,
-                            );
-
-                            if (this.notificationManager) {
-                                this.notificationManager.showNotification(
-                                    "Document updated (WebSocket reconnecting...)",
-                                    "info",
-                                );
-
-                                // Mark as disconnected for sync notification tracking
-                                this.notificationManager.markDocumentDisconnected(
-                                    data.documentName || this.currentDocumentId,
-                                );
-                            }
-                        } catch (error) {
-                            console.error(
-                                `[SSE-FALLBACK] Failed to refresh content:`,
-                                error,
-                            );
-                        }
-                    } else {
-                        console.log(
-                            ` [SSE] WebSocket connected - no fallback needed`,
-                        );
-                    }
-                } else {
-                    console.log(
-                        `[SSE] No editor manager available for WebSocket status check`,
-                    );
-                }
-                break;
-
             case "documentSynced":
                 console.log(`[SSE] Document synchronized: ${data.documentId}`);
                 if (this.notificationManager) {

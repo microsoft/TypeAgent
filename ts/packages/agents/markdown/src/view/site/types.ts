@@ -4,6 +4,7 @@
 // Consolidated types for the markdown editor site
 
 import type { Editor } from "@milkdown/core";
+import { Crepe } from "@milkdown/crepe";
 import type { Doc } from "yjs";
 import type { WebsocketProvider } from "y-websocket";
 
@@ -97,6 +98,7 @@ export interface CollaborationConfig {
 
 export interface EditorState {
     editor: Editor | null;
+    crepe: Crepe | null;
     yjsDoc: Doc | null;
     websocketProvider: WebsocketProvider | null;
 }

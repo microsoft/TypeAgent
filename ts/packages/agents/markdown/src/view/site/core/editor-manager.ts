@@ -23,6 +23,7 @@ import { CollaborationManager } from "./collaboration-manager";
 export class EditorManager {
     private state: EditorState = {
         editor: null,
+        crepe: null,
         yjsDoc: null,
         websocketProvider: null,
     };
@@ -87,6 +88,7 @@ export class EditorManager {
         await this.configureEditorPlugins(crepe);
 
         this.state.editor = crepe.editor;
+        this.state.crepe = crepe;
 
         // Setup collaboration after editor is created
         if (
@@ -156,6 +158,10 @@ export class EditorManager {
 
     public getEditor(): Editor | null {
         return this.state.editor;
+    }
+
+    public getCrepeEditor(): Crepe | null {
+        return this.state.crepe;
     }
 
     public getCollaborationManager(): CollaborationManager {
