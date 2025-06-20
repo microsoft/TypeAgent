@@ -16,4 +16,15 @@ export interface BrowserControl {
     goForward(): Promise<void>;
     goBack(): Promise<void>;
     reload(): Promise<void>;
+
+    getPageUrl(): Promise<string>;
 }
+
+export type BrowserControlInvokeFunctions = {
+    openWebPage(url: string): Promise<void>;
+    closeWebPage(): Promise<void>;
+    goForward(): Promise<void>;
+    goBack(): Promise<void>;
+    reload(): Promise<void>;
+    getPageUrl(): Promise<string>;
+};

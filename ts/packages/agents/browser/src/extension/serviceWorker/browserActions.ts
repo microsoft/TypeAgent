@@ -305,11 +305,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             );
             break;
         }
-        case "getPageUrl": {
-            const targetTab = await getActiveTab();
-            responseObject = targetTab?.url;
-            break;
-        }
         case "awaitPageLoad": {
             const targetTab = await getActiveTab();
             await awaitPageLoad(targetTab!);

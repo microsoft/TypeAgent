@@ -6,18 +6,20 @@ import { SessionContext } from "@typeagent/agent-sdk";
 import { Crossword, CrosswordClue } from "./schema/pageSchema.mjs";
 import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext, getBrowserControl } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 
 export async function getBoardSchema(
     context: SessionContext<BrowserActionContext>,
 ) {
-    if (!context.agentContext.browserConnector) {
+    const agentContext = context.agentContext;
+    if (!agentContext.browserConnector) {
         throw new Error("No connection to browser session.");
     }
 
-    const browser: BrowserConnector = context.agentContext.browserConnector;
-    const url = await browser.getPageUrl();
+    const browser: BrowserConnector = agentContext.browserConnector;
+    const browserControl = getBrowserControl(agentContext);
+    const url = await browserControl.getPageUrl();
     const cachedSchema = await browser.getCurrentPageSchema(url);
     if (cachedSchema) {
         return cachedSchema as Crossword;

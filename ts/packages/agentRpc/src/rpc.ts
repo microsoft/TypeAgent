@@ -13,12 +13,10 @@ type RpcFuncTypes<
     N extends string,
     T extends Record<string, (...args: any) => any>,
 > = {
-    [K in keyof T as `${N}`]: Parameters<T[K]>[0] extends undefined
-        ? <K extends string>(name: K) => ReturnType<T[K]>
-        : <K extends string>(
-              name: K,
-              param: Parameters<T[K]>[0],
-          ) => ReturnType<T[K]>;
+    [K in keyof T as `${N}`]: <K extends string>(
+        name: K,
+        param: Parameters<T[K]>[0],
+    ) => ReturnType<T[K]>;
 };
 
 type RpcInvokeFunction = (param: any) => Promise<unknown>;

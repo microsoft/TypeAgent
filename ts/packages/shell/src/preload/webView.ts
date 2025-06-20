@@ -301,10 +301,6 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
-        case "getPageUrl": {
-            responseObject = window.location.href;
-            break;
-        }
         case "getPageSchema": {
             responseObject = await sendScriptAction(
                 {
