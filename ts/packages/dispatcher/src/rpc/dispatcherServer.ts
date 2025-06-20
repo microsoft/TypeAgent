@@ -48,5 +48,5 @@ export function createDispatcherRpcServer(
         },
     };
 
-    createRpc(channel, dispatcherInvokeHandler);
+    createRpc("dispatcher", channel, dispatcherInvokeHandler);
 }

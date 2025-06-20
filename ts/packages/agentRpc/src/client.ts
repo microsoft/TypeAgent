@@ -113,7 +113,7 @@ function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
     const optionsMap = createObjectMap();
     return {
         optionsMap,
-        rpc: createRpc(channel, {
+        rpc: createRpc(name, channel, {
             callback: async (param: {
                 id: number;
                 name: string;
@@ -399,7 +399,7 @@ export async function createAgentRpcClient(
         AgentCallFunctions,
         AgentContextInvokeFunctions,
         AgentContextCallFunctions
-    >(channel, agentContextInvokeHandlers, agentContextCallHandlers);
+    >(name, channel, agentContextInvokeHandlers, agentContextCallHandlers);
 
     // The shim needs to implement all the APIs regardless whether the actual agent
     // has that API.  We remove remove it the one that is not necessary below.

@@ -11,7 +11,7 @@ function remoteCallNotSupported(): never {
 }
 
 export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
-    const rpc = createRpc<DispatcherInvokeFunctions>(channel);
+    const rpc = createRpc<DispatcherInvokeFunctions>("dispatcher", channel);
 
     return {
         async processCommand(command, requestId, attachments) {

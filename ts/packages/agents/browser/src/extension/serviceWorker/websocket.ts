@@ -104,31 +104,17 @@ export async function ensureWebsocketConnected(): Promise<
                 const [schema, actionName] = data.method?.split("/");
 
                 if (schema == "browser") {
-                    if (actionName == "siteTranslatorStatus") {
-                        if (data.params.status == "initializing") {
-                            showBadgeBusy();
-                            console.log(
-                                `Initializing ${data.params.translator}`,
-                            );
-                        } else if (data.params.status == "initialized") {
-                            showBadgeHealthy();
-                            console.log(
-                                `Finished initializing ${data.params.translator}`,
-                            );
-                        }
-                    } else {
-                        const response = await runBrowserAction({
-                            actionName: actionName,
-                            parameters: data.params,
-                        });
+                    const response = await runBrowserAction({
+                        actionName: actionName,
+                        parameters: data.params,
+                    });
 
-                        webSocket?.send(
-                            JSON.stringify({
-                                id: data.id,
-                                result: response,
-                            }),
-                        );
-                    }
+                    webSocket?.send(
+                        JSON.stringify({
+                            id: data.id,
+                            result: response,
+                        }),
+                    );
                 }
             }
         };

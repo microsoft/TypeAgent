@@ -4,6 +4,7 @@
 import { WebSocket } from "ws";
 import {
     BrowserControl,
+    BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
 } from "../interface.mjs";
 import { createGenericChannel } from "agent-rpc/channel";
@@ -40,9 +41,10 @@ export function createExternalBrowserClient(
         browserControlChannel.disconnect();
     });
 
-    const rpc = createRpc<BrowserControlInvokeFunctions>(
-        browserControlChannel.channel,
-    );
+    const rpc = createRpc<
+        BrowserControlInvokeFunctions,
+        BrowserControlCallFunctions
+    >("browser:extension", browserControlChannel.channel);
 
     return {
         openWebPage: async (url: string) => {
@@ -62,6 +64,12 @@ export function createExternalBrowserClient(
         },
         getPageUrl: async () => {
             return rpc.invoke("getPageUrl", undefined);
+        },
+        setAgentStatus: (isBusy: boolean, message: string) => {
+            rpc.send("setAgentStatus", {
+                isBusy,
+                message,
+            });
         },
     };
 }

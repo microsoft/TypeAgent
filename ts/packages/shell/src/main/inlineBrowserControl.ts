@@ -37,5 +37,8 @@ export function createInlineBrowserControl(
         async getPageUrl() {
             return shellWindow.inlineBrowser.webContents.getURL();
         },
+        setAgentStatus(isBusy: boolean, message: string) {
+            console.log(`${message} (isBusy: ${isBusy})`);
+        },
     };
 }

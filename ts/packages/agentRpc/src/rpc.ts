@@ -3,10 +3,6 @@
 
 import registerDebug from "debug";
 
-const debugIn = registerDebug("typeagent:rpc:in");
-const debugOut = registerDebug("typeagent:rpc:out");
-const debugError = registerDebug("typeagent:rpc:error");
-
 import { RpcChannel } from "./common.js";
 
 type RpcFuncTypes<
@@ -35,10 +31,14 @@ export function createRpc<
     InvokeHandlers extends RpcInvokeFunctions = {},
     CallHandlers extends RpcCallFunctions = {},
 >(
+    name: string, // for debugging only.
     channel: RpcChannel,
     invokeHandlers?: InvokeHandlers,
     callHandlers?: CallHandlers,
 ): RpcReturn<InvokeTargetFunctions, CallTargetFunctions> {
+    const debugIn = registerDebug(`typeagent:${name}:rpc:in`);
+    const debugOut = registerDebug(`typeagent:${name}:rpc:out`);
+    const debugError = registerDebug(`typeagent:${name}:rpc:error`);
     const pending = new Map<
         number,
         {

@@ -127,7 +127,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         );
     });
 
-    createRpc(registerChannel.channel, {
+    createRpc("webagent", registerChannel.channel, {
         addTypeAgent: async (param: {
             name: string;
             manifest: AppAgentManifest;

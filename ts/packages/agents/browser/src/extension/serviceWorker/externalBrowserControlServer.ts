@@ -4,9 +4,13 @@
 import { RpcChannel } from "agent-rpc/channel";
 import { getActiveTab } from "./tabManager";
 import { createRpc } from "agent-rpc/rpc";
-import { BrowserControlInvokeFunctions } from "../../agent/interface.mjs";
+import {
+    BrowserControlCallFunctions,
+    BrowserControlInvokeFunctions,
+} from "../../agent/interface.mjs";
+import { showBadgeBusy, showBadgeHealthy } from "./ui";
 export function createExternalBrowserServer(channel: RpcChannel) {
-    const browserControlInvokeFunctions: BrowserControlInvokeFunctions = {
+    const invokeFunctions: BrowserControlInvokeFunctions = {
         openWebPage: async (url: string) => {
             const targetTab = await getActiveTab();
             if (targetTab) {
@@ -51,5 +55,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             }
         },
     };
-    return createRpc(channel, browserControlInvokeFunctions);
+    const callFunctions: BrowserControlCallFunctions = {
+        setAgentStatus: ({ isBusy, message }) => {
+            if (isBusy) {
+                showBadgeBusy();
+            } else {
+                showBadgeHealthy();
+            }
+            console.log(`${message} (isBusy: ${isBusy})`);
+        },
+    };
+    return createRpc(channel, invokeFunctions, callFunctions);
 }
