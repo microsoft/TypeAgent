@@ -185,7 +185,6 @@ interface Response {
  url: string;
  urlValidity: "valid" | "invalid" | "indeterminate";
  explanation: string;
- httpRequestContent: string;
 }`,
             tools: [ToolUtility.createBingGroundingTool([
                 {
