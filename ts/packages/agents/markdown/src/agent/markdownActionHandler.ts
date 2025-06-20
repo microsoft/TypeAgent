@@ -791,9 +791,13 @@ export async function createViewServiceHost(filePath: string, port: number) {
                     ),
                 );
 
+                const folderPath = path.dirname(filePath!);
+
                 const childProcess = fork(expressService, [port.toString()], {
-                    // Explicitly inherit environment variables to ensure .env values are passed
-                    env: process.env,
+                    env: {
+                        ...process.env,
+                        TYPEAGENT_MARKDOWN_ROOT: folderPath,
+                    }
                 });
 
                 childProcess.send({

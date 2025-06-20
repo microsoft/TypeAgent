@@ -21,7 +21,6 @@ export class AIAgentManager {
     private editor: Editor | null = null;
     private notificationManager: any = null;
     private aiPresenceIndicator: HTMLElement | null = null;
-    // private aiCursorPosition: number = -1; // Currently unused
     private isTestMode: boolean = false; // Track test mode to prevent duplicate content
 
     public setEditor(editor: Editor): void {

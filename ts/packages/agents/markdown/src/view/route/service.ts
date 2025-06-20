@@ -134,7 +134,7 @@ let collaborationManager: CollaborationManager;
 let commandCounter = 0;
 const pendingCommands = new Map<string, any>();
 const userHomeDir = os.homedir();
-const ROOT_DIR = path.join(userHomeDir, "Documents");
+const ROOT_DIR = process.env.TYPEAGENT_MARKDOWN_ROOT || path.join(userHomeDir, "Documents");
 
 // Streaming state for LLM responses
 const activeStreamingSessions = new Map<
