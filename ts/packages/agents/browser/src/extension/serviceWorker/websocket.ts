@@ -5,6 +5,8 @@ import { AppAction, isWebAgentMessageFromDispatcher } from "./types";
 import { getSettings } from "./storage";
 import { showBadgeError, showBadgeHealthy, showBadgeBusy } from "./ui";
 import { runBrowserAction } from "./browserActions";
+import { createGenericChannel } from "agent-rpc/channel";
+import { createExternalBrowserServer } from "./externalBrowserControlServer";
 
 let webSocket: WebSocket | undefined;
 let settings: Record<string, any>;
@@ -70,12 +72,31 @@ export async function ensureWebsocketConnected(): Promise<
         webSocket.binaryType = "blob";
         keepWebSocketAlive(webSocket);
 
+        const browserControlChannel = createGenericChannel((message: any) => {
+            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                webSocket.send(
+                    JSON.stringify({
+                        source: "browserExtension",
+                        method: "browserControl/message",
+                        params: message,
+                    }),
+                );
+            }
+        });
+        createExternalBrowserServer(browserControlChannel.channel);
         webSocket.onmessage = async (event: MessageEvent) => {
             const text = await (event.data as Blob).text();
-            const data = JSON.parse(text) as WebSocketMessageV2;
+            console.log(`Browser websocket client received message: ${text}`);
 
+            const data = JSON.parse(text) as WebSocketMessageV2;
             if (data.error) {
                 console.error(data.error);
+                return;
+            }
+            if (data.method === "browserControl/message") {
+                if (data.source === "browserAgent") {
+                    browserControlChannel.message(data.params);
+                }
                 return;
             }
 
@@ -110,7 +131,6 @@ export async function ensureWebsocketConnected(): Promise<
                     }
                 }
             }
-            console.log(`Browser websocket client received message: ${text}`);
         };
 
         webSocket.onclose = (event: CloseEvent) => {

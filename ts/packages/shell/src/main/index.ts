@@ -287,6 +287,26 @@ async function initializeDispatcher(
             async closeWebPage() {
                 shellWindow.closeInlineBrowser();
             },
+
+            async goForward() {
+                const navigateHistory =
+                    shellWindow.inlineBrowser.webContents.navigationHistory;
+                if (!navigateHistory.canGoForward()) {
+                    throw new Error("Cannot go forward in history");
+                }
+                navigateHistory.goForward();
+            },
+            async goBack() {
+                const navigateHistory =
+                    shellWindow.inlineBrowser.webContents.navigationHistory;
+                if (!navigateHistory.canGoBack()) {
+                    throw new Error("Cannot go back in history");
+                }
+                navigateHistory.goBack();
+            },
+            async reload() {
+                shellWindow.inlineBrowser.webContents.reload();
+            },
         };
 
         // Set up dispatcher

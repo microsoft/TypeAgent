@@ -171,18 +171,6 @@ export async function handleMessage(
                 break;
             }
 
-            case "history_go_back": {
-                window.history.back();
-                sendResponse({});
-                break;
-            }
-
-            case "history_go_forward": {
-                window.history.forward();
-                sendResponse({});
-                break;
-            }
-
             case "read_page_content": {
                 const article = getReadablePageContent();
                 sendResponse(article);
