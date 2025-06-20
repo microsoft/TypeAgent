@@ -18,6 +18,7 @@ import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
     displayStatus,
+    displaySuccess,
 } from "@typeagent/agent-sdk/helpers/display";
 import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import {
@@ -75,8 +76,10 @@ import {
 } from "@azure/ai-agents";
 import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
+import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
+const debugWebSocket = registerDebug("typeagent:browser:ws");
 
 export function instantiate(): AppAgent {
     return {
@@ -89,7 +92,9 @@ export function instantiate(): AppAgent {
 }
 
 export type BrowserActionContext = {
-    browserControl?: BrowserControl | undefined;
+    clientBrowserControl?: BrowserControl | undefined;
+    externalBrowserControl?: BrowserControl | undefined;
+    useExternalBrowserControl: boolean;
     webSocket?: WebSocket | undefined;
     webAgentChannels?: WebAgentChannels | undefined;
     crossWordState?: Crossword | undefined;
@@ -113,9 +118,12 @@ export interface urlResolutionAction {
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
 ): Promise<BrowserActionContext> {
-    const browserControl = settings?.options as BrowserControl | undefined;
+    const clientBrowserControl = settings?.options as
+        | BrowserControl
+        | undefined;
     return {
-        browserControl,
+        clientBrowserControl,
+        useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
     };
 }
@@ -172,17 +180,20 @@ async function updateBrowserContext(
         const webSocket = await createWebSocket("browser", "dispatcher");
         if (webSocket) {
             context.agentContext.webSocket = webSocket;
+            const browserControls = createExternalBrowserClient(webSocket);
+            context.agentContext.externalBrowserControl = browserControls;
             context.agentContext.browserConnector = new BrowserConnector(
                 context,
             );
 
             webSocket.onclose = (event: object) => {
-                console.error("Browser webSocket connection closed.");
+                debugWebSocket("Browser webSocket connection closed.");
                 context.agentContext.webSocket = undefined;
             };
             webSocket.addEventListener("message", async (event: any) => {
                 const text = event.data.toString();
                 const data = JSON.parse(text);
+                debugWebSocket(`Received message from browser: ${text}`);
                 if (isWebAgentMessage(data)) {
                     await processWebAgentMessage(data, context);
                     return;
@@ -201,19 +212,24 @@ async function updateBrowserContext(
                             const targetTranslator = data.params.translator;
                             if (targetTranslator == "browser.crossword") {
                                 // initialize crossword state
-                                sendSiteTranslatorStatus(
-                                    targetTranslator,
-                                    "initializing",
-                                    context,
+                                browserControls.setAgentStatus(
+                                    true,
+                                    `Initializing ${targetTranslator}`,
                                 );
-                                context.agentContext.crossWordState =
-                                    await getBoardSchema(context);
+                                try {
+                                    context.agentContext.crossWordState =
+                                        await getBoardSchema(context);
 
-                                sendSiteTranslatorStatus(
-                                    targetTranslator,
-                                    "initialized",
-                                    context,
-                                );
+                                    browserControls.setAgentStatus(
+                                        false,
+                                        `Finished initializing ${targetTranslator}`,
+                                    );
+                                } catch (e) {
+                                    browserControls.setAgentStatus(
+                                        false,
+                                        `Failed to initialize ${targetTranslator}`,
+                                    );
+                                }
 
                                 if (context.agentContext.crossWordState) {
                                     context.notify(
@@ -509,63 +525,74 @@ interface Response {
     }
 }
 
+export function getActionBrowserControl(
+    actionContext: ActionContext<BrowserActionContext>,
+) {
+    return getBrowserControl(actionContext.sessionContext.agentContext);
+}
+export function getSessionBrowserControl(
+    sessionContext: SessionContext<BrowserActionContext>,
+) {
+    return getBrowserControl(sessionContext.agentContext);
+}
+
+export function getBrowserControl(agentContext: BrowserActionContext) {
+    const browserControl = agentContext.useExternalBrowserControl
+        ? agentContext.externalBrowserControl
+        : agentContext.clientBrowserControl;
+    if (!browserControl) {
+        throw new Error(
+            `${agentContext.externalBrowserControl ? "External" : "Client"} browser control is not available.`,
+        );
+    }
+    return browserControl;
+}
+
 async function openWebPage(
     context: ActionContext<BrowserActionContext>,
     action: TypeAgentAction<OpenWebPage>,
 ) {
-    if (context.sessionContext.agentContext.browserControl) {
+    const browserControl = getActionBrowserControl(context);
+
+    displayStatus(`Opening web page for ${action.parameters.site}.`, context);
+    const siteEntity = action.entities?.site;
+    const url =
+        siteEntity?.type[0] === "WebPage"
+            ? siteEntity.uniqueId!
+            : await resolveWebPage(
+                  context.sessionContext,
+                  action.parameters.site,
+              );
+
+    if (url !== action.parameters.site) {
         displayStatus(
-            `Opening web page for ${action.parameters.site}.`,
+            `Opening web page for ${action.parameters.site} at ${url}.`,
             context,
         );
-        const siteEntity = action.entities?.site;
-        const url =
-            siteEntity?.type[0] === "WebPage"
-                ? siteEntity.uniqueId!
-                : await resolveWebPage(
-                      context.sessionContext,
-                      action.parameters.site,
-                  );
-
-        if (url !== action.parameters.site) {
-            displayStatus(
-                `Opening web page for ${action.parameters.site} at ${url}.`,
-                context,
-            );
-        }
-        await context.sessionContext.agentContext.browserControl.openWebPage(
-            url,
-        );
-        const result = createActionResult("Web page opened successfully.");
-
-        result.activityContext = {
-            activityName: "browsingWebPage",
-            description: "Browsing a web page",
-            state: {
-                site: siteEntity?.name,
-            },
-            activityEndAction: {
-                actionName: "closeWebPage",
-            },
-        };
-        return result;
     }
-    throw new Error(
-        "Browser control is not available. Please launch a browser first.",
-    );
+    await browserControl.openWebPage(url);
+    const result = createActionResult("Web page opened successfully.");
+
+    result.activityContext = {
+        activityName: "browsingWebPage",
+        description: "Browsing a web page",
+        state: {
+            site: siteEntity?.name,
+        },
+        activityEndAction: {
+            actionName: "closeWebPage",
+        },
+    };
+    return result;
 }
 
 async function closeWebPage(context: ActionContext<BrowserActionContext>) {
-    if (context.sessionContext.agentContext.browserControl) {
-        context.actionIO.setDisplay("Closing web page.");
-        await context.sessionContext.agentContext.browserControl.closeWebPage();
-        const result = createActionResult("Web page closed successfully.");
-        result.activityContext = null; // clear the activity context.
-        return result;
-    }
-    throw new Error(
-        "Browser control is not available. Please launch a browser first.",
-    );
+    const browserControl = getActionBrowserControl(context);
+    context.actionIO.setDisplay("Closing web page.");
+    await browserControl.closeWebPage();
+    const result = createActionResult("Web page closed successfully.");
+    result.activityContext = null; // clear the activity context.
+    return result;
 }
 
 async function executeBrowserAction(
@@ -591,6 +618,16 @@ async function executeBrowserAction(
                 return searchWebsites(context, action);
             case "getWebsiteStats":
                 return getWebsiteStats(context, action);
+            case "goForward":
+                await getActionBrowserControl(context).goForward();
+                return;
+            case "goBack":
+                await getActionBrowserControl(context).goBack();
+                return;
+            case "reloadPage":
+                // REVIEW: do we need to clear page schema?
+                await getActionBrowserControl(context).reload();
+                return;
         }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
@@ -656,28 +693,6 @@ async function executeBrowserAction(
         throw new Error("No websocket connection.");
     }
     return undefined;
-}
-
-function sendSiteTranslatorStatus(
-    schemaName: string,
-    status: string,
-    context: SessionContext<BrowserActionContext>,
-) {
-    const webSocketEndpoint = context.agentContext.webSocket;
-    const callId = new Date().getTime().toString();
-
-    if (webSocketEndpoint) {
-        webSocketEndpoint.send(
-            JSON.stringify({
-                method: "browser/siteTranslatorStatus",
-                id: callId,
-                params: {
-                    translator: schemaName,
-                    status: status,
-                },
-            }),
-        );
-    }
 }
 
 async function handleTabIndexActions(
@@ -891,5 +906,46 @@ export const handlers: CommandHandlerTable = {
 
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
+        external: {
+            description: "Toggle external browser control",
+            defaultSubCommand: "on",
+            commands: {
+                on: {
+                    description: "Enable external browser control",
+                    run: async (
+                        context: ActionContext<BrowserActionContext>,
+                    ) => {
+                        const agentContext =
+                            context.sessionContext.agentContext;
+                        if (agentContext.externalBrowserControl === undefined) {
+                            throw new Error(
+                                "External browser control is not available.",
+                            );
+                        }
+                        agentContext.useExternalBrowserControl = true;
+                        displaySuccess(
+                            "Using external browser control.",
+                            context,
+                        );
+                    },
+                },
+                off: {
+                    description: "Disable external browser control",
+                    run: async (
+                        context: ActionContext<BrowserActionContext>,
+                    ) => {
+                        const agentContext =
+                            context.sessionContext.agentContext;
+                        if (agentContext.clientBrowserControl === undefined) {
+                            throw new Error(
+                                "Client browser control is not available.",
+                            );
+                        }
+                        agentContext.useExternalBrowserControl = false;
+                        displaySuccess("Use client browser control.", context);
+                    },
+                },
+            },
+        },
     },
 };

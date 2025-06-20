@@ -3,13 +3,9 @@
 
 import registerDebug from "debug";
 
-const debugIn = registerDebug("typeagent:rpc:in");
-const debugOut = registerDebug("typeagent:rpc:out");
-const debugError = registerDebug("typeagent:rpc:error");
-
 import { RpcChannel } from "./common.js";
 
-type RpcFuncType<
+type RpcFuncTypes<
     N extends string,
     T extends Record<string, (...args: any) => any>,
 > = {
@@ -19,28 +15,30 @@ type RpcFuncType<
     ) => ReturnType<T[K]>;
 };
 
+type RpcInvokeFunction = (param: any) => Promise<unknown>;
+type RpcCallFunction = (param: any) => void;
+type RpcInvokeFunctions = Record<string, RpcInvokeFunction>;
+type RpcCallFunctions = Record<string, RpcCallFunction>;
 type RpcReturn<
-    InvokeTargetFunctions extends {
-        [key: string]: (param: any) => Promise<unknown>;
-    },
-    CallTargetFunctions extends { [key: string]: (param: any) => void },
-> = RpcFuncType<"invoke", InvokeTargetFunctions> &
-    RpcFuncType<"send", CallTargetFunctions>;
+    InvokeTargetFunctions extends RpcInvokeFunctions,
+    CallTargetFunctions extends RpcCallFunctions,
+> = RpcFuncTypes<"invoke", InvokeTargetFunctions> &
+    RpcFuncTypes<"send", CallTargetFunctions>;
 
 export function createRpc<
-    InvokeTargetFunctions extends {
-        [key: string]: (param: any) => Promise<unknown>;
-    } = {},
-    CallTargetFunctions extends { [key: string]: (param: any) => void } = {},
-    InvokeHandlers extends {
-        [key: string]: (param: any) => Promise<unknown>;
-    } = {},
-    CallHandlers extends { [key: string]: (param: any) => void } = {},
+    InvokeTargetFunctions extends RpcInvokeFunctions = {},
+    CallTargetFunctions extends RpcCallFunctions = {},
+    InvokeHandlers extends RpcInvokeFunctions = {},
+    CallHandlers extends RpcCallFunctions = {},
 >(
+    name: string, // for debugging only.
     channel: RpcChannel,
     invokeHandlers?: InvokeHandlers,
     callHandlers?: CallHandlers,
 ): RpcReturn<InvokeTargetFunctions, CallTargetFunctions> {
+    const debugIn = registerDebug(`typeagent:${name}:rpc:in`);
+    const debugOut = registerDebug(`typeagent:${name}:rpc:out`);
+    const debugError = registerDebug(`typeagent:${name}:rpc:error`);
     const pending = new Map<
         number,
         {

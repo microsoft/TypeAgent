@@ -4,6 +4,7 @@
     "composite": true,
     "rootDir": ".",
     "outDir": "../../dist/agent",
+    
   },
   "include": ["./**/*"],
   "ts-node": {

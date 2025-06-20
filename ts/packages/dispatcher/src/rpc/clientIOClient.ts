@@ -17,6 +17,7 @@ import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {
     const rpc = createRpc<ClientIOInvokeFunctions, ClientIOCallFunctions>(
+        "clientio",
         channel,
     );
     return {

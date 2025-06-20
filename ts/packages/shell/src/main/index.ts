@@ -51,7 +51,7 @@ import {
     setUpdateConfigPath,
     startBackgroundUpdateCheck,
 } from "./commands/update.js";
-import type { BrowserControl } from "browser-typeagent/agent/interface";
+import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 
 debugShell("App name", app.getName());
 debugShell("App version", app.getVersion());
@@ -280,15 +280,6 @@ async function initializeDispatcher(
             },
         };
 
-        const browserControl: BrowserControl = {
-            async openWebPage(url: string) {
-                return shellWindow.openInlineBrowser(new URL(url));
-            },
-            async closeWebPage() {
-                shellWindow.closeInlineBrowser();
-            },
-        };
-
         // Set up dispatcher
         const newDispatcher = await createDispatcher("shell", {
             appAgentProviders: [
@@ -296,7 +287,7 @@ async function initializeDispatcher(
                 ...getDefaultAppAgentProviders(instanceDir),
             ],
             agentInitOptions: {
-                browser: browserControl,
+                browser: createInlineBrowserControl(shellWindow),
             },
             agentInstaller: getDefaultAppAgentInstaller(instanceDir),
             persistSession: true,

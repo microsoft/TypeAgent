@@ -12,4 +12,25 @@ export interface BrowserControl {
      * close the browser view.
      */
     closeWebPage(): Promise<void>;
+
+    goForward(): Promise<void>;
+    goBack(): Promise<void>;
+    reload(): Promise<void>;
+
+    getPageUrl(): Promise<string>;
+
+    setAgentStatus(isBusy: boolean, message: string): void;
 }
+
+export type BrowserControlInvokeFunctions = {
+    openWebPage(url: string): Promise<void>;
+    closeWebPage(): Promise<void>;
+    goForward(): Promise<void>;
+    goBack(): Promise<void>;
+    reload(): Promise<void>;
+    getPageUrl(): Promise<string>;
+};
+
+export type BrowserControlCallFunctions = {
+    setAgentStatus(params: { isBusy: boolean; message: string }): void;
+};
