@@ -71,6 +71,8 @@ app.post(
                 return;
             }
 
+            debug("Switch document called with parameter ", documentName)
+
             // Construct file path
             const sanitizedDocumentName = sanitizeFilename(documentName);
 
@@ -85,6 +87,7 @@ app.post(
                 `${sanitizedDocumentName}.md`,
             );
 
+            debug("Sanitized document path ", documentPath)
             // Verify that the file path is within the safe root directory
             if (!documentPath.startsWith(ROOT_DIR)) {
                 res.status(403).json({
@@ -104,12 +107,20 @@ app.post(
             filePath = documentPath;
 
             // Initialize collaboration for new document
-            const documentId = documentName;
-            collaborationManager.initializeDocument(documentId, documentPath);
+            const documentId = sanitizedDocumentName;
+            collaborationManager.initializeDocument(sanitizedDocumentName, documentPath);
 
             // Load content into collaboration manager
             const content = fs.readFileSync(documentPath, "utf-8");
-            collaborationManager.setDocumentContent(documentId, content);
+            debug("Raw content: ", content)
+            // collaborationManager.setDocumentContent(documentId, content);
+
+            const ydoc = getAuthoritativeDocument(documentId);
+            const ytext = ydoc.getText("content");
+
+            // Update document content
+            ytext.delete(0, ytext.length);
+            ytext.insert(0, content);
 
             res.json({
                 success: true,
@@ -406,7 +417,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
             return;
         }
 
-        debug(
+        console.log(
             `[AUTO-SAVE] Received auto-save request for document: ${documentId}`,
         );
         debug(
@@ -414,8 +425,17 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         );
 
         // Use the provided file path or fall back to current filePath
-        let sanitizedFilePath = sanitizeFilename(requestFilePath || filePath);
+        let sanitizedFilePath = sanitizeFilename(documentId || filePath);
+        if(!sanitizedFilePath.endsWith(".md")){
+                    sanitizedFilePath += ".md";
+        }
+
         const resolvedFilePath = path.resolve(ROOT_DIR, sanitizedFilePath);
+
+        console.log(
+            `[AUTO-SAVE] Sanitized file name: ${sanitizedFilePath} and resolved path ${resolvedFilePath}`,
+        );
+
         if (!resolvedFilePath.startsWith(ROOT_DIR)) {
             res.status(403).json({ error: "Invalid file path" });
             return;
@@ -423,7 +443,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         const targetFilePath = resolvedFilePath;
         const targetDocumentId =
             documentId ||
-            (filePath ? path.basename(filePath, ".md") : "default");
+            (sanitizedFilePath ? path.basename(sanitizedFilePath, ".md") : "default");
 
         if (!targetFilePath) {
             // Memory-only mode: save to authoritative Y.js document
@@ -478,7 +498,7 @@ app.post("/autosave", express.json(), (req: Request, res: Response) => {
         ytext.insert(0, content);
 
         // Then save to file
-        fs.writeFileSync(targetFilePath, content, "utf-8");
+        // fs.writeFileSync(targetFilePath, content, "utf-8");
 
         debug(
             `Auto-save completed to both Y.js document and file: ${targetFilePath}, ${content.length} chars`,

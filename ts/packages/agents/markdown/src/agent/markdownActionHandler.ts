@@ -448,7 +448,11 @@ async function handleMarkdownAction(
             } else {
                 result = createActionResult("Opening document ...");
 
-                const newFileName = action.parameters.name.trim() + ".md";
+                let newFileName = action.parameters.name.trim();
+                if(!newFileName.endsWith(".md")){
+                    newFileName += ".md";
+                }
+                
                 actionContext.sessionContext.agentContext.currentFileName =
                     newFileName;
 
@@ -464,7 +468,7 @@ async function handleMarkdownAction(
 
                     actionContext.sessionContext.agentContext.viewProcess.send({
                         type: "setFile",
-                        filePath: fullPath,
+                        filePath: path.basename(fullPath!),
                         folderPath: path.dirname(fullPath!),
                     });
                 }
@@ -802,7 +806,7 @@ export async function createViewServiceHost(filePath: string, port: number) {
 
                 childProcess.send({
                     type: "setFile",
-                    filePath: filePath,
+                    filePath: path.basename(filePath),
                 });
 
                 childProcess.on("message", function (message) {

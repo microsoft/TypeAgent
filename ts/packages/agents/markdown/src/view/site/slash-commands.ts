@@ -101,7 +101,50 @@ export const slashCommandHandler = $prose((_ctx) => {
                         },
                     },
                     {
+                        pattern: /^\/test:ai:(?:\s*(.+))?\s*$/,
+                        handler: (match: RegExpMatchArray) => {
+                            const instruction =
+                                match[1]?.trim() || "improve formatting";
+                            executeSlashCommand(
+                                "augment",
+                                { instruction },
+                                true,
+                                view,
+                                lineStart,
+                                lineEnd,
+                            );
+                        },
+                    },
+                    {
                         pattern: /^\/augment\s+(.+)\s*$/,
+                        handler: (match: RegExpMatchArray) => {
+                            const instruction = match[1]?.trim();
+                            executeSlashCommand(
+                                "augment",
+                                { instruction },
+                                false,
+                                view,
+                                lineStart,
+                                lineEnd,
+                            );
+                        },
+                    },
+                    {
+                        pattern: /^\/ai:\s*(.+)\s*$/,
+                        handler: (match: RegExpMatchArray) => {
+                            const instruction = match[1]?.trim();
+                            executeSlashCommand(
+                                "augment",
+                                { instruction },
+                                false,
+                                view,
+                                lineStart,
+                                lineEnd,
+                            );
+                        },
+                    },
+                    {
+                        pattern: /^@ai:\s*(.+)\s*$/,
                         handler: (match: RegExpMatchArray) => {
                             const instruction = match[1]?.trim();
                             executeSlashCommand(
@@ -209,28 +252,40 @@ export const slashCommandPreview = $prose(() => {
                 // Define command patterns for styling
                 const commandPatterns = [
                     {
-                        pattern: /^(\/test:continue)(\s+(.+))?$/,
+                        pattern: /^(\/test:continue)(\s.*)?$/,
                         commandEnd: 14, // "/test:continue".length
                     },
                     {
-                        pattern: /^(\/continue)(\s+(.+))?$/,
+                        pattern: /^(\/continue)(\s.*)?$/,
                         commandEnd: 9, // "/continue".length
                     },
                     {
-                        pattern: /^(\/test:diagram)(\s+(.+))?$/,
+                        pattern: /^(\/test:diagram)(\s.*)?$/,
                         commandEnd: 13, // "/test:diagram".length
                     },
                     {
-                        pattern: /^(\/diagram)(\s+(.+))?$/,
+                        pattern: /^(\/diagram)(\s.*)?$/,
                         commandEnd: 8, // "/diagram".length
                     },
                     {
-                        pattern: /^(\/test:augment)(\s+(.+))?$/,
+                        pattern: /^(\/test:augment)(\s.*)?$/,
                         commandEnd: 13, // "/test:augment".length
                     },
                     {
-                        pattern: /^(\/augment)(\s+(.+))?$/,
+                        pattern: /^(\/test:ai:)(\s.*)?$/,
+                        commandEnd: 9, // "/test:ai:".length
+                    },
+                    {
+                        pattern: /^(\/augment)(\s.*)?$/,
                         commandEnd: 8, // "/augment".length
+                    },
+                    {
+                        pattern: /^(\/ai:)(\s.*)?$/,
+                        commandEnd: 4, // "/ai:".length
+                    },
+                    {
+                        pattern: /^(@ai:)(\s.*)?$/,
+                        commandEnd: 4, // "@ai:".length
                     },
                 ];
 
@@ -248,19 +303,19 @@ export const slashCommandPreview = $prose(() => {
                         decorations.push(commandDecoration);
 
                         // Style the instruction part if it exists
-                        if (match[3]) {
-                            // The instruction part
-                            const instructionStart =
-                                lineStart +
-                                match[1].length +
-                                (match[2].length - match[3].length);
-                            const instructionEnd = lineStart + lineText.length;
-                            const instructionDecoration = Decoration.inline(
-                                instructionStart,
-                                instructionEnd,
-                                { class: "slash-command-instruction" },
-                            );
-                            decorations.push(instructionDecoration);
+                        if (match[2] && match[2].trim()) {
+                            // The instruction part - everything after the command and spaces
+                            const instructionText = match[2].trim();
+                            if (instructionText) {
+                                const instructionStart = lineText.indexOf(instructionText, cmd.commandEnd);
+                                const instructionEnd = instructionStart + instructionText.length;
+                                const instructionDecoration = Decoration.inline(
+                                    lineStart + instructionStart,
+                                    lineStart + instructionEnd,
+                                    { class: "slash-command-instruction" },
+                                );
+                                decorations.push(instructionDecoration);
+                            }
                         }
                         break;
                     }
