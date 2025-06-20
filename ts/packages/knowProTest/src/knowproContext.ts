@@ -14,12 +14,12 @@ export class KnowproContext {
     constructor(basePath?: string) {
         this.basePath = basePath ?? "/data/testChat/knowpro";
         this.knowledgeModel = createKnowledgeModel();
-        (this.queryTranslator = kp.createSearchQueryTranslator(
+        this.queryTranslator = kp.createSearchQueryTranslator(
             this.knowledgeModel,
-        )),
-            (this.answerGenerator = new kp.AnswerGenerator(
-                kp.createAnswerGeneratorSettings(this.knowledgeModel),
-            ));
+        );
+        this.answerGenerator = new kp.AnswerGenerator(
+            kp.createAnswerGeneratorSettings(this.knowledgeModel),
+        );
     }
 
     public ensureConversationLoaded(): kp.IConversation {

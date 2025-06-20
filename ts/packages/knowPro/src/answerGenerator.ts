@@ -131,7 +131,7 @@ export type AnswerGeneratorSettings = {
  * If the context exceeds the generator.setting.maxCharsInBudget, will break up the context into
  * chunks, run them in parallel, and then merge the answers found in individual chunks
  * @param conversation conversation about which this is a question
- * @param generator answer generator to use
+ * @param generator answer generator to use to turn search results onto language answers: @see AnswerGenerator
  * @param question question that was asked
  * @param searchResults the results of running a search query for the question on the conversation
  * @param progress Progress callback
