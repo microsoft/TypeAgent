@@ -572,7 +572,9 @@ def create_match_terms_boolean_expr(
 
 # TODO: Move to compilelib.py
 def create_match_messages_boolean_expr(
-    term_expressions: list[IQueryOpExpr[MessageAccumulator | None]],
+    term_expressions: list[
+        IQueryOpExpr[SemanticRefAccumulator | MessageAccumulator | None]
+    ],
     boolean_op: BooleanOp,
     scope_expr: GetScopeExpr | None = None,
 ) -> MatchMessagesBooleanExpr:
