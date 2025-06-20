@@ -64,7 +64,7 @@ app.post(
         try {
             const { documentName } = req.body;
 
-            if (!documentName || !/^[a-zA-Z0-9_]+$/.test(documentName)) {
+            if (!documentName || !/^[a-zA-Z0-9_\- ]+$/.test(documentName)) {
                 res.status(400).json({
                     error: "Invalid document name. Only alphanumeric characters and underscores are allowed.",
                 });
@@ -102,7 +102,7 @@ app.post(
             }
 
             filePath = documentPath;
-            
+
             // Initialize collaboration for new document
             const documentId = documentName;
             collaborationManager.initializeDocument(documentId, documentPath);
@@ -570,8 +570,13 @@ app.post("/file/load", express.json(), (req: Request, res: Response) => {
         }
 
         const resolvedPath = path.resolve(ROOT_DIR, newFilePath);
-        if (!resolvedPath.startsWith(ROOT_DIR) || !fs.existsSync(resolvedPath)) {
-            res.status(403).json({ error: "Access to the file is forbidden or file not found" });
+        if (
+            !resolvedPath.startsWith(ROOT_DIR) ||
+            !fs.existsSync(resolvedPath)
+        ) {
+            res.status(403).json({
+                error: "Access to the file is forbidden or file not found",
+            });
             return;
         }
 
