@@ -4,7 +4,7 @@
 // Consolidated utilities for the markdown editor site
 
 import type { Editor } from "@milkdown/core";
-import { editorViewCtx } from "@milkdown/core";
+import { editorViewCtx, serializerCtx } from "@milkdown/core";
 import type { ContentItem } from "./types";
 import { EDITOR_CONFIG } from "./config";
 
@@ -82,6 +82,64 @@ export function removeClass(element: HTMLElement, className: string): void {
 
 export function hasClass(element: HTMLElement, className: string): boolean {
     return element.classList.contains(className);
+}
+
+// ============================================================================
+// Markdown Serialization Utilities
+// ============================================================================
+
+/**
+ * Get proper markdown content from Milkdown editor using the serializer
+ * This ensures we get accurate markdown formatting and position information
+ */
+export async function getMarkdownFromEditor(editor: Editor): Promise<string> {
+    if (!editor) return "";
+
+    return new Promise((resolve) => {
+        try {
+            editor.action((ctx) => {
+                const view = ctx.get(editorViewCtx);
+                const serializer = ctx.get(serializerCtx);
+                const markdown = serializer(view.state.doc);
+                resolve(markdown);
+            });
+        } catch (error) {
+            console.warn("Failed to serialize markdown from editor:", error);
+            // Fallback to text content if serializer fails
+            editor.action((ctx) => {
+                const view = ctx.get(editorViewCtx);
+                resolve(view.state.doc.textContent || "");
+            });
+        }
+    });
+}
+
+/**
+ * Get current cursor position and selection information from editor
+ */
+export function getEditorPositionInfo(editor: Editor): Promise<{
+    position: number;
+    selection?: { from: number; to: number };
+}> {
+    return new Promise((resolve) => {
+        editor.action((ctx) => {
+            const view = ctx.get(editorViewCtx);
+            const selection = view.state.selection;
+            
+            const result: { position: number; selection?: { from: number; to: number } } = {
+                position: selection.head
+            };
+            
+            if (!selection.empty) {
+                result.selection = {
+                    from: selection.from,
+                    to: selection.to
+                };
+            }
+            
+            resolve(result);
+        });
+    });
 }
 
 // ============================================================================

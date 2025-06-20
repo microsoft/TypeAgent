@@ -5,6 +5,7 @@ import type { Editor } from "@milkdown/core";
 import { editorViewCtx, parserCtx } from "@milkdown/core";
 import type { SaveStatus } from "../types";
 import { AI_CONFIG, DEFAULT_MARKDOWN_CONTENT, EDITOR_CONFIG } from "../config";
+import { getMarkdownFromEditor, getEditorPositionInfo } from "../utils";
 
 export class DocumentManager {
     private notificationManager: any = null;
@@ -147,6 +148,7 @@ export class DocumentManager {
             this.eventSource.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    console.log(`[SSE] Received event: ${data.type}`, data);
                     this.handleSSEEvent(data);
                 } catch (error) {
                     console.error("[SSE] Failed to parse event data:", error);
@@ -300,6 +302,12 @@ export class DocumentManager {
                 }
                 break;
 
+            case "requestMarkdown":
+                // Handle request for markdown content from view process
+                console.log(`[SSE] Received requestMarkdown event:`, data);
+                await this.handleMarkdownRequest(data.requestId);
+                break;
+
             default:
                 // Log unknown event types for debugging
                 console.log(`[SSE] Unknown event type: ${data.type}`, data);
@@ -359,6 +367,75 @@ export class DocumentManager {
         if (this.autoSaveTimer) {
             clearInterval(this.autoSaveTimer);
             this.autoSaveTimer = null;
+        }
+    }
+
+    /**
+     * Handle markdown content request from view process
+     * This provides proper markdown serialization from the Milkdown editor
+     */
+    private async handleMarkdownRequest(requestId: string): Promise<void> {
+        console.log(`[CLIENT] Handling markdown request: ${requestId}`);
+        console.log(`[CLIENT] Editor manager available: ${!!this.editorManager}`);
+        
+        try {
+            let markdown = "";
+            let positionInfo = { position: 0 };
+
+            if (this.editorManager) {
+                const editor = this.editorManager.getEditor();
+                console.log(`[CLIENT] Editor available: ${!!editor}`);
+                if (editor) {
+                    // Get proper markdown from the editor using serializer
+                    console.log(`[CLIENT] Getting markdown from editor using static import...`);
+                    
+                    markdown = await getMarkdownFromEditor(editor);
+                    positionInfo = await getEditorPositionInfo(editor);
+                    
+                    console.log(`[CLIENT] Retrieved markdown from editor: ${markdown.length} chars, position: ${positionInfo.position}`);
+                } else {
+                    console.warn("[CLIENT] No editor available for markdown request");
+                }
+            } else {
+                console.warn("[CLIENT] No editor manager available for markdown request");
+            }
+
+            console.log(`[CLIENT] Sending markdown response to server...`);
+            // Send markdown content back to view process
+            const response = await fetch('/api/markdown-response', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    requestId: requestId,
+                    markdown: markdown,
+                    positionInfo: positionInfo,
+                    timestamp: Date.now()
+                })
+            });
+
+            if (!response.ok) {
+                console.error(`[CLIENT] Failed to send markdown response: ${response.statusText}`);
+            } else {
+                console.log(`[CLIENT] Successfully sent markdown response for request: ${requestId}`);
+            }
+        } catch (error) {
+            console.error(`[CLIENT] Error handling markdown request:`, error);
+            
+            // Send error response
+            try {
+                await fetch('/api/markdown-response', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        requestId: requestId,
+                        markdown: "",
+                        error: error instanceof Error ? error.message : "Unknown error",
+                        timestamp: Date.now()
+                    })
+                });
+            } catch (responseError) {
+                console.error(`[CLIENT] Failed to send error response:`, responseError);
+            }
         }
     }
 
@@ -772,13 +849,10 @@ export class DocumentManager {
                     // Handle different content types
                     switch (item.type) {
                         case "heading":
-                            const level = item.level || 1;
                             const headingText = this.extractTextFromContent(
-                                item.content,
+                                item.content || item.text,
                             );
-                            const result =
-                                "#".repeat(level) + " " + headingText;
-                            return result;
+                            return headingText;
 
                         case "paragraph":
                             const paragraphText = this.extractTextFromContent(

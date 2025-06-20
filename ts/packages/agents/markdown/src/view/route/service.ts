@@ -140,6 +140,52 @@ app.post(
     },
 );
 
+// API endpoint to handle markdown response from clients
+app.post(
+    "/api/markdown-response",
+    express.json(),
+    (req: Request, res: Response) => {
+        try {
+            const { requestId, markdown, positionInfo, error } = req.body;
+            
+            if (!requestId) {
+                res.status(400).json({ error: "Request ID is required" });
+                return;
+            }
+
+            debug(`[MARKDOWN-RESPONSE] Received response for request: ${requestId}, markdown length: ${markdown?.length || 0}, error: ${error || 'none'}`);
+
+            // Find the pending markdown request
+            const pendingRequest = pendingMarkdownRequests.get(requestId);
+            if (pendingRequest) {
+                clearTimeout(pendingRequest.timeout);
+                pendingMarkdownRequests.delete(requestId);
+                
+                if (error) {
+                    pendingRequest.reject(new Error(error));
+                } else {
+                    pendingRequest.resolve({
+                        markdown: markdown || "",
+                        positionInfo: positionInfo || { position: 0 }
+                    });
+                }
+                
+                debug(`[MARKDOWN-RESPONSE] Resolved request: ${requestId}`);
+            } else {
+                debug(`[MARKDOWN-RESPONSE] No pending request found for: ${requestId}`);
+            }
+
+            res.json({ success: true });
+        } catch (error) {
+            console.error("[MARKDOWN-RESPONSE] Error handling response:", error);
+            res.status(500).json({ 
+                error: "Failed to handle markdown response",
+                details: error instanceof Error ? error.message : error
+            });
+        }
+    },
+);
+
 let clients: any[] = [];
 let filePath: string | null;
 let collaborationManager: CollaborationManager;
@@ -147,6 +193,10 @@ let collaborationManager: CollaborationManager;
 // UI Command routing state
 let commandCounter = 0;
 const pendingCommands = new Map<string, any>();
+
+// Markdown request state
+let markdownRequestCounter = 0;
+const pendingMarkdownRequests = new Map<string, any>();
 const userHomeDir = os.homedir();
 const ROOT_DIR =
     process.env.TYPEAGENT_MARKDOWN_ROOT || path.join(userHomeDir, "Documents");
@@ -247,6 +297,65 @@ async function sendUICommandToAgentWithStreaming(
             },
             timestamp: Date.now(),
         });
+    });
+}
+
+/**
+ * Request markdown content from connected client with retry logic
+ */
+async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
+    markdown: string;
+    positionInfo: { position: number; selection?: { from: number; to: number } };
+}> {
+    const maxRetries = 2;
+    
+    return new Promise((resolve, reject) => {
+        const requestId = `markdown_req_${++markdownRequestCounter}`;
+        const timeout = setTimeout(() => {
+            pendingMarkdownRequests.delete(requestId);
+            
+            if (retryCount < maxRetries && clients.length > 0) {
+                debug(`[MARKDOWN-REQUEST] Timeout, retrying (${retryCount + 1}/${maxRetries})`);
+                // Retry after a short delay
+                setTimeout(() => {
+                    requestMarkdownFromClient(retryCount + 1)
+                        .then(resolve)
+                        .catch(reject);
+                }, 1000);
+            } else {
+                reject(new Error("Client markdown request timeout"));
+            }
+        }, 5000); // 5 second timeout
+
+        // Store resolver for this request
+        pendingMarkdownRequests.set(requestId, { resolve, reject, timeout });
+
+        // Send request to clients via SSE
+        debug(`[MARKDOWN-REQUEST] Sending request to clients: ${requestId} (attempt ${retryCount + 1})`);
+        
+        if (clients.length === 0) {
+            clearTimeout(timeout);
+            pendingMarkdownRequests.delete(requestId);
+            reject(new Error("No clients connected to provide markdown"));
+            return;
+        }
+
+        // Send to primary client (first connected)
+        const primaryClient = clients[0];
+        try {
+            primaryClient.write(
+                `data: ${JSON.stringify({
+                    type: "requestMarkdown",
+                    requestId: requestId,
+                    timestamp: Date.now(),
+                })}\n\n`,
+            );
+            debug(`[MARKDOWN-REQUEST] Sent request to primary client: ${requestId}`);
+        } catch (error) {
+            clearTimeout(timeout);
+            pendingMarkdownRequests.delete(requestId);
+            reject(new Error(`Failed to send markdown request to client: ${error}`));
+        }
     });
 }
 
@@ -1222,7 +1331,9 @@ app.get("/events", (req: Request, res: Response) => {
 // Serve static files AFTER API routes to avoid conflicts
 app.use(express.static(staticPath));
 
-process.on("message", (message: any) => {
+process.on("message", async (message: any) => {
+    debug(`[VIEW] Received IPC message: ${message.type} at ${new Date().toISOString()}`);
+    
     if (message.type == "setFile") {
         if (message.filePath) {
             // Resolve and validate the file path
@@ -1451,43 +1562,69 @@ Start typing to see the editor in action!
             });
         }
     } else if (message.type === "getDocumentContent") {
-        // Handle content requests from agent - read from authoritative Y.js document
-        try {
-            let documentId = "";
+        debug(`[VIEW] Processing getDocumentContent request at ${new Date().toISOString()}`);
+        // Handle content requests from agent - try client markdown first, fallback to Y.js
+        // Process this asynchronously to avoid blocking other messages
+        (async () => {
+            try {
+                let documentId = "";
 
-            if (!filePath) {
-                // Use default document ID for memory-only mode
-                documentId = "default";
-            } else {
-                documentId = path.basename(filePath, ".md");
+                if (!filePath) {
+                    // Use default document ID for memory-only mode
+                    documentId = "default";
+                } else {
+                    documentId = path.basename(filePath, ".md");
+                }
+
+                debug("Using documentID " + documentId);
+
+                let content = "";
+                let source = "unknown";
+
+                try {
+                    // PRIMARY: Try to get proper markdown from connected client
+                    if (clients.length > 0) {
+                        debug(`[VIEW] Attempting to get markdown from connected client...`);
+                        const markdownResponse = await requestMarkdownFromClient();
+                        content = markdownResponse.markdown;
+                        source = "client-serializer";
+                        debug(`[VIEW] Retrieved markdown from client: ${content.length} chars`);
+                    } else {
+                        throw new Error("No clients connected");
+                    }
+                } catch (clientError) {
+                    const errorMessage = clientError instanceof Error ? clientError.message : String(clientError);
+                    debug(`[VIEW] Failed to get markdown from client (${errorMessage}), falling back to Y.js`);
+                    
+                    // FALLBACK: Get content from authoritative Y.js document
+                    const ydoc = getAuthoritativeDocument(documentId);
+                    const yText = ydoc.getText("content");
+                    content = yText.toString();
+                    source = "yjs-fallback";
+                    debug(`[VIEW] Retrieved content from Y.js fallback: ${content.length} chars`);
+                }
+
+                debug(`[VIEW] Sending document content to agent (source: ${source}, ${content.length} chars)`);
+
+                process.send?.({
+                    type: "documentContent",
+                    content: content,
+                    source: source,
+                    timestamp: Date.now(),
+                });
+
+                debug("[SENT] [VIEW] Sent document content to agent process");
+            } catch (error) {
+                console.error("[VIEW] Failed to get document content:", error);
+                process.send?.({
+                    type: "documentContent",
+                    content: "",
+                    source: "error",
+                    error: error instanceof Error ? error.message : "Unknown error",
+                    timestamp: Date.now(),
+                });
             }
-
-            debug("Using documentID " + documentId);
-
-            // Get content from authoritative Y.js document (single source of truth)
-            const ydoc = getAuthoritativeDocument(documentId);
-            const yText = ydoc.getText("content");
-            const content = yText.toString();
-
-            debug(
-                `Retrieved content from authoritative Y.js doc ${documentId}: ${content.length} chars`,
-            );
-
-            process.send?.({
-                type: "documentContent",
-                content: content,
-                timestamp: Date.now(),
-            });
-
-            debug("[SENT] [VIEW] Sent document content to agent process");
-        } catch (error) {
-            console.error("[VIEW] Failed to get document content:", error);
-            process.send?.({
-                type: "documentContent",
-                content: "",
-                timestamp: Date.now(),
-            });
-        }
+        })();
     } else if (message.type === "uiCommandResult") {
         // Handle UI command results from agent
         const pending = pendingCommands.get(message.requestId);
@@ -1629,9 +1766,6 @@ function setupWSConnection(conn: any, req: any, roomName: string): void {
         if (conn.readyState === conn.OPEN) {
             try {
                 conn.send(message);
-                debug(
-                    `Sent WebSocket message to client: ${message.length} bytes`,
-                );
             } catch (error) {
                 console.error(`Failed to send message to client:`, error);
                 closeConnection(doc, conn);
@@ -1868,17 +2002,28 @@ function setupWSConnection(conn: any, req: any, roomName: string): void {
         closeConnection(ydoc, conn);
     });
 
-    // Add ping/pong to keep connection alive
+    // Add ping/pong to keep connection alive with more lenient timeouts
     let pongReceived = true;
+    let missedPings = 0;
+    const maxMissedPings = 3; // Allow 3 missed pings before disconnecting
+    
     const pingInterval = setInterval(() => {
         if (!pongReceived) {
+            missedPings++;
             debug(
-                `Client in room ${roomName} didn't respond to ping, closing connection`,
+                `Client in room ${roomName} missed ping ${missedPings}/${maxMissedPings}`,
             );
-            closeConnection(ydoc, conn);
-            clearInterval(pingInterval);
+            
+            if (missedPings >= maxMissedPings) {
+                debug(
+                    `Client in room ${roomName} exceeded missed ping limit, closing connection`,
+                );
+                closeConnection(ydoc, conn);
+                clearInterval(pingInterval);
+            }
         } else if (conn.readyState === conn.OPEN) {
             pongReceived = false;
+            missedPings = 0; // Reset missed ping counter
             try {
                 conn.ping();
             } catch (error) {
@@ -1889,10 +2034,12 @@ function setupWSConnection(conn: any, req: any, roomName: string): void {
         } else {
             clearInterval(pingInterval);
         }
-    }, 30000); // Ping every 30 seconds
+    }, 45000); // Increased from 30s to 45s to be more lenient
 
     conn.on("pong", () => {
         pongReceived = true;
+        missedPings = 0; // Reset counter on successful pong
+        debug(`Received pong from client in room ${roomName}`);
     });
 
     conn.on("close", () => {

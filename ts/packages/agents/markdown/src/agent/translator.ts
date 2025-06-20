@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createJsonTranslator, MultimodalPromptContent, TypeChatJsonTranslator } from "typechat";
 import { ChatModelWithStreaming, openai as ai } from "aiclient";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import fs from "node:fs";
@@ -69,7 +69,7 @@ export class MarkdownAgent<T extends object> {
             contentPrompt.push({
                 type: "text",
                 text: `
-            Here is the current markdown for the document:
+            Here is the current markdown for the document. The document uses GitHub-flavored markdown: 
             '''
             ${currentMarkdown}
             '''
@@ -80,9 +80,7 @@ export class MarkdownAgent<T extends object> {
         const promptSections = [
             {
                 type: "text",
-                text: `You are a virtual assistant that helps users edit markdown documents. The document uses GitHub-flavored markdown.
-
-                Here is the current state of the document`,
+                text: `You are a virtual assistant that helps users edit markdown documents.`,
             },
             ...contentPrompt,
             {
@@ -95,7 +93,10 @@ export class MarkdownAgent<T extends object> {
             ${this.schema}
             '''
             
-            User request: ${intent}
+            Here is the request from the user: 
+            '''
+            ${intent}
+            '''
             
             The following is the response formatted as a JSON object with 2 spaces of indentation and no properties with the value undefined:
         `,
@@ -114,8 +115,10 @@ export class MarkdownAgent<T extends object> {
             debug(`Request prompt: ${input}`);
             return "";
         };
+
+        debug("Prompt Sections: ",  promptSections )
         const response = await this.translator.translate("", [
-            { role: "user", content: JSON.stringify(promptSections) },
+            { role: "user", content: promptSections as MultimodalPromptContent[] },
         ]);
         return response;
     }

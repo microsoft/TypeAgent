@@ -41,6 +41,8 @@ export interface GetDocumentContentMessage {
 export interface DocumentContentMessage {
     type: "documentContent";
     content: string;
+    source?: "client-serializer" | "yjs-fallback" | "error";
+    error?: string;
     timestamp: number;
 }
 
@@ -74,4 +76,24 @@ export interface NotificationEvent {
 export interface OperationsAppliedEvent {
     type: "operationsApplied";
     operationCount: number;
+}
+
+// Client ← View: Markdown content requests
+export interface RequestMarkdownMessage {
+    type: "requestMarkdown";
+    requestId: string;
+    timestamp: number;
+}
+
+// View ← Client: Markdown content responses
+export interface MarkdownResponseMessage {
+    type: "markdownResponse";
+    requestId: string;
+    markdown: string;
+    positionInfo?: {
+        position: number;
+        selection?: { from: number; to: number };
+    };
+    error?: string;
+    timestamp: number;
 }

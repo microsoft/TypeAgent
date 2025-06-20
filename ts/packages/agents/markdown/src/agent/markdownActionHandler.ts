@@ -758,17 +758,28 @@ async function getDocumentContentFromView(
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             reject(new Error("Timeout getting document content from view"));
-        }, 3000);
+        }, 8000);
 
         const responseHandler = (message: any) => {
             if (message.type === "documentContent") {
                 clearTimeout(timeout);
                 viewProcess.off("message", responseHandler);
+                
+                // Log the source of the content for debugging
+                const source = message.source || "unknown";
+                debug(`[AGENT] Received document content from ${source}: ${message.content?.length || 0} chars`);
+                
+                if (message.error) {
+                    debug(`[AGENT] Content retrieval had error: ${message.error}`);
+                }
+                
                 resolve(message.content);
             }
         };
 
         viewProcess.on("message", responseHandler);
+        
+        debug("[AGENT] Sending getDocumentContent request to view process");
         viewProcess.send({ type: "getDocumentContent" });
     });
 }
