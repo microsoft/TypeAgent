@@ -41,7 +41,7 @@ function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
     const optionsChannel: RpcChannel = channelProvider.createChannel(
         `options:${name}`,
     );
-    return createRpc<OptionsFunctionCallBack>(optionsChannel);
+    return createRpc<OptionsFunctionCallBack>(name, optionsChannel);
 }
 
 function populateOptionsFunctions(
@@ -260,7 +260,7 @@ export function createAgentRpcServer(
         AgentContextCallFunctions,
         AgentInvokeFunctions,
         AgentCallFunctions
-    >(channel, agentInvokeHandlers, agentCallHandlers);
+    >(name, channel, agentInvokeHandlers, agentCallHandlers);
 
     function getStorage(contextId: number, session: boolean): Storage {
         const tokenCachePersistence: TokenCachePersistence = {

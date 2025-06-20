@@ -79,6 +79,7 @@ import { openai, TextEmbeddingModel } from "aiclient";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
+const debugWebSocket = registerDebug("typeagent:browser:ws");
 
 export function instantiate(): AppAgent {
     return {
@@ -179,19 +180,20 @@ async function updateBrowserContext(
         const webSocket = await createWebSocket("browser", "dispatcher");
         if (webSocket) {
             context.agentContext.webSocket = webSocket;
-            context.agentContext.externalBrowserControl =
-                createExternalBrowserClient(webSocket);
+            const browserControls = createExternalBrowserClient(webSocket);
+            context.agentContext.externalBrowserControl = browserControls;
             context.agentContext.browserConnector = new BrowserConnector(
                 context,
             );
 
             webSocket.onclose = (event: object) => {
-                console.error("Browser webSocket connection closed.");
+                debugWebSocket("Browser webSocket connection closed.");
                 context.agentContext.webSocket = undefined;
             };
             webSocket.addEventListener("message", async (event: any) => {
                 const text = event.data.toString();
                 const data = JSON.parse(text);
+                debugWebSocket(`Received message from browser: ${text}`);
                 if (isWebAgentMessage(data)) {
                     await processWebAgentMessage(data, context);
                     return;
@@ -210,19 +212,24 @@ async function updateBrowserContext(
                             const targetTranslator = data.params.translator;
                             if (targetTranslator == "browser.crossword") {
                                 // initialize crossword state
-                                sendSiteTranslatorStatus(
-                                    targetTranslator,
-                                    "initializing",
-                                    context,
+                                browserControls.setAgentStatus(
+                                    true,
+                                    `Initializing ${targetTranslator}`,
                                 );
-                                context.agentContext.crossWordState =
-                                    await getBoardSchema(context);
+                                try {
+                                    context.agentContext.crossWordState =
+                                        await getBoardSchema(context);
 
-                                sendSiteTranslatorStatus(
-                                    targetTranslator,
-                                    "initialized",
-                                    context,
-                                );
+                                    browserControls.setAgentStatus(
+                                        false,
+                                        `Finished initializing ${targetTranslator}`,
+                                    );
+                                } catch (e) {
+                                    browserControls.setAgentStatus(
+                                        false,
+                                        `Failed to initialize ${targetTranslator}`,
+                                    );
+                                }
 
                                 if (context.agentContext.crossWordState) {
                                     context.notify(
@@ -686,28 +693,6 @@ async function executeBrowserAction(
         throw new Error("No websocket connection.");
     }
     return undefined;
-}
-
-function sendSiteTranslatorStatus(
-    schemaName: string,
-    status: string,
-    context: SessionContext<BrowserActionContext>,
-) {
-    const webSocketEndpoint = context.agentContext.webSocket;
-    const callId = new Date().getTime().toString();
-
-    if (webSocketEndpoint) {
-        webSocketEndpoint.send(
-            JSON.stringify({
-                method: "browser/siteTranslatorStatus",
-                id: callId,
-                params: {
-                    translator: schemaName,
-                    status: status,
-                },
-            }),
-        );
-    }
 }
 
 async function handleTabIndexActions(

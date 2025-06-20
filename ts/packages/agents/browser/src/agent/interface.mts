@@ -18,6 +18,8 @@ export interface BrowserControl {
     reload(): Promise<void>;
 
     getPageUrl(): Promise<string>;
+
+    setAgentStatus(isBusy: boolean, message: string): void;
 }
 
 export type BrowserControlInvokeFunctions = {
@@ -27,4 +29,8 @@ export type BrowserControlInvokeFunctions = {
     goBack(): Promise<void>;
     reload(): Promise<void>;
     getPageUrl(): Promise<string>;
+};
+
+export type BrowserControlCallFunctions = {
+    setAgentStatus(params: { isBusy: boolean; message: string }): void;
 };
