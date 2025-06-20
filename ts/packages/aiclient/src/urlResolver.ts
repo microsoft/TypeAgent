@@ -120,7 +120,7 @@ async function ensureResolverAgent(
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
     return await agents.ensureAgent(
-        groundingConfig.validatorAgentId!, 
+        groundingConfig.urlResolutionAgentId!, 
         project,
         {
             model: "gpt-4o",
@@ -290,8 +290,15 @@ export async function validateURL(
                     },                
                 */
                 retryCount++;
-                console.log(lastResponse);
+                //console.log(lastResponse);
+                console.log(pollingError);
+                const ee = (lastResponse as any).parsedBody;
+                console.log(`\t${JSON.stringify(ee.last_error)}`);
             }            
+        }
+
+        if (retryCount >= maxRetries) {
+            console.log("MAXIMUM RETRY COUNT EXCEEDED!!!");
         }
 
         // delete the thread we just created since we are currently one and done
