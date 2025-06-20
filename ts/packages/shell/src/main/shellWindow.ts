@@ -41,6 +41,13 @@ export class ShellWindow {
     private readonly handlers = new Map<string, (event: any) => void>();
     private readonly settings: ShellSettingManager;
     private closing: boolean = false;
+
+    public get inlineBrowser(): WebContentsView {
+        if (this.inlineWebContentView === undefined) {
+            throw new Error("Inline browser is not open");
+        }
+        return this.inlineWebContentView;
+    }
     constructor(shellSettings: ShellSettings, instanceDir: string) {
         if (ShellWindow.instance !== undefined) {
             throw new Error("ShellWindow already created");
