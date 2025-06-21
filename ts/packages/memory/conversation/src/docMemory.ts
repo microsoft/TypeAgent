@@ -23,34 +23,16 @@ export class DocPartMeta extends MessageMetadata {
  */
 export class DocPart extends Message<DocPartMeta> {
     constructor(
-        textChunks: string | string[],
+        textChunks: string | string[] = [],
         metadata?: DocPartMeta | undefined,
         tags?: string[] | undefined,
-        timestamp?: string,
+        timestamp?: string | undefined,
+        knowledge?: kpLib.conversation.KnowledgeResponse | undefined,
         deletionInfo: kp.DeletionInfo | undefined = undefined,
     ) {
         metadata ??= new DocPartMeta();
         tags ??= [];
-        timestamp = timestamp ?? new Date().toISOString();
-        super(metadata, textChunks, tags, timestamp, undefined, deletionInfo);
-    }
-}
-
-export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
-    public serialize(value: DocPart): string {
-        return JSON.stringify(value);
-    }
-
-    public deserialize(json: string): DocPart {
-        const jMsg: DocPart = JSON.parse(json);
-        const jMeta: DocPartMeta = jMsg.metadata;
-        return new DocPart(
-            jMsg.textChunks,
-            jMeta,
-            jMsg.tags,
-            jMsg.timestamp,
-            jMsg.deletionInfo,
-        );
+        super(metadata, textChunks, tags, timestamp, knowledge, deletionInfo);
     }
 }
 
@@ -192,3 +174,22 @@ export class DocMemory
 
 export interface DocMemoryData
     extends kp.IConversationDataWithIndexes<DocPart> {}
+
+export class DocPartSerializer implements kp.JsonSerializer<DocPart> {
+    public serialize(value: DocPart): string {
+        return JSON.stringify(value);
+    }
+
+    public deserialize(json: string): DocPart {
+        const jMsg: DocPart = JSON.parse(json);
+        const jMeta: DocPartMeta = jMsg.metadata;
+        return new DocPart(
+            jMsg.textChunks,
+            jMeta,
+            jMsg.tags,
+            jMsg.timestamp,
+            jMsg.knowledge,
+            jMsg.deletionInfo,
+        );
+    }
+}

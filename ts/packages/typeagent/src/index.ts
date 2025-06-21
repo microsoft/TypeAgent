@@ -7,6 +7,7 @@ export * from "./prompt.js";
 export * from "./schema.js";
 export * from "./chat.js";
 export * from "./textProcessing.js";
+export * from "./htmlProcessing.js";
 export * from "./objStream.js";
 export * from "./schema.js";
 

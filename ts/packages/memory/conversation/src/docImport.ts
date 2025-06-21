@@ -1,14 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getFileName, htmlToText, readAllText } from "typeagent";
+import { getFileName, HtmlTag, htmlToHtmlTags, readAllText } from "typeagent";
 import {
     DocMemory,
     DocMemorySettings,
     DocPart,
     DocPartMeta,
 } from "./docMemory.js";
-import * as kpLib from "knowledge-processor";
+import {
+    conversation as kpLib,
+    splitLargeTextIntoChunks,
+} from "knowledge-processor";
+import * as kp from "knowpro";
 import { parseVttTranscript } from "./transcript.js";
 import { filePathToUrlString } from "memory-storage";
 import path from "path";
@@ -97,7 +101,7 @@ export function docPartsFromText(
     sourceUrl?: string,
 ): DocPart[] {
     const blocks: DocPart[] = [];
-    for (const chunk of kpLib.splitLargeTextIntoChunks(
+    for (const chunk of splitLargeTextIntoChunks(
         documentText,
         maxCharsPerChunk,
         false,
@@ -121,11 +125,7 @@ export function docPartFromText(
     sourceUrl?: string,
 ): DocPart {
     const textChunks = [
-        ...kpLib.splitLargeTextIntoChunks(
-            documentText,
-            maxCharsPerChunk,
-            false,
-        ),
+        ...splitLargeTextIntoChunks(documentText, maxCharsPerChunk, false),
     ];
     return new DocPart(textChunks, new DocPartMeta(sourceUrl));
 }
@@ -143,8 +143,12 @@ export function docPartsFromHtml(
     maxCharsPerChunk: number,
     sourceUrl: string,
 ): DocPart[] {
+    /*
     const htmlText = htmlToText(html);
     return docPartsFromText(htmlText, maxCharsPerChunk, sourceUrl);
+    */
+    const importer = new HtmlImporter(maxCharsPerChunk);
+    return importer.import(html);
 }
 
 /**
@@ -180,7 +184,7 @@ export function mergeDocParts(
     const mergedChunks: DocPart[] = [];
     // This will merge all small chunks into larger chunks as needed.. but not exceed
     // maxCharsPerChunk
-    for (const chunk of kpLib.splitLargeTextIntoChunks(
+    for (const chunk of splitLargeTextIntoChunks(
         allChunks,
         maxCharsPerChunk,
         true,
@@ -188,4 +192,191 @@ export function mergeDocParts(
         mergedChunks.push(new DocPart(chunk, metadata));
     }
     return mergedChunks;
+}
+
+class HtmlImporter {
+    private _currentKnowledge: kpLib.KnowledgeResponse | undefined;
+    private _currentText: string;
+    private _parts: DocPart[];
+
+    constructor(public maxCharsPerChunk: number) {
+        this._currentText = "";
+        this._parts = [];
+    }
+
+    public import(html: string) {
+        if (this._parts.length > 0) {
+            this._parts = [];
+        }
+        const htmlTags = htmlToHtmlTags(html);
+        for (const htmlTag of htmlTags) {
+            const text = this.textFromTag(htmlTag);
+            this.appendText(text);
+            const entity = this.entityFromTag(htmlTag);
+            if (entity) {
+                this.getKnowledge().entities.push(entity);
+            }
+        }
+        this.endPart();
+        return this._parts;
+    }
+
+    private beginPart(): void {
+        this._currentText = "";
+        this._currentKnowledge = undefined;
+    }
+
+    private endPart(): void {
+        if (this._currentText.length > 0) {
+            const part = new DocPart(this._currentText);
+            part.knowledge = this._currentKnowledge;
+            this._parts.push(part);
+        }
+    }
+
+    private appendText(text: string) {
+        if (this._currentText.length + text.length > this.maxCharsPerChunk) {
+            this.endPart();
+            this.beginPart();
+        }
+        if (this._currentText.length > 0) {
+            this._currentText += " ";
+        }
+        this._currentText += text;
+    }
+
+    private textFromTag(htmlTag: HtmlTag): string {
+        let text = htmlTag.text ?? "";
+        switch (htmlTag.tag) {
+            default:
+                break;
+            case "em":
+                text = `_${text}_`;
+                break;
+            case "h1":
+                text = this.textForHeading(htmlTag, 1);
+                break;
+            case "h2":
+                text = this.textForHeading(htmlTag, 2);
+                break;
+            case "h3":
+                text = this.textForHeading(htmlTag, 3);
+                break;
+            case "h4":
+                text = this.textForHeading(htmlTag, 4);
+                break;
+            case "h5":
+                text = this.textForHeading(htmlTag, 5);
+                break;
+            case "h6":
+                text = this.textForHeading(htmlTag, 6);
+                break;
+            case "ol":
+            case "ul":
+                text += "\n";
+                break;
+            case "li":
+                text = "- " + text + "\n";
+                break;
+            case "div":
+                if (text) {
+                    text += "\n";
+                }
+                break;
+            case "p":
+            case "section":
+            case "blockquote":
+            case "figure":
+            case "header":
+            case "footer":
+            case "article":
+                text += "\n\n";
+                break;
+            case "code":
+                text = `\`\`\`\n${text}\n\`\`\`\n`;
+                break;
+            case "th":
+            case "tr":
+                text = `\n|${text}`;
+            case "td":
+                text = `${text}|`;
+                break;
+        }
+        return text;
+    }
+
+    private entityFromTag(htmlTag: HtmlTag): kpLib.ConcreteEntity | undefined {
+        let entity: kpLib.ConcreteEntity | undefined;
+
+        switch (htmlTag.tag) {
+            default:
+                break;
+            case "h1":
+                entity = this.entityForHeading(1);
+                break;
+            case "h2":
+                entity = this.entityForHeading(2);
+                break;
+            case "h3":
+                entity = this.entityForHeading(3);
+                break;
+            case "h4":
+                entity = this.entityForHeading(4);
+                break;
+            case "h5":
+                entity = this.entityForHeading(5);
+                break;
+            case "h6":
+                entity = this.entityForHeading(6);
+                break;
+        }
+        if (entity) {
+            this.addFacets(htmlTag, entity);
+        }
+        return entity;
+    }
+
+    private addFacets(htmlTag: HtmlTag, entity: kpLib.ConcreteEntity) {
+        if (htmlTag.attr) {
+            entity.facets ??= [];
+            for (let name in htmlTag.attr) {
+                name = name.toLowerCase();
+                if (
+                    name.startsWith("class") ||
+                    name.startsWith("data-") ||
+                    name.startsWith("id") ||
+                    name.startsWith("tab")
+                ) {
+                    continue;
+                }
+                entity.facets.push({
+                    name,
+                    value: htmlTag.attr[name],
+                });
+            }
+        }
+    }
+
+    private textForHeading(htmlTag: HtmlTag, level: number): string {
+        if (!htmlTag.text) {
+            return "";
+        }
+        const headingPrefix = "#".repeat(level);
+        return `${headingPrefix} ${htmlTag.text}\n`;
+    }
+
+    private entityForHeading(level: number): kpLib.ConcreteEntity {
+        return {
+            name: `Heading ${level}`,
+            type: ["heading"],
+            facets: [{ name: "level", value: level }],
+        };
+    }
+
+    private getKnowledge() {
+        if (!this._currentKnowledge) {
+            this._currentKnowledge = kp.createKnowledgeResponse();
+        }
+        return this._currentKnowledge;
+    }
 }
