@@ -919,10 +919,10 @@ class MatchMessagesBooleanExpr(IQueryOpExpr[MessageAccumulator]):
         IQueryOpExpr[SemanticRefAccumulator | MessageAccumulator | None]
     ]
 
-    def begin_match(self, context: QueryEvalContext) -> None:
+    def _begin_match(self, context: QueryEvalContext) -> None:
         context.clear_matched_terms()
 
-    def accumulate_messages(
+    def _accumulate_messages(
         self,
         context: QueryEvalContext,
         semantic_ref_matches: SemanticRefAccumulator,
@@ -941,7 +941,7 @@ class MatchMessagesBooleanExpr(IQueryOpExpr[MessageAccumulator]):
 class MatchMessagesOrExpr(MatchMessagesBooleanExpr):
 
     def eval(self, context: QueryEvalContext) -> MessageAccumulator:
-        self.begin_match(context)
+        self._begin_match(context)
 
         all_matches: MessageAccumulator | None = None
         for match_expr in self.term_expressions:
@@ -949,7 +949,7 @@ class MatchMessagesOrExpr(MatchMessagesBooleanExpr):
             if not matches:
                 continue
             if isinstance(matches, SemanticRefAccumulator):
-                message_matches = self.accumulate_messages(context, matches)
+                message_matches = self._accumulate_messages(context, matches)
             else:
                 message_matches = matches
             if all_matches is not None:
@@ -967,7 +967,7 @@ class MatchMessagesOrExpr(MatchMessagesBooleanExpr):
 class MatchMessagesAndExpr(MatchMessagesBooleanExpr):
 
     def eval(self, context: QueryEvalContext) -> MessageAccumulator:
-        self.begin_match(context)
+        self._begin_match(context)
 
         all_matches: MessageAccumulator | None = None
         all_done = False
@@ -977,7 +977,7 @@ class MatchMessagesAndExpr(MatchMessagesBooleanExpr):
                 # If any expr does not match, the AND fails.
                 break
             if isinstance(matches, SemanticRefAccumulator):
-                message_matches = self.accumulate_messages(context, matches)
+                message_matches = self._accumulate_messages(context, matches)
             else:
                 message_matches = matches
             if all_matches is None:
