@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createJsonTranslator, MultimodalPromptContent, TypeChatJsonTranslator } from "typechat";
+import {
+    createJsonTranslator,
+    MultimodalPromptContent,
+    TypeChatJsonTranslator,
+} from "typechat";
 import { ChatModelWithStreaming, openai as ai } from "aiclient";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import fs from "node:fs";
@@ -81,7 +85,7 @@ export class MarkdownAgent<T extends object> {
 
         // Add cursor position context if available
         let positionPrompt = [];
-        if (typeof cursorPosition === 'number' && cursorPosition >= 0) {
+        if (typeof cursorPosition === "number" && cursorPosition >= 0) {
             positionPrompt.push({
                 type: "text",
                 text: `
@@ -121,7 +125,12 @@ export class MarkdownAgent<T extends object> {
         return promptSections;
     }
 
-    async updateDocument(currentMarkdown: string | undefined, intent: string, cursorPosition?: number, context?: any) {
+    async updateDocument(
+        currentMarkdown: string | undefined,
+        intent: string,
+        cursorPosition?: number,
+        context?: any,
+    ) {
         const promptSections = this.getMarkdownUpdatePrompts(
             currentMarkdown,
             intent,
@@ -135,7 +144,10 @@ export class MarkdownAgent<T extends object> {
         };
 
         const response = await this.translator.translate("", [
-            { role: "user", content: promptSections as MultimodalPromptContent[] },
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
         ]);
         return response;
     }
@@ -247,7 +259,12 @@ export class MarkdownAgent<T extends object> {
         }
     }
 
-    getStreamingPrompts(currentMarkdown: string | undefined, intent: string, cursorPosition?: number, context?: any) {
+    getStreamingPrompts(
+        currentMarkdown: string | undefined,
+        intent: string,
+        cursorPosition?: number,
+        context?: any,
+    ) {
         let contextPrompt = "";
         if (currentMarkdown) {
             contextPrompt = `\n\nCurrent document content:\n${currentMarkdown}\n\n`;
@@ -255,7 +272,7 @@ export class MarkdownAgent<T extends object> {
 
         // Add cursor position context
         let positionPrompt = "";
-        if (typeof cursorPosition === 'number' && cursorPosition >= 0) {
+        if (typeof cursorPosition === "number" && cursorPosition >= 0) {
             positionPrompt = `The user's cursor is at position ${cursorPosition} in the document. `;
         }
 
@@ -267,7 +284,11 @@ export class MarkdownAgent<T extends object> {
         ];
     }
 
-    convertContentToOperations(content: string, intent: string, cursorPosition?: number) {
+    convertContentToOperations(
+        content: string,
+        intent: string,
+        cursorPosition?: number,
+    ) {
         // Convert generated content to operations format
         const operations = [
             {

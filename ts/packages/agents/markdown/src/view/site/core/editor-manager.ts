@@ -344,23 +344,28 @@ export class EditorManager {
      */
     public getCollaborationService(): any {
         if (!this.state.editor) {
-            console.warn("[EDITOR] Cannot get collaboration service - editor not initialized");
+            console.warn(
+                "[EDITOR] Cannot get collaboration service - editor not initialized",
+            );
             return null;
         }
-        
+
         try {
             // Get collaboration service from editor context
             const ctx = this.state.editor.ctx;
             const collabService = ctx.get("collabServiceCtx");
             return {
                 awareness: this.state.websocketProvider?.awareness,
-                service: collabService
+                service: collabService,
             };
         } catch (error) {
-            console.warn("[EDITOR] Could not get collaboration service:", error);
+            console.warn(
+                "[EDITOR] Could not get collaboration service:",
+                error,
+            );
             return {
                 awareness: this.state.websocketProvider?.awareness,
-                service: null
+                service: null,
             };
         }
     }

@@ -147,40 +147,47 @@ app.post(
     (req: Request, res: Response) => {
         try {
             const { requestId, markdown, positionInfo, error } = req.body;
-            
+
             if (!requestId) {
                 res.status(400).json({ error: "Request ID is required" });
                 return;
             }
 
-            debug(`[MARKDOWN-RESPONSE] Received response for request: ${requestId}, markdown length: ${markdown?.length || 0}, error: ${error || 'none'}`);
+            debug(
+                `[MARKDOWN-RESPONSE] Received response for request: ${requestId}, markdown length: ${markdown?.length || 0}, error: ${error || "none"}`,
+            );
 
             // Find the pending markdown request
             const pendingRequest = pendingMarkdownRequests.get(requestId);
             if (pendingRequest) {
                 clearTimeout(pendingRequest.timeout);
                 pendingMarkdownRequests.delete(requestId);
-                
+
                 if (error) {
                     pendingRequest.reject(new Error(error));
                 } else {
                     pendingRequest.resolve({
                         markdown: markdown || "",
-                        positionInfo: positionInfo || { position: 0 }
+                        positionInfo: positionInfo || { position: 0 },
                     });
                 }
-                
+
                 debug(`[MARKDOWN-RESPONSE] Resolved request: ${requestId}`);
             } else {
-                debug(`[MARKDOWN-RESPONSE] No pending request found for: ${requestId}`);
+                debug(
+                    `[MARKDOWN-RESPONSE] No pending request found for: ${requestId}`,
+                );
             }
 
             res.json({ success: true });
         } catch (error) {
-            console.error("[MARKDOWN-RESPONSE] Error handling response:", error);
-            res.status(500).json({ 
+            console.error(
+                "[MARKDOWN-RESPONSE] Error handling response:",
+                error,
+            );
+            res.status(500).json({
                 error: "Failed to handle markdown response",
-                details: error instanceof Error ? error.message : error
+                details: error instanceof Error ? error.message : error,
             });
         }
     },
@@ -243,9 +250,11 @@ async function sendUICommandToAgent(
 ): Promise<any> {
     return new Promise((resolve, reject) => {
         const requestId = `ui_cmd_${++commandCounter}`;
-        
-        debug(`[VIEW] Sending UI command to agent: ${command}, requestId: ${requestId}, cursorPosition: ${parameters.context?.position}, context: ${parameters.context ? 'serialized' : 'none'}`);
-        
+
+        debug(
+            `[VIEW] Sending UI command to agent: ${command}, requestId: ${requestId}, cursorPosition: ${parameters.context?.position}, context: ${parameters.context ? "serialized" : "none"}`,
+        );
+
         const timeout = setTimeout(() => {
             pendingCommands.delete(requestId);
             debug(`[VIEW] Command ${requestId} timed out after 90 seconds`);
@@ -263,7 +272,9 @@ async function sendUICommandToAgent(
             command: command,
             parameters: {
                 originalRequest: parameters.originalRequest,
-                context: parameters.context ? JSON.stringify(parameters.context) : undefined,
+                context: parameters.context
+                    ? JSON.stringify(parameters.context)
+                    : undefined,
                 cursorPosition: parameters.context?.position, // Explicit cursor position
             },
             timestamp: Date.now(),
@@ -281,13 +292,17 @@ async function sendUICommandToAgentWithStreaming(
 ): Promise<any> {
     return new Promise((resolve, reject) => {
         const requestId = `ui_cmd_${++commandCounter}`;
-        
-        debug(`[VIEW] Sending streaming UI command to agent: ${command}, requestId: ${requestId}, streamId: ${streamId}, cursorPosition: ${parameters.context?.position}, context: ${parameters.context ? 'serialized' : 'none'}`);
-        
+
+        debug(
+            `[VIEW] Sending streaming UI command to agent: ${command}, requestId: ${requestId}, streamId: ${streamId}, cursorPosition: ${parameters.context?.position}, context: ${parameters.context ? "serialized" : "none"}`,
+        );
+
         const timeout = setTimeout(() => {
             pendingCommands.delete(requestId);
             activeStreamingSessions.delete(streamId);
-            debug(`[VIEW] Streaming command ${requestId} timed out after 240 seconds`);
+            debug(
+                `[VIEW] Streaming command ${requestId} timed out after 240 seconds`,
+            );
             reject(new Error("Agent command timeout"));
         }, 240000); // 240 second timeout for streaming LLM operations
 
@@ -301,7 +316,9 @@ async function sendUICommandToAgentWithStreaming(
             command: command,
             parameters: {
                 originalRequest: parameters.originalRequest,
-                context: parameters.context ? JSON.stringify(parameters.context) : undefined,
+                context: parameters.context
+                    ? JSON.stringify(parameters.context)
+                    : undefined,
                 cursorPosition: parameters.context?.position, // Explicit cursor position
                 streamId: streamId,
                 enableStreaming: true,
@@ -316,23 +333,31 @@ async function sendUICommandToAgentWithStreaming(
  */
 async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
     markdown: string;
-    positionInfo: { position: number; selection?: { from: number; to: number } };
+    positionInfo: {
+        position: number;
+        selection?: { from: number; to: number };
+    };
 }> {
     const maxRetries = 3; // Increased from 2 to 3
-    
+
     return new Promise((resolve, reject) => {
         const requestId = `markdown_req_${++markdownRequestCounter}`;
         const timeout = setTimeout(() => {
             pendingMarkdownRequests.delete(requestId);
-            
+
             if (retryCount < maxRetries && clients.length > 0) {
-                debug(`[MARKDOWN-REQUEST] Timeout, retrying (${retryCount + 1}/${maxRetries})`);
+                debug(
+                    `[MARKDOWN-REQUEST] Timeout, retrying (${retryCount + 1}/${maxRetries})`,
+                );
                 // Retry after a longer delay for better reliability
-                setTimeout(() => {
-                    requestMarkdownFromClient(retryCount + 1)
-                        .then(resolve)
-                        .catch(reject);
-                }, 2000 + (retryCount * 1000)); // Exponential backoff: 2s, 3s, 4s
+                setTimeout(
+                    () => {
+                        requestMarkdownFromClient(retryCount + 1)
+                            .then(resolve)
+                            .catch(reject);
+                    },
+                    2000 + retryCount * 1000,
+                ); // Exponential backoff: 2s, 3s, 4s
             } else {
                 reject(new Error("Client markdown request timeout"));
             }
@@ -342,8 +367,10 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
         pendingMarkdownRequests.set(requestId, { resolve, reject, timeout });
 
         // Send request to clients via SSE
-        debug(`[MARKDOWN-REQUEST] Sending request to clients: ${requestId} (attempt ${retryCount + 1})`);
-        
+        debug(
+            `[MARKDOWN-REQUEST] Sending request to clients: ${requestId} (attempt ${retryCount + 1})`,
+        );
+
         if (clients.length === 0) {
             clearTimeout(timeout);
             pendingMarkdownRequests.delete(requestId);
@@ -361,11 +388,17 @@ async function requestMarkdownFromClient(retryCount: number = 0): Promise<{
                     timestamp: Date.now(),
                 })}\n\n`,
             );
-            debug(`[MARKDOWN-REQUEST] Sent request to primary client: ${requestId}`);
+            debug(
+                `[MARKDOWN-REQUEST] Sent request to primary client: ${requestId}`,
+            );
         } catch (error) {
             clearTimeout(timeout);
             pendingMarkdownRequests.delete(requestId);
-            reject(new Error(`Failed to send markdown request to client: ${error}`));
+            reject(
+                new Error(
+                    `Failed to send markdown request to client: ${error}`,
+                ),
+            );
         }
     });
 }
@@ -383,7 +416,7 @@ function shouldCommandStream(originalRequest: string): boolean {
     const streamingCommands = ["/continue2"];
 
     // Don't stream these commands (need complete response)
-    const nonStreamingCommands = ["/diagram","/augment", "/test:diagram"];
+    const nonStreamingCommands = ["/diagram", "/augment", "/test:diagram"];
 
     // Check non-streaming first (takes precedence)
     if (nonStreamingCommands.some((cmd) => request.startsWith(cmd))) {
@@ -536,15 +569,17 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
 app.post("/api/ai-awareness", express.json(), (req: Request, res: Response) => {
     try {
         const { type, position, timestamp } = req.body;
-        
-        console.log(`[AI-AWARENESS] Received request:`, req.body);
-        
+
+        debug(`[AI-AWARENESS] Received request:`, req.body);
+
         if (!type) {
             res.status(400).json({ error: "AI awareness type is required" });
             return;
         }
 
-        debug(`[AI-AWARENESS] Processing request: ${type}, position: ${position}, clients: ${clients.length}`);
+        debug(
+            `[AI-AWARENESS] Processing request: ${type}, position: ${position}, clients: ${clients.length}`,
+        );
 
         // Broadcast AI awareness to all connected clients via SSE
         const awarenessData = {
@@ -554,26 +589,30 @@ app.post("/api/ai-awareness", express.json(), (req: Request, res: Response) => {
             timestamp: timestamp || Date.now(),
         };
 
-        console.log(`[AI-AWARENESS] Broadcasting to ${clients.length} clients:`, awarenessData);
+        debug(
+            `[AI-AWARENESS] Broadcasting to ${clients.length} clients:`,
+            awarenessData,
+        );
 
         clients.forEach((client, index) => {
             try {
-                client.write(
-                    `data: ${JSON.stringify(awarenessData)}\n\n`
-                );
+                client.write(`data: ${JSON.stringify(awarenessData)}\n\n`);
                 debug(`[AI-AWARENESS] Sent ${type} to client ${index}`);
             } catch (error) {
-                console.error(`[AI-AWARENESS] Failed to send to client ${index}:`, error);
+                console.error(
+                    `[AI-AWARENESS] Failed to send to client ${index}:`,
+                    error,
+                );
             }
         });
 
-        const response = { 
-            success: true, 
+        const response = {
+            success: true,
             message: `AI awareness ${type} broadcasted to ${clients.length} clients`,
-            clientCount: clients.length
+            clientCount: clients.length,
         };
-        
-        console.log(`[AI-AWARENESS] Sending response:`, response);
+
+        debug(`[AI-AWARENESS] Sending response:`, response);
         res.json(response);
     } catch (error) {
         console.error("[AI-AWARENESS] Error handling request:", error);
@@ -1345,7 +1384,18 @@ function generateTestResponse(originalRequest: string, context: any): any {
                     type: "diagram",
                     position: context?.position || 0,
                     diagramType: "mermaid",
-                    content: `graph TD\n    A[Start: ${description}] --> B{Process}\n    B --> C[Complete]\n    C --> D[End]`,
+                    content: `
+erDiagram
+          CUSTOMER }|..|{ DELIVERY-ADDRESS : has
+          CUSTOMER ||--o{ ORDER : places
+          CUSTOMER ||--o{ INVOICE : "liable for"
+          DELIVERY-ADDRESS ||--o{ ORDER : receives
+          INVOICE ||--|{ ORDER : covers
+          ORDER ||--|{ ORDER-ITEM : includes
+          PRODUCT-CATEGORY ||--|{ PRODUCT : contains
+          PRODUCT ||--o{ ORDER-ITEM : "ordered in"
+`,
+
                     description: `Generated test diagram for: ${description}`,
                 },
             ],
@@ -1396,8 +1446,10 @@ app.get("/events", (req: Request, res: Response) => {
 app.use(express.static(staticPath));
 
 process.on("message", async (message: any) => {
-    debug(`[VIEW] Received IPC message: ${message.type} at ${new Date().toISOString()}`);
-    
+    debug(
+        `[VIEW] Received IPC message: ${message.type} at ${new Date().toISOString()}`,
+    );
+
     if (message.type == "setFile") {
         if (message.filePath) {
             // Resolve and validate the file path
@@ -1570,9 +1622,7 @@ Start typing to see the editor in action!
                     `[SSE] Sent ${message.operations?.length || 0} operations to PRIMARY client (${clients.indexOf(primaryClient)} of ${clients.length} clients)`,
                 );
 
-                debug(
-                    `data: ${JSON.stringify(operationsEvent)}\n\n`,
-                );
+                debug(`data: ${JSON.stringify(operationsEvent)}\n\n`);
 
                 // Notify other clients that operations are being applied (optional)
                 if (clients.length > 1) {
@@ -1630,7 +1680,9 @@ Start typing to see the editor in action!
             });
         }
     } else if (message.type === "getDocumentContent") {
-        debug(`[VIEW] Processing getDocumentContent request at ${new Date().toISOString()}`);
+        debug(
+            `[VIEW] Processing getDocumentContent request at ${new Date().toISOString()}`,
+        );
         // Handle content requests from agent - try client markdown first, fallback to Y.js
         // Process this asynchronously to avoid blocking other messages
         (async () => {
@@ -1652,38 +1704,56 @@ Start typing to see the editor in action!
                 try {
                     // PRIMARY: Try to get proper markdown from connected client
                     if (clients.length > 0) {
-                        debug(`[VIEW] Attempting to get markdown from connected client...`);
-                        const markdownResponse = await requestMarkdownFromClient();
+                        debug(
+                            `[VIEW] Attempting to get markdown from connected client...`,
+                        );
+                        const markdownResponse =
+                            await requestMarkdownFromClient();
                         content = markdownResponse.markdown;
                         source = "client-serializer";
-                        debug(`[VIEW] Retrieved markdown from client: ${content.length} chars`);
+                        debug(
+                            `[VIEW] Retrieved markdown from client: ${content.length} chars`,
+                        );
                     } else {
                         throw new Error("No clients connected");
                     }
                 } catch (clientError) {
-                    const errorMessage = clientError instanceof Error ? clientError.message : String(clientError);
-                    debug(`[VIEW] Failed to get markdown from client (${errorMessage}), falling back to Y.js`);
-                    
+                    const errorMessage =
+                        clientError instanceof Error
+                            ? clientError.message
+                            : String(clientError);
+                    debug(
+                        `[VIEW] Failed to get markdown from client (${errorMessage}), falling back to Y.js`,
+                    );
+
                     // FALLBACK: Get content from authoritative Y.js document
                     const ydoc = getAuthoritativeDocument(documentId);
                     const yText = ydoc.getText("content");
                     content = yText.toString();
                     source = "yjs-fallback";
-                    debug(`[VIEW] Retrieved content from Y.js fallback: ${content.length} chars`);
-                    
+                    debug(
+                        `[VIEW] Retrieved content from Y.js fallback: ${content.length} chars`,
+                    );
+
                     // If Y.js is also empty, try reading from file as last resort
                     if (!content && filePath && fs.existsSync(filePath)) {
                         try {
                             content = fs.readFileSync(filePath, "utf-8");
                             source = "file-fallback";
-                            debug(`[VIEW] Retrieved content from file fallback: ${content.length} chars`);
+                            debug(
+                                `[VIEW] Retrieved content from file fallback: ${content.length} chars`,
+                            );
                         } catch (fileError) {
-                            debug(`[VIEW] File fallback also failed: ${fileError}`);
+                            debug(
+                                `[VIEW] File fallback also failed: ${fileError}`,
+                            );
                         }
                     }
                 }
 
-                debug(`[VIEW] Sending document content to agent (source: ${source}, ${content.length} chars)`);
+                debug(
+                    `[VIEW] Sending document content to agent (source: ${source}, ${content.length} chars)`,
+                );
 
                 process.send?.({
                     type: "documentContent",
@@ -1699,15 +1769,20 @@ Start typing to see the editor in action!
                     type: "documentContent",
                     content: "",
                     source: "error",
-                    error: error instanceof Error ? error.message : "Unknown error",
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
                     timestamp: Date.now(),
                 });
             }
         })();
     } else if (message.type === "uiCommandResult") {
         // Handle UI command results from agent
-        debug(`[VIEW] Received uiCommandResult for ${message.requestId}, success: ${message.result?.success}`);
-        
+        debug(
+            `[VIEW] Received uiCommandResult for ${message.requestId}, success: ${message.result?.success}`,
+        );
+
         const pending = pendingCommands.get(message.requestId);
         if (pending) {
             clearTimeout(pending.timeout);
@@ -2089,14 +2164,14 @@ function setupWSConnection(conn: any, req: any, roomName: string): void {
     let pongReceived = true;
     let missedPings = 0;
     const maxMissedPings = 3; // Allow 3 missed pings before disconnecting
-    
+
     const pingInterval = setInterval(() => {
         if (!pongReceived) {
             missedPings++;
             debug(
                 `Client in room ${roomName} missed ping ${missedPings}/${maxMissedPings}`,
             );
-            
+
             if (missedPings >= maxMissedPings) {
                 debug(
                     `Client in room ${roomName} exceeded missed ping limit, closing connection`,

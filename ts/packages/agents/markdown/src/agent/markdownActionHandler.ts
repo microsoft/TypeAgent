@@ -51,7 +51,9 @@ async function handleUICommand(
     parameters: any,
     context: ActionContext<MarkdownActionContext>,
 ): Promise<UICommandResult> {
-    debug(`[AGENT] Processing UI command: ${command}, cursorPosition: ${parameters.cursorPosition}, context: ${parameters.context ? 'received' : 'none'}, originalRequest: ${parameters.originalRequest}`);
+    debug(
+        `[AGENT] Processing UI command: ${command}, cursorPosition: ${parameters.cursorPosition}, context: ${parameters.context ? "received" : "none"}, originalRequest: ${parameters.originalRequest}`,
+    );
 
     try {
         // Check if streaming is enabled for this command
@@ -214,8 +216,10 @@ async function handleUICommandViaIPC(
     message: any,
     agentContext: MarkdownActionContext,
 ): Promise<UICommandResult> {
-    debug(`[AGENT] Processing UI command: ${message.command}, requestId: ${message.requestId}`);
-    
+    debug(
+        `[AGENT] Processing UI command: ${message.command}, requestId: ${message.requestId}`,
+    );
+
     try {
         // Create minimal action context for UI commands
         const actionContext = {
@@ -229,13 +233,14 @@ async function handleUICommandViaIPC(
             message.parameters,
             actionContext,
         );
-        
-        debug(`[AGENT] UI command completed successfully: ${message.requestId}`);
+
+        debug(
+            `[AGENT] UI command completed successfully: ${message.requestId}`,
+        );
         return result;
-        
     } catch (error) {
         console.error(`[AGENT] UI command failed: ${message.requestId}`, error);
-        
+
         // Return error result instead of throwing to ensure response is sent
         return {
             success: false,
@@ -356,21 +361,25 @@ async function handleStreamingMarkdownAction(
             "originalRequest" in action.parameters
                 ? action.parameters.originalRequest
                 : "";
-        
-        const cursorPosition = "cursorPosition" in action.parameters
-            ? action.parameters.cursorPosition
-            : undefined;
-        
-        const context = "context" in action.parameters && action.parameters.context
-            ? (() => {
-                try {
-                    return JSON.parse(action.parameters.context);
-                } catch (error) {
-                    debug(`[AGENT] Failed to parse context JSON: ${error}, using undefined`);
-                    return undefined;
-                }
-            })()
-            : undefined;
+
+        const cursorPosition =
+            "cursorPosition" in action.parameters
+                ? action.parameters.cursorPosition
+                : undefined;
+
+        const context =
+            "context" in action.parameters && action.parameters.context
+                ? (() => {
+                      try {
+                          return JSON.parse(action.parameters.context);
+                      } catch (error) {
+                          debug(
+                              `[AGENT] Failed to parse context JSON: ${error}, using undefined`,
+                          );
+                          return undefined;
+                      }
+                  })()
+                : undefined;
 
         const response = await agent.updateDocumentWithStreaming(
             markdownContent,
@@ -571,24 +580,32 @@ async function handleMarkdownAction(
                 "originalRequest" in action.parameters
                     ? action.parameters.originalRequest
                     : "";
-            
-            const cursorPosition = "cursorPosition" in action.parameters
-                ? action.parameters.cursorPosition
-                : undefined;
-            
-            const context = "context" in action.parameters && action.parameters.context
-                ? (() => {
-                    try {
-                        return JSON.parse(action.parameters.context);
-                    } catch (error) {
-                        debug(`[AGENT] Failed to parse context JSON: ${error}, using undefined`);
-                        return undefined;
-                    }
-                })()
-                : undefined;
 
-            debug(`[AGENT] About to call LLM service with request: "${originalRequest}"`);
-            debug(`[AGENT] Document content length: ${markdownContent?.length || 0} chars`);
+            const cursorPosition =
+                "cursorPosition" in action.parameters
+                    ? action.parameters.cursorPosition
+                    : undefined;
+
+            const context =
+                "context" in action.parameters && action.parameters.context
+                    ? (() => {
+                          try {
+                              return JSON.parse(action.parameters.context);
+                          } catch (error) {
+                              debug(
+                                  `[AGENT] Failed to parse context JSON: ${error}, using undefined`,
+                              );
+                              return undefined;
+                          }
+                      })()
+                    : undefined;
+
+            debug(
+                `[AGENT] About to call LLM service with request: "${originalRequest}"`,
+            );
+            debug(
+                `[AGENT] Document content length: ${markdownContent?.length || 0} chars`,
+            );
 
             const response = await agent.updateDocument(
                 markdownContent,
@@ -601,7 +618,9 @@ async function handleMarkdownAction(
 
             if (response.success) {
                 const updateResult = response.data;
-                debug(`[AGENT] LLM processing successful, operations count: ${updateResult.operations?.length || 0}`);
+                debug(
+                    `[AGENT] LLM processing successful, operations count: ${updateResult.operations?.length || 0}`,
+                );
 
                 // Apply operations to the document
                 if (
@@ -643,7 +662,7 @@ async function handleMarkdownAction(
                 } else {
                     result = createActionResult("Updated document");
                 }
-                
+
                 debug(`[AGENT] updateDocument case completed successfully`);
             } else {
                 const errorMessage =
@@ -816,11 +835,15 @@ async function getDocumentContentFromView(
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            debug("[AGENT] Content request timeout, trying fallback to empty content");
-            
+            debug(
+                "[AGENT] Content request timeout, trying fallback to empty content",
+            );
+
             // Use empty content as fallback when view process fails
             // This allows the agent to continue processing even if content retrieval fails
-            console.warn("[AGENT] View process content request timed out, using empty content fallback");
+            console.warn(
+                "[AGENT] View process content request timed out, using empty content fallback",
+            );
             resolve("");
         }, 15000); // 15 second timeout
 
@@ -828,22 +851,26 @@ async function getDocumentContentFromView(
             if (message.type === "documentContent") {
                 clearTimeout(timeout);
                 viewProcess.off("message", responseHandler);
-                
+
                 // Log the source of the content for debugging
                 const source = message.source || "unknown";
-                debug(`[AGENT] Received document content from ${source}: ${message.content?.length || 0} chars`);
-                
+                debug(
+                    `[AGENT] Received document content from ${source}: ${message.content?.length || 0} chars`,
+                );
+
                 if (message.error) {
-                    debug(`[AGENT] Content retrieval had error: ${message.error}`);
+                    debug(
+                        `[AGENT] Content retrieval had error: ${message.error}`,
+                    );
                     // Still resolve with content even if there was an error
                 }
-                
+
                 resolve(message.content || "");
             }
         };
 
         viewProcess.on("message", responseHandler);
-        
+
         debug("[AGENT] Sending getDocumentContent request to view process");
         viewProcess.send({ type: "getDocumentContent" });
     });
@@ -918,41 +945,60 @@ export function setCurrentAgentContext(context: MarkdownActionContext) {
 
     const viewProcess = context.viewProcess;
 
-     if( typeof viewProcess !== "undefined" && viewProcess.on) {
-    viewProcess.on("message", async (message: any) => {
-        if (message.type === "uiCommand" && currentAgentContext) {
-            debug(`[AGENT] Received UI command: ${message.command}, requestId: ${message.requestId}, cursorPosition: ${message.parameters?.cursorPosition}, context: ${message.parameters?.context ? 'serialized' : 'none'}`);
+    if (typeof viewProcess !== "undefined" && viewProcess.on) {
+        viewProcess.on("message", async (message: any) => {
+            if (message.type === "uiCommand" && currentAgentContext) {
+                debug(
+                    `[AGENT] Received UI command: ${message.command}, requestId: ${message.requestId}, cursorPosition: ${message.parameters?.cursorPosition}, context: ${message.parameters?.context ? "serialized" : "none"}`,
+                );
 
-            try {
-                debug(`[AGENT] Starting to process UI command: ${message.requestId}`);
-                const result = await handleUICommandViaIPC(message, currentAgentContext);
-                
-                debug(`[AGENT] UI command ${message.requestId} completed successfully, sending result`);
-                viewProcess.send?.({
-                    type: "uiCommandResult",
-                    requestId: message.requestId,
-                    result: result,
-                });
-                debug(`[AGENT] Result sent for UI command: ${message.requestId}`);
-            } catch (error) {
-                console.error(`[AGENT] UI command ${message.requestId} failed:`, error);
-                
-                // Always send error response to prevent timeout
-                const errorResult = {
-                    success: false,
-                    error: error instanceof Error ? error.message : "Unknown error",
-                    message: "Internal error processing UI command",
-                    type: "error" as const,
-                };
-                
-                debug(`[AGENT] Sending error result for UI command: ${message.requestId}`);
-                viewProcess.send?.({
-                    type: "uiCommandResult",
-                    requestId: message.requestId,
-                    result: errorResult,
-                });
+                try {
+                    debug(
+                        `[AGENT] Starting to process UI command: ${message.requestId}`,
+                    );
+                    const result = await handleUICommandViaIPC(
+                        message,
+                        currentAgentContext,
+                    );
+
+                    debug(
+                        `[AGENT] UI command ${message.requestId} completed successfully, sending result`,
+                    );
+                    viewProcess.send?.({
+                        type: "uiCommandResult",
+                        requestId: message.requestId,
+                        result: result,
+                    });
+                    debug(
+                        `[AGENT] Result sent for UI command: ${message.requestId}`,
+                    );
+                } catch (error) {
+                    console.error(
+                        `[AGENT] UI command ${message.requestId} failed:`,
+                        error,
+                    );
+
+                    // Always send error response to prevent timeout
+                    const errorResult = {
+                        success: false,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                        message: "Internal error processing UI command",
+                        type: "error" as const,
+                    };
+
+                    debug(
+                        `[AGENT] Sending error result for UI command: ${message.requestId}`,
+                    );
+                    viewProcess.send?.({
+                        type: "uiCommandResult",
+                        requestId: message.requestId,
+                        result: errorResult,
+                    });
+                }
             }
-        }
-    });
-}
+        });
+    }
 }

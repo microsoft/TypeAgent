@@ -125,18 +125,21 @@ export function getEditorPositionInfo(editor: Editor): Promise<{
         editor.action((ctx) => {
             const view = ctx.get(editorViewCtx);
             const selection = view.state.selection;
-            
-            const result: { position: number; selection?: { from: number; to: number } } = {
-                position: selection.head
+
+            const result: {
+                position: number;
+                selection?: { from: number; to: number };
+            } = {
+                position: selection.head,
             };
-            
+
             if (!selection.empty) {
                 result.selection = {
                     from: selection.from,
-                    to: selection.to
+                    to: selection.to,
                 };
             }
-            
+
             resolve(result);
         });
     });
@@ -244,13 +247,18 @@ export function contentItemToNode(item: ContentItem, schema: any): any {
                     alt: item.attrs?.alt || "",
                     title: item.attrs?.title || item.attrs?.alt || "",
                 };
-                
+
                 // Check if image node exists in schema
                 if (schema.nodes.image) {
-                    console.log("[UTILS] Creating image node with attrs:", imageAttrs);
+                    console.log(
+                        "[UTILS] Creating image node with attrs:",
+                        imageAttrs,
+                    );
                     return schema.nodes.image.create(imageAttrs);
                 } else {
-                    console.warn("[UTILS] Image node not available in schema, falling back to markdown");
+                    console.warn(
+                        "[UTILS] Image node not available in schema, falling back to markdown",
+                    );
                     // Fallback: create markdown text that will be parsed as image
                     const markdownImage = `![${imageAttrs.alt}](${imageAttrs.src}${imageAttrs.title ? ` "${imageAttrs.title}"` : ""})`;
                     return schema.text(markdownImage);

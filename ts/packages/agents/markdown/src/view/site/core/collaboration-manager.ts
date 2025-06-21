@@ -135,7 +135,7 @@ export class CollaborationManager {
 
             // Setup connection status monitoring
             this.setupCollaborationStatus(this.websocketProvider);
-            
+
             // Add browser visibility change handling to maintain connections
             this.setupVisibilityHandling();
 
@@ -229,14 +229,19 @@ export class CollaborationManager {
             statusElement.className = `collaboration-status ${status}`;
 
             // this.updateStatusDisplay(statusElement, status);
-            
+
             // Handle disconnection tracking for stability monitoring
             if (status === "disconnected") {
                 this.disconnectedTime = Date.now();
-                console.log("[WEBSOCKET] Connection lost, tracking disconnection time");
+                console.log(
+                    "[WEBSOCKET] Connection lost, tracking disconnection time",
+                );
             } else if (status === "connected" && this.disconnectedTime > 0) {
-                const disconnectionDuration = Date.now() - this.disconnectedTime;
-                console.log(`[WEBSOCKET] Reconnected after ${disconnectionDuration}ms`);
+                const disconnectionDuration =
+                    Date.now() - this.disconnectedTime;
+                console.log(
+                    `[WEBSOCKET] Reconnected after ${disconnectionDuration}ms`,
+                );
                 this.disconnectedTime = 0;
             }
         });
@@ -343,12 +348,16 @@ export class CollaborationManager {
                 if (!document.hidden && this.websocketProvider) {
                     // Tab became visible - check connection status
                     const provider = this.websocketProvider;
-                    console.log(`[WEBSOCKET] Tab became visible, checking connection status`);
-                    
+                    console.log(
+                        `[WEBSOCKET] Tab became visible, checking connection status`,
+                    );
+
                     // If we've been disconnected while tab was hidden, the provider
                     // should automatically reconnect, but we can log the status
                     setTimeout(() => {
-                        console.log(`[WEBSOCKET] Connection check after tab focus - Provider exists: ${!!provider}`);
+                        console.log(
+                            `[WEBSOCKET] Connection check after tab focus - Provider exists: ${!!provider}`,
+                        );
                     }, 1000);
                 }
             });

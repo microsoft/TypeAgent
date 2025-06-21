@@ -265,7 +265,9 @@ export class AIAgentManager {
                 console.log(
                     `[LLM-OPS] Operations being applied by primary client - ${(data as any).operationCount} changes incoming`,
                 );
-                console.log(`AI is applying ${(data as any).operationCount} changes...`);
+                console.log(
+                    `AI is applying ${(data as any).operationCount} changes...`,
+                );
                 break;
 
             case "complete":
@@ -397,22 +399,32 @@ export class AIAgentManager {
             console.log("[AI-AGENT] Applying insert operation:", operation);
 
             if (operation.content && Array.isArray(operation.content)) {
-                console.log("[AI-AGENT] Applying insert operation with content:", operation.content);
-                
+                console.log(
+                    "[AI-AGENT] Applying insert operation with content:",
+                    operation.content,
+                );
+
                 // Check if this is an image operation - handle specially
-                const hasImageContent = operation.content.some(item => item.type === "image");
-                
+                const hasImageContent = operation.content.some(
+                    (item) => item.type === "image",
+                );
+
                 if (hasImageContent) {
-                    console.log("[AI-AGENT] Detected image content, using markdown insertion approach");
-                    
+                    console.log(
+                        "[AI-AGENT] Detected image content, using markdown insertion approach",
+                    );
+
                     // For images, convert to markdown and insert via markdown parser
                     for (const contentItem of operation.content) {
                         if (contentItem.type === "image") {
                             const imageAttrs = contentItem.attrs || {};
                             const markdownImage = `![${imageAttrs.alt || ""}](${imageAttrs.src || ""}${imageAttrs.title ? ` "${imageAttrs.title}"` : ""})`;
-                            
-                            console.log("[AI-AGENT] Inserting image as markdown:", markdownImage);
-                            
+
+                            console.log(
+                                "[AI-AGENT] Inserting image as markdown:",
+                                markdownImage,
+                            );
+
                             // Insert markdown text and let Milkdown parse it
                             tr = tr.insertText(markdownImage, position);
                         }
@@ -420,14 +432,23 @@ export class AIAgentManager {
                 } else {
                     // Regular content insertion
                     for (const contentItem of operation.content) {
-                        console.log("[AI-AGENT] Processing content item:", contentItem);
+                        console.log(
+                            "[AI-AGENT] Processing content item:",
+                            contentItem,
+                        );
                         const node = contentItemToNode(contentItem, schema);
                         console.log("[AI-AGENT] Created node:", node);
                         if (node) {
                             tr = tr.insert(position, node);
-                            console.log("[AI-AGENT] Inserted node at position:", position);
+                            console.log(
+                                "[AI-AGENT] Inserted node at position:",
+                                position,
+                            );
                         } else {
-                            console.warn("[AI-AGENT] Failed to create node for content item:", contentItem);
+                            console.warn(
+                                "[AI-AGENT] Failed to create node for content item:",
+                                contentItem,
+                            );
                         }
                     }
                 }
@@ -476,13 +497,15 @@ export class AIAgentManager {
      * Show AI awareness cursor that appears for all clients
      */
     private showAIAwarenessCursor(position: number): void {
-        console.log(`🤖 [AI-AWARENESS] Requesting AI awareness cursor at position ${position}`);
-        
+        console.log(
+            `🤖 [AI-AWARENESS] Requesting AI awareness cursor at position ${position}`,
+        );
+
         // Send request to server to broadcast AI awareness to all clients
         this.sendAIAwarenessRequest({
             type: "showAICursor",
             position: position,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
     }
 
@@ -491,11 +514,11 @@ export class AIAgentManager {
      */
     private hideAIAwarenessCursor(): void {
         console.log(`🤖 [AI-AWARENESS] Requesting to hide AI awareness cursor`);
-        
+
         // Send request to server to clear AI awareness from all clients
         this.sendAIAwarenessRequest({
             type: "hideAICursor",
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
     }
 
@@ -505,29 +528,37 @@ export class AIAgentManager {
     private sendAIAwarenessRequest(data: any): void {
         try {
             console.log(`🤖 [AI-AWARENESS] Sending request:`, data);
-            
-            fetch('/api/ai-awareness', {
-                method: 'POST',
+
+            fetch("/api/ai-awareness", {
+                method: "POST",
                 headers: {
-                    'Content-Type': 'application/json',
+                    "Content-Type": "application/json",
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify(data),
             })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-            })
-            .then(result => {
-                console.log(`🤖 [AI-AWARENESS] Server response:`, result);
-            })
-            .catch(error => {
-                console.warn(`🤖 [AI-AWARENESS] Failed to send awareness request:`, error);
-            });
+                .then((response) => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error(
+                            `HTTP ${response.status}: ${response.statusText}`,
+                        );
+                    }
+                })
+                .then((result) => {
+                    console.log(`🤖 [AI-AWARENESS] Server response:`, result);
+                })
+                .catch((error) => {
+                    console.warn(
+                        `🤖 [AI-AWARENESS] Failed to send awareness request:`,
+                        error,
+                    );
+                });
         } catch (error) {
-            console.warn(`🤖 [AI-AWARENESS] Error sending awareness request:`, error);
+            console.warn(
+                `🤖 [AI-AWARENESS] Error sending awareness request:`,
+                error,
+            );
         }
     }
 }

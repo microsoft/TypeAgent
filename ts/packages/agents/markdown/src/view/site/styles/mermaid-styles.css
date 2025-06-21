@@ -192,3 +192,50 @@
 .dark-theme .mermaid-error-content p {
   background: rgba(0, 0, 0, 0.2);
 }
+
+/* Ensure foreignObject content is styled properly */
+.mermaid-diagram svg foreignObject {
+  overflow: visible;
+}
+
+.mermaid-diagram svg foreignObject div {
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  color: #000000;
+  text-align: center;
+  line-height: 1.2;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.dark-theme .mermaid-diagram svg foreignObject div {
+  color: #ffffff;
+}
+
+/* Style for different Mermaid node types within foreignObject */
+.mermaid-diagram svg foreignObject div.nodeLabel {
+  font-weight: 500;
+  background: inherit;
+}
+
+.mermaid-diagram svg foreignObject div.edgeLabel {
+  font-size: 12px;
+  font-weight: 400;
+  color: #666666;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+.dark-theme .mermaid-diagram svg foreignObject div.edgeLabel {
+  color: #cccccc;
+  background: rgba(45, 55, 72, 0.9);
+  border-color: #4a5568;
+}
