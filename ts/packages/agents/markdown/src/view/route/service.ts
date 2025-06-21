@@ -532,6 +532,58 @@ app.post("/document", express.json(), (req: Request, res: Response) => {
     }
 });
 
+// API endpoint to handle AI awareness requests
+app.post("/api/ai-awareness", express.json(), (req: Request, res: Response) => {
+    try {
+        const { type, position, timestamp } = req.body;
+        
+        console.log(`[AI-AWARENESS] Received request:`, req.body);
+        
+        if (!type) {
+            res.status(400).json({ error: "AI awareness type is required" });
+            return;
+        }
+
+        debug(`[AI-AWARENESS] Processing request: ${type}, position: ${position}, clients: ${clients.length}`);
+
+        // Broadcast AI awareness to all connected clients via SSE
+        const awarenessData = {
+            type: "aiAwareness",
+            operation: type, // "showAICursor" or "hideAICursor"
+            position: position,
+            timestamp: timestamp || Date.now(),
+        };
+
+        console.log(`[AI-AWARENESS] Broadcasting to ${clients.length} clients:`, awarenessData);
+
+        clients.forEach((client, index) => {
+            try {
+                client.write(
+                    `data: ${JSON.stringify(awarenessData)}\n\n`
+                );
+                debug(`[AI-AWARENESS] Sent ${type} to client ${index}`);
+            } catch (error) {
+                console.error(`[AI-AWARENESS] Failed to send to client ${index}:`, error);
+            }
+        });
+
+        const response = { 
+            success: true, 
+            message: `AI awareness ${type} broadcasted to ${clients.length} clients`,
+            clientCount: clients.length
+        };
+        
+        console.log(`[AI-AWARENESS] Sending response:`, response);
+        res.json(response);
+    } catch (error) {
+        console.error("[AI-AWARENESS] Error handling request:", error);
+        res.status(500).json({
+            error: "Failed to handle AI awareness request",
+            details: error instanceof Error ? error.message : error,
+        });
+    }
+});
+
 // Add auto-save endpoint
 app.post("/autosave", express.json(), (req: Request, res: Response) => {
     try {
@@ -1516,6 +1568,10 @@ Start typing to see the editor in action!
                 );
                 debug(
                     `[SSE] Sent ${message.operations?.length || 0} operations to PRIMARY client (${clients.indexOf(primaryClient)} of ${clients.length} clients)`,
+                );
+
+                debug(
+                    `data: ${JSON.stringify(operationsEvent)}\n\n`,
                 );
 
                 // Notify other clients that operations are being applied (optional)

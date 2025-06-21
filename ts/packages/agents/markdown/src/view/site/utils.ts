@@ -237,6 +237,25 @@ export function contentItemToNode(item: ContentItem, schema: any): any {
                     codeText ? [schema.text(codeText)] : [],
                 );
 
+            case "image":
+                // Handle image nodes with src, alt, and title attributes
+                const imageAttrs = {
+                    src: item.attrs?.src || "",
+                    alt: item.attrs?.alt || "",
+                    title: item.attrs?.title || item.attrs?.alt || "",
+                };
+                
+                // Check if image node exists in schema
+                if (schema.nodes.image) {
+                    console.log("[UTILS] Creating image node with attrs:", imageAttrs);
+                    return schema.nodes.image.create(imageAttrs);
+                } else {
+                    console.warn("[UTILS] Image node not available in schema, falling back to markdown");
+                    // Fallback: create markdown text that will be parsed as image
+                    const markdownImage = `![${imageAttrs.alt}](${imageAttrs.src}${imageAttrs.title ? ` "${imageAttrs.title}"` : ""})`;
+                    return schema.text(markdownImage);
+                }
+
             default:
                 console.warn("Unknown content item type:", item.type);
                 return null;

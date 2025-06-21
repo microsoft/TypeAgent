@@ -20,7 +20,6 @@ import {
 export class AIAgentManager {
     private editor: Editor | null = null;
     private notificationManager: any = null;
-    private aiPresenceIndicator: HTMLElement | null = null;
     private isTestMode: boolean = false; // Track test mode to prevent duplicate content
 
     public setEditor(editor: Editor): void {
@@ -38,14 +37,14 @@ export class AIAgentManager {
         try {
             console.log(`🤖 Executing agent command: ${command}`, params);
 
-            // Show AI cursor at target position immediately
-            this.showAICursor(params.position || 0);
+            // Show AI awareness cursor at target position for all clients
+            this.showAIAwarenessCursor(params.position || 0);
 
             // Always use streaming for better UX
             await this.executeStreamingAgentCommand(command, params);
         } catch (error) {
             console.error(`Agent command failed:`, error);
-            this.hideAICursor();
+            this.hideAIAwarenessCursor();
             this.showNotification(
                 `Failed to execute ${command} command. Please try again.`,
                 "error",
@@ -66,8 +65,7 @@ export class AIAgentManager {
         let operationsReceived = false;
         let errorOccurred = false;
 
-        // Show AI presence cursor
-        this.showAIPresence(true);
+        console.log(`🤖 [AI-PRESENCE] AI processing started`);
 
         try {
             // Call streaming endpoint
@@ -110,8 +108,9 @@ export class AIAgentManager {
                 );
             }
         } finally {
-            // Hide AI presence cursor
-            this.showAIPresence(false);
+            console.log(`🤖 [AI-PRESENCE] AI processing finished`);
+            // Hide AI awareness cursor
+            this.hideAIAwarenessCursor();
         }
     }
 
@@ -168,9 +167,7 @@ export class AIAgentManager {
                 break;
 
             case "typing":
-                this.updateAIPresenceMessage(
-                    data.message || "AI is thinking...",
-                );
+                console.log("AI typing:", data.message || "AI is thinking...");
                 break;
 
             case "notification":
@@ -268,14 +265,10 @@ export class AIAgentManager {
                 console.log(
                     `[LLM-OPS] Operations being applied by primary client - ${(data as any).operationCount} changes incoming`,
                 );
-                this.updateAIPresenceMessage(
-                    `AI is applying ${(data as any).operationCount} changes...`,
-                );
+                console.log(`AI is applying ${(data as any).operationCount} changes...`);
                 break;
 
             case "complete":
-                this.showAIPresence(false);
-                this.hideAICursor(); // Ensure AI cursor is hidden when complete
                 this.isTestMode = false; // Reset test mode flag
                 console.log("Streaming command completed");
                 break;
@@ -283,8 +276,6 @@ export class AIAgentManager {
             case "error":
                 console.log(`[ERROR] ${(data as any).error}`);
                 this.showNotification((data as any).error, "error");
-                this.showAIPresence(false);
-                this.hideAICursor(); // Hide cursor on error
                 this.isTestMode = false; // Reset test mode flag on error
                 errorOccurred = true;
                 break;
@@ -313,7 +304,7 @@ export class AIAgentManager {
                 break;
 
             case "operation":
-                // Apply operation to document
+                // Always apply operations (they create properly formatted content)
                 if (data.operation) {
                     this.applyAgentOperations([data.operation]);
                     operationsReceived = true;
@@ -403,11 +394,41 @@ export class AIAgentManager {
             const schema = view.state.schema;
             const position = operation.position || tr.selection.head;
 
+            console.log("[AI-AGENT] Applying insert operation:", operation);
+
             if (operation.content && Array.isArray(operation.content)) {
-                for (const contentItem of operation.content) {
-                    const node = contentItemToNode(contentItem, schema);
-                    if (node) {
-                        tr = tr.insert(position, node);
+                console.log("[AI-AGENT] Applying insert operation with content:", operation.content);
+                
+                // Check if this is an image operation - handle specially
+                const hasImageContent = operation.content.some(item => item.type === "image");
+                
+                if (hasImageContent) {
+                    console.log("[AI-AGENT] Detected image content, using markdown insertion approach");
+                    
+                    // For images, convert to markdown and insert via markdown parser
+                    for (const contentItem of operation.content) {
+                        if (contentItem.type === "image") {
+                            const imageAttrs = contentItem.attrs || {};
+                            const markdownImage = `![${imageAttrs.alt || ""}](${imageAttrs.src || ""}${imageAttrs.title ? ` "${imageAttrs.title}"` : ""})`;
+                            
+                            console.log("[AI-AGENT] Inserting image as markdown:", markdownImage);
+                            
+                            // Insert markdown text and let Milkdown parse it
+                            tr = tr.insertText(markdownImage, position);
+                        }
+                    }
+                } else {
+                    // Regular content insertion
+                    for (const contentItem of operation.content) {
+                        console.log("[AI-AGENT] Processing content item:", contentItem);
+                        const node = contentItemToNode(contentItem, schema);
+                        console.log("[AI-AGENT] Created node:", node);
+                        if (node) {
+                            tr = tr.insert(position, node);
+                            console.log("[AI-AGENT] Inserted node at position:", position);
+                        } else {
+                            console.warn("[AI-AGENT] Failed to create node for content item:", contentItem);
+                        }
                     }
                 }
             }
@@ -440,44 +461,6 @@ export class AIAgentManager {
         }
     }
 
-    private showAIPresence(show: boolean): void {
-        if (show) {
-            if (!this.aiPresenceIndicator) {
-                this.aiPresenceIndicator = this.createAIPresenceIndicator();
-                document.body.appendChild(this.aiPresenceIndicator);
-            }
-            this.aiPresenceIndicator.style.display = "block";
-        } else {
-            if (this.aiPresenceIndicator) {
-                this.aiPresenceIndicator.style.display = "none";
-            }
-        }
-    }
-
-    private createAIPresenceIndicator(): HTMLElement {
-        const indicator = document.createElement("div");
-        indicator.id = "ai-presence-indicator";
-        indicator.className = "ai-presence-indicator";
-        indicator.innerHTML = `
-      <div class="ai-avatar">🤖</div>
-      <div class="ai-message">AI is thinking...</div>
-      <div class="ai-typing-dots">
-        <span></span><span></span><span></span>
-      </div>
-    `;
-        return indicator;
-    }
-
-    private updateAIPresenceMessage(message: string): void {
-        if (this.aiPresenceIndicator) {
-            const messageEl =
-                this.aiPresenceIndicator.querySelector(".ai-message");
-            if (messageEl) {
-                messageEl.textContent = message;
-            }
-        }
-    }
-
     private showNotification(
         message: string,
         type: "success" | "error" | "info" = "info",
@@ -490,106 +473,64 @@ export class AIAgentManager {
     }
 
     /**
-     * Show AI cursor at specific position in the document
+     * Show AI awareness cursor that appears for all clients
      */
-    private showAICursor(position: number): void {
-        if (!this.editor) return;
+    private showAIAwarenessCursor(position: number): void {
+        console.log(`🤖 [AI-AWARENESS] Requesting AI awareness cursor at position ${position}`);
+        
+        // Send request to server to broadcast AI awareness to all clients
+        this.sendAIAwarenessRequest({
+            type: "showAICursor",
+            position: position,
+            timestamp: Date.now()
+        });
+    }
 
-        // this.aiCursorPosition = position;
-        console.log(`🤖 [AI-CURSOR] Showing AI cursor at position ${position}`);
+    /**
+     * Hide AI awareness cursor
+     */
+    private hideAIAwarenessCursor(): void {
+        console.log(`🤖 [AI-AWARENESS] Requesting to hide AI awareness cursor`);
+        
+        // Send request to server to clear AI awareness from all clients
+        this.sendAIAwarenessRequest({
+            type: "hideAICursor",
+            timestamp: Date.now()
+        });
+    }
 
+    /**
+     * Send AI awareness request to server via fetch
+     */
+    private sendAIAwarenessRequest(data: any): void {
         try {
-            this.editor.action((ctx: any) => {
-                const view = ctx.get(editorViewCtx);
-
-                // Create AI cursor decoration at the specified position
-                const validPosition = Math.min(
-                    position,
-                    view.state.doc.content.size,
-                );
-
-                // Add AI cursor styling (you can customize this CSS)
-                const cursorElement = document.createElement("span");
-                cursorElement.className = "ai-cursor-indicator";
-                cursorElement.innerHTML = "🤖";
-                cursorElement.style.cssText = `
-                    position: absolute;
-                    color: #3b82f6;
-                    font-size: 16px;
-                    animation: ai-cursor-blink 1s infinite;
-                    z-index: 1000;
-                    pointer-events: none;
-                `;
-
-                // Add blinking animation if not already added
-                if (!document.querySelector("#ai-cursor-styles")) {
-                    const styles = document.createElement("style");
-                    styles.id = "ai-cursor-styles";
-                    styles.textContent = `
-                        @keyframes ai-cursor-blink {
-                            0%, 50% { opacity: 1; }
-                            51%, 100% { opacity: 0.3; }
-                        }
-                        .ai-cursor-indicator {
-                            transition: all 0.2s ease;
-                        }
-                    `;
-                    document.head.appendChild(styles);
+            console.log(`🤖 [AI-AWARENESS] Sending request:`, data);
+            
+            fetch('/api/ai-awareness', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-
-                // Position the cursor element
-                this.positionAICursorElement(
-                    cursorElement,
-                    view,
-                    validPosition,
-                );
-
-                // Store reference for cleanup
-                this.aiPresenceIndicator = cursorElement;
+            })
+            .then(result => {
+                console.log(`🤖 [AI-AWARENESS] Server response:`, result);
+            })
+            .catch(error => {
+                console.warn(`🤖 [AI-AWARENESS] Failed to send awareness request:`, error);
             });
         } catch (error) {
-            console.error(" [AI-CURSOR] Failed to show AI cursor:", error);
+            console.warn(`🤖 [AI-AWARENESS] Error sending awareness request:`, error);
         }
     }
 
-    /**
-     * Position the AI cursor element in the editor
-     */
-    private positionAICursorElement(
-        element: HTMLElement,
-        view: any,
-        position: number,
-    ): void {
-        try {
-            const coords = view.coordsAtPos(position);
-            const editorRect = view.dom.getBoundingClientRect();
-
-            element.style.left = `${coords.left - editorRect.left}px`;
-            element.style.top = `${coords.top - editorRect.top}px`;
-
-            // Append to editor if not already there
-            if (!element.parentNode) {
-                view.dom.appendChild(element);
-            }
-        } catch (error) {
-            console.warn(
-                " [AI-CURSOR] Could not position cursor element:",
-                error,
-            );
-        }
-    }
-
-    /**
-     * Hide AI cursor
-     */
-    private hideAICursor(): void {
-        if (this.aiPresenceIndicator) {
-            console.log(`🤖 [AI-CURSOR] Hiding AI cursor`);
-            this.aiPresenceIndicator.remove();
-            this.aiPresenceIndicator = null;
-            // this.aiCursorPosition = -1;
-        }
-    }
 }
 
 // Export singleton instance for global access

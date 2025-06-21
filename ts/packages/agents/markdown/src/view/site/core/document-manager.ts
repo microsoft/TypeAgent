@@ -308,6 +308,12 @@ export class DocumentManager {
                 await this.handleMarkdownRequest(data.requestId);
                 break;
 
+            case "aiAwareness":
+                // Handle AI awareness cursor display
+                console.log(`[SSE] Received AI awareness event:`, data);
+                await this.handleAIAwarenessEvent(data);
+                break;
+
             default:
                 // Log unknown event types for debugging
                 console.log(`[SSE] Unknown event type: ${data.type}`, data);
@@ -907,5 +913,142 @@ export class DocumentManager {
         }
 
         return "";
+    }
+
+    /**
+     * Handle AI awareness events from SSE
+     */
+    private async handleAIAwarenessEvent(data: any): Promise<void> {
+        try {
+            const { operation, position } = data;
+            
+            console.log(`[AI-AWARENESS] Handling ${operation} at position ${position}`);
+            
+            // Get editor manager to access awareness
+            if (!this.editorManager) {
+                console.warn("[AI-AWARENESS] No editor manager available");
+                return;
+            }
+            
+            const collabService = this.editorManager.getCollaborationService();
+            if (!collabService || !collabService.awareness) {
+                console.warn("[AI-AWARENESS] No collaboration service or awareness available");
+                return;
+            }
+            
+            if (operation === "showAICursor") {
+                // Use a different approach: create a visual indicator directly in the editor
+                // instead of trying to manipulate awareness which is meant for real users
+                this.showAIVisualCursor(position);
+                
+                console.log(`[AI-AWARENESS] Showed AI visual cursor at position ${position}`);
+            } else if (operation === "hideAICursor") {
+                // Hide the visual AI cursor
+                this.hideAIVisualCursor();
+                
+                console.log(`[AI-AWARENESS] Hid AI visual cursor`);
+            }
+        } catch (error) {
+            console.error("[AI-AWARENESS] Error handling awareness event:", error);
+        }
+    }
+    
+    /**
+     * Show AI visual cursor as a DOM element overlay
+     */
+    private showAIVisualCursor(position: number): void {
+        try {
+            // Remove any existing AI cursor
+            this.hideAIVisualCursor();
+            
+            const editor = this.editorManager?.getEditor();
+            if (!editor) {
+                console.warn("[AI-AWARENESS] No editor available for visual cursor");
+                return;
+            }
+            
+            // Get editor view to calculate position
+            editor.action((ctx: any) => {
+                const view = ctx.get(editorViewCtx);
+                if (!view) return;
+                
+                // Create AI cursor element
+                const aiCursor = document.createElement('div');
+                aiCursor.id = 'ai-visual-cursor';
+                aiCursor.className = 'ai-visual-cursor';
+                aiCursor.innerHTML = `
+                    <div class="ai-cursor-line"></div>
+                    <div class="ai-cursor-label">🤖 AI Assistant</div>
+                `;
+                
+                // Style the cursor
+                aiCursor.style.cssText = `
+                    position: absolute;
+                    z-index: 1000;
+                    pointer-events: none;
+                    font-size: 12px;
+                    color: #3b82f6;
+                `;
+                
+                // Add CSS for cursor styling
+                if (!document.getElementById('ai-cursor-styles')) {
+                    const styles = document.createElement('style');
+                    styles.id = 'ai-cursor-styles';
+                    styles.textContent = `
+                        .ai-visual-cursor .ai-cursor-line {
+                            width: 2px;
+                            height: 20px;
+                            background-color: #3b82f6;
+                            animation: ai-cursor-blink 1s infinite;
+                            margin-bottom: 2px;
+                        }
+                        .ai-visual-cursor .ai-cursor-label {
+                            background: #3b82f6;
+                            color: white;
+                            padding: 2px 6px;
+                            border-radius: 4px;
+                            font-size: 11px;
+                            white-space: nowrap;
+                        }
+                        @keyframes ai-cursor-blink {
+                            0%, 50% { opacity: 1; }
+                            51%, 100% { opacity: 0.3; }
+                        }
+                    `;
+                    document.head.appendChild(styles);
+                }
+                
+                // Position the cursor at the specified position
+                try {
+                    const coords = view.coordsAtPos(position);
+                    const editorRect = view.dom.getBoundingClientRect();
+                    
+                    aiCursor.style.left = `${coords.left - editorRect.left}px`;
+                    aiCursor.style.top = `${coords.top - editorRect.top - 25}px`; // Offset above the line
+                    
+                    // Add to editor DOM
+                    view.dom.parentElement?.appendChild(aiCursor);
+                    
+                    console.log(`[AI-AWARENESS] AI visual cursor positioned at ${coords.left}, ${coords.top}`);
+                } catch (posError) {
+                    console.warn("[AI-AWARENESS] Could not position AI cursor:", posError);
+                    // Fallback: add to document body
+                    document.body.appendChild(aiCursor);
+                }
+            });
+        } catch (error) {
+            console.error("[AI-AWARENESS] Error showing AI visual cursor:", error);
+        }
+    }
+    
+    /**
+     * Hide AI visual cursor
+     */
+    private hideAIVisualCursor(): void {
+        const existingCursor = document.getElementById('ai-visual-cursor');
+        if (existingCursor) {
+            existingCursor.remove();
+            console.log("[AI-AWARENESS] Removed AI visual cursor");
+        }
     }
 }

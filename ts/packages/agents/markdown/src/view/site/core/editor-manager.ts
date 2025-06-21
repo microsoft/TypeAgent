@@ -339,6 +339,32 @@ export class EditorManager {
         console.log(`[EDITOR] Switched to document: "${documentId}"`);
     }
 
+    /**
+     * Get collaboration service for awareness operations
+     */
+    public getCollaborationService(): any {
+        if (!this.state.editor) {
+            console.warn("[EDITOR] Cannot get collaboration service - editor not initialized");
+            return null;
+        }
+        
+        try {
+            // Get collaboration service from editor context
+            const ctx = this.state.editor.ctx;
+            const collabService = ctx.get("collabServiceCtx");
+            return {
+                awareness: this.state.websocketProvider?.awareness,
+                service: collabService
+            };
+        } catch (error) {
+            console.warn("[EDITOR] Could not get collaboration service:", error);
+            return {
+                awareness: this.state.websocketProvider?.awareness,
+                service: null
+            };
+        }
+    }
+
     public destroy(): void {
         if (this.state.editor) {
             this.state.editor.destroy();
