@@ -124,6 +124,7 @@ function setupManagerDependencies(editor: any): void {
 function setupGlobalAccess(editor: any): void {
     // Export for global access (for debugging and slash commands)
     (window as any).editor = editor;
+    (window as any).editorManager = editorManager;
     (window as any).executeAgentCommand =
         aiAgentManager.executeAgentCommand.bind(aiAgentManager);
 }
