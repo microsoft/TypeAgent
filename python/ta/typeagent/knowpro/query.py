@@ -853,6 +853,8 @@ class MessagesFromKnowledgeExpr(QueryOpExpr[MessageAccumulator]):
 
 
 # TODO: SelectMessagesInCharBudget
+
+
 @dataclass
 class RankMessagesBySimilarityExpr(QueryOpExpr[MessageAccumulator]):
     src_expr: IQueryOpExpr[MessageAccumulator]
@@ -1005,12 +1007,16 @@ class MatchMessagesAndExpr(MatchMessagesBooleanExpr):
 
 @dataclass
 class MatchMessagesOrMaxExpr(MatchMessagesOrExpr):
-    pass  # TODO
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        matches = super().eval(context)
+        max_hit_count = matches.get_max_hit_count()
+        if max_hit_count > 1:
+            matches.select_with_hit_count(max_hit_count)
+        return matches
 
 
-@dataclass
-class MatchMessagesBySimilarityExpr:
-    pass  # TODO
+# TODO: class MatchMessagesBySimilarityExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
 
 
 class NoOpExpr[T](QueryOpExpr[T]):
