@@ -198,32 +198,17 @@ export class DocumentManager {
 
             case "documentSynced":
                 console.log(`[SSE] Document synchronized: ${data.documentId}`);
-                if (this.notificationManager) {
-                    this.notificationManager.showDocumentSyncNotification(
-                        data.documentId || this.currentDocumentId,
-                    );
-                }
+                // Document sync notification removed per user request
                 break;
 
             case "autoSave":
                 console.log(`[SSE] Auto-save completed for: ${data.filePath}`);
-                // Show brief save notification
-                if (this.notificationManager) {
-                    this.notificationManager.showNotification(
-                        `Auto-saved: ${data.filePath}`,
-                        "info",
-                    );
-                }
+                // Auto-save notification removed per user request
                 break;
 
             case "autoSaveError":
                 console.error(`[SSE] Auto-save error: ${data.error}`);
-                if (this.notificationManager) {
-                    this.notificationManager.showNotification(
-                        `Auto-save failed: ${data.error}`,
-                        "error",
-                    );
-                }
+                // Auto-save error notification removed per user request  
                 break;
 
             case "llmOperations":

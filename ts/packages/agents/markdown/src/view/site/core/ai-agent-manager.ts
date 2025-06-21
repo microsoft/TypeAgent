@@ -530,7 +530,6 @@ export class AIAgentManager {
             console.warn(`🤖 [AI-AWARENESS] Error sending awareness request:`, error);
         }
     }
-
 }
 
 // Export singleton instance for global access

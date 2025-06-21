@@ -228,7 +228,7 @@ export class CollaborationManager {
 
             statusElement.className = `collaboration-status ${status}`;
 
-            this.updateStatusDisplay(statusElement, status);
+            // this.updateStatusDisplay(statusElement, status);
             
             // Handle disconnection tracking for stability monitoring
             if (status === "disconnected") {
@@ -296,6 +296,7 @@ export class CollaborationManager {
         });
     }
 
+    /*
     private updateStatusDisplay(
         statusElement: HTMLElement,
         status: string,
@@ -305,7 +306,7 @@ export class CollaborationManager {
         switch (status) {
             case "connected":
                 statusElement.textContent = "Connected to collaboration server";
-                // statusElement.style.display = "block";
+                statusElement.style.display = "block";
                 setTimeout(() => {
                     statusElement.style.display = "none";
                 }, hideDelay);
@@ -322,7 +323,7 @@ export class CollaborationManager {
                 break;
         }
     }
-
+*/
     public getYjsDoc(): Doc | null {
         return this.yjsDoc;
     }

@@ -250,7 +250,7 @@ async function sendUICommandToAgent(
             pendingCommands.delete(requestId);
             debug(`[VIEW] Command ${requestId} timed out after 90 seconds`);
             reject(new Error("Agent command timeout"));
-        }, 90000); // 90 second timeout for LLM operations
+        }, 90000);
 
         // Store resolver for this request
         pendingCommands.set(requestId, { resolve, reject, timeout });
@@ -287,9 +287,9 @@ async function sendUICommandToAgentWithStreaming(
         const timeout = setTimeout(() => {
             pendingCommands.delete(requestId);
             activeStreamingSessions.delete(streamId);
-            debug(`[VIEW] Streaming command ${requestId} timed out after 120 seconds`);
+            debug(`[VIEW] Streaming command ${requestId} timed out after 240 seconds`);
             reject(new Error("Agent command timeout"));
-        }, 120000); // 120 second timeout for streaming LLM operations
+        }, 240000); // 240 second timeout for streaming LLM operations
 
         // Store resolver for this request
         pendingCommands.set(requestId, { resolve, reject, timeout, streamId });

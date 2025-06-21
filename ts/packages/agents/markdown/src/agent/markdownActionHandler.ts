@@ -214,19 +214,36 @@ async function handleUICommandViaIPC(
     message: any,
     agentContext: MarkdownActionContext,
 ): Promise<UICommandResult> {
-    debug("Recieved UI command ", message)
-    // Create minimal action context for UI commands
-    const actionContext = {
-        sessionContext: {
-            agentContext: agentContext,
-        },
-    } as ActionContext<MarkdownActionContext>;
+    debug(`[AGENT] Processing UI command: ${message.command}, requestId: ${message.requestId}`);
+    
+    try {
+        // Create minimal action context for UI commands
+        const actionContext = {
+            sessionContext: {
+                agentContext: agentContext,
+            },
+        } as ActionContext<MarkdownActionContext>;
 
-    return await handleUICommand(
-        message.command,
-        message.parameters,
-        actionContext,
-    );
+        const result = await handleUICommand(
+            message.command,
+            message.parameters,
+            actionContext,
+        );
+        
+        debug(`[AGENT] UI command completed successfully: ${message.requestId}`);
+        return result;
+        
+    } catch (error) {
+        console.error(`[AGENT] UI command failed: ${message.requestId}`, error);
+        
+        // Return error result instead of throwing to ensure response is sent
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            message: `Failed to execute ${message.command} command`,
+            type: "error",
+        };
+    }
 }
 
 async function markdownValidateWildcardMatch(
@@ -529,19 +546,12 @@ async function handleMarkdownAction(
                     );
                 } catch (error) {
                     console.warn(
-                        "Failed to get content from view, falling back to storage:",
+                        "Failed to get content from view, using empty content fallback:",
                         error,
                     );
-                    // Fallback to storage only if view process fails
-                    if (await storage?.exists(filePath)) {
-                        markdownContent =
-                            (await storage?.read(filePath, "utf8")) || "";
-                        debug(
-                            "Fallback: Read content from storage:",
-                            markdownContent?.length,
-                            "chars",
-                        );
-                    }
+                    // Use empty content as fallback to allow agent to continue processing
+                    markdownContent = "";
+                    debug("Using empty content fallback");
                 }
             } else {
                 // Fallback if no view process
@@ -577,6 +587,9 @@ async function handleMarkdownAction(
                 })()
                 : undefined;
 
+            debug(`[AGENT] About to call LLM service with request: "${originalRequest}"`);
+            debug(`[AGENT] Document content length: ${markdownContent?.length || 0} chars`);
+
             const response = await agent.updateDocument(
                 markdownContent,
                 originalRequest,
@@ -584,8 +597,11 @@ async function handleMarkdownAction(
                 context,
             );
 
+            debug(`[AGENT] LLM service returned, success: ${response.success}`);
+
             if (response.success) {
                 const updateResult = response.data;
+                debug(`[AGENT] LLM processing successful, operations count: ${updateResult.operations?.length || 0}`);
 
                 // Apply operations to the document
                 if (
@@ -618,6 +634,8 @@ async function handleMarkdownAction(
                             "No view process available, operations not applied",
                         );
                     }
+                } else {
+                    debug("[AGENT] No operations returned from LLM");
                 }
 
                 if (updateResult.operationSummary) {
@@ -625,6 +643,8 @@ async function handleMarkdownAction(
                 } else {
                     result = createActionResult("Updated document");
                 }
+                
+                debug(`[AGENT] updateDocument case completed successfully`);
             } else {
                 const errorMessage =
                     (response as any).message || "Unknown error occurred";
@@ -659,19 +679,12 @@ async function handleMarkdownAction(
                     );
                 } catch (error) {
                     console.warn(
-                        "Failed to get content from view, falling back to storage:",
+                        "Failed to get content from view, using empty content fallback:",
                         error,
                     );
-                    // Fallback to storage only if view process fails
-                    if (await storage?.exists(filePath)) {
-                        markdownContent =
-                            (await storage?.read(filePath, "utf8")) || "";
-                        debug(
-                            "Fallback: Read content from storage:",
-                            markdownContent?.length,
-                            "chars",
-                        );
-                    }
+                    // Use empty content as fallback to allow agent to continue processing
+                    markdownContent = "";
+                    debug("Using empty content fallback");
                 }
             } else {
                 // Fallback if no view process
@@ -803,7 +816,12 @@ async function getDocumentContentFromView(
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            reject(new Error("Timeout getting document content from view"));
+            debug("[AGENT] Content request timeout, trying fallback to empty content");
+            
+            // Use empty content as fallback when view process fails
+            // This allows the agent to continue processing even if content retrieval fails
+            console.warn("[AGENT] View process content request timed out, using empty content fallback");
+            resolve("");
         }, 15000); // 15 second timeout
 
         const responseHandler = (message: any) => {
@@ -817,9 +835,10 @@ async function getDocumentContentFromView(
                 
                 if (message.error) {
                     debug(`[AGENT] Content retrieval had error: ${message.error}`);
+                    // Still resolve with content even if there was an error
                 }
                 
-                resolve(message.content);
+                resolve(message.content || "");
             }
         };
 
@@ -900,33 +919,39 @@ export function setCurrentAgentContext(context: MarkdownActionContext) {
     const viewProcess = context.viewProcess;
 
      if( typeof viewProcess !== "undefined" && viewProcess.on) {
-    viewProcess.on("message", (message: any) => {
+    viewProcess.on("message", async (message: any) => {
         if (message.type === "uiCommand" && currentAgentContext) {
             debug(`[AGENT] Received UI command: ${message.command}, requestId: ${message.requestId}, cursorPosition: ${message.parameters?.cursorPosition}, context: ${message.parameters?.context ? 'serialized' : 'none'}`);
 
-            handleUICommandViaIPC(message, currentAgentContext)
-                .then((result) => {
-                    debug(`[AGENT] UI command ${message.requestId} completed successfully`);
-                    process.send?.({
-                        type: "uiCommandResult",
-                        requestId: message.requestId,
-                        result: result,
-                    });
-                })
-                .catch((error) => {
-                    debug(`[AGENT] UI command ${message.requestId} failed: ${error.message}`);
-                    process.send?.({
-                        type: "uiCommandResult",
-                        requestId: message.requestId,
-                        result: {
-                            success: false,
-                            error: error.message,
-                            message: "Internal error processing UI command",
-                            type: "error",
-                        },
-                    });
-                    console.error(`[AGENT] UI command error:`, error);
+            try {
+                debug(`[AGENT] Starting to process UI command: ${message.requestId}`);
+                const result = await handleUICommandViaIPC(message, currentAgentContext);
+                
+                debug(`[AGENT] UI command ${message.requestId} completed successfully, sending result`);
+                viewProcess.send?.({
+                    type: "uiCommandResult",
+                    requestId: message.requestId,
+                    result: result,
                 });
+                debug(`[AGENT] Result sent for UI command: ${message.requestId}`);
+            } catch (error) {
+                console.error(`[AGENT] UI command ${message.requestId} failed:`, error);
+                
+                // Always send error response to prevent timeout
+                const errorResult = {
+                    success: false,
+                    error: error instanceof Error ? error.message : "Unknown error",
+                    message: "Internal error processing UI command",
+                    type: "error" as const,
+                };
+                
+                debug(`[AGENT] Sending error result for UI command: ${message.requestId}`);
+                viewProcess.send?.({
+                    type: "uiCommandResult",
+                    requestId: message.requestId,
+                    result: errorResult,
+                });
+            }
         }
     });
 }
