@@ -12,7 +12,12 @@ import { KnowproContext } from "./knowproMemory.js";
 import { argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
-import { changeFileExt, getAbsolutePath } from "typeagent";
+import {
+    changeFileExt,
+    getAbsolutePath,
+    readAllText,
+    simplifyHtml,
+} from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
 
@@ -29,7 +34,13 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifySearchBatch = verifySearchBatch;
     commands.kpTestAnswerBatch = answerBatch;
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
+    commands.kpTest = testHtml;
 
+    async function testHtml(args: string[]) {
+        const html = await readAllText(args[0]);
+        const simpleHtml = simplifyHtml(html);
+        context.printer.writeLine(simpleHtml);
+    }
     function searchBatchDef(): CommandMetadata {
         return {
             description:

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import * as cheerio from "cheerio";
+import { collections } from "./index.js";
 
 /**
  * Extract all text from the given html.
@@ -72,4 +73,154 @@ function getText(
         }
     });
     return text;
+}
+
+export function simplifyText(html: string): string {
+    const editor = new HtmlEditor(html);
+    editor.simplify();
+    return editor.getText();
+}
+
+export function simplifyHtml(html: string): string {
+    const editor = new HtmlEditor(html);
+    editor.simplify();
+    return editor.getHtml();
+}
+
+export class HtmlEditor {
+    private $: cheerio.CheerioAPI;
+    private usefulTags: Set<string>;
+
+    constructor(
+        public html: string,
+        usefulTags?: string | Set<string> | undefined,
+    ) {
+        this.$ = cheerio.load(html.replaceAll("\n", ""));
+        usefulTags ??=
+            "body, a, p, div, span, em, strong, ol, ul, li, table, tr, th, td, h1, h2, h3, h4, h5, h6, article, section, header, footer, annotation, blockquote, code, figure";
+        if (typeof usefulTags === "string") {
+            usefulTags = collections.stringsToSet(usefulTags);
+        }
+        this.usefulTags = usefulTags;
+    }
+
+    public getHtml(): string {
+        return this.$.root().html();
+    }
+
+    public getText(): string {
+        return this.$.root().text();
+    }
+
+    public simplify() {
+        this.keepOnly(this.$("html")[0], this.usefulTags);
+        this.removeUnnecessaryAttr();
+        this.flattenText(this.$("html")[0]);
+    }
+
+    public flattenText(element: cheerio.Element) {
+        if (!element.children) {
+            return;
+        }
+        for (let i = 0; i < element.children.length; ++i) {
+            const child = element.children[i];
+            if (child && child.type === "tag") {
+                this.flattenText(child);
+            }
+        }
+        let flatText: string | undefined;
+        switch (element.tagName) {
+            default:
+                console.log(element.tagName);
+                return;
+            case "p":
+                flatText = this.elementText(element) + "\n\n";
+                break;
+            case "div":
+                flatText = this.elementText(element) + "\n";
+                break;
+            case "span":
+                flatText = this.elementText(element);
+                break;
+        }
+        this.replaceElement(element, flatText);
+    }
+
+    public keepOnly(element: cheerio.Element, usefulTags: Set<string>) {
+        if (!element.children) {
+            return;
+        }
+        for (let i = 0; i < element.children.length; ) {
+            const child = element.children[i];
+            switch (child.type) {
+                default:
+                    this.$(child).remove();
+                    break;
+                case "root":
+                case "text":
+                    ++i;
+                    break;
+                case "tag":
+                    const childElement = child as cheerio.Element;
+                    this.keepOnly(childElement, usefulTags);
+                    if (!usefulTags.has(childElement.tagName)) {
+                        if (this.replaceElement(childElement)) {
+                            continue;
+                        }
+                    }
+                    ++i;
+                    break;
+            }
+        }
+    }
+
+    public removeUnnecessaryAttr(): void {
+        this.removeAttr((attr) => this.isProcessingAttr(attr));
+    }
+
+    public removeAttr(
+        attrFilter: (attr: string) => boolean,
+        nodeQuery?: string,
+    ) {
+        nodeQuery ??= "*";
+        this.$(nodeQuery).each((_, el) => {
+            if (el.type !== "tag") {
+                return;
+            }
+            for (const attr of Object.keys(el.attribs)) {
+                if (attrFilter(attr)) {
+                    this.$(el).removeAttr(attr);
+                }
+            }
+        });
+    }
+
+    private replaceElement(
+        el: cheerio.Element,
+        innerHtml?: string | undefined | null,
+    ): boolean {
+        // Unwrap: replace the element with its children
+        const $el = this.$(el);
+        innerHtml ??= $el.html();
+        if (innerHtml !== null && innerHtml.length > 0) {
+            $el.replaceWith(innerHtml);
+            return false;
+        }
+        $el.remove();
+        return true;
+    }
+
+    private elementText(el: cheerio.Element): string {
+        return this.$(el).html() ?? "";
+    }
+
+    private isProcessingAttr(attr: string): boolean {
+        return (
+            attr === "class" ||
+            attr === "style" ||
+            attr === "id" ||
+            attr.startsWith("data") ||
+            attr.startsWith("tab")
+        );
+    }
 }
