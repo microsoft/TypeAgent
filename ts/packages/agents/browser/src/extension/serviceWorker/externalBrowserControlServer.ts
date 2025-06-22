@@ -56,7 +56,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         },
     };
     const callFunctions: BrowserControlCallFunctions = {
-        setAgentStatus: ({ isBusy, message }) => {
+        setAgentStatus: (isBusy: boolean, message: string) => {
             if (isBusy) {
                 showBadgeBusy();
             } else {
@@ -65,5 +65,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             console.log(`${message} (isBusy: ${isBusy})`);
         },
     };
-    return createRpc(channel, invokeFunctions, callFunctions);
+    return createRpc(
+        "browser:extension",
+        channel,
+        invokeFunctions,
+        callFunctions,
+    );
 }

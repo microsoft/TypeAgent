@@ -32,5 +32,5 @@ export type BrowserControlInvokeFunctions = {
 };
 
 export type BrowserControlCallFunctions = {
-    setAgentStatus(params: { isBusy: boolean; message: string }): void;
+    setAgentStatus(isBusy: boolean, message: string): void;
 };
