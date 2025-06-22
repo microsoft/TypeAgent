@@ -48,7 +48,7 @@ export function createDispatcherRpcClient(channel: RpcChannel): Dispatcher {
             return rpc.invoke("getCommandCompletion", { prefix });
         },
         async close() {
-            return rpc.invoke("close", undefined);
+            return rpc.invoke("close");
         },
         getPrompt: remoteCallNotSupported,
         getSettingSummary: remoteCallNotSupported,
