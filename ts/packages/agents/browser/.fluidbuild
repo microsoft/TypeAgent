@@ -54,7 +54,8 @@
       ],
       "outputs": [
         "dist/extension/**/*",
-        "dist/electron/**/*"
+        "dist/electron/**/*",
+        ".extension-build-hash"
       ]
     },
     "tsc:typecheck": {

@@ -6,6 +6,7 @@ dist/
 # Build cache
 .vite-build-hash
 .vite-vendor-cache.json
+.smart-build-cache.json
 
 # Dependencies
 node_modules/

@@ -55,12 +55,20 @@ function checkIncrementalBuild() {
             }
         }
         
-        // Store current hash for next time
-        return () => writeFileSync(buildHashFile, currentHash);
+        // Store current hash for next time - ONLY update if we actually built
+        return (actuallyBuilt) => {
+            if (actuallyBuilt) {
+                writeFileSync(buildHashFile, currentHash);
+            }
+        };
     } catch (error) {
         // If hash checking fails, proceed with build
         console.warn(chalk.yellow("⚠️  Could not check incremental build status, proceeding..."));
-        return () => {};
+        return (actuallyBuilt) => {
+            if (actuallyBuilt) {
+                console.warn(chalk.yellow("⚠️  Could not update build hash"));
+            }
+        };
     }
 }
 
@@ -250,7 +258,7 @@ copyFileSync(
 if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
 
 // Update build hash to mark successful completion
-updateBuildHash();
+updateBuildHash(true); // true = actually built something
 
 if (verbose)
     console.log(
