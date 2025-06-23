@@ -1,9 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import dotenv from "dotenv";
 import { testIf } from "./testCore.js";
 import * as urlResolver from "../src/urlResolver.js";
 import { bingWithGrounding } from "../src/index.js";
+
+dotenv.config({
+    path: new URL("../../../../.env", import.meta.url),
+});
 
 function hasUrlResolverApiKey() {
     try {
