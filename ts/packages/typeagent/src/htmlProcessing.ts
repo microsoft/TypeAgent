@@ -70,7 +70,7 @@ export class HtmlEditor {
         public html: string,
         tagsToKeep?: string[] | undefined,
     ) {
-        this.$ = cheerio.load(html.replaceAll("\n", ""));
+        this.$ = cheerio.load(html);
         this.tagsToKeep = new Set(tagsToKeep ?? getTypicalTagNames());
         this.removableAttrPrefixes = getRemovableAttrPrefixes();
     }
@@ -88,6 +88,7 @@ export class HtmlEditor {
         if (simplifyAttr) {
             this.removeAttributes();
         }
+        this.trimText(this.$("html")[0]);
         this.flattenText(this.$("html")[0]);
     }
 
@@ -124,7 +125,7 @@ export class HtmlEditor {
         this.replaceElement(element, innerHtml);
     }
 
-    public keepOnly(element: cheerio.Element, usefulTags: Set<string>) {
+    public keepOnly(element: cheerio.Element, tagsToKeep: Set<string>) {
         if (!element.children) {
             return;
         }
@@ -140,8 +141,8 @@ export class HtmlEditor {
                     break;
                 case "tag":
                     const childElement = child as cheerio.Element;
-                    this.keepOnly(childElement, usefulTags);
-                    if (!usefulTags.has(childElement.tagName)) {
+                    this.keepOnly(childElement, tagsToKeep);
+                    if (!tagsToKeep.has(childElement.tagName)) {
                         if (this.replaceElement(childElement)) {
                             continue;
                         }
@@ -171,6 +172,32 @@ export class HtmlEditor {
                 }
             }
         });
+    }
+
+    public trimText(element: cheerio.Element): void {
+        if (!element.children) {
+            return;
+        }
+        for (let i = 0; i < element.children.length; ++i) {
+            const child = element.children[i];
+            if (child.type === "tag") {
+                this.trimText(child);
+            }
+        }
+        for (let i = 0; i < element.children.length; ++i) {
+            const child = element.children[i];
+            if (child.type === "text") {
+                const childNode = this.$(child);
+                let text = childNode.text();
+                if (text.length > 1) {
+                    text = text.trim();
+                    if (text.length === 0) {
+                        text = " ";
+                    }
+                    childNode.replaceWith(text);
+                }
+            }
+        }
     }
 
     private replaceElement(
