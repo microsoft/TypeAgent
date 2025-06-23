@@ -69,7 +69,7 @@ export function createRpc<
                 out({
                     type: "invokeError",
                     callId: message.callId,
-                    error: "No invoke handler",
+                    error: `No invoke handler ${message.name}`,
                 });
             } else {
                 f(...message.args).then(
@@ -137,6 +137,7 @@ export function createRpc<
             return new Promise<any>((resolve, reject) => {
                 out(message, (err) => {
                     if (err !== null) {
+                        pending.delete(message.callId);
                         reject(err);
                     }
                 });

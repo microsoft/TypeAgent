@@ -6,7 +6,7 @@ import {
     BrowserControl,
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
-} from "../interface.mjs";
+} from "../browserControl.mjs";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
 import { WebSocketMessageV2 } from "common-utils";
@@ -67,6 +67,12 @@ export function createExternalBrowserClient(
         },
         setAgentStatus: (...args) => {
             rpc.send("setAgentStatus", ...args);
+        },
+        scrollUp: async () => {
+            return rpc.invoke("scrollUp");
+        },
+        scrollDown: async () => {
+            return rpc.invoke("scrollDown");
         },
     };
 }
