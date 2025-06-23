@@ -216,7 +216,7 @@ export async function validateURL(
         await project.agents.messages.create(thread.id, "user", JSON.stringify({ request: utterance, url: url }));
 
         let retryCount = 0;
-        const maxRetries = 3;
+        const maxRetries = 5;
         let success = false;
         let lastResponse;
 
@@ -228,7 +228,7 @@ export async function validateURL(
                     agent!.id,
                     {
                         pollingOptions: {
-                            intervalInMs: 1000,
+                            intervalInMs: 3000,
                         },
                         onResponse: (response): void => {
                             lastResponse = response;
@@ -288,12 +288,14 @@ export async function validateURL(
                         debug_info: [Object]
                     },                
                 */
-                retryCount++;
+                
                 //console.log(lastResponse);
-                console.log(pollingError);
+                //console.log(pollingError);
                 const ee = (lastResponse as any).parsedBody;
                 console.log(`\t${JSON.stringify(ee.last_error)}`);
-            }            
+            } finally {
+                retryCount++;
+            }          
         }
 
         if (retryCount >= maxRetries) {
