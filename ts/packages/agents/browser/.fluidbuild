@@ -1,0 +1,72 @@
+{
+  "tasks": {
+    "build": {
+      "dependsOn": ["tsc:common"],
+      "inputs": [
+        "src/**/*",
+        "scripts/**/*", 
+        "*.config.*",
+        "*.json"
+      ],
+      "outputs": [
+        "dist/**/*"
+      ]
+    },
+    "tsc:common": {
+      "inputs": [
+        "src/common/**/*",
+        "src/common/tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        "dist/common/**/*",
+        ".tsbuildinfo/common.tsbuildinfo"
+      ]
+    },
+    "tsc:agent": {
+      "dependsOn": ["tsc:common"],
+      "inputs": [
+        "src/agent/**/*",
+        "src/agent/tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        "dist/agent/**/*",
+        ".tsbuildinfo/agent.tsbuildinfo"
+      ]
+    },
+    "tsc:puppeteer": {
+      "inputs": [
+        "src/puppeteer/**/*",
+        "src/puppeteer/tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        "dist/puppeteer/**/*",
+        ".tsbuildinfo/puppeteer.tsbuildinfo"
+      ]
+    },
+    "vite": {
+      "inputs": [
+        "src/extension/**/*",
+        "src/electron/**/*",
+        "scripts/buildExtension.mjs"
+      ],
+      "outputs": [
+        "dist/extension/**/*",
+        "dist/electron/**/*"
+      ]
+    },
+    "tsc:typecheck": {
+      "dependsOn": ["tsc:common", "tsc:agent", "tsc:puppeteer"],
+      "inputs": [
+        "src/**/*",
+        "tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        ".tsbuildinfo/main.tsbuildinfo"
+      ]
+    }
+  }
+}

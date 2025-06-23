@@ -5,6 +5,8 @@ import { defineConfig } from "vite";
 import typescript from "@rollup/plugin-typescript";
 import { resolve } from "path";
 
+const isDev = process.env.NODE_ENV === 'development';
+
 export default defineConfig({
     root: resolve(__dirname, "src/view/client"),
     plugins: [
@@ -14,11 +16,17 @@ export default defineConfig({
     ],
     build: {
         outDir: resolve(__dirname, "dist/view/public"),
-        sourcemap: true,
+        sourcemap: isDev,
         emptyOutDir: false,
+        minify: isDev ? false : 'esbuild',
+        target: 'es2020',
         rollupOptions: {
             output: {
                 entryFileNames: "js/[name].js",
+                manualChunks: {
+                    'cytoscape': ['cytoscape', 'cytoscape-dagre'],
+                    'dagre': ['dagre']
+                }
             },
         },
     },
@@ -42,4 +50,11 @@ export default defineConfig({
             "@": resolve(__dirname, "src/view/client"),
         },
     },
+    optimizeDeps: {
+        include: ['cytoscape', 'cytoscape-dagre', 'dagre'],
+    },
+    esbuild: {
+        target: 'es2020',
+        legalComments: isDev ? 'inline' : 'none'
+    }
 });

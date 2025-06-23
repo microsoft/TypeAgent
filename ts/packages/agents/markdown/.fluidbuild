@@ -1,0 +1,42 @@
+{
+  "tasks": {
+    "build": {
+      "dependsOn": ["tsc", "build:frontend"],
+      "inputs": [
+        "src/**/*",
+        "vite.config.js",
+        "*.json"
+      ],
+      "outputs": [
+        "dist/**/*"
+      ]
+    },
+    "tsc": {
+      "inputs": [
+        "src/**/*.ts",
+        "src/agent/tsconfig.json",
+        "src/view/route/tsconfig.json", 
+        "src/view/site/tsconfig.json",
+        "tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        "dist/agent/**/*",
+        "dist/view/**/*",
+        ".tsbuildinfo/agent.tsbuildinfo",
+        ".tsbuildinfo/route.tsbuildinfo",
+        ".tsbuildinfo/site.tsbuildinfo"
+      ]
+    },
+    "build:frontend": {
+      "dependsOn": ["tsc"],
+      "inputs": [
+        "src/view/site/**/*",
+        "vite.config.js"
+      ],
+      "outputs": [
+        "dist/view/site/**/*"
+      ]
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "tasks": {
+    "build": {
+      "inputs": [
+        "src/**/*",
+        "vite.config.js",
+        "*.json"
+      ],
+      "outputs": [
+        "dist/**/*"
+      ]
+    },
+    "build:shared": {
+      "inputs": [
+        "src/view/shared/**/*",
+        "src/view/shared/tsconfig.json",
+        "tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        "dist/view/shared/**/*",
+        ".tsbuildinfo/shared.tsbuildinfo"
+      ]
+    },
+    "build:server": {
+      "dependsOn": ["build:shared"],
+      "inputs": [
+        "src/view/server/**/*",
+        "src/view/server/tsconfig.json",
+        "tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        "dist/view/server/**/*",
+        ".tsbuildinfo/server.tsbuildinfo"
+      ]
+    },
+    "build:agent": {
+      "inputs": [
+        "src/agent/**/*",
+        "src/agent/tsconfig.json",
+        "../../tsconfig.base.json"
+      ],
+      "outputs": [
+        "dist/agent/**/*",
+        ".tsbuildinfo/agent.tsbuildinfo"
+      ]
+    },
+    "build:client": {
+      "dependsOn": ["build:shared"],
+      "inputs": [
+        "src/view/client/**/*",
+        "vite.config.js"
+      ],
+      "outputs": [
+        "dist/view/public/**/*"
+      ]
+    }
+  }
+}

@@ -3,10 +3,68 @@
 import { build } from "vite";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { copyFileSync, mkdirSync, cpSync } from "fs";
+import { copyFileSync, mkdirSync, cpSync, readFileSync, writeFileSync, existsSync, statSync, readdirSync } from "fs";
+import { createHash } from "crypto";
 import chalk from "chalk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// --- 🔧 Incremental build detection ---
+function checkIncrementalBuild() {
+    const buildHashFile = resolve(__dirname, "../.extension-build-hash");
+    
+    try {
+        // Get modification times of key directories
+        const srcExtensionPath = resolve(__dirname, "../src/extension");
+        const srcElectronPath = resolve(__dirname, "../src/electron");
+        const scriptPath = resolve(__dirname, "buildExtension.mjs");
+        
+        const getLastModified = (dirPath) => {
+            if (!existsSync(dirPath)) return 0;
+            const stat = statSync(dirPath);
+            if (stat.isFile()) return stat.mtimeMs;
+            
+            let maxTime = stat.mtimeMs;
+            try {
+                const items = readdirSync(dirPath);
+                for (const item of items) {
+                    const itemPath = resolve(dirPath, item);
+                    const itemTime = getLastModified(itemPath);
+                    maxTime = Math.max(maxTime, itemTime);
+                }
+            } catch (e) {
+                // Skip directories we can't read
+            }
+            return maxTime;
+        };
+        
+        const lastModified = Math.max(
+            getLastModified(srcExtensionPath),
+            getLastModified(srcElectronPath),
+            getLastModified(scriptPath)
+        );
+        
+        const currentHash = createHash('md5').update(lastModified.toString()).digest('hex');
+        
+        // Check if build is up to date
+        if (existsSync(buildHashFile)) {
+            const lastHash = readFileSync(buildHashFile, 'utf8').trim();
+            if (lastHash === currentHash) {
+                console.log(chalk.green("✅ Extension build is up to date, skipping..."));
+                process.exit(0);
+            }
+        }
+        
+        // Store current hash for next time
+        return () => writeFileSync(buildHashFile, currentHash);
+    } catch (error) {
+        // If hash checking fails, proceed with build
+        console.warn(chalk.yellow("⚠️  Could not check incremental build status, proceeding..."));
+        return () => {};
+    }
+}
+
+const updateBuildHash = checkIncrementalBuild();
 
 // --- 🔧 Detect dev mode ---
 const isDev =
@@ -190,6 +248,9 @@ copyFileSync(
     `${electronOutDir}/manifest.json`,
 );
 if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
+
+// Update build hash to mark successful completion
+updateBuildHash();
 
 if (verbose)
     console.log(
