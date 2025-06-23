@@ -64,7 +64,7 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { BrowserControl } from "./interface.mjs";
+import { BrowserControl } from "./browserControl.mjs";
 import { bingWithGrounding } from "aiclient";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
@@ -627,6 +627,12 @@ async function executeBrowserAction(
             case "reloadPage":
                 // REVIEW: do we need to clear page schema?
                 await getActionBrowserControl(context).reload();
+                return;
+            case "scrollUp":
+                await getActionBrowserControl(context).scrollUp();
+                return;
+            case "scrollDown":
+                await getActionBrowserControl(context).scrollDown();
                 return;
         }
     }

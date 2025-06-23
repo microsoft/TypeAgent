@@ -7,6 +7,11 @@ const { webFrame } = require("electron");
 import DOMPurify from "dompurify";
 import { ipcRenderer } from "electron";
 import registerDebug from "debug";
+import {
+    setupInlineBrowserRendererProxy,
+    sendScriptAction,
+} from "./inlineBrowserRendererRpcServer";
+
 const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
 ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
@@ -48,6 +53,9 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
         );
     }
 });
+
+// Set up inline browser renderer RPC proxy
+setupInlineBrowserRendererProxy();
 
 function sendToBrowserAgent(message: any) {
     ipcRenderer.send("send-to-browser-ipc", message);
@@ -137,61 +145,6 @@ export async function getTabHTMLFragments(
     return htmlFragments;
 }
 
-export async function sendScriptAction(
-    body: any,
-    timeout?: number,
-    frameWindow?: Window | null,
-    idPrefix?: string,
-) {
-    const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
-
-    const targetWindow = frameWindow ?? window;
-
-    const actionPromise = new Promise<any | undefined>((resolve) => {
-        let callId = new Date().getTime().toString();
-        if (idPrefix) {
-            callId = idPrefix + "_" + callId;
-        }
-
-        targetWindow.postMessage(
-            {
-                source: "preload",
-                target: "contentScript",
-                messageType: "scriptActionRequest",
-                id: callId,
-                body: body,
-            },
-            "*",
-        );
-
-        // if timeout is provided, wait for a response - otherwise fire and forget
-        if (timeout) {
-            const handler = (event: any) => {
-                if (
-                    event.data.target == "preload" &&
-                    event.data.source == "contentScript" &&
-                    event.data.messageType == "scriptActionResponse" &&
-                    event.data.id == callId &&
-                    event.data.body
-                ) {
-                    window.removeEventListener("message", handler);
-                    resolve(event.data.body);
-                }
-            };
-
-            window.addEventListener("message", handler, false);
-        } else {
-            resolve(undefined);
-        }
-    });
-
-    if (timeout) {
-        return Promise.race([actionPromise, timeoutPromise]);
-    } else {
-        return actionPromise;
-    }
-}
-
 export async function sendScriptActionToAllFrames(body: any, timeout?: number) {
     const frames = [window.top, ...Array.from(window.frames)];
 
@@ -229,20 +182,6 @@ async function runBrowserAction(action: any) {
 
             break;
         }
-
-        case "scrollDown": {
-            sendScriptAction({
-                type: "scroll_down_on_page",
-            });
-            break;
-        }
-        case "scrollUp": {
-            sendScriptAction({
-                type: "scroll_up_on_page",
-            });
-            break;
-        }
-
         case "zoomIn": {
             if (window.location.href.startsWith("https://paleobiodb.org/")) {
                 sendScriptAction({
