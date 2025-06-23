@@ -36,23 +36,21 @@ export type HtmlNode = HtmlTagNode | HtmlTextNode;
 
 export interface HtmlTextNode {
     type: "text";
-    text: () => string | undefined;
+    text: string;
 }
 
 export interface HtmlTagNode {
     type: "tag";
-    tag: string;
-    attr: {
+    tagName: string;
+    attribs: {
         [name: string]: string;
     };
-    text: () => string | undefined;
-    html: () => string | undefined;
 }
 
 export function simplifyText(html: string): string {
     const editor = new HtmlEditor(html);
     editor.simplify();
-    return editor.getText();
+    return editor.getText().trim();
 }
 
 export function simplifyHtml(html: string): string {
@@ -60,6 +58,8 @@ export function simplifyHtml(html: string): string {
     editor.simplify();
     return editor.getHtml();
 }
+
+export function visitHtml(html: string, cb: (node: HtmlNode) => void) {}
 
 export class HtmlEditor {
     private $: cheerio.CheerioAPI;
@@ -83,13 +83,47 @@ export class HtmlEditor {
         return this.$.root().text();
     }
 
-    public simplify(simplifyAttr: boolean = true) {
+    public simplify(simplifyAttr: boolean = true): void {
         this.keepOnly(this.$("html")[0], this.tagsToKeep);
         if (simplifyAttr) {
             this.removeAttributes();
         }
         this.trimText(this.$("html")[0]);
         this.flattenText(this.$("html")[0]);
+    }
+
+    public visitAll(cb: (node: HtmlNode) => void) {
+        this.visitRecursive(this.$("html")[0], cb);
+    }
+
+    public visitRecursive(
+        element: cheerio.Element,
+        cb: (node: HtmlNode) => void,
+    ): void {
+        if (!element.children) {
+            return;
+        }
+        for (let i = 0; i < element.children.length; ++i) {
+            const child = element.children[i];
+            if (child.type === "tag") {
+                const childElement = child as cheerio.Element;
+                const tagNode: HtmlTagNode = {
+                    type: "tag",
+                    tagName: childElement.tagName,
+                    attribs: childElement.attribs,
+                };
+                cb(tagNode);
+            } else if (child.type === "text") {
+                const childNode = this.$(child);
+                const text = childNode.text();
+                if (text) {
+                    cb({
+                        type: "text",
+                        text,
+                    });
+                }
+            }
+        }
     }
 
     public flattenText(element: cheerio.Element) {
@@ -184,19 +218,24 @@ export class HtmlEditor {
                 this.trimText(child);
             }
         }
-        for (let i = 0; i < element.children.length; ++i) {
+        if (!element.children) {
+            return;
+        }
+        let i = 0;
+        while (i < element.children.length) {
             const child = element.children[i];
+            const childNode = this.$(child);
             if (child.type === "text") {
-                const childNode = this.$(child);
                 let text = childNode.text();
                 if (text.length > 1) {
                     text = text.trim();
                     if (text.length === 0) {
-                        text = " ";
+                        // Reduce the amount of unnecessary whitespace
+                        childNode.replaceWith(" ");
                     }
-                    childNode.replaceWith(text);
                 }
             }
+            ++i;
         }
     }
 

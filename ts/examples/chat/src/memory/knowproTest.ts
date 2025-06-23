@@ -36,14 +36,14 @@ export async function createKnowproTestCommands(
     commands.kpTestAnswerBatch = answerBatch;
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
-    commands.kpTestText = testText;
+    commands.kpTestHtmlText = testHtmlText;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
         const simpleHtml = simplifyHtml(html);
         context.printer.writeLine(simpleHtml);
     }
-    async function testText(args: string[]) {
+    async function testHtmlText(args: string[]) {
         const html = await readAllText(args[0]);
         const text = simplifyText(html);
         context.printer.writeLine(text);
