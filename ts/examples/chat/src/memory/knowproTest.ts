@@ -17,6 +17,7 @@ import {
     getAbsolutePath,
     readAllText,
     simplifyHtml,
+    simplifyText,
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
@@ -34,13 +35,20 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifySearchBatch = verifySearchBatch;
     commands.kpTestAnswerBatch = answerBatch;
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
-    commands.kpTest = testHtml;
+    commands.kpTestHtml = testHtml;
+    commands.kpTestText = testText;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
         const simpleHtml = simplifyHtml(html);
         context.printer.writeLine(simpleHtml);
     }
+    async function testText(args: string[]) {
+        const html = await readAllText(args[0]);
+        const text = simplifyText(html);
+        context.printer.writeLine(text);
+    }
+
     function searchBatchDef(): CommandMetadata {
         return {
             description:

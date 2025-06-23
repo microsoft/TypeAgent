@@ -124,26 +124,31 @@ export class HtmlEditor {
         }
         for (let i = 0; i < element.children.length; ++i) {
             const child = element.children[i];
-            if (child && child.type === "tag") {
+            if (child.type === "tag") {
                 this.flattenText(child);
             }
         }
-        let flatText: string | undefined;
+        let innerHtml: string | undefined;
         switch (element.tagName) {
             default:
-                console.log(element.tagName);
                 return;
             case "p":
-                flatText = this.elementText(element) + "\n\n";
+                innerHtml = this.innerHtml(element);
+                if (innerHtml) {
+                    innerHtml += "\n\n";
+                }
                 break;
             case "div":
-                flatText = this.elementText(element) + "\n";
+                innerHtml = this.innerHtml(element);
+                if (innerHtml) {
+                    innerHtml += "\n";
+                }
                 break;
             case "span":
-                flatText = this.elementText(element);
+                innerHtml = this.innerHtml(element);
                 break;
         }
-        this.replaceElement(element, flatText);
+        this.replaceElement(element, innerHtml);
     }
 
     public keepOnly(element: cheerio.Element, usefulTags: Set<string>) {
@@ -210,17 +215,19 @@ export class HtmlEditor {
         return true;
     }
 
-    private elementText(el: cheerio.Element): string {
+    private innerHtml(el: cheerio.Element): string {
         return this.$(el).html() ?? "";
     }
 
     private isProcessingAttr(attr: string): boolean {
         return (
-            attr === "class" ||
-            attr === "style" ||
+            attr.startsWith("class") ||
+            attr.startsWith("style") ||
             attr === "id" ||
+            attr === "dir" ||
             attr.startsWith("data") ||
-            attr.startsWith("tab")
+            attr.startsWith("tab") ||
+            attr.startsWith("aria")
         );
     }
 }
