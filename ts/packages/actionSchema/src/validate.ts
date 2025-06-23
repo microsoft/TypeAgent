@@ -27,6 +27,8 @@ export function validateSchema(
         throw new Error(`${errorName(name)} should not be null`);
     }
     switch (expected.type) {
+        case "any":
+            break; // any type, no validation needed
         case "type-union": {
             const errors: [SchemaType, Error][] = [];
             for (const type of expected.types) {

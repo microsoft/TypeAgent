@@ -98,6 +98,8 @@ function generateJsonSchemaType(
             // Note: undefined is presented by null in JSON schema
             return { type: "null" };
         }
+        case "any":
+            return {};
         default:
             return { type: type.type };
     }

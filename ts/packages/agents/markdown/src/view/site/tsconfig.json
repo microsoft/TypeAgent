@@ -9,6 +9,9 @@
     "moduleResolution": "bundler",
     "module": "ESNext",
     "lib": ["DOM"],
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
   },
   "include": ["./*"],
   "ts-node": {

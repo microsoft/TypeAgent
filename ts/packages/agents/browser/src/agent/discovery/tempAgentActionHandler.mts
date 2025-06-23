@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgent } from "@typeagent/agent-sdk";
+import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
 import { BrowserConnector } from "../browserConnector.mjs";
 import {
     BrowseProductCategories,
@@ -11,11 +11,15 @@ import { handleCommerceAction } from "../commerce/actionHandler.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
 import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
 import { setupAuthoringActions } from "./authoringUtilities.mjs";
+import {
+    BrowserActionContext,
+    getSessionBrowserControl,
+} from "../actionHandler.mjs";
 
 export function createTempAgentForSchema(
     browser: BrowserConnector,
     agent: any,
-    context: any,
+    context: SessionContext<BrowserActionContext>,
 ): AppAgent {
     const actionUtils = setupAuthoringActions(browser, agent, context);
     return {
@@ -77,7 +81,7 @@ export function createTempAgentForSchema(
     }
 
     async function handleUserDefinedAction(action: any) {
-        const url = await browser.getPageUrl();
+        const url = await getSessionBrowserControl(context).getPageUrl();
         const intentJson = new Map(
             Object.entries(
                 (await browser.getCurrentPageStoredProperty(

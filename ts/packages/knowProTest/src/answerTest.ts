@@ -4,7 +4,7 @@
 import * as kp from "knowpro";
 import { execGetAnswerRequest } from "./knowproCommands.js";
 import { BatchCallback } from "./types.js";
-import { getCommandArgs } from "./common.js";
+import { getCommandArgs, queryError } from "./common.js";
 import { KnowproContext } from "./knowproContext.js";
 import { error, Result, success } from "typechat";
 import { TextEmbeddingModel } from "aiclient";
@@ -38,7 +38,10 @@ export async function runAnswerBatch(
         if (args.length === 0) {
             continue;
         }
-        const response = await getQuestionAnswer(context, args);
+        let response = await getQuestionAnswer(context, args);
+        if (!response.success) {
+            response = queryError(cmd, response);
+        }
         if (cb) {
             cb(response, i, batchLines.length);
         }
@@ -80,7 +83,7 @@ export async function verifyQuestionAnswerBatch(
         if (args.length === 0) {
             continue;
         }
-        const response = await getQuestionAnswer(context, args);
+        let response = await getQuestionAnswer(context, args);
         if (response.success) {
             const actual = response.data;
             const score = await compareQuestionAnswer(
@@ -98,6 +101,7 @@ export async function verifyQuestionAnswerBatch(
                 cb(success(result), i, questionAnswers.length);
             }
         } else {
+            response = queryError(expected.cmd!, response);
             if (cb) {
                 cb(response, i, questionAnswers.length);
             }

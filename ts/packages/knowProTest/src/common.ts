@@ -5,9 +5,7 @@ import fs from "fs";
 import { ArgDef, NamedArgs, parseCommandLine } from "interactive-app";
 import path from "path";
 import { getFileName } from "typeagent";
-import { error, Result } from "typechat";
-import * as kp from "knowpro";
-import * as cm from "conversation-memory";
+import { error, Result, Error } from "typechat";
 
 export function ensureDirSync(folderPath: string): string {
     if (!fs.existsSync(folderPath)) {
@@ -128,30 +126,6 @@ export function compareArray(
     return undefined;
 }
 
-export async function getLangSearchResult(
-    conversation: kp.IConversation | cm.Memory,
-    queryTranslator: kp.SearchQueryTranslator,
-    searchText: string,
-    options?: kp.LanguageSearchOptions,
-    langFilter?: kp.LanguageSearchFilter,
-    debugContext?: kp.LanguageSearchDebugContext,
-) {
-    const searchResults =
-        conversation instanceof cm.Memory
-            ? await conversation.searchWithLanguage(
-                  searchText,
-                  options,
-                  langFilter,
-                  debugContext,
-              )
-            : await kp.searchConversationWithLanguage(
-                  conversation,
-                  searchText,
-                  queryTranslator,
-                  options,
-                  langFilter,
-                  debugContext,
-              );
-
-    return searchResults;
+export function queryError(query: string, result: Error): Error {
+    return error(`${query}\n${result.message}`);
 }

@@ -3,8 +3,9 @@
   "description": "Agent to create and update markdown files",
   "localView": true,
   "schema": {
-    "description": "Markdown editing agent that updates documents using Github markdown flavor.",
+    "description": "Markdown editing agent that updates documents using Github markdown flavor with AI streaming support.",
     "schemaFile": "./markdownActionSchema.ts",
-    "schemaType": "MarkdownAction"
+    "schemaType": "MarkdownAction",
+    "streamingActions": ["streamingUpdateDocument"]
   }
 }

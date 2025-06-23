@@ -126,16 +126,81 @@ export type AnswerGeneratorSettings = {
 
 /**
  * Generate a natural language answer for question about a conversation using the provided search results as context
+ *  - Each search result is first turned into an answer individually
+ *  - If more than one search result provided, then individual answers are combined into a single answer
  * If the context exceeds the generator.setting.maxCharsInBudget, will break up the context into
  * chunks, run them in parallel, and then merge the answers found in individual chunks
  * @param conversation conversation about which this is a question
- * @param generator answer generator to use
+ * @param generator answer generator to use to turn search results onto language answers: @see AnswerGenerator
  * @param question question that was asked
- * @param searchResult the results of running a search query for the question on the conversation
+ * @param searchResults the results of running a search query for the question on the conversation
  * @param progress Progress callback
  * @returns Answers
  */
 export async function generateAnswer(
+    conversation: IConversation,
+    generator: IAnswerGenerator,
+    question: string,
+    searchResults: ConversationSearchResult | ConversationSearchResult[],
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse>
+    >,
+    contextOptions?: AnswerContextOptions,
+): Promise<Result<answerSchema.AnswerResponse>> {
+    let answerResponse: Result<answerSchema.AnswerResponse>;
+    if (!Array.isArray(searchResults)) {
+        answerResponse = await generateAnswerFromSearchResult(
+            conversation,
+            generator,
+            question,
+            searchResults,
+            progress,
+        );
+    } else {
+        if (searchResults.length === 0) {
+            return error("No search results");
+        }
+        if (searchResults.length === 1) {
+            answerResponse = await generateAnswerFromSearchResult(
+                conversation,
+                generator,
+                question,
+                searchResults[0],
+                progress,
+            );
+        } else {
+            // Get answers for individual searches in parallel
+            const partialResults = await asyncArray.mapAsync(
+                searchResults,
+                generator.settings.concurrency,
+                (sr) =>
+                    generateAnswerFromSearchResult(
+                        conversation,
+                        generator,
+                        question,
+                        sr,
+                        progress,
+                    ),
+            );
+            // Use partial responses to build a complete answer
+            const partialResponses: answerSchema.AnswerResponse[] = [];
+            for (const result of partialResults) {
+                if (!result.success) {
+                    return result;
+                }
+                partialResponses.push(result.data);
+            }
+            answerResponse = await generator.combinePartialAnswers(
+                question,
+                partialResponses,
+            );
+        }
+    }
+    return answerResponse;
+}
+
+async function generateAnswerFromSearchResult(
     conversation: IConversation,
     generator: IAnswerGenerator,
     question: string,
@@ -610,7 +675,7 @@ function createQuestionPrompt(question: string): string {
         "- Answer the user question PRECISELY using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
         "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in [ANSWER CONTEXT].",
         "- Use the 'name', 'type' and 'facets' properties of the provided JSON entities to identify those highly relevant to answering the question.",
-        //"- 'origin' on knowledge simply means who provided it.", // TODO: un-comment this once test cases are in
+        "- 'origin' on knowledge simply means who provided it.",
         "- When asked for lists, ensure the the list contents answer the question and nothing else.",
         "E.g. for the question 'List all books': List only the books in [ANSWER CONTEXT].",
         "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",

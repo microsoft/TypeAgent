@@ -828,7 +828,7 @@ export function addBatchHandler(app: InteractiveApp) {
 
     function batchDef(): CommandMetadata {
         return {
-            description: "Run a batch file",
+            description: "Run a batch file of commands",
             args: {
                 filePath: {
                     description: "Batch file path.",
@@ -886,7 +886,9 @@ export function getBatchFileLines(
     commentPrefix = "#",
 ): string[] {
     const lines = fs.readFileSync(batchFilePath, "utf-8").split(/\r?\n/);
-    return lines.filter((line) => line && !line.startsWith(commentPrefix));
+    return lines.filter(
+        (line) => line && line.length > 0 && !line.startsWith(commentPrefix),
+    );
 }
 
 function getDescription(handler: CommandHandler): string | undefined {

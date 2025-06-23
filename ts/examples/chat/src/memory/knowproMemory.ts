@@ -111,6 +111,7 @@ export async function createKnowproCommands(
     commands.kpTopics = topics;
     commands.kpMessages = showMessages;
     commands.kpAbstractMessage = abstract;
+    commands.kpRelatedTerms = addRelatedTerm;
 
     /*----------------
      * COMMANDS
@@ -578,6 +579,45 @@ export async function createKnowproCommands(
         }
         if (namedArgs.showMessage) {
             context.printer.writeMessage(message);
+        }
+    }
+
+    function addRelatedTermDef(): CommandMetadata {
+        return {
+            description: "Add an alias",
+            args: {
+                term: arg("Value for which to add an alias"),
+            },
+            options: {
+                relatedTerm: arg("Alias to add"),
+                weight: argNum("Relationship weight", 0.9),
+            },
+        };
+    }
+    commands.kpRelatedTerms.metadata = addRelatedTermDef();
+    async function addRelatedTerm(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, addRelatedTermDef());
+        const aliases =
+            context.conversation!.secondaryIndexes?.termToRelatedTermsIndex
+                ?.aliases;
+        if (!aliases) {
+            context.printer.writeLine(
+                "No aliases available on this conversation",
+            );
+            return;
+        }
+        if (aliases instanceof kp.TermToRelatedTermsMap) {
+            if (namedArgs.relatedTerm) {
+                const relatedTerm: kp.Term = { text: namedArgs.relatedTerm };
+                aliases.addRelatedTerm(namedArgs.term, relatedTerm);
+            }
+        }
+        const relatedTerms = aliases.lookupTerm(namedArgs.term);
+        if (relatedTerms && relatedTerms.length > 0) {
+            context.printer.writeList(relatedTerms.map((rt) => rt.text));
         }
     }
 

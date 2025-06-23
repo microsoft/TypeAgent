@@ -54,6 +54,7 @@ export {
     ActionResultSuccessNoDisplay,
     ActionResultSuccess,
     ActionResult,
+    ActionResultActivityContext,
 } from "./action.js";
 
 export type {
