@@ -7,12 +7,12 @@ import { bingWithGrounding } from "../src/index.js";
 
 function hasUrlResolverApiKey() {
     try {
-        const appSettings = bingWithGrounding.apiSettingsFromEnv()
+        const appSettings = bingWithGrounding.apiSettingsFromEnv();
         return (
-            appSettings.urlResolutionAgentId !== undefined 
-            && appSettings.urlResolutionAgentId.length > 0
-            && appSettings.validatorAgentId !== undefined
-            && appSettings.validatorAgentId.length > 0
+            appSettings.urlResolutionAgentId !== undefined &&
+            appSettings.urlResolutionAgentId.length > 0 &&
+            appSettings.validatorAgentId !== undefined &&
+            appSettings.validatorAgentId.length > 0
         );
     } catch {}
     return false;
@@ -23,20 +23,27 @@ describe("urlResolver", () => {
         () => hasUrlResolverApiKey(),
         "urlResolver.resolveUrl",
         async () => {
-            const resolved = await urlResolver.resolveURLWithSearch("microsoft", bingWithGrounding.apiSettingsFromEnv());
+            const resolved = await urlResolver.resolveURLWithSearch(
+                "microsoft",
+                bingWithGrounding.apiSettingsFromEnv(),
+            );
 
             expect(resolved).toBe("https://www.microsoft.com/en-us/");
-        }
+        },
     );
 
     testIf(
         () => hasUrlResolverApiKey(),
         "urlResolver.validateUrl",
         async () => {
-            const validated: urlResolver.urlValidityAction | undefined = await urlResolver.validateURL("microsoft", "https://www.microsoft.com/en-us/", bingWithGrounding.apiSettingsFromEnv());
+            const validated: urlResolver.urlValidityAction | undefined =
+                await urlResolver.validateURL(
+                    "microsoft",
+                    "https://www.microsoft.com/en-us/",
+                    bingWithGrounding.apiSettingsFromEnv(),
+                );
 
             expect(validated?.urlValidity).toBe("valid");
-        }
+        },
     );
-
 });

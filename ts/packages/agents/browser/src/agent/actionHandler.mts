@@ -67,7 +67,12 @@ import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "./interface.mjs";
 
 import * as website from "website-memory";
-import { bingWithGrounding, openai, TextEmbeddingModel, urlResolver } from "aiclient";
+import {
+    bingWithGrounding,
+    openai,
+    TextEmbeddingModel,
+    urlResolver,
+} from "aiclient";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
@@ -365,7 +370,10 @@ async function resolveWebPage(
             }
 
             // try to resolve URL using LLM + internet search
-            const url = await urlResolver.resolveURLWithSearch(site, bingWithGrounding.apiSettingsFromEnv());
+            const url = await urlResolver.resolveURLWithSearch(
+                site,
+                bingWithGrounding.apiSettingsFromEnv(),
+            );
 
             if (url) {
                 return url;
