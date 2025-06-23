@@ -3,11 +3,11 @@
 
 import argparse
 import asyncio
+import builtins
+from dataclasses import dataclass
 import json
 
-from dataclasses import dataclass
-import sys
-from typechat import TypeChatJsonTranslator
+import numpy as np
 import typechat
 
 from typeagent.aitools import auth
@@ -23,9 +23,10 @@ from typeagent.podcasts.podcast import Podcast
 @dataclass
 class Context:
     conversation: IConversation
-    query_translator: TypeChatJsonTranslator[SearchQuery]
+    query_translator: typechat.TypeChatJsonTranslator[SearchQuery]
     embedding_model: AsyncEmbeddingModel
     options: None
+    interactive: bool
 
 
 def main():
@@ -55,6 +56,13 @@ def main():
         type=int,
         default=0,
         help="Number of initial Q/A pairs to skip (for debugging purposes)",
+    )
+    parser.add_argument(
+        "--interactive",
+        "-i",
+        action="store_true",
+        default=False,
+        help="Run in interactive mode, waiting for user input before each question",
     )
     args = parser.parse_args()
 
@@ -87,6 +95,7 @@ def main():
         query_translator,
         AsyncEmbeddingModel(),
         options=None,  # TODO: Set options if needed
+        interactive=args.interactive,
     )
 
     # Loop over eval data, skipping duplicate questions
@@ -94,7 +103,9 @@ def main():
 
     skip = args.skip
     last_q = ""
+    counter = 0
     for qa_pair in data:
+        counter += 1
         question = qa_pair.get("question")
         answer = qa_pair.get("answer")
         if not (question and answer) or question == last_q:
@@ -105,21 +116,43 @@ def main():
             continue
 
         # Wait for user input before continuing.
-        try:
-            input("Press Enter to continue... ")
-        except (EOFError, KeyboardInterrupt):
-            print()
-            sys.exit()
+        if context.interactive:
+            try:
+                input("Press Enter to continue... ")
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
 
-        asyncio.run(compare(context, qa_pair))
+        # Compare the given answer with the actual answer for the question.
+        actual_answer, score = asyncio.run(compare(context, qa_pair))
+        print("-" * 25, counter, "-" * 25)
+        if not context.interactive and score < 0.97:
+            print(f"Question: {question}")
+            print(f"Expected answer:\n{answer}")
+            print("-" * 20)
+            print(f"Actual answer:\n{actual_answer}")
+            print(f"Score: {score:.3f}")
+        else:
+            print(f"Score: {score:.3f} (question: {question})")
 
 
-async def compare(context, qa_pair):
+async def compare(
+    context: Context, qa_pair: dict[str, str | None]
+) -> tuple[str | None, float]:
+    the_answer: str | None = None
+    score = 0.0
+
     question = qa_pair.get("question")
     answer = qa_pair.get("answer")
     cmd = qa_pair.get("cmd")
     if not (question and answer):
-        return
+        return None, score
+
+    if not context.interactive:
+        print = lambda *args, **kwds: None  # Disable printing in non-interactive mode
+    else:
+        print = builtins.print
+
     print()
     print("=" * 40)
     if cmd:
@@ -144,9 +177,30 @@ async def compare(context, qa_pair):
         print("-" * 40)
         if combined_answer.type == "NoAnswer":
             print("Failure:", combined_answer.whyNoAnswer)
+            print("All answers:")
+            if context.interactive:
+                ui.pretty_print(all_answers)
         else:
-            print(combined_answer.answer)
+            assert combined_answer.answer is not None, "Expected an answer"
+            the_answer = combined_answer.answer
+            score = await equality_score(context, answer, the_answer)
+            print(the_answer)
+            print("Correctness score:", score)
     print("=" * 40)
+
+    return the_answer, score
+
+
+async def equality_score(context: Context, a: str, b: str) -> float:
+    a = a.strip()
+    b = b.strip()
+    if a == b:
+        return 1.0
+    if a.lower() == b.lower():
+        return 0.999
+    embeddings = await context.embedding_model.get_embeddings([a, b])
+    assert embeddings.shape[0] == 2, "Expected two embeddings"
+    return np.dot(embeddings[0], embeddings[1])
 
 
 if __name__ == "__main__":
