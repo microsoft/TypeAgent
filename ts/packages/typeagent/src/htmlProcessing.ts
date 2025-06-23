@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import * as cheerio from "cheerio";
-import { collections } from "./index.js";
 
 /**
  * Extract all text from the given html.
@@ -33,46 +32,21 @@ export function htmlToText(html: string, nodeQuery?: string): string {
         .join(" ");
 }
 
-export type HtmlTag = {
-    tag: string;
-    attr?:
-        | {
-              [name: string]: string;
-          }
-        | undefined;
-    text?: string | undefined;
-};
+export type HtmlNode = HtmlTagNode | HtmlTextNode;
 
-export function htmlToHtmlTags(html: string): HtmlTag[] {
-    const $ = cheerio.load(html);
-    const nodeQuery =
-        "a, p, div, span, em, strong, li, tr, th, td, h1, h2, h3, h4, h5, h6, article, section, header, footer, annotation, blockquote, code, figure";
-    const htmlTags: HtmlTag[] = [];
-    $(nodeQuery).each((_, el) => {
-        const element = $(el);
-        const tag = element[0].tagName;
-        let text = getText($, element);
-        //const text = $(element).text().trim();
-        htmlTags.push({
-            tag,
-            attr: element[0].attribs,
-            text: text || undefined,
-        });
-    });
-    return htmlTags;
+export interface HtmlTextNode {
+    type: "text";
+    text: () => string | undefined;
 }
 
-function getText(
-    $: cheerio.CheerioAPI,
-    element: cheerio.Cheerio<cheerio.Element>,
-): string | undefined {
-    let text = "";
-    element.contents().each((_, child) => {
-        if (child.type === "text") {
-            text += $(child).text().trim();
-        }
-    });
-    return text;
+export interface HtmlTagNode {
+    type: "tag";
+    tag: string;
+    attr: {
+        [name: string]: string;
+    };
+    text: () => string | undefined;
+    html: () => string | undefined;
 }
 
 export function simplifyText(html: string): string {
@@ -89,19 +63,16 @@ export function simplifyHtml(html: string): string {
 
 export class HtmlEditor {
     private $: cheerio.CheerioAPI;
-    private usefulTags: Set<string>;
+    private tagsToKeep: Set<string>;
+    private removableAttrPrefixes: string[];
 
     constructor(
         public html: string,
-        usefulTags?: string | Set<string> | undefined,
+        tagsToKeep?: string[] | undefined,
     ) {
         this.$ = cheerio.load(html.replaceAll("\n", ""));
-        usefulTags ??=
-            "body, a, p, div, span, em, strong, ol, ul, li, table, tr, th, td, h1, h2, h3, h4, h5, h6, article, section, header, footer, annotation, blockquote, code, figure";
-        if (typeof usefulTags === "string") {
-            usefulTags = collections.stringsToSet(usefulTags);
-        }
-        this.usefulTags = usefulTags;
+        this.tagsToKeep = new Set(tagsToKeep ?? getTypicalTagNames());
+        this.removableAttrPrefixes = getRemovableAttrPrefixes();
     }
 
     public getHtml(): string {
@@ -112,9 +83,11 @@ export class HtmlEditor {
         return this.$.root().text();
     }
 
-    public simplify() {
-        this.keepOnly(this.$("html")[0], this.usefulTags);
-        this.removeUnnecessaryAttr();
+    public simplify(simplifyAttr: boolean = true) {
+        this.keepOnly(this.$("html")[0], this.tagsToKeep);
+        if (simplifyAttr) {
+            this.removeAttributes();
+        }
         this.flattenText(this.$("html")[0]);
     }
 
@@ -179,8 +152,8 @@ export class HtmlEditor {
         }
     }
 
-    public removeUnnecessaryAttr(): void {
-        this.removeAttr((attr) => this.isProcessingAttr(attr));
+    public removeAttributes(): void {
+        this.removeAttr((attr) => this.isRemovableAttr(attr));
     }
 
     public removeAttr(
@@ -219,15 +192,59 @@ export class HtmlEditor {
         return this.$(el).html() ?? "";
     }
 
-    private isProcessingAttr(attr: string): boolean {
-        return (
-            attr.startsWith("class") ||
-            attr.startsWith("style") ||
-            attr === "id" ||
-            attr === "dir" ||
-            attr.startsWith("data") ||
-            attr.startsWith("tab") ||
-            attr.startsWith("aria")
-        );
+    private isRemovableAttr(attrName: string): boolean {
+        return this.removableAttrPrefixes.some((a) => attrName.startsWith(a));
     }
+}
+
+function getTypicalTagNames(): string[] {
+    return [
+        "body",
+        "a",
+        "p",
+        "div",
+        "span",
+        "em",
+        "strong",
+        "b",
+        "i",
+        "ol",
+        "ul",
+        "li",
+        "table",
+        "tr",
+        "th",
+        "td",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "article",
+        "section",
+        "header",
+        "footer",
+        "annotation",
+        "blockquote",
+        "code",
+        "figure",
+    ];
+}
+
+function getRemovableAttrPrefixes(): string[] {
+    return [
+        "class",
+        "style",
+        "aria",
+        "id",
+        "data",
+        "tab",
+        "dir",
+        "x-",
+        "role",
+        "title",
+        "lang",
+        "accesskey",
+    ];
 }
