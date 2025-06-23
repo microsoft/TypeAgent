@@ -1,4 +1,5 @@
 wikipedia	https://www.wikipedia.org/
+yahoo	https://www.yahoo.com/
 youtube	https://www.youtube.com/
 instagram	https://www.instagram.com/
 google	https://www.google.com/
