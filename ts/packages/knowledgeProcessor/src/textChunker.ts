@@ -21,6 +21,7 @@ export function split(
     options?: SplitOptions,
 ): string[] {
     let parts = text.split(pattern);
+    parts = parts.filter((p) => p !== undefined);
     if (parts.length > 0 && options) {
         if (options.trim) {
             for (let i = 0; i < parts.length; ++i) {
