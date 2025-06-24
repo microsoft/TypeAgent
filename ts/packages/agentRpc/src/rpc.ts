@@ -7,16 +7,16 @@ import { RpcChannel } from "./common.js";
 
 type RpcFuncTypes<
     N extends string,
-    T extends Record<string, (...args: any) => any>,
+    T extends Record<string, (...args: any[]) => any>,
 > = {
     [K in keyof T as `${N}`]: <K extends string>(
         name: K,
-        param: Parameters<T[K]>[0],
+        ...args: Parameters<T[K]>
     ) => ReturnType<T[K]>;
 };
 
-type RpcInvokeFunction = (param: any) => Promise<unknown>;
-type RpcCallFunction = (param: any) => void;
+type RpcInvokeFunction = (...args: any[]) => Promise<unknown>;
+type RpcCallFunction = (...args: any[]) => void;
 type RpcInvokeFunctions = Record<string, RpcInvokeFunction>;
 type RpcCallFunctions = Record<string, RpcCallFunction>;
 type RpcReturn<
@@ -59,7 +59,7 @@ export function createRpc<
             if (f === undefined) {
                 debugError("No call handler", message);
             } else {
-                f(message.param);
+                f(...message.args);
             }
             return;
         }
@@ -69,10 +69,10 @@ export function createRpc<
                 out({
                     type: "invokeError",
                     callId: message.callId,
-                    error: "No invoke handler",
+                    error: `No invoke handler ${message.name}`,
                 });
             } else {
-                f(message.param).then(
+                f(...message.args).then(
                     (result) => {
                         out({
                             type: "invokeResult",
@@ -123,32 +123,33 @@ export function createRpc<
 
     let nextCallId = 0;
     const rpc = {
-        invoke: async function <P, T>(
+        invoke: async function (
             name: keyof InvokeTargetFunctions,
-            param: P,
-        ): Promise<T> {
+            ...args: any[]
+        ): Promise<any> {
             const message = {
                 type: "invoke",
                 callId: nextCallId++,
                 name,
-                param,
+                args,
             };
 
-            return new Promise<T>((resolve, reject) => {
+            return new Promise<any>((resolve, reject) => {
                 out(message, (err) => {
                     if (err !== null) {
+                        pending.delete(message.callId);
                         reject(err);
                     }
                 });
                 pending.set(message.callId, { resolve, reject });
             });
         },
-        send: <P>(name: keyof CallTargetFunctions, param?: P) => {
+        send: (name: keyof CallTargetFunctions, ...args: any[]) => {
             out({
                 type: "call",
                 callId: nextCallId++,
                 name,
-                param,
+                args,
             });
         },
     } as RpcReturn<InvokeTargetFunctions, CallTargetFunctions>;
@@ -173,16 +174,16 @@ function isInvokeError(message: any): message is InvokeError {
 
 type CallMessage = {
     type: "call";
-    callId: number;
+    callId: number; // Not necessary for call messages. included for tracing.
     name: string;
-    param: any;
+    args: any[];
 };
 
 type InvokeMessage = {
     type: "invoke";
     callId: number;
     name: string;
-    param: any;
+    args: any[];
 };
 
 type InvokeResult<T = void> = {

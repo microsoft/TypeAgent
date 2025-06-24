@@ -20,6 +20,8 @@ export interface BrowserControl {
     getPageUrl(): Promise<string>;
 
     setAgentStatus(isBusy: boolean, message: string): void;
+    scrollUp(): Promise<void>;
+    scrollDown(): Promise<void>;
 }
 
 export type BrowserControlInvokeFunctions = {
@@ -29,8 +31,10 @@ export type BrowserControlInvokeFunctions = {
     goBack(): Promise<void>;
     reload(): Promise<void>;
     getPageUrl(): Promise<string>;
+    scrollUp(): Promise<void>;
+    scrollDown(): Promise<void>;
 };
 
 export type BrowserControlCallFunctions = {
-    setAgentStatus(params: { isBusy: boolean; message: string }): void;
+    setAgentStatus(isBusy: boolean, message: string): void;
 };

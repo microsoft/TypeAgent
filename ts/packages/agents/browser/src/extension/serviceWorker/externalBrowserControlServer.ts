@@ -1,15 +1,47 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { RpcChannel } from "agent-rpc/channel";
+import { createGenericChannel, RpcChannel } from "agent-rpc/channel";
 import { getActiveTab } from "./tabManager";
 import { createRpc } from "agent-rpc/rpc";
 import {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
-} from "../../agent/interface.mjs";
+} from "../../agent/browserControl.mjs";
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
+import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 export function createExternalBrowserServer(channel: RpcChannel) {
+    const contentScriptRpcChannel = createGenericChannel(
+        async (message, cb) => {
+            try {
+                const targetTab = await getActiveTab();
+                await chrome.tabs.sendMessage(targetTab?.id!, {
+                    type: "rpc",
+                    message,
+                });
+            } catch (error) {
+                console.error(
+                    "Error sending message to content script:",
+                    error,
+                );
+                if (cb) {
+                    cb(error as Error);
+                }
+            }
+        },
+    );
+
+    chrome.runtime.onMessage.addListener(
+        (message: any, sender: chrome.runtime.MessageSender) => {
+            if (message.type === "rpc") {
+                contentScriptRpcChannel.message(message.message);
+            }
+        },
+    );
+
+    const contentScriptRpc = createContentScriptRpcClient(
+        contentScriptRpcChannel.channel,
+    );
     const invokeFunctions: BrowserControlInvokeFunctions = {
         openWebPage: async (url: string) => {
             const targetTab = await getActiveTab();
@@ -54,9 +86,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                 throw new Error("No active tab to get URL from.");
             }
         },
+        scrollUp: async () => {
+            return contentScriptRpc.scrollUp();
+        },
+        scrollDown: async () => {
+            return contentScriptRpc.scrollDown();
+        },
     };
     const callFunctions: BrowserControlCallFunctions = {
-        setAgentStatus: ({ isBusy, message }) => {
+        setAgentStatus: (isBusy: boolean, message: string) => {
             if (isBusy) {
                 showBadgeBusy();
             } else {
@@ -65,5 +103,10 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             console.log(`${message} (isBusy: ${isBusy})`);
         },
     };
-    return createRpc(channel, invokeFunctions, callFunctions);
+    return createRpc(
+        "browser:extension",
+        channel,
+        invokeFunctions,
+        callFunctions,
+    );
 }

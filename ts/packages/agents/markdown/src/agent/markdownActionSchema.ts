@@ -31,6 +31,10 @@ export type UpdateDocumentAction = {
     parameters: {
         // the original request of the user
         originalRequest: string;
+        // cursor position where the user invoked the command
+        cursorPosition?: number;
+        // additional context information from the editor (serialized as JSON string)
+        context?: string;
     };
 };
 
@@ -40,6 +44,10 @@ export type StreamingUpdateDocumentAction = {
     parameters: {
         // the original request of the user
         originalRequest: string;
+        // cursor position where the user invoked the command
+        cursorPosition?: number;
+        // additional context information from the editor (serialized as JSON string)
+        context?: string;
         // Stream-friendly properties that can be updated incrementally
         generatedContent?: string; // Streamed content for AI operations
         progressStatus?: string; // Status updates for long operations

@@ -51,7 +51,9 @@ async function handleUICommand(
     parameters: any,
     context: ActionContext<MarkdownActionContext>,
 ): Promise<UICommandResult> {
-    debug(`[AGENT] Processing UI command: ${command}`);
+    debug(
+        `[AGENT] Processing UI command: ${command}, cursorPosition: ${parameters.cursorPosition}, context: ${parameters.context ? "received" : "none"}, originalRequest: ${parameters.originalRequest}`,
+    );
 
     try {
         // Check if streaming is enabled for this command
@@ -69,6 +71,8 @@ async function handleUICommand(
                 actionName: "streamingUpdateDocument",
                 parameters: {
                     originalRequest: parameters.originalRequest,
+                    context: parameters.context, // Already serialized by view
+                    cursorPosition: parameters.cursorPosition, // Explicit position
                 },
             };
 
@@ -92,6 +96,8 @@ async function handleUICommand(
                 actionName: "updateDocument",
                 parameters: {
                     originalRequest: parameters.originalRequest,
+                    context: parameters.context, // Already serialized by view
+                    cursorPosition: parameters.cursorPosition, // Explicit position
                 },
             };
 
@@ -210,18 +216,39 @@ async function handleUICommandViaIPC(
     message: any,
     agentContext: MarkdownActionContext,
 ): Promise<UICommandResult> {
-    // Create minimal action context for UI commands
-    const actionContext = {
-        sessionContext: {
-            agentContext: agentContext,
-        },
-    } as ActionContext<MarkdownActionContext>;
-
-    return await handleUICommand(
-        message.command,
-        message.parameters,
-        actionContext,
+    debug(
+        `[AGENT] Processing UI command: ${message.command}, requestId: ${message.requestId}`,
     );
+
+    try {
+        // Create minimal action context for UI commands
+        const actionContext = {
+            sessionContext: {
+                agentContext: agentContext,
+            },
+        } as ActionContext<MarkdownActionContext>;
+
+        const result = await handleUICommand(
+            message.command,
+            message.parameters,
+            actionContext,
+        );
+
+        debug(
+            `[AGENT] UI command completed successfully: ${message.requestId}`,
+        );
+        return result;
+    } catch (error) {
+        console.error(`[AGENT] UI command failed: ${message.requestId}`, error);
+
+        // Return error result instead of throwing to ensure response is sent
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            message: `Failed to execute ${message.command} command`,
+            type: "error",
+        };
+    }
 }
 
 async function markdownValidateWildcardMatch(
@@ -276,6 +303,8 @@ async function updateMarkdownContext(
                 );
             }
         }
+
+        setCurrentAgentContext(context.agentContext);
     } else {
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
@@ -333,6 +362,25 @@ async function handleStreamingMarkdownAction(
                 ? action.parameters.originalRequest
                 : "";
 
+        const cursorPosition =
+            "cursorPosition" in action.parameters
+                ? action.parameters.cursorPosition
+                : undefined;
+
+        const context =
+            "context" in action.parameters && action.parameters.context
+                ? (() => {
+                      try {
+                          return JSON.parse(action.parameters.context);
+                      } catch (error) {
+                          debug(
+                              `[AGENT] Failed to parse context JSON: ${error}, using undefined`,
+                          );
+                          return undefined;
+                      }
+                  })()
+                : undefined;
+
         const response = await agent.updateDocumentWithStreaming(
             markdownContent,
             originalRequest,
@@ -340,6 +388,8 @@ async function handleStreamingMarkdownAction(
                 // Send chunk to view process for streaming to client
                 sendStreamingChunkToView(streamId, chunk, actionContext);
             },
+            cursorPosition,
+            context,
         );
 
         if (response.success) {
@@ -448,7 +498,11 @@ async function handleMarkdownAction(
             } else {
                 result = createActionResult("Opening document ...");
 
-                const newFileName = action.parameters.name.trim() + ".md";
+                let newFileName = action.parameters.name.trim();
+                if (!newFileName.endsWith(".md")) {
+                    newFileName += ".md";
+                }
+
                 actionContext.sessionContext.agentContext.currentFileName =
                     newFileName;
 
@@ -464,7 +518,7 @@ async function handleMarkdownAction(
 
                     actionContext.sessionContext.agentContext.viewProcess.send({
                         type: "setFile",
-                        filePath: fullPath,
+                        filePath: path.basename(fullPath!),
                         folderPath: path.dirname(fullPath!),
                     });
                 }
@@ -501,19 +555,12 @@ async function handleMarkdownAction(
                     );
                 } catch (error) {
                     console.warn(
-                        "Failed to get content from view, falling back to storage:",
+                        "Failed to get content from view, using empty content fallback:",
                         error,
                     );
-                    // Fallback to storage only if view process fails
-                    if (await storage?.exists(filePath)) {
-                        markdownContent =
-                            (await storage?.read(filePath, "utf8")) || "";
-                        debug(
-                            "Fallback: Read content from storage:",
-                            markdownContent?.length,
-                            "chars",
-                        );
-                    }
+                    // Use empty content as fallback to allow agent to continue processing
+                    markdownContent = "";
+                    debug("Using empty content fallback");
                 }
             } else {
                 // Fallback if no view process
@@ -529,13 +576,51 @@ async function handleMarkdownAction(
             }
 
             // Handle synchronous requests through the agent
+            const originalRequest =
+                "originalRequest" in action.parameters
+                    ? action.parameters.originalRequest
+                    : "";
+
+            const cursorPosition =
+                "cursorPosition" in action.parameters
+                    ? action.parameters.cursorPosition
+                    : undefined;
+
+            const context =
+                "context" in action.parameters && action.parameters.context
+                    ? (() => {
+                          try {
+                              return JSON.parse(action.parameters.context);
+                          } catch (error) {
+                              debug(
+                                  `[AGENT] Failed to parse context JSON: ${error}, using undefined`,
+                              );
+                              return undefined;
+                          }
+                      })()
+                    : undefined;
+
+            debug(
+                `[AGENT] About to call LLM service with request: "${originalRequest}"`,
+            );
+            debug(
+                `[AGENT] Document content length: ${markdownContent?.length || 0} chars`,
+            );
+
             const response = await agent.updateDocument(
                 markdownContent,
-                action.parameters.originalRequest,
+                originalRequest,
+                cursorPosition,
+                context,
             );
+
+            debug(`[AGENT] LLM service returned, success: ${response.success}`);
 
             if (response.success) {
                 const updateResult = response.data;
+                debug(
+                    `[AGENT] LLM processing successful, operations count: ${updateResult.operations?.length || 0}`,
+                );
 
                 // Apply operations to the document
                 if (
@@ -568,6 +653,8 @@ async function handleMarkdownAction(
                             "No view process available, operations not applied",
                         );
                     }
+                } else {
+                    debug("[AGENT] No operations returned from LLM");
                 }
 
                 if (updateResult.operationSummary) {
@@ -575,6 +662,8 @@ async function handleMarkdownAction(
                 } else {
                     result = createActionResult("Updated document");
                 }
+
+                debug(`[AGENT] updateDocument case completed successfully`);
             } else {
                 const errorMessage =
                     (response as any).message || "Unknown error occurred";
@@ -609,19 +698,12 @@ async function handleMarkdownAction(
                     );
                 } catch (error) {
                     console.warn(
-                        "Failed to get content from view, falling back to storage:",
+                        "Failed to get content from view, using empty content fallback:",
                         error,
                     );
-                    // Fallback to storage only if view process fails
-                    if (await storage?.exists(filePath)) {
-                        markdownContent =
-                            (await storage?.read(filePath, "utf8")) || "";
-                        debug(
-                            "Fallback: Read content from storage:",
-                            markdownContent?.length,
-                            "chars",
-                        );
-                    }
+                    // Use empty content as fallback to allow agent to continue processing
+                    markdownContent = "";
+                    debug("Using empty content fallback");
                 }
             } else {
                 // Fallback if no view process
@@ -753,18 +835,43 @@ async function getDocumentContentFromView(
 ): Promise<string> {
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
-            reject(new Error("Timeout getting document content from view"));
-        }, 3000);
+            debug(
+                "[AGENT] Content request timeout, trying fallback to empty content",
+            );
+
+            // Use empty content as fallback when view process fails
+            // This allows the agent to continue processing even if content retrieval fails
+            console.warn(
+                "[AGENT] View process content request timed out, using empty content fallback",
+            );
+            resolve("");
+        }, 15000); // 15 second timeout
 
         const responseHandler = (message: any) => {
             if (message.type === "documentContent") {
                 clearTimeout(timeout);
                 viewProcess.off("message", responseHandler);
-                resolve(message.content);
+
+                // Log the source of the content for debugging
+                const source = message.source || "unknown";
+                debug(
+                    `[AGENT] Received document content from ${source}: ${message.content?.length || 0} chars`,
+                );
+
+                if (message.error) {
+                    debug(
+                        `[AGENT] Content retrieval had error: ${message.error}`,
+                    );
+                    // Still resolve with content even if there was an error
+                }
+
+                resolve(message.content || "");
             }
         };
 
         viewProcess.on("message", responseHandler);
+
+        debug("[AGENT] Sending getDocumentContent request to view process");
         viewProcess.send({ type: "getDocumentContent" });
     });
 }
@@ -791,17 +898,21 @@ export async function createViewServiceHost(filePath: string, port: number) {
                     ),
                 );
 
+                const folderPath = path.dirname(filePath!);
+
                 const childProcess = fork(expressService, [port.toString()], {
-                    // Explicitly inherit environment variables to ensure .env values are passed
-                    env: process.env,
+                    env: {
+                        ...process.env,
+                        TYPEAGENT_MARKDOWN_ROOT: folderPath,
+                    },
                 });
 
                 childProcess.send({
                     type: "setFile",
-                    filePath: filePath,
+                    filePath: path.basename(filePath),
                 });
 
-                childProcess.on("message", function (message) {
+                childProcess.on("message", function (message: any) {
                     if (message === "Success") {
                         resolve(childProcess);
                     } else if (message === "Failure") {
@@ -831,35 +942,63 @@ let currentAgentContext: MarkdownActionContext | null = null;
 // Store agent context for UI command processing
 export function setCurrentAgentContext(context: MarkdownActionContext) {
     currentAgentContext = context;
-}
 
-// Handle UI commands from view process
-if (typeof process !== "undefined" && process.on) {
-    process.on("message", (message: any) => {
-        if (message.type === "uiCommand" && currentAgentContext) {
-            debug(`[AGENT] Received UI command: ${message.command}`);
+    const viewProcess = context.viewProcess;
 
-            handleUICommandViaIPC(message, currentAgentContext)
-                .then((result) => {
-                    process.send?.({
+    if (typeof viewProcess !== "undefined" && viewProcess.on) {
+        viewProcess.on("message", async (message: any) => {
+            if (message.type === "uiCommand" && currentAgentContext) {
+                debug(
+                    `[AGENT] Received UI command: ${message.command}, requestId: ${message.requestId}, cursorPosition: ${message.parameters?.cursorPosition}, context: ${message.parameters?.context ? "serialized" : "none"}`,
+                );
+
+                try {
+                    debug(
+                        `[AGENT] Starting to process UI command: ${message.requestId}`,
+                    );
+                    const result = await handleUICommandViaIPC(
+                        message,
+                        currentAgentContext,
+                    );
+
+                    debug(
+                        `[AGENT] UI command ${message.requestId} completed successfully, sending result`,
+                    );
+                    viewProcess.send?.({
                         type: "uiCommandResult",
                         requestId: message.requestId,
                         result: result,
                     });
-                })
-                .catch((error) => {
-                    process.send?.({
+                    debug(
+                        `[AGENT] Result sent for UI command: ${message.requestId}`,
+                    );
+                } catch (error) {
+                    console.error(
+                        `[AGENT] UI command ${message.requestId} failed:`,
+                        error,
+                    );
+
+                    // Always send error response to prevent timeout
+                    const errorResult = {
+                        success: false,
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                        message: "Internal error processing UI command",
+                        type: "error" as const,
+                    };
+
+                    debug(
+                        `[AGENT] Sending error result for UI command: ${message.requestId}`,
+                    );
+                    viewProcess.send?.({
                         type: "uiCommandResult",
                         requestId: message.requestId,
-                        result: {
-                            success: false,
-                            error: error.message,
-                            message: "Internal error processing UI command",
-                            type: "error",
-                        },
+                        result: errorResult,
                     });
-                    console.error(`[AGENT] UI command error:`, error);
-                });
-        }
-    });
+                }
+            }
+        });
+    }
 }

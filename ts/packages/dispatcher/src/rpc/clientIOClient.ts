@@ -22,10 +22,10 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
     );
     return {
         clear(): void {
-            return rpc.send("clear", undefined);
+            return rpc.send("clear");
         },
         exit(): void {
-            return rpc.send("exit", undefined);
+            return rpc.send("exit");
         },
         setDisplayInfo(
             source: string,

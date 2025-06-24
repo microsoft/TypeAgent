@@ -6,7 +6,7 @@ import {
     BrowserControl,
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
-} from "../interface.mjs";
+} from "../browserControl.mjs";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
 import { WebSocketMessageV2 } from "common-utils";
@@ -51,25 +51,28 @@ export function createExternalBrowserClient(
             return rpc.invoke("openWebPage", url);
         },
         closeWebPage: async () => {
-            return rpc.invoke("closeWebPage", undefined);
+            return rpc.invoke("closeWebPage");
         },
         goForward: async () => {
-            return rpc.invoke("goForward", undefined);
+            return rpc.invoke("goForward");
         },
         goBack: async () => {
-            return rpc.invoke("goBack", undefined);
+            return rpc.invoke("goBack");
         },
         reload: async () => {
-            return rpc.invoke("reload", undefined);
+            return rpc.invoke("reload");
         },
         getPageUrl: async () => {
-            return rpc.invoke("getPageUrl", undefined);
+            return rpc.invoke("getPageUrl");
         },
-        setAgentStatus: (isBusy: boolean, message: string) => {
-            rpc.send("setAgentStatus", {
-                isBusy,
-                message,
-            });
+        setAgentStatus: (...args) => {
+            rpc.send("setAgentStatus", ...args);
+        },
+        scrollUp: async () => {
+            return rpc.invoke("scrollUp");
+        },
+        scrollDown: async () => {
+            return rpc.invoke("scrollDown");
         },
     };
 }

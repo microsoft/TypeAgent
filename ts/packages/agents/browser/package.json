@@ -15,12 +15,14 @@
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
     "./agent/handlers": "./dist/agent/actionHandler.mjs",
-    "./agent/interface": "./dist/agent/interface.mjs"
+    "./agent/types": "./dist/agent/browserControl.mjs",
+    "./contentScriptRpc/types": "./dist/common/contentScriptRpc/types.mjs",
+    "./contentScriptRpc/client": "./dist/common/contentScriptRpc/client.mjs"
   },
   "main": "index.js",
   "scripts": {
-    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite",
-    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev",
+    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite npm:tsc:typecheck",
+    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev npm:tsc:typecheck",
     "clean": "rimraf dist deploy",
     "package": "node scripts/packExtension.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
@@ -29,6 +31,7 @@
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
+    "tsc:typecheck": "tsc --noEmit -p tsconfig.json",
     "vite": "node scripts/buildExtension.mjs",
     "vite:dev": "node scripts/buildExtension.mjs --dev"
   },
