@@ -442,3 +442,5 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 
 # Mac OS files
 .DS_Store
+ts/packages/agents/browser/.extension-build-hash
+ts/packages/agents/markdown/.vite-vendor-cache.json

@@ -1,8 +1,3 @@
-node_modules
-public/js/*.js
-public/js/*.js.map
-public/js/*.d.ts
-
 # Build outputs
 dist/
 *.tsbuildinfo
@@ -10,8 +5,12 @@ dist/
 
 # Build cache
 .vite-build-hash
-.frontend-build-cache.json
+.vite-vendor-cache.json
+.smart-build-cache.json
 .tsc-cache-*.json
+
+# Dependencies
+node_modules/
 
 # Environment
 .env

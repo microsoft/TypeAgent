@@ -8,6 +8,14 @@ node_modules/
 *.out.txt
 *.bat
 
+# TypeScript build info
+.tsbuildinfo/
+*.tsbuildinfo
+
+# Build cache
+.extension-build-hash
+.tsc-cache-*.json
+
 # Local development and debugging
 .scratch/
 .vscode
