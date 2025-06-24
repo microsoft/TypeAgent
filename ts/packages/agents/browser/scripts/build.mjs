@@ -25,21 +25,32 @@ function calculateFileHash(filePath) {
 function calculateProjectHash(taskName) {
     const hash = createHash('md5');
     
-    // File sets for markdown-agent tasks
+    // Different file sets for different tasks
     const taskFiles = {
-        'tsc': [
-            'src/agent/**/*.ts',
-            'src/view/site/**/*.ts', 
-            'src/view/route/**/*.ts',
-            'src/agent/tsconfig.json',
-            'src/view/site/tsconfig.json',
-            'src/view/route/tsconfig.json',
+        'typecheck': [
+            'src/**/*.ts',
             'tsconfig.json',
-            '../../../tsconfig.base.json'
+            '../../tsconfig.base.json'
+        ],
+        'agent': [
+            'src/agent/**/*.ts', 
+            'src/agent/tsconfig.json',
+            'src/common/**/*.ts',  // agent depends on common
+            '../../tsconfig.base.json'
+        ],
+        'common': [
+            'src/common/**/*.ts',
+            'src/common/tsconfig.json', 
+            '../../tsconfig.base.json'
+        ],
+        'puppeteer': [
+            'src/puppeteer/**/*.ts',
+            'src/puppeteer/tsconfig.json',
+            '../../tsconfig.base.json'
         ]
     };
     
-    const filesToCheck = taskFiles[taskName] || taskFiles['tsc'];
+    const filesToCheck = taskFiles[taskName] || taskFiles['typecheck'];
     let hashInput = '';
     
     for (const pattern of filesToCheck) {
@@ -75,24 +86,17 @@ function calculateProjectHash(taskName) {
 
 function checkTSBuildInfoExists(taskName) {
     const tsbuildInfoFiles = {
-        'tsc': [
-            '.tsbuildinfo/agent.tsbuildinfo',
-            '.tsbuildinfo/route.tsbuildinfo', 
-            '.tsbuildinfo/site.tsbuildinfo'
-        ]
+        'typecheck': '.tsbuildinfo/main.tsbuildinfo',
+        'agent': '.tsbuildinfo/agent.tsbuildinfo', 
+        'common': '.tsbuildinfo/common.tsbuildinfo',
+        'puppeteer': '.tsbuildinfo/puppeteer.tsbuildinfo'
     };
     
-    const tsbuildInfoFileList = tsbuildInfoFiles[taskName] || tsbuildInfoFiles['tsc'];
+    const tsbuildInfoFile = tsbuildInfoFiles[taskName];
+    if (!tsbuildInfoFile) return false;
     
-    // Check if all tsbuildinfo files exist
-    for (const tsbuildInfoFile of tsbuildInfoFileList) {
-        const fullPath = path.join(rootDir, tsbuildInfoFile);
-        if (!existsSync(fullPath)) {
-            return false;
-        }
-    }
-    
-    return true;
+    const fullPath = path.join(rootDir, tsbuildInfoFile);
+    return existsSync(fullPath);
 }
 
 function loadCache(taskName) {
@@ -138,7 +142,7 @@ function main() {
     
     if (args.length === 0) {
         console.error('Usage: node build.mjs <task> <build-command>');
-        console.error('Example: node build.mjs tsc "tsc -b"');
+        console.error('Example: node build.mjs typecheck "tsc --noEmit -p tsconfig.json"');
         process.exit(1);
     }
     

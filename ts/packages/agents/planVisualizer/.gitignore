@@ -10,6 +10,8 @@ dist/
 
 # Build cache
 .vite-build-hash
+.frontend-build-cache.json
+.tsc-cache-*.json
 
 # Environment
 .env

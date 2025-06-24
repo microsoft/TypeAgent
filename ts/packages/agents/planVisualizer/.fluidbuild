@@ -11,6 +11,7 @@
       ]
     },
     "build:shared": {
+      "command": "npm run build:shared",
       "inputs": [
         "src/view/shared/**/*",
         "src/view/shared/tsconfig.json",
@@ -23,6 +24,7 @@
       ]
     },
     "build:server": {
+      "command": "npm run build:server",
       "dependsOn": ["build:shared"],
       "inputs": [
         "src/view/server/**/*",
@@ -36,6 +38,7 @@
       ]
     },
     "build:agent": {
+      "command": "npm run build:agent",
       "inputs": [
         "src/agent/**/*",
         "src/agent/tsconfig.json",
@@ -47,6 +50,7 @@
       ]
     },
     "build:client": {
+      "command": "npm run build:client",
       "dependsOn": ["build:shared"],
       "inputs": [
         "src/view/client/**/*",

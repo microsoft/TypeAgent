@@ -12,6 +12,7 @@
       ]
     },
     "tsc": {
+      "command": "npm run tsc",
       "inputs": [
         "src/**/*.ts",
         "src/agent/tsconfig.json",

@@ -25,32 +25,29 @@ function calculateFileHash(filePath) {
 function calculateProjectHash(taskName) {
     const hash = createHash('md5');
     
-    // Different file sets for different tasks
+    // File sets for planVisualizer tasks
     const taskFiles = {
-        'typecheck': [
-            'src/**/*.ts',
+        'shared': [
+            'src/view/shared/**/*.ts',
+            'src/view/shared/tsconfig.json',
             'tsconfig.json',
-            '../../tsconfig.base.json'
+            '../../../tsconfig.base.json'
         ],
         'agent': [
-            'src/agent/**/*.ts', 
+            'src/agent/**/*.ts',
             'src/agent/tsconfig.json',
-            'src/common/**/*.ts',  // agent depends on common
-            '../../tsconfig.base.json'
+            '../../../tsconfig.base.json'
         ],
-        'common': [
-            'src/common/**/*.ts',
-            'src/common/tsconfig.json', 
-            '../../tsconfig.base.json'
-        ],
-        'puppeteer': [
-            'src/puppeteer/**/*.ts',
-            'src/puppeteer/tsconfig.json',
-            '../../tsconfig.base.json'
+        'server': [
+            'src/view/server/**/*.ts',
+            'src/view/shared/**/*.ts',  // server depends on shared
+            'src/view/server/tsconfig.json',
+            'tsconfig.json',
+            '../../../tsconfig.base.json'
         ]
     };
     
-    const filesToCheck = taskFiles[taskName] || taskFiles['typecheck'];
+    const filesToCheck = taskFiles[taskName] || taskFiles['shared'];
     let hashInput = '';
     
     for (const pattern of filesToCheck) {
@@ -86,10 +83,9 @@ function calculateProjectHash(taskName) {
 
 function checkTSBuildInfoExists(taskName) {
     const tsbuildInfoFiles = {
-        'typecheck': '.tsbuildinfo/main.tsbuildinfo',
-        'agent': '.tsbuildinfo/agent.tsbuildinfo', 
-        'common': '.tsbuildinfo/common.tsbuildinfo',
-        'puppeteer': '.tsbuildinfo/puppeteer.tsbuildinfo'
+        'shared': '.tsbuildinfo/shared.tsbuildinfo',
+        'agent': '.tsbuildinfo/agent.tsbuildinfo',
+        'server': '.tsbuildinfo/server.tsbuildinfo'
     };
     
     const tsbuildInfoFile = tsbuildInfoFiles[taskName];
@@ -141,8 +137,8 @@ function main() {
     const args = process.argv.slice(2);
     
     if (args.length === 0) {
-        console.error('Usage: node cachedBuild.mjs <task> <build-command>');
-        console.error('Example: node cachedBuild.mjs typecheck "tsc --noEmit -p tsconfig.json"');
+        console.error('Usage: node build.mjs <task> <build-command>');
+        console.error('Example: node build.mjs shared "tsc --build src/view/shared/tsconfig.json"');
         process.exit(1);
     }
     
