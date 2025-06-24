@@ -562,7 +562,7 @@ export async function createKnowproCommands(
         );
         def.options!.fastStop = argBool(
             "Ignore messages if knowledge produces answers",
-            true,
+            false,
         );
         def.options!.knowledgeTopK = argNum(
             "How many top K knowledge matches",

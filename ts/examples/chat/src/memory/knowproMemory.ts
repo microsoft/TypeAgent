@@ -361,11 +361,13 @@ export async function createKnowproCommands(
             return;
         }
 
+        const options = createAnswerOptions(namedArgs);
         const getAnswerRequest = parseTypedArguments<kpTest.GetAnswerRequest>(
             args,
             kpTest.getAnswerRequestDef(),
         );
         getAnswerRequest.searchResponse = searchResponse;
+        getAnswerRequest.knowledgeTopK = options.entitiesTopK;
         await kpTest.execGetAnswerRequest(
             context,
             getAnswerRequest,
