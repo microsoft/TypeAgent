@@ -140,20 +140,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
 
             break;
         }
-        case "scrollDown": {
-            const targetTab = await getActiveTab();
-            await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "scroll_down_on_page",
-            });
-            break;
-        }
-        case "scrollUp": {
-            const targetTab = await getActiveTab();
-            await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "scroll_up_on_page",
-            });
-            break;
-        }
 
         case "openFromHistory": {
             const targetTab = await getActiveTab();

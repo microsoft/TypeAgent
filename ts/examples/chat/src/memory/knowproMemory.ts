@@ -12,6 +12,7 @@ import {
     displayClosestCommands,
     InteractiveIo,
     NamedArgs,
+    namedArgsToArgs,
     parseNamedArguments,
     parseTypedArguments,
     runConsole,
@@ -21,6 +22,7 @@ import {
     argToDate,
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
+    TermParser,
 } from "../common.js";
 import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
@@ -86,6 +88,8 @@ export async function createKnowproCommands(
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
 
+    const termParser = new TermParser();
+
     await ensureDir(context.basePath);
     /*
      * CREATE COMMANDS FOR DIFFERENT MEMORY TYPES
@@ -103,6 +107,7 @@ export async function createKnowproCommands(
      * These include: (a) search (b) answer generation (c) enumeration
      */
     commands.kpSearchTerms = searchTerms;
+    commands.kpSearchTermsLang = searchTermsLang;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
     commands.kpSearchRag = searchRag;
@@ -238,6 +243,27 @@ export async function createKnowproCommands(
             context.printer.writeTiming(chalk.gray, timer);
         } else {
             context.printer.writeError("Conversation is not indexed");
+        }
+    }
+
+    function searchTermsLangDef(): CommandMetadata {
+        const def = searchTermsDef();
+        def.args ??= {};
+        def.args.query = arg("Get search terms from this query");
+        return def;
+    }
+    commands.kpSearchTermsLang.metadata = searchTermsLangDef();
+    async function searchTermsLang(args: string[]) {
+        const namedArgs = parseNamedArguments(args, searchTermsLangDef());
+        const rawTerms = termParser.getRawTerms(namedArgs.query);
+        if (rawTerms) {
+            context.printer.writeList(rawTerms, { type: "csv" });
+            delete namedArgs.query;
+            args = [...rawTerms];
+            args.push(...namedArgsToArgs(namedArgs));
+            await searchTerms(args);
+        } else {
+            context.printer.writeError("No search terms");
         }
     }
 

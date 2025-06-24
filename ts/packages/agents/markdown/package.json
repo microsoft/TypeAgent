@@ -18,13 +18,14 @@
   "scripts": {
     "build": "npm run tsc && npm run build:frontend",
     "postbuild": "copyfiles -u 1 \"src/**/config.json\" dist",
-    "build:frontend": "vite build",
-    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "build:frontend": "node scripts/buildFrontend.mjs",
+    "build:frontend:force": "vite build",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log .frontend-build-cache.json .tsc-cache-*.json && rimraf .tsbuildinfo",
     "dev": "npm run tsc && node scripts/dev-viewer.js --hmr",
     "dev:frontend": "vite  --watch",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "tsc": "tsc -b"
+    "tsc": "node scripts/build.mjs tsc \"tsc -b\""
   },
   "dependencies": {
     "@milkdown/core": "^7.3.6",

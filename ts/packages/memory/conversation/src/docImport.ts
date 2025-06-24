@@ -8,7 +8,11 @@ import {
     DocPart,
     DocPartMeta,
 } from "./docMemory.js";
-import * as kpLib from "knowledge-processor";
+import {
+    //conversation as kpLib,
+    splitLargeTextIntoChunks,
+} from "knowledge-processor";
+//import * as kp from "knowpro";
 import { parseVttTranscript } from "./transcript.js";
 import { filePathToUrlString } from "memory-storage";
 import path from "path";
@@ -97,7 +101,7 @@ export function docPartsFromText(
     sourceUrl?: string,
 ): DocPart[] {
     const blocks: DocPart[] = [];
-    for (const chunk of kpLib.splitLargeTextIntoChunks(
+    for (const chunk of splitLargeTextIntoChunks(
         documentText,
         maxCharsPerChunk,
         false,
@@ -121,11 +125,7 @@ export function docPartFromText(
     sourceUrl?: string,
 ): DocPart {
     const textChunks = [
-        ...kpLib.splitLargeTextIntoChunks(
-            documentText,
-            maxCharsPerChunk,
-            false,
-        ),
+        ...splitLargeTextIntoChunks(documentText, maxCharsPerChunk, false),
     ];
     return new DocPart(textChunks, new DocPartMeta(sourceUrl));
 }
@@ -180,7 +180,7 @@ export function mergeDocParts(
     const mergedChunks: DocPart[] = [];
     // This will merge all small chunks into larger chunks as needed.. but not exceed
     // maxCharsPerChunk
-    for (const chunk of kpLib.splitLargeTextIntoChunks(
+    for (const chunk of splitLargeTextIntoChunks(
         allChunks,
         maxCharsPerChunk,
         true,

@@ -16,16 +16,16 @@
     "./agent/handlers": "./dist/agent/planViewActionHandler.js"
   },
   "scripts": {
-    "build": "npm run build:shared && npm run build:server && npm run build:agent && npm run build:client",
+    "build": "npm run build:shared && concurrently npm:build:server npm:build:agent npm:build:client",
     "postbuild": "copyfiles -u 1 \"src/**/config.json\" dist",
-    "build:agent": "tsc -p src/agent/tsconfig.json",
-    "build:client": "vite build",
-    "build:server": "tsc -p src/view/server/tsconfig.json",
-    "build:shared": "tsc -p src/view/shared/tsconfig.json",
-    "clean": "rimraf dist",
+    "build:agent": "node scripts/build.mjs agent \"tsc --build src/agent/tsconfig.json\"",
+    "build:client": "node scripts/buildFrontend.mjs",
+    "build:server": "node scripts/build.mjs server \"tsc --build src/view/server/tsconfig.json\"",
+    "build:shared": "node scripts/build.mjs shared \"tsc --build src/view/shared/tsconfig.json\"",
+    "clean": "rimraf dist .frontend-build-cache.json .tsbuildinfo && rimraf --glob '.tsc-cache-*.json'",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/view/server/server.js 9052 \"",
     "dev:client": "vite dev",
-    "dev:server": "tsc -p src/view/server/tsconfig.json --watch",
+    "dev:server": "tsc --build src/view/server/tsconfig.json --watch",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "start": "node --experimental-specifier-resolution=node dist/view/server/server.js"

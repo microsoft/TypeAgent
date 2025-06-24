@@ -2,6 +2,8 @@
     "extends": "../../../../../tsconfig.base.json",
     "compilerOptions": {
       "composite": true,
+      "incremental": true,
+      "tsBuildInfoFile": "../../.tsbuildinfo/common.tsbuildinfo",
       "rootDir": ".",
       "outDir": "../../dist/common",
       "types": ["node"],

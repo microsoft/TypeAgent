@@ -20,6 +20,9 @@ dist-pub/
 *.map
 *.out.txt
 *.tsbuildinfo
+.extension-build-hash
+.tsc-cache-*.json
+.frontend-build-cache.json
 
 # Local development and debugging
 .scratch/

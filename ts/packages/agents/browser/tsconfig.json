@@ -9,9 +9,11 @@
        "rootDir": "src",
        "outDir": "dist/js",
        "noEmitOnError": true,
+       "incremental": true,
+       "tsBuildInfoFile": ".tsbuildinfo/main.tsbuildinfo",
        "typeRoots": [ "node_modules/@types" ]
     },
-    "exclude": ["dist/*.ts", "dist/extension/sites/*.mts","src/agent/*.ts", "test/*"],
+    "exclude": ["dist/**/*", "src/agent/*.ts", "test/*"],
     "ts-node": {
       "esm": true
     }

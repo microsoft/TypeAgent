@@ -22,6 +22,9 @@ import {
     extractSchemaFromLinkedPages,
 } from "./schemaExtraction";
 import { awaitPageIncrementalUpdates } from "./loadingDetector";
+import { createGenericChannel } from "agent-rpc/channel";
+import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
+import { createRpc } from "agent-rpc/rpc";
 
 // Set up history interception for SPA navigation
 const interceptHistory = (method: "pushState" | "replaceState") => {
@@ -52,9 +55,22 @@ export function initializeEventHandlers(): void {
  * Sets up message listeners for communication with the extension
  */
 function setupMessageListeners(): void {
+    const contentScriptExtensionChannel = createGenericChannel((message) => {
+        // Send messages to the background script
+        chrome.runtime?.sendMessage({
+            type: "rpc",
+            message,
+        });
+    });
+
     // Listen for messages from the background script
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (message.type === "rpc") {
+                contentScriptExtensionChannel.message(message.message);
+                return false;
+            }
+
             const handleAction = async () => {
                 await handleMessage(message, sendResponse);
             };
@@ -65,6 +81,15 @@ function setupMessageListeners(): void {
         },
     );
 
+    const contentScriptChannel = createGenericChannel((message) => {
+        window.postMessage({
+            source: "contentScript",
+            target: "preload",
+            messageType: "rpc",
+            body: message,
+        });
+    });
+
     // Listen for messages from content scripts
     window.addEventListener(
         "message",
@@ -73,21 +98,28 @@ function setupMessageListeners(): void {
             if (
                 event.data !== undefined &&
                 event.data.source === "preload" &&
-                event.data.target === "contentScript" &&
-                event.data.messageType === "scriptActionRequest"
+                event.data.target === "contentScript"
             ) {
-                await handleMessage(event.data.body, (response) => {
-                    window.top?.postMessage(
-                        {
-                            source: "contentScript",
-                            target: "preload",
-                            messageType: "scriptActionResponse",
-                            id: event.data.id,
-                            body: response,
-                        },
-                        "*",
-                    );
-                });
+                switch (event.data.messageType) {
+                    case "rpc":
+                        // Handle RPC messages
+                        contentScriptChannel.message(event.data.body);
+                        break;
+                    case "scriptActionRequest":
+                        await handleMessage(event.data.body, (response) => {
+                            window.top?.postMessage(
+                                {
+                                    source: "contentScript",
+                                    target: "preload",
+                                    messageType: "scriptActionResponse",
+                                    id: event.data.id,
+                                    body: response,
+                                },
+                                "*",
+                            );
+                        });
+                        break;
+                }
             }
 
             // Handle file path requests
@@ -103,6 +135,26 @@ function setupMessageListeners(): void {
             }
         },
         false,
+    );
+
+    const contentScriptRpc: ContentScriptRpc = {
+        scrollUp: async () => {
+            scrollPageUp();
+        },
+        scrollDown: async () => {
+            scrollPageDown();
+        },
+    };
+
+    createRpc(
+        "browser:content",
+        contentScriptChannel.channel,
+        contentScriptRpc,
+    );
+    createRpc(
+        "browser:content",
+        contentScriptExtensionChannel.channel,
+        contentScriptRpc,
     );
 }
 
@@ -156,18 +208,6 @@ export async function handleMessage(
                 } else {
                     sendResponse({});
                 }
-                break;
-            }
-
-            case "scroll_down_on_page": {
-                scrollPageDown();
-                sendResponse({});
-                break;
-            }
-
-            case "scroll_up_on_page": {
-                scrollPageUp();
-                sendResponse({});
                 break;
             }
 

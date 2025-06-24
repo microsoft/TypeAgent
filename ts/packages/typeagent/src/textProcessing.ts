@@ -16,7 +16,6 @@ import {
     getData,
     success,
 } from "typechat";
-import * as cheerio from "cheerio";
 import { getHtml, bing, ChatModel, TextEmbeddingModel } from "aiclient";
 import { createChatTranslator } from "./chat.js";
 import { MessageSourceRole } from "./message.js";
@@ -26,6 +25,7 @@ import fs from "fs";
 import { textToProcessSection } from "./promptLib.js";
 import { ProcessProgress, mapAsync } from "./arrayAsync.js";
 import { generateTextEmbeddings, similarity, SimilarityType } from "./index.js";
+import { htmlToText } from "./htmlProcessing.js";
 
 function splitIntoSentences(text: string): string[] {
     return text.split(/(?<=[.!?;\r\n])\s+/);
@@ -1049,36 +1049,6 @@ export async function extractEntitiesFromLargeText(
         entities.push(...entityChunk);
     }
     return entities;
-}
-
-/**
- * Extract all text from the given html.
- * @param html raw html
- * @param nodeQuery A JQuery like list of node types to extract text from. By default, p, div and span
- * @returns text
- */
-export function htmlToText(html: string, nodeQuery?: string): string {
-    //nodeQuery ??= "*:not(iframe, script, style, noscript)"; // "body, p, div, span, li, tr, td, h1, h2, h3, h4, h5, h6, a";
-    nodeQuery ??=
-        "a, p, div, span, em, strong, li, tr, td, h1, h2, h3, h4, h5, h6, article, section, header, footer";
-    const $ = cheerio.load(html);
-    const query = $(nodeQuery);
-    return query
-        .contents()
-        .filter(function () {
-            return (
-                this.nodeType === 3 ||
-                (this.nodeType === 1 && this.name === "a")
-            );
-        })
-        .map(function () {
-            return $(this).text().trim();
-        })
-        .filter(function () {
-            return this.length > 0;
-        })
-        .get()
-        .join(" ");
 }
 
 /**
