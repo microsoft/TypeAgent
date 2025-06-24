@@ -189,22 +189,3 @@ export function mergeDocParts(
     }
     return mergedChunks;
 }
-
-/*
-    private textForHeading(htmlTag: HtmlTag, level: number): string {
-        if (!htmlTag.text) {
-            return "";
-        }
-        const headingPrefix = "#".repeat(level);
-        return `${headingPrefix} ${htmlTag.text}\n`;
-    }
-
-    private entityForHeading(level: number): kpLib.ConcreteEntity {
-        return {
-            name: `Heading ${level}`,
-            type: ["heading"],
-            facets: [{ name: "level", value: level }],
-        };
-    }
-
-*/
