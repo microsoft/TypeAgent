@@ -20,6 +20,9 @@ dist-pub/
 *.map
 *.out.txt
 *.tsbuildinfo
+.extension-build-hash
+.tsc-cache-*.json
+.frontend-build-cache.json
 
 # Local development and debugging
 .scratch/
@@ -442,5 +445,3 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 
 # Mac OS files
 .DS_Store
-ts/packages/agents/browser/.extension-build-hash
-ts/packages/agents/markdown/.vite-vendor-cache.json
