@@ -11,11 +11,13 @@ import {
 } from "./schema/pageComponents.mjs";
 import { PageActionsPlan, UserIntent } from "./schema/recordedActions.mjs";
 import { createExecutionTracker } from "../planVisualizationClient.mjs";
+import { BrowserActionContext } from "../actionHandler.mjs";
+import { SessionContext } from "@typeagent/agent-sdk";
 
 export function setupAuthoringActions(
     browser: BrowserConnector,
     agent: any,
-    context: any,
+    context: SessionContext<BrowserActionContext>,
 ) {
     return {
         getComponentFromPage: getComponentFromPage,
@@ -121,8 +123,11 @@ export function setupAuthoringActions(
         targetPlan: PageActionsPlan,
         userSuppliedParameters: Map<string, any>,
     ) {
+        const port = context.agentContext.localHostPort;
+        const planVisualizationEndpoint = `http://localhost:${port}`;
+
         const { trackState, reset } = createExecutionTracker(
-            context.agentContext.planVisualizationEndpoint!,
+            planVisualizationEndpoint,
             targetPlan.planName,
         );
         await reset(true);

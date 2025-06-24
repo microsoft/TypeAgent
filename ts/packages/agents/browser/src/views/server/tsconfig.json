@@ -1,12 +1,11 @@
 {
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../../dist/view/public/js",
+    "outDir": "../../../dist/views/server",
     "rootDir": ".",
-    "declarationMap": false,
-    "moduleResolution": "bundler",
-      "module": "ESNext",
-    "lib": ["DOM", "ES2020", "DOM.Iterable"]
+    "incremental": true,
+    "tsBuildInfoFile": "../../../.tsbuildinfo/server.tsbuildinfo",
+    "lib": ["ES2020", "DOM"]
   },
   "include": ["./**/*.ts", "../shared/**/*.ts"],
   "references": [{ "path": "../shared" }]

@@ -52,6 +52,19 @@ function calculateProjectHash(taskName) {
             "src/puppeteer/tsconfig.json",
             "../../tsconfig.base.json",
         ],
+        shared: [
+            "src/views/shared/**/*.ts",
+            "src/views/shared/tsconfig.json",
+            "tsconfig.json",
+            "../../../tsconfig.base.json",
+        ],
+        server: [
+            "src/views/server/**/*.ts",
+            "src/views/shared/**/*.ts",
+            "src/views/server/tsconfig.json",
+            "tsconfig.json",
+            "../../../tsconfig.base.json",
+        ],
     };
 
     const filesToCheck = taskFiles[taskName] || taskFiles["typecheck"];
@@ -94,6 +107,8 @@ function checkTSBuildInfoExists(taskName) {
         agent: ".tsbuildinfo/agent.tsbuildinfo",
         common: ".tsbuildinfo/common.tsbuildinfo",
         puppeteer: ".tsbuildinfo/puppeteer.tsbuildinfo",
+        shared: ".tsbuildinfo/shared.tsbuildinfo",
+        server: ".tsbuildinfo/server.tsbuildinfo",
     };
 
     const tsbuildInfoFile = tsbuildInfoFiles[taskName];

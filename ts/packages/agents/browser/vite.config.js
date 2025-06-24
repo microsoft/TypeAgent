@@ -6,14 +6,14 @@ import typescript from "@rollup/plugin-typescript";
 import { resolve } from "path";
 
 export default defineConfig({
-    root: resolve(__dirname, "src/view/client"),
+    root: resolve(__dirname, "src/views/client/plans"),
     plugins: [
         typescript({
-            tsconfig: "./src/view/client/tsconfig.json",
+            tsconfig: "./src/views/client/plans/tsconfig.json",
         }),
     ],
     build: {
-        outDir: resolve(__dirname, "dist/view/public"),
+        outDir: resolve(__dirname, "dist/views/public"),
         sourcemap: true,
         emptyOutDir: false,
         rollupOptions: {
@@ -39,7 +39,7 @@ export default defineConfig({
     resolve: {
         extensions: [".ts", ".js"],
         alias: {
-            "@": resolve(__dirname, "src/view/client"),
+            "@": resolve(__dirname, "src/views/client"),
         },
     },
 });
