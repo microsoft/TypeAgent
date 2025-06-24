@@ -3,7 +3,6 @@
 
 import type { Editor } from "@milkdown/core";
 import { editorViewCtx, parserCtx } from "@milkdown/core";
-import type { SaveStatus } from "../types";
 import { AI_CONFIG, DEFAULT_MARKDOWN_CONTENT, EDITOR_CONFIG } from "../config";
 import { getMarkdownFromEditor, getEditorPositionInfo } from "../utils";
 
@@ -237,13 +236,6 @@ export class DocumentManager {
                             console.log(
                                 ` [SSE] Applied ${data.operations.length} operations via editor API`,
                             );
-
-                            if (this.notificationManager) {
-                                this.notificationManager.showNotification(
-                                    `✨  AI updated document with ${data.operations.length} changes`,
-                                    "success",
-                                );
-                            }
                         } else {
                             console.warn(
                                 ` [SSE] No editor available to apply operations`,
@@ -279,12 +271,6 @@ export class DocumentManager {
                     `[SSE] Operations being applied by primary client - ${data.operationCount} changes incoming`,
                 );
 
-                if (this.notificationManager) {
-                    this.notificationManager.showNotification(
-                        `AI is updating document (${data.operationCount} changes)...`,
-                        "info",
-                    );
-                }
                 break;
 
             case "requestMarkdown":
@@ -334,13 +320,6 @@ export class DocumentManager {
             document.title = `${documentName} - AI-Enhanced Markdown Editor`;
             const newUrl = `/document/${encodeURIComponent(documentName)}`;
             window.history.pushState({ documentName }, document.title, newUrl);
-
-            if (this.notificationManager) {
-                this.notificationManager.showNotification(
-                    `📄 Switched to: ${documentName}`,
-                    "success",
-                );
-            }
         } catch (error) {
             console.error(
                 "[DOCUMENT] Failed to handle backend document change:",
@@ -452,8 +431,6 @@ export class DocumentManager {
 
     public async saveDocument(editor?: Editor): Promise<void> {
         try {
-            this.showSaveStatus("saving");
-
             // Get markdown content from editor or server
             const content = editor
                 ? await this.getMarkdownContent(editor)
@@ -472,10 +449,11 @@ export class DocumentManager {
             }
 
             console.log(` [DOCUMENT] Document saved successfully`);
-            this.showSaveStatus("saved");
         } catch (error) {
             console.error("[DOCUMENT] Failed to save document:", error);
-            this.showSaveStatus("error");
+            if (this.notificationManager) {
+                this.notificationManager.showSaveStatus("error");
+            }
             throw error;
         }
     }
@@ -548,12 +526,6 @@ export class DocumentManager {
     private getDefaultContent(): string {
         // Import from config - use the exported constant
         return DEFAULT_MARKDOWN_CONTENT;
-    }
-
-    private showSaveStatus(status: SaveStatus): void {
-        if (this.notificationManager) {
-            this.notificationManager.showSaveStatus(status);
-        }
     }
 
     public async getDocumentContent(): Promise<string> {
@@ -634,13 +606,6 @@ export class DocumentManager {
 
             // Also update the server-side content
             await this.setDocumentContent(content);
-
-            if (this.notificationManager) {
-                this.notificationManager.showNotification(
-                    `📁 Loaded: ${file.name}`,
-                    "success",
-                );
-            }
         } catch (error) {
             console.error("Failed to load file:", error);
             if (this.notificationManager) {

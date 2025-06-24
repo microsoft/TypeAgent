@@ -94,10 +94,6 @@ export class AIAgentManager {
             // Only show success message if we actually received operations and no errors occurred
             if (operationsReceived && !errorOccurred) {
                 console.log("Streaming command completed successfully");
-                this.showNotification(
-                    `${command} completed successfully!`,
-                    "success",
-                );
             } else if (errorOccurred) {
                 // Error message already shown in stream handler, just log
                 console.error("Streaming command failed");
