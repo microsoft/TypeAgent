@@ -118,3 +118,15 @@ export function* getStringChunks(
         yield chunk;
     }
 }
+
+export function stringsToSet(values: string, separator: string= ","): Set<string> {
+    let keys = values.split(separator);
+    const set = new Set<string>();
+    for (let key of keys) {
+        key = key.trim();
+        if (key) {
+            set.add(key);
+        }
+    }
+    return set;
+}

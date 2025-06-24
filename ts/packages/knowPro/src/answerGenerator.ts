@@ -156,6 +156,7 @@ export async function generateAnswer(
             question,
             searchResults,
             progress,
+            contextOptions,
         );
     } else {
         if (searchResults.length === 0) {
@@ -168,6 +169,7 @@ export async function generateAnswer(
                 question,
                 searchResults[0],
                 progress,
+                contextOptions,
             );
         } else {
             // Get answers for individual searches in parallel
@@ -181,6 +183,7 @@ export async function generateAnswer(
                         question,
                         sr,
                         progress,
+                        contextOptions,
                     ),
             );
             // Use partial responses to build a complete answer
