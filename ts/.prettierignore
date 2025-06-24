@@ -10,6 +10,7 @@ pnpm-lock.yaml
 **/lib/*
 **/out/*
 .rollup.cache/**
+.tsc-cache-*.json
 
 # Typescript config
 tsconfig.json
