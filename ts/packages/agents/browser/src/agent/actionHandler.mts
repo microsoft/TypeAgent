@@ -105,6 +105,8 @@ export type BrowserActionContext = {
     websiteCollection?: website.WebsiteCollection | undefined;
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
     index: website.IndexData | undefined;
+    viewProcess?: ChildProcess | undefined;
+    localHostPort: number;
 };
 
 export interface urlResolutionAction {
@@ -121,10 +123,16 @@ async function initializeBrowserContext(
     const clientBrowserControl = settings?.options as
         | BrowserControl
         | undefined;
+
+    const localHostPort = settings?.localHostPort;
+    if (localHostPort === undefined) {
+        throw new Error("Local view port not assigned.");
+    }
     return {
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
+        localHostPort,
     };
 }
 
@@ -171,6 +179,12 @@ async function updateBrowserContext(
         if (!context.agentContext.fuzzyMatchingModel) {
             context.agentContext.fuzzyMatchingModel =
                 openai.createEmbeddingModel();
+        }
+
+        if (!context.agentContext.viewProcess) {
+            context.agentContext.viewProcess = await createViewServiceHost(
+                context.agentContext.localHostPort,
+            );
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -308,6 +322,10 @@ async function updateBrowserContext(
         if (context.agentContext.browserProcess) {
             context.agentContext.browserProcess.kill();
         }
+
+        if (context.agentContext.viewProcess) {
+            context.agentContext.viewProcess.kill();
+        }
     }
 }
 
@@ -362,11 +380,22 @@ async function resolveWebPage(
             }
 
             try {
-                // get local agent
+                // handle browser views
+                if (site === "planViewer") {
+                    const port =
+                        await context.getSharedLocalHostPort("browser");
+                    if (port !== undefined) {
+                        debug(`Resolved local site on PORT ${port}`);
+
+                        return `http://localhost:${port}/plans`;
+                    }
+                }
+
                 const port = await context.getSharedLocalHostPort(site);
 
                 if (port !== undefined) {
                     debug(`Resolved local site on PORT ${port}`);
+
                     return `http://localhost:${port}`;
                 }
             } catch (e) {
@@ -767,6 +796,52 @@ async function handleTabIndexActions(
         throw new Error("No websocket connection.");
     }
     return undefined;
+}
+
+export async function createViewServiceHost(port: number) {
+    let timeoutHandle: NodeJS.Timeout;
+
+    const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
+        timeoutHandle = setTimeout(
+            () => reject(new Error("Browser views service creation timed out")),
+            10000,
+        );
+    });
+
+    const viewServicePromise = new Promise<ChildProcess | undefined>(
+        (resolve, reject) => {
+            try {
+                const expressService = fileURLToPath(
+                    new URL(
+                        path.join("..", "./views/server/server.js"),
+                        import.meta.url,
+                    ),
+                );
+
+                const childProcess = fork(expressService, [port.toString()]);
+
+                childProcess.on("message", function (message) {
+                    if (message === "Success") {
+                        resolve(childProcess);
+                    } else if (message === "Failure") {
+                        resolve(undefined);
+                    }
+                });
+
+                childProcess.on("exit", (code) => {
+                    console.log("Browser views server exited with code:", code);
+                });
+            } catch (e: any) {
+                console.error(e);
+                resolve(undefined);
+            }
+        },
+    );
+
+    return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
+        clearTimeout(timeoutHandle);
+        return result;
+    });
 }
 
 export async function createAutomationBrowser(isVisible?: boolean) {

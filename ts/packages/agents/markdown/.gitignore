@@ -5,6 +5,7 @@ dist/
 
 # Build cache
 .vite-build-hash
+.build.cache/
 .vite-vendor-cache.json
 .smart-build-cache.json
 .tsc-cache-*.json

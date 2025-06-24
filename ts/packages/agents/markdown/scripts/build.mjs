@@ -12,6 +12,7 @@ import {
     existsSync,
     statSync,
     readdirSync,
+    mkdirSync,
 } from "fs";
 import { execSync } from "child_process";
 import path from "path";
@@ -105,7 +106,8 @@ function checkTSBuildInfoExists(taskName) {
 }
 
 function loadCache(taskName) {
-    const cacheFile = path.join(rootDir, `.tsc-cache-${taskName}.json`);
+    const cacheDir = path.join(rootDir, ".build.cache");
+    const cacheFile = path.join(cacheDir, `.tsc-cache-${taskName}.json`);
     try {
         if (existsSync(cacheFile)) {
             return JSON.parse(readFileSync(cacheFile, "utf8"));
@@ -117,7 +119,13 @@ function loadCache(taskName) {
 }
 
 function saveCache(taskName, hash) {
-    const cacheFile = path.join(rootDir, `.tsc-cache-${taskName}.json`);
+    const cacheDir = path.join(rootDir, ".build.cache");
+    // Ensure cache directory exists
+    if (!existsSync(cacheDir)) {
+        mkdirSync(cacheDir, { recursive: true });
+    }
+
+    const cacheFile = path.join(cacheDir, `.tsc-cache-${taskName}.json`);
     const cache = {
         hash,
         timestamp: Date.now(),

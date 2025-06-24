@@ -1,7 +1,7 @@
 {
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "../../../dist/view/shared",
+    "outDir": "../../../dist/views/shared",
     "rootDir": ".",
     "composite": true,
     "incremental": true,
