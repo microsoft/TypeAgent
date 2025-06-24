@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 // Smart build wrapper that truly skips builds when nothing has changed
 // This runs BEFORE Vite and can exit early if no changes are detected

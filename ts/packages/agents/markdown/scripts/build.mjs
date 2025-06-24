@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 // Cached build wrapper for browser-typeagent
 // Skips compilation when no source files have changed

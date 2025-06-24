@@ -16,13 +16,13 @@
     "./agent/handlers": "./dist/agent/planViewActionHandler.js"
   },
   "scripts": {
-    "build": "concurrently npm:build:shared npm:build:server npm:build:agent npm:build:client",
+    "build": "npm run build:shared && concurrently npm:build:server npm:build:agent npm:build:client",
     "postbuild": "copyfiles -u 1 \"src/**/config.json\" dist",
     "build:agent": "node scripts/build.mjs agent \"tsc --build src/agent/tsconfig.json\"",
     "build:client": "node scripts/buildFrontend.mjs",
     "build:server": "node scripts/build.mjs server \"tsc --build src/view/server/tsconfig.json\"",
     "build:shared": "node scripts/build.mjs shared \"tsc --build src/view/shared/tsconfig.json\"",
-    "clean": "rimraf dist .frontend-build-cache.json .tsc-cache-*.json",
+    "clean": "rimraf dist .frontend-build-cache.json .tsbuildinfo && rimraf --glob '.tsc-cache-*.json'",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npx nodemon --experimental-specifier-resolution=node dist/view/server/server.js 9052 \"",
     "dev:client": "vite dev",
     "dev:server": "tsc --build src/view/server/tsconfig.json --watch",
