@@ -22,7 +22,7 @@
     "build": "npm run build:deps && npm run build:parallel",
     "build:deps": "npm run tsc:common",
     "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev npm:tsc:typecheck",
-    "build:parallel": "concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite npm:tsc:typecheck",    
+    "build:parallel": "concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite npm:tsc:typecheck",
     "clean": "rimraf dist deploy .tsbuildinfo && rimraf --glob '.tsc-cache-*.json'",
     "package": "node scripts/packExtension.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
