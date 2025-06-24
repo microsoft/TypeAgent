@@ -13,7 +13,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
-const cacheFile = path.join(rootDir, ".smart-build-cache.json");
+const cacheFile = path.join(rootDir, ".frontend-build-cache.json");
 
 function calculateFileHash(filePath) {
     try {

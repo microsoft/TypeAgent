@@ -11,6 +11,7 @@ pnpm-lock.yaml
 **/out/*
 .rollup.cache/**
 .tsc-cache-*.json
+.smart-build-cache.json
 
 # Typescript config
 tsconfig.json
