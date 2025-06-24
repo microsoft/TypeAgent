@@ -946,12 +946,27 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      cytoscape:
+        specifier: ^3.32.0
+        version: 3.32.0
+      cytoscape-dagre:
+        specifier: ^2.5.0
+        version: 2.5.0(cytoscape@3.32.0)
+      dagre:
+        specifier: ^0.8.5
+        version: 0.8.5
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
       dompurify:
         specifier: ^3.2.5
         version: 3.2.5
+      express:
+        specifier: ^4.18.2
+        version: 4.21.2
+      express-rate-limit:
+        specifier: ^7.5.0
+        version: 7.5.0(express@4.21.2)
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -1004,9 +1019,21 @@ importers:
       '@types/chrome':
         specifier: ^0.0.256
         version: 0.0.256
+      '@types/cytoscape':
+        specifier: ^3.21.9
+        version: 3.21.9
+      '@types/cytoscape-dagre':
+        specifier: ^2.3.3
+        version: 2.3.3
+      '@types/dagre':
+        specifier: ^0.7.52
+        version: 0.7.52
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.21
       '@types/html-to-text':
         specifier: ^9.0.4
         version: 9.0.4
@@ -1649,70 +1676,6 @@ importers:
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
-
-  packages/agents/planVisualizer:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
-      cytoscape:
-        specifier: ^3.32.0
-        version: 3.32.0
-      cytoscape-dagre:
-        specifier: ^2.5.0
-        version: 2.5.0(cytoscape@3.32.0)
-      dagre:
-        specifier: ^0.8.5
-        version: 0.8.5
-      debug:
-        specifier: ^4.4.0
-        version: 4.4.1(supports-color@8.1.1)
-      express:
-        specifier: ^4.18.2
-        version: 4.21.2
-      express-rate-limit:
-        specifier: ^7.5.0
-        version: 7.5.0(express@4.21.2)
-    devDependencies:
-      '@rollup/plugin-typescript':
-        specifier: ^12.1.2
-        version: 12.1.2(rollup@4.39.0)(tslib@2.8.1)(typescript@5.4.5)
-      '@types/cytoscape':
-        specifier: ^3.21.9
-        version: 3.21.9
-      '@types/cytoscape-dagre':
-        specifier: ^2.3.3
-        version: 2.3.3
-      '@types/dagre':
-        specifier: ^0.7.52
-        version: 0.7.52
-      '@types/debug':
-        specifier: ^4.1.12
-        version: 4.1.12
-      '@types/express':
-        specifier: ^4.17.21
-        version: 4.17.21
-      '@types/node':
-        specifier: ^20.11.10
-        version: 20.17.47
-      concurrently:
-        specifier: ^9.1.2
-        version: 9.1.2
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      ts-node:
-        specifier: ^10.9.2
-        version: 10.9.2(@types/node@20.17.47)(typescript@5.4.5)
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-      vite:
-        specifier: ^6.3.4
-        version: 6.3.5(@types/node@20.17.47)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
 
   packages/agents/player:
     dependencies:
@@ -2400,9 +2363,6 @@ importers:
       photo-agent:
         specifier: workspace:*
         version: link:../agents/photo
-      plan-visualizer:
-        specifier: workspace:*
-        version: link:../agents/planVisualizer
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
@@ -5162,19 +5122,6 @@ packages:
 
   '@rollup/plugin-typescript@11.1.6':
     resolution: {integrity: sha512-R92yOmIACgYdJ7dJ97p4K69I8gg6IEHt8M7dUBxN3W6nrO8uUxX5ixl0yU/N3aZTi8WhPuICvOHXQvF6FaykAA==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      rollup: ^2.14.0||^3.0.0||^4.0.0
-      tslib: '*'
-      typescript: '>=3.7.0'
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-      tslib:
-        optional: true
-
-  '@rollup/plugin-typescript@12.1.2':
-    resolution: {integrity: sha512-cdtSp154H5sv637uMr1a8OTWB0L1SWDSm1rDGiyfcGcvQ6cuTs4MDk2BVEBGysUWago4OJN4EQZqOTl/QY3Jgg==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       rollup: ^2.14.0||^3.0.0||^4.0.0
@@ -15230,15 +15177,6 @@ snapshots:
       rollup: 4.39.0
       tslib: 2.8.1
 
-  '@rollup/plugin-typescript@12.1.2(rollup@4.39.0)(tslib@2.8.1)(typescript@5.4.5)':
-    dependencies:
-      '@rollup/pluginutils': 5.1.4(rollup@4.39.0)
-      resolve: 1.22.8
-      typescript: 5.4.5
-    optionalDependencies:
-      rollup: 4.39.0
-      tslib: 2.8.1
-
   '@rollup/pluginutils@4.2.1':
     dependencies:
       estree-walker: 2.0.2
@@ -23129,6 +23067,7 @@ snapshots:
       typescript: 5.4.5
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
+    optional: true
 
   ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5):
     dependencies:

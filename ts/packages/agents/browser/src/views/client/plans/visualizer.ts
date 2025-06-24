@@ -13,7 +13,11 @@ cytoscape.use(cytoscapeDagre as any);
 
 import CONFIG from "./config.js";
 import CytoscapeConfig from "./cytoscapeConfig.js";
-import { WebPlanData, PlanLink, NodeSelectCallback } from "../shared/types.js";
+import {
+    WebPlanData,
+    PlanLink,
+    NodeSelectCallback,
+} from "../../shared/types.js";
 
 class Visualizer {
     private container: HTMLElement;

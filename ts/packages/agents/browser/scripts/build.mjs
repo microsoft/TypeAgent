@@ -12,6 +12,7 @@ import {
     existsSync,
     statSync,
     readdirSync,
+    mkdirSync,
 } from "fs";
 import { execSync } from "child_process";
 import path from "path";
@@ -51,6 +52,19 @@ function calculateProjectHash(taskName) {
             "src/puppeteer/**/*.ts",
             "src/puppeteer/tsconfig.json",
             "../../tsconfig.base.json",
+        ],
+        shared: [
+            "src/views/shared/**/*.ts",
+            "src/views/shared/tsconfig.json",
+            "tsconfig.json",
+            "../../../tsconfig.base.json",
+        ],
+        server: [
+            "src/views/server/**/*.ts",
+            "src/views/shared/**/*.ts",
+            "src/views/server/tsconfig.json",
+            "tsconfig.json",
+            "../../../tsconfig.base.json",
         ],
     };
 
@@ -94,6 +108,8 @@ function checkTSBuildInfoExists(taskName) {
         agent: ".tsbuildinfo/agent.tsbuildinfo",
         common: ".tsbuildinfo/common.tsbuildinfo",
         puppeteer: ".tsbuildinfo/puppeteer.tsbuildinfo",
+        shared: ".tsbuildinfo/shared.tsbuildinfo",
+        server: ".tsbuildinfo/server.tsbuildinfo",
     };
 
     const tsbuildInfoFile = tsbuildInfoFiles[taskName];
@@ -104,7 +120,8 @@ function checkTSBuildInfoExists(taskName) {
 }
 
 function loadCache(taskName) {
-    const cacheFile = path.join(rootDir, `.tsc-cache-${taskName}.json`);
+    const cacheDir = path.join(rootDir, ".build.cache");
+    const cacheFile = path.join(cacheDir, `.tsc-cache-${taskName}.json`);
     try {
         if (existsSync(cacheFile)) {
             return JSON.parse(readFileSync(cacheFile, "utf8"));
@@ -116,7 +133,13 @@ function loadCache(taskName) {
 }
 
 function saveCache(taskName, hash) {
-    const cacheFile = path.join(rootDir, `.tsc-cache-${taskName}.json`);
+    const cacheDir = path.join(rootDir, ".build.cache");
+    // Ensure cache directory exists
+    if (!existsSync(cacheDir)) {
+        mkdirSync(cacheDir, { recursive: true });
+    }
+
+    const cacheFile = path.join(cacheDir, `.tsc-cache-${taskName}.json`);
     const cache = {
         hash,
         timestamp: Date.now(),

@@ -10,7 +10,7 @@ import {
     TransitionFormData,
     TransitionResponse,
     TitleUpdateRequest,
-} from "../shared/types.js";
+} from "../../shared/types.js";
 
 class ApiService {
     /**

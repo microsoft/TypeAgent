@@ -109,6 +109,9 @@ const clients: Set<Client> = new Set();
 app.get("/", (req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, "..", "public", "index.html"));
 });
+app.get("/plans/", (req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, "..", "public", "index.html"));
+});
 
 app.get("/api/events", (req: Request, res: Response) => {
     res.setHeader("Content-Type", "text/event-stream");
