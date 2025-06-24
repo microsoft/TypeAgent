@@ -11,7 +11,6 @@ import sys
 import traceback
 from typing import cast
 
-
 try:
     import readline
 except ImportError:
@@ -20,6 +19,7 @@ except ImportError:
 import typechat
 
 from ..aitools.utils import create_translator, load_dotenv, pretty_print, timelog
+from ..knowpro.answer_response_schema import AnswerResponse
 from ..knowpro.answers import generate_answers
 from ..knowpro.convknowledge import create_typechat_model
 from ..knowpro.importing import ConversationSettings
@@ -43,7 +43,8 @@ def main() -> None:
     with timelog("create typechat model"):
         model = create_typechat_model()
     with timelog("create typechat translator"):
-        translator = create_translator(model, SearchQuery)
+        query_translator = create_translator(model, SearchQuery)
+        answer_translator = create_translator(model, AnswerResponse)
 
     file = "testdata/Episode_53_AdrianTchaikovsky_index"
     with timelog("create conversation settings"):
@@ -60,7 +61,12 @@ def main() -> None:
         except FileNotFoundError:
             pass  # Ignore if history file does not exist.
     try:
-        process_inputs(translator, context, cast(io.TextIOWrapper, sys.stdin))
+        process_inputs(
+            query_translator,
+            answer_translator,
+            context,
+            cast(io.TextIOWrapper, sys.stdin),
+        )
     except KeyboardInterrupt:
         print()
     finally:
@@ -69,7 +75,8 @@ def main() -> None:
 
 
 def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
-    translator: typechat.TypeChatJsonTranslator[SearchQuery],
+    query_translator: typechat.TypeChatJsonTranslator[SearchQuery],
+    answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse],
     context: QueryEvalContext[TMessage, TIndex],
     stream: io.TextIOWrapper,
 ) -> None:
@@ -107,7 +114,12 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             case _:
                 with timelog("Query processing"):
                     asyncio.run(
-                        wrap_process_query(query_text, context.conversation, translator)
+                        wrap_process_query(
+                            query_text,
+                            context.conversation,
+                            query_translator,
+                            answer_translator,
+                        )
                     )
 
 
@@ -132,11 +144,14 @@ def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
 async def wrap_process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     query_text: str,
     conversation: IConversation[TMessage, TIndex],
-    translator: typechat.TypeChatJsonTranslator[SearchQuery],
+    query_translator: typechat.TypeChatJsonTranslator[SearchQuery],
+    answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse],
 ) -> None:
     """Wrap the process_query function to handle exceptions."""
     try:
-        await process_query(query_text, conversation, translator)
+        await process_query(
+            query_text, conversation, query_translator, answer_translator
+        )
     except Exception as exc:
         traceback.print_exc()
         # traceback.print_exception(type(exc), exc, exc.__traceback__.tb_next)
@@ -145,12 +160,13 @@ async def wrap_process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex
 async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     orig_query_text: str,
     conversation: IConversation[TMessage, TIndex],
-    translator: typechat.TypeChatJsonTranslator[SearchQuery],
+    query_translator: typechat.TypeChatJsonTranslator[SearchQuery],
+    answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse],
 ) -> None:
     debug_context = None  # LanguageSearchDebugContext()  # For lots of debug output.
     result = await search_conversation_with_language(
         conversation,
-        translator,
+        query_translator,
         orig_query_text,
         debug_context=debug_context,
     )
@@ -162,7 +178,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
         return
     search_results = result.value
     all_answers, combined_answer = await generate_answers(
-        search_results, conversation, orig_query_text, debug_context
+        answer_translator, search_results, conversation, orig_query_text
     )
     print("-" * 40)
     if combined_answer.type == "NoAnswer":

@@ -12,6 +12,7 @@ import typechat
 
 from typeagent.aitools import utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
+from typeagent.knowpro.answer_response_schema import AnswerResponse
 from typeagent.knowpro import answers
 from typeagent.knowpro.importing import ConversationSettings
 from typeagent.knowpro.convknowledge import create_typechat_model
@@ -25,6 +26,7 @@ from typeagent.podcasts.podcast import Podcast
 class Context:
     conversation: IConversation
     query_translator: typechat.TypeChatJsonTranslator[SearchQuery]
+    answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse]
     embedding_model: AsyncEmbeddingModel
     options: None
     interactive: bool
@@ -86,16 +88,18 @@ def main():
         conversation = Podcast.read_from_file(args.podcast, settings)
     assert conversation is not None, f"Failed to load podcast from {file!r}"
 
-    # Create translator.
+    # Create translators.
 
     model = create_typechat_model()
     query_translator = utils.create_translator(model, SearchQuery)
+    answer_translator = utils.create_translator(model, AnswerResponse)
 
     # Create context.
 
     context = Context(
         conversation,
         query_translator,
+        answer_translator,
         AsyncEmbeddingModel(),
         options=None,  # TODO: Set options if needed
         interactive=args.interactive,
@@ -175,7 +179,7 @@ async def compare(
         print("Error:", result.message)
     else:
         all_answers, combined_answer = await answers.generate_answers(
-            result.value, context.conversation, question
+            context.answer_translator, result.value, context.conversation, question
         )
         print("-" * 40)
         if combined_answer.type == "NoAnswer":
