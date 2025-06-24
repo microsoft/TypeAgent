@@ -19,25 +19,15 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
         const [schema, actionName] = data.method?.split("/");
 
         if (schema === "browser") {
-            if (actionName == "siteTranslatorStatus") {
-                if (data.body.status == "initializing") {
-                    console.log(`Initializing ${data.body.translator}`);
-                } else if (data.body.status == "initialized") {
-                    console.log(
-                        `Finished initializing ${data.body.translator}`,
-                    );
-                }
-            } else {
-                const response = await runBrowserAction({
-                    actionName: actionName,
-                    parameters: data.params,
-                });
+            const response = await runBrowserAction({
+                actionName: actionName,
+                parameters: data.params,
+            });
 
-                sendToBrowserAgent({
-                    id: data.id,
-                    result: response,
-                });
-            }
+            sendToBrowserAgent({
+                id: data.id,
+                result: response,
+            });
         } else if (schema.startsWith("browser.")) {
             const message = await runSiteAction(schema, {
                 actionName: actionName,
@@ -299,10 +289,6 @@ async function runBrowserAction(action: any) {
                 type: "run_ui_event",
                 action: action,
             });
-            break;
-        }
-        case "getPageUrl": {
-            responseObject = window.location.href;
             break;
         }
         case "getPageSchema": {

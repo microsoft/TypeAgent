@@ -8,6 +8,38 @@ import { visit } from "unist-util-visit";
 import mermaid from "mermaid";
 import DOMPurify from "dompurify";
 
+// Configure DOMPurify for SVG with foreignObject support
+export const createSVGSafePurifyConfig = () => {
+    return {
+        // Use ADD_TAGS to extend default allowlist instead of replacing it
+        ADD_TAGS: ["foreignObject", "div", "span"],
+
+        // Add necessary attributes
+        ADD_ATTR: [
+            "xmlns",
+            "class",
+            "style",
+            "transform",
+            "width",
+            "height",
+            "x",
+            "y",
+        ],
+
+        // Keep all content
+        KEEP_CONTENT: true,
+
+        // Don't be too aggressive with DOM sanitization
+        SANITIZE_DOM: false,
+
+        // Allow the XHTML namespace for div/span content
+        ALLOWED_NAMESPACES: [
+            "http://www.w3.org/2000/svg",
+            "http://www.w3.org/1999/xhtml",
+        ],
+    };
+};
+
 // Initialize Mermaid
 mermaid.initialize({
     startOnLoad: false,
@@ -283,7 +315,27 @@ const mermaidRenderer = $prose(() => {
                             );
                             diagramContainer.innerHTML = "";
                             const svgContainer = document.createElement("div");
-                            svgContainer.innerHTML = DOMPurify.sanitize(svg);
+
+                            // Conditional sanitization: Skip DOMPurify for SVG with foreignObject content
+                            let sanitizedSvg: string;
+                            if (
+                                svg.includes("foreignObject") &&
+                                svg.includes("<div")
+                            ) {
+                                // Skip DOMPurify for mixed SVG/HTML content to preserve foreignObject content
+                                sanitizedSvg = svg;
+                            } else {
+                                // Use DOMPurify for pure SVG content
+                                const svgSafeConfig =
+                                    createSVGSafePurifyConfig();
+                                sanitizedSvg = DOMPurify.sanitize(
+                                    svg,
+                                    svgSafeConfig,
+                                );
+                            }
+
+                            svgContainer.innerHTML = sanitizedSvg;
+
                             diagramContainer.appendChild(svgContainer);
                             errorContainer.style.display = "none";
                         } catch (error) {

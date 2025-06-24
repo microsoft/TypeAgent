@@ -2,16 +2,14 @@
 // Licensed under the MIT License.
 
 import { WebSocket } from "ws";
-import { BrowserControl } from "../interface.mjs";
+import {
+    BrowserControl,
+    BrowserControlCallFunctions,
+    BrowserControlInvokeFunctions,
+} from "../interface.mjs";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
 import { WebSocketMessageV2 } from "common-utils";
-
-type BrowserControlInvokeFunctions = {
-    goForward: () => Promise<void>;
-    goBack: () => Promise<void>;
-    reload: () => Promise<void>;
-};
 
 export function createExternalBrowserClient(
     webSocket: WebSocket,
@@ -43,19 +41,17 @@ export function createExternalBrowserClient(
         browserControlChannel.disconnect();
     });
 
-    const rpc = createRpc<BrowserControlInvokeFunctions>(
-        browserControlChannel.channel,
-    );
+    const rpc = createRpc<
+        BrowserControlInvokeFunctions,
+        BrowserControlCallFunctions
+    >("browser:extension", browserControlChannel.channel);
+
     return {
         openWebPage: async (url: string) => {
-            throw new Error(
-                "openWebPage not implement in external browser control",
-            );
+            return rpc.invoke("openWebPage", url);
         },
         closeWebPage: async () => {
-            throw new Error(
-                "closeWebPage not implement in external browser control",
-            );
+            return rpc.invoke("closeWebPage");
         },
         goForward: async () => {
             return rpc.invoke("goForward");
@@ -65,6 +61,12 @@ export function createExternalBrowserClient(
         },
         reload: async () => {
             return rpc.invoke("reload");
+        },
+        getPageUrl: async () => {
+            return rpc.invoke("getPageUrl");
+        },
+        setAgentStatus: (...args) => {
+            rpc.send("setAgentStatus", ...args);
         },
     };
 }

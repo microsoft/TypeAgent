@@ -5,6 +5,7 @@ import type { Editor } from "@milkdown/core";
 import { editorViewCtx, parserCtx } from "@milkdown/core";
 import type { SaveStatus } from "../types";
 import { AI_CONFIG, DEFAULT_MARKDOWN_CONTENT, EDITOR_CONFIG } from "../config";
+import { getMarkdownFromEditor, getEditorPositionInfo } from "../utils";
 
 export class DocumentManager {
     private notificationManager: any = null;
@@ -147,6 +148,7 @@ export class DocumentManager {
             this.eventSource.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
+                    console.log(`[SSE] Received event: ${data.type}`, data);
                     this.handleSSEEvent(data);
                 } catch (error) {
                     console.error("[SSE] Failed to parse event data:", error);
@@ -196,32 +198,17 @@ export class DocumentManager {
 
             case "documentSynced":
                 console.log(`[SSE] Document synchronized: ${data.documentId}`);
-                if (this.notificationManager) {
-                    this.notificationManager.showDocumentSyncNotification(
-                        data.documentId || this.currentDocumentId,
-                    );
-                }
+                // Document sync notification removed per user request
                 break;
 
             case "autoSave":
                 console.log(`[SSE] Auto-save completed for: ${data.filePath}`);
-                // Show brief save notification
-                if (this.notificationManager) {
-                    this.notificationManager.showNotification(
-                        `Auto-saved: ${data.filePath}`,
-                        "info",
-                    );
-                }
+                // Auto-save notification removed per user request
                 break;
 
             case "autoSaveError":
                 console.error(`[SSE] Auto-save error: ${data.error}`);
-                if (this.notificationManager) {
-                    this.notificationManager.showNotification(
-                        `Auto-save failed: ${data.error}`,
-                        "error",
-                    );
-                }
+                // Auto-save error notification removed per user request
                 break;
 
             case "llmOperations":
@@ -300,6 +287,18 @@ export class DocumentManager {
                 }
                 break;
 
+            case "requestMarkdown":
+                // Handle request for markdown content from view process
+                console.log(`[SSE] Received requestMarkdown event:`, data);
+                await this.handleMarkdownRequest(data.requestId);
+                break;
+
+            case "aiAwareness":
+                // Handle AI awareness cursor display
+                console.log(`[SSE] Received AI awareness event:`, data);
+                await this.handleAIAwarenessEvent(data);
+                break;
+
             default:
                 // Log unknown event types for debugging
                 console.log(`[SSE] Unknown event type: ${data.type}`, data);
@@ -359,6 +358,95 @@ export class DocumentManager {
         if (this.autoSaveTimer) {
             clearInterval(this.autoSaveTimer);
             this.autoSaveTimer = null;
+        }
+    }
+
+    /**
+     * Handle markdown content request from view process
+     * This provides proper markdown serialization from the Milkdown editor
+     */
+    private async handleMarkdownRequest(requestId: string): Promise<void> {
+        console.log(`[CLIENT] Handling markdown request: ${requestId}`);
+        console.log(
+            `[CLIENT] Editor manager available: ${!!this.editorManager}`,
+        );
+
+        try {
+            let markdown = "";
+            let positionInfo = { position: 0 };
+
+            if (this.editorManager) {
+                const editor = this.editorManager.getEditor();
+                console.log(`[CLIENT] Editor available: ${!!editor}`);
+                if (editor) {
+                    // Get proper markdown from the editor using serializer
+                    console.log(
+                        `[CLIENT] Getting markdown from editor using static import...`,
+                    );
+
+                    markdown = await getMarkdownFromEditor(editor);
+                    positionInfo = await getEditorPositionInfo(editor);
+
+                    console.log(
+                        `[CLIENT] Retrieved markdown from editor: ${markdown.length} chars, position: ${positionInfo.position}`,
+                    );
+                } else {
+                    console.warn(
+                        "[CLIENT] No editor available for markdown request",
+                    );
+                }
+            } else {
+                console.warn(
+                    "[CLIENT] No editor manager available for markdown request",
+                );
+            }
+
+            console.log(`[CLIENT] Sending markdown response to server...`);
+            // Send markdown content back to view process
+            const response = await fetch("/api/markdown-response", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    requestId: requestId,
+                    markdown: markdown,
+                    positionInfo: positionInfo,
+                    timestamp: Date.now(),
+                }),
+            });
+
+            if (!response.ok) {
+                console.error(
+                    `[CLIENT] Failed to send markdown response: ${response.statusText}`,
+                );
+            } else {
+                console.log(
+                    `[CLIENT] Successfully sent markdown response for request: ${requestId}`,
+                );
+            }
+        } catch (error) {
+            console.error(`[CLIENT] Error handling markdown request:`, error);
+
+            // Send error response
+            try {
+                await fetch("/api/markdown-response", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        requestId: requestId,
+                        markdown: "",
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                        timestamp: Date.now(),
+                    }),
+                });
+            } catch (responseError) {
+                console.error(
+                    `[CLIENT] Failed to send error response:`,
+                    responseError,
+                );
+            }
         }
     }
 
@@ -772,13 +860,10 @@ export class DocumentManager {
                     // Handle different content types
                     switch (item.type) {
                         case "heading":
-                            const level = item.level || 1;
                             const headingText = this.extractTextFromContent(
-                                item.content,
+                                item.content || item.text,
                             );
-                            const result =
-                                "#".repeat(level) + " " + headingText;
-                            return result;
+                            return headingText;
 
                         case "paragraph":
                             const paragraphText = this.extractTextFromContent(
@@ -833,5 +918,161 @@ export class DocumentManager {
         }
 
         return "";
+    }
+
+    /**
+     * Handle AI awareness events from SSE
+     */
+    private async handleAIAwarenessEvent(data: any): Promise<void> {
+        try {
+            const { operation, position } = data;
+
+            console.log(
+                `[AI-AWARENESS] Handling ${operation} at position ${position}`,
+            );
+
+            // Get editor manager to access awareness
+            if (!this.editorManager) {
+                console.warn("[AI-AWARENESS] No editor manager available");
+                return;
+            }
+
+            const collabService = this.editorManager.getCollaborationService();
+            if (!collabService || !collabService.awareness) {
+                console.warn(
+                    "[AI-AWARENESS] No collaboration service or awareness available",
+                );
+                return;
+            }
+
+            if (operation === "showAICursor") {
+                // Use a different approach: create a visual indicator directly in the editor
+                // instead of trying to manipulate awareness which is meant for real users
+                this.showAIVisualCursor(position);
+
+                console.log(
+                    `[AI-AWARENESS] Showed AI visual cursor at position ${position}`,
+                );
+            } else if (operation === "hideAICursor") {
+                // Hide the visual AI cursor
+                this.hideAIVisualCursor();
+
+                console.log(`[AI-AWARENESS] Hid AI visual cursor`);
+            }
+        } catch (error) {
+            console.error(
+                "[AI-AWARENESS] Error handling awareness event:",
+                error,
+            );
+        }
+    }
+
+    /**
+     * Show AI visual cursor as a DOM element overlay
+     */
+    private showAIVisualCursor(position: number): void {
+        try {
+            // Remove any existing AI cursor
+            this.hideAIVisualCursor();
+
+            const editor = this.editorManager?.getEditor();
+            if (!editor) {
+                console.warn(
+                    "[AI-AWARENESS] No editor available for visual cursor",
+                );
+                return;
+            }
+
+            // Get editor view to calculate position
+            editor.action((ctx: any) => {
+                const view = ctx.get(editorViewCtx);
+                if (!view) return;
+
+                // Create AI cursor element
+                const aiCursor = document.createElement("div");
+                aiCursor.id = "ai-visual-cursor";
+                aiCursor.className = "ai-visual-cursor";
+                aiCursor.innerHTML = `
+                    <div class="ai-cursor-line"></div>
+                    <div class="ai-cursor-label">🤖 AI Assistant</div>
+                `;
+
+                // Style the cursor
+                aiCursor.style.cssText = `
+                    position: absolute;
+                    z-index: 1000;
+                    pointer-events: none;
+                    font-size: 12px;
+                    color: #3b82f6;
+                `;
+
+                // Add CSS for cursor styling
+                if (!document.getElementById("ai-cursor-styles")) {
+                    const styles = document.createElement("style");
+                    styles.id = "ai-cursor-styles";
+                    styles.textContent = `
+                        .ai-visual-cursor .ai-cursor-line {
+                            width: 2px;
+                            height: 20px;
+                            background-color: #3b82f6;
+                            animation: ai-cursor-blink 1s infinite;
+                            margin-bottom: 2px;
+                        }
+                        .ai-visual-cursor .ai-cursor-label {
+                            background: #3b82f6;
+                            color: white;
+                            padding: 2px 6px;
+                            border-radius: 4px;
+                            font-size: 11px;
+                            white-space: nowrap;
+                        }
+                        @keyframes ai-cursor-blink {
+                            0%, 50% { opacity: 1; }
+                            51%, 100% { opacity: 0.3; }
+                        }
+                    `;
+                    document.head.appendChild(styles);
+                }
+
+                // Position the cursor at the specified position
+                try {
+                    const coords = view.coordsAtPos(position);
+                    const editorRect = view.dom.getBoundingClientRect();
+
+                    aiCursor.style.left = `${coords.left - editorRect.left}px`;
+                    aiCursor.style.top = `${coords.top - editorRect.top - 25}px`; // Offset above the line
+
+                    // Add to editor DOM
+                    view.dom.parentElement?.appendChild(aiCursor);
+
+                    console.log(
+                        `[AI-AWARENESS] AI visual cursor positioned at ${coords.left}, ${coords.top}`,
+                    );
+                } catch (posError) {
+                    console.warn(
+                        "[AI-AWARENESS] Could not position AI cursor:",
+                        posError,
+                    );
+                    // Fallback: add to document body
+                    document.body.appendChild(aiCursor);
+                }
+            });
+        } catch (error) {
+            console.error(
+                "[AI-AWARENESS] Error showing AI visual cursor:",
+                error,
+            );
+        }
+    }
+
+    /**
+     * Hide AI visual cursor
+     */
+    private hideAIVisualCursor(): void {
+        const existingCursor = document.getElementById("ai-visual-cursor");
+        if (existingCursor) {
+            existingCursor.remove();
+            console.log("[AI-AWARENESS] Removed AI visual cursor");
+        }
     }
 }

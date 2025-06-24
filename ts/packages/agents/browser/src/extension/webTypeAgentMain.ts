@@ -72,6 +72,7 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     });
 
     const rpc = createRpc<DynamicTypeAgentManagerInvokeFunctions>(
+        "webAgent",
         registerChannel.channel,
     );
     manager = {

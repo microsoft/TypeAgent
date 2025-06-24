@@ -211,7 +211,7 @@ export async function validateURL(
     );
 
     try {
-        const agent = await ensureValidatorAgent(groundingConfig, project);
+        const agent =  await ensureValidatorAgent(groundingConfig, project);
         const thread = await project.agents.threads.create();
 
         // the question that needs answering

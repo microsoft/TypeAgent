@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext } from "../actionHandler.mjs";
+import { BrowserActionContext, getBrowserControl } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
 import {
@@ -33,11 +33,12 @@ export async function handleSchemaDiscoveryAction(
 ) {
     let message = "OK";
     let actionData: any;
-    if (!context.agentContext.browserConnector) {
+    const agentContext = context.agentContext;
+    if (!agentContext.browserConnector) {
         throw new Error("No connection to browser session.");
     }
 
-    const browser: BrowserConnector = context.agentContext.browserConnector;
+    const browser: BrowserConnector = agentContext.browserConnector;
 
     // const agent = await createDiscoveryPageTranslator("GPT_4_O_MINI");
     const agent = await createDiscoveryPageTranslator("GPT_4_O");
@@ -123,7 +124,7 @@ export async function handleSchemaDiscoveryAction(
         const { schema, typeDefinitions } = await getDynamicSchema(actionNames);
         message += `\n =========== \n Discovered actions schema: \n ${schema} `;
 
-        const url = await browser.getPageUrl();
+        const url = await getBrowserControl(agentContext).getPageUrl();
         const hostName = new URL(url!).hostname.replace(/\./g, "_");
         const agentName = `temp_${hostName}`;
 
@@ -199,7 +200,7 @@ export async function handleSchemaDiscoveryAction(
     }
 
     async function handleRegisterSiteSchema(action: any) {
-        const url = await browser.getPageUrl();
+        const url = await getBrowserControl(agentContext).getPageUrl();
         const detectedActions = new Map(
             Object.entries(
                 (await browser.getCurrentPageStoredProperty(

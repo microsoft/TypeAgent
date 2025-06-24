@@ -19,8 +19,8 @@
   },
   "main": "index.js",
   "scripts": {
-    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite",
-    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev",
+    "build": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite npm:tsc:typecheck",
+    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev npm:tsc:typecheck",
     "clean": "rimraf dist deploy",
     "package": "node scripts/packExtension.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
@@ -29,10 +29,14 @@
     "tsc:agent": "tsc -p src/agent/tsconfig.json",
     "tsc:common": "tsc -p src/common/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
+    "tsc:typecheck": "tsc --noEmit -p tsconfig.json",
     "vite": "node scripts/buildExtension.mjs",
     "vite:dev": "node scripts/buildExtension.mjs --dev"
   },
   "dependencies": {
+    "@azure/ai-agents": "^1.0.0-beta.3",
+    "@azure/ai-projects": "^1.0.0-beta.8",
+    "@azure/identity": "^4.10.0",
     "@mozilla/readability": "^0.6.0",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",

@@ -63,11 +63,11 @@ export type FormatOperation = {
 export type ContentItem = {
     // Type of content node (paragraph, heading, code_block, etc.)
     type: string;
-    // Text content for text nodes
+    // Text content for text nodes. This should be well formatted Markdown (e.g. "# Heading" for headings)
     text?: string;
-    // Attributes for the node (e.g., level for headings)
+    // Attributes for the node
     attrs?: {};
-    // Child content for container nodes. This should be provided in github-flavored markdown
+    // Child content for container nodes
     content?: ContentItem[];
     // Marks applied to this content (bold, italic, etc.)
     marks?: MarkItem[];
@@ -77,7 +77,7 @@ export type ContentItem = {
 export type MarkItem = {
     // Type of mark (strong, em, code, link, etc.)
     type: string;
-    // Attributes for the mark (e.g., href for links)
+    // Attributes for the mark (e.g., href for links)s
     attrs?: {};
 };
 

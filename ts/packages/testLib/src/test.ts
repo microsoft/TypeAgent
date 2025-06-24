@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { Result } from "typechat";
 import { hasTestKeys } from "./models.js";
 
 export function testIf(
@@ -32,4 +33,14 @@ export function describeIf(
 
 export function shouldSkip() {
     return !hasTestKeys();
+}
+
+export function verifyResult<T = any>(
+    result: Result<T>,
+    cb?: (data: T) => void,
+): void {
+    expect(result.success);
+    if (result.success && cb) {
+        cb(result.data);
+    }
 }

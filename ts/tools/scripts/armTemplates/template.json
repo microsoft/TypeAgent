@@ -62,6 +62,10 @@
     "accounts_bing_with_grounding_externalid": {
       "defaultValue": "[concat(subscription().id, 'resourceGroups', parameters('group_name'), 'providers/Microsoft.Bing/accounts/bing-with-grounding')]",
       "type": "String"
+    },
+    "workflows_GetHTTPSEndpoint_name": {
+      "defaultValue": "GetHTTPSEndpoint",
+      "type": "String"
     }
   },
   "resources": {
@@ -96,6 +100,9 @@
           },
           "accounts_bing_with_grounding_externalid": {
             "value": "[parameters('accounts_bing_with_grounding_externalid')]"
+          },
+          "workflows_GetHTTPSEndpoint_name": {
+            "value": "[parameters('workflows_GetHTTPSEndpoint_name')]"
           }
         },
         "mode": "Incremental",
@@ -115,7 +122,8 @@
             "vaults_name": { "type": "String" },
             "principalId": { "type": "String" },
             "accounts_typeagent_test_agent_resource_name": { "type": "String" },
-            "accounts_bing_with_grounding_externalid": { "type": "String" }
+            "accounts_bing_with_grounding_externalid": { "type": "String" },
+            "workflows_GetHTTPSEndpoint_name": { "type": "String" }
           },
           "variables": {
             "keyVaultSecretUserRole": "4633458b-17de-408a-b874-0445c86b69e6",
@@ -614,6 +622,87 @@
                   "type": "bing_grounding",
                   "ApiType": "Azure",
                   "ResourceId": "[parameters('accounts_bing_with_grounding_externalid')]"
+                }
+              }
+            },
+            "http_endpoint_logic_app": {
+              "type": "Microsoft.Logic/workflows",
+              "apiVersion": "2017-07-01",
+              "name": "[parameters('workflows_GetHTTPSEndpoint_name')]",
+              "location": "eastus2",
+              "properties": {
+                "state": "Enabled",
+                "definition": {
+                  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                  "contentVersion": "1.0.0.0",
+                  "parameters": {
+                    "Method_": {
+                      "defaultValue": "",
+                      "type": "String"
+                    },
+                    "$connections": {
+                      "defaultValue": {},
+                      "type": "Object"
+                    }
+                  },
+                  "triggers": {
+                    "When_a_HTTP_request_is_received": {
+                      "type": "Request",
+                      "kind": "Http",
+                      "inputs": {
+                        "schema": {
+                          "type": "object",
+                          "properties": {
+                            "HTTP_URI": {
+                              "description": "URI for HTTP Request",
+                              "type": "string"
+                            },
+                            "HTTP_request_content": {
+                              "description": "Content or Body of the HTTP Request",
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "description": "Calles the HTTP endpoint and returns the response."
+                    }
+                  },
+                  "actions": {
+                    "Response": {
+                      "runAfter": {
+                        "HTTP": ["Succeeded"]
+                      },
+                      "type": "Response",
+                      "kind": "Http",
+                      "inputs": {
+                        "statusCode": 200,
+                        "body": "@body('HTTP')"
+                      }
+                    },
+                    "HTTP": {
+                      "runAfter": {},
+                      "type": "Http",
+                      "inputs": {
+                        "uri": "@triggerBody()?['HTTP_URI']",
+                        "method": "@parameters('Method_')",
+                        "body": "@triggerBody()?['HTTP_request_content']"
+                      },
+                      "runtimeConfiguration": {
+                        "contentTransfer": {
+                          "transferMode": "Chunked"
+                        }
+                      }
+                    }
+                  },
+                  "outputs": {}
+                },
+                "parameters": {
+                  "Method_": {
+                    "value": "GET"
+                  },
+                  "$connections": {
+                    "value": {}
+                  }
                 }
               }
             }

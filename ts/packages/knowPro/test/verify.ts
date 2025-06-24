@@ -24,6 +24,7 @@ import {
     matchSearchTermToEntity,
 } from "../src/query.js";
 import { isPropertyTerm, isSearchGroupTerm } from "../src/compileLib.js";
+import { AnswerResponse } from "../src/answerResponseSchema.js";
 
 export function expectHasEntities(
     semanticRefs: SemanticRef[],
@@ -173,5 +174,27 @@ export function verifyDidMatchSearchGroup(
         case "or_max":
             verifyDidMatchOneOfTerms(termGroup, semanticRef, kType);
             break;
+    }
+}
+
+export function verifySearchResult(result: ConversationSearchResult) {
+    expect(result.rawSearchQuery).toBeDefined();
+    expect(result.knowledgeMatches.size).toBeGreaterThan(0);
+    expect(result.messageMatches.length).toBeGreaterThan(0);
+}
+
+export function verifySearchResults(results: ConversationSearchResult[]) {
+    expect(results.length).toBeGreaterThan(0);
+    for (let i = 0; i < results.length; ++i) {
+        verifySearchResult(results[i]);
+    }
+}
+
+export function verifyAnswerResponse(response: AnswerResponse) {
+    expect(response.type).toBeDefined();
+    if (response.type === "Answered") {
+        expect(response.answer).toBeDefined();
+    } else {
+        expect(response.whyNoAnswer).toBeDefined();
     }
 }

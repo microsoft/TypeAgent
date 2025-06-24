@@ -1,0 +1,8 @@
+--query "List all books"
+
+--query "List all books and also list all movies"
+
+--query "List all movies"
+
+--query "List all books and movies"
+
