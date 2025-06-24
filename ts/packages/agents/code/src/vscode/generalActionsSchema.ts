@@ -4,7 +4,6 @@
 export type CodeGeneralActions =
     | ShowCommandPaletteAction
     | GotoFileOrLineOrSymbolAction
-    | NewWindowAction
     | ShowUserSettingsAction
     | ShowKeyboardShortcutsAction;
 
@@ -27,9 +26,9 @@ export type GotoFileOrLineOrSymbolAction = {
     };
 };
 
-// New window/instance of vscode
-export type NewWindowAction = {
-    actionName: "newWindow";
+// Opens a new VS Code application window from within a running VS Code instance.
+export type NewWindowFromAppAction = {
+    actionName: "newWindowFromApp";
 };
 
 // Show user settings
