@@ -13,5 +13,5 @@ export {
     getChatModelNames,
     getChatModelMaxConcurrency,
 } from "./modelResource.js";
-export * as urlResolver from "./urlResolver.js"
+export * as urlResolver from "./urlResolver.js";
 export * as agents from "./agents.js";

@@ -67,7 +67,12 @@ import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "./interface.mjs";
 
 import * as website from "website-memory";
-import { bingWithGrounding, openai, TextEmbeddingModel, urlResolver } from "aiclient";
+import {
+    bingWithGrounding,
+    openai,
+    TextEmbeddingModel,
+    urlResolver,
+} from "aiclient";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
@@ -358,7 +363,10 @@ async function resolveWebPage(
             }
 
             // try to resolve URL using LLM + internet search
-            const url = await urlResolver.resolveURLWithSearch(site, bingWithGrounding.apiSettingsFromEnv());
+            const url = await urlResolver.resolveURLWithSearch(
+                site,
+                bingWithGrounding.apiSettingsFromEnv(),
+            );
 
             if (url) {
                 return url;
@@ -369,11 +377,34 @@ async function resolveWebPage(
     }
 }
 
+export function getActionBrowserControl(
+    actionContext: ActionContext<BrowserActionContext>,
+) {
+    return getBrowserControl(actionContext.sessionContext.agentContext);
+}
+export function getSessionBrowserControl(
+    sessionContext: SessionContext<BrowserActionContext>,
+) {
+    return getBrowserControl(sessionContext.agentContext);
+}
+
+export function getBrowserControl(agentContext: BrowserActionContext) {
+    const browserControl = agentContext.useExternalBrowserControl
+        ? agentContext.externalBrowserControl
+        : agentContext.clientBrowserControl;
+    if (!browserControl) {
+        throw new Error(
+            `${agentContext.externalBrowserControl ? "External" : "Client"} browser control is not available.`,
+        );
+    }
+    return browserControl;
+}
+
 async function openWebPage(
     context: ActionContext<BrowserActionContext>,
     action: TypeAgentAction<OpenWebPage>,
 ) {
-    const browserControl = getBrowserControl(context);
+    const browserControl = getActionBrowserControl(context);
 
     displayStatus(`Opening web page for ${action.parameters.site}.`, context);
     const siteEntity = action.entities?.site;
@@ -408,7 +439,7 @@ async function openWebPage(
 }
 
 async function closeWebPage(context: ActionContext<BrowserActionContext>) {
-    const browserControl = getBrowserControl(context);
+    const browserControl = getActionBrowserControl(context);
     context.actionIO.setDisplay("Closing web page.");
     await browserControl.closeWebPage();
     const result = createActionResult("Web page closed successfully.");
@@ -440,14 +471,14 @@ async function executeBrowserAction(
             case "getWebsiteStats":
                 return getWebsiteStats(context, action);
             case "goForward":
-                await getBrowserControl(context).goForward();
+                await getActionBrowserControl(context).goForward();
                 return;
             case "goBack":
-                await getBrowserControl(context).goBack();
+                await getActionBrowserControl(context).goBack();
                 return;
             case "reloadPage":
                 // REVIEW: do we need to clear page schema?
-                await getBrowserControl(context).reload();
+                await getActionBrowserControl(context).reload();
                 return;
         }
     }

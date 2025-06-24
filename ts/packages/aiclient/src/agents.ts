@@ -1,26 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    Agent,
-    ToolDefinitionUnion,
-} from "@azure/ai-agents";
+import { Agent, ToolDefinitionUnion } from "@azure/ai-agents";
 import { AIProjectClient } from "@azure/ai-projects";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:aiClient:agents");
 
 /**
-  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
-  * 
-  * @param agentId - The id of the agent to get
-  * @param project - The AI project client
-  * @param config - The configuration options for the agent 
-  */
+ * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
+ *
+ * @param agentId - The id of the agent to get
+ * @param project - The AI project client
+ * @param config - The configuration options for the agent
+ */
 export async function ensureAgent(
     agentId: string,
     project: AIProjectClient,
-    agentConfig: agentConfig
+    agentConfig: agentConfig,
 ): Promise<Agent | undefined> {
     try {
         return await project.agents.getAgent(agentId);
@@ -30,23 +27,23 @@ export async function ensureAgent(
 }
 
 export type agentConfig = {
-    model: string,
-    name: string,
-    description: string,
-    temperature: number,
-    instructions: string,
-    tools: ToolDefinitionUnion[]
-}
+    model: string;
+    name: string;
+    description: string;
+    temperature: number;
+    instructions: string;
+    tools: ToolDefinitionUnion[];
+};
 
 /**
  * Creates the agent with the supplied parameters
- * @param project - The ai projct client object 
+ * @param project - The ai projct client object
  * @param agentConfig - The configuration for the agent
  * @returns The created agent
  */
 export async function createAgent(
     project: AIProjectClient,
-    agentConfig: agentConfig
+    agentConfig: agentConfig,
 ): Promise<Agent> {
     try {
         // try to create the agent
@@ -68,9 +65,12 @@ export async function createAgent(
  * @param nameStartsWith - The name of the agents to match
  * @param agent_ids_to_keep - The ID of the agents to retain
  */
-export async function flushAgents(nameStartsWith: string, agent_ids_to_keep: string[], project: AIProjectClient) {
+export async function flushAgents(
+    nameStartsWith: string,
+    agent_ids_to_keep: string[],
+    project: AIProjectClient,
+) {
     try {
-
         const ids = agent_ids_to_keep.join("|");
         let lastAgentId = "";
 
@@ -78,21 +78,22 @@ export async function flushAgents(nameStartsWith: string, agent_ids_to_keep: str
         let empty = true;
         do {
             agents = project.agents.listAgents({
-                after: lastAgentId
+                after: lastAgentId,
             });
 
             for await (const a of agents) {
                 empty = false;
                 // delete the agent if we're not supposed to keep it and the name matches
-                if (a.name?.startsWith(nameStartsWith) && ids.indexOf(a.id) === -1) {
-                    await project.agents.deleteAgent(a.id);                    
+                if (
+                    a.name?.startsWith(nameStartsWith) &&
+                    ids.indexOf(a.id) === -1
+                ) {
+                    await project.agents.deleteAgent(a.id);
                 } else {
                     lastAgentId = a.id;
                 }
             }
         } while (!empty);
-
-        
     } catch (e) {
         debug(`Error creating agent: ${e}`);
         throw e;

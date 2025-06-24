@@ -31,8 +31,10 @@ export interface urlValidityAction {
     explanation: string;
 }
 
-export async function resolveURLWithSearch(site: string, groundingConfig: bingWithGrounding.ApiSettings): Promise<string | undefined> {
-
+export async function resolveURLWithSearch(
+    site: string,
+    groundingConfig: bingWithGrounding.ApiSettings,
+): Promise<string | undefined> {
     let retVal: string = site;
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
@@ -115,12 +117,10 @@ async function ensureResolverAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
 ): Promise<Agent | undefined> {
-
-
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
     return await agents.ensureAgent(
-        groundingConfig.urlResolutionAgentId!, 
+        groundingConfig.urlResolutionAgentId!,
         project,
         {
             model: "gpt-4o",
@@ -140,12 +140,14 @@ interface Response {
     explanation: string;
     bingSearchQuery: string;
 }`,
-            tools: [ToolUtility.createBingGroundingTool([
-                {
-                    connectionId: groundingConfig.connectionId!,
-                },
-            ]).definition],
-        }
+            tools: [
+                ToolUtility.createBingGroundingTool([
+                    {
+                        connectionId: groundingConfig.connectionId!,
+                    },
+                ]).definition,
+            ],
+        },
     );
 }
 
@@ -156,12 +158,10 @@ async function ensureValidatorAgent(
     groundingConfig: bingWithGrounding.ApiSettings,
     project: AIProjectClient,
 ): Promise<Agent | undefined> {
-
-
     // tool connection ids are in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/<PROJECT NAME>/connections/<CONNECTION NAME>>
 
     return await agents.ensureAgent(
-        groundingConfig.validatorAgentId!, 
+        groundingConfig.validatorAgentId!,
         project,
         {
             model: "gpt-4o",
@@ -186,12 +186,15 @@ interface Response {
  urlValidity: "valid" | "invalid" | "indeterminate";
  explanation: string;
 }`,
-            tools: [ToolUtility.createBingGroundingTool([
-                {
-                    connectionId: groundingConfig.httpEndpointLogicAppConnectionId!,
-                },
-            ]).definition],
-        }
+            tools: [
+                ToolUtility.createBingGroundingTool([
+                    {
+                        connectionId:
+                            groundingConfig.httpEndpointLogicAppConnectionId!,
+                    },
+                ]).definition,
+            ],
+        },
     );
 }
 
@@ -201,19 +204,22 @@ export async function validateURL(
     groundingConfig: bingWithGrounding.ApiSettings,
 ): Promise<urlValidityAction | undefined> {
     debug(`Validating URL for utterance: ${utterance}, url: ${url}`);
-    
+
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
         new DefaultAzureCredential(),
     );
-    
 
     try {
         const agent = await ensureValidatorAgent(groundingConfig, project);
         const thread = await project.agents.threads.create();
-        
+
         // the question that needs answering
-        await project.agents.messages.create(thread.id, "user", JSON.stringify({ request: utterance, url: url }));
+        await project.agents.messages.create(
+            thread.id,
+            "user",
+            JSON.stringify({ request: utterance, url: url }),
+        );
 
         let retryCount = 0;
         const maxRetries = 5;
@@ -232,25 +238,31 @@ export async function validateURL(
                         },
                         onResponse: (response): void => {
                             lastResponse = response;
-                            
-                            debug(`Received response with status: ${response.status}`);
+
+                            debug(
+                                `Received response with status: ${response.status}`,
+                            );
 
                             if (response.status != 200) {
                                 process.stdout.write(response.bodyAsText!);
-                                debug(`Received response with status: ${response}`);
+                                debug(
+                                    `Received response with status: ${response}`,
+                                );
                             }
                         },
                     },
                 );
 
-
                 const msgs: ThreadMessage[] = [];
                 if (run.status === "completed") {
                     if (run.completedAt) {
                         // Retrieve messages
-                        const messages = await project.agents.messages.list(thread.id, {
-                            order: "asc",
-                        });
+                        const messages = await project.agents.messages.list(
+                            thread.id,
+                            {
+                                order: "asc",
+                            },
+                        );
 
                         // accumulate assistant messages
                         for await (const m of messages) {
@@ -267,7 +279,7 @@ export async function validateURL(
                                     txt = txt
                                         .replaceAll("```json", "")
                                         .replaceAll("```", "");
-                                    
+
                                     // BUGBUG: only returns the first user message in the thread
                                     return JSON.parse(txt) as urlValidityAction;
                                 }
@@ -277,7 +289,6 @@ export async function validateURL(
                 }
 
                 success = true;
-
             } catch (pollingError) {
                 /*
                     Getting lots of 502s from Logic App for getting web page content.
@@ -288,14 +299,14 @@ export async function validateURL(
                         debug_info: [Object]
                     },                
                 */
-                
+
                 //console.log(lastResponse);
                 //console.log(pollingError);
                 const ee = (lastResponse as any).parsedBody;
                 console.log(`\t${JSON.stringify(ee.last_error)}`);
             } finally {
                 retryCount++;
-            }          
+            }
         }
 
         if (retryCount >= maxRetries) {
@@ -304,10 +315,9 @@ export async function validateURL(
 
         // delete the thread we just created since we are currently one and done
         project.agents.threads.delete(thread.id);
-
     } catch (e) {
         debug(`Error validating URL: ${e}`);
     }
-    
+
     return undefined;
 }

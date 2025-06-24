@@ -16,9 +16,12 @@ import registerDebug from "debug";
 import { DefaultAzureCredential } from "@azure/identity";
 import { AIProjectClient } from "@azure/ai-projects";
 
-export function createURLResolverCommands(studio: SchemaStudio): CommandHandler {
+export function createURLResolverCommands(
+    studio: SchemaStudio,
+): CommandHandler {
     const argDef: CommandMetadata = {
-        description: "Resolves the supplied utterance + URLs in the supplied file",
+        description:
+            "Resolves the supplied utterance + URLs in the supplied file",
         options: {
             file: {
                 description: "The file to open",
@@ -29,7 +32,7 @@ export function createURLResolverCommands(studio: SchemaStudio): CommandHandler 
                 description: "If true, will process all URLs in the file",
                 type: "boolean",
                 defaultValue: true,
-            }
+            },
         },
     };
 
@@ -42,7 +45,7 @@ export function createURLResolverCommands(studio: SchemaStudio): CommandHandler 
         registerDebug.enable("*");
 
         io.writer.writeLine(`Opening file: ${namedArgs.file}`);
-        const urls = fs.readFileSync(namedArgs.file, "utf-8").split("\n"); 
+        const urls = fs.readFileSync(namedArgs.file, "utf-8").split("\n");
 
         // ignore the first line which is a comment
         urls.shift();
@@ -54,13 +57,16 @@ export function createURLResolverCommands(studio: SchemaStudio): CommandHandler 
 
         // Start checking each URL
         let passCount = 0;
-        let failCount = 0; 
+        let failCount = 0;
         for (const url of urls) {
-            const temp = url.split("\t"); 
+            const temp = url.split("\t");
             const utterance = temp[0].trim();
             const site = temp[1].trim();
-            
-            const resolved = await urlResolver.resolveURLWithSearch(utterance, groundingConfig);
+
+            const resolved = await urlResolver.resolveURLWithSearch(
+                utterance,
+                groundingConfig,
+            );
             let passFail = "";
 
             if (resolved !== site) {
@@ -71,21 +77,30 @@ export function createURLResolverCommands(studio: SchemaStudio): CommandHandler 
                 passCount++;
             }
 
-            io.writer.writeLine(`${passFail}: Resolved '${utterance}' to '${resolved}' (expected: ${site})`);
+            io.writer.writeLine(
+                `${passFail}: Resolved '${utterance}' to '${resolved}' (expected: ${site})`,
+            );
 
-            fs.appendFileSync("examples/schemaStudio/data/resolved.txt", `${passFail}\t${utterance}\t${site}\t${resolved}\n`);
+            fs.appendFileSync(
+                "examples/schemaStudio/data/resolved.txt",
+                `${passFail}\t${utterance}\t${site}\t${resolved}\n`,
+            );
         }
 
-        io.writer.writeLine("URL resolution complete. Results written to resolved.txt");
+        io.writer.writeLine(
+            "URL resolution complete. Results written to resolved.txt",
+        );
         io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
-    }
-    
+    };
+
     handler.metadata = argDef;
 
     return handler;
 }
 
-export function createURLValidateCommands(studio: SchemaStudio): CommandHandler {
+export function createURLValidateCommands(
+    studio: SchemaStudio,
+): CommandHandler {
     const argDef: CommandMetadata = {
         description: "Validates that supplied utterance and URL matches.",
         options: {
@@ -100,10 +115,11 @@ export function createURLValidateCommands(studio: SchemaStudio): CommandHandler 
                 defaultValue: true,
             },
             flushAgents: {
-                description: "Deletes all agents except the one in the api settings.",
+                description:
+                    "Deletes all agents except the one in the api settings.",
                 type: "boolean",
                 defaultValue: false,
-            }
+            },
         },
     };
 
@@ -111,7 +127,6 @@ export function createURLValidateCommands(studio: SchemaStudio): CommandHandler 
         args: string[],
         io: InteractiveIo,
     ): Promise<CommandResult> {
-
         const namedArgs = parseNamedArguments(args, argDef);
 
         if (namedArgs.flushAgents) {
@@ -120,13 +135,16 @@ export function createURLValidateCommands(studio: SchemaStudio): CommandHandler 
                 bingWithGrounding.apiSettingsFromEnv().endpoint!,
                 new DefaultAzureCredential(),
             );
-            await agents.flushAgents("TypeAgent_URLResolverAgent", [bingWithGrounding.apiSettingsFromEnv().urlResolutionAgentId!], project);
+            await agents.flushAgents(
+                "TypeAgent_URLResolverAgent",
+                [bingWithGrounding.apiSettingsFromEnv().urlResolutionAgentId!],
+                project,
+            );
             return;
         }
 
-
         io.writer.writeLine(`Opening file: ${namedArgs.file}`);
-        const urls = fs.readFileSync(namedArgs.file, "utf-8").split("\n"); 
+        const urls = fs.readFileSync(namedArgs.file, "utf-8").split("\n");
 
         // ignore the first line which is a comment
         urls.shift();
@@ -144,24 +162,32 @@ export function createURLValidateCommands(studio: SchemaStudio): CommandHandler 
 
         // Start checking each URL
         let passCount = 0;
-        let failCount = 0; 
+        let failCount = 0;
         for (const url of urls) {
-            const temp = url.split("\t"); 
+            const temp = url.split("\t");
             const utterance = temp[0].trim();
             const site = temp[1].trim();
-            
-            const siteValidity: urlValidityAction | undefined = await urlResolver.validateURL(utterance, site, groundingConfig);
 
-            io.writer.writeLine(`${siteValidity?.urlValidity}\t${utterance} (${site})`);
+            const siteValidity: urlValidityAction | undefined =
+                await urlResolver.validateURL(utterance, site, groundingConfig);
 
-            fs.appendFileSync(outputFile, `${utterance}\t${site}\t${siteValidity?.urlValidity}\t${siteValidity?.explanation}\n`);
+            io.writer.writeLine(
+                `${siteValidity?.urlValidity}\t${utterance} (${site})`,
+            );
+
+            fs.appendFileSync(
+                outputFile,
+                `${utterance}\t${site}\t${siteValidity?.urlValidity}\t${siteValidity?.explanation}\n`,
+            );
         }
 
-        io.writer.writeLine("URL resolution complete. Results written to resolved.txt");
+        io.writer.writeLine(
+            "URL resolution complete. Results written to resolved.txt",
+        );
         io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
-    }
-    
+    };
+
     handler.metadata = argDef;
 
-    return handler;    
+    return handler;
 }
