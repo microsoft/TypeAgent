@@ -13,6 +13,7 @@
       ]
     },
     "tsc:common": {
+      "command": "npm run tsc:common",
       "inputs": [
         "src/common/**/*",
         "src/common/tsconfig.json",
@@ -24,6 +25,7 @@
       ]
     },
     "tsc:agent": {
+      "command": "npm run tsc:agent",
       "dependsOn": ["tsc:common"],
       "inputs": [
         "src/agent/**/*",
@@ -36,6 +38,7 @@
       ]
     },
     "tsc:puppeteer": {
+      "command": "npm run tsc:puppeteer",
       "inputs": [
         "src/puppeteer/**/*",
         "src/puppeteer/tsconfig.json",
@@ -47,6 +50,7 @@
       ]
     },
     "vite": {
+      "command": "npm run vite",
       "inputs": [
         "src/extension/**/*",
         "src/electron/**/*",
@@ -59,6 +63,7 @@
       ]
     },
     "tsc:typecheck": {
+      "command": "npm run tsc:typecheck",
       "dependsOn": ["tsc:common", "tsc:agent", "tsc:puppeteer"],
       "inputs": [
         "src/**/*",
