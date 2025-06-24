@@ -6,14 +6,15 @@
 // This runs BEFORE Vite and can exit early if no changes are detected
 
 import { createHash } from "crypto";
-import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from "fs";
 import { execSync } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
-const cacheFile = path.join(rootDir, ".frontend-build-cache.json");
+const cacheDir = path.join(rootDir, ".build.cache");
+const cacheFile = path.join(cacheDir, ".frontend-build-cache.json");
 
 function calculateFileHash(filePath) {
     try {
@@ -39,7 +40,7 @@ function calculateProjectHash() {
         "src/views/client/plans/visualizer.ts",
         "src/views/client/plans/tsconfig.json",
         "package.json",
-        "vite.config.js",
+        "vite.config.mjs",
 
         // Lock file for dependencies
         "../../../../pnpm-lock.yaml",
@@ -89,6 +90,11 @@ function loadCache() {
 }
 
 function saveCache(hash) {
+    // Ensure cache directory exists
+    if (!existsSync(cacheDir)) {
+        mkdirSync(cacheDir, { recursive: true });
+    }
+    
     const cache = {
         hash,
         timestamp: Date.now(),

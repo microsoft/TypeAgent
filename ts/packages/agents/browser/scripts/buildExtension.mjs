@@ -20,7 +20,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // --- 🔧 Incremental build detection ---
 function checkIncrementalBuild() {
-    const buildHashFile = resolve(__dirname, "../.extension-build-hash");
+    const buildHashFile = resolve(__dirname, "../.build.cache/.extension-build-hash");
 
     try {
         // Get modification times of key directories
@@ -73,6 +73,11 @@ function checkIncrementalBuild() {
         // Store current hash for next time - ONLY update if we actually built
         return (actuallyBuilt) => {
             if (actuallyBuilt) {
+                // Ensure cache directory exists
+                const cacheDir = dirname(buildHashFile);
+                if (!existsSync(cacheDir)) {
+                    mkdirSync(cacheDir, { recursive: true });
+                }
                 writeFileSync(buildHashFile, currentHash);
             }
         };
