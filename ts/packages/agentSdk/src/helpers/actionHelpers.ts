@@ -87,13 +87,16 @@ export function createActionResultFromHtmlDisplayWithScript(
  */
 export function createActionResultFromMarkdownDisplay(
     markdownText: string | string[],
+    literalText?: string,
     entities: Entity[] = [],
     resultEntity?: Entity,
 ): ActionResultSuccess {
     return {
-        literalText: Array.isArray(markdownText)
-            ? markdownText.join("\n")
-            : markdownText,
+        literalText:
+            literalText ??
+            (Array.isArray(markdownText)
+                ? markdownText.join("\n")
+                : markdownText),
         entities,
         resultEntity,
         displayContent: { type: "markdown", content: markdownText },

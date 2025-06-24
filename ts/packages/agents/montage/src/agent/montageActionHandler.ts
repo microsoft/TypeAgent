@@ -652,6 +652,7 @@ async function handleMontageAction(
 
                 result = createActionResultFromMarkdownDisplay(
                     names.join("\n"),
+                    undefined,
                     agentContext.montages.map((m) => entityFromMontage(m)),
                 );
             } else {

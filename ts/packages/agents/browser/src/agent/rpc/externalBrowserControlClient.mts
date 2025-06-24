@@ -47,8 +47,8 @@ export function createExternalBrowserClient(
     >("browser:extension", browserControlChannel.channel);
 
     return {
-        openWebPage: async (url: string) => {
-            return rpc.invoke("openWebPage", url);
+        openWebPage: async (...args) => {
+            return rpc.invoke("openWebPage", ...args);
         },
         closeWebPage: async () => {
             return rpc.invoke("closeWebPage");
@@ -73,6 +73,12 @@ export function createExternalBrowserClient(
         },
         scrollDown: async () => {
             return rpc.invoke("scrollDown");
+        },
+        followLinkByText: (...args) => {
+            return rpc.invoke("followLinkByText", ...args);
+        },
+        followLinkByPosition: (...args) => {
+            return rpc.invoke("followLinkByPosition", ...args);
         },
     };
 }

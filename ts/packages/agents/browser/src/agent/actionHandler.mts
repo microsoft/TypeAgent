@@ -14,7 +14,10 @@ import {
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromMarkdownDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
     displayStatus,
@@ -634,6 +637,37 @@ async function executeBrowserAction(
             case "scrollDown":
                 await getActionBrowserControl(context).scrollDown();
                 return;
+            case "followLinkByText": {
+                const control = getActionBrowserControl(context);
+                const { keywords, openInNewTab } = action.parameters;
+                const url = await control.followLinkByText(
+                    keywords,
+                    openInNewTab,
+                );
+                if (!url) {
+                    throw new Error(`No link found for '${keywords}'`);
+                }
+
+                return createActionResultFromMarkdownDisplay(
+                    `Navigated to link for [${keywords}](${url})`,
+                    `Navigated to link for '${keywords}'`,
+                );
+            }
+            case "followLinkByPosition":
+                const control = getActionBrowserControl(context);
+                const url = await control.followLinkByPosition(
+                    action.parameters.position,
+                    action.parameters.openInNewTab,
+                );
+                if (!url) {
+                    throw new Error(
+                        `No link found at position ${action.parameters.position}`,
+                    );
+                }
+                return createActionResultFromMarkdownDisplay(
+                    `Navigated to [link](${url}) at position ${action.parameters.position}`,
+                    `Navigated to link at position ${action.parameters.position}`,
+                );
         }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;

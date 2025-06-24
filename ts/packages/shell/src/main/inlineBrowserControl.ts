@@ -63,5 +63,33 @@ export function createInlineBrowserControl(
         async scrollDown() {
             return contentScriptControl.scrollDown();
         },
+        async followLinkByPosition(position: number, openInNewTab?: boolean) {
+            if (openInNewTab) {
+                // TODO: Support opening in new browser view.
+                throw new Error(
+                    "New tab opening is not supported in inline browser.",
+                );
+            }
+            const url =
+                await contentScriptControl.getPageLinksByPosition(position);
+            if (url) {
+                await shellWindow.openInlineBrowser(new URL(url));
+            }
+            return url;
+        },
+        async followLinkByText(keywords: string, openInNewTab?: boolean) {
+            if (openInNewTab) {
+                // TODO: Support opening in new browser view.
+                throw new Error(
+                    "New tab opening is not supported in inline browser.",
+                );
+            }
+            const url =
+                await contentScriptControl.getPageLinksByQuery(keywords);
+            if (url) {
+                await shellWindow.openInlineBrowser(new URL(url));
+            }
+            return url;
+        },
     };
 }
