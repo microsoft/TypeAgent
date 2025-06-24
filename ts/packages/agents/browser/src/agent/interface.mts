@@ -12,4 +12,8 @@ export interface BrowserControl {
      * close the browser view.
      */
     closeWebPage(): Promise<void>;
+
+    goForward(): Promise<void>;
+    goBack(): Promise<void>;
+    reload(): Promise<void>;
 }

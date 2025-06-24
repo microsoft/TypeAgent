@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
+import * as cm from "conversation-memory";
 import { KnowproContext } from "./knowproContext.js";
 import { NamedArgs, parseTypedArguments } from "interactive-app";
 import {
@@ -13,12 +14,21 @@ import {
     searchRequestDef,
     SearchResponse,
 } from "./types.js";
-import { getLangSearchResult, shouldParseRequest } from "./common.js";
+import { shouldParseRequest } from "./common.js";
 import { error, Result, success } from "typechat";
+import { async } from "typeagent";
 
+/**
+ * Execute a natural language search request against the conversation
+ * Returns results of the search: any matching knowledge, messages etc
+ * @see ../../knowPro/src/search.ts
+ * @param context
+ * @param {SearchRequest} request Structured request or Named Arguments
+ * @returns
+ */
 export async function execSearchRequest(
     context: KnowproContext,
-    request: string[] | NamedArgs | SearchRequest,
+    request: SearchRequest | string[] | NamedArgs,
 ): Promise<SearchResponse> {
     const conversation = context.ensureConversationLoaded();
     if (shouldParseRequest(request)) {
@@ -27,9 +37,11 @@ export async function execSearchRequest(
             searchRequestDef(),
         );
     }
-    const searchText = request.query;
-    const debugContext: AnswerDebugContext = { searchText };
-
+    const langQuery = request.query; // Natural language query to run
+    const debugContext: AnswerDebugContext = { searchText: langQuery };
+    //
+    // Set up options  for the search API Call
+    //
     const options: kp.LanguageSearchOptions = {
         ...createSearchOptions(request),
         compileOptions: {
@@ -45,11 +57,20 @@ export async function execSearchRequest(
             thresholdScore: 0.7,
         };
     }
-    const langFilter = createLangFilter(undefined, request);
+    //
+    // We can specify the subset of the conversation to search using a filter
+    //
+    const langFilter: kp.LanguageSearchFilter | undefined = createLangFilter(
+        undefined,
+        request,
+    );
+    //
+    // Run query
+    //
     const searchResults = await getLangSearchResult(
         conversation,
         context.queryTranslator,
-        searchText,
+        langQuery,
         options,
         langFilter,
         debugContext,
@@ -58,22 +79,35 @@ export async function execSearchRequest(
     return { searchResults, debugContext };
 }
 
+/**
+ * Returns a natural language answer for a natural language question
+ *  - Transform the question into queries (@see execSearchRequest above)
+ *  - Pass the matched knowledge and messages to a model so it can answer the user's question
+ * Note: you can also directly call {}
+ * @param context
+ * @param {GetAnswerRequest} request
+ * @param progressCallback
+ * @returns
+ */
 export async function execGetAnswerRequest(
     context: KnowproContext,
-    request: string[] | NamedArgs | GetAnswerRequest,
+    request: GetAnswerRequest | string[] | NamedArgs,
     progressCallback?: (
         index: number,
         question: string,
         answer: Result<kp.AnswerResponse>,
     ) => void,
 ): Promise<GetAnswerResponse> {
+    // Parse request
     if (shouldParseRequest(request)) {
         request = parseTypedArguments<GetAnswerRequest>(
             request,
             getAnswerRequestDef(),
         );
     }
-
+    //
+    // Turn user question into a search query and evaluate it
+    //
     const searchResponse = request.searchResponse
         ? request.searchResponse
         : await execSearchRequest(context, request);
@@ -86,8 +120,12 @@ export async function execGetAnswerRequest(
         return response;
     }
     if (!kp.hasConversationResults(searchResults.data)) {
+        // Search matched nothing relevant
         return response;
     }
+    //
+    // Use search results to generate a natural language answer
+    //
     const answerResponses = await getAnswersForSearchResults(
         context,
         request,
@@ -98,6 +136,16 @@ export async function execGetAnswerRequest(
     return response;
 }
 
+/**
+ * Multiple query expressions can produce multiple search results
+ * Currently, we take each individual search result and generate a separate answer
+ * TODO: combine answers
+ * @param context
+ * @param request
+ * @param searchResults
+ * @param progressCallback
+ * @returns
+ */
 async function getAnswersForSearchResults(
     context: KnowproContext,
     request: GetAnswerRequest,
@@ -110,9 +158,11 @@ async function getAnswersForSearchResults(
 ): Promise<Result<kp.AnswerResponse[]>> {
     let answerResponses: kp.AnswerResponse[] = [];
     if (!request.messages) {
-        // Don't include raw message text... try answering only with knowledge
+        // (Optionally for testing: Don't include raw message text... try answering only with knowledge
         searchResults.forEach((r) => (r.messageMatches = []));
     }
+    // Set up answer options
+    // Choices are optional
     const choices = request.choices?.split(";");
     const options = createAnswerOptions(request);
     for (let i = 0; i < searchResults.length; ++i) {
@@ -145,10 +195,11 @@ async function getAnswerFromSearchResult(
     searchResult: kp.ConversationSearchResult,
     choices: string[] | undefined,
     options: kp.AnswerContextOptions,
+    retryNoAnswer: boolean = true,
 ): Promise<Result<kp.AnswerResponse>> {
     const conversation = context.ensureConversationLoaded();
     const fastStopSav = context.answerGenerator.settings.fastStop;
-    if (request.fastStop) {
+    if (request.fastStop !== undefined) {
         context.answerGenerator.settings.fastStop = request.fastStop;
     }
     try {
@@ -156,14 +207,44 @@ async function getAnswerFromSearchResult(
         if (choices && choices.length > 0) {
             question = kp.createMultipleChoiceQuestion(question, choices);
         }
-        return await kp.generateAnswer(
-            conversation,
-            context.answerGenerator,
-            question,
-            searchResult,
-            undefined,
-            options,
+        const maxAttempts = 2;
+        let answerResult = await async.getResultWithRetry(
+            () =>
+                //
+                // Generate an answer from search results
+                //
+                kp.generateAnswer(
+                    conversation,
+                    context.answerGenerator,
+                    question,
+                    searchResult,
+                    undefined,
+                    options,
+                ),
+            maxAttempts,
         );
+        if (
+            retryNoAnswer &&
+            answerResult.success &&
+            answerResult.data.type === "NoAnswer"
+        ) {
+            answerResult = await async.getResultWithRetry(
+                () =>
+                    //
+                    // Generate an answer from search results
+                    //
+                    kp.generateAnswer(
+                        conversation,
+                        context.answerGenerator,
+                        question,
+                        searchResult,
+                        undefined,
+                        options,
+                    ),
+                maxAttempts,
+            );
+        }
+        return answerResult;
     } finally {
         context.answerGenerator.settings.fastStop = fastStopSav;
     }
@@ -208,4 +289,48 @@ function createAnswerOptions(
         topicsTopK: topK,
     };
     return options;
+}
+
+/**
+ * Run a natural language query over a conversation
+ * @param {kp.IConversation} conversation
+ * @param {kp.SearchQueryTranslator} queryTranslator Typechat translator from language to query
+ * @param langQuery Natural language query
+ * @param options
+ * @param langFilter
+ * @param debugContext
+ * @returns
+ */
+
+export async function getLangSearchResult(
+    conversation: kp.IConversation | cm.Memory,
+    queryTranslator: kp.SearchQueryTranslator,
+    langQuery: string,
+    options?: kp.LanguageSearchOptions,
+    langFilter?: kp.LanguageSearchFilter,
+    debugContext?: kp.LanguageSearchDebugContext,
+) {
+    /**
+     * If the IConversation interface is implemented by a Memory object, call
+     * the searchWithLanguage on the memory object. Else use the general purpose
+     * searchConversationWithLanguage
+     */
+    const searchResults =
+        conversation instanceof cm.Memory
+            ? await conversation.searchWithLanguage(
+                  langQuery,
+                  options,
+                  langFilter,
+                  debugContext,
+              )
+            : await kp.searchConversationWithLanguage(
+                  conversation,
+                  langQuery,
+                  queryTranslator,
+                  options,
+                  langFilter,
+                  debugContext,
+              );
+
+    return searchResults;
 }

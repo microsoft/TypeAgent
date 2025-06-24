@@ -7,12 +7,12 @@ import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { getChatModelNames } from "aiclient";
 import {
     ChatHistoryInput,
+    isChatHistoryInput,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
 import { getClientId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import fs from "node:fs";
-import { ChatHistoryEntry } from "../../../dispatcher/dist/context/chatHistory.js";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -21,20 +21,25 @@ const { schemaNames } = await getAllActionConfigProvider(
     defaultAppAgentProviders,
 );
 
-async function readHistoryFile(filePath: string): Promise<ChatHistoryEntry[]> {
+async function readHistoryFile(filePath: string): Promise<ChatHistoryInput> {
     if (!fs.existsSync(filePath)) {
         throw new Error(`History file not found: ${filePath}`);
     }
 
     const history = await fs.promises.readFile(filePath, "utf8");
     try {
-        return JSON.parse(history);
+        const data = JSON.parse(history);
+        if (isChatHistoryInput(data)) {
+            return data;
+        }
+        throw new Error(`Invalid history file format: ${filePath}.`);
     } catch (e) {
         throw new Error(
             `Failed to parse history file: ${filePath}. Error: ${e}`,
         );
     }
 }
+
 export default class ReplayCommand extends Command {
     static args = {
         history: Args.string({
@@ -133,7 +138,7 @@ export default class ReplayCommand extends Command {
                         search: flags.switchSearch,
                     },
                 },
-                execution: { history: flags.translate }, // don't generate chat history, the test manually imports them
+                execution: { history: !flags.translate }, // don't generate chat history, the test manually imports them
                 explainer: { enabled: false },
                 cache: { enabled: false },
                 clientIO,
@@ -143,25 +148,21 @@ export default class ReplayCommand extends Command {
             });
 
             try {
-                let insertHistory: ChatHistoryInput | undefined = undefined;
-                for (const entry of history) {
-                    if (entry.role === "user") {
-                        if (flags.translate && insertHistory !== undefined) {
+                if (Array.isArray(history)) {
+                    for (const entry of history) {
+                        await dispatcher.processCommand(entry.user);
+                        if (flags.translate) {
                             await dispatcher.processCommand(
-                                `@history insert ${JSON.stringify(insertHistory)}`,
+                                `@history insert ${JSON.stringify(entry)}`,
                             );
-                            insertHistory = undefined;
                         }
-                        await dispatcher.processCommand(entry.text, entry.id);
-                        insertHistory = { user: entry.text, assistant: [] };
-                    } else if (insertHistory !== undefined) {
-                        (insertHistory.assistant as any[]).push({
-                            text: entry.text,
-                            source: entry.sourceAppAgentName,
-                            entities: entry.entities,
-                            additionalInstructions:
-                                entry.additionalInstructions,
-                        });
+                    }
+                } else {
+                    await dispatcher.processCommand(history.user);
+                    if (flags.translate) {
+                        await dispatcher.processCommand(
+                            `@history insert ${JSON.stringify(history)}`,
+                        );
                     }
                 }
             } finally {

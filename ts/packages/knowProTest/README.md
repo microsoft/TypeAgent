@@ -2,10 +2,15 @@
 
 KnowProTest is **experimental sample code and wrappers** used by [test apps](../../examples/chat/README.md) and evaluation tooling for the [KnowPro](../knowPro/README.md) package.
 
-The [KnowProContext](./src/knowproContext.ts) class also demonstrates the following KnowPro use cases:
+[KnowProContext](./src/knowproContext) demonstrates how to set up:
 
-- Searching memory: _execSearchRequest_ method.
-- Answering a question using memory: _execGetAnswerRequest_ method.
+- LLM and embedding models to use with KnowPro
+- Create query translators and answer generators.
+
+The [knowProCommands.ts](./src/knowCommands.ts) file demonstrates the following KnowPro use cases:
+
+- Searching memory using natural language: _execSearchRequest_ method.
+- Answering a natural question about memory with a natural language answer: _execGetAnswerRequest_ method.
 
 ## Trademarks
 

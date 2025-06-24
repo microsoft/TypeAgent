@@ -78,6 +78,7 @@ export async function createKnowproTestCommands(
             options: {
                 startAt: argNum("Start at this query", 0),
                 count: argNum("Number to run"),
+                verbose: argBool("Verbose error output", false),
             },
         };
     }
@@ -89,13 +90,16 @@ export async function createKnowproTestCommands(
 
         const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
         const srcPath = namedArgs.srcPath;
+        let errorCount = 0;
         const results = await kpTest.verifyLangSearchResultsBatch(
             context,
             srcPath,
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
                 if (result.success) {
-                    writeSearchScore(result.data);
+                    if (!writeSearchScore(result.data, namedArgs.verbose)) {
+                        errorCount++;
+                    }
                 } else {
                     context.printer.writeError(result.message);
                 }
@@ -103,6 +107,9 @@ export async function createKnowproTestCommands(
         );
         if (!results.success) {
             context.printer.writeError(results.message);
+        }
+        if (errorCount > 0) {
+            context.printer.writeLine(`${errorCount} errors`);
         }
     }
 
@@ -156,6 +163,7 @@ export async function createKnowproTestCommands(
                     "Similarity: Generated answer must have at least this similarity to baseline",
                     0.9,
                 ),
+                verbose: argBool("Verbose error output", false),
             },
         };
     }
@@ -176,7 +184,11 @@ export async function createKnowproTestCommands(
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
                 if (result.success) {
-                    writeAnswerScore(result.data, minSimilarity);
+                    writeAnswerScore(
+                        result.data,
+                        minSimilarity,
+                        namedArgs.verbose,
+                    );
                 } else {
                     context.printer.writeError(result.message);
                 }
@@ -228,36 +240,51 @@ export async function createKnowproTestCommands(
 
     function writeSearchScore(
         result: kpTest.Comparison<kpTest.LangSearchResults>,
-    ): void {
+        verbose: boolean = false,
+    ): boolean {
         const error = result.error;
         if (error !== undefined && error.length > 0) {
             context.printer.writeInColor(
                 chalk.redBright,
-                `[${error}]: ${result.actual.searchText}`,
+                `[${error}]: ${result.expected.cmd!}`,
             );
             context.printer.writeInColor(chalk.red, `Error: ${error}`);
-            context.printer.writeJsonInColor(chalk.red, result.actual.results);
-            context.printer.writeJsonInColor(
-                chalk.green,
-                result.expected.results,
-            );
+            if (verbose) {
+                context.printer.writeJsonInColor(
+                    chalk.red,
+                    result.actual.results,
+                );
+                context.printer.writeJsonInColor(
+                    chalk.green,
+                    result.expected.results,
+                );
+            }
+            return true;
         } else {
             context.printer.writeInColor(
                 chalk.greenBright,
                 result.actual.searchText,
             );
+            return false;
         }
     }
 
     function writeAnswerScore(
         result: kpTest.SimilarityComparison<kpTest.QuestionAnswer>,
         threshold: number,
+        verbose: boolean = false,
     ) {
-        const color =
-            result.score >= threshold ? chalk.greenBright : chalk.redBright;
-        context.printer.writeInColor(color, result.actual.question);
-
-        if (result.score < threshold) {
+        const isSimilar = result.score >= threshold;
+        context.printer.writeInColor(
+            isSimilar ? chalk.greenBright : chalk.redBright,
+            result.expected.cmd!,
+        );
+        if (!isSimilar) {
+            context.printer.writeError(
+                `Similarity ${result.score} / ${threshold}`,
+            );
+        }
+        if (result.score < threshold && verbose) {
             context.printer.writeJsonInColor(chalk.redBright, result.actual);
             context.printer.writeJsonInColor(chalk.green, result.expected);
         }

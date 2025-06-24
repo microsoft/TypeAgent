@@ -67,7 +67,7 @@ class SessionNewCommandHandler implements CommandHandler {
             ),
         );
 
-        context.sessionContext.agentContext.chatHistory.entries.length = 0;
+        context.sessionContext.agentContext.chatHistory.clear();
 
         displaySuccess(
             `New session created${

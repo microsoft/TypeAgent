@@ -8,6 +8,8 @@ The CLI explores:
 - [conversation-memory](../../packages/memory/conversation/README.md)
 - [image-memory](../../packages/memory/image/README.md)
 
+The CLI also uses the [knowProTest](../../packages/knowProTest/README.md) package to wrap and invoke KnowPro APIs.
+
 Enter @**help** for a list of commands
 
 - All command names must be prefixed with **@**
@@ -17,14 +19,14 @@ Enter @**help** for a list of commands
 
 You can list all commands matching a prefix by typing the prefix: e.g. @kpSearch
 
-| Feature Area                                                     | Command Prefix             |
-| ---------------------------------------------------------------- | -------------------------- |
-| [KnowPro APIs: Search and Answer](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
-| [Podcast Memory](./src/memory/knowproPodcast.ts)                 | @kpPodcast...              |
-| [Email Memory](./src/memory/knowproEmail.ts)                     | @kpEmail...                |
-| [Conversation Memory](./src/memory/knowproConversation.ts)       | @kpCm...                   |
-| [Image Memory](./src/memory/knowproImage.ts)                     | @kpImage...                |
-| [Document Memory](./src/memory/knowproDoc.ts)                    | @kpDoc...                  |
+| Feature Area                                               | Command Prefix             |
+| ---------------------------------------------------------- | -------------------------- |
+| [Search and Answer Commnds](./src/memory/knowproMemory.ts) | @kpSearch..., @kpAnswer... |
+| [Podcast Memory](./src/memory/knowproPodcast.ts)           | @kpPodcast...              |
+| [Email Memory](./src/memory/knowproEmail.ts)               | @kpEmail...                |
+| [Conversation Memory](./src/memory/knowproConversation.ts) | @kpCm...                   |
+| [Image Memory](./src/memory/knowproImage.ts)               | @kpImage...                |
+| [Document Memory](./src/memory/knowproDoc.ts)              | @kpDoc...                  |
 
 ### Trying it out
 

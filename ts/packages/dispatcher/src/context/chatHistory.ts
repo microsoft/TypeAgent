@@ -1,11 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Entity } from "@typeagent/agent-sdk";
+import { ActionResultActivityContext, Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails, extractRelevantExifTags } from "common-utils";
 import { PromptSection } from "typechat";
 import { RequestId } from "./interactiveIO.js";
 import { normalizeParamString, PromptEntity } from "agent-cache";
+import { SchemaCreator as sc, validateType } from "action-schema";
+import { getAppAgentName } from "../internal.js";
 
 type UserEntry = {
     role: "user";
@@ -18,15 +20,71 @@ type AssistantEntry = {
     role: "assistant";
     text: string;
     id?: RequestId;
-    sourceAppAgentName: string;
+    sourceSchemaName: string;
     entities?: Entity[] | undefined;
     additionalInstructions?: string[] | undefined;
+    activityContext?: ActionResultActivityContext | undefined;
 };
 
-export type ChatHistoryEntry = UserEntry | AssistantEntry;
+type ChatHistoryEntry = UserEntry | AssistantEntry;
+
+type ChatHistoryInputAssistant = {
+    text: string;
+    source: string;
+    entities?: Entity[];
+    additionalInstructions?: string[];
+    activityContext?: ActionResultActivityContext;
+};
+
+type ChatHistoryInputEntry = {
+    user: string;
+    assistant: ChatHistoryInputAssistant | ChatHistoryInputAssistant[];
+};
+
+function convertAssistantMessage(
+    entries: ChatHistoryEntry[],
+    message: ChatHistoryInputAssistant,
+) {
+    entries.push({
+        role: "assistant",
+        text: message.text,
+        sourceSchemaName: message.source,
+        entities: message.entities,
+        additionalInstructions: message.additionalInstructions,
+        activityContext: message.activityContext,
+    });
+}
+
+function convertChatHistoryInputEntry(
+    entries: ChatHistoryEntry[],
+    message: ChatHistoryInputEntry,
+) {
+    entries.push({
+        role: "user",
+        text: message.user,
+    });
+    const assistant = message.assistant;
+    if (Array.isArray(assistant)) {
+        assistant.forEach((m) => convertAssistantMessage(entries, m));
+    } else {
+        convertAssistantMessage(entries, assistant);
+    }
+}
+
+function convertChatHistoryInput(
+    message: ChatHistoryInput,
+): ChatHistoryEntry[] {
+    const entries: ChatHistoryEntry[] = [];
+    if (Array.isArray(message)) {
+        message.forEach((m) => convertChatHistoryInputEntry(entries, m));
+    } else {
+        convertChatHistoryInputEntry(entries, message);
+    }
+    return entries;
+}
 
 export interface ChatHistory {
-    entries: ChatHistoryEntry[];
+    // entries: ChatHistoryEntry[];
     enable(value: boolean): void;
     getTopKEntities(k: number): PromptEntity[];
     addUserEntry(
@@ -37,29 +95,42 @@ export interface ChatHistory {
     addAssistantEntry(
         text: string,
         id: string | undefined,
-        sourceAppAgentName: string,
+        sourceSchemaName: string,
         entities?: Entity[],
         additionalInstructions?: string[],
+        activityContext?: ActionResultActivityContext,
     ): void;
     getCurrentInstructions(): string[] | undefined;
     getPromptSections(): PromptSection[];
+    getLastActivityContextInfo():
+        | {
+              resultActivityContext: ActionResultActivityContext;
+              sourceSchemaName: string;
+          }
+        | undefined;
+    count(): number;
+    delete(index: number): void;
+    clear(): void;
+    getStrings(): string[];
+    export(): ChatHistoryInputEntry | ChatHistoryInputEntry[] | undefined;
+    import(input: ChatHistoryInputEntry | ChatHistoryInputEntry[]): void;
 }
 
 export function createChatHistory(init: boolean): ChatHistory {
     let enabled = init;
+    const entries: ChatHistoryEntry[] = [];
     return {
         enable(value: boolean) {
             enabled = value;
         },
-        entries: [],
         getPromptSections(maxChars = 2000) {
             const sections: PromptSection[] = [];
             // Find the last N that can fit the character quota
             let totalLength = 0;
-            let i: number = this.entries.length - 1;
+            let i: number = entries.length - 1;
             // Get the range of sections that could be pushed on, NEWEST first
             while (i >= 0) {
-                const nextLength = this.entries[i].text.length;
+                const nextLength = entries[i].text.length;
                 if (nextLength + totalLength > maxChars) {
                     ++i;
                     break;
@@ -70,8 +141,8 @@ export function createChatHistory(init: boolean): ChatHistory {
             if (i < 0) {
                 i = 0;
             }
-            for (; i < this.entries.length; ++i) {
-                const entry = this.entries[i];
+            for (; i < entries.length; ++i) {
+                const entry = entries[i];
 
                 if (entry.text.length > 0) {
                     sections.push({ role: entry.role, content: entry.text });
@@ -120,15 +191,15 @@ export function createChatHistory(init: boolean): ChatHistory {
         },
         getCurrentInstructions(): string[] | undefined {
             const instructions: string[] = [];
-            if (this.entries.length === 0) {
+            if (entries.length === 0) {
                 return undefined;
             }
-            let i = this.entries.length - 1;
-            if (this.entries[i].role === "user") {
+            let i = entries.length - 1;
+            if (entries[i].role === "user") {
                 i--;
             }
             while (i >= 0) {
-                const entry = this.entries[i];
+                const entry = entries[i];
                 if (entry.role === "user") {
                     break;
                 }
@@ -139,13 +210,26 @@ export function createChatHistory(init: boolean): ChatHistory {
             }
             return instructions.length > 0 ? instructions : undefined;
         },
+        getLastActivityContextInfo() {
+            if (entries.length === 0) {
+                return undefined;
+            }
+            const last = entries[entries.length - 1];
+            return last.role === "assistant" &&
+                last.activityContext !== undefined
+                ? {
+                      sourceSchemaName: last.sourceSchemaName,
+                      resultActivityContext: last.activityContext,
+                  }
+                : undefined;
+        },
         addUserEntry(
             text: string,
             id: string | undefined,
             attachments?: CachedImageWithDetails[],
         ): void {
             if (enabled) {
-                this.entries.push({
+                entries.push({
                     role: "user",
                     text,
                     id,
@@ -156,18 +240,20 @@ export function createChatHistory(init: boolean): ChatHistory {
         addAssistantEntry(
             text: string,
             id: string | undefined,
-            sourceAppAgentName: string,
+            sourceSchemaName: string,
             entities?: Entity[],
             additionalInstructions?: string[],
+            activityContext?: ActionResultActivityContext,
         ): void {
             if (enabled) {
-                this.entries.push({
+                entries.push({
                     role: "assistant",
                     text,
                     id,
-                    sourceAppAgentName,
+                    sourceSchemaName,
                     entities: structuredClone(entities), // make a copy so that it doesn't get modified by others later.
                     additionalInstructions,
+                    activityContext: structuredClone(activityContext),
                 });
             }
         },
@@ -176,11 +262,12 @@ export function createChatHistory(init: boolean): ChatHistory {
             let found = 0;
             const result: PromptEntity[][] = [];
             // loop over entries from last to first
-            for (let i = this.entries.length - 1; i >= 0; i--) {
-                const entry = this.entries[i];
+            for (let i = entries.length - 1; i >= 0; i--) {
+                const entry = entries[i];
                 if (entry.role === "user" || entry.entities === undefined) {
                     continue;
                 }
+                const appAgentName = getAppAgentName(entry.sourceSchemaName);
                 const promptEntities: PromptEntity[] = [];
                 for (const entity of entry.entities) {
                     // Multiple entities may have the same name ('Design meeting') but different
@@ -192,14 +279,13 @@ export function createChatHistory(init: boolean): ChatHistory {
                     let existing = uniqueEntities.get(uniqueIndex);
                     const promptEntity: PromptEntity = {
                         ...entity,
-                        sourceAppAgentName: entry.sourceAppAgentName,
+                        sourceAppAgentName: appAgentName,
                     };
                     if (existing) {
                         if (
                             existing.some(
                                 (e) =>
-                                    e.sourceAppAgentName ===
-                                        entry.sourceAppAgentName &&
+                                    e.sourceAppAgentName === appAgentName &&
                                     e.uniqueId === entity.uniqueId,
                             )
                         ) {
@@ -223,5 +309,118 @@ export function createChatHistory(init: boolean): ChatHistory {
             }
             return result.flat();
         },
+        count(): number {
+            return entries.length;
+        },
+        delete(index: number): void {
+            if (index < 0 || index >= entries.length) {
+                throw new Error(
+                    `The supplied index (${index}) is outside the range of available indices (0, ${entries.length})`,
+                );
+            }
+            if (isNaN(index)) {
+                throw new Error(
+                    `The supplied value '${index}' is not a valid index.`,
+                );
+            }
+
+            entries.splice(index, 1);
+        },
+        clear(): void {
+            entries.length = 0;
+        },
+        getStrings(): string[] {
+            return entries.map(
+                (entry, index) =>
+                    `${index}: ${JSON.stringify(entry, undefined, 2)}`,
+            );
+        },
+        export(): ChatHistoryInputEntry | ChatHistoryInputEntry[] | undefined {
+            const input: ChatHistoryInputEntry[] = [];
+            let currInput: ChatHistoryInputEntry | undefined = undefined;
+            for (const entry of entries) {
+                if (entry.role === "user") {
+                    if (currInput !== undefined) {
+                        input.push(currInput);
+                    }
+                    currInput = {
+                        user: entry.text,
+                        assistant: [],
+                    };
+                } else if (currInput !== undefined) {
+                    const assistantEntry: ChatHistoryInputAssistant = {
+                        text: entry.text,
+                        source: entry.sourceSchemaName,
+                    };
+                    if (entry.entities) {
+                        assistantEntry.entities = structuredClone(
+                            entry.entities,
+                        );
+                    }
+                    if (entry.additionalInstructions) {
+                        assistantEntry.additionalInstructions =
+                            entry.additionalInstructions;
+                    }
+                    if (entry.activityContext) {
+                        assistantEntry.activityContext = entry.activityContext;
+                    }
+                    (currInput.assistant as any).push(assistantEntry);
+                }
+            }
+            if (input.length === 0) {
+                return currInput;
+            }
+            if (currInput !== undefined) {
+                input.push(currInput);
+            }
+            return input.length === 1 ? input[0] : input;
+        },
+        import(input: ChatHistoryInput): void {
+            entries.push(...convertChatHistoryInput(input));
+        },
     };
+}
+
+const assistantInputSchema = sc.obj({
+    text: sc.string(),
+    source: sc.string(),
+    entities: sc.optional(
+        sc.array(
+            sc.obj({
+                name: sc.string(),
+                type: sc.array(sc.string()),
+                uniqueId: sc.optional(sc.string()),
+            }),
+        ),
+    ),
+    additionalInstructions: sc.optional(sc.array(sc.string())),
+    activityContext: sc.optional(
+        sc.obj({
+            activityName: sc.string(),
+            description: sc.string(),
+            openLocalView: sc.optional(sc.boolean()),
+            state: sc.optional(sc.any()),
+            activityEndAction: sc.optional(sc.any()),
+        }),
+    ),
+});
+
+const messageInputSchema = sc.obj({
+    user: sc.string(),
+    assistant: sc.union(assistantInputSchema, sc.array(assistantInputSchema)),
+});
+
+const chatHistoryInputSchema = sc.union(
+    messageInputSchema,
+    sc.array(messageInputSchema),
+);
+
+export type ChatHistoryInput = ChatHistoryInputEntry | ChatHistoryInputEntry[];
+export function isChatHistoryInput(data: any): data is ChatHistoryInput {
+    try {
+        validateType(chatHistoryInputSchema, data);
+        return true;
+    } catch {
+        return false;
+    }
 }

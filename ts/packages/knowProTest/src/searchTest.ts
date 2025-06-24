@@ -1,14 +1,20 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as kp from "knowpro";
 import { KnowproContext } from "./knowproContext.js";
 import { readJsonFile, writeJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import { BatchCallback, Comparison } from "./types.js";
-import { compareArray, getCommandArgs, getLangSearchResult } from "./common.js";
+import {
+    compareArray,
+    getCommandArgs,
+    isJsonEqual,
+    queryError,
+} from "./common.js";
+import { getLangSearchResult } from "./knowproCommands.js";
 import { getBatchFileLines } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
+import * as kp from "knowpro";
 
 export type LangSearchResults = {
     searchText: string;
@@ -39,7 +45,10 @@ export async function runSearchBatch(
         if (args.length === 0) {
             continue;
         }
-        const response = await getSearchResults(context, args);
+        let response = await getSearchResults(context, args);
+        if (!response.success) {
+            response = queryError(cmd, response);
+        }
         if (cb) {
             cb(response, i, batchLines.length);
         }
@@ -109,7 +118,7 @@ export async function verifyLangSearchResultsBatch(
         if (args.length === 0) {
             continue;
         }
-        const response = await getSearchResults(context, args);
+        let response = await getSearchResults(context, args);
         if (response.success) {
             const actual = response.data;
             const error = compareLangSearchResults(actual, expected);
@@ -123,6 +132,7 @@ export async function verifyLangSearchResultsBatch(
                 cb(success(comparisonResult), i, expectedResults.length);
             }
         } else {
+            response = queryError(expected.cmd!, response);
             if (cb) {
                 cb(response, i, expectedResults.length);
             }
@@ -205,13 +215,12 @@ function getMatchedSemanticRefOrdinals(
         ?.semanticRefMatches.map((sr) => sr.semanticRefOrdinal);
 }
 
-/*
 function compareSearchExpr(
     s1: kp.querySchema.SearchQuery,
     s2: kp.querySchema.SearchQuery,
 ): string | undefined {
     if (s1.searchExpressions.length !== s2?.searchExpressions.length) {
-        return "searchExpr Length";
+        return "searchQuery expressions Length";
     }
     for (let i = 0; i < s1.searchExpressions.length; ++i) {
         if (
@@ -220,19 +229,22 @@ function compareSearchExpr(
                 s2.searchExpressions[i].filters,
             )
         ) {
-            return "searchExpr Filter";
+            return `searchExpr.Filter #${i}`;
         }
     }
     return undefined;
 }
-*/
 
 function compareLangSearchResults(
     lr1: LangSearchResults,
     lr2: LangSearchResults,
 ): string | undefined {
+    let error = compareSearchExpr(lr1.searchQueryExpr, lr2.searchQueryExpr);
+    if (error !== undefined && error.length > 0) {
+        return error;
+    }
     if (lr1.results.length !== lr2.results.length) {
-        return "array";
+        return `Number results ${lr1.results.length} != ${lr2.results.length}`;
     }
     for (let i = 0; i < lr1.results.length; ++i) {
         const error = compareLangSearchResult(lr1.results[i], lr2.results[i]);
@@ -247,20 +259,6 @@ function compareLangSearchResult(
     lr1: LangSearchResult,
     lr2: LangSearchResult,
 ): string | undefined {
-    /*
-    if (!isJsonEqual(lr1.messageMatches, lr2.messageMatches)) {
-        return "message";
-    }
-    if (!isJsonEqual(lr1.entityMatches, lr2.entityMatches)) {
-        return "entity";
-    }
-    if (!isJsonEqual(lr1.topicMatches, lr2.topicMatches)) {
-        return "topic";
-    }
-    if (!isJsonEqual(lr1.actionMatches, lr2.actionMatches)) {
-        return "action";
-    }
-        */
     let error = compareArray("message", lr1.messageMatches, lr2.messageMatches);
     if (error !== undefined) {
         return error;

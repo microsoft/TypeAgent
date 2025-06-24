@@ -252,18 +252,6 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
-        case "goBack": {
-            sendScriptAction({
-                type: "history_go_back",
-            });
-            break;
-        }
-        case "goForward": {
-            sendScriptAction({
-                type: "history_go_forward",
-            });
-            break;
-        }
 
         case "zoomIn": {
             if (window.location.href.startsWith("https://paleobiodb.org/")) {
@@ -340,19 +328,15 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
-        case "reloadPage": {
-            sendScriptAction({
-                type: "clear_page_schema",
-            });
-            location.reload();
-            break;
-        }
         case "closeWindow": {
             window.close();
             // todo: call method on IPC process to close the window/view
 
             break;
         }
+
+        default:
+            throw new Error(`Invalid action: ${actionName}`);
     }
 
     return {

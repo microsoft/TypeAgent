@@ -154,16 +154,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             });
             break;
         }
-        case "goBack": {
-            const targetTab = await getActiveTab();
-            await chrome.tabs.goBack(targetTab?.id!);
-            break;
-        }
-        case "goForward": {
-            const targetTab = await getActiveTab();
-            await chrome.tabs.goForward(targetTab?.id!);
-            break;
-        }
+
         case "openFromHistory": {
             const targetTab = await getActiveTab();
             const historyItems = await chrome.history.search({
@@ -391,6 +382,8 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             );
             break;
         }
+        default:
+            throw new Error(`Unknown action: ${actionName}. `);
     }
 
     return {

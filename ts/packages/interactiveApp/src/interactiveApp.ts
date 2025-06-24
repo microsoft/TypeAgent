@@ -886,7 +886,9 @@ export function getBatchFileLines(
     commentPrefix = "#",
 ): string[] {
     const lines = fs.readFileSync(batchFilePath, "utf-8").split(/\r?\n/);
-    return lines.filter((line) => line && !line.startsWith(commentPrefix));
+    return lines.filter(
+        (line) => line && line.length > 0 && !line.startsWith(commentPrefix),
+    );
 }
 
 function getDescription(handler: CommandHandler): string | undefined {

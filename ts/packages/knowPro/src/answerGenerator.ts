@@ -610,7 +610,7 @@ function createQuestionPrompt(question: string): string {
         "- Answer the user question PRECISELY using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
         "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in [ANSWER CONTEXT].",
         "- Use the 'name', 'type' and 'facets' properties of the provided JSON entities to identify those highly relevant to answering the question.",
-        //"- 'origin' on knowledge simply means who provided it.", // TODO: un-comment this once test cases are in
+        "- 'origin' on knowledge simply means who provided it.",
         "- When asked for lists, ensure the the list contents answer the question and nothing else.",
         "E.g. for the question 'List all books': List only the books in [ANSWER CONTEXT].",
         "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",

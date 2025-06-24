@@ -9,33 +9,33 @@ const debugError = registerDebug("typeagent:rpc:error");
 
 import { RpcChannel } from "./common.js";
 
-type RpcFuncType<
+type RpcFuncTypes<
     N extends string,
     T extends Record<string, (...args: any) => any>,
 > = {
-    [K in keyof T as `${N}`]: <K extends string>(
-        name: K,
-        param: Parameters<T[K]>[0],
-    ) => ReturnType<T[K]>;
+    [K in keyof T as `${N}`]: Parameters<T[K]>[0] extends undefined
+        ? <K extends string>(name: K) => ReturnType<T[K]>
+        : <K extends string>(
+              name: K,
+              param: Parameters<T[K]>[0],
+          ) => ReturnType<T[K]>;
 };
 
+type RpcInvokeFunction = (param: any) => Promise<unknown>;
+type RpcCallFunction = (param: any) => void;
+type RpcInvokeFunctions = Record<string, RpcInvokeFunction>;
+type RpcCallFunctions = Record<string, RpcCallFunction>;
 type RpcReturn<
-    InvokeTargetFunctions extends {
-        [key: string]: (param: any) => Promise<unknown>;
-    },
-    CallTargetFunctions extends { [key: string]: (param: any) => void },
-> = RpcFuncType<"invoke", InvokeTargetFunctions> &
-    RpcFuncType<"send", CallTargetFunctions>;
+    InvokeTargetFunctions extends RpcInvokeFunctions,
+    CallTargetFunctions extends RpcCallFunctions,
+> = RpcFuncTypes<"invoke", InvokeTargetFunctions> &
+    RpcFuncTypes<"send", CallTargetFunctions>;
 
 export function createRpc<
-    InvokeTargetFunctions extends {
-        [key: string]: (param: any) => Promise<unknown>;
-    } = {},
-    CallTargetFunctions extends { [key: string]: (param: any) => void } = {},
-    InvokeHandlers extends {
-        [key: string]: (param: any) => Promise<unknown>;
-    } = {},
-    CallHandlers extends { [key: string]: (param: any) => void } = {},
+    InvokeTargetFunctions extends RpcInvokeFunctions = {},
+    CallTargetFunctions extends RpcCallFunctions = {},
+    InvokeHandlers extends RpcInvokeFunctions = {},
+    CallHandlers extends RpcCallFunctions = {},
 >(
     channel: RpcChannel,
     invokeHandlers?: InvokeHandlers,
