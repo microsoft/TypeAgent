@@ -94,52 +94,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             confirmationMessage = `Opened new tab with query ${action.parameters.query}`;
             break;
         }
-        case "followLinkByText": {
-            const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "get_page_links_by_query",
-                query: action.parameters.keywords,
-            });
-
-            if (response && response.url) {
-                if (action.parameters.openInNewTab) {
-                    await chrome.tabs.create({
-                        url: response.url,
-                    });
-                } else {
-                    await chrome.tabs.update(targetTab?.id!, {
-                        url: response.url,
-                    });
-                }
-
-                confirmationMessage = `Navigated to the ${action.parameters.keywords} link`;
-            }
-
-            break;
-        }
-        case "followLinkByPosition": {
-            const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "get_page_links_by_position",
-                position: action.parameters.position,
-            });
-
-            if (response && response.url) {
-                if (action.parameters.openInNewTab) {
-                    await chrome.tabs.create({
-                        url: response.url,
-                    });
-                } else {
-                    await chrome.tabs.update(targetTab?.id!, {
-                        url: response.url,
-                    });
-                }
-
-                confirmationMessage = `Navigated to the ${action.parameters.position} link`;
-            }
-
-            break;
-        }
 
         case "openFromHistory": {
             const targetTab = await getActiveTab();

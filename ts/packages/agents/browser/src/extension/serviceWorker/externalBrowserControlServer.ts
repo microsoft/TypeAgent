@@ -92,6 +92,38 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         scrollDown: async () => {
             return contentScriptRpc.scrollDown();
         },
+        followLinkByText: async (keywords: string, openInNewTab?: boolean) => {
+            const url = await contentScriptRpc.getPageLinksByQuery(keywords);
+
+            if (url) {
+                if (openInNewTab) {
+                    await chrome.tabs.create({ url });
+                } else {
+                    // REVIEW: the active tab might have changed from getPageLinksByQuery call
+                    const targetTab = await getActiveTab();
+                    await chrome.tabs.update(targetTab?.id!, { url });
+                }
+            }
+
+            return url;
+        },
+        followLinkByPosition: async (position, openInNewTab) => {
+            const url = await contentScriptRpc.getPageLinksByPosition(position);
+
+            if (url) {
+                if (openInNewTab) {
+                    await chrome.tabs.create({
+                        url,
+                    });
+                } else {
+                    // REVIEW: the active tab might have changed from getPageLinksByPosition call
+                    const targetTab = await getActiveTab();
+                    await chrome.tabs.update(targetTab?.id!, { url });
+                }
+            }
+
+            return url;
+        },
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

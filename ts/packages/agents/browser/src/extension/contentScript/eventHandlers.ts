@@ -144,6 +144,14 @@ function setupMessageListeners(): void {
         scrollDown: async () => {
             scrollPageDown();
         },
+        getPageLinksByQuery: async (query: string) => {
+            const link = matchLinks(query) as HTMLAnchorElement;
+            return link?.href;
+        },
+        getPageLinksByPosition: async (position: number) => {
+            const link = matchLinksByPosition(position) as HTMLAnchorElement;
+            return link?.href;
+        },
     };
 
     createRpc(
@@ -189,28 +197,6 @@ export async function handleMessage(
 ): Promise<void> {
     try {
         switch (message.type) {
-            case "get_page_links_by_query": {
-                const link = matchLinks(message.query) as HTMLAnchorElement;
-                if (link && link.href) {
-                    sendResponse({ url: link.href });
-                } else {
-                    sendResponse({});
-                }
-                break;
-            }
-
-            case "get_page_links_by_position": {
-                const link = matchLinksByPosition(
-                    message.position,
-                ) as HTMLAnchorElement;
-                if (link && link.href) {
-                    sendResponse({ url: link.href });
-                } else {
-                    sendResponse({});
-                }
-                break;
-            }
-
             case "read_page_content": {
                 const article = getReadablePageContent();
                 sendResponse(article);

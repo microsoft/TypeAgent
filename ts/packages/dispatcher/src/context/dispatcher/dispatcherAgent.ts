@@ -237,7 +237,11 @@ function clarifyEntityAction(
         `Please clarify which one you meant.`,
     ];
 
-    return createActionResultFromMarkdownDisplay(question, result.entities);
+    return createActionResultFromMarkdownDisplay(
+        question,
+        undefined,
+        result.entities,
+    );
 }
 
 export const dispatcherManifest: AppAgentManifest = {

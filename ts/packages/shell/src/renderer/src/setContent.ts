@@ -50,6 +50,16 @@ function processContent(
             });
         case "markdown":
             const md = new MarkdownIt();
+            // Links in the chat windows should open in a new tab.
+            const defaultRender =
+                md.renderer.rules.link_open ||
+                function (tokens, idx, options, _env, self) {
+                    return self.renderToken(tokens, idx, options);
+                };
+            md.renderer.rules.link_open = (tokens, idx, ...args) => {
+                tokens[idx].attrSet("target", "_blank");
+                return defaultRender(tokens, idx, ...args);
+            };
             return inline ? md.renderInline(content) : md.render(content);
         case "text":
             return enableText2Html
