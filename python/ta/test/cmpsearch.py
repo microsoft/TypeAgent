@@ -10,10 +10,10 @@ import json
 import numpy as np
 import typechat
 
-from typeagent.knowpro.importing import ConversationSettings
-from typeagent.aitools import auth
+from typeagent.aitools import utils
 from typeagent.aitools.embeddings import AsyncEmbeddingModel
-from typeagent.demo import ui  # TODO: Move what we import to a more appropriate place
+from typeagent.knowpro import answers
+from typeagent.knowpro.importing import ConversationSettings
 from typeagent.knowpro.convknowledge import create_typechat_model
 from typeagent.knowpro.interfaces import IConversation
 from typeagent.knowpro.search_query_schema import SearchQuery
@@ -80,16 +80,16 @@ def main():
 
     # Read podcast data.
 
-    auth.load_dotenv()
+    utils.load_dotenv()
     settings = ConversationSettings()
-    with ui.timelog("Loading podcast data"):
+    with utils.timelog("Loading podcast data"):
         conversation = Podcast.read_from_file(args.podcast, settings)
     assert conversation is not None, f"Failed to load podcast from {file!r}"
 
     # Create translator.
 
     model = create_typechat_model()
-    query_translator = ui.create_translator(model, SearchQuery)
+    query_translator = utils.create_translator(model, SearchQuery)
 
     # Create context.
 
@@ -174,7 +174,7 @@ async def compare(
     if not isinstance(result, typechat.Success):
         print("Error:", result.message)
     else:
-        all_answers, combined_answer = await ui.generate_answers(
+        all_answers, combined_answer = await answers.generate_answers(
             result.value, context.conversation, question
         )
         print("-" * 40)
@@ -182,7 +182,7 @@ async def compare(
             print("Failure:", combined_answer.whyNoAnswer)
             print("All answers:")
             if context.interactive:
-                ui.pretty_print(all_answers)
+                utils.pretty_print(all_answers)
         else:
             assert combined_answer.answer is not None, "Expected an answer"
             the_answer = combined_answer.answer

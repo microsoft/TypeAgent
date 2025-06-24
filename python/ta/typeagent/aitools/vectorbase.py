@@ -7,6 +7,7 @@ from typing import Callable
 
 import numpy as np
 
+from ..aitools import utils
 from .embeddings import AsyncEmbeddingModel, NormalizedEmbedding, NormalizedEmbeddings
 
 
@@ -191,7 +192,7 @@ async def main():
     def debugv(heading: str):
         log(f"{heading}: bool={bool(v)}, len={len(v)}")
 
-    auth.load_dotenv()
+    utils.load_dotenv()
     v = VectorBase()
     debugv("\nEmpty vector base")
 
