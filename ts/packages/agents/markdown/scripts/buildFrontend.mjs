@@ -6,7 +6,13 @@
 // This runs BEFORE Vite and can exit early if no changes are detected
 
 import { createHash } from "crypto";
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from "fs";
+import {
+    readFileSync,
+    writeFileSync,
+    existsSync,
+    statSync,
+    mkdirSync,
+} from "fs";
 import { execSync } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -75,7 +81,7 @@ function saveCache(hash) {
     if (!existsSync(cacheDir)) {
         mkdirSync(cacheDir, { recursive: true });
     }
-    
+
     const cache = {
         hash,
         timestamp: Date.now(),

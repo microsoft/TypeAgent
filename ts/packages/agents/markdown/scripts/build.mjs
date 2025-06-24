@@ -124,7 +124,7 @@ function saveCache(taskName, hash) {
     if (!existsSync(cacheDir)) {
         mkdirSync(cacheDir, { recursive: true });
     }
-    
+
     const cacheFile = path.join(cacheDir, `.tsc-cache-${taskName}.json`);
     const cache = {
         hash,

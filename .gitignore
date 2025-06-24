@@ -20,6 +20,7 @@ dist-pub/
 *.map
 *.out.txt
 *.tsbuildinfo
+.build.cache/
 .extension-build-hash
 .tsc-cache-*.json
 .frontend-build-cache.json
