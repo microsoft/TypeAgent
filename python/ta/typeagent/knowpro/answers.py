@@ -83,9 +83,9 @@ async def generate_answer[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     assert search_result.raw_query_text is not None, "Raw query text must not be None"
     context = make_context(search_result, conversation, options)
     request = f"{create_question_prompt(search_result.raw_query_text)}\n{create_context_prompt(context)}"
-    print("+" * 80)
-    print(request)
-    print("+" * 80)
+    # print("+" * 80)
+    # print(request)
+    # print("+" * 80)
     result = await translator.translate(request)
     if isinstance(result, typechat.Failure):
         return AnswerResponse(type="NoAnswer", answer=None, whyNoAnswer=result.message)
