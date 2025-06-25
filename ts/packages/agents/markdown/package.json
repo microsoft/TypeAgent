@@ -16,10 +16,8 @@
     "./agent/handlers": "./dist/agent/markdownActionHandler.js"
   },
   "scripts": {
-    "build": "npm run tsc && npm run build:frontend",
-    "postbuild": "copyfiles -u 1 \"src/**/config.json\" dist",
+    "build": "concurrently npm:tsc npm:build:frontend",
     "build:frontend": "vite build",
-    "build:frontend:force": "vite build",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log .frontend-build-cache.json .tsc-cache-*.json && rimraf .tsbuildinfo .build.cache",
     "dev": "npm run tsc && node scripts/dev-viewer.js --hmr",
     "dev:frontend": "vite  --watch",
@@ -69,6 +67,7 @@
     "@types/katex": "^0.16.7",
     "@types/markdown-it": "^14.1.2",
     "@types/ws": "^8.5.8",
+    "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
@@ -76,5 +75,17 @@
     "sanitize-filename": "^1.6.3",
     "typescript": "~5.4.5",
     "vite": "^4.5.14"
+  },
+  "fluidBuild": {
+    "declarativeTasks": {
+      "vite": {
+        "inputGlobs": [
+          "src/view/site/**/*"
+        ],
+        "outputGlobs": [
+          "dist/view/site/**/*"
+        ]
+      }
+    }
   }
 }
