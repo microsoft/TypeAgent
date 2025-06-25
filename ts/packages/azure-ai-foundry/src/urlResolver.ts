@@ -254,6 +254,8 @@ export async function validateURL(
 
         while (retryCount < maxRetries && !success) {
             try {
+                // need this cause you can't access the run object until it enters the start state
+                const runStarted = Date.now();
                 // Create run
                 const run = await project.agents.runs.createAndPoll(
                     thread.id,
@@ -276,11 +278,14 @@ export async function validateURL(
                                 );
                             }
 
-                            // // Cancel the run if it has been running for more than 30 seconds
-                            // if (run.startedAt && !run.completedAt && (Date.now() - new Date(run.startedAt).getTime() > 30000)) {
-                            //     await project.agents.runs.cancel(thread.id, run.id);
-                            //     console.log(`TIMEOUT - Canceled ${utterance}`);
-                            // }
+                            // Cancel the run if it has been running for more than 30 seconds
+                            
+                            if (Date.now() - new Date(runStarted).getTime() > 30000) {
+                                //if (!run.completedAt) {
+                                    await project.agents.runs.cancel(thread.id, run.id);
+                                    console.log(`TIMEOUT - Canceled ${utterance}`);
+                                //}
+                            }
                         },
                     },
                 );
