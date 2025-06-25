@@ -1,16 +1,19 @@
 {
   "extends": "../../../../../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": false,
+    "noEmit": true,
+    "composite": true,
+    "incremental": true,
     "rootDir": ".",
-    "outDir": "../../../dist/view/site",
-    "declaration": false,
-    "declarationMap": false,
+    "outDir": "../../../dist/view/site-typecheck",
     "moduleResolution": "bundler",
     "module": "ESNext",
     "lib": ["DOM"],
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
   },
-  "include": ["./*"],
+  "include": ["./**/*"],
   "ts-node": {
     "esm": true
   }

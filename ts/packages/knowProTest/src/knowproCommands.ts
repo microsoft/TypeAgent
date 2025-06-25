@@ -139,7 +139,6 @@ export async function execGetAnswerRequest(
 /**
  * Multiple query expressions can produce multiple search results
  * Currently, we take each individual search result and generate a separate answer
- * TODO: combine answers
  * @param context
  * @param request
  * @param searchResults
@@ -155,6 +154,7 @@ async function getAnswersForSearchResults(
         question: string,
         answer: Result<kp.AnswerResponse>,
     ) => void,
+    retryNoAnswer: boolean = true,
 ): Promise<Result<kp.AnswerResponse[]>> {
     let answerResponses: kp.AnswerResponse[] = [];
     if (!request.messages) {
@@ -171,19 +171,50 @@ async function getAnswersForSearchResults(
         if (choices && choices.length > 0) {
             question = kp.createMultipleChoiceQuestion(question, choices);
         }
-        const answerResult = await getAnswerFromSearchResult(
-            context,
-            request,
-            searchResult,
-            choices,
-            options,
-        );
+        let answerResult = await async.getResultWithRetry(() => {
+            return getAnswerFromSearchResult(
+                context,
+                request,
+                searchResult,
+                choices,
+                options,
+            );
+        });
+        if (
+            retryNoAnswer &&
+            answerResult.success &&
+            answerResult.data.type === "NoAnswer"
+        ) {
+            answerResult = await async.getResultWithRetry(() => {
+                return getAnswerFromSearchResult(
+                    context,
+                    request,
+                    searchResult,
+                    choices,
+                    options,
+                );
+            });
+        }
         if (!answerResult.success) {
             return answerResult;
         }
         answerResponses.push(answerResult.data);
-        if (progressCallback) {
+        if (progressCallback && request.combineAnswer !== true) {
             progressCallback(i, question, answerResult);
+        }
+    }
+    if (request.combineAnswer === true) {
+        const answerResult =
+            await context.answerGenerator.combinePartialAnswers(
+                request.query,
+                answerResponses,
+            );
+        if (!answerResult.success) {
+            return answerResult;
+        }
+        answerResponses = [answerResult.data];
+        if (progressCallback) {
+            progressCallback(0, request.query, answerResult);
         }
     }
     return success(answerResponses);
@@ -195,7 +226,6 @@ async function getAnswerFromSearchResult(
     searchResult: kp.ConversationSearchResult,
     choices: string[] | undefined,
     options: kp.AnswerContextOptions,
-    retryNoAnswer: boolean = true,
 ): Promise<Result<kp.AnswerResponse>> {
     const conversation = context.ensureConversationLoaded();
     const fastStopSav = context.answerGenerator.settings.fastStop;
@@ -207,43 +237,17 @@ async function getAnswerFromSearchResult(
         if (choices && choices.length > 0) {
             question = kp.createMultipleChoiceQuestion(question, choices);
         }
-        const maxAttempts = 2;
-        let answerResult = await async.getResultWithRetry(
-            () =>
-                //
-                // Generate an answer from search results
-                //
-                kp.generateAnswer(
-                    conversation,
-                    context.answerGenerator,
-                    question,
-                    searchResult,
-                    undefined,
-                    options,
-                ),
-            maxAttempts,
+        //
+        // Generate an answer from search results
+        //
+        let answerResult = await kp.generateAnswer(
+            conversation,
+            context.answerGenerator,
+            question,
+            searchResult,
+            undefined,
+            options,
         );
-        if (
-            retryNoAnswer &&
-            answerResult.success &&
-            answerResult.data.type === "NoAnswer"
-        ) {
-            answerResult = await async.getResultWithRetry(
-                () =>
-                    //
-                    // Generate an answer from search results
-                    //
-                    kp.generateAnswer(
-                        conversation,
-                        context.answerGenerator,
-                        question,
-                        searchResult,
-                        undefined,
-                        options,
-                    ),
-                maxAttempts,
-            );
-        }
         return answerResult;
     } finally {
         context.answerGenerator.settings.fastStop = fastStopSav;

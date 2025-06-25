@@ -22,6 +22,9 @@ import {
     extractSchemaFromLinkedPages,
 } from "./schemaExtraction";
 import { awaitPageIncrementalUpdates } from "./loadingDetector";
+import { createGenericChannel } from "agent-rpc/channel";
+import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
+import { createRpc } from "agent-rpc/rpc";
 
 // Set up history interception for SPA navigation
 const interceptHistory = (method: "pushState" | "replaceState") => {
@@ -52,9 +55,22 @@ export function initializeEventHandlers(): void {
  * Sets up message listeners for communication with the extension
  */
 function setupMessageListeners(): void {
+    const contentScriptExtensionChannel = createGenericChannel((message) => {
+        // Send messages to the background script
+        chrome.runtime?.sendMessage({
+            type: "rpc",
+            message,
+        });
+    });
+
     // Listen for messages from the background script
     chrome.runtime?.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (message.type === "rpc") {
+                contentScriptExtensionChannel.message(message.message);
+                return false;
+            }
+
             const handleAction = async () => {
                 await handleMessage(message, sendResponse);
             };
@@ -65,6 +81,15 @@ function setupMessageListeners(): void {
         },
     );
 
+    const contentScriptChannel = createGenericChannel((message) => {
+        window.postMessage({
+            source: "contentScript",
+            target: "preload",
+            messageType: "rpc",
+            body: message,
+        });
+    });
+
     // Listen for messages from content scripts
     window.addEventListener(
         "message",
@@ -73,21 +98,28 @@ function setupMessageListeners(): void {
             if (
                 event.data !== undefined &&
                 event.data.source === "preload" &&
-                event.data.target === "contentScript" &&
-                event.data.messageType === "scriptActionRequest"
+                event.data.target === "contentScript"
             ) {
-                await handleMessage(event.data.body, (response) => {
-                    window.top?.postMessage(
-                        {
-                            source: "contentScript",
-                            target: "preload",
-                            messageType: "scriptActionResponse",
-                            id: event.data.id,
-                            body: response,
-                        },
-                        "*",
-                    );
-                });
+                switch (event.data.messageType) {
+                    case "rpc":
+                        // Handle RPC messages
+                        contentScriptChannel.message(event.data.body);
+                        break;
+                    case "scriptActionRequest":
+                        await handleMessage(event.data.body, (response) => {
+                            window.top?.postMessage(
+                                {
+                                    source: "contentScript",
+                                    target: "preload",
+                                    messageType: "scriptActionResponse",
+                                    id: event.data.id,
+                                    body: response,
+                                },
+                                "*",
+                            );
+                        });
+                        break;
+                }
             }
 
             // Handle file path requests
@@ -103,6 +135,37 @@ function setupMessageListeners(): void {
             }
         },
         false,
+    );
+
+    const contentScriptRpc: ContentScriptRpc = {
+        scrollUp: async () => {
+            scrollPageUp();
+        },
+        scrollDown: async () => {
+            scrollPageDown();
+        },
+        getPageLinksByQuery: async (query: string) => {
+            const link = matchLinks(query) as HTMLAnchorElement;
+            return link?.href;
+        },
+        getPageLinksByPosition: async (position: number) => {
+            const link = matchLinksByPosition(position) as HTMLAnchorElement;
+            return link?.href;
+        },
+        runPaleoBioDbAction: async (action: any) => {
+            sendPaleoDbRequest(action);
+        },
+    };
+
+    createRpc(
+        "browser:content",
+        contentScriptChannel.channel,
+        contentScriptRpc,
+    );
+    createRpc(
+        "browser:content",
+        contentScriptExtensionChannel.channel,
+        contentScriptRpc,
     );
 }
 
@@ -137,52 +200,6 @@ export async function handleMessage(
 ): Promise<void> {
     try {
         switch (message.type) {
-            case "get_page_links_by_query": {
-                const link = matchLinks(message.query) as HTMLAnchorElement;
-                if (link && link.href) {
-                    sendResponse({ url: link.href });
-                } else {
-                    sendResponse({});
-                }
-                break;
-            }
-
-            case "get_page_links_by_position": {
-                const link = matchLinksByPosition(
-                    message.position,
-                ) as HTMLAnchorElement;
-                if (link && link.href) {
-                    sendResponse({ url: link.href });
-                } else {
-                    sendResponse({});
-                }
-                break;
-            }
-
-            case "scroll_down_on_page": {
-                scrollPageDown();
-                sendResponse({});
-                break;
-            }
-
-            case "scroll_up_on_page": {
-                scrollPageUp();
-                sendResponse({});
-                break;
-            }
-
-            case "history_go_back": {
-                window.history.back();
-                sendResponse({});
-                break;
-            }
-
-            case "history_go_forward": {
-                window.history.forward();
-                sendResponse({});
-                break;
-            }
-
             case "read_page_content": {
                 const article = getReadablePageContent();
                 sendResponse(article);
@@ -241,12 +258,6 @@ export async function handleMessage(
 
             case "run_ui_event": {
                 await sendUIEventsRequest(message.action);
-                sendResponse({});
-                break;
-            }
-
-            case "run_paleoBioDb_action": {
-                sendPaleoDbRequest(message.action);
                 sendResponse({});
                 break;
             }

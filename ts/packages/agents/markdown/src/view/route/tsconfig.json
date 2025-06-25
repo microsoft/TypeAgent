@@ -2,10 +2,14 @@
   "extends": "../../../../../../tsconfig.base.json",
   "compilerOptions": {
     "composite": true,
+    "incremental": true,
     "rootDir": ".",
-    "outDir": "../../../dist/view/route",
+    "outDir": "../../../dist/view/route"
   },
   "include": ["./*","./plugins/*"],
+  "references": [
+    { "path": "../../agent" }
+  ],
   "ts-node": {
     "esm": true
   }

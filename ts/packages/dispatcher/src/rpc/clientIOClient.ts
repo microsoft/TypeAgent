@@ -17,14 +17,15 @@ import { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export function createClientIORpcClient(channel: RpcChannel): ClientIO {
     const rpc = createRpc<ClientIOInvokeFunctions, ClientIOCallFunctions>(
+        "clientio",
         channel,
     );
     return {
         clear(): void {
-            return rpc.send("clear", undefined);
+            return rpc.send("clear");
         },
         exit(): void {
-            return rpc.send("exit", undefined);
+            return rpc.send("exit");
         },
         setDisplayInfo(
             source: string,

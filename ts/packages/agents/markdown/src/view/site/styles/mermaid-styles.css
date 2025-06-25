@@ -1,0 +1,241 @@
+/* Mermaid diagram styles */
+.mermaid-wrapper {
+  margin: 16px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+  position: relative;
+}
+
+.dark-theme .mermaid-wrapper {
+  border-color: #4a5568;
+  background: #2d3748;
+}
+
+.mermaid-diagram {
+  padding: 16px;
+  text-align: center;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-empty {
+  color: #a0aec0;
+  font-style: italic;
+  padding: 24px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.mermaid-empty:hover {
+  color: #4299e1;
+  background: #f7fafc;
+}
+
+.dark-theme .mermaid-empty {
+  color: #718096;
+}
+
+.dark-theme .mermaid-empty:hover {
+  color: #63b3ed;
+  background: #4a5568;
+}
+
+.mermaid-loading {
+  color: #4299e1;
+  font-style: italic;
+  padding: 24px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.mermaid-source {
+  padding: 16px;
+  background: #f7fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.dark-theme .mermaid-source {
+  background: #1a202c;
+  border-top-color: #4a5568;
+}
+
+.mermaid-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-family:
+    "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", "Source Code Pro",
+    monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  background: #ffffff;
+  color: #2d3748;
+}
+
+.dark-theme .mermaid-textarea {
+  background: #2d3748;
+  border-color: #4a5568;
+  color: #e2e8f0;
+}
+
+.mermaid-textarea:focus {
+  outline: none;
+  border-color: #4299e1;
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+}
+
+.mermaid-controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.mermaid-save,
+.mermaid-cancel {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mermaid-save {
+  background: #48bb78 !important;
+  color: white;
+}
+
+.mermaid-save:hover {
+  background: #38a169;
+  transform: translateY(-1px);
+}
+
+.mermaid-cancel {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.mermaid-cancel:hover {
+  background: #cbd5e0;
+  transform: translateY(-1px);
+}
+
+.dark-theme .mermaid-cancel {
+  background: #4a5568;
+  color: #e2e8f0;
+}
+
+.dark-theme .mermaid-cancel:hover {
+  background: #718096;
+}
+
+.mermaid-error {
+  padding: 16px;
+  background: #fed7d7;
+  border-top: 1px solid #fc8181;
+}
+
+.dark-theme .mermaid-error {
+  background: #742a2a;
+  border-top-color: #e53e3e;
+}
+
+.mermaid-error-content {
+  color: #c53030;
+  font-size: 14px;
+}
+
+.dark-theme .mermaid-error-content {
+  color: #fc8181;
+}
+
+.mermaid-error-content strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.mermaid-error-content p {
+  margin: 0;
+  font-family:
+    "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", "Source Code Pro",
+    monospace;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.dark-theme .mermaid-error-content p {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* Ensure foreignObject content is styled properly */
+.mermaid-diagram svg foreignObject {
+  overflow: visible;
+}
+
+.mermaid-diagram svg foreignObject div {
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  color: #000000;
+  text-align: center;
+  line-height: 1.2;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.dark-theme .mermaid-diagram svg foreignObject div {
+  color: #ffffff;
+}
+
+/* Style for different Mermaid node types within foreignObject */
+.mermaid-diagram svg foreignObject div.nodeLabel {
+  font-weight: 500;
+  background: inherit;
+}
+
+.mermaid-diagram svg foreignObject div.edgeLabel {
+  font-size: 12px;
+  font-weight: 400;
+  color: #666666;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+.dark-theme .mermaid-diagram svg foreignObject div.edgeLabel {
+  color: #cccccc;
+  background: rgba(45, 55, 72, 0.9);
+  border-color: #4a5568;
+}

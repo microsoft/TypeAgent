@@ -12,6 +12,7 @@ import {
     displayClosestCommands,
     InteractiveIo,
     NamedArgs,
+    namedArgsToArgs,
     parseNamedArguments,
     parseTypedArguments,
     runConsole,
@@ -21,6 +22,7 @@ import {
     argToDate,
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
+    TermParser,
 } from "../common.js";
 import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
@@ -86,6 +88,8 @@ export async function createKnowproCommands(
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
 
+    const termParser = new TermParser();
+
     await ensureDir(context.basePath);
     /*
      * CREATE COMMANDS FOR DIFFERENT MEMORY TYPES
@@ -103,6 +107,7 @@ export async function createKnowproCommands(
      * These include: (a) search (b) answer generation (c) enumeration
      */
     commands.kpSearchTerms = searchTerms;
+    commands.kpSearchTermsLang = searchTermsLang;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
     commands.kpSearchRag = searchRag;
@@ -111,6 +116,7 @@ export async function createKnowproCommands(
     commands.kpTopics = topics;
     commands.kpMessages = showMessages;
     commands.kpAbstractMessage = abstract;
+    commands.kpRelatedTerms = addRelatedTerm;
 
     /*----------------
      * COMMANDS
@@ -240,6 +246,27 @@ export async function createKnowproCommands(
         }
     }
 
+    function searchTermsLangDef(): CommandMetadata {
+        const def = searchTermsDef();
+        def.args ??= {};
+        def.args.query = arg("Get search terms from this query");
+        return def;
+    }
+    commands.kpSearchTermsLang.metadata = searchTermsLangDef();
+    async function searchTermsLang(args: string[]) {
+        const namedArgs = parseNamedArguments(args, searchTermsLangDef());
+        const rawTerms = termParser.getRawTerms(namedArgs.query);
+        if (rawTerms) {
+            context.printer.writeList(rawTerms, { type: "csv" });
+            delete namedArgs.query;
+            args = [...rawTerms];
+            args.push(...namedArgsToArgs(namedArgs));
+            await searchTerms(args);
+        } else {
+            context.printer.writeError("No search terms");
+        }
+    }
+
     function searchDef(base?: CommandMetadata): CommandMetadata {
         const def = kpTest.searchRequestDef();
         def.options ??= {};
@@ -334,11 +361,13 @@ export async function createKnowproCommands(
             return;
         }
 
+        const options = createAnswerOptions(namedArgs);
         const getAnswerRequest = parseTypedArguments<kpTest.GetAnswerRequest>(
             args,
             kpTest.getAnswerRequestDef(),
         );
         getAnswerRequest.searchResponse = searchResponse;
+        getAnswerRequest.knowledgeTopK = options.entitiesTopK;
         await kpTest.execGetAnswerRequest(
             context,
             getAnswerRequest,
@@ -578,6 +607,45 @@ export async function createKnowproCommands(
         }
         if (namedArgs.showMessage) {
             context.printer.writeMessage(message);
+        }
+    }
+
+    function addRelatedTermDef(): CommandMetadata {
+        return {
+            description: "Add an alias",
+            args: {
+                term: arg("Value for which to add an alias"),
+            },
+            options: {
+                relatedTerm: arg("Alias to add"),
+                weight: argNum("Relationship weight", 0.9),
+            },
+        };
+    }
+    commands.kpRelatedTerms.metadata = addRelatedTermDef();
+    async function addRelatedTerm(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, addRelatedTermDef());
+        const aliases =
+            context.conversation!.secondaryIndexes?.termToRelatedTermsIndex
+                ?.aliases;
+        if (!aliases) {
+            context.printer.writeLine(
+                "No aliases available on this conversation",
+            );
+            return;
+        }
+        if (aliases instanceof kp.TermToRelatedTermsMap) {
+            if (namedArgs.relatedTerm) {
+                const relatedTerm: kp.Term = { text: namedArgs.relatedTerm };
+                aliases.addRelatedTerm(namedArgs.term, relatedTerm);
+            }
+        }
+        const relatedTerms = aliases.lookupTerm(namedArgs.term);
+        if (relatedTerms && relatedTerms.length > 0) {
+            context.printer.writeList(relatedTerms.map((rt) => rt.text));
         }
     }
 

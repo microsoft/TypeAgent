@@ -2,6 +2,7 @@
     "extends": "../../../../../tsconfig.base.json",
     "compilerOptions": {
       "composite": true,
+      "incremental": true,
       "rootDir": ".",
       "outDir": "../../dist/common",
       "types": ["node"],

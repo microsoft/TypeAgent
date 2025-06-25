@@ -437,24 +437,6 @@ export async function executeActions(
             );
         }
 
-        if (result.additionalActions !== undefined) {
-            try {
-                const actions = getAdditionalExecutableActions(
-                    result.additionalActions,
-                    action.schemaName,
-                    systemContext,
-                );
-                // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
-                actionQueue.unshift(
-                    ...(await toPendingActions(context, actions, undefined)),
-                );
-            } catch (e) {
-                throw new Error(
-                    `${action.schemaName}.${action.actionName} returned an invalid action: ${e}`,
-                );
-            }
-        }
-
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {
                 throw new Error(
@@ -484,6 +466,24 @@ export async function executeActions(
                 if (port !== undefined) {
                     await systemContext.clientIO.openLocalView(port);
                 }
+            }
+        }
+
+        if (result.additionalActions !== undefined) {
+            try {
+                const actions = getAdditionalExecutableActions(
+                    result.additionalActions,
+                    action.schemaName,
+                    systemContext,
+                );
+                // REVIEW: assume that the agent will fill the entities already?  Also, current format doesn't support resultEntityIds.
+                actionQueue.unshift(
+                    ...(await toPendingActions(context, actions, undefined)),
+                );
+            } catch (e) {
+                throw new Error(
+                    `${action.schemaName}.${action.actionName} returned an invalid action: ${e}`,
+                );
             }
         }
         actionIndex++;

@@ -3,10 +3,134 @@
 import { build } from "vite";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { copyFileSync, mkdirSync, cpSync } from "fs";
+import {
+    copyFileSync,
+    mkdirSync,
+    cpSync,
+    readFileSync,
+    writeFileSync,
+    existsSync,
+    statSync,
+    readdirSync,
+} from "fs";
+import { createHash } from "crypto";
 import chalk from "chalk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Helper function to create Vite build options that avoid TypeScript plugin conflicts
+function createBuildOptions(outDir, options = {}) {
+    return {
+        logLevel: "error",
+        plugins: [
+            // Explicitly disable TypeScript plugin to avoid outDir conflicts
+            {
+                name: "disable-typescript-plugin",
+                configResolved(config) {
+                    // Remove TypeScript plugin
+                    config.plugins = config.plugins.filter(
+                        (plugin) =>
+                            !plugin.name || !plugin.name.includes("typescript"),
+                    );
+                },
+            },
+        ],
+        esbuild: {
+            // Use esbuild for TypeScript compilation
+            target: "es2022",
+        },
+        build: {
+            outDir,
+            emptyOutDir: options.emptyOutDir ?? false,
+            sourcemap: isDev,
+            minify: !isDev,
+            rollupOptions: options.rollupOptions || {},
+        },
+    };
+}
+
+// --- 🔧 Incremental build detection ---
+function checkIncrementalBuild() {
+    const buildHashFile = resolve(
+        __dirname,
+        "../.build.cache/.extension-build-hash",
+    );
+
+    try {
+        // Get modification times of key directories
+        const srcExtensionPath = resolve(__dirname, "../src/extension");
+        const srcElectronPath = resolve(__dirname, "../src/electron");
+        const scriptPath = resolve(__dirname, "buildExtension.mjs");
+
+        const getLastModified = (dirPath) => {
+            if (!existsSync(dirPath)) return 0;
+            const stat = statSync(dirPath);
+            if (stat.isFile()) return stat.mtimeMs;
+
+            let maxTime = stat.mtimeMs;
+            try {
+                const items = readdirSync(dirPath);
+                for (const item of items) {
+                    const itemPath = resolve(dirPath, item);
+                    const itemTime = getLastModified(itemPath);
+                    maxTime = Math.max(maxTime, itemTime);
+                }
+            } catch (e) {
+                // Skip directories we can't read
+            }
+            return maxTime;
+        };
+
+        const lastModified = Math.max(
+            getLastModified(srcExtensionPath),
+            getLastModified(srcElectronPath),
+            getLastModified(scriptPath),
+        );
+
+        const currentHash = createHash("md5")
+            .update(lastModified.toString())
+            .digest("hex");
+
+        // Check if build is up to date
+        if (existsSync(buildHashFile)) {
+            const lastHash = readFileSync(buildHashFile, "utf8").trim();
+            if (lastHash === currentHash) {
+                console.log(
+                    chalk.green(
+                        "✅ Extension build is up to date, skipping...",
+                    ),
+                );
+                process.exit(0);
+            }
+        }
+
+        // Store current hash for next time - ONLY update if we actually built
+        return (actuallyBuilt) => {
+            if (actuallyBuilt) {
+                // Ensure cache directory exists
+                const cacheDir = dirname(buildHashFile);
+                if (!existsSync(cacheDir)) {
+                    mkdirSync(cacheDir, { recursive: true });
+                }
+                writeFileSync(buildHashFile, currentHash);
+            }
+        };
+    } catch (error) {
+        // If hash checking fails, proceed with build
+        console.warn(
+            chalk.yellow(
+                "⚠️  Could not check incremental build status, proceeding...",
+            ),
+        );
+        return (actuallyBuilt) => {
+            if (actuallyBuilt) {
+                console.warn(chalk.yellow("⚠️  Could not update build hash"));
+            }
+        };
+    }
+}
+
+// const updateBuildHash = checkIncrementalBuild();
 
 // --- 🔧 Detect dev mode ---
 const isDev =
@@ -70,13 +194,9 @@ if (verbose)
 if (verbose) console.log(chalk.cyan("🚀 Building Browser extension..."));
 
 // Service worker (ESM)
-await build({
-    logLevel: "error",
-    build: {
-        outDir: chromeOutDir,
+await build(
+    createBuildOptions(chromeOutDir, {
         emptyOutDir: !isDev,
-        sourcemap: isDev,
-        minify: !isDev,
         rollupOptions: {
             input: { serviceWorker: resolve(srcDir, "serviceWorker/index.ts") },
             output: {
@@ -84,21 +204,16 @@ await build({
                 entryFileNames: "serviceWorker.js",
             },
         },
-    },
-});
+    }),
+);
 if (verbose) console.log(chalk.green("✅ Chrome service worker built"));
 
 // Content scripts (IIFE)
 for (const [name, relPath] of Object.entries(sharedScripts)) {
     const input = resolve(srcDir, relPath);
     if (verbose) console.log(chalk.yellow(`➡️  Chrome content: ${name}`));
-    await build({
-        logLevel: "error",
-        build: {
-            outDir: chromeOutDir,
-            emptyOutDir: false,
-            sourcemap: isDev,
-            minify: !isDev,
+    await build(
+        createBuildOptions(chromeOutDir, {
             rollupOptions: {
                 input,
                 output: {
@@ -107,8 +222,8 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
                     inlineDynamicImports: true,
                 },
             },
-        },
-    });
+        }),
+    );
     if (verbose) console.log(chalk.green(`✅ Chrome ${name}.js built`));
 }
 
@@ -140,13 +255,8 @@ if (verbose) console.log(chalk.cyan("\n🚀 Building Electron extension..."));
 for (const [name, relPath] of Object.entries(sharedScripts)) {
     const input = resolve(srcDir, relPath);
     if (verbose) console.log(chalk.yellow(`➡️  Electron shared: ${name}`));
-    await build({
-        logLevel: "error",
-        build: {
-            outDir: electronOutDir,
-            emptyOutDir: false,
-            sourcemap: isDev,
-            minify: !isDev,
+    await build(
+        createBuildOptions(electronOutDir, {
             rollupOptions: {
                 input,
                 output: {
@@ -155,21 +265,16 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
                     inlineDynamicImports: true,
                 },
             },
-        },
-    });
+        }),
+    );
     if (verbose) console.log(chalk.green(`✅ Electron ${name}.js built`));
 }
 
 for (const [name, relPath] of Object.entries(electronOnlyScripts)) {
     const input = resolve(__dirname, relPath);
     if (verbose) console.log(chalk.yellow(`➡️  Electron only: ${name}`));
-    await build({
-        logLevel: "error",
-        build: {
-            outDir: electronOutDir,
-            emptyOutDir: false,
-            sourcemap: isDev,
-            minify: !isDev,
+    await build(
+        createBuildOptions(electronOutDir, {
             rollupOptions: {
                 input,
                 output: {
@@ -178,8 +283,8 @@ for (const [name, relPath] of Object.entries(electronOnlyScripts)) {
                     inlineDynamicImports: true,
                 },
             },
-        },
-    });
+        }),
+    );
     if (verbose) console.log(chalk.green(`✅ Electron ${name}.js built`));
 }
 
@@ -190,6 +295,9 @@ copyFileSync(
     `${electronOutDir}/manifest.json`,
 );
 if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
+
+// Update build hash to mark successful completion
+// updateBuildHash(true); // true = actually built something
 
 if (verbose)
     console.log(

@@ -98,3 +98,12 @@ export async function extractKnowledgeForTextBatchQ(
     }
     return results;
 }
+
+export function createKnowledgeResponse(): kpLib.KnowledgeResponse {
+    return {
+        entities: [],
+        actions: [],
+        inverseActions: [],
+        topics: [],
+    };
+}

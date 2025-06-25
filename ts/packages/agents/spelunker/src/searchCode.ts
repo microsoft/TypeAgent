@@ -97,6 +97,7 @@ export async function searchCode(
 
     return createActionResultFromMarkdownDisplay(
         answer,
+        undefined,
         outputEntities,
         resultEntity,
     );

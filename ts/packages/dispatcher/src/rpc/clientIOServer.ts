@@ -77,5 +77,10 @@ export function createClientIORpcServer(
             ),
         takeAction: (params) => clientIO.takeAction(params.action, params.data),
     };
-    createRpc(channel, clientIOInvokeFunctions, clientIOCallFunctions);
+    createRpc(
+        "clientio",
+        channel,
+        clientIOInvokeFunctions,
+        clientIOCallFunctions,
+    );
 }

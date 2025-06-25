@@ -5,6 +5,8 @@ import { AppAction, isWebAgentMessageFromDispatcher } from "./types";
 import { getSettings } from "./storage";
 import { showBadgeError, showBadgeHealthy, showBadgeBusy } from "./ui";
 import { runBrowserAction } from "./browserActions";
+import { createGenericChannel } from "agent-rpc/channel";
+import { createExternalBrowserServer } from "./externalBrowserControlServer";
 
 let webSocket: WebSocket | undefined;
 let settings: Record<string, any>;
@@ -70,12 +72,29 @@ export async function ensureWebsocketConnected(): Promise<
         webSocket.binaryType = "blob";
         keepWebSocketAlive(webSocket);
 
+        const browserControlChannel = createGenericChannel((message: any) => {
+            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                const text = JSON.stringify({
+                    source: "browserExtension",
+                    method: "browserControl/message",
+                    params: message,
+                });
+                webSocket.send(text);
+            }
+        });
+        createExternalBrowserServer(browserControlChannel.channel);
         webSocket.onmessage = async (event: MessageEvent) => {
             const text = await (event.data as Blob).text();
-            const data = JSON.parse(text) as WebSocketMessageV2;
 
+            const data = JSON.parse(text) as WebSocketMessageV2;
             if (data.error) {
                 console.error(data.error);
+                return;
+            }
+            if (data.method === "browserControl/message") {
+                if (data.source === "browserAgent") {
+                    browserControlChannel.message(data.params);
+                }
                 return;
             }
 
@@ -83,34 +102,19 @@ export async function ensureWebsocketConnected(): Promise<
                 const [schema, actionName] = data.method?.split("/");
 
                 if (schema == "browser") {
-                    if (actionName == "siteTranslatorStatus") {
-                        if (data.params.status == "initializing") {
-                            showBadgeBusy();
-                            console.log(
-                                `Initializing ${data.params.translator}`,
-                            );
-                        } else if (data.params.status == "initialized") {
-                            showBadgeHealthy();
-                            console.log(
-                                `Finished initializing ${data.params.translator}`,
-                            );
-                        }
-                    } else {
-                        const response = await runBrowserAction({
-                            actionName: actionName,
-                            parameters: data.params,
-                        });
+                    const response = await runBrowserAction({
+                        actionName: actionName,
+                        parameters: data.params,
+                    });
 
-                        webSocket?.send(
-                            JSON.stringify({
-                                id: data.id,
-                                result: response,
-                            }),
-                        );
-                    }
+                    webSocket?.send(
+                        JSON.stringify({
+                            id: data.id,
+                            result: response,
+                        }),
+                    );
                 }
             }
-            console.log(`Browser websocket client received message: ${text}`);
         };
 
         webSocket.onclose = (event: CloseEvent) => {

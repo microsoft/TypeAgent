@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/views/shared",
+    "rootDir": ".",
+    "composite": true,
+    "incremental": true,
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": ["./**/*.ts"]
+}

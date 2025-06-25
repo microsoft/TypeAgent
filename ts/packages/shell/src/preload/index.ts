@@ -81,6 +81,7 @@ const api: ClientAPI = {
     },
 };
 
+// set up dispatch RPC client
 const dispatcherChannel = createGenericChannel((message: any) =>
     ipcRenderer.send("dispatcher-rpc-call", message),
 );

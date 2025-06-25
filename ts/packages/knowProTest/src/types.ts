@@ -56,6 +56,11 @@ export interface GetAnswerRequest extends SearchRequest {
     knowledgeTopK?: number | undefined;
     choices?: string | undefined;
     searchResponse?: SearchResponse | undefined;
+    /**
+     * If searchResponse.searchResults.length > 1, use answers for individual
+     * search results as partial answers... and then combine them using the LLM
+     */
+    combineAnswer?: boolean | undefined;
 }
 
 export interface GetAnswerResponse {
@@ -80,6 +85,10 @@ export function getAnswerRequestDef(
         knowledgeTopK,
     );
     def.options.choices = arg("Answer choices, separated by ';'");
+    def.options.combineAnswer = argBool(
+        "Combine results of multiple search results into a single answer",
+        false,
+    );
     return def;
 }
 

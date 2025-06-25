@@ -163,8 +163,9 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
     public static async readFromFile(
         dirPath: string,
         baseFileName: string,
+        settings?: kp.ConversationSettings,
     ): Promise<Podcast | undefined> {
-        const podcast = new Podcast();
+        const podcast = new Podcast(undefined, undefined, undefined, settings);
         const data = await kp.readConversationDataFromFile(
             dirPath,
             baseFileName,

@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgent, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    AppAgent,
+    SessionContext,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { BrowserConnector } from "../browserConnector.mjs";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import {
@@ -14,6 +18,7 @@ import { UserIntent } from "./schema/recordedActions.mjs";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { SchemaDiscoveryAgent } from "./translator.mjs";
 import { WebPlanResult, WebPlanSuggestions } from "./schema/evaluatePlan.mjs";
+import { BrowserActionContext } from "../actionHandler.mjs";
 
 type WebPlanInfo = {
     webPlanName?: string | undefined;
@@ -25,9 +30,10 @@ type WebPlanInfo = {
 export function createSchemaAuthoringAgent(
     browser: BrowserConnector,
     agent: SchemaDiscoveryAgent<SchemaDiscoveryActions>,
-    context: any,
+    context: SessionContext<BrowserActionContext>,
 ): AppAgent {
     const actionUtils = setupAuthoringActions(browser, agent, context);
+
     let intentInfo: { intentJson: UserIntent; actions: any } | undefined =
         undefined;
 
@@ -41,10 +47,7 @@ export function createSchemaAuthoringAgent(
             console.log(`Executing action: ${action.actionName}`);
             switch (action.actionName) {
                 case "createOrUpdateWebPlan":
-                    let result = await handleUpdateWebPlan(
-                        action,
-                        actionContext,
-                    );
+                    let result = await handleUpdateWebPlan(action, context);
                     result.activityContext = {
                         activityName: "editingWebPlan",
                         description: "Editing a Web Plan",
@@ -55,10 +58,7 @@ export function createSchemaAuthoringAgent(
                     return result;
                     break;
                 case "runCurrentWebPlan":
-                    const runResult = await handleRunWebPlan(
-                        action,
-                        actionContext,
-                    );
+                    const runResult = await handleRunWebPlan(action, context);
                     return runResult;
                     break;
                 default:

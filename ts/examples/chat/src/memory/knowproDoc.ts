@@ -81,6 +81,7 @@ export async function createKnowproDocMemoryCommands(
         kpContext.conversation = context.docMemory;
         writeDocInfo(context.docMemory);
         if (!namedArgs.buildIndex) {
+            writeDoc(context.docMemory);
             return;
         }
         // Build index
@@ -140,6 +141,14 @@ export async function createKnowproDocMemoryCommands(
     function writeDocInfo(docMemory: cm.DocMemory) {
         context.printer.writeLine(docMemory.nameTag);
         context.printer.writeLine(`${docMemory.messages.length} parts`);
+    }
+
+    function writeDoc(docMemory: cm.DocMemory) {
+        for (const part of docMemory.messages) {
+            for (const chunk of part.textChunks) {
+                context.printer.write(chunk);
+            }
+        }
     }
     return;
 }

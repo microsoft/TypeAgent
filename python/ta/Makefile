@@ -22,6 +22,14 @@ test: venv
 demo: venv
 	.venv/bin/python -m typeagent.demo
 
+.PHONY: eval
+eval: venv
+	.venv/bin/python -m test.cmpsearch
+
+.PHONY: profile
+profile: venv
+	</dev/null .venv/bin/python -m cProfile -s ncalls -m test.cmpsearch --interactive --podcast ~/AISystems-Archive/data/knowpro/test/indexes/All_Episodes_index | head -60
+
 .PHONY: build
 build: venv
 	.venv/bin/python -m build --wheel

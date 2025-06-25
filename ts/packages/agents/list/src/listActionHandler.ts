@@ -286,6 +286,7 @@ function getListDisplay(
     // set displayText to markdown list of the items
     return createActionResultFromMarkdownDisplay(
         `List '${listName}' has items:\n\n${plainList.map((item) => `- ${item}`).join("\n")}${suffix ? `\n\n${suffix}` : ""}`,
+        undefined,
         getEntities(listName, plainList),
     );
 }

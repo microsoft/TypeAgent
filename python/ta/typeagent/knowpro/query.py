@@ -2,6 +2,7 @@
 # Licensed under the MIT License.
 
 from abc import ABC, abstractmethod
+from ast import Not
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from re import search
@@ -21,6 +22,8 @@ from .collections import (
 )
 from .common import is_search_term_wildcard
 from .interfaces import (
+    Datetime,
+    DateRange,
     IConversation,
     IMessage,
     IMessageCollection,
@@ -70,7 +73,29 @@ def is_conversation_searchable(conversation: IConversation) -> bool:
     )
 
 
-# TODO: get_text_range_for_date_range
+def get_text_range_for_date_range(
+    conversation: IConversation,
+    date_range: DateRange,
+) -> TextRange | None:
+    messages = conversation.messages
+    message_count = len(messages)
+    range_start_ordinal: MessageOrdinal = -1
+    range_end_ordinal = range_start_ordinal
+    for message in messages:
+        if Datetime.fromisoformat(message.timestamp) in date_range:
+            if range_start_ordinal < 0:
+                range_start_ordinal = message.ordinal
+            range_end_ordinal = message.ordinal
+        else:
+            if range_start_ordinal >= 0:
+                # We have a range, so break.
+                break
+    if range_start_ordinal >= 0:
+        return TextRange(
+            start=TextLocation(range_start_ordinal),
+            end=TextLocation(range_end_ordinal + 1),
+        )
+    return None
 
 
 def get_matching_term_for_text(search_term: SearchTerm, text: str) -> Term | None:
@@ -729,7 +754,37 @@ class GetScopeExpr(QueryOpExpr[TextRangesInScope]):
 
 
 # TODO: SelectInScopeExpr
-# TODO: TextRangesInDateRangeSelector
+
+
+@dataclass
+class TextRangesInDateRangeSelector(IQueryTextRangeSelector):
+    date_range_in_scope: DateRange
+
+    def eval(
+        self,
+        context: QueryEvalContext,
+        semantic_refs: SemanticRefAccumulator | None = None,
+    ) -> TextRangeCollection | None:
+        """Evaluate the selector and return text ranges in the specified date range."""
+        text_ranges_in_scope = TextRangeCollection()
+
+        if context.timestamp_index is not None:
+            text_ranges = context.timestamp_index.lookup_range(
+                self.date_range_in_scope,
+            )
+            for time_range in text_ranges:
+                text_ranges_in_scope.add_range(time_range.range)
+        else:
+            text_range = get_text_range_for_date_range(
+                context.conversation,
+                self.date_range_in_scope,
+            )
+            if text_range is not None:
+                text_ranges_in_scope.add_range(text_range)
+
+        return text_ranges_in_scope
+
+
 # TODO: TextRangesPredicateSelector
 # TODO: TextRangesWithTagSelector
 # TODO: TextRangesFromSemanticRefsSelector
@@ -798,6 +853,8 @@ class MessagesFromKnowledgeExpr(QueryOpExpr[MessageAccumulator]):
 
 
 # TODO: SelectMessagesInCharBudget
+
+
 @dataclass
 class RankMessagesBySimilarityExpr(QueryOpExpr[MessageAccumulator]):
     src_expr: IQueryOpExpr[MessageAccumulator]
@@ -858,11 +915,108 @@ class GetScoredMessagesExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
         return matches.to_scored_message_ordinals()
 
 
-# TODO: MatchMessagesBooleanExpr
-# TODO: MatchMessagesOrExpr
-# TODO: MatchMessagesAndExpr
-# TODO: MatchMessagesOrMaxExpr
-# TODO: MatchMessagesBySimilarityExpr
+@dataclass
+class MatchMessagesBooleanExpr(IQueryOpExpr[MessageAccumulator]):
+    term_expressions: list[
+        IQueryOpExpr[SemanticRefAccumulator | MessageAccumulator | None]
+    ]
+
+    def _begin_match(self, context: QueryEvalContext) -> None:
+        context.clear_matched_terms()
+
+    def _accumulate_messages(
+        self,
+        context: QueryEvalContext,
+        semantic_ref_matches: SemanticRefAccumulator,
+    ) -> MessageAccumulator:
+        message_matches = MessageAccumulator()
+        for semantic_ref_match in semantic_ref_matches:
+            semantic_ref = context.get_semantic_ref(semantic_ref_match.value)
+            message_matches.add_messages_for_semantic_ref(
+                context.get_semantic_ref(semantic_ref_match.value),
+                semantic_ref_match.score,
+            )
+        return message_matches
+
+
+@dataclass
+class MatchMessagesOrExpr(MatchMessagesBooleanExpr):
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        self._begin_match(context)
+
+        all_matches: MessageAccumulator | None = None
+        for match_expr in self.term_expressions:
+            matches = match_expr.eval(context)
+            if not matches:
+                continue
+            if isinstance(matches, SemanticRefAccumulator):
+                message_matches = self._accumulate_messages(context, matches)
+            else:
+                message_matches = matches
+            if all_matches is not None:
+                all_matches.add_union(message_matches)
+            else:
+                all_matches = message_matches
+        if all_matches is not None:
+            all_matches.calculate_total_score()
+        else:
+            all_matches = MessageAccumulator()
+        return all_matches
+
+
+@dataclass
+class MatchMessagesAndExpr(MatchMessagesBooleanExpr):
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        self._begin_match(context)
+
+        all_matches: MessageAccumulator | None = None
+        all_done = False
+        for match_expr in self.term_expressions:
+            matches = match_expr.eval(context)
+            if not matches:
+                # If any expr does not match, the AND fails.
+                break
+            if isinstance(matches, SemanticRefAccumulator):
+                message_matches = self._accumulate_messages(context, matches)
+            else:
+                message_matches = matches
+            if all_matches is None:
+                all_matches = message_matches
+            else:
+                # Intersect the message matches
+                all_matches.intersect(message_matches)
+                if not all_matches:
+                    # If the intersection is empty, we can stop early.
+                    break
+        else:
+            # If we did not break, all terms matched.
+            all_done = True
+
+        if all_matches is not None:
+            if all_done:
+                all_matches.calculate_total_score()
+                all_matches.select_with_hit_count(len(self.term_expressions))
+            else:
+                all_matches.clear_matches()
+        else:
+            all_matches = MessageAccumulator()
+        return all_matches
+
+
+@dataclass
+class MatchMessagesOrMaxExpr(MatchMessagesOrExpr):
+
+    def eval(self, context: QueryEvalContext) -> MessageAccumulator:
+        matches = super().eval(context)
+        max_hit_count = matches.get_max_hit_count()
+        if max_hit_count > 1:
+            matches.select_with_hit_count(max_hit_count)
+        return matches
+
+
+# TODO: class MatchMessagesBySimilarityExpr(QueryOpExpr[list[ScoredMessageOrdinal]]):
 
 
 class NoOpExpr[T](QueryOpExpr[T]):

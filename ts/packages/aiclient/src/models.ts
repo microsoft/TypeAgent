@@ -125,3 +125,15 @@ export type GeneratedImage = {
     revised_prompt: string;
     image_url: string;
 };
+
+export type EmbeddingModelMetadata = {
+    modelName?: string | undefined;
+    embeddingSize: number;
+};
+
+export function modelMetadata_ada002(): EmbeddingModelMetadata {
+    return {
+        modelName: "ada-002",
+        embeddingSize: 1536,
+    };
+}

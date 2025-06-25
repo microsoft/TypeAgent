@@ -292,14 +292,18 @@ export class WebsiteCollection
         baseFileName: string,
     ): Promise<WebsiteCollection | undefined> {
         const websiteCollection = new WebsiteCollection();
-        const data = await readConversationDataFromFile(
-            dirPath,
-            baseFileName,
-            websiteCollection.settings.relatedTermIndexSettings
-                .embeddingIndexSettings?.embeddingSize,
-        );
-        if (data) {
-            websiteCollection.deserialize(data);
+        try {
+            const data = await readConversationDataFromFile(
+                dirPath,
+                baseFileName,
+                websiteCollection.settings.relatedTermIndexSettings
+                    .embeddingIndexSettings?.embeddingSize,
+            );
+            if (data) {
+                websiteCollection.deserialize(data);
+            }
+        } catch (error: any) {
+            console.warn(`Website collection loading failed: ${error.message}`);
         }
         return websiteCollection;
     }

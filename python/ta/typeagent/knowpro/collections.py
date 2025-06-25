@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import heapq
 import math
 import sys
-from typing import Literal, Set, cast
+from typing import Set, cast
 
 from .interfaces import (
     ISemanticRefCollection,
@@ -32,7 +32,7 @@ class Match[T]:
     related_hit_count: int
 
 
-# TODO: sortMatchesByRelevance,
+# TODO: sortMatchesByRelevance
 
 
 class MatchAccumulator[T]:
@@ -239,7 +239,7 @@ def add_smooth_related_score_to_match_score[T](match: Match[T]) -> None:
         match.score += smooth_related_score
 
 
-def smooth_match_score(match: Match) -> None:
+def smooth_match_score[T](match: Match[T]) -> None:
     if match.hit_count > 0:
         match.score = get_smooth_score(match.score, match.hit_count)
 
@@ -256,7 +256,7 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
         self,
         search_term: Term,
         scored_refs: Iterable[ScoredSemanticRefOrdinal] | None,
-        is_exact_match: bool,  # TODO: May disappear
+        is_exact_match: bool,
         *,
         weight: float | None = None,
     ) -> None:
@@ -343,23 +343,24 @@ class SemanticRefAccumulator(MatchAccumulator[SemanticRefOrdinal]):
                 accumulator.set_match(match)
         return accumulator
 
-    def add_union(self, other: "SemanticRefAccumulator") -> None:  # type: ignore
+    def add_union(self, other: "MatchAccumulator[SemanticRefOrdinal]") -> None:
         """Add matches from another SemanticRefAccumulator."""
-        assert isinstance(
-            other, SemanticRefAccumulator
-        )  # Runtime check b/c other's type mismatch
+        assert isinstance(other, SemanticRefAccumulator)
         super().add_union(other)
         self.search_term_matches.update(other.search_term_matches)
 
-    def intersect(self, other: "SemanticRefAccumulator") -> "SemanticRefAccumulator":  # type: ignore
+    def intersect(
+        self,
+        other: MatchAccumulator[SemanticRefOrdinal],
+        intersection: MatchAccumulator[SemanticRefOrdinal] | None = None,
+    ) -> "SemanticRefAccumulator":
         """Intersect with another SemanticRefAccumulator."""
-        assert isinstance(
-            other, SemanticRefAccumulator
-        )  # Runtime check b/c other's type mismatch
-        intersection = SemanticRefAccumulator()
-        super().intersect(
-            other, intersection
-        )  # TODO: Why is this a red wiggle line in strict mode?
+        assert isinstance(other, SemanticRefAccumulator)
+        if intersection is None:
+            intersection = SemanticRefAccumulator()
+        else:
+            assert isinstance(intersection, SemanticRefAccumulator)
+        super().intersect(other, intersection)
         if len(intersection) > 0:
             intersection.search_term_matches.update(self.search_term_matches)
             intersection.search_term_matches.update(other.search_term_matches)
@@ -409,7 +410,19 @@ class MessageAccumulator(MatchAccumulator[MessageOrdinal]):
         else:
             self.add(message_ordinal_start, score)
 
-    # TODO: add_range, add_scored_matches, intersect.
+    # TODO: add_range, add_scored_matches
+
+    def intersect(
+        self,
+        other: MatchAccumulator[MessageOrdinal],
+        intersection: MatchAccumulator[MessageOrdinal] | None = None,
+    ) -> "MessageAccumulator":
+        if intersection is None:
+            intersection = MessageAccumulator()
+        else:
+            assert isinstance(intersection, MessageAccumulator)
+        super().intersect(other, intersection)
+        return intersection
 
     def smooth_scores(self) -> None:
         for match in self:
@@ -419,7 +432,8 @@ class MessageAccumulator(MatchAccumulator[MessageOrdinal]):
         sorted_matches = self.get_sorted_by_score()
         return [ScoredMessageOrdinal(m.value, m.score) for m in sorted_matches]
 
-    # TODO: select_messages_in_budget, from_scored_ordinals.
+    # TODO: select_messages_in_budget
+    # TODO: from_scored_ordinals
 
 
 # TODO: intersectScoredMessageOrdinals
@@ -451,7 +465,7 @@ class TextRangeCollection(Iterable[TextRange]):
         return self._ranges  # TODO: Maybe return a copy?
 
     def add_range(self, text_range: TextRange) -> bool:
-        # TODO: Are TextRanges total-ordered?
+        # This assumes TextRanges are totally ordered.
         pos = bisect.bisect_left(self._ranges, text_range)
         if pos < len(self._ranges) and self._ranges[pos] == text_range:
             return False
@@ -596,24 +610,29 @@ class PropertyTermSet:
         return f"{property_name}:{value}"
 
 
-# TODO: unionArrays, union, addToSet, setUnion, setIntersect, getBatches,
+# TODO: unionArrays
+# TODO: union
+# TODO: addToSet
+# TODO: setUnion
+# TODO: setIntersect
+# TODO: getBatches
 
 
 @dataclass
-class ScoredItem[T]:
+class Scored[T]:
     item: T
     score: float
 
-    def __lt__(self, other: "ScoredItem[T]") -> bool:
+    def __lt__(self, other: "Scored[T]") -> bool:
         return self.score < other.score
 
-    def __gt__(self, other: "ScoredItem[T]") -> bool:
+    def __gt__(self, other: "Scored[T]") -> bool:
         return self.score > other.score
 
-    def __le__(self, other: "ScoredItem[T]") -> bool:
+    def __le__(self, other: "Scored[T]") -> bool:
         return self.score <= other.score
 
-    def __ge__(self, other: "ScoredItem[T]") -> bool:
+    def __ge__(self, other: "Scored[T]") -> bool:
         return self.score >= other.score
 
 
@@ -624,7 +643,7 @@ class TopNCollection[T]:
 
     def __init__(self, max_count: int):
         self._max_count = max_count
-        self._heap: list[ScoredItem[T]] = []
+        self._heap: list[Scored[T]] = []
 
     def __len__(self) -> int:
         return len(self._heap)
@@ -632,19 +651,19 @@ class TopNCollection[T]:
     def reset(self) -> None:
         self._heap = []
 
-    def pop(self) -> ScoredItem[T]:
+    def pop(self) -> Scored[T]:
         return heapq.heappop(self._heap)
 
-    def top(self) -> ScoredItem[T]:
+    def top(self) -> Scored[T]:
         return self._heap[0]
 
     def push(self, item: T, score: float) -> None:
         if len(self._heap) < self._max_count:
-            heapq.heappush(self._heap, ScoredItem(item, score))
+            heapq.heappush(self._heap, Scored(item, score))
         else:
-            heapq.heappushpop(self._heap, ScoredItem(item, score))
+            heapq.heappushpop(self._heap, Scored(item, score))
 
-    def by_rank(self) -> list[ScoredItem[T]]:
+    def by_rank(self) -> list[Scored[T]]:
         return sorted(self._heap, reverse=True)
 
     def values_by_rank(self) -> list[T]:
@@ -663,9 +682,9 @@ class TopNListAll[T](TopNList[T]):
 
 
 def get_top_k[T](
-    scored_items: Iterable[ScoredItem[T]],
+    scored_items: Iterable[Scored[T]],
     top_k: int,
-) -> list[ScoredItem[T]]:
+) -> list[Scored[T]]:
     """A function to get the top K of an unsorted list of scored items."""
     top_n_list = TopNCollection[T](top_k)
     for scored_item in scored_items:

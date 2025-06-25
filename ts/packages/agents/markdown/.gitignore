@@ -1,0 +1,30 @@
+# Build outputs
+dist/
+*.tsbuildinfo
+.tsbuildinfo/
+
+# Build cache
+.vite-build-hash
+.build.cache/
+.vite-vendor-cache.json
+.smart-build-cache.json
+.tsc-cache-*.json
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

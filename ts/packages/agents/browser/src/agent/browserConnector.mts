@@ -207,14 +207,6 @@ export class BrowserConnector {
         return this.sendActionToBrowser(schemaAction, "browser");
     }
 
-    async getPageUrl() {
-        const action = {
-            actionName: "getPageUrl",
-        };
-
-        return this.getPageDataFromBrowser(action);
-    }
-
     async clickOn(cssSelector: string) {
         const clickAction = {
             actionName: "clickOnElement",

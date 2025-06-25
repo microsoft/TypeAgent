@@ -21,7 +21,6 @@ from typing import (
 from pydantic.dataclasses import dataclass
 
 from ..aitools.embeddings import NormalizedEmbedding, NormalizedEmbeddings
-from ..aitools.vectorbase import VectorBase
 from . import kplib
 
 
@@ -153,6 +152,7 @@ class TextRangeData(TypedDict):
 
 
 # A text range within a session.
+# TODO: Are TextRanges totally ordered?
 @dataclass
 class TextRange:
     # The start of the range.
@@ -262,9 +262,9 @@ class DateRange:
 
     def __repr__(self) -> str:
         if self.end is None:
-            return f"{self.__class__.__name__}({self.start})"
+            return f"{self.__class__.__name__}({self.start!r})"
         else:
-            return f"{self.__class__.__name__}({self.start}, {self.end})"
+            return f"{self.__class__.__name__}({self.start!r}, {self.end!r})"
 
     def __contains__(self, datetime: Datetime) -> bool:
         if self.end is None:
@@ -548,7 +548,9 @@ class SearchTermGroup:
     """A group of search terms."""
 
     boolean_op: Literal["and", "or", "or_max"]
-    terms: list["SearchTermGroupTypes"] = field(default_factory=list)
+    terms: list["SearchTermGroupTypes"] = field(
+        default_factory=list["SearchTermGroupTypes"]
+    )
 
 
 type SearchTermGroupTypes = SearchTerm | PropertySearchTerm | SearchTermGroup
@@ -602,7 +604,7 @@ class SemanticRefSearchResult:
 
 class ThreadDataItem(TypedDict):
     thread: ThreadData
-    embedding: NormalizedEmbedding | None
+    embedding: list[float] | None  # TODO: Why not NormalizedEmbedding?
 
 
 class ConversationThreadData[TThreadDataItem: ThreadDataItem](TypedDict):

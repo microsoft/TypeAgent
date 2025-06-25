@@ -595,6 +595,25 @@ export function compareNamedArgs(x: NamedArgs, y: NamedArgs): boolean {
     return true;
 }
 
+export function namedArgsToArgs(
+    namedArgs: NamedArgs,
+    keyPrefix: string = "--",
+): string[] {
+    let args: string[] = [];
+    for (const key in namedArgs) {
+        const value = namedArgs[key];
+        if (
+            value !== undefined &&
+            typeof value !== "function" &&
+            typeof value !== "object"
+        ) {
+            args.push(keyPrefix + key);
+            args.push(String(value));
+        }
+    }
+    return args;
+}
+
 export type CommandMetadata = {
     description?: string;
     args?: Record<string, ArgDef>;
@@ -828,7 +847,7 @@ export function addBatchHandler(app: InteractiveApp) {
 
     function batchDef(): CommandMetadata {
         return {
-            description: "Run a batch file",
+            description: "Run a batch file of commands",
             args: {
                 filePath: {
                     description: "Batch file path.",
