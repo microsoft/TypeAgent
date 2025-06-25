@@ -1,11 +1,9 @@
 {
-  "extends": "../../../tsconfig.json",
+  "extends": "../../../../../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "../../../dist/views/server",
-    "rootDir": ".",
-    "incremental": true,
-    "lib": ["ES2020", "DOM"]
+    "rootDir": "."
   },
-  "include": ["./**/*.ts"],
+  "include": ["./**/*.mts"],
   "references": [{ "path": "../shared" }]
 }

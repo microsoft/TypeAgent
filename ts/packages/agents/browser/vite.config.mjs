@@ -2,16 +2,10 @@
 // Licensed under the MIT License.
 
 import { defineConfig } from "vite";
-import typescript from "@rollup/plugin-typescript";
 import { resolve } from "path";
 
 export default defineConfig({
     root: resolve(__dirname, "src/views/client/plans"),
-    plugins: [
-        typescript({
-            tsconfig: "./src/views/client/plans/tsconfig.json",
-        }),
-    ],
     build: {
         outDir: resolve(__dirname, "dist/views/public"),
         sourcemap: true,

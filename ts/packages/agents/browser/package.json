@@ -23,21 +23,24 @@
   "scripts": {
     "build": "fluid-build . -t build",
     "build:dev": "fluid-build . -t build:dev",
+    "build:extension": "fluid-build . -t build:extension",
     "build:views": "fluid-build . -t build:views",
-    "build:views:client": "vite build",
-    "build:views:server": "tsc --build src/views/server/tsconfig.json",
-    "build:views:shared": "tsc --build src/views/shared/tsconfig.json",
-    "clean": "rimraf dist deploy .tsbuildinfo .build.cache && rimraf --glob '.tsc-cache-*.json'",
+    "clean": "rimraf dist deploy *.done.build.log && rimraf -g **/*.tsbuildinfo",
     "package": "node scripts/packExtension.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "jest",
-    "tsc:agent": "tsc --build src/agent/tsconfig.json",
-    "tsc:common": "tsc --build src/common/tsconfig.json",
-    "tsc:puppeteer": "tsc --build src/puppeteer/tsconfig.json",
-    "tsc:typecheck": "tsc --noEmit -p tsconfig.json",
+    "tsc:agent": "tsc -p src/agent/tsconfig.json",
+    "tsc:common": "tsc -p src/common/tsconfig.json",
+    "tsc:extension:electron:typecheck": "tsc -p src/electron/tsconfig.json",
+    "tsc:extension:chrome:typecheck": "tsc -p src/extension/tsconfig.json",
+    "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
+    "tsc:views:client:typecheck": "tsc -p src/views/client/plans/tsconfig.json",
+    "tsc:views:server": "tsc -p src/views/server/tsconfig.json",
+    "tsc:views:shared": "tsc -p src/views/shared/tsconfig.json",
     "vite:extension": "node scripts/buildExtension.mjs",
-    "vite:extension:dev": "node scripts/buildExtension.mjs --dev"
+    "vite:extension:dev": "node scripts/buildExtension.mjs --dev",
+    "vite:views:client": "vite build"
   },
   "dependencies": {
     "@azure/ai-agents": "^1.0.0-beta.3",
@@ -112,20 +115,34 @@
     "tasks": {
       "build": {
         "dependsOn": [
+          "build:extension",
           "build:views",
           "tsc:agent",
-          "tsc:puppeteer",
-          "tsc:typecheck",
-          "vite:extension"
+          "tsc:puppeteer"
         ],
         "script": false
       },
       "build:dev": {
         "dependsOn": [
+          "build:extension:dev",
           "build:views",
           "tsc:agent",
-          "tsc:puppeteer",
-          "tsc:typecheck",
+          "tsc:puppeteer"
+        ],
+        "script": false
+      },
+      "build:extension": {
+        "dependsOn": [
+          "tsc:extension:electron:typecheck",
+          "tsc:extension:chrome:typecheck",
+          "vite:extension"
+        ],
+        "script": false
+      },
+      "build:extension:dev": {
+        "dependsOn": [
+          "tsc:extension:electron:typecheck",
+          "tsc:extension:chrome:typecheck",
           "vite:extension:dev"
         ],
         "script": false
@@ -141,16 +158,20 @@
       ],
       "build:views": {
         "dependsOn": [
-          "build:views:server",
-          "build:views:client"
+          "tsc:views:server",
+          "tsc:views:client:typecheck",
+          "vite:views:client"
         ],
         "script": false
       },
-      "build:views:server": [
-        "build:views:shared"
+      "tsc:views:server": [
+        "tsc:views:shared"
       ],
-      "build:views:client": [
-        "build:views:shared"
+      "tsc:views:client:typecheck": [
+        "tsc:views:shared"
+      ],
+      "vite:views:client": [
+        "tsc:views:shared"
       ]
     },
     "declarativeTasks": {

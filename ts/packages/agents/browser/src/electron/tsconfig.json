@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.bundle-typecheck.json",
+  "compilerOptions": {
+    "lib": ["dom"]
+  },
+  "include": ["./**/*.ts"]
+}
