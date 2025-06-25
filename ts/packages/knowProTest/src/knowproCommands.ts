@@ -116,7 +116,7 @@ export async function execGetAnswerRequest(
     const searchResults = searchResponse.searchResults;
     const response: GetAnswerResponse = {
         searchResponse,
-        answerResponses: error("Not initialized"),
+        answerResponses: error("No search matches"),
     };
     if (!searchResults.success) {
         return response;
