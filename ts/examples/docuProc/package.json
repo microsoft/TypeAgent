@@ -14,7 +14,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run tsc",
-    "postbuild": "pnpm run copy-data && copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" \"src/srag/*.py\" \"data/**/*\" dist && rimraf --glob 'copyfiles-*.done.build.log'",
+    "postbuild": "pnpm run copy-data && copyfiles -u 1 \"src/**/*Schema.ts\" \"src/**/*.txt\" \"src/*.py\" \"src/srag/*.py\" \"data/**/*\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log dist/data",
     "copy-data": "copyfiles \"data/**/*\" dist",
     "install-python-deps": "node -e \"const { execSync } = require('child_process'); try { execSync('python3 --version', { stdio: 'ignore' }); execSync('python3 -m pip install --user -qq -r requirements.txt', { stdio: 'inherit' }); } catch { try { execSync('python --version', { stdio: 'ignore' }); execSync('python -m pip install --user -qq -r requirements.txt', { stdio: 'inherit' }); } catch { console.log('Python not found, skipping...'); } }\"",
