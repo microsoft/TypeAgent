@@ -496,6 +496,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
+      azure-ai-foundry:
+        specifier: workspace:*
+        version: link:../../packages/azure-ai-foundry
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)
@@ -517,9 +520,6 @@ importers:
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
-      url-resolver:
-        specifier: workspace:*
-        version: link:../../packages/urlResolver
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -937,6 +937,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      azure-ai-foundry:
+        specifier: workspace:*
+        version: link:../../azure-ai-foundry
       bootstrap:
         specifier: ^5.3.3
         version: 5.3.6(@popperjs/core@2.11.8)
@@ -985,9 +988,6 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
-      url-resolver:
-        specifier: workspace:*
-        version: link:../../urlResolver
       website-memory:
         specifier: workspace:*
         version: link:../../memory/website
@@ -1990,6 +1990,55 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/azure-ai-foundry:
+    dependencies:
+      '@azure/ai-agents':
+        specifier: ^1.0.0-beta.3
+        version: 1.0.0-beta.3
+      '@azure/ai-projects':
+        specifier: ^1.0.0-beta.8
+        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
+      '@azure/identity':
+        specifier: ^4.10.0
+        version: 4.10.0
+      aiclient:
+        specifier: workspace:*
+        version: link:../aiclient
+      async:
+        specifier: ^3.2.5
+        version: 3.2.6
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.1(supports-color@8.1.1)
+      telemetry:
+        specifier: workspace:*
+        version: link:../telemetry
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
+    devDependencies:
+      '@types/async':
+        specifier: ^3.2.24
+        version: 3.2.24
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      dotenv:
+        specifier: ^16.3.1
+        version: 16.5.0
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/cache:
     dependencies:
       '@typeagent/agent-sdk':
@@ -2494,6 +2543,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
+      azure-ai-foundry:
+        specifier: workspace:*
+        version: link:../azure-ai-foundry
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
@@ -2539,9 +2591,6 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
-      url-resolver:
-        specifier: workspace:*
-        version: link:../urlResolver
       website-memory:
         specifier: workspace:*
         version: link:../memory/website
@@ -3285,55 +3334,6 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-
-  packages/urlResolver:
-    dependencies:
-      '@azure/ai-agents':
-        specifier: ^1.0.0-beta.3
-        version: 1.0.0-beta.3
-      '@azure/ai-projects':
-        specifier: ^1.0.0-beta.8
-        version: 1.0.0-beta.8(encoding@0.1.13)(ws@8.18.2)(zod@3.24.4)
-      '@azure/identity':
-        specifier: ^4.10.0
-        version: 4.10.0
-      aiclient:
-        specifier: workspace:*
-        version: link:../aiclient
-      async:
-        specifier: ^3.2.5
-        version: 3.2.6
-      debug:
-        specifier: ^4.4.0
-        version: 4.4.1(supports-color@8.1.1)
-      telemetry:
-        specifier: workspace:*
-        version: link:../telemetry
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.24.4)
-    devDependencies:
-      '@types/async':
-        specifier: ^3.2.24
-        version: 3.2.24
-      '@types/debug':
-        specifier: ^4.1.12
-        version: 4.1.12
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
 
   tools:
     dependencies:

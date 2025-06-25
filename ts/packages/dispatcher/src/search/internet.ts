@@ -28,7 +28,7 @@ import {
     RunStreamEvent,
     ThreadMessage,
 } from "@azure/ai-agents";
-import { bingWithGrounding } from "url-resolver";
+import { bingWithGrounding } from "azure-ai-foundry";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
 function urlToHtml(url: string, title?: string | undefined): string {

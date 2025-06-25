@@ -49,6 +49,7 @@
     "agent-cache": "workspace:*",
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
+    "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
@@ -63,8 +64,7 @@
     "string-width": "^7.2.0",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
-    "typechat": "^0.1.1",
-    "url-resolver": "workspace:*",
+    "typechat": "^0.1.1",    
     "website-memory": "workspace:*",
     "ws": "^8.17.1"
   },

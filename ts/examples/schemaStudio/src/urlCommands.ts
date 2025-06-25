@@ -10,7 +10,7 @@ import {
 } from "interactive-app";
 import { SchemaStudio } from "./studio.js";
 import fs from "fs";
-import { bingWithGrounding, urlResolver } from "url-resolver";
+import { bingWithGrounding, urlResolver } from "azure-ai-foundry";
 import registerDebug from "debug";
 
 export function createURLResolverCommands(

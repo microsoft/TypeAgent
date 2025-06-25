@@ -24,14 +24,14 @@
   "dependencies": {
     "action-schema": "workspace:*",
     "aiclient": "workspace:*",
+    "azure-ai-foundry": "workspace:*",
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",
     "schema-author": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5",
-    "url-resolver": "workspace:*"
+    "typescript": "~5.4.5" 
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

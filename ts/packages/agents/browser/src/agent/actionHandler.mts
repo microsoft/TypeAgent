@@ -67,7 +67,7 @@ import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "./browserControl.mjs";
 import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
-import { urlResolver, bingWithGrounding } from "url-resolver";
+import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 
 const debug = registerDebug("typeagent:browser:action");

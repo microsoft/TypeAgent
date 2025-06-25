@@ -1,15 +1,20 @@
-# aiclient
+# Azure AI Foundry
 
-AI Client is **sample code** for calling AI endpoints and other REST services.
+The Azure AI Foundry package is **sample code** for interfacing with Azure AI Foundry agents, projects, and tools.
 
 The library is used by and intended only for sample agents and examples in the TypeAgent project.
 
 Supported services:
 
-- Open AI model endpoints, both on Azure and Open AI.
-- Bing
+- Manage Azure AI Foundry agents (create, update, delete)
+- Manage agent conversations (threads)
+- Manage agent tools (BingWithGrounding, Logic Apps, etc.).
 
 The library includes support for getting settings needed to call these services from environment variables.
+
+# Dependencies
+
+This package depends on Azure AI Foundry packages: (@azure/ai-projects)[https://www.npmjs.com/package/@azure/ai-projects] and (@azure/ai-agents)[https://www.npmjs.com/package/@azure/ai-agents].
 
 ## Trademarks
 
