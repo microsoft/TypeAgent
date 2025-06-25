@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getEnvSetting } from "./common.js";
+import { getEnvSetting } from "aiclient";
 
 export type ApiSettings = {
     endpoint?: string;

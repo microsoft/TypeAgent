@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { agents, bingWithGrounding } from "aiclient";
+import * as bingWithGrounding from "./bingWithGrounding.js";
+import * as agents from "./agents.js";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
 import {
@@ -29,6 +30,21 @@ export interface urlValidityAction {
     url: string;
     urlValidity: SiteValidity;
     explanation: string;
+}
+
+const urlResolutionAgentId = "TypeAgent_URLResolverAgent";
+export async function flushAgent(
+    groundingConfig: bingWithGrounding.ApiSettings,
+) {
+    const project = new AIProjectClient(
+        groundingConfig.endpoint!,
+        new DefaultAzureCredential(),
+    );
+    await agents.flushAgents(
+        urlResolutionAgentId,
+        [groundingConfig.urlResolutionAgentId!],
+        project,
+    );
 }
 
 export async function resolveURLWithSearch(
