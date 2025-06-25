@@ -16,9 +16,9 @@ export function setupInlineBrowserRendererProxy() {
 
     window.addEventListener("message", (event) => {
         if (
-            event.data.target == "preload" &&
-            event.data.source == "contentScript" &&
-            event.data.messageType == "rpc" &&
+            event.data.target === "preload" &&
+            event.data.source === "contentScript" &&
+            event.data.messageType === "rpc" &&
             event.data.body
         ) {
             ipcRenderer.send("inline-browser-rpc-reply", event.data.body);

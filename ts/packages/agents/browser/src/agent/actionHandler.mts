@@ -666,6 +666,15 @@ async function executeBrowserAction(
             case "scrollDown":
                 await getActionBrowserControl(context).scrollDown();
                 return;
+            case "zoomIn":
+                await getActionBrowserControl(context).zoomIn();
+                return;
+            case "zoomOut":
+                await getActionBrowserControl(context).zoomOut();
+                return;
+            case "zoomReset":
+                await getActionBrowserControl(context).zoomReset();
+                return;
             case "followLinkByText": {
                 const control = getActionBrowserControl(context);
                 const { keywords, openInNewTab } = action.parameters;

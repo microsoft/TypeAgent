@@ -74,19 +74,17 @@ export async function ensureWebsocketConnected(): Promise<
 
         const browserControlChannel = createGenericChannel((message: any) => {
             if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                webSocket.send(
-                    JSON.stringify({
-                        source: "browserExtension",
-                        method: "browserControl/message",
-                        params: message,
-                    }),
-                );
+                const text = JSON.stringify({
+                    source: "browserExtension",
+                    method: "browserControl/message",
+                    params: message,
+                });
+                webSocket.send(text);
             }
         });
         createExternalBrowserServer(browserControlChannel.channel);
         webSocket.onmessage = async (event: MessageEvent) => {
             const text = await (event.data as Blob).text();
-            console.log(`Browser websocket client received message: ${text}`);
 
             const data = JSON.parse(text) as WebSocketMessageV2;
             if (data.error) {

@@ -74,6 +74,15 @@ export function createExternalBrowserClient(
         scrollDown: async () => {
             return rpc.invoke("scrollDown");
         },
+        zoomIn: async () => {
+            return rpc.invoke("zoomIn");
+        },
+        zoomOut: async () => {
+            return rpc.invoke("zoomOut");
+        },
+        zoomReset: async () => {
+            return rpc.invoke("zoomReset");
+        },
         followLinkByText: (...args) => {
             return rpc.invoke("followLinkByText", ...args);
         },
