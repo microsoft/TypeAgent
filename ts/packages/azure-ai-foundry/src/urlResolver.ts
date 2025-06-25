@@ -279,11 +279,17 @@ export async function validateURL(
                             }
 
                             // Cancel the run if it has been running for more than 30 seconds
-                            
-                            if (Date.now() - new Date(runStarted).getTime() > 30000) {
+
+                            if (
+                                Date.now() - new Date(runStarted).getTime() >
+                                30000
+                            ) {
                                 //if (!run.completedAt) {
-                                    await project.agents.runs.cancel(thread.id, run.id);
-                                    console.log(`TIMEOUT - Canceled ${utterance}`);
+                                await project.agents.runs.cancel(
+                                    thread.id,
+                                    run.id,
+                                );
+                                console.log(`TIMEOUT - Canceled ${utterance}`);
                                 //}
                             }
                         },

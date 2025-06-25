@@ -21,7 +21,6 @@ function testIf(
     return test(name, fn, testTimeout);
 }
 
-
 function hasUrlResolverApiKey() {
     try {
         const appSettings = bingWithGrounding.apiSettingsFromEnv();
