@@ -32,7 +32,7 @@ export type OpenWebPage = {
         // Name or description of the site to search for and open
         // Do NOT put URL here unless the user request specified the URL.
         site:
-            | "paelobiodb"
+            | "paleobiodb"
             | "crossword"
             | "commerce"
             | "montage"
@@ -145,10 +145,16 @@ export type ImportWebsiteData = {
 export type SearchWebsites = {
     actionName: "searchWebsites";
     parameters: {
+        // The original user request
+        originalUserRequest: string;
         // Search query terms
         query: string;
         // Filter by domain
         domain?: string;
+        // How to sort by time, if temporal intent present
+        temporalSort: "ascend" | "descend" | "none";
+        // How to sort by frequency of visit, if required
+        frequencySort: "ascend" | "descend" | "none";
         // Filter by page type (news, commerce, social, etc.)
         pageType?: string;
         // Filter by source (bookmark, history)

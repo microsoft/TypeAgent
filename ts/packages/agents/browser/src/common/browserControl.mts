@@ -18,6 +18,9 @@ export type BrowserControlInvokeFunctions = {
     getPageUrl(): Promise<string>;
     scrollUp(): Promise<void>;
     scrollDown(): Promise<void>;
+    zoomIn(): Promise<void>;
+    zoomOut(): Promise<void>;
+    zoomReset(): Promise<void>;
     // returns the URL, or undefined if not found
     followLinkByText(
         keywords: string,

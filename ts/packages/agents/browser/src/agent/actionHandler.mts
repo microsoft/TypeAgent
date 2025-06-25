@@ -67,7 +67,7 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { BrowserControl } from "./browserControl.mjs";
+import { BrowserControl } from "../common/browserControl.mjs";
 import { bingWithGrounding } from "aiclient";
 import { AIProjectClient } from "@azure/ai-projects";
 import { DefaultAzureCredential } from "@azure/identity";
@@ -665,6 +665,15 @@ async function executeBrowserAction(
                 return;
             case "scrollDown":
                 await getActionBrowserControl(context).scrollDown();
+                return;
+            case "zoomIn":
+                await getActionBrowserControl(context).zoomIn();
+                return;
+            case "zoomOut":
+                await getActionBrowserControl(context).zoomOut();
+                return;
+            case "zoomReset":
+                await getActionBrowserControl(context).zoomReset();
                 return;
             case "followLinkByText": {
                 const control = getActionBrowserControl(context);

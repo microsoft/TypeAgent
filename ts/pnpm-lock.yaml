@@ -1013,6 +1013,9 @@ importers:
       '@esbuild-plugins/node-globals-polyfill':
         specifier: ^0.2.3
         version: 0.2.3(esbuild@0.25.4)
+      '@fluidframework/build-tools':
+        specifier: ^0.56.0
+        version: 0.56.0(@types/node@20.17.47)
       '@rollup/plugin-typescript':
         specifier: ^11.1.5
         version: 11.1.6(rollup@4.39.0)(tslib@2.8.1)(typescript@5.4.5)
@@ -1508,6 +1511,9 @@ importers:
         specifier: ^13.6.8
         version: 13.6.27
     devDependencies:
+      '@milkdown/ctx':
+        specifier: ~7.13.0
+        version: 7.13.1
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -1526,6 +1532,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.8
         version: 8.18.1
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1

@@ -3,7 +3,6 @@
   "compilerOptions": {
     "composite": true,
     "incremental": true,
-    "tsBuildInfoFile": "../../../.tsbuildinfo/route.tsbuildinfo",
     "rootDir": ".",
     "outDir": "../../../dist/view/route"
   },

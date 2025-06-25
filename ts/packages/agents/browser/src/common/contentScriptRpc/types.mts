@@ -6,4 +6,6 @@ export type ContentScriptRpc = {
     scrollDown(): Promise<void>;
     getPageLinksByQuery(query: string): Promise<string | undefined>;
     getPageLinksByPosition(position: number): Promise<string | undefined>;
+
+    runPaleoBioDbAction(action: any): Promise<void>;
 };

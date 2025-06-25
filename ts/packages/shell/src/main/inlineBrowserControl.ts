@@ -63,6 +63,30 @@ export function createInlineBrowserControl(
         async scrollDown() {
             return contentScriptControl.scrollDown();
         },
+        async zoomIn() {
+            const url = await this.getPageUrl();
+            if (url.startsWith("https://paleobiodb.org/")) {
+                return contentScriptControl.runPaleoBioDbAction({
+                    actionName: "zoomIn",
+                });
+            }
+            const webContents = shellWindow.inlineBrowser.webContents;
+            webContents.setZoomFactor(webContents.getZoomFactor() + 0.1);
+        },
+        async zoomOut() {
+            const url = await this.getPageUrl();
+            if (url.startsWith("https://paleobiodb.org/")) {
+                return contentScriptControl.runPaleoBioDbAction({
+                    actionName: "zoomOut",
+                });
+            }
+            const webContents = shellWindow.inlineBrowser.webContents;
+            webContents.setZoomFactor(webContents.getZoomFactor() - 0.1);
+        },
+        async zoomReset() {
+            const webContents = shellWindow.inlineBrowser.webContents;
+            webContents.setZoomFactor(1.0);
+        },
         async followLinkByPosition(position: number, openInNewTab?: boolean) {
             if (openInNewTab) {
                 // TODO: Support opening in new browser view.

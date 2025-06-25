@@ -6,7 +6,7 @@ import {
     BrowserControl,
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
-} from "../browserControl.mjs";
+} from "../../common/browserControl.mjs";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createRpc } from "agent-rpc/rpc";
 import { WebSocketMessageV2 } from "common-utils";
@@ -73,6 +73,15 @@ export function createExternalBrowserClient(
         },
         scrollDown: async () => {
             return rpc.invoke("scrollDown");
+        },
+        zoomIn: async () => {
+            return rpc.invoke("zoomIn");
+        },
+        zoomOut: async () => {
+            return rpc.invoke("zoomOut");
+        },
+        zoomReset: async () => {
+            return rpc.invoke("zoomReset");
         },
         followLinkByText: (...args) => {
             return rpc.invoke("followLinkByText", ...args);

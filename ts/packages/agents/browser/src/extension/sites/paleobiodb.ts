@@ -243,8 +243,7 @@ export function createPaleoBioDbAgent(): AppAgent {
 document.addEventListener("toPaleoDbAutomation", function (e: any) {
     var message = e.detail;
     console.log("received", message);
-    const actionName =
-        message.actionName ?? message.fullActionName.split(".").at(-1);
+    const actionName = message.actionName;
     switch (actionName) {
         case "zoomIn": {
             zoomInOnPaleoBioDb();

@@ -72,11 +72,19 @@ async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
 }
 
 function chromeTimeToDate(chromeTime: string): string {
-    // Chrome stores time as microseconds since Windows epoch (1601-01-01)
-    const windowsEpoch = 11644473600000; // Milliseconds between 1601 and 1970
-    const chromeTimeMs = parseInt(chromeTime) / 1000; // Convert to milliseconds
-    const unixTimeMs = chromeTimeMs - windowsEpoch;
-    return new Date(unixTimeMs).toISOString();
+    const timestamp = parseInt(chromeTime);
+
+    // Detect format based on timestamp magnitude
+    if (timestamp < 1e12) {
+        // HTML bookmark export format: Unix timestamp (seconds since epoch)
+        return new Date(timestamp * 1000).toISOString();
+    } else {
+        // Chrome internal format: microseconds since Windows epoch (1601-01-01)
+        const windowsEpoch = 11644473600000; // Milliseconds between 1601 and 1970
+        const chromeTimeMs = timestamp / 1000; // Convert to milliseconds
+        const unixTimeMs = chromeTimeMs - windowsEpoch;
+        return new Date(unixTimeMs).toISOString();
+    }
 }
 
 function chromeTimeToISOString(chromeTimeMicros: number): string {
@@ -309,7 +317,7 @@ export async function importChromeHistory(
 
                 const domain = extractDomain(row.url);
                 const visitDate = chromeTimeToISOString(row.last_visit_time);
-                const pageType = determinePageType(row.url, row.title);
+                const pageType = determinePageType(row.url, row.title); // TODO: Call LLM for this
 
                 const visitInfo: WebsiteVisitInfo = {
                     url: row.url,
