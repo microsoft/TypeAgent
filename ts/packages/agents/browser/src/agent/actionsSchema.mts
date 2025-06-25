@@ -152,9 +152,9 @@ export type SearchWebsites = {
         // Filter by domain
         domain?: string;
         // How to sort by time, if temporal intent present
-        temporalSort: 'ascend' | 'descend' | 'none';
+        temporalSort: "ascend" | "descend" | "none";
         // How to sort by frequency of visit, if required
-        frequencySort: 'ascend' | 'descend' | 'none';
+        frequencySort: "ascend" | "descend" | "none";
         // Filter by page type (news, commerce, social, etc.)
         pageType?: string;
         // Filter by source (bookmark, history)

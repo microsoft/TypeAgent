@@ -293,18 +293,18 @@ export class WebsiteCollection
     ): Promise<WebsiteCollection | undefined> {
         const websiteCollection = new WebsiteCollection();
         try {
-        const data = await readConversationDataFromFile(
-            dirPath,
-            baseFileName,
-            websiteCollection.settings.relatedTermIndexSettings
-                .embeddingIndexSettings?.embeddingSize,
-        );
-        if (data) {
-            websiteCollection.deserialize(data);
+            const data = await readConversationDataFromFile(
+                dirPath,
+                baseFileName,
+                websiteCollection.settings.relatedTermIndexSettings
+                    .embeddingIndexSettings?.embeddingSize,
+            );
+            if (data) {
+                websiteCollection.deserialize(data);
+            }
+        } catch (error: any) {
+            console.warn(`Website collection loading failed: ${error.message}`);
         }
-    }catch(error: any){
-        console.warn(`Website collection loading failed: ${error.message}`);
-    }
         return websiteCollection;
     }
 

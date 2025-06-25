@@ -69,7 +69,7 @@ export async function resolveURLWithHistory(
         }
 
         debug(`Found ${matches.size} semantic matches for: '${site}'`);
-        debug(matches)
+        debug(matches);
 
         const candidates: { url: string; score: number; metadata: any }[] = [];
         const processedMessages = new Set<number>();
@@ -355,8 +355,8 @@ export async function findRequestedWebsites(
             `Filtered to ${sortedResults.length} unique websites after scoring`,
         );
 
-        debug(sortedResults)
-        
+        debug(sortedResults);
+
         return sortedResults.map((r) => r.website);
     } catch (error) {
         debug(`Error in semantic website search: ${error}`);
@@ -460,9 +460,11 @@ export async function importWebsiteData(
             if (context.sessionContext.agentContext.index?.path) {
                 await context.sessionContext.agentContext.websiteCollection.writeToFile(
                     context.sessionContext.agentContext.index.path,
-                    "index"
+                    "index",
                 );
-                debug(`Saved website collection to ${context.sessionContext.agentContext.index.path}`);
+                debug(
+                    `Saved website collection to ${context.sessionContext.agentContext.index.path}`,
+                );
             } else {
                 debug("No index path available, website data not persisted");
             }
