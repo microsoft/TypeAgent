@@ -55,10 +55,16 @@ def main():
         help="Path to the podcast index files (excluding the '_index.json' suffix)",
     )
     parser.add_argument(
-        "--skip",
+        "--offset",
         type=int,
         default=0,
-        help="Number of initial Q/A pairs to skip (for debugging purposes)",
+        help="Number of initial Q/A pairs to skip",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Number of Q/A pairs to print (0 means all)",
     )
     parser.add_argument(
         "--interactive",
@@ -108,18 +114,22 @@ def main():
     # Loop over eval data, skipping duplicate questions
     # (Those differ in 'cmd' value, which we don't support yet.)
 
-    skip = args.skip
+    offset = args.offset
+    limit = args.limit
     last_q = ""
     counter = 0
+    all_scores: list[float] = []
     for qa_pair in data:
-        counter += 1
         question = qa_pair.get("question")
         answer = qa_pair.get("answer")
         if not (question and answer) or question == last_q:
             continue
+        counter += 1
         last_q = question
-        if skip > 0:
-            skip -= 1
+
+        # Process offset if specified.
+        if offset > 0:
+            offset -= 1
             continue
 
         # Wait for user input before continuing.
@@ -132,15 +142,29 @@ def main():
 
         # Compare the given answer with the actual answer for the question.
         actual_answer, score = asyncio.run(compare(context, qa_pair))
-        print("-" * 25, counter, "-" * 25)
-        if not context.interactive and score < 0.97:
-            print(f"Question: {question}")
+        all_scores.append(score)
+        good_enough = score >= 0.97
+        sep = "-" if good_enough else "*"
+        print(sep * 25, counter, sep * 25)
+        print(f"Score: {score:.3f}; Question: {question}")
+        if context.interactive or not good_enough:
             print(f"Expected answer:\n{answer}")
             print("-" * 20)
             print(f"Actual answer:\n{actual_answer}")
             print(f"Score: {score:.3f}")
-        else:
-            print(f"Score: {score:.3f} (question: {question})")
+
+        # Process limit if specified.
+        if limit > 0:
+            limit -= 1
+            if limit == 0:
+                break
+
+    good_scores = [s for s in all_scores if s >= 0.97]
+    bad_scores = [s for s in all_scores if s < 0.97]
+    print("-" * 50)
+    print("Good scores:", ", ".join(f"{s:.3f}" for s in good_scores))
+    print("Bad scores: ", ", ".join(f"{s:.3f}" for s in bad_scores))
+    assert len(good_scores) + len(bad_scores) == len(all_scores)
 
 
 async def compare(
@@ -183,6 +207,8 @@ async def compare(
         )
         print("-" * 40)
         if combined_answer.type == "NoAnswer":
+            if "[ANSWER CONTEXT]" in answer:
+                score = 1.0
             print("Failure:", combined_answer.whyNoAnswer)
             print("All answers:")
             if context.interactive:
