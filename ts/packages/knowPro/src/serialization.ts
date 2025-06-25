@@ -149,7 +149,7 @@ function validateFileData(
                 ?.embeddingSize ?? modelMetadata_ada002().embeddingSize;
         if (expectedEmbeddingSize !== actualEmbeddingSize) {
             throw new Error(
-                `File has embeddings of size ${expectedEmbeddingSize}`,
+                `File has embeddings of size ${actualEmbeddingSize}, expected size ${expectedEmbeddingSize}`,
             );
         }
     }
