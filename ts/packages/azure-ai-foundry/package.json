@@ -1,19 +1,18 @@
 {
-  "name": "aiclient",
+  "name": "azure-ai-foundry",
   "version": "0.0.1",
   "description": "Clients for AI APIs used by Microsoft AI Systems team.",
   "homepage": "https://github.com/microsoft/TypeAgent#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/microsoft/TypeAgent.git",
-    "directory": "ts/packages/aiclient"
+    "directory": "ts/packages/azure-ai-foundry"
   },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
-    "./test": "./dist/test/testCore.js"
+    ".": "./dist/index.js"
   },
   "types": "./dist/index.d.ts",
   "files": [
@@ -31,7 +30,10 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure/ai-agents": "^1.0.0-beta.3",
+    "@azure/ai-projects": "^1.0.0-beta.8",
     "@azure/identity": "^4.10.0",
+    "aiclient": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
     "telemetry": "workspace:*",

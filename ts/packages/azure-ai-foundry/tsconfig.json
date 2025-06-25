@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [],
+  "references": [
+    { "path": "./src" },
+    { "path": "./test" },
+  ],
+  "ts-node": {
+    "esm": true
+  }
+}

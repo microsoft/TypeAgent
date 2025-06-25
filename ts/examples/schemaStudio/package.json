@@ -24,6 +24,8 @@
   "dependencies": {
     "action-schema": "workspace:*",
     "aiclient": "workspace:*",
+    "azure-ai-foundry": "workspace:*",
+    "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "interactive-app": "workspace:*",
     "schema-author": "workspace:*",
@@ -32,6 +34,7 @@
     "typescript": "~5.4.5"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.12",
     "copyfiles": "^2.4.1",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

@@ -1,13 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { getEnvSetting } from "./common.js";
+import { getEnvSetting } from "aiclient";
 
 export type ApiSettings = {
     endpoint?: string;
     agent?: string;
     urlResolutionAgentId?: string;
     connectionId?: string;
+    validatorAgentId?: string;
+    httpEndpointLogicAppConnectionId?: string;
 };
 
 /**
@@ -18,6 +20,8 @@ export enum EnvVars {
     BING_WITH_GROUNDING_AGENT_ID = "BING_WITH_GROUNDING_AGENT_ID",
     BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID = "BING_WITH_GROUNDING_URL_RESOLUTION_AGENT_ID",
     BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID = "BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID",
+    AZURE_FOUNDRY_AGENT_ID_VALIDATOR = "AZURE_FOUNDRY_AGENT_ID_VALIDATOR",
+    LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT = "LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT",
 }
 
 /**
@@ -39,6 +43,14 @@ export function apiSettingsFromEnv(
         connectionId: getEnvSetting(
             env,
             EnvVars.BING_WITH_GROUNDING_URL_RESOLUTION_CONNECTION_ID,
+        ),
+        validatorAgentId: getEnvSetting(
+            env,
+            EnvVars.AZURE_FOUNDRY_AGENT_ID_VALIDATOR,
+        ),
+        httpEndpointLogicAppConnectionId: getEnvSetting(
+            env,
+            EnvVars.LOGIC_APP_CONNECTION_ID_GET_HTTP_ENDPOINT,
         ),
     };
 }

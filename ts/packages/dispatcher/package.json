@@ -49,6 +49,7 @@
     "agent-cache": "workspace:*",
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
+    "azure-ai-foundry": "workspace:*",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",
     "debug": "^4.4.0",
