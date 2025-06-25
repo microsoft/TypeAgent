@@ -5,7 +5,6 @@
     "rootDir": ".",
     "composite": true,
     "incremental": true,
-    "tsBuildInfoFile": "../../../.tsbuildinfo/shared.tsbuildinfo",
     "declaration": true,
     "declarationMap": true
   },

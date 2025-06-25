@@ -10,7 +10,6 @@
        "outDir": "dist/js",
        "noEmitOnError": true,
        "incremental": true,
-       "tsBuildInfoFile": ".tsbuildinfo/main.tsbuildinfo",
        "typeRoots": [ "node_modules/@types" ]
     },
     "exclude": ["dist/**/*", "src/agent/*.ts", "test/*"],

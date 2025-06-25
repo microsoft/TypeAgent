@@ -7,6 +7,7 @@ import { InputRule } from "prosemirror-inputrules";
 import { visit } from "unist-util-visit";
 import mermaid from "mermaid";
 import DOMPurify from "dompurify";
+import type { MilkdownPlugin } from "@milkdown/ctx";
 
 // Configure DOMPurify for SVG with foreignObject support
 export const createSVGSafePurifyConfig = () => {
@@ -508,7 +509,7 @@ const mermaidRenderer = $prose(() => {
 });
 
 // Export the complete mermaid plugin
-export const mermaidPlugin = [
+export const mermaidPlugin: MilkdownPlugin[] = [
     remarkMermaid,
     mermaidNode,
     mermaidLiveParser,
