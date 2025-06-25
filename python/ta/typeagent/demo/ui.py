@@ -6,7 +6,6 @@ from contextlib import contextmanager
 import time
 import io
 import re
-import shutil
 import sys
 import traceback
 from typing import cast
@@ -33,15 +32,17 @@ from ..knowpro.interfaces import (
 from ..knowpro.kplib import Action, ActionParam, ConcreteEntity, Quantity
 from ..knowpro.query import QueryEvalContext
 from ..knowpro.search import ConversationSearchResult
-from ..knowpro.searchlang import search_conversation_with_language
+from ..knowpro.searchlang import (
+    LanguageSearchDebugContext,
+    search_conversation_with_language,
+)
 from ..knowpro.search_query_schema import SearchQuery
 from ..podcasts.podcast import Podcast
 
 
 def main() -> None:
     load_dotenv()
-    with timelog("create typechat model"):
-        model = create_typechat_model()
+    model = create_typechat_model()
     with timelog("create typechat translator"):
         query_translator = create_translator(model, SearchQuery)
         answer_translator = create_translator(model, AnswerResponse)
@@ -163,16 +164,20 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     query_translator: typechat.TypeChatJsonTranslator[SearchQuery],
     answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse],
 ) -> None:
-    debug_context = None  # LanguageSearchDebugContext()  # For lots of debug output.
+    debug_context = LanguageSearchDebugContext()  # For lots of debug output.
     result = await search_conversation_with_language(
         conversation,
         query_translator,
         orig_query_text,
         debug_context=debug_context,
     )
-    if debug_context and debug_context.search_query:
-        print("Search query:")
-        pretty_print(debug_context.search_query)
+    if debug_context:
+        if debug_context.search_query:
+            print("-" * 50)
+            pretty_print(debug_context.search_query)
+        if debug_context.search_query_expr:
+            print("-" * 50)
+            pretty_print(debug_context.search_query_expr)
     if not isinstance(result, typechat.Success):
         print(f"Error searching conversation: {result.message}")
         return
@@ -183,9 +188,9 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     print("-" * 40)
     if combined_answer.type == "NoAnswer":
         print(f"Failure: {combined_answer.whyNoAnswer}")
-        pretty_print(all_answers)
     else:
         print(combined_answer.answer)
+    pretty_print(all_answers)
     print("-" * 40)
 
 
