@@ -2,9 +2,7 @@
 // Licensed under the MIT License.
 
 const { contextBridge } = require("electron/renderer");
-const { webFrame } = require("electron");
 
-import DOMPurify from "dompurify";
 import { ipcRenderer } from "electron";
 import registerDebug from "debug";
 import {
@@ -164,54 +162,6 @@ async function runBrowserAction(action: any) {
     const actionName =
         action.actionName ?? action.fullActionName.split(".").at(-1);
     switch (actionName) {
-        case "followLinkByText": {
-            const response = await sendScriptAction(
-                {
-                    type: "get_page_links_by_query",
-                    query: action.parameters.keywords,
-                },
-                5000,
-            );
-            console.log("We should navigate to " + JSON.stringify(response));
-
-            if (response && response.url) {
-                const sanitizedUrl = DOMPurify.sanitize(response.url);
-                window.location.href = sanitizedUrl;
-                confirmationMessage = `Navigated to the  ${action.parameters.keywords} link`;
-            }
-
-            break;
-        }
-        case "zoomIn": {
-            if (window.location.href.startsWith("https://paleobiodb.org/")) {
-                sendScriptAction({
-                    type: "run_paleoBioDb_action",
-                    action: action,
-                });
-            } else {
-                const currZoom = webFrame.getZoomFactor();
-                webFrame.setZoomFactor(currZoom + 0.2);
-            }
-
-            break;
-        }
-        case "zoomOut": {
-            if (window.location.href.startsWith("https://paleobiodb.org/")) {
-                sendScriptAction({
-                    type: "run_paleoBioDb_action",
-                    action: action,
-                });
-            } else {
-                const currZoom = webFrame.getZoomFactor();
-                webFrame.setZoomFactor(currZoom - 0.2);
-            }
-            break;
-        }
-        case "zoomReset": {
-            webFrame.setZoomFactor(1.0);
-            break;
-        }
-
         case "getHTML": {
             responseObject = await getTabHTMLFragments(
                 action.parameters.fullHTML,

@@ -94,7 +94,8 @@ class IndexCreateCommandHandler implements CommandHandler {
         flags: {},
         args: {
             type: {
-                description: "The type of index to create [image, email]",
+                description:
+                    "The type of index to create [image, email, website]",
                 char: "t",
                 type: "string",
                 enum: ["image", "email", "website"],

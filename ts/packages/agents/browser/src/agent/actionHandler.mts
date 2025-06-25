@@ -14,7 +14,10 @@ import {
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromMarkdownDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
 import {
     displayError,
     displayStatus,
@@ -64,7 +67,16 @@ import { InstacartActions } from "./instacart/schema/userActions.mjs";
 import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import { BrowserControl } from "./browserControl.mjs";
+import { BrowserControl } from "../common/browserControl.mjs";
+import { bingWithGrounding } from "aiclient";
+import { AIProjectClient } from "@azure/ai-projects";
+import { DefaultAzureCredential } from "@azure/identity";
+import {
+    Agent,
+    MessageContentUnion,
+    ThreadMessage,
+    ToolUtility,
+} from "@azure/ai-agents";
 import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
@@ -97,7 +109,17 @@ export type BrowserActionContext = {
     websiteCollection?: website.WebsiteCollection | undefined;
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
     index: website.IndexData | undefined;
+    viewProcess?: ChildProcess | undefined;
+    localHostPort: number;
 };
+
+export interface urlResolutionAction {
+    originalRequest: string;
+    url: string;
+    urlsEvaluated: string[];
+    explanation: string;
+    bingSearchQuery: string;
+}
 
 async function initializeBrowserContext(
     settings?: AppAgentInitSettings,
@@ -105,10 +127,16 @@ async function initializeBrowserContext(
     const clientBrowserControl = settings?.options as
         | BrowserControl
         | undefined;
+
+    const localHostPort = settings?.localHostPort;
+    if (localHostPort === undefined) {
+        throw new Error("Local view port not assigned.");
+    }
     return {
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
+        localHostPort,
     };
 }
 
@@ -155,6 +183,12 @@ async function updateBrowserContext(
         if (!context.agentContext.fuzzyMatchingModel) {
             context.agentContext.fuzzyMatchingModel =
                 openai.createEmbeddingModel();
+        }
+
+        if (!context.agentContext.viewProcess) {
+            context.agentContext.viewProcess = await createViewServiceHost(
+                context.agentContext.localHostPort,
+            );
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -292,6 +326,10 @@ async function updateBrowserContext(
         if (context.agentContext.browserProcess) {
             context.agentContext.browserProcess.kill();
         }
+
+        if (context.agentContext.viewProcess) {
+            context.agentContext.viewProcess.kill();
+        }
     }
 }
 
@@ -346,11 +384,22 @@ async function resolveWebPage(
             }
 
             try {
-                // get local agent
+                // handle browser views
+                if (site === "planViewer") {
+                    const port =
+                        await context.getSharedLocalHostPort("browser");
+                    if (port !== undefined) {
+                        debug(`Resolved local site on PORT ${port}`);
+
+                        return `http://localhost:${port}/plans`;
+                    }
+                }
+
                 const port = await context.getSharedLocalHostPort(site);
 
                 if (port !== undefined) {
                     debug(`Resolved local site on PORT ${port}`);
+
                     return `http://localhost:${port}`;
                 }
             } catch (e) {
@@ -488,6 +537,46 @@ async function executeBrowserAction(
             case "scrollDown":
                 await getActionBrowserControl(context).scrollDown();
                 return;
+            case "zoomIn":
+                await getActionBrowserControl(context).zoomIn();
+                return;
+            case "zoomOut":
+                await getActionBrowserControl(context).zoomOut();
+                return;
+            case "zoomReset":
+                await getActionBrowserControl(context).zoomReset();
+                return;
+            case "followLinkByText": {
+                const control = getActionBrowserControl(context);
+                const { keywords, openInNewTab } = action.parameters;
+                const url = await control.followLinkByText(
+                    keywords,
+                    openInNewTab,
+                );
+                if (!url) {
+                    throw new Error(`No link found for '${keywords}'`);
+                }
+
+                return createActionResultFromMarkdownDisplay(
+                    `Navigated to link for [${keywords}](${url})`,
+                    `Navigated to link for '${keywords}'`,
+                );
+            }
+            case "followLinkByPosition":
+                const control = getActionBrowserControl(context);
+                const url = await control.followLinkByPosition(
+                    action.parameters.position,
+                    action.parameters.openInNewTab,
+                );
+                if (!url) {
+                    throw new Error(
+                        `No link found at position ${action.parameters.position}`,
+                    );
+                }
+                return createActionResultFromMarkdownDisplay(
+                    `Navigated to [link](${url}) at position ${action.parameters.position}`,
+                    `Navigated to link at position ${action.parameters.position}`,
+                );
         }
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
@@ -621,6 +710,52 @@ async function handleTabIndexActions(
         throw new Error("No websocket connection.");
     }
     return undefined;
+}
+
+export async function createViewServiceHost(port: number) {
+    let timeoutHandle: NodeJS.Timeout;
+
+    const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
+        timeoutHandle = setTimeout(
+            () => reject(new Error("Browser views service creation timed out")),
+            10000,
+        );
+    });
+
+    const viewServicePromise = new Promise<ChildProcess | undefined>(
+        (resolve, reject) => {
+            try {
+                const expressService = fileURLToPath(
+                    new URL(
+                        path.join("..", "./views/server/server.js"),
+                        import.meta.url,
+                    ),
+                );
+
+                const childProcess = fork(expressService, [port.toString()]);
+
+                childProcess.on("message", function (message) {
+                    if (message === "Success") {
+                        resolve(childProcess);
+                    } else if (message === "Failure") {
+                        resolve(undefined);
+                    }
+                });
+
+                childProcess.on("exit", (code) => {
+                    console.log("Browser views server exited with code:", code);
+                });
+            } catch (e: any) {
+                console.error(e);
+                resolve(undefined);
+            }
+        },
+    );
+
+    return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
+        clearTimeout(timeoutHandle);
+        return result;
+    });
 }
 
 export async function createAutomationBrowser(isVisible?: boolean) {

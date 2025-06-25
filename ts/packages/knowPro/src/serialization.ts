@@ -149,7 +149,7 @@ function validateFileData(
                 ?.embeddingSize ?? modelMetadata_ada002().embeddingSize;
         if (expectedEmbeddingSize !== actualEmbeddingSize) {
             throw new Error(
-                `File has embeddings of size ${expectedEmbeddingSize}`,
+                `File has embeddings of size ${actualEmbeddingSize}, expected size ${expectedEmbeddingSize}`,
             );
         }
     }
@@ -245,7 +245,6 @@ function getEmbeddingsFromBinaryData(
     embeddingData: EmbeddingData | undefined,
     startAt: number,
     length?: number | undefined,
-    modelMetadata?: EmbeddingModelMetadata,
 ): number {
     if (binaryData.embeddings && embeddingData && length && length > 0) {
         embeddingData.embeddings = binaryData.embeddings.slice(
@@ -256,8 +255,6 @@ function getEmbeddingsFromBinaryData(
             throw new Error(
                 `${Error_FileCorrupt}: expected ${length}, got ${embeddingData.embeddings.length}`,
             );
-        }
-        if (modelMetadata) {
         }
         return length;
     }

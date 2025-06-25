@@ -18,9 +18,43 @@ import chalk from "chalk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Helper function to create Vite build options that avoid TypeScript plugin conflicts
+function createBuildOptions(outDir, options = {}) {
+    return {
+        logLevel: "error",
+        plugins: [
+            // Explicitly disable TypeScript plugin to avoid outDir conflicts
+            {
+                name: "disable-typescript-plugin",
+                configResolved(config) {
+                    // Remove TypeScript plugin
+                    config.plugins = config.plugins.filter(
+                        (plugin) =>
+                            !plugin.name || !plugin.name.includes("typescript"),
+                    );
+                },
+            },
+        ],
+        esbuild: {
+            // Use esbuild for TypeScript compilation
+            target: "es2022",
+        },
+        build: {
+            outDir,
+            emptyOutDir: options.emptyOutDir ?? false,
+            sourcemap: isDev,
+            minify: !isDev,
+            rollupOptions: options.rollupOptions || {},
+        },
+    };
+}
+
 // --- 🔧 Incremental build detection ---
 function checkIncrementalBuild() {
-    const buildHashFile = resolve(__dirname, "../.extension-build-hash");
+    const buildHashFile = resolve(
+        __dirname,
+        "../.build.cache/.extension-build-hash",
+    );
 
     try {
         // Get modification times of key directories
@@ -73,6 +107,11 @@ function checkIncrementalBuild() {
         // Store current hash for next time - ONLY update if we actually built
         return (actuallyBuilt) => {
             if (actuallyBuilt) {
+                // Ensure cache directory exists
+                const cacheDir = dirname(buildHashFile);
+                if (!existsSync(cacheDir)) {
+                    mkdirSync(cacheDir, { recursive: true });
+                }
                 writeFileSync(buildHashFile, currentHash);
             }
         };
@@ -91,7 +130,7 @@ function checkIncrementalBuild() {
     }
 }
 
-const updateBuildHash = checkIncrementalBuild();
+// const updateBuildHash = checkIncrementalBuild();
 
 // --- 🔧 Detect dev mode ---
 const isDev =
@@ -155,13 +194,9 @@ if (verbose)
 if (verbose) console.log(chalk.cyan("🚀 Building Browser extension..."));
 
 // Service worker (ESM)
-await build({
-    logLevel: "error",
-    build: {
-        outDir: chromeOutDir,
+await build(
+    createBuildOptions(chromeOutDir, {
         emptyOutDir: !isDev,
-        sourcemap: isDev,
-        minify: !isDev,
         rollupOptions: {
             input: { serviceWorker: resolve(srcDir, "serviceWorker/index.ts") },
             output: {
@@ -169,21 +204,16 @@ await build({
                 entryFileNames: "serviceWorker.js",
             },
         },
-    },
-});
+    }),
+);
 if (verbose) console.log(chalk.green("✅ Chrome service worker built"));
 
 // Content scripts (IIFE)
 for (const [name, relPath] of Object.entries(sharedScripts)) {
     const input = resolve(srcDir, relPath);
     if (verbose) console.log(chalk.yellow(`➡️  Chrome content: ${name}`));
-    await build({
-        logLevel: "error",
-        build: {
-            outDir: chromeOutDir,
-            emptyOutDir: false,
-            sourcemap: isDev,
-            minify: !isDev,
+    await build(
+        createBuildOptions(chromeOutDir, {
             rollupOptions: {
                 input,
                 output: {
@@ -192,8 +222,8 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
                     inlineDynamicImports: true,
                 },
             },
-        },
-    });
+        }),
+    );
     if (verbose) console.log(chalk.green(`✅ Chrome ${name}.js built`));
 }
 
@@ -225,13 +255,8 @@ if (verbose) console.log(chalk.cyan("\n🚀 Building Electron extension..."));
 for (const [name, relPath] of Object.entries(sharedScripts)) {
     const input = resolve(srcDir, relPath);
     if (verbose) console.log(chalk.yellow(`➡️  Electron shared: ${name}`));
-    await build({
-        logLevel: "error",
-        build: {
-            outDir: electronOutDir,
-            emptyOutDir: false,
-            sourcemap: isDev,
-            minify: !isDev,
+    await build(
+        createBuildOptions(electronOutDir, {
             rollupOptions: {
                 input,
                 output: {
@@ -240,21 +265,16 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
                     inlineDynamicImports: true,
                 },
             },
-        },
-    });
+        }),
+    );
     if (verbose) console.log(chalk.green(`✅ Electron ${name}.js built`));
 }
 
 for (const [name, relPath] of Object.entries(electronOnlyScripts)) {
     const input = resolve(__dirname, relPath);
     if (verbose) console.log(chalk.yellow(`➡️  Electron only: ${name}`));
-    await build({
-        logLevel: "error",
-        build: {
-            outDir: electronOutDir,
-            emptyOutDir: false,
-            sourcemap: isDev,
-            minify: !isDev,
+    await build(
+        createBuildOptions(electronOutDir, {
             rollupOptions: {
                 input,
                 output: {
@@ -263,8 +283,8 @@ for (const [name, relPath] of Object.entries(electronOnlyScripts)) {
                     inlineDynamicImports: true,
                 },
             },
-        },
-    });
+        }),
+    );
     if (verbose) console.log(chalk.green(`✅ Electron ${name}.js built`));
 }
 
@@ -277,7 +297,7 @@ copyFileSync(
 if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
 
 // Update build hash to mark successful completion
-updateBuildHash(true); // true = actually built something
+// updateBuildHash(true); // true = actually built something
 
 if (verbose)
     console.log(

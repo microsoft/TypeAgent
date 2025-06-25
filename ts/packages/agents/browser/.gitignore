@@ -13,6 +13,7 @@ node_modules/
 *.tsbuildinfo
 
 # Build cache
+.build.cache/
 .extension-build-hash
 .tsc-cache-*.json
 

@@ -50,9 +50,6 @@
     "oracle": {
       "name": "oracle-agent"
     },
-    "planVisualizer": {
-      "name": "plan-visualizer"
-    },
     "spelunker": {
       "name": "spelunker-agent"
     }

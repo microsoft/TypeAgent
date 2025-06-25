@@ -15,27 +15,29 @@
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
     "./agent/handlers": "./dist/agent/actionHandler.mjs",
-    "./agent/types": "./dist/agent/browserControl.mjs",
+    "./agent/types": "./dist/common/browserControl.mjs",
     "./contentScriptRpc/types": "./dist/common/contentScriptRpc/types.mjs",
     "./contentScriptRpc/client": "./dist/common/contentScriptRpc/client.mjs"
   },
   "main": "index.js",
   "scripts": {
-    "build": "npm run build:deps && npm run build:parallel",
-    "build:deps": "npm run tsc:common",
-    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev npm:tsc:typecheck",
-    "build:parallel": "concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite npm:tsc:typecheck",
-    "clean": "rimraf dist deploy .tsbuildinfo && rimraf --glob '.tsc-cache-*.json'",
+    "build": "fluid-build . -t build",
+    "build:dev": "fluid-build . -t build:dev",
+    "build:views": "fluid-build . -t build:views",
+    "build:views:client": "vite build",
+    "build:views:server": "tsc --build src/views/server/tsconfig.json",
+    "build:views:shared": "tsc --build src/views/shared/tsconfig.json",
+    "clean": "rimraf dist deploy .tsbuildinfo .build.cache && rimraf --glob '.tsc-cache-*.json'",
     "package": "node scripts/packExtension.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "jest",
-    "tsc:agent": "node scripts/build.mjs agent \"tsc --build src/agent/tsconfig.json\"",
-    "tsc:common": "node scripts/build.mjs common \"tsc --build src/common/tsconfig.json\"",
-    "tsc:puppeteer": "node scripts/build.mjs puppeteer \"tsc --build src/puppeteer/tsconfig.json\"",
-    "tsc:typecheck": "node scripts/build.mjs typecheck \"tsc --noEmit -p tsconfig.json\"",
-    "vite": "node scripts/buildExtension.mjs",
-    "vite:dev": "node scripts/buildExtension.mjs --dev"
+    "tsc:agent": "tsc --build src/agent/tsconfig.json",
+    "tsc:common": "tsc --build src/common/tsconfig.json",
+    "tsc:puppeteer": "tsc --build src/puppeteer/tsconfig.json",
+    "tsc:typecheck": "tsc --noEmit -p tsconfig.json",
+    "vite:extension": "node scripts/buildExtension.mjs",
+    "vite:extension:dev": "node scripts/buildExtension.mjs --dev"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -47,8 +49,13 @@
     "bootstrap": "^5.3.3",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",
+    "cytoscape": "^3.32.0",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5",
     "debug": "^4.4.0",
     "dompurify": "^3.2.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.5.0",
     "html-to-text": "^9.0.5",
     "jsonpath": "^1.1.1",
     "knowpro": "workspace:*",
@@ -67,9 +74,14 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.18",
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@fluidframework/build-tools": "^0.56.0",
     "@rollup/plugin-typescript": "^11.1.5",
     "@types/chrome": "^0.0.256",
+    "@types/cytoscape": "^3.21.9",
+    "@types/cytoscape-dagre": "^2.3.3",
+    "@types/dagre": "^0.7.52",
     "@types/debug": "^4.1.12",
+    "@types/express": "^4.17.21",
     "@types/html-to-text": "^9.0.4",
     "@types/jest": "^29.5.7",
     "@types/jquery": "^3.5.14",
@@ -94,5 +106,61 @@
     "ts-loader": "^9.5.1",
     "typescript": "~5.4.5",
     "vite": "^6.3.4"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "build": {
+        "dependsOn": [
+          "build:views",
+          "tsc:agent",
+          "tsc:puppeteer",
+          "tsc:typecheck",
+          "vite:extension"
+        ],
+        "script": false
+      },
+      "build:dev": {
+        "dependsOn": [
+          "build:views",
+          "tsc:agent",
+          "tsc:puppeteer",
+          "tsc:typecheck",
+          "vite:extension:dev"
+        ],
+        "script": false
+      },
+      "tsc:agent": [
+        "tsc:common"
+      ],
+      "vite:extension": [
+        "tsc:common"
+      ],
+      "vite:extension:dev": [
+        "tsc:common"
+      ],
+      "build:views": {
+        "dependsOn": [
+          "build:views:server",
+          "build:views:client"
+        ],
+        "script": false
+      },
+      "build:views:server": [
+        "build:views:shared"
+      ],
+      "build:views:client": [
+        "build:views:shared"
+      ]
+    },
+    "declarativeTasks": {
+      "vite": {
+        "inputGlobs": [
+          "src/views/client/**/*"
+        ],
+        "outputGlobs": [
+          "dist/views/public/**/*"
+        ]
+      }
+    }
   }
 }

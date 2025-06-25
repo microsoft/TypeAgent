@@ -6,14 +6,21 @@
 // This runs BEFORE Vite and can exit early if no changes are detected
 
 import { createHash } from "crypto";
-import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
+import {
+    readFileSync,
+    writeFileSync,
+    existsSync,
+    statSync,
+    mkdirSync,
+} from "fs";
 import { execSync } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..");
-const cacheFile = path.join(rootDir, ".frontend-build-cache.json");
+const cacheDir = path.join(rootDir, ".build.cache");
+const cacheFile = path.join(cacheDir, ".frontend-build-cache.json");
 
 function calculateFileHash(filePath) {
     try {
@@ -31,19 +38,19 @@ function calculateProjectHash() {
     // Key files that affect the planVisualizer frontend build
     const keyFiles = [
         // Source files
-        "src/view/client/index.html",
-        "src/view/client/app.ts",
-        "src/view/client/config.ts",
-        "src/view/client/apiService.ts",
-        "src/view/client/cytoscapeConfig.ts",
-        "src/view/client/visualizer.ts",
-        "src/view/client/tsconfig.json",
+        "src/views/client/plans/index.html",
+        "src/views/client/plans/app.ts",
+        "src/views/client/plans/config.ts",
+        "src/views/client/plans/apiService.ts",
+        "src/views/client/plans/cytoscapeConfig.ts",
+        "src/views/client/plans/visualizer.ts",
+        "src/views/client/plans/tsconfig.json",
         "package.json",
-        "vite.config.js",
+        "vite.config.mjs",
 
         // Lock file for dependencies
-        "../../../pnpm-lock.yaml",
-        "../../../package.json",
+        "../../../../pnpm-lock.yaml",
+        "../../../../package.json",
     ];
 
     let hashInput = "";
@@ -54,7 +61,7 @@ function calculateProjectHash() {
     }
 
     // Also check CSS directory
-    const cssDir = path.join(rootDir, "src/view/client/css");
+    const cssDir = path.join(rootDir, "src/views/client/plans/css");
     if (existsSync(cssDir)) {
         try {
             const files = readdirSync(cssDir, { recursive: true });
@@ -72,7 +79,7 @@ function calculateProjectHash() {
 }
 
 function checkOutputExists() {
-    const outputDir = path.join(rootDir, "dist/view/public");
+    const outputDir = path.join(rootDir, "dist/views/public");
     const indexFile = path.join(outputDir, "index.html");
     return existsSync(indexFile);
 }
@@ -89,6 +96,11 @@ function loadCache() {
 }
 
 function saveCache(hash) {
+    // Ensure cache directory exists
+    if (!existsSync(cacheDir)) {
+        mkdirSync(cacheDir, { recursive: true });
+    }
+
     const cache = {
         hash,
         timestamp: Date.now(),

@@ -11,7 +11,7 @@ import cytoscapeDagre from "cytoscape-dagre";
 import CONFIG from "./config.js";
 import ApiService from "./apiService.js";
 import Visualizer from "./visualizer.js";
-import { WebPlanData, SSEEvent } from "../shared/types.js";
+import { WebPlanData, SSEEvent } from "../../shared/types.js";
 
 declare global {
     interface Window {

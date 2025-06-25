@@ -94,52 +94,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             confirmationMessage = `Opened new tab with query ${action.parameters.query}`;
             break;
         }
-        case "followLinkByText": {
-            const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "get_page_links_by_query",
-                query: action.parameters.keywords,
-            });
-
-            if (response && response.url) {
-                if (action.parameters.openInNewTab) {
-                    await chrome.tabs.create({
-                        url: response.url,
-                    });
-                } else {
-                    await chrome.tabs.update(targetTab?.id!, {
-                        url: response.url,
-                    });
-                }
-
-                confirmationMessage = `Navigated to the ${action.parameters.keywords} link`;
-            }
-
-            break;
-        }
-        case "followLinkByPosition": {
-            const targetTab = await getActiveTab();
-            const response = await chrome.tabs.sendMessage(targetTab?.id!, {
-                type: "get_page_links_by_position",
-                position: action.parameters.position,
-            });
-
-            if (response && response.url) {
-                if (action.parameters.openInNewTab) {
-                    await chrome.tabs.create({
-                        url: response.url,
-                    });
-                } else {
-                    await chrome.tabs.update(targetTab?.id!, {
-                        url: response.url,
-                    });
-                }
-
-                confirmationMessage = `Navigated to the ${action.parameters.position} link`;
-            }
-
-            break;
-        }
 
         case "openFromHistory": {
             const targetTab = await getActiveTab();
@@ -212,51 +166,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             chrome.tts.stop();
             break;
         }
-        case "zoomIn": {
-            const targetTab = await getActiveTab();
-            if (targetTab?.url?.startsWith("https://paleobiodb.org/")) {
-                const result = await chrome.tabs.sendMessage(targetTab.id!, {
-                    type: "run_paleoBioDb_action",
-                    action: action,
-                });
-            } else {
-                const currentZoom = await chrome.tabs.getZoom();
-                if (currentZoom < 5) {
-                    var stepValue = 1;
-                    if (currentZoom < 2) {
-                        stepValue = 0.25;
-                    }
 
-                    await chrome.tabs.setZoom(currentZoom + stepValue);
-                }
-            }
-
-            break;
-        }
-        case "zoomOut": {
-            const targetTab = await getActiveTab();
-            if (targetTab?.url?.startsWith("https://paleobiodb.org/")) {
-                const result = await chrome.tabs.sendMessage(targetTab.id!, {
-                    type: "run_paleoBioDb_action",
-                    action: action,
-                });
-            } else {
-                const currentZoom = await chrome.tabs.getZoom();
-                if (currentZoom > 0) {
-                    var stepValue = 1;
-                    if (currentZoom < 2) {
-                        stepValue = 0.25;
-                    }
-
-                    await chrome.tabs.setZoom(currentZoom - stepValue);
-                }
-            }
-            break;
-        }
-        case "zoomReset": {
-            await chrome.tabs.setZoom(0);
-            break;
-        }
         case "captureScreenshot": {
             responseObject = await getTabScreenshot(
                 action.parameters?.downloadAsFile,
