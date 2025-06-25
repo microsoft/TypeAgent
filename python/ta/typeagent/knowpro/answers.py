@@ -74,7 +74,6 @@ async def generate_answers(
     return all_answers, combined_answer
 
 
-# TODO: Pass typechat model in as an argument to avoid creating it every time.
 async def generate_answer[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     translator: typechat.TypeChatJsonTranslator[AnswerResponse],
     search_result: ConversationSearchResult,
@@ -168,7 +167,6 @@ def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                 messageText=" ".join(msg.text_chunks),
             )
         )
-    # TODO: merge, then TopK
     for ktype, knowledge in search_result.knowledge_matches.items():
         assert conversation.semantic_refs is not None, "Semantic refs must not be None"
         match ktype:
