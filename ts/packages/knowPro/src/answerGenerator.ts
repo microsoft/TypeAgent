@@ -675,14 +675,14 @@ function createQuestionPrompt(question: string): string {
         question,
         "===",
         "- The included [ANSWER CONTEXT] contains information that MAY be relevant to answering the question.",
-        "- Answer the user question PRECISELY using ONLY relevant topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT].",
-        "- Return 'NoAnswer' if unsure or if the topics and entity names/types in the question are not in [ANSWER CONTEXT].",
+        "- Answer the user question PRECISELY using ONLY information EXPLICITLY provided in the topics, entities, actions, messages and time ranges/timestamps found in [ANSWER CONTEXT]",
+        "- Return 'NoAnswer' if you are unsure, if the answer is not explicitly in [ANSWER CONTEXT] or if the topics or {entity names, types and facets} in the question are not found in [ANSWER CONTEXT].",
         "- Use the 'name', 'type' and 'facets' properties of the provided JSON entities to identify those highly relevant to answering the question.",
-        "- 'origin' on knowledge simply means who provided it.",
-        "- When asked for lists, ensure the the list contents answer the question and nothing else.",
-        "E.g. for the question 'List all books': List only the books in [ANSWER CONTEXT].",
+        "- knowledge.origin knowledge.audience explain ONLY the flow of information. But they DO NOT imply attributes and roles such as: 'writer', 'singer', 'inventor' etc.",
+        "- When asked for lists, ensure the the list contents answer the question and nothing else. E.g. for the question 'List all books': List only the books in [ANSWER CONTEXT].",
         "- Use direct quotes only when needed or asked. Otherwise answer in your own words.",
         "- Your answer is readable and complete, with appropriate formatting: line breaks, numbered lists, bullet points etc.",
+        "- If the specific information requested (e.g., the inventor) is not explicitly provided in the context, return 'NoAnswer' with an explanation.",
     ];
     return prompt.join("\n");
 }

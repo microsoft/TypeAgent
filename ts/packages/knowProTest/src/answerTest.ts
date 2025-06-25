@@ -21,6 +21,7 @@ export type QuestionAnswer = {
     question: string;
     answer: string;
     cmd?: string | undefined;
+    hasNoAnswer?: boolean | undefined;
 };
 
 export async function runAnswerBatch(
@@ -145,9 +146,13 @@ async function getQuestionAnswer(
         return response.answerResponses;
     }
     const answer = flattenAnswers(response.answerResponses.data);
+    const hasNoAnswer = response.answerResponses.data.some(
+        (a) => a.type === "NoAnswer",
+    );
     const qa: QuestionAnswer = {
         question: response.searchResponse.debugContext.searchText,
         answer,
+        hasNoAnswer,
     };
     return success(qa);
 }

@@ -67,13 +67,15 @@ export async function execSearchRequest(
     //
     // Run query
     //
-    const searchResults = await getLangSearchResult(
-        conversation,
-        context.queryTranslator,
-        langQuery,
-        options,
-        langFilter,
-        debugContext,
+    const searchResults = await async.getResultWithRetry(() =>
+        getLangSearchResult(
+            conversation,
+            context.queryTranslator,
+            langQuery,
+            options,
+            langFilter,
+            debugContext,
+        ),
     );
 
     return { searchResults, debugContext };
