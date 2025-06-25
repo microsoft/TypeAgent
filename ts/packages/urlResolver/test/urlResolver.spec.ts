@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
-import { testIf } from "./testCore.js";
+import { testIf } from "aiclient/test";
 import * as urlResolver from "../src/urlResolver.js";
 import { bingWithGrounding } from "../src/index.js";
 

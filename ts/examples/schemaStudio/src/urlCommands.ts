@@ -10,11 +10,8 @@ import {
 } from "interactive-app";
 import { SchemaStudio } from "./studio.js";
 import fs from "fs";
-import { bingWithGrounding, agents, urlResolver } from "aiclient";
-import { urlValidityAction } from "../../../packages/aiclient/dist/urlResolver.js";
+import { bingWithGrounding, urlResolver } from "url-resolver";
 import registerDebug from "debug";
-import { DefaultAzureCredential } from "@azure/identity";
-import { AIProjectClient } from "@azure/ai-projects";
 
 export function createURLResolverCommands(
     studio: SchemaStudio,
@@ -131,14 +128,8 @@ export function createURLValidateCommands(
 
         if (namedArgs.flushAgents) {
             io.writer.writeLine("Flushing agents...");
-            const project = new AIProjectClient(
-                bingWithGrounding.apiSettingsFromEnv().endpoint!,
-                new DefaultAzureCredential(),
-            );
-            await agents.flushAgents(
-                "TypeAgent_URLResolverAgent",
-                [bingWithGrounding.apiSettingsFromEnv().urlResolutionAgentId!],
-                project,
+            await urlResolver.flushAgent(
+                bingWithGrounding.apiSettingsFromEnv(),
             );
             return;
         }
@@ -168,7 +159,7 @@ export function createURLValidateCommands(
             const utterance = temp[0].trim();
             const site = temp[1].trim();
 
-            const siteValidity: urlValidityAction | undefined =
+            const siteValidity: urlResolver.urlValidityAction | undefined =
                 await urlResolver.validateURL(utterance, site, groundingConfig);
 
             io.writer.writeLine(

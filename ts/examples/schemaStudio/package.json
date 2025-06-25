@@ -22,9 +22,6 @@
     "tsc": "tsc -p src"
   },
   "dependencies": {
-    "@azure/ai-agents": "^1.0.0-beta.3",
-    "@azure/ai-projects": "^1.0.0-beta.8",
-    "@azure/identity": "^4.10.0",
     "action-schema": "workspace:*",
     "aiclient": "workspace:*",
     "debug": "^4.4.0",
@@ -33,7 +30,8 @@
     "schema-author": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "typescript": "~5.4.5"
+    "typescript": "~5.4.5",
+    "url-resolver": "workspace:*"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",

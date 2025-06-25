@@ -66,12 +66,8 @@ import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs"
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "./browserControl.mjs";
 import * as website from "website-memory";
-import {
-    bingWithGrounding,
-    openai,
-    TextEmbeddingModel,
-    urlResolver,
-} from "aiclient";
+import { openai, TextEmbeddingModel } from "aiclient";
+import { urlResolver, bingWithGrounding } from "url-resolver";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
