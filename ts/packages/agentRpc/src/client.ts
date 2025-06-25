@@ -119,10 +119,24 @@ function createOptionsRpc(channelProvider: ChannelProvider, name: string) {
                 name: string;
                 args: any[];
             }) => {
-                const options = optionsMap.get(param.id);
-                const fn = getObjectProperty(options, param.name);
-                // TODO: provide "this" object
-                return fn(...param.args);
+                const options: any = optionsMap.get(param.id);
+                let thisObject: any = undefined;
+                let fn: (...args: any[]) => any;
+                const name = param.name;
+                if (name === "") {
+                    fn = options;
+                } else {
+                    const names = param.name.split(".");
+                    if (names.length === 1) {
+                        thisObject = options;
+                        fn = options[name];
+                    } else {
+                        const funcName = names.pop();
+                        thisObject = getObjectProperty(options, name);
+                        fn = thisObject[funcName!];
+                    }
+                }
+                return fn.call(thisObject, ...param.args);
             },
         }),
     };

@@ -20,5 +20,7 @@ export function createContentScriptRpcClient(
             contentScriptRpcClient.invoke("getPageLinksByQuery", keywords),
         getPageLinksByPosition: (position: number) =>
             contentScriptRpcClient.invoke("getPageLinksByPosition", position),
+        runPaleoBioDbAction: (action: any) =>
+            contentScriptRpcClient.invoke("runPaleoBioDbAction", action),
     };
 }

@@ -152,6 +152,9 @@ function setupMessageListeners(): void {
             const link = matchLinksByPosition(position) as HTMLAnchorElement;
             return link?.href;
         },
+        runPaleoBioDbAction: async (action: any) => {
+            sendPaleoDbRequest(action);
+        },
     };
 
     createRpc(
@@ -255,12 +258,6 @@ export async function handleMessage(
 
             case "run_ui_event": {
                 await sendUIEventsRequest(message.action);
-                sendResponse({});
-                break;
-            }
-
-            case "run_paleoBioDb_action": {
-                sendPaleoDbRequest(message.action);
                 sendResponse({});
                 break;
             }
