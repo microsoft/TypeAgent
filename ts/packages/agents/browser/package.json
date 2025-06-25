@@ -74,8 +74,8 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.18",
-    "@fluidframework/build-tools": "^0.56.0",
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@fluidframework/build-tools": "^0.56.0",
     "@rollup/plugin-typescript": "^11.1.5",
     "@types/chrome": "^0.0.256",
     "@types/cytoscape": "^3.21.9",
