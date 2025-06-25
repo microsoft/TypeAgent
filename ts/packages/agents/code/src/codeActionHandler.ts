@@ -165,9 +165,6 @@ async function ensureVSCodeProcess(): Promise<void> {
                 chalk.redBright(`❌ Failed to launch VSCode:${error.message}`),
             );
         } else {
-            console.log(
-                `✅ VSCode launched${folder ? ` with: ${folder}` : ""}`,
-            );
             debug(
                 chalk.greenBright(
                     `✅ VSCode launched${folder ? ` with: ${folder}` : ""}`,
