@@ -117,6 +117,11 @@ export function createURLValidateCommands(
                 type: "boolean",
                 defaultValue: false,
             },
+            deleteThreads: {
+                description: "Deletes all threads.",
+                type: "boolean",
+                defaultValue: false,
+            },
         },
     };
 
@@ -133,6 +138,16 @@ export function createURLValidateCommands(
             );
             return;
         }
+
+        if (namedArgs.deleteThreads) {
+            io.writer.writeLine("Deleting threads...");
+            await urlResolver.deleteThreads(
+                bingWithGrounding.apiSettingsFromEnv(),
+            );
+            return;
+        }
+
+        registerDebug.enable("*");
 
         io.writer.writeLine(`Opening file: ${namedArgs.file}`);
         const urls = fs.readFileSync(namedArgs.file, "utf-8").split("\n");

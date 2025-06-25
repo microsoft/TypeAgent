@@ -64,6 +64,7 @@ export async function createAgent(
  * Deletes all agents that start with the supplied string except the ones whose ID is in the keep list
  * @param nameStartsWith - The name of the agents to match
  * @param agent_ids_to_keep - The ID of the agents to retain
+ * @param project - The AI project client
  */
 export async function flushAgents(
     nameStartsWith: string,
@@ -95,7 +96,30 @@ export async function flushAgents(
             }
         } while (!empty);
     } catch (e) {
-        debug(`Error creating agent: ${e}`);
+        debug(`Error deleting agent: ${e}`);
+        throw e;
+    }
+}
+
+/**
+ * Deletes all agent threads.
+ */
+export async function deleteThreads(project: AIProjectClient) {
+    try {
+        let threads;
+        let empty = true;
+        // pagination doesn't work when you are deleting everything, so we have to loop until we find no more threads
+        do {
+            empty = true;
+            threads = project.agents.threads.list();
+            for await (const t of threads) {
+                empty = false;
+
+                await project.agents.threads.delete(t.id);
+            }
+        } while (!empty);
+    } catch (e) {
+        debug(`Error deleting thread: ${e}`);
         throw e;
     }
 }

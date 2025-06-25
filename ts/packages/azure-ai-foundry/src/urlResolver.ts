@@ -47,6 +47,16 @@ export async function flushAgent(
     );
 }
 
+export async function deleteThreads(
+    groundingConfig: bingWithGrounding.ApiSettings,
+) {
+    const project = new AIProjectClient(
+        groundingConfig.endpoint!,
+        new DefaultAzureCredential(),
+    );
+    await agents.deleteThreads(project);
+}
+
 export async function resolveURLWithSearch(
     site: string,
     groundingConfig: bingWithGrounding.ApiSettings,
@@ -252,7 +262,7 @@ export async function validateURL(
                         pollingOptions: {
                             intervalInMs: 3000,
                         },
-                        onResponse: (response): void => {
+                        onResponse: async (response): Promise<void> => {
                             lastResponse = response;
 
                             debug(
@@ -265,6 +275,12 @@ export async function validateURL(
                                     `Received response with status: ${response}`,
                                 );
                             }
+
+                            // // Cancel the run if it has been running for more than 30 seconds
+                            // if (run.startedAt && !run.completedAt && (Date.now() - new Date(run.startedAt).getTime() > 30000)) {
+                            //     await project.agents.runs.cancel(thread.id, run.id);
+                            //     console.log(`TIMEOUT - Canceled ${utterance}`);
+                            // }
                         },
                     },
                 );
