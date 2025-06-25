@@ -183,7 +183,7 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
         return
     search_results = result.value
     for sr in search_results:
-        print("-"*50)
+        print("-" * 50)
         print_result(sr, conversation)
     all_answers, combined_answer = await generate_answers(
         answer_translator, search_results, conversation, orig_query_text

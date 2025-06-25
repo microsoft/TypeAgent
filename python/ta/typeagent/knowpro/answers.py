@@ -2,15 +2,15 @@
 # Licensed under the MIT License.
 
 from collections.abc import Iterable, Iterator
-from dataclasses import asdict, dataclass
-import re
-from typing import Any, cast
+from dataclasses import dataclass
+from typing import Any
 
 import black
 import typechat
 
 from .answer_context_schema import AnswerContext, RelevantKnowledge, RelevantMessage
 from .answer_response_schema import AnswerResponse
+from .collections import Scored, get_top_k
 from .interfaces import (
     IConversation,
     IMessage,
@@ -82,7 +82,10 @@ async def generate_answer[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
 ) -> AnswerResponse:
     assert search_result.raw_query_text is not None, "Raw query text must not be None"
     context = make_context(search_result, conversation, options)
-    request = f"{create_question_prompt(search_result.raw_query_text)}\n\n{create_context_prompt(context)}"
+    request = f"{create_question_prompt(search_result.raw_query_text)}\n{create_context_prompt(context)}"
+    print("+" * 80)
+    print(request)
+    print("+" * 80)
     result = await translator.translate(request)
     if isinstance(result, typechat.Failure):
         return AnswerResponse(type="NoAnswer", answer=None, whyNoAnswer=result.message)
@@ -147,9 +150,6 @@ def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     options: AnswerContextOptions | None = None,
 ) -> AnswerContext:
     context = AnswerContext([], [], [])
-    context.entities = []
-    context.topics = []
-    context.messages = []
 
     if search_result.message_matches:
         context.messages = get_relevant_messages_for_answer(
@@ -157,46 +157,45 @@ def make_context[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
             search_result.message_matches,
             options and options.messages_top_k,
         )
-    for scored_msg_ord in search_result.message_matches:
-        msg = conversation.messages[scored_msg_ord.message_ordinal]
-        context.messages.append(
-            RelevantMessage(  # TODO: type-safety
-                from_=msg.speaker,  # type: ignore  # It's a PodcastMessage
-                to=msg.listeners,  # type: ignore  # It's a PodcastMessage
-                timestamp=msg.timestamp,  # type: ignore  # It's a PodcastMessage
-                messageText=" ".join(msg.text_chunks),
-            )
-        )
+
     for ktype, knowledge in search_result.knowledge_matches.items():
-        assert conversation.semantic_refs is not None, "Semantic refs must not be None"
         match ktype:
             case "entity":
-                for scored_sem_ref_ord in knowledge.semantic_ref_matches:
-                    sem_ref = conversation.semantic_refs[
-                        scored_sem_ref_ord.semantic_ref_ordinal
-                    ]
-                    entity = cast(ConcreteEntity, sem_ref.knowledge)
-                    context.entities.append(
-                        RelevantKnowledge(
-                            knowledge=asdict(entity),
-                            origin=None,
-                            audience=None,
-                            timeRange=None,
-                        )
-                    )
+                context.entities = get_relevant_entities_for_answer(
+                    conversation,
+                    knowledge,
+                    options and options.entities_top_k,
+                )
             case "topic":
-                topic = cast(Topic, knowledge)
-                context.topics.append(
-                    RelevantKnowledge(
-                        knowledge=asdict(topic),
-                        origin=None,
-                        audience=None,
-                        timeRange=None,
-                    )
+                context.topics = get_relevant_topics_for_answer(
+                    conversation,
+                    knowledge,
+                    options and options.topics_top_k,
                 )
             case _:
-                pass  # TODO: Actions and topics too???
+                pass  # TODO: Actions and tags (once we support them)?
+
     return context
+
+
+type MergedFacets = dict[str, list[str]]
+
+
+# NOT a dataclass -- an optional merge-in attribute for MergedEntity etc.
+class MergedKnowledge:
+    source_message_ordinals: set[MessageOrdinal] | None = None
+
+
+@dataclass
+class MergedTopic(MergedKnowledge):
+    topic: Topic
+
+
+@dataclass
+class MergedEntity(MergedKnowledge):
+    name: str
+    type: list[str]
+    facets: MergedFacets | None = None
 
 
 def get_relevant_messages_for_answer[
@@ -229,6 +228,66 @@ def get_relevant_messages_for_answer[
     return relevant_messages
 
 
+def get_relevant_topics_for_answer(
+    conversation: IConversation,
+    search_result: SemanticRefSearchResult,
+    top_k: int | None = None,
+) -> list[RelevantKnowledge]:
+    assert conversation.semantic_refs is not None, "Semantic refs must not be None"
+    scored_topics: Iterable[Scored[SemanticRef]] = (
+        get_scored_semantic_refs_from_ordinals_iter(
+            conversation.semantic_refs,
+            search_result.semantic_ref_matches,
+            "topic",
+        )
+    )
+    merged_topics = merge_scored_topics(scored_topics, True)
+    candidate_topics: Iterable[Scored[MergedTopic]] = merged_topics.values()
+    if top_k and len(merged_topics) > top_k:
+        candidate_topics = get_top_k(candidate_topics, top_k)
+
+    relevant_topics: list[RelevantKnowledge] = []
+
+    for scored_value in candidate_topics:
+        merged_topic = scored_value.item
+        relevant_topics.append(
+            create_relevant_knowledge(
+                conversation,
+                merged_topic.topic,
+                merged_topic.source_message_ordinals,
+            )
+        )
+
+    return relevant_topics
+
+
+def merge_scored_topics(
+    scored_topics: Iterable[Scored[SemanticRef]],
+    merge_ordinals: bool,
+) -> dict[str, Scored[MergedTopic]]:
+    merged_topics: dict[str, Scored[MergedTopic]] = {}
+
+    for scored_topic in scored_topics:
+        assert isinstance(scored_topic.item.knowledge, Topic)
+        topic = scored_topic.item.knowledge
+        existing = merged_topics.get(topic.text)
+        if existing is not None:
+            assert existing.item.topic.text == topic.text
+            # Merge scores.
+            if existing.score < scored_topic.score:
+                existing.score = scored_topic.score
+        else:
+            existing = Scored(
+                item=MergedTopic(topic=topic),
+                score=scored_topic.score,
+            )
+            merged_topics[topic.text] = existing
+        if merge_ordinals:
+            merge_message_ordinals(existing.item, scored_topic.item)
+
+    return merged_topics
+
+
 def get_relevant_entities_for_answer(
     conversation: IConversation,
     search_result: SemanticRefSearchResult,
@@ -236,7 +295,7 @@ def get_relevant_entities_for_answer(
 ) -> list[RelevantKnowledge]:
     assert conversation.semantic_refs is not None, "Semantic refs must not be None"
     merged_entities = merge_scored_concrete_entities(
-        scored_semantic_refs_from_ordinals_iter(
+        get_scored_semantic_refs_from_ordinals_iter(
             conversation.semantic_refs,
             search_result.semantic_ref_matches,
             "entity",
@@ -245,9 +304,7 @@ def get_relevant_entities_for_answer(
     )
     candidate_entities = merged_entities.values()
     if top_k and len(merged_entities) > top_k:
-        candidate_entities = sorted(
-            merged_entities.values(), key=lambda x: x.score, reverse=True
-        )[:top_k]
+        candidate_entities = get_top_k(candidate_entities, top_k)
 
     relevant_entities: list[RelevantKnowledge] = []
 
@@ -258,6 +315,7 @@ def get_relevant_entities_for_answer(
             merged_to_concrete_entity(merged_entity),
             merged_entity.source_message_ordinals,
         )
+        relevant_entities.append(relevane_entity)
 
     return relevant_entities
 
@@ -277,13 +335,7 @@ def create_relevant_knowledge(
     return relevant_knowledge
 
 
-@dataclass
-class Scored[T]:
-    item: T
-    score: float
-
-
-def scored_semantic_refs_from_ordinals_iter(
+def get_scored_semantic_refs_from_ordinals_iter(
     semantic_refs: ISemanticRefCollection,
     semantic_ref_matches: list[ScoredSemanticRefOrdinal],
     knowledge_type: KnowledgeType,
@@ -295,26 +347,6 @@ def scored_semantic_refs_from_ordinals_iter(
                 item=semantic_ref,
                 score=semantic_ref_match.score,
             )
-
-
-type MergedFacets = dict[str, list[str]]
-
-
-# NOT a dataclass -- an optional merge-in attribute for MergedEntity etc.
-class MergedKnowledge:
-    source_message_ordinals: set[MessageOrdinal] | None = None
-
-
-@dataclass
-class MergedTopic(MergedKnowledge):
-    topic: Topic
-
-
-@dataclass
-class MergedEntity(MergedKnowledge):
-    name: str
-    type: list[str]
-    facets: MergedFacets | None = None
 
 
 def merge_scored_concrete_entities(
