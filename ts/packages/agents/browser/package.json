@@ -15,17 +15,15 @@
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
     "./agent/handlers": "./dist/agent/actionHandler.mjs",
-    "./agent/types": "./dist/agent/browserControl.mjs",
+    "./agent/types": "./dist/common/browserControl.mjs",
     "./contentScriptRpc/types": "./dist/common/contentScriptRpc/types.mjs",
     "./contentScriptRpc/client": "./dist/common/contentScriptRpc/client.mjs"
   },
   "main": "index.js",
   "scripts": {
-    "build": "npm run build:deps && npm run build:parallel",
-    "build:deps": "npm run tsc:common && npm run build:views:shared && npm run build:views:client",
-    "build:dev": "npm run tsc:common && concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite:dev npm:tsc:typecheck",
-    "build:parallel": "concurrently npm:tsc:agent npm:tsc:puppeteer npm:vite npm:tsc:typecheck npm:build:views:server",
-    "build:views": "npm run build:views:shared && concurrently npm:build:views:server npm:build:views:client",
+    "build": "fluid-build . -t build",
+    "build:dev": "fluid-build . -t build:dev",
+    "build:views": "fluid-build . -t build:views",
     "build:views:client": "vite build",
     "build:views:server": "tsc --build src/views/server/tsconfig.json",
     "build:views:shared": "tsc --build src/views/shared/tsconfig.json",
@@ -38,8 +36,8 @@
     "tsc:common": "tsc --build src/common/tsconfig.json",
     "tsc:puppeteer": "tsc --build src/puppeteer/tsconfig.json",
     "tsc:typecheck": "tsc --noEmit -p tsconfig.json",
-    "vite": "node scripts/buildExtension.mjs",
-    "vite:dev": "node scripts/buildExtension.mjs --dev"
+    "vite:extension": "node scripts/buildExtension.mjs",
+    "vite:extension:dev": "node scripts/buildExtension.mjs --dev"
   },
   "dependencies": {
     "@azure/ai-agents": "^1.0.0-beta.3",
@@ -77,6 +75,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.18",
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@fluidframework/build-tools": "^0.56.0",
     "@rollup/plugin-typescript": "^11.1.5",
     "@types/chrome": "^0.0.256",
     "@types/cytoscape": "^3.21.9",
@@ -108,5 +107,51 @@
     "ts-loader": "^9.5.1",
     "typescript": "~5.4.5",
     "vite": "^6.3.4"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "build": {
+        "dependsOn": [
+          "build:views",
+          "tsc:agent",
+          "tsc:puppeteer",
+          "tsc:typecheck",
+          "vite:extension"
+        ],
+        "script": false
+      },
+      "build:dev": {
+        "dependsOn": [
+          "build:views",
+          "tsc:agent",
+          "tsc:puppeteer",
+          "tsc:typecheck",
+          "vite:extension:dev"
+        ],
+        "script": false
+      },
+      "tsc:agent": [
+        "tsc:common"
+      ],
+      "vite:extension": [
+        "tsc:common"
+      ],
+      "vite:extension:dev": [
+        "tsc:common"
+      ],
+      "build:views": {
+        "dependsOn": [
+          "build:views:server",
+          "build:views:client"
+        ],
+        "script": false
+      },
+      "build:views:server": [
+        "build:views:shared"
+      ],
+      "build:views:client": [
+        "build:views:shared"
+      ]
+    }
   }
 }

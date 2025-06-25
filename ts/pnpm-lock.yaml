@@ -1013,6 +1013,9 @@ importers:
       '@esbuild-plugins/node-globals-polyfill':
         specifier: ^0.2.3
         version: 0.2.3(esbuild@0.25.4)
+      '@fluidframework/build-tools':
+        specifier: ^0.56.0
+        version: 0.56.0(@types/node@20.17.47)
       '@rollup/plugin-typescript':
         specifier: ^11.1.5
         version: 11.1.6(rollup@4.39.0)(tslib@2.8.1)(typescript@5.4.5)
