@@ -1508,6 +1508,9 @@ importers:
         specifier: ^13.6.8
         version: 13.6.27
     devDependencies:
+      '@milkdown/ctx':
+        specifier: ~7.13.0
+        version: 7.13.1
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
