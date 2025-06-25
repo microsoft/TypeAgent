@@ -161,7 +161,7 @@ export async function createKnowproTestCommands(
                 if (result.success) {
                     context.printer.writeLine(result.data.question);
                     context.printer.writeInColor(
-                        chalk.green,
+                        chalk.greenBright,
                         result.data.answer,
                     );
                 } else {
@@ -278,13 +278,13 @@ export async function createKnowproTestCommands(
                     result.expected.results,
                 );
             }
-            return true;
+            return false;
         } else {
             context.printer.writeInColor(
                 chalk.greenBright,
                 result.actual.searchText,
             );
-            return false;
+            return true;
         }
     }
 
