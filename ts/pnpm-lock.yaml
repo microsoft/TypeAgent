@@ -1198,13 +1198,28 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      better-sqlite3:
+        specifier: 11.9.1
+        version: 11.9.1
+      chalk:
+        specifier: ^5.4.1
+        version: 5.4.1
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.1(supports-color@8.1.1)
       ws:
         specifier: ^8.17.1
         version: 8.18.2
     devDependencies:
+      '@types/better-sqlite3':
+        specifier: 7.6.11
+        version: 7.6.11
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
