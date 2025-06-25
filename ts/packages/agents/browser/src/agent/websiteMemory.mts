@@ -455,6 +455,21 @@ export async function importWebsiteData(
         );
         await context.sessionContext.agentContext.websiteCollection.buildIndex();
 
+        // Persist the website collection to disk
+        try {
+            if (context.sessionContext.agentContext.index?.path) {
+                await context.sessionContext.agentContext.websiteCollection.writeToFile(
+                    context.sessionContext.agentContext.index.path,
+                    "index"
+                );
+                debug(`Saved website collection to ${context.sessionContext.agentContext.index.path}`);
+            } else {
+                debug("No index path available, website data not persisted");
+            }
+        } catch (error) {
+            debug(`Failed to save website collection: ${error}`);
+        }
+
         const result = createActionResult(
             `Successfully imported ${websites.length} ${type} from ${source}.`,
         );
