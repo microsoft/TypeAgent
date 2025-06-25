@@ -182,15 +182,19 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
         print(f"Error searching conversation: {result.message}")
         return
     search_results = result.value
+    for sr in search_results:
+        print("-"*50)
+        print_result(sr, conversation)
     all_answers, combined_answer = await generate_answers(
         answer_translator, search_results, conversation, orig_query_text
     )
+    print("-" * 40)
+    pretty_print(all_answers)
     print("-" * 40)
     if combined_answer.type == "NoAnswer":
         print(f"Failure: {combined_answer.whyNoAnswer}")
     else:
         print(combined_answer.answer)
-    pretty_print(all_answers)
     print("-" * 40)
 
 
