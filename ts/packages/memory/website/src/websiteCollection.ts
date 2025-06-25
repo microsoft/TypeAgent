@@ -292,6 +292,7 @@ export class WebsiteCollection
         baseFileName: string,
     ): Promise<WebsiteCollection | undefined> {
         const websiteCollection = new WebsiteCollection();
+        try {
         const data = await readConversationDataFromFile(
             dirPath,
             baseFileName,
@@ -301,6 +302,9 @@ export class WebsiteCollection
         if (data) {
             websiteCollection.deserialize(data);
         }
+    }catch(error: any){
+        console.warn(`Website collection loading failed: ${error.message}`);
+    }
         return websiteCollection;
     }
 

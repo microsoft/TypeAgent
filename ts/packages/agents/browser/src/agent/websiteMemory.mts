@@ -69,6 +69,7 @@ export async function resolveURLWithHistory(
         }
 
         debug(`Found ${matches.size} semantic matches for: '${site}'`);
+        debug(matches)
 
         const candidates: { url: string; score: number; metadata: any }[] = [];
         const processedMessages = new Set<number>();
@@ -166,12 +167,14 @@ function siteQueryToSearchTerms(site: string): any[] {
     terms.push({ term: { text: siteQuery } });
 
     // Add individual words if it's a multi-word query
+    /*
     const words = siteQuery.split(/\s+/).filter((word) => word.length > 2);
     words.forEach((word) => {
         if (word !== siteQuery) {
             terms.push({ term: { text: word } });
         }
     });
+*/
 
     return terms;
 }
@@ -284,6 +287,8 @@ export async function findRequestedWebsites(
             `Found ${matches.size} semantic matches for search filters: ${searchFilters.join(", ")}`,
         );
 
+        debug(matches);
+
         const results: { website: website.Website; score: number }[] = [];
         const processedMessages = new Set<number>();
 
@@ -350,6 +355,8 @@ export async function findRequestedWebsites(
             `Filtered to ${sortedResults.length} unique websites after scoring`,
         );
 
+        debug(sortedResults)
+        
         return sortedResults.map((r) => r.website);
     } catch (error) {
         debug(`Error in semantic website search: ${error}`);
@@ -369,6 +376,7 @@ function searchFiltersToSearchTerms(filters: string[]): any[] {
         terms.push({ term: { text: filter } });
 
         // Add individual words if it's a multi-word filter
+        /*
         const words = filter
             .toLowerCase()
             .split(/\s+/)
@@ -378,6 +386,7 @@ function searchFiltersToSearchTerms(filters: string[]): any[] {
                 terms.push({ term: { text: word } });
             }
         });
+        */
     });
 
     return terms;
@@ -478,7 +487,8 @@ export async function searchWebsites(
         context.actionIO.setDisplay("Searching websites...");
 
         const {
-            query,
+            originalUserRequest,
+            //query,
             domain,
             pageType,
             source,
@@ -487,7 +497,7 @@ export async function searchWebsites(
         } = action.parameters;
 
         // Build search filters
-        const searchFilters = [query];
+        const searchFilters = [originalUserRequest];
         if (domain) searchFilters.push(domain);
         if (pageType) searchFilters.push(pageType);
 
