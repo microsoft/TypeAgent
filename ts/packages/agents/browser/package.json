@@ -152,6 +152,16 @@
       "build:views:client": [
         "build:views:shared"
       ]
+    },
+    "declarativeTasks": {
+      "vite": {
+        "inputGlobs": [
+          "src/views/client/**/*"
+        ],
+        "outputGlobs": [
+          "dist/views/public/**/*"
+        ]
+      }
     }
   }
 }
