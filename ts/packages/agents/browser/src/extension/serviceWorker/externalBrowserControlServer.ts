@@ -11,7 +11,7 @@ import { createRpc } from "agent-rpc/rpc";
 import {
     BrowserControlCallFunctions,
     BrowserControlInvokeFunctions,
-} from "../../agent/browserControl.mjs";
+} from "../../common/browserControl.mjs";
 import { showBadgeBusy, showBadgeHealthy } from "./ui";
 import { createContentScriptRpcClient } from "../../common/contentScriptRpc/client.mjs";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
