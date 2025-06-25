@@ -3,8 +3,8 @@
 
 import dotenv from "dotenv";
 import { testIf } from "aiclient/test";
-import * as urlResolver from "../urlResolver.js";
-import { bingWithGrounding } from "../index.js";
+import * as urlResolver from "../src/urlResolver.js";
+import { bingWithGrounding } from "../src/index.js";
 
 dotenv.config({
     path: new URL("../../../../.env", import.meta.url),
