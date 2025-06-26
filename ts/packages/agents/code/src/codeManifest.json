@@ -5,7 +5,10 @@
   "schema": {
     "description": "Code agent helps you with productivity in using an editor and performing actions like creating files, editor customization, writing code, intelligent code suggestions, real-time error detection, debugging, and source control tasks etc.",
     "schemaFile": "./codeActionsSchema.ts",
-    "schemaType": "CodeActions"
+    "schemaType": {
+      "action": "CodeActions",
+      "activity": "CodeActivity"
+    }
   },
   "subActionManifests": {
     "code-debug": {
