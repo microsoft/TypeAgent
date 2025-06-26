@@ -938,7 +938,10 @@ function optimizeOrMax(termGroup: SearchTermGroup) {
 }
 
 export class SearchTermParser {
-    constructor(public noiseTerms?: Set<string>) {}
+    constructor(
+        public noiseTerms?: Set<string>,
+        public minTermLength: number = 3,
+    ) {}
 
     public getTerms(text: string, caseSensitive: boolean = false): string[] {
         // Should we also handle quotes etc?
@@ -958,10 +961,10 @@ export class SearchTermParser {
     }
 
     public removeNoise(terms: string[]): string[] {
+        let cleanTerms = terms.filter((t) => t.length >= this.minTermLength);
         if (this.noiseTerms) {
-            const cleanTerms = terms.filter((t) => !this.noiseTerms?.has(t));
-            return cleanTerms;
+            cleanTerms = cleanTerms.filter((t) => !this.noiseTerms?.has(t));
         }
-        return terms;
+        return cleanTerms;
     }
 }

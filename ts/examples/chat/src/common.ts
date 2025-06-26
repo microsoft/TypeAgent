@@ -465,7 +465,7 @@ export class TermParser {
         );
     }
 
-    public getRawTerms(text: string): string[] {
+    public getTerms(text: string): string[] {
         return this.parser.getTerms(text);
     }
 
