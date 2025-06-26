@@ -88,8 +88,6 @@ export default defineConfig({
         extensions: [".ts", ".js"],
         alias: {
             "@": resolve(__dirname, "src/views/client"),
-            // Alias for PDF.js files
-            pdfjs: resolve(__dirname, "src/views/client/pdf/pdfjs-viewer"),
         },
     },
 });
