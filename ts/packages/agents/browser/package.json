@@ -12,6 +12,7 @@
   "license": "MIT",
   "author": "Microsoft",
   "sideEffects": false,
+  "type": "module",
   "exports": {
     "./agent/manifest": "./src/agent/manifest.json",
     "./agent/handlers": "./dist/agent/actionHandler.mjs",
