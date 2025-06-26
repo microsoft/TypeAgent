@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 /**
  * Core PDF Viewer Implementation
  * Handles PDF.js integration and document rendering
