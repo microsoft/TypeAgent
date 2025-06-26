@@ -3,7 +3,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "../dist",
-    "types": ["node", "spotify-api"],
+    "types": ["node", "spotify-api"]
   },
-  "include":["./**/*"],
+  "include": ["./**/*"]
 }

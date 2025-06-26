@@ -6,7 +6,6 @@ import { resolve } from "path";
 
 export default defineConfig({
     root: resolve(__dirname, "src/views/client"),
-    plugins: [],
     build: {
         outDir: resolve(__dirname, "dist/views/public"),
         sourcemap: true,

@@ -1,15 +1,15 @@
 {
-    "extends": "../../../tsconfig.base.json",
-    "compilerOptions": {
-      "composite": true,
-    },
-    "include": [],
-    "references": [
-      { "path": "./src/agent" },
-      { "path": "./src/site" },
-      { "path": "./src/route" }
-    ],
-    "ts-node": {
-      "esm": true
-    }
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true
+  },
+  "include": [],
+  "references": [
+    { "path": "./src/agent" },
+    { "path": "./src/site" },
+    { "path": "./src/route" }
+  ],
+  "ts-node": {
+    "esm": true
   }
+}

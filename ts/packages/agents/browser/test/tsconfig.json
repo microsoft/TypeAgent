@@ -15,10 +15,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": [
-    "../test/**/*.ts",
-    "../src/**/*.ts",
-    "../test/types/*.d.ts"
-  ],
+  "include": ["../test/**/*.ts", "../src/**/*.ts", "../test/types/*.d.ts"],
   "exclude": ["node_modules"]
 }

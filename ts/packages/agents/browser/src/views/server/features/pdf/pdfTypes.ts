@@ -89,7 +89,7 @@ export interface PDFSSEEvent {
     data: any;
     timestamp: string;
     documentId: string;
-    userId?: string;
+    userId?: string | undefined;
 }
 
 export interface PDFUploadRequest {

@@ -13,9 +13,6 @@ pnpm-lock.yaml
 .tsc-cache-*.json
 .frontend-build-cache.json
 
-# Typescript config
-tsconfig.json
-
 # Test data
 packages/defaultAgentProvider/test/data
 packages/defaultAgentProvider/test/repo

@@ -4,8 +4,7 @@
     "composite": true,
     "incremental": true,
     "rootDir": ".",
-    "outDir": "../../dist/agent",
-    
+    "outDir": "../../dist/agent"
   },
   "include": ["./**/*"],
   "ts-node": {

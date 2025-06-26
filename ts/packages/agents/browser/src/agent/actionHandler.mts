@@ -718,7 +718,7 @@ export async function createViewServiceHost(port: number) {
             try {
                 const expressService = fileURLToPath(
                     new URL(
-                        path.join("..", "./views/server/server.js"),
+                        path.join("..", "./views/server/server.mjs"),
                         import.meta.url,
                     ),
                 );
