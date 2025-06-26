@@ -53,14 +53,14 @@ class EntityTerm:
             "Generic types like 'object', 'thing' etc. are NOT allowed.\n"
             "An entity can have multiple types; entity types should be single words."
         ),
-    ]
+    ] = None
     facets: Annotated[
         list[FacetTerm] | None,
         Doc(
             "Facet terms search for properties or attributes of the entity.\n"
             "E.g.: color(blue), profession(writer), author(*), aunt(Agatha), weight(4kg), phoneNumber(...), etc."
         ),
-    ]
+    ] = None
 
 
 @dataclass
@@ -71,31 +71,10 @@ class VerbsTerm:
 
 @dataclass
 class ActionTerm:
-    action_verbs: Annotated[
-        VerbsTerm | None, Doc("Action verbs describing the interaction.")
-    ]
     actor_entities: Annotated[
         list[EntityTerm] | Literal["*"],
         Doc(
             "The origin of the action or information, typically the entity performing the action."
-        ),
-    ]
-    target_entities: Annotated[
-        list[EntityTerm] | None,
-        Doc(
-            "The recipient or target of the action or information.\n"
-            "Action verbs can imply relevant facet names on the targetEntity. "
-            "E.g. write -> writer, sing -> singer etc."
-        ),
-    ]
-    additional_entities: Annotated[
-        list[EntityTerm] | None,
-        Doc(
-            "Additional entities participating in the action.\n"
-            "E.g. in the phrase 'Jane ate the spaghetti with the fork', "
-            "'the fork' would be an additional entity.\n"
-            "E.g. in the phrase 'Did Jane speak about Bach with Nina', "
-            "'Bach' would be the additional entity."
         ),
     ]
     is_informational: Annotated[
@@ -110,6 +89,27 @@ class ActionTerm:
             "such as 'What phone number did Mia mention in her note to Jane?'"
         ),
     ]
+    action_verbs: Annotated[
+        VerbsTerm | None, Doc("Action verbs describing the interaction.")
+    ] = None
+    target_entities: Annotated[
+        list[EntityTerm] | None,
+        Doc(
+            "The recipient or target of the action or information.\n"
+            "Action verbs can imply relevant facet names on the targetEntity. "
+            "E.g. write -> writer, sing -> singer etc."
+        ),
+    ] = None
+    additional_entities: Annotated[
+        list[EntityTerm] | None,
+        Doc(
+            "Additional entities participating in the action.\n"
+            "E.g. in the phrase 'Jane ate the spaghetti with the fork', "
+            "'the fork' would be an additional entity.\n"
+            "E.g. in the phrase 'Did Jane speak about Bach with Nina', "
+            "'Bach' would be the additional entity."
+        ),
+    ] = None
 
 
 @dataclass
