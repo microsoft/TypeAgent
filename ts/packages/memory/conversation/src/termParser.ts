@@ -35,7 +35,8 @@ export class SearchTermParser {
             terms = terms.map((t) => t.toLowerCase());
         }
         terms = this.removeNoise(terms);
-        return terms;
+        const uniqueTerms = new Set(terms);
+        return [...uniqueTerms.values()];
     }
 
     public getSearchTerms(text: string): kp.SearchTermGroup | undefined {
