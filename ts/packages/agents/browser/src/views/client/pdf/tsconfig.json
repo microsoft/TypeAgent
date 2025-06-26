@@ -1,15 +1,8 @@
 {
-  "extends": "../../../../tsconfig.json",
+  "extends": "../../../../tsconfig.bundle-typecheck.json",
   "compilerOptions": {
-    "outDir": "../../../../dist/views/public/pdf",
-    "rootDir": ".",
-    "incremental": true,
-    "lib": ["ES2020", "DOM"],
-    "moduleResolution": "bundler",
-    "strict": true,
-    "skipLibCheck": true,
-    "target": "ES2020",
-    "module": "ESNext"
+    "lib": ["DOM", "ES2020", "DOM.Iterable"],
+    "outDir": "../../../../dist/views/public/pdf"
   },
   "include": ["./**/*.ts"],
   "references": [{ "path": "../../shared" }]
