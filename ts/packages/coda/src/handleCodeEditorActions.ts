@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-
-interface ActionResult {
-    handled: boolean;
-    message: string;
-}
+import { ActionResult } from "./helpers";
 
 async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
     let actionResult: ActionResult = {
