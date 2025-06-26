@@ -129,6 +129,8 @@ something
 sometimes
 somewhere
 such
+summarize
+summary
 than
 that
 the
@@ -145,6 +147,8 @@ those
 through
 to
 too
+topic
+topics
 under
 until
 up

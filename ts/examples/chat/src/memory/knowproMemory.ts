@@ -3,6 +3,7 @@
 
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
+import * as cm from "conversation-memory";
 import {
     arg,
     argBool,
@@ -22,7 +23,6 @@ import {
     argToDate,
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
-    TermParser,
 } from "../common.js";
 import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
@@ -88,7 +88,7 @@ export async function createKnowproCommands(
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
 
-    const termParser = new TermParser();
+    const termParser = new cm.SearchTermParser();
 
     await ensureDir(context.basePath);
     /*
