@@ -6,10 +6,8 @@
     "rootDir": ".",
     "outDir": "../../../dist/view/route"
   },
-  "include": ["./*","./plugins/*"],
-  "references": [
-    { "path": "../../agent" }
-  ],
+  "include": ["./*", "./plugins/*"],
+  "references": [{ "path": "../../agent" }],
   "ts-node": {
     "esm": true
   }

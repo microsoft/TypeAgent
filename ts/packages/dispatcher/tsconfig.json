@@ -5,10 +5,7 @@
     "allowSyntheticDefaultImports": true
   },
   "include": [],
-  "references": [
-    { "path": "./src" },
-    { "path": "./test" }
-  ],
+  "references": [{ "path": "./src" }, { "path": "./test" }],
   "ts-node": {
     "esm": true
   }

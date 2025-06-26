@@ -12,6 +12,5 @@
   "references": [{ "path": "./src" }],
   "ts-node": {
     "esm": true
-  },
-  
+  }
 }
