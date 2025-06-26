@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, openai, TextEmbeddingModel } from "aiclient";
+import {
+    ChatModel,
+    hasEnvSettings,
+    openai,
+    TextEmbeddingModel,
+} from "aiclient";
 import { ChalkInstance } from "chalk";
 import {
     ArgDef,
@@ -28,6 +33,7 @@ import { KnowledgeProcessorWriter } from "./knowledgeProc/knowledgeProcessorWrit
 import path from "path";
 import fs from "fs";
 import * as knowLib from "knowledge-processor";
+import * as kpTest from "knowpro-test";
 
 /**
  * Models used by example code
@@ -66,6 +72,29 @@ export function createModels(): Models {
     models.chatModel.completionSettings.seed = 123;
     models.answerModel.completionSettings.seed = 123;
     return models;
+}
+
+export function hasApiSettings(key: string, endpoint?: string | undefined) {
+    return hasEnvSettings(process.env, key, endpoint);
+}
+
+export function createGpt41Models(): {
+    gpt41: ChatModel | undefined;
+    gpt41Mini: ChatModel | undefined;
+} {
+    let gpt41: ChatModel | undefined;
+    let gpt41Mini: ChatModel | undefined;
+
+    if (hasApiSettings(openai.EnvVars.AZURE_OPENAI_API_KEY, "GPT_4_1")) {
+        gpt41 = kpTest.createKnowledgeModel("GPT_4_1");
+    }
+    if (hasApiSettings(openai.EnvVars.AZURE_OPENAI_API_KEY, "GPT_4_1_MINI")) {
+        gpt41Mini = kpTest.createKnowledgeModel("GPT_4_1_MINI");
+    }
+    return {
+        gpt41,
+        gpt41Mini,
+    };
 }
 
 export async function pause(ms: number): Promise<void> {

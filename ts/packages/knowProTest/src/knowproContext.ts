@@ -30,8 +30,14 @@ export class KnowproContext {
     }
 }
 
-export function createKnowledgeModel() {
-    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
+export function createKnowledgeModel(nameSuffix?: string) {
+    const chatModelSettings = nameSuffix
+        ? openai.apiSettingsFromEnv(
+              openai.ModelType.Chat,
+              undefined,
+              nameSuffix,
+          )
+        : openai.apiSettingsFromEnv(openai.ModelType.Chat);
     chatModelSettings.retryPauseMs = 10000;
     const model = openai.createJsonChatModel(chatModelSettings, [
         "knowproTest",

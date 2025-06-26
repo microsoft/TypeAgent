@@ -37,6 +37,7 @@ import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
 import { createKnowproWebsiteCommands } from "./knowproWebsite.js";
 import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
+import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -102,6 +103,7 @@ export async function createKnowproCommands(
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
     await createKnowproWebsiteCommands(context, commands);
+    await createKnowproKnowledgeCommands(context, commands);
     /*
      * CREATE GENERAL COMMANDS that are common to all memory types
      * These include: (a) search (b) answer generation (c) enumeration
