@@ -145,8 +145,18 @@ export class PDFRoutes {
      * Serve the PDF viewer page
      */
     private servePDFViewer(req: Request, res: Response): void {
+        // Serve the built PDF viewer HTML
         res.sendFile(
-            path.join(__dirname, "..", "..", "..", "public", "pdf-viewer.html"),
+            path.join(
+                __dirname,
+                "..",
+                "..",
+                "..",
+                "..",
+                "public",
+                "pdf",
+                "index.html",
+            ),
         );
     }
     /**

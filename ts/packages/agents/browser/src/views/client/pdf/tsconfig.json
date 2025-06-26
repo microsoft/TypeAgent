@@ -1,0 +1,9 @@
+{
+  "extends": "../../../../tsconfig.bundle-typecheck.json",
+  "compilerOptions": {
+    "lib": ["DOM", "ES2020", "DOM.Iterable"],
+    "outDir": "../../../../dist/views/public/pdf"
+  },
+  "include": ["./**/*.ts"],
+  "references": [{ "path": "../../shared" }]
+}
