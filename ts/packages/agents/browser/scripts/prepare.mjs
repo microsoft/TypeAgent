@@ -22,7 +22,7 @@ if (process.platform === "win32") {
     // Windows script
     const script = [
         `@echo off`,
-        `${nodeBin} "${path.join(fullLocation, "scripts", "buildExtension.mjs")}" %*`,
+        `"${nodeBin}" "${path.join(fullLocation, "scripts", "buildExtension.mjs")}" %*`,
     ];
     await fs.promises.writeFile(
         path.join(dest, `${binBaseName}.cmd`),
@@ -33,7 +33,7 @@ if (process.platform === "win32") {
     // Linux/MacOS script
     const script = [
         `#!/bin/bash`,
-        `${nodeBin} "${path.join(fullLocation, "scripts", "buildExtension.mjs")}" "$@"`,
+        `"${nodeBin}" "${path.join(fullLocation, "scripts", "buildExtension.mjs")}" "$@"`,
     ];
     const outfile = path.join(dest, binBaseName);
     await fs.promises.writeFile(outfile, script.join("\n"), "utf8");
