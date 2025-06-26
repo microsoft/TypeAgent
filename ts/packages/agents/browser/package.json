@@ -28,6 +28,7 @@
     "build:views": "fluid-build . -t build:views",
     "clean": "rimraf dist deploy *.done.build.log && rimraf -g **/*.tsbuildinfo",
     "package": "node scripts/packExtension.mjs",
+    "prepare": "node ./scripts/prepare.mjs .",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "jest",
@@ -39,8 +40,8 @@
     "tsc:views:client:typecheck": "tsc -p src/views/client/plans/tsconfig.json",
     "tsc:views:server": "tsc -p src/views/server/tsconfig.json",
     "tsc:views:shared": "tsc -p src/views/shared/tsconfig.json",
-    "vite:extension": "node scripts/buildExtension.mjs",
-    "vite:extension:dev": "node scripts/buildExtension.mjs --dev",
+    "vite:extension": "build-extension",
+    "vite:extension:dev": "build-extension --dev",
     "vite:views:client": "vite build"
   },
   "dependencies": {
@@ -113,6 +114,7 @@
     "tasks": {
       "build": {
         "dependsOn": [
+          "^build",
           "build:extension",
           "build:views",
           "tsc:agent",
@@ -122,6 +124,7 @@
       },
       "build:dev": {
         "dependsOn": [
+          "^build",
           "build:extension:dev",
           "build:views",
           "tsc:agent",
@@ -179,6 +182,16 @@
         ],
         "outputGlobs": [
           "dist/views/public/**/*"
+        ]
+      },
+      "build-extension": {
+        "inputGlobs": [
+          "src/extension/**",
+          "src/electron/**"
+        ],
+        "outputGlobs": [
+          "dist/extension/**",
+          "dist/electron/**"
         ]
       }
     }
