@@ -40,14 +40,12 @@
     "vite:extension:dev": "node scripts/buildExtension.mjs --dev"
   },
   "dependencies": {
-    "@azure/ai-agents": "^1.0.0-beta.3",
-    "@azure/ai-projects": "^1.0.0-beta.8",
-    "@azure/identity": "^4.10.0",
     "@mozilla/readability": "^0.6.0",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-rpc": "workspace:*",
     "aiclient": "workspace:*",
+    "azure-ai-foundry": "workspace:*",
     "bootstrap": "^5.3.3",
     "chalk": "^5.4.1",
     "common-utils": "workspace:*",

@@ -297,7 +297,7 @@ export async function handleGeneralKBActions(
             }
             break;
         }
-        case "newWindow": {
+        case "newWindowFromApp": {
             vscode.commands.executeCommand("workbench.action.newWindow");
             actionResult.message = "New window";
             break;
