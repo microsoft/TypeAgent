@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebPlanData, PlanNode, PlansSSEEvent } from "./plansTypes.js";
-import registerDebug from "debug";
-
-const debug = registerDebug("typeagent:views:server:plans:service");
+import { WebPlanData, PlanNode } from "./plansTypes.js";
 
 /**
  * Plans business logic service
