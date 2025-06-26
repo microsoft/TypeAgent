@@ -81,6 +81,7 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     context: QueryEvalContext[TMessage, TIndex],
     stream: io.TextIOWrapper,
 ) -> None:
+    print("_" * 80)
     ps1 = "--> "
     while True:
         query_text = read_one_line(ps1, stream)
@@ -122,6 +123,7 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                             answer_translator,
                         )
                     )
+                print("_" * 80)
 
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
@@ -182,9 +184,9 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
         print(f"Error searching conversation: {result.message}")
         return
     search_results = result.value
-    for sr in search_results:
-        print("-" * 50)
-        print_result(sr, conversation)
+    # for sr in search_results:
+    #     print("-" * 50)
+    #     print_result(sr, conversation)
     all_answers, combined_answer = await generate_answers(
         answer_translator, search_results, conversation, orig_query_text
     )
