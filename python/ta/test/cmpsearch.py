@@ -118,7 +118,7 @@ def main():
     limit = args.limit
     last_q = ""
     counter = 0
-    all_scores: list[float] = []
+    all_scores: list[tuple[float, int]] = []  # [(score, counter), ...]
     for qa_pair in data:
         question = qa_pair.get("question")
         answer = qa_pair.get("answer")
@@ -142,7 +142,7 @@ def main():
 
         # Compare the given answer with the actual answer for the question.
         actual_answer, score = asyncio.run(compare(context, qa_pair))
-        all_scores.append(score)
+        all_scores.append((score, counter))
         good_enough = score >= 0.97
         sep = "-" if good_enough else "*"
         print(sep * 25, counter, sep * 25)
@@ -151,7 +151,6 @@ def main():
             print(f"Expected answer:\n{answer}")
             print("-" * 20)
             print(f"Actual answer:\n{actual_answer}")
-            print(f"Score: {score:.3f}")
 
         # Process limit if specified.
         if limit > 0:
@@ -159,12 +158,19 @@ def main():
             if limit == 0:
                 break
 
-    good_scores = [s for s in all_scores if s >= 0.97]
-    bad_scores = [s for s in all_scores if s < 0.97]
-    print("-" * 50)
-    print("Good scores:", ", ".join(f"{s:.3f}" for s in good_scores))
-    print("Bad scores: ", ", ".join(f"{s:.3f}" for s in bad_scores))
-    assert len(good_scores) + len(bad_scores) == len(all_scores)
+    print("=" * 50)
+    all_scores.sort(reverse=True)
+    good_scores = [(score, counter) for score, counter in all_scores if score >= 0.97]
+    bad_scores = [(score, counter) for score, counter in all_scores if score < 0.97]
+    for label, pairs in [("Good", good_scores), ("Bad", bad_scores)]:
+        print(f"{label} scores ({len(pairs)}):")
+        for i in range(0, len(pairs), 10):
+            print(
+                ", ".join(
+                    f"{score:.3f}({counter})"
+                for score, counter in pairs[i : i + 10]
+            )
+        )
 
 
 async def compare(
