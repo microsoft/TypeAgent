@@ -63,11 +63,11 @@ export interface Config {
 const CONFIG: Config = {
     // API endpoints
     API: {
-        GET_PLAN: "/api/plan",
-        ADD_TRANSITION: "/api/transition",
-        RESET_PLAN: "/api/reset",
-        SET_TITLE: "/api/title",
-        UPLOAD_SCREENSHOT: "/api/screenshot",
+        GET_PLAN: "/api/plans/plan",
+        ADD_TRANSITION: "/api/plans/transition",
+        RESET_PLAN: "/api/plans/reset",
+        SET_TITLE: "/api/plans/title",
+        UPLOAD_SCREENSHOT: "/api/plans/screenshot",
     },
 
     // Node types

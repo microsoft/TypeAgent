@@ -24,10 +24,15 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
+    "better-sqlite3": "11.9.1",
+    "chalk": "^5.4.1",
     "common-utils": "workspace:*",
+    "debug": "^4.4.0",
     "ws": "^8.17.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "7.6.11",
+    "@types/debug": "^4.1.12",
     "@types/ws": "^8.5.10",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",

@@ -93,7 +93,9 @@ export class VisualizerClient {
     async getPlan(
         mode: "static" | "dynamic" | "screenshot" = "dynamic",
     ): Promise<WebPlanData | null> {
-        const data = await this.fetchApi<WebPlanData>(`/api/plan?mode=${mode}`);
+        const data = await this.fetchApi<WebPlanData>(
+            `/api/plans/plan?mode=${mode}`,
+        );
 
         if (!data) {
             return null;
@@ -110,7 +112,7 @@ export class VisualizerClient {
      */
     async addTransition(data: TransitionData): Promise<WebPlanData | null> {
         const updatedPlan = await this.fetchApi<WebPlanData | null>(
-            "/api/transition",
+            "/api/plans/transition",
             {
                 method: "POST",
                 headers: {
@@ -138,7 +140,7 @@ export class VisualizerClient {
         screenshot: string,
     ): Promise<WebPlanData | null> {
         const updatedPlan = await this.fetchApi<WebPlanData>(
-            "/api/screenshot",
+            "/api/plans/screenshot",
             {
                 method: "POST",
                 headers: {
@@ -174,7 +176,7 @@ export class VisualizerClient {
      * @returns Promise resolving to the reset plan data
      */
     async resetPlan(): Promise<WebPlanData | null> {
-        const resetPlan = await this.fetchApi<WebPlanData>("/api/reset", {
+        const resetPlan = await this.fetchApi<WebPlanData>("/api/plans/reset", {
             method: "POST",
         });
 
@@ -192,13 +194,16 @@ export class VisualizerClient {
      * @returns Promise resolving to the updated plan data
      */
     async setPlanTitle(title: string): Promise<WebPlanData | null> {
-        const updatedPlan = await this.fetchApi<WebPlanData>("/api/title", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
+        const updatedPlan = await this.fetchApi<WebPlanData>(
+            "/api/plans/title",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ title }),
             },
-            body: JSON.stringify({ title }),
-        });
+        );
 
         if (!updatedPlan) {
             return null;

@@ -27,10 +27,7 @@ import {
 import { KnowledgeProcessorWriter } from "./knowledgeProc/knowledgeProcessorWriter.js";
 import path from "path";
 import fs from "fs";
-import * as kp from "knowpro";
 import * as knowLib from "knowledge-processor";
-import * as cm from "conversation-memory";
-import * as ms from "memory-storage";
 
 /**
  * Models used by example code
@@ -452,34 +449,4 @@ export function isJsonEqual(x: any | undefined, y: any | undefined): boolean {
         return jx === jy;
     }
     return false;
-}
-
-export class TermParser {
-    public parser: kp.SearchTermParser;
-
-    constructor() {
-        this.parser = new kp.SearchTermParser(new Set<string>());
-        cm.addNoiseWordsFromFile(
-            this.parser.noiseTerms!,
-            ms.getAbsolutePathFromUrl(import.meta.url, "searchNoiseTerms.txt"),
-        );
-    }
-
-    public getRawTerms(text: string): string[] {
-        return this.parser.getTerms(text);
-    }
-
-    public getSearchTerms(text: string): kp.SearchTermGroup | undefined {
-        const rawTerms = this.parser.getTerms(text);
-        if (!rawTerms) {
-            return undefined;
-        }
-        const terms: kp.SearchTerm[] = rawTerms.map((rt) => {
-            return { term: { text: rt } };
-        });
-        return {
-            booleanOp: "or_max",
-            terms,
-        };
-    }
 }
