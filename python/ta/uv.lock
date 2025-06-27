@@ -739,7 +739,7 @@ requires-dist = [
 [[package]]
 name = "typechat"
 version = "0.0.2"
-source = { git = "https://github.com/microsoft/TypeChat?subdirectory=python#fb4bdeb8eefc5ed33718c5ed83417f38f83f1480" }
+source = { git = "https://github.com/microsoft/TypeChat?subdirectory=python#02e0a748b4a3f9cfad13db2ecba8d9616b0754a6" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
