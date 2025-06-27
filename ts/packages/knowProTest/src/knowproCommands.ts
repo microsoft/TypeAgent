@@ -119,6 +119,7 @@ export async function execGetAnswerRequest(
         answerResponses: error("No search matches"),
     };
     if (!searchResults.success) {
+        response.answerResponses = error(searchResults.message);
         return response;
     }
     if (!kp.hasConversationResults(searchResults.data)) {

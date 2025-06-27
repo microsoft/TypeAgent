@@ -118,7 +118,8 @@ export async function createKnowproCommands(
     commands.kpTopics = topics;
     commands.kpMessages = showMessages;
     commands.kpAbstractMessage = abstract;
-    commands.kpRelatedTerms = addRelatedTerm;
+    commands.kpAlias = addAlias;
+    commands.kpRelatedTerms = relatedTerms;
 
     /*----------------
      * COMMANDS
@@ -660,7 +661,7 @@ export async function createKnowproCommands(
         }
     }
 
-    function addRelatedTermDef(): CommandMetadata {
+    function addAliasDef(): CommandMetadata {
         return {
             description: "Add an alias",
             args: {
@@ -672,12 +673,12 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpRelatedTerms.metadata = addRelatedTermDef();
-    async function addRelatedTerm(args: string[]) {
+    commands.kpAlias.metadata = addAliasDef();
+    async function addAlias(args: string[]) {
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, addRelatedTermDef());
+        const namedArgs = parseNamedArguments(args, addAliasDef());
         const aliases =
             context.conversation!.secondaryIndexes?.termToRelatedTermsIndex
                 ?.aliases;
@@ -697,6 +698,36 @@ export async function createKnowproCommands(
         if (relatedTerms && relatedTerms.length > 0) {
             context.printer.writeList(relatedTerms.map((rt) => rt.text));
         }
+    }
+
+    function relatedTermsDef(): CommandMetadata {
+        return {
+            description: "Return related term matches from current index",
+            args: {
+                term: arg("Term to search for"),
+            },
+        };
+    }
+    commands.kpRelatedTerms.metadata = relatedTermsDef();
+    async function relatedTerms(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, relatedTermsDef());
+        const relatedTerms =
+            context.conversation!.secondaryIndexes?.termToRelatedTermsIndex
+                ?.fuzzyIndex;
+        if (!relatedTerms) {
+            context.printer.writeLine(
+                "No related terms available on this conversation",
+            );
+            return;
+        }
+        let searchTerm: kp.SearchTerm = { term: { text: namedArgs.term } };
+        searchTerm.relatedTerms = await relatedTerms.lookupTerm(
+            searchTerm.term.text,
+        );
+        context.printer.writeJson(searchTerm);
     }
 
     /*---------- 

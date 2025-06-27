@@ -101,7 +101,7 @@ export async function createKnowproKnowledgeCommands(
                 searchResults,
                 true,
                 false,
-                25,
+                50,
                 true,
             );
         }
@@ -173,21 +173,17 @@ export class KnowledgeCompiler {
         knowledge: kpLib.KnowledgeResponse,
     ): kp.SearchSelectExpr {
         const searchTermGroup = kp.createOrTermGroup();
-        const entityTermGroup = this.compileEntities(knowledge.entities);
-        if (entityTermGroup) {
-            searchTermGroup.terms.push(entityTermGroup);
-        }
-        const topicTermGroup = this.compileTopics(knowledge.topics);
-        if (topicTermGroup) {
-            searchTermGroup.terms.push(topicTermGroup);
-        }
+        this.compileEntities(knowledge.entities, searchTermGroup);
+        //this.compileTopics(knowledge.topics, searchTermGroup);
         return {
             searchTermGroup,
         };
     }
-
-    private compileTopics(topics: string[]) {
-        const termGroup = kp.createOrTermGroup();
+    /*
+    private compileTopics(topics: string[], termGroup: kp.SearchTermGroup) {
+        if (topics.length === 0) {
+            return;
+        }
         for (const topic of topics) {
             termGroup.terms.push(
                 kp.createPropertySearchTerm(kp.PropertyNames.Topic, topic),
@@ -195,20 +191,24 @@ export class KnowledgeCompiler {
         }
         return termGroup;
     }
-
-    private compileEntities(entities: kpLib.ConcreteEntity[]) {
+    */
+    private compileEntities(
+        entities: kpLib.ConcreteEntity[],
+        termGroup: kp.SearchTermGroup,
+    ) {
         if (entities.length === 0) {
-            return undefined;
+            return;
         }
-        const termGroup = kp.createOrTermGroup();
         for (const entity of entities) {
-            termGroup.terms.push(this.compileEntity(entity));
+            this.compileEntity(entity, termGroup);
         }
         return termGroup;
     }
 
-    private compileEntity(entity: kpLib.ConcreteEntity) {
-        const termGroup = kp.createOrMaxTermGroup();
+    private compileEntity(
+        entity: kpLib.ConcreteEntity,
+        termGroup: kp.SearchTermGroup,
+    ) {
         termGroup.terms.push(
             kp.createPropertySearchTerm(
                 kp.PropertyNames.EntityName,
@@ -229,23 +229,30 @@ export class KnowledgeCompiler {
                 kp.createPropertySearchTerm(kp.PropertyNames.EntityType, type),
             );
         }
-        if (entity.facets) {
-            for (const facet of entity.facets) {
-                termGroup.terms.push(
-                    kp.createPropertySearchTerm(
-                        kp.PropertyNames.FacetName,
-                        facet.name,
-                    ),
-                );
-                termGroup.terms.push(
-                    kp.createPropertySearchTerm(
-                        kp.PropertyNames.FacetValue,
-                        this.facetValueToString(facet),
-                    ),
-                );
-            }
-        }
         return termGroup;
+    }
+    /*
+    private compileFacets(
+        facets: kpLib.Facet[],
+        termGroup: kp.SearchTermGroup,
+    ) {
+        if (facets.length === 0) {
+            return;
+        }
+        for (const facet of facets) {
+            termGroup.terms.push(
+                kp.createPropertySearchTerm(
+                    kp.PropertyNames.FacetName,
+                    facet.name,
+                ),
+            );
+            termGroup.terms.push(
+                kp.createPropertySearchTerm(
+                    kp.PropertyNames.FacetValue,
+                    this.facetValueToString(facet),
+                ),
+            );
+        }
     }
 
     private facetValueToString(facet: kpLib.Facet): string {
@@ -255,4 +262,5 @@ export class KnowledgeCompiler {
         }
         return value.toString();
     }
+        */
 }

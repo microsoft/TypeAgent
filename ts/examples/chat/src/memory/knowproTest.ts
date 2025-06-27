@@ -77,7 +77,9 @@ export async function createKnowproTestCommands(
             (srResult, index, total) => {
                 if (srResult.success) {
                     context.printer.writeProgress(index + 1, total);
-                    context.printer.writeLine(srResult.data.searchText);
+                    context.printer.writeLine(
+                        srResult.data.cmd ?? srResult.data.searchText,
+                    );
                 } else {
                     context.printer.writeError(srResult.message);
                 }
@@ -159,7 +161,9 @@ export async function createKnowproTestCommands(
             (result, index, total) => {
                 context.printer.writeProgress(index + 1, total);
                 if (result.success) {
-                    context.printer.writeLine(result.data.question);
+                    context.printer.writeLine(
+                        result.data.cmd ?? result.data.question,
+                    );
                     context.printer.writeInColor(
                         chalk.greenBright,
                         result.data.answer,
