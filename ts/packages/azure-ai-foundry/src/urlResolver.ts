@@ -256,7 +256,7 @@ export async function validateURL(
             try {
                 // need this cause you can't access the run object until it enters the start state
                 const runStarted = Date.now();
-                
+
                 // Create run
                 const run = await project.agents.runs.createAndPoll(
                     thread.id,
@@ -282,7 +282,9 @@ export async function validateURL(
                             // Cancel the run if it has been running for more than 30 seconds
                             if (
                                 Date.now() - new Date(runStarted).getTime() >
-                                30000 && (response.parsedBody as any).status != "cancelling"
+                                    30000 &&
+                                (response.parsedBody as any).status !=
+                                    "cancelling"
                             ) {
                                 //if (!run.completedAt) {
                                 await project.agents.runs.cancel(
