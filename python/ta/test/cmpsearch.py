@@ -122,6 +122,10 @@ def main():
     for qa_pair in data:
         question = qa_pair.get("question")
         answer = qa_pair.get("answer")
+        if question:
+            question = question.strip()
+        if answer:
+            answer = answer.strip()
         if not (question and answer) or question == last_q:
             continue
         counter += 1
@@ -146,11 +150,11 @@ def main():
         good_enough = score >= 0.97
         sep = "-" if good_enough else "*"
         print(sep * 25, counter, sep * 25)
-        print(f"Score: {score:.3f}; Question: {question}")
+        print(f"Score: {score:.3f}; Question: {question}", flush=True)
         if context.interactive or not good_enough:
             print(f"Expected answer:\n{answer}")
             print("-" * 20)
-            print(f"Actual answer:\n{actual_answer}")
+            print(f"Actual answer:\n{actual_answer}", flush=True)
 
         # Process limit if specified.
         if limit > 0:
