@@ -13,6 +13,7 @@ import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
 import { conversation as kpLib } from "knowledge-processor";
 import * as kpTest from "knowpro-test";
+import * as kp from "knowpro";
 import chalk from "chalk";
 
 export type LLMKnowledgeExtractor = {
@@ -26,6 +27,8 @@ export type KnowProKnowledgeContext = {
     extractor35?: LLMKnowledgeExtractor | undefined;
     extractor41?: LLMKnowledgeExtractor | undefined;
     extractor41Mini?: LLMKnowledgeExtractor | undefined;
+
+    compiler: KnowledgeCompiler;
 };
 
 export async function createKnowproKnowledgeCommands(
@@ -34,6 +37,7 @@ export async function createKnowproKnowledgeCommands(
 ) {
     const context: KnowProKnowledgeContext = {
         printer: kpContext.printer,
+        compiler: new KnowledgeCompiler(),
     };
     createExtractors();
 
@@ -71,6 +75,8 @@ export async function createKnowproKnowledgeCommands(
         stopWatch.stop();
         if (knowledge) {
             context.printer.writeJson(knowledge);
+            const searchExpr = context.compiler.compileKnowledge(knowledge);
+            context.printer.writeJsonInColor(chalk.gray, searchExpr);
         }
         context.printer.writeTiming(
             chalk.cyan,
@@ -136,4 +142,86 @@ export async function createKnowproKnowledgeCommands(
     }
 
     return;
+}
+
+export class KnowledgeCompiler {
+    constructor() {}
+
+    public compileKnowledge(
+        knowledge: kpLib.KnowledgeResponse,
+    ): kp.SearchSelectExpr {
+        const searchTermGroup = kp.createOrTermGroup();
+        const entityTermGroup = this.compileEntities(knowledge.entities);
+        if (entityTermGroup) {
+            searchTermGroup.terms.push(entityTermGroup);
+        }
+        const topicTermGroup = this.compileTopics(knowledge.topics);
+        if (topicTermGroup) {
+            searchTermGroup.terms.push(topicTermGroup);
+        }
+        return {
+            searchTermGroup,
+        };
+    }
+
+    private compileTopics(topics: string[]) {
+        const termGroup = kp.createOrMaxTermGroup();
+        for (const topic of topics) {
+            termGroup.terms.push(
+                kp.createPropertySearchTerm(kp.PropertyNames.Topic, topic),
+            );
+        }
+        return termGroup;
+    }
+
+    private compileEntities(entities: kpLib.ConcreteEntity[]) {
+        if (entities.length === 0) {
+            return undefined;
+        }
+        const termGroup = kp.createOrTermGroup();
+        for (const entity of entities) {
+            termGroup.terms.push(this.compileEntity(entity));
+        }
+        return termGroup;
+    }
+
+    private compileEntity(entity: kpLib.ConcreteEntity) {
+        const termGroup = kp.createOrMaxTermGroup();
+        termGroup.terms.push(
+            kp.createPropertySearchTerm(
+                kp.PropertyNames.EntityName,
+                entity.name,
+            ),
+        );
+        for (const type of entity.type) {
+            termGroup.terms.push(
+                kp.createPropertySearchTerm(kp.PropertyNames.EntityType, type),
+            );
+        }
+        if (entity.facets) {
+            for (const facet of entity.facets) {
+                termGroup.terms.push(
+                    kp.createPropertySearchTerm(
+                        kp.PropertyNames.FacetName,
+                        facet.name,
+                    ),
+                );
+                termGroup.terms.push(
+                    kp.createPropertySearchTerm(
+                        kp.PropertyNames.FacetValue,
+                        this.facetValueToString(facet),
+                    ),
+                );
+            }
+        }
+        return termGroup;
+    }
+
+    private facetValueToString(facet: kpLib.Facet): string {
+        const value = facet.value;
+        if (typeof value === "object") {
+            return `${value.amount} ${value.units}`;
+        }
+        return value.toString();
+    }
 }
