@@ -257,7 +257,6 @@ export async function validateURL(
                 // need this cause you can't access the run object until it enters the start state
                 const runStarted = Date.now();
 
-
                 // Create run
                 const run = await project.agents.runs.createAndPoll(
                     thread.id,
