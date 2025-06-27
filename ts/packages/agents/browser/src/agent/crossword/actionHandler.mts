@@ -8,10 +8,14 @@ import { CrosswordPresence } from "./schema/pageFrame.mjs";
 import { createCrosswordPageTranslator } from "./translator.mjs";
 import { BrowserActionContext, getBrowserControl } from "../actionHandler.mjs";
 import { BrowserConnector } from "../browserConnector.mjs";
+import { getCachedSchema, setCachedSchema } from "./cachedSchema.mjs";
 
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:crossword:schema");
 export async function getBoardSchema(
     context: SessionContext<BrowserActionContext>,
-) {
+): Promise<Crossword | undefined> {
     const agentContext = context.agentContext;
     if (!agentContext.browserConnector) {
         throw new Error("No connection to browser session.");
@@ -20,85 +24,103 @@ export async function getBoardSchema(
     const browser: BrowserConnector = agentContext.browserConnector;
     const browserControl = getBrowserControl(agentContext);
     const url = await browserControl.getPageUrl();
-    const cachedSchema = await browser.getCurrentPageSchema(url);
+    const cachedSchema = await getCachedSchema(context, url);
+
     if (cachedSchema) {
-        return cachedSchema as Crossword;
-    } else {
-        const htmlFragments = await browser.getHtmlFragments();
-        const agent = await createCrosswordPageTranslator("GPT_4_O_MINI");
+        debug(
+            `Reusing cached schema for ${url}: ${JSON.stringify(cachedSchema)}`,
+        );
+        return cachedSchema;
+    }
+    const htmlFragments = await browser.getHtmlFragments();
+    debug(`Found ${htmlFragments.length} HTML fragments on the page ${url}.`);
+    debug(htmlFragments);
+    const agent = await createCrosswordPageTranslator("GPT_4_O_MINI");
 
-        let firstCandidateFragments = [];
-        let candidateFragments = [];
-        let pagePromises = [];
+    let firstCandidateFragments = [];
+    let candidateFragments = [];
+    let pagePromises = [];
 
-        for (let i = 0; i < htmlFragments.length; i++) {
-            // skip html fragments that are too short to contain crossword
-            if (
-                !htmlFragments[i].content ||
-                htmlFragments[i].content.length < 500
-            ) {
-                continue;
-            }
-
-            firstCandidateFragments.push({
-                frameId: htmlFragments[i].frameId,
-                content: htmlFragments[i].content,
-            });
-
-            pagePromises.push(agent.checkIsCrosswordOnPage([htmlFragments[i]]));
+    for (let i = 0; i < htmlFragments.length; i++) {
+        // skip html fragments that are too short to contain crossword
+        if (
+            !htmlFragments[i].content ||
+            htmlFragments[i].content.length < 500
+        ) {
+            continue;
         }
 
-        const pageResults = await Promise.all(pagePromises);
+        firstCandidateFragments.push({
+            frameId: htmlFragments[i].frameId,
+            content: htmlFragments[i].content,
+        });
 
-        for (let i = 0; i < pageResults.length; i++) {
-            const isPresent = pageResults[i];
+        pagePromises.push(agent.checkIsCrosswordOnPage([htmlFragments[i]]));
+    }
 
-            if (isPresent.success) {
-                const result = isPresent.data as CrosswordPresence;
-                if (result.crossWordPresent) {
-                    candidateFragments.push({
-                        frameId: firstCandidateFragments[i].frameId,
-                        content: firstCandidateFragments[i].content,
-                    });
-                }
+    const pageResults = await Promise.all(pagePromises);
+
+    for (let i = 0; i < pageResults.length; i++) {
+        const isPresent = pageResults[i];
+
+        if (isPresent.success) {
+            const result = isPresent.data as CrosswordPresence;
+            if (result.crossWordPresent) {
+                candidateFragments.push({
+                    frameId: firstCandidateFragments[i].frameId,
+                    content: firstCandidateFragments[i].content,
+                });
             }
         }
+    }
 
-        /*    
+    /*    
     const filteredFragments = await browser.getFilteredHtmlFragments(
       candidateFragments,
     );
   */
+    if (candidateFragments.length === 0) {
+        debug(`No crossword fragments found on the page ${url}.`);
+        return undefined;
+    }
 
-        if (candidateFragments.length > 0) {
-            let cluePromises = [];
-            for (let i = 0; i < candidateFragments.length; i++) {
-                cluePromises.push(
-                    agent.getCluesTextWithSelectors([candidateFragments[i]]),
-                    // agent.getCluesTextThenSelectors([candidateFragments[i]]),
-                );
-            }
+    debug(
+        `Found candidate fragments for crossword clues: ${JSON.stringify(
+            candidateFragments,
+            undefined,
+            2,
+        )}`,
+    );
 
-            const clueResults = await Promise.all(cluePromises);
+    let cluePromises = [];
+    for (let i = 0; i < candidateFragments.length; i++) {
+        cluePromises.push(
+            agent.getCluesTextWithSelectors([candidateFragments[i]]),
+            // agent.getCluesTextThenSelectors([candidateFragments[i]]),
+        );
+    }
 
-            for (let i = 0; i < clueResults.length; i++) {
-                const cluesResponse = clueResults[i];
+    const clueResults = await Promise.all(cluePromises);
 
-                if (cluesResponse && cluesResponse.success) {
-                    if (cluesResponse.data) {
-                        const data = cluesResponse.data as Crossword;
-                        if (data.across.length > 3 && data.down.length > 3) {
-                            // save schema to cache
-                            await browser.setCurrentPageSchema(url!, data);
-                            return data;
-                        }
-                    }
+    for (let i = 0; i < clueResults.length; i++) {
+        const cluesResponse = clueResults[i];
+
+        if (cluesResponse && cluesResponse.success) {
+            if (cluesResponse.data) {
+                const data = cluesResponse.data as Crossword;
+                if (data.across.length > 3 && data.down.length > 3) {
+                    // save schema to cache
+                    debug(`Saving crossword clues found for ${url}`);
+                    await setCachedSchema(context, url, data);
+                    debug(`Saved crossword clues found for ${url}`);
+                    return data;
                 }
             }
-
-            console.log("Page schema not initialized");
         }
     }
+
+    debug(`No valid crossword clues found on the page ${url}.`);
+
     return undefined;
 }
 
