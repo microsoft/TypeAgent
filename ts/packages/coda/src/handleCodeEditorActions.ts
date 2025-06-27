@@ -3,6 +3,7 @@
 
 import * as vscode from "vscode";
 import { ActionResult } from "./helpers";
+import { handleWorkbenchActions } from "./handleWorkBenchActions";
 
 async function execChangeEditorColumns(actionData: any): Promise<ActionResult> {
     let actionResult: ActionResult = {
@@ -427,6 +428,7 @@ export async function handleVSCodeActions(action: any) {
             handleGeneralKBActions,
             handleDisplayKBActions,
             handleDebugActions,
+            handleWorkbenchActions,
         ];
 
         const results = await Promise.all(

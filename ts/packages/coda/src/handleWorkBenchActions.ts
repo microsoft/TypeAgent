@@ -41,11 +41,7 @@ export async function findMatchingFiles(
         excludeGlobs.length > 0 ? `{${excludeGlobs.join(",")}}` : undefined;
 
     // Search all files first; we'll filter based on match strategy and extension
-    const allFiles = await vscode.workspace.findFiles(
-        "**/*",
-        excludePattern,
-        maxResults * 10,
-    );
+    const allFiles = await vscode.workspace.findFiles("**/*", excludePattern);
 
     const lowercaseTarget = fileName.toLowerCase();
 
@@ -70,7 +66,7 @@ export async function findMatchingFiles(
     return filtered.slice(0, maxResults);
 }
 
-export async function handleOpenFileAction(action: any) {
+async function handleOpenFileAction(action: any): Promise<ActionResult> {
     let actionResult: ActionResult = {
         handled: true,
         message: "Ok",
@@ -81,7 +77,9 @@ export async function handleOpenFileAction(action: any) {
         vscode.window.showErrorMessage(
             "Invalid action: 'fileName' is required.",
         );
-        return;
+        actionResult.handled = false;
+        actionResult.message = "Invalid action: 'fileName' is required.";
+        return actionResult;
     }
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -89,7 +87,9 @@ export async function handleOpenFileAction(action: any) {
         vscode.window.showErrorMessage(
             "No workspace or folder is currently open.",
         );
-        return;
+        actionResult.handled = false;
+        actionResult.message;
+        return actionResult;
     }
 
     const {
@@ -115,7 +115,9 @@ export async function handleOpenFileAction(action: any) {
         vscode.window.showWarningMessage(
             `No matching file found for "${fileName}".`,
         );
-        return;
+        actionResult.handled = false;
+        actionResult.message = `No matching file found for "${fileName}".`;
+        return actionResult;
     }
 
     const targetUri = matches[0];
@@ -124,6 +126,30 @@ export async function handleOpenFileAction(action: any) {
         await vscode.window.showTextDocument(doc);
     } catch (err) {
         //vscode.window.showErrorMessage(`Failed to open file: ${err}`);
+    }
+
+    return actionResult;
+}
+
+export async function handleWorkbenchActions(
+    action: any,
+): Promise<ActionResult> {
+    let actionResult: ActionResult = {
+        handled: true,
+        message: "Ok",
+    };
+
+    const actionName =
+        action.actionName ?? action.fullActionName.split(".").at(-1);
+
+    switch (actionName) {
+        case "[workbench.action.files.openFile]":
+            actionResult = await handleOpenFileAction(action);
+            break;
+        default: {
+            actionResult.message = `Did not understand the request for action: "${actionName}"`;
+            actionResult.handled = false;
+        }
     }
 
     return actionResult;

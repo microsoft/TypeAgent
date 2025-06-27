@@ -38,6 +38,13 @@
         "schemaFile": "./vscode/editorCommandActionsSchema.ts",
         "schemaType": "CodeEditorActions"
       }
+    },
+    "code-workbench": {
+      "schema": {
+        "description": "Code agent that helps you perform vscode workbench actions like open a file, close a file etc.",
+        "schemaFile": "./vscode/workbenchCommandActionsSchema.ts",
+        "schemaType": "CodeWorkbenchActions"
+      }
     }
   }
 }

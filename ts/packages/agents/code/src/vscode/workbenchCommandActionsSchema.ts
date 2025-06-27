@@ -4,7 +4,7 @@
 export type CodeWorkbenchActions = WorkbenchActionFilesOpenFile;
 
 export type WorkbenchActionFilesOpenFile = {
-    actionName: "workbench.action.files.openFile";
+    actionName: "[workbench.action.files.openFile]";
     parameters: {
         // The name of the file to open (e.g., "main.ts")
         fileName: string;
