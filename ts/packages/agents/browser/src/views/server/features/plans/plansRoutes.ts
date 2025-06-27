@@ -100,7 +100,16 @@ export class PlansRoutes {
      */
     private serveIndex(req: Request, res: Response): void {
         res.sendFile(
-            path.join(__dirname, "..", "..", "..", "public", "index.html"),
+            path.join(
+                __dirname,
+                "..",
+                "..",
+                "..",
+                "..",
+                "public",
+                "plans",
+                "index.html",
+            ),
         );
     }
 
