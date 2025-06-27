@@ -285,6 +285,8 @@ export async function validateURL(
                                     30000 &&
                                 (response.parsedBody as any).status !=
                                     "cancelling"
+                                    && (response.parsedBody as any).status !=
+                                    "completed"
                             ) {
                                 //if (!run.completedAt) {
                                 await project.agents.runs.cancel(
