@@ -3,7 +3,6 @@
 
 import {
     arg,
-    argBool,
     CommandHandler,
     CommandMetadata,
     NamedArgs,
@@ -24,6 +23,7 @@ export type LLMKnowledgeExtractor = {
 export type KnowProKnowledgeContext = {
     printer: KnowProPrinter;
     extractor?: LLMKnowledgeExtractor | undefined;
+    extractor35?: LLMKnowledgeExtractor | undefined;
     extractor41?: LLMKnowledgeExtractor | undefined;
     extractor41Mini?: LLMKnowledgeExtractor | undefined;
 };
@@ -44,8 +44,7 @@ export async function createKnowproKnowledgeCommands(
             description: "Extract knowledge",
             options: {
                 text: arg("Extract knowledge from this text"),
-                use41: argBool("Extract with Gpt4.1", true),
-                useMini: argBool("Extract using mini model", true),
+                model: arg("Extract with: 4o | 41 | 41m | 35", "41m"),
             },
         };
     }
@@ -84,10 +83,21 @@ export async function createKnowproKnowledgeCommands(
         namedArgs: NamedArgs,
     ): LLMKnowledgeExtractor | undefined {
         let extractor = context.extractor;
-        if (namedArgs.use41) {
-            extractor = namedArgs.useMini
-                ? context.extractor41Mini
-                : context.extractor41;
+        switch (namedArgs.model) {
+            default:
+                break;
+            case "4o":
+                extractor = context.extractor;
+                break;
+            case "41":
+                extractor = context.extractor41;
+                break;
+            case "41m":
+                extractor = context.extractor41Mini;
+                break;
+            case "35":
+                extractor = context.extractor35;
+                break;
         }
 
         return extractor;
@@ -98,22 +108,29 @@ export async function createKnowproKnowledgeCommands(
             extractor: kpLib.createKnowledgeExtractor(kpContext.knowledgeModel),
             model: {
                 model: kpContext.knowledgeModel,
-                modelName: "Default",
+                modelName: "4o",
             },
         };
-        const models = kpTest.createGpt41Models();
-        if (models.gpt41) {
+        const models41 = kpTest.createGpt41Models();
+        if (models41.gpt41) {
             context.extractor41 = {
-                extractor: kpLib.createKnowledgeExtractor(models.gpt41.model),
-                model: models.gpt41,
+                extractor: kpLib.createKnowledgeExtractor(models41.gpt41.model),
+                model: models41.gpt41,
             };
         }
-        if (models.gpt41Mini) {
+        if (models41.gpt41Mini) {
             context.extractor41Mini = {
                 extractor: kpLib.createKnowledgeExtractor(
-                    models.gpt41Mini.model,
+                    models41.gpt41Mini.model,
                 ),
-                model: models.gpt41Mini,
+                model: models41.gpt41Mini,
+            };
+        }
+        const model35 = kpTest.create35Model();
+        if (model35) {
+            context.extractor35 = {
+                extractor: kpLib.createKnowledgeExtractor(model35.model),
+                model: model35,
             };
         }
     }
