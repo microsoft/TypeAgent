@@ -664,6 +664,6 @@ async def search_query_from_language(
     if time_range:
         prompt_preamble.append(time_range)
     # print("[" * 50)
-    # print(translator._schema_str)
+    # print(translator.schema_str)
     # print("]" * 50)
     return await translator.translate(query_text, prompt_preamble=prompt_preamble)
