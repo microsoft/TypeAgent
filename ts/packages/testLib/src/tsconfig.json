@@ -4,7 +4,7 @@
     "composite": true,
     "rootDir": ".",
     "outDir": "../dist",
-    "types": ["node", "jest"],
+    "types": ["node", "jest"]
   },
   "ts-node": {
     "esm": true

@@ -4,10 +4,10 @@
     "composite": true,
     "rootDir": ".",
     "outDir": "../dist",
-    "lib": ["es2021", "DOM"],
+    "lib": ["es2021", "DOM"]
   },
   "include": ["./**/*"],
-    "ts-node": {
-      "esm": true
-    }
+  "ts-node": {
+    "esm": true
+  }
 }

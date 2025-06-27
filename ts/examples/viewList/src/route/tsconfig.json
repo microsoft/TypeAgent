@@ -3,7 +3,7 @@
   "compilerOptions": {
     "composite": true,
     "rootDir": ".",
-    "outDir": "../../dist/route",    
+    "outDir": "../../dist/route"
   },
   "include": ["./*"],
   "ts-node": {

@@ -11,7 +11,7 @@
     "lib": ["DOM"],
     "verbatimModuleSyntax": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedParameters": true
   },
   "include": ["./**/*"],
   "ts-node": {

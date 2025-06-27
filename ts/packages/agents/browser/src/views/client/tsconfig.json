@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/views/public",
+    "rootDir": ".",
+    "incremental": true,
+    "lib": ["ES2020", "DOM"],
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "target": "ES2020",
+    "module": "ESNext"
+  },
+  "include": ["./**/*.ts"],
+  "references": [
+    { "path": "./plans" },
+    { "path": "./pdf" },
+    { "path": "../shared" }
+  ]
+}

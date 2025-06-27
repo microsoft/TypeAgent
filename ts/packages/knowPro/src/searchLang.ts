@@ -38,7 +38,6 @@ import {
     getCountOfMessagesInCharBudget,
     getMessageOrdinalsFromScored,
 } from "./message.js";
-import { split } from "knowledge-processor";
 
 /*
     APIs for searching with Natural Language
@@ -935,33 +934,4 @@ function optimizeOrMax(termGroup: SearchTermGroup) {
         return termGroup.terms[0];
     }
     return termGroup;
-}
-
-export class SearchTermParser {
-    constructor(public noiseTerms?: Set<string>) {}
-
-    public getTerms(text: string, caseSensitive: boolean = false): string[] {
-        // Should we also handle quotes etc?
-        let terms = split(
-            text,
-            /"([^"]+)"|([a-zA-Z0-9]+(?:[-][a-zA-Z0-9]+)*)/g,
-            {
-                trim: true,
-                removeEmpty: true,
-            },
-        );
-        if (!caseSensitive) {
-            terms = terms.map((t) => t.toLowerCase());
-        }
-        terms = this.removeNoise(terms);
-        return terms;
-    }
-
-    public removeNoise(terms: string[]): string[] {
-        if (this.noiseTerms) {
-            const cleanTerms = terms.filter((t) => !this.noiseTerms?.has(t));
-            return cleanTerms;
-        }
-        return terms;
-    }
 }
