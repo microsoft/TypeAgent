@@ -3,6 +3,7 @@
 
 import {
     arg,
+    argBool,
     CommandHandler,
     CommandMetadata,
     NamedArgs,
@@ -47,8 +48,9 @@ export async function createKnowproKnowledgeCommands(
         return {
             description: "Extract knowledge",
             options: {
-                text: arg("Extract knowledge from this text"),
-                model: arg("Extract with: 4o | 41 | 41m | 35", "41m"),
+                text: arg("From this text"),
+                model: arg("Model: 4o | 41 | 41m | 35", "4o"),
+                search: argBool("Run knowledge search", false),
             },
         };
     }
@@ -73,16 +75,36 @@ export async function createKnowproKnowledgeCommands(
         stopWatch.start();
         const knowledge = await llmExtractor.extractor.extract(namedArgs.text);
         stopWatch.stop();
-        if (knowledge) {
-            context.printer.writeJson(knowledge);
-            const searchExpr = context.compiler.compileKnowledge(knowledge);
-            context.printer.writeJsonInColor(chalk.gray, searchExpr);
-        }
         context.printer.writeTiming(
             chalk.cyan,
             stopWatch,
             llmExtractor.model.modelName,
         );
+        if (!knowledge) {
+            return;
+        }
+        context.printer.writeJson(knowledge);
+        if (namedArgs.search) {
+            const searchExpr = context.compiler.compileKnowledge(knowledge);
+            context.printer.writeJsonInColor(chalk.gray, searchExpr);
+            if (!kpContext.conversation) {
+                context.printer.writeError("No conversation loaded");
+                return;
+            }
+            const searchResults = await kp.searchConversation(
+                kpContext.conversation,
+                searchExpr.searchTermGroup,
+                searchExpr.when,
+            );
+            context.printer.writeConversationSearchResult(
+                kpContext.conversation,
+                searchResults,
+                true,
+                false,
+                25,
+                true,
+            );
+        }
     }
 
     function getExtractor(
@@ -165,7 +187,7 @@ export class KnowledgeCompiler {
     }
 
     private compileTopics(topics: string[]) {
-        const termGroup = kp.createOrMaxTermGroup();
+        const termGroup = kp.createOrTermGroup();
         for (const topic of topics) {
             termGroup.terms.push(
                 kp.createPropertySearchTerm(kp.PropertyNames.Topic, topic),
@@ -193,7 +215,16 @@ export class KnowledgeCompiler {
                 entity.name,
             ),
         );
+        termGroup.terms.push(
+            kp.createPropertySearchTerm(
+                kp.PropertyNames.EntityType,
+                entity.name,
+            ),
+        );
         for (const type of entity.type) {
+            if (type.toLowerCase() === "object") {
+                continue;
+            }
             termGroup.terms.push(
                 kp.createPropertySearchTerm(kp.PropertyNames.EntityType, type),
             );
