@@ -8,18 +8,26 @@ import {
     CommandMetadata,
     NamedArgs,
     parseNamedArguments,
+    StopWatch,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { KnowProPrinter } from "./knowproPrinter.js";
-import { createGpt41Models } from "../common.js";
 import { conversation as kpLib } from "knowledge-processor";
+import * as kpTest from "knowpro-test";
+import chalk from "chalk";
+
+export type LLMKnowledgeExtractor = {
+    extractor: kpLib.KnowledgeExtractor;
+    model: kpTest.LanguageModel;
+};
 
 export type KnowProKnowledgeContext = {
     printer: KnowProPrinter;
-    extractor?: kpLib.KnowledgeExtractor | undefined;
-    extractor41?: kpLib.KnowledgeExtractor | undefined;
-    extractor41Mini?: kpLib.KnowledgeExtractor | undefined;
+    extractor?: LLMKnowledgeExtractor | undefined;
+    extractor41?: LLMKnowledgeExtractor | undefined;
+    extractor41Mini?: LLMKnowledgeExtractor | undefined;
 };
+
 export async function createKnowproKnowledgeCommands(
     kpContext: KnowproContext,
     commands: Record<string, CommandHandler>,
@@ -47,22 +55,34 @@ export async function createKnowproKnowledgeCommands(
         if (!namedArgs.text) {
             return;
         }
-        const extractor = getExtractor(namedArgs);
-        if (!extractor) {
+        const llmExtractor = getExtractor(namedArgs);
+        if (!llmExtractor) {
             context.printer.writeError(
                 "Knowledge extractor not available for model",
             );
             return;
         }
-        const knowledge = await extractor.extract(namedArgs.text);
+        context.printer.writeLineInColor(
+            chalk.cyan,
+            `Using ${llmExtractor.model.modelName}`,
+        );
+        const stopWatch = new StopWatch();
+        stopWatch.start();
+        const knowledge = await llmExtractor.extractor.extract(namedArgs.text);
+        stopWatch.stop();
         if (knowledge) {
             context.printer.writeJson(knowledge);
         }
+        context.printer.writeTiming(
+            chalk.cyan,
+            stopWatch,
+            llmExtractor.model.modelName,
+        );
     }
 
     function getExtractor(
         namedArgs: NamedArgs,
-    ): kpLib.KnowledgeExtractor | undefined {
+    ): LLMKnowledgeExtractor | undefined {
         let extractor = context.extractor;
         if (namedArgs.use41) {
             extractor = namedArgs.useMini
@@ -74,17 +94,27 @@ export async function createKnowproKnowledgeCommands(
     }
 
     function createExtractors() {
-        context.extractor = kpLib.createKnowledgeExtractor(
-            kpContext.knowledgeModel,
-        );
-        const models = createGpt41Models();
+        context.extractor = {
+            extractor: kpLib.createKnowledgeExtractor(kpContext.knowledgeModel),
+            model: {
+                model: kpContext.knowledgeModel,
+                modelName: "Default",
+            },
+        };
+        const models = kpTest.createGpt41Models();
         if (models.gpt41) {
-            context.extractor41 = kpLib.createKnowledgeExtractor(models.gpt41);
+            context.extractor41 = {
+                extractor: kpLib.createKnowledgeExtractor(models.gpt41.model),
+                model: models.gpt41,
+            };
         }
         if (models.gpt41Mini) {
-            context.extractor41Mini = kpLib.createKnowledgeExtractor(
-                models.gpt41Mini,
-            );
+            context.extractor41Mini = {
+                extractor: kpLib.createKnowledgeExtractor(
+                    models.gpt41Mini.model,
+                ),
+                model: models.gpt41Mini,
+            };
         }
     }
 
