@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { removePageSchema } from "./storage";
 import { sendActionToAgent } from "./websocket";
 import { getWebSocket } from "./websocket";
 
@@ -95,8 +94,19 @@ export async function handleContextMenuClick(
         }
         case "clearCrosswordPageCache": {
             // remove cached schema for current tab
-            if (tab.url) {
-                await removePageSchema(tab.url);
+            // trigger translator
+            const webSocket = getWebSocket();
+            if (
+                tab.url &&
+                webSocket &&
+                webSocket.readyState === WebSocket.OPEN
+            ) {
+                webSocket.send(
+                    JSON.stringify({
+                        method: "removeCrosswordPageCache",
+                        params: { url: tab.url },
+                    }),
+                );
             }
             break;
         }

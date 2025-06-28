@@ -155,31 +155,6 @@ export class BrowserConnector {
         return screenshot;
     }
 
-    async getCurrentPageSchema(url: string | undefined) {
-        const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
-        const action = {
-            actionName: "getPageSchema",
-            parameters: {
-                url: url,
-            },
-        };
-
-        const actionPromise = this.getPageDataFromBrowser(action);
-        return Promise.race([actionPromise, timeoutPromise]);
-    }
-
-    async setCurrentPageSchema(url: string, data: any) {
-        const schemaAction = {
-            actionName: "setPageSchema",
-            parameters: {
-                url: url,
-                schema: data,
-            },
-        };
-
-        return this.sendActionToBrowser(schemaAction, "browser");
-    }
-
     async getCurrentPageStoredProperty(url: string, key: string) {
         const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
         const action = {
