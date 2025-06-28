@@ -1,0 +1,339 @@
+/* Import PDF.js viewer CSS */
+@import "pdfjs-dist/web/pdf_viewer.css";
+
+/* TypeAgent PDF Viewer Styles */
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  background: #323639;
+  color: white;
+  overflow: hidden;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.toolbar {
+  background: #424242;
+  padding: 8px 16px;
+  border-bottom: 1px solid #555;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.toolbar button {
+  background: transparent;
+  color: #e8eaed;
+  border: none;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.toolbar button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.toolbar button:disabled {
+  color: #5f6368;
+  cursor: not-allowed;
+}
+
+.toolbar button:disabled:hover {
+  background: transparent;
+}
+
+.open-button {
+  background: #1a73e8;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  width: auto;
+  gap: 8px;
+}
+
+.open-button:hover {
+  background: #1557b0;
+}
+
+.page-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.page-input {
+  background: transparent;
+  color: #e8eaed;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 2px;
+  width: 40px;
+  text-align: center;
+  font-size: 13px;
+  outline: none;
+}
+
+.page-input:focus {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.page-separator {
+  color: #9aa0a6;
+  font-size: 13px;
+  margin: 0 4px;
+}
+
+.page-total {
+  color: #9aa0a6;
+  font-size: 13px;
+  min-width: 20px;
+}
+
+.zoom-level {
+  color: #9aa0a6;
+  font-size: 13px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.file-input {
+  display: none;
+}
+
+.viewer-container {
+  flex: 1;
+  background: #323639;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+/* PDF.js viewer container - positioned by JavaScript below toolbar */
+#viewerContainer {
+  /* Position will be set dynamically by JavaScript */
+}
+
+#viewer {
+  /* Styles will be set by PDF.js */
+}
+
+/* PDF.js viewer specific styles */
+.pdfViewer {
+  padding: 20px;
+  width: 100%;
+}
+
+.pdfViewer .page {
+  border: 1px solid #555;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  background: white;
+  margin: 10px auto;
+  position: relative;
+}
+
+/* Override PDF.js text layer styles for better visibility */
+.pdfViewer .textLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.2;
+  line-height: 1;
+}
+
+.pdfViewer .textLayer > span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdfViewer .textLayer .highlight {
+  margin: -1px;
+  padding: 1px;
+  background-color: rgba(180, 0, 170, 1);
+  border-radius: 4px;
+}
+
+.pdfViewer .textLayer .highlight.begin {
+  border-radius: 4px 0px 0px 4px;
+}
+
+.pdfViewer .textLayer .highlight.end {
+  border-radius: 0px 4px 4px 0px;
+}
+
+.pdfViewer .textLayer .highlight.middle {
+  border-radius: 0px;
+}
+
+.pdfViewer .textLayer .highlight.selected {
+  background-color: rgba(0, 100, 0, 1);
+}
+
+/* Annotation layer styles */
+.pdfViewer .annotationLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.error {
+  color: #f28b82;
+  text-align: center;
+  padding: 40px;
+  background: rgba(242, 139, 130, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(242, 139, 130, 0.3);
+  max-width: 500px;
+  margin: 20px auto;
+}
+
+.loading {
+  color: #8ab4f8;
+  text-align: center;
+  padding: 40px;
+  background: rgba(138, 180, 248, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(138, 180, 248, 0.3);
+  margin: 20px auto;
+}
+
+.loading::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #8ab4f8;
+  border-top: 2px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .toolbar {
+    padding: 8px 12px;
+  }
+
+  .toolbar-center {
+    position: static;
+    transform: none;
+    order: -1;
+  }
+
+  .toolbar-left {
+    order: 1;
+  }
+
+  .toolbar-right {
+    order: 2;
+  }
+
+  .pdfViewer {
+    padding: 10px;
+  }
+}
+
+/* Custom zoom indicator styles */
+#zoom-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 16px 24px;
+  border-radius: 12px;
+  font-size: 24px;
+  font-weight: 600;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  z-index: 10000;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 80px;
+  text-align: center;
+}
+
+/* Add a subtle animation for zoom indicator appearance */
+@keyframes zoomIndicatorIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+#zoom-overlay.zoom-in {
+  animation: zoomIndicatorIn 0.2s ease-out;
+}

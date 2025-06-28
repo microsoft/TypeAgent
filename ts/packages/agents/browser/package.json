@@ -26,7 +26,7 @@
     "build:dev": "fluid-build . -t build:dev",
     "build:extension": "fluid-build . -t build:extension",
     "build:views": "fluid-build . -t build:views",
-    "clean": "rimraf dist deploy *.done.build.log && rimraf -g **/*.tsbuildinfo",
+    "clean": "rimraf dist deploy && rimraf -g **/*.tsbuildinfo *.done.build.log",
     "dev:client": "vite serve",
     "package": "node scripts/packExtension.mjs",
     "prepare": "node ./scripts/prepare.mjs .",

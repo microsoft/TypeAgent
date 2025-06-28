@@ -1,21 +1,39 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as pdfjsLib from "pdfjs-dist";
+// Import the viewer as a global script
+import "pdfjs-dist/web/pdf_viewer.mjs";
 import { PDFApiService } from "./services/pdfApiService";
 import { PDFSSEClient } from "./services/pdfSSEClient";
+import "./pdf-viewer.css";
 
-// PDF.js types
+// PDF.js library types
 declare global {
     interface Window {
         pdfjsLib: any;
+        pdfjsViewer: any;
     }
 }
 
+// Configure PDF.js worker
+if (typeof window !== "undefined") {
+    // Ensure pdfjsLib is available globally
+    window.pdfjsLib = pdfjsLib;
+}
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.mjs",
+    import.meta.url,
+).toString();
+
 /**
- * Basic TypeAgent PDF Viewer Application
+ * Enhanced TypeAgent PDF Viewer using npm pdfjs-dist package
  */
 export class TypeAgentPDFViewerApp {
     private pdfDoc: any = null;
+    private pdfViewer: any = null;
+    private eventBus: any = null;
     private currentPage = 1;
     private scale = 1.0;
     private pdfApiService: PDFApiService;
@@ -30,11 +48,13 @@ export class TypeAgentPDFViewerApp {
      * Initialize the PDF viewer application
      */
     async initialize(): Promise<void> {
-        console.log("🚀 Initializing TypeAgent PDF Viewer...");
+        console.log(
+            "🚀 Initializing TypeAgent PDF Viewer with npm pdfjs-dist...",
+        );
 
         try {
-            // Set up PDF.js worker
-            await this.setupPDFJS();
+            // Set up PDF.js viewer components
+            await this.setupPDFJSViewer();
 
             // Set up UI event handlers
             this.setupEventHandlers();
@@ -60,17 +80,150 @@ export class TypeAgentPDFViewerApp {
     }
 
     /**
-     * Set up PDF.js library
+     * Set up PDF.js viewer components
      */
-    private async setupPDFJS(): Promise<void> {
-        // PDF.js should be available from CDN
-        if (typeof window.pdfjsLib === "undefined") {
-            throw new Error("PDF.js library not loaded");
+    private async setupPDFJSViewer(): Promise<void> {
+        console.log("🔧 Setting up PDF.js viewer components...");
+
+        // Wait for PDF.js to be available
+        if (!window.pdfjsLib || !window.pdfjsViewer) {
+            throw new Error("PDF.js not loaded");
         }
 
-        // Set up worker
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs";
+        // Create event bus
+        this.eventBus = new window.pdfjsViewer.EventBus();
+
+        // Get viewer container
+        const viewerContainer = document.getElementById("viewerContainer");
+        if (!viewerContainer) {
+            throw new Error("Viewer container not found");
+        }
+
+        // Create the specific structure that PDF.js expects
+        viewerContainer.innerHTML = `
+            <div id="viewer" class="pdfViewer"></div>
+        `;
+
+        // Ensure the container has absolute positioning (PDF.js requirement)
+        // Position it below the toolbar
+        const toolbar = document.querySelector(".toolbar") as HTMLElement;
+        const toolbarHeight = toolbar ? toolbar.offsetHeight : 56; // Default fallback
+
+        console.log("📄 Toolbar height:", toolbarHeight, "px");
+
+        viewerContainer.style.position = "absolute";
+        viewerContainer.style.top = `${toolbarHeight}px`;
+        viewerContainer.style.left = "0";
+        viewerContainer.style.right = "0";
+        viewerContainer.style.bottom = "0";
+        viewerContainer.style.overflow = "auto";
+
+        const viewerElement = document.getElementById("viewer");
+        if (!viewerElement) {
+            throw new Error("PDF viewer element not found");
+        }
+
+        // Wait for container to be properly rendered
+        await new Promise((resolve) => {
+            const checkDimensions = () => {
+                const rect = viewerContainer.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    console.log(
+                        "✅ Container has proper dimensions:",
+                        rect.width,
+                        "x",
+                        rect.height,
+                    );
+                    resolve(true);
+                } else {
+                    console.log("⏳ Waiting for container dimensions...");
+                    setTimeout(checkDimensions, 100);
+                }
+            };
+            checkDimensions();
+        });
+
+        // Create PDF link service
+        const linkService = new window.pdfjsViewer.PDFLinkService({
+            eventBus: this.eventBus,
+        });
+
+        // Create PDF viewer with the correct container structure
+        this.pdfViewer = new window.pdfjsViewer.PDFViewer({
+            container: viewerContainer,
+            viewer: viewerElement,
+            eventBus: this.eventBus,
+            linkService: linkService,
+            renderer: "canvas", // Use canvas renderer for better compatibility
+            textLayerMode: 2, // Enable text selection
+            annotationMode: 2, // Enable annotations
+            removePageBorders: false,
+            l10n: window.pdfjsViewer.NullL10n, // Use NullL10n for simplicity
+        });
+
+        // Link the link service to the viewer
+        linkService.setViewer(this.pdfViewer);
+
+        // Set up event listeners for the PDF viewer
+        this.eventBus.on("pagesinit", () => {
+            console.log("📄 Pages initialized");
+
+            // Check container layout for debugging
+            const container = document.getElementById("viewerContainer");
+            const viewer = document.getElementById("viewer");
+
+            if (container && viewer) {
+                const containerRect = container.getBoundingClientRect();
+                const viewerRect = viewer.getBoundingClientRect();
+                console.log(
+                    "📄 Container rect:",
+                    containerRect.width,
+                    "x",
+                    containerRect.height,
+                );
+                console.log(
+                    "📄 Viewer rect:",
+                    viewerRect.width,
+                    "x",
+                    viewerRect.height,
+                );
+                console.log(
+                    "📄 Container offsetParent:",
+                    container.offsetParent,
+                );
+                console.log("📄 Viewer offsetParent:", viewer.offsetParent);
+
+                // Check if pages are actually being rendered
+                const pages = viewer.querySelectorAll(".page");
+                console.log("📄 Number of rendered pages:", pages.length);
+
+                if (pages.length > 0) {
+                    console.log(
+                        "📄 First page dimensions:",
+                        pages[0].getBoundingClientRect(),
+                    );
+                }
+            }
+
+            // Hide loading overlay when pages are initialized
+            this.hideLoadingState();
+
+            console.log("📄 Letting PDF.js handle initial scale naturally");
+        });
+
+        this.eventBus.on("pagechanging", (evt: any) => {
+            console.log("📄 Page changing to:", evt.pageNumber);
+            this.currentPage = evt.pageNumber;
+            this.updateCurrentPageIndicator();
+        });
+
+        this.eventBus.on("scalechanging", (evt: any) => {
+            console.log("🔍 Scale changing to:", evt.scale);
+            this.scale = evt.scale;
+            this.updateScaleIndicator();
+        });
+
+        console.log("✅ PDF.js viewer components set up successfully");
     }
 
     /**
@@ -86,29 +239,13 @@ export class TypeAgentPDFViewerApp {
         ) as HTMLInputElement;
         const zoomInBtn = document.getElementById("zoomIn");
         const zoomOutBtn = document.getElementById("zoomOut");
-        const openBtn = document.getElementById("openFile");
-        const fileInput = document.getElementById(
-            "fileInput",
-        ) as HTMLInputElement;
-
-        console.log("🔍 Found elements:", {
-            prevBtn: !!prevBtn,
-            nextBtn: !!nextBtn,
-            pageNumInput: !!pageNumInput,
-            zoomInBtn: !!zoomInBtn,
-            zoomOutBtn: !!zoomOutBtn,
-            openBtn: !!openBtn,
-            fileInput: !!fileInput,
-        });
 
         if (
             !prevBtn ||
             !nextBtn ||
             !pageNumInput ||
             !zoomInBtn ||
-            !zoomOutBtn ||
-            !openBtn ||
-            !fileInput
+            !zoomOutBtn
         ) {
             console.error(
                 "❌ Some UI elements not found! Retrying in 100ms...",
@@ -120,6 +257,7 @@ export class TypeAgentPDFViewerApp {
         // Navigation events
         prevBtn.addEventListener("click", () => this.goToPreviousPage());
         nextBtn.addEventListener("click", () => this.goToNextPage());
+
         pageNumInput.addEventListener("change", (e) => {
             const target = e.target as HTMLInputElement;
             const pageNum = parseInt(target.value);
@@ -135,7 +273,6 @@ export class TypeAgentPDFViewerApp {
             }
         });
 
-        // Also handle Enter key
         pageNumInput.addEventListener("keypress", (e) => {
             if (e.key === "Enter") {
                 const target = e.target as HTMLInputElement;
@@ -156,70 +293,133 @@ export class TypeAgentPDFViewerApp {
         zoomInBtn.addEventListener("click", () => this.zoomIn());
         zoomOutBtn.addEventListener("click", () => this.zoomOut());
 
-        // File open events
-        openBtn.addEventListener("click", () => this.openFileDialog());
-        fileInput.addEventListener("change", (e) => this.handleFileSelect(e));
+        // Custom zoom handling for Ctrl+scroll wheel
+        this.setupCustomZoomHandling();
 
         console.log("✅ Event handlers set up successfully");
     }
 
     /**
-     * Open file dialog
+     * Load PDF document from ArrayBuffer
      */
-    private openFileDialog(): void {
-        const fileInput = document.getElementById(
-            "fileInput",
-        ) as HTMLInputElement;
-        if (fileInput) {
-            fileInput.click();
-        }
-    }
-
-    /**
-     * Handle file selection from dialog
-     */
-    private async handleFileSelect(event: Event): Promise<void> {
-        const target = event.target as HTMLInputElement;
-        const file = target.files?.[0];
-
-        if (!file) {
-            return;
-        }
-
-        if (file.type !== "application/pdf") {
-            this.showError("Please select a valid PDF file.");
-            return;
-        }
-
+    private async loadPDFDocument(data: ArrayBuffer | string): Promise<void> {
         try {
-            console.log("📁 Loading selected file:", file.name);
-            this.showLoading(`Loading ${file.name}...`);
+            console.log("📄 Loading PDF document...");
+            console.log("📄 Data type:", typeof data);
 
-            // Read file as array buffer
-            const arrayBuffer = await file.arrayBuffer();
+            if (data instanceof ArrayBuffer) {
+                console.log("📄 ArrayBuffer size:", data.byteLength, "bytes");
+            } else {
+                console.log(
+                    "📄 String/URL data:",
+                    typeof data === "string" ? data.substring(0, 100) : data,
+                );
+            }
 
-            // Load PDF from array buffer
-            const loadingTask = window.pdfjsLib.getDocument(arrayBuffer);
+            // Validate the data before passing to PDF.js
+            if (data instanceof ArrayBuffer && data.byteLength === 0) {
+                throw new Error("PDF data is empty");
+            }
+
+            // Load the PDF document using pdfjs-dist
+            const loadingTask = window.pdfjsLib.getDocument({
+                data: data,
+                cMapUrl:
+                    "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.3.31/cmaps/",
+                cMapPacked: true,
+                enableXfa: true,
+                verbosity: 1, // Enable some debugging
+            });
+
+            // Add progress tracking
+            loadingTask.onProgress = (progress: any) => {
+                console.log(
+                    "📄 PDF loading progress:",
+                    progress.loaded,
+                    "/",
+                    progress.total,
+                );
+            };
+
             this.pdfDoc = await loadingTask.promise;
 
             console.log(
-                "📄 PDF loaded from file. Pages:",
+                "📄 PDF loaded successfully. Pages:",
                 this.pdfDoc.numPages,
             );
+
+            // Set the document in the PDF viewer
+            if (this.pdfViewer) {
+                console.log("📄 Setting document in PDF viewer");
+                this.pdfViewer.setDocument(this.pdfDoc);
+
+                // Wait for pages to initialize and viewer to be ready
+                await new Promise((resolve) => {
+                    const checkInit = () => {
+                        if (this.pdfViewer.pagesCount > 0) {
+                            console.log(
+                                "📄 PDF viewer pages initialized, count:",
+                                this.pdfViewer.pagesCount,
+                            );
+
+                            // Additional check for container dimensions
+                            const container =
+                                document.getElementById("viewerContainer");
+                            if (container) {
+                                const rect = container.getBoundingClientRect();
+                                console.log(
+                                    "📄 Container dimensions:",
+                                    rect.width,
+                                    "x",
+                                    rect.height,
+                                );
+
+                                if (rect.width > 0 && rect.height > 0) {
+                                    resolve(true);
+                                } else {
+                                    console.log(
+                                        "⏳ Container not ready, waiting...",
+                                    );
+                                    setTimeout(checkInit, 100);
+                                }
+                            } else {
+                                resolve(true);
+                            }
+                        } else {
+                            setTimeout(checkInit, 100);
+                        }
+                    };
+                    checkInit();
+                });
+            }
 
             // Update UI
             this.updatePageCount();
             this.currentPage = 1;
-            await this.renderPage(this.currentPage);
 
-            // Clear the file input for next use
-            target.value = "";
+            // Hide loading state
+            this.hideLoadingState();
+
+            console.log("✅ PDF document loaded successfully");
         } catch (error) {
-            console.error("❌ Failed to load PDF file:", error);
-            this.showError(
-                "Failed to load PDF file. Please make sure it is a valid PDF document.",
-            );
-            target.value = "";
+            console.error("❌ Failed to load PDF document:", error);
+
+            // Provide more specific error messages
+            if (error instanceof Error) {
+                if (error.name === "InvalidPDFException") {
+                    this.showError(
+                        "Invalid PDF file. Please check that the file is a valid PDF document.",
+                    );
+                } else if (error.name === "PasswordException") {
+                    this.showError(
+                        "This PDF is password protected. Password-protected PDFs are not currently supported.",
+                    );
+                } else {
+                    this.showError(`Failed to load PDF: ${error.message}`);
+                }
+            }
+
+            throw error;
         }
     }
 
@@ -298,22 +498,93 @@ export class TypeAgentPDFViewerApp {
      */
     async loadPDFFromUrl(url: string): Promise<void> {
         try {
-            this.showLoading("Loading PDF from URL...");
+            console.log("📄 Loading PDF from URL:", url);
 
-            const loadingTask = window.pdfjsLib.getDocument(url);
-            this.pdfDoc = await loadingTask.promise;
+            // First, get or create a document ID for this URL
+            this.showLoading("Getting document ID...");
+            const urlMapping =
+                await this.pdfApiService.getDocumentIdFromUrl(url);
+            this.documentId = urlMapping.documentId;
 
-            console.log("📄 PDF loaded from URL. Pages:", this.pdfDoc.numPages);
+            console.log("📄 Document ID for URL:", this.documentId);
 
-            // Update UI
-            this.updatePageCount();
-            this.currentPage = 1;
-            await this.renderPage(this.currentPage);
+            // Now fetch the PDF data
+            this.showLoading("Fetching PDF data...");
+            console.log("📄 Fetching PDF from URL:", url);
+
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                    Accept: "application/pdf",
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(
+                    `Failed to fetch PDF: ${response.status} ${response.statusText}`,
+                );
+            }
+
+            const contentType = response.headers.get("content-type");
+            console.log("📄 Response content-type:", contentType);
+
+            const arrayBuffer = await response.arrayBuffer();
+            console.log(
+                "📄 Downloaded PDF size:",
+                arrayBuffer.byteLength,
+                "bytes",
+            );
+
+            // Validate that we got some data
+            if (arrayBuffer.byteLength === 0) {
+                throw new Error("Downloaded PDF file is empty");
+            }
+
+            // Check for PDF header
+            const uint8Array = new Uint8Array(arrayBuffer);
+            const pdfHeader = String.fromCharCode.apply(
+                null,
+                Array.from(uint8Array.slice(0, 4)),
+            );
+            console.log("📄 PDF header:", pdfHeader);
+
+            if (!pdfHeader.startsWith("%PDF")) {
+                console.error(
+                    "📄 Invalid PDF header. First 20 bytes:",
+                    String.fromCharCode.apply(
+                        null,
+                        Array.from(uint8Array.slice(0, 20)),
+                    ),
+                );
+                throw new Error(
+                    "Downloaded file is not a valid PDF (missing PDF header)",
+                );
+            }
+
+            // Load the validated PDF data
+            this.showLoading("Loading PDF document...");
+            await this.loadPDFDocument(arrayBuffer);
+
+            // Set up SSE connection for real-time features using the document ID
+            if (this.documentId) {
+                this.setupSSEConnection(this.documentId);
+            }
+
+            console.log(
+                "✅ PDF loaded from URL successfully with document ID:",
+                this.documentId,
+            );
         } catch (error) {
             console.error("❌ Failed to load PDF from URL:", error);
-            this.showError(
-                "Failed to load PDF from URL. Please check if the URL is accessible and points to a valid PDF file.",
-            );
+
+            if (error instanceof Error) {
+                this.showError(`Failed to load PDF from URL: ${error.message}`);
+            } else {
+                this.showError(
+                    "Failed to load PDF from URL. Please check if the URL is accessible and points to a valid PDF file.",
+                );
+            }
+            throw error;
         }
     }
 
@@ -324,74 +595,33 @@ export class TypeAgentPDFViewerApp {
         try {
             this.showLoading("Loading sample document...");
 
-            // Use a sample PDF URL - you can replace this with your own
+            // Use a known working sample PDF URL
             const samplePdfUrl =
                 "https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf";
 
-            const loadingTask = window.pdfjsLib.getDocument(samplePdfUrl);
-            this.pdfDoc = await loadingTask.promise;
+            // Use the same flow as loading from URL to get a document ID
+            await this.loadPDFFromUrl(samplePdfUrl);
 
-            console.log("📄 PDF loaded. Pages:", this.pdfDoc.numPages);
-
-            // Update UI
-            this.updatePageCount();
-            this.currentPage = 1;
-            await this.renderPage(this.currentPage);
+            console.log("✅ Sample document loaded successfully");
         } catch (error) {
             console.error("❌ Failed to load sample document:", error);
-            this.showError("Failed to load PDF document");
+            this.showError("Failed to load sample PDF document");
         }
     }
 
     /**
-     * Render a specific page
+     * Get the current document ID
      */
-    async renderPage(pageNum: number): Promise<void> {
-        if (!this.pdfDoc) {
-            throw new Error("No PDF document loaded");
-        }
-
-        try {
-            const page = await this.pdfDoc.getPage(pageNum);
-            const viewport = page.getViewport({ scale: this.scale });
-
-            // Create canvas
-            const canvas = document.createElement("canvas");
-            const context = canvas.getContext("2d");
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            canvas.className = "page";
-
-            // Render page
-            const renderContext = {
-                canvasContext: context,
-                viewport: viewport,
-            };
-
-            await page.render(renderContext).promise;
-
-            // Update viewer container
-            const container = document.getElementById("viewerContainer");
-            if (container) {
-                container.innerHTML = "";
-                container.appendChild(canvas);
-            }
-
-            // Update current page indicator
-            this.updateCurrentPageIndicator();
-        } catch (error) {
-            console.error("❌ Failed to render page:", error);
-            this.showError("Failed to render page " + pageNum);
-        }
+    getCurrentDocumentId(): string | null {
+        return this.documentId;
     }
 
     /**
      * Navigate to previous page
      */
     async goToPreviousPage(): Promise<void> {
-        if (this.currentPage > 1) {
-            this.currentPage--;
-            await this.renderPage(this.currentPage);
+        if (this.pdfViewer && this.currentPage > 1) {
+            this.pdfViewer.currentPageNumber = this.currentPage - 1;
         }
     }
 
@@ -399,9 +629,12 @@ export class TypeAgentPDFViewerApp {
      * Navigate to next page
      */
     async goToNextPage(): Promise<void> {
-        if (this.pdfDoc && this.currentPage < this.pdfDoc.numPages) {
-            this.currentPage++;
-            await this.renderPage(this.currentPage);
+        if (
+            this.pdfViewer &&
+            this.pdfDoc &&
+            this.currentPage < this.pdfDoc.numPages
+        ) {
+            this.pdfViewer.currentPageNumber = this.currentPage + 1;
         }
     }
 
@@ -409,9 +642,13 @@ export class TypeAgentPDFViewerApp {
      * Go to specific page
      */
     async goToPage(pageNum: number): Promise<void> {
-        if (this.pdfDoc && pageNum >= 1 && pageNum <= this.pdfDoc.numPages) {
-            this.currentPage = pageNum;
-            await this.renderPage(this.currentPage);
+        if (
+            this.pdfViewer &&
+            this.pdfDoc &&
+            pageNum >= 1 &&
+            pageNum <= this.pdfDoc.numPages
+        ) {
+            this.pdfViewer.currentPageNumber = pageNum;
         }
     }
 
@@ -419,18 +656,165 @@ export class TypeAgentPDFViewerApp {
      * Zoom in
      */
     async zoomIn(): Promise<void> {
-        this.scale = Math.min(this.scale * 1.2, 3.0);
-        await this.renderPage(this.currentPage);
-        this.updateScaleIndicator();
+        if (this.pdfViewer) {
+            const currentScale = this.pdfViewer.currentScale;
+            this.pdfViewer.currentScale = Math.min(currentScale * 1.2, 3.0);
+        }
     }
 
     /**
      * Zoom out
      */
     async zoomOut(): Promise<void> {
-        this.scale = Math.max(this.scale / 1.2, 0.3);
-        await this.renderPage(this.currentPage);
+        if (this.pdfViewer) {
+            const currentScale = this.pdfViewer.currentScale;
+            this.pdfViewer.currentScale = Math.max(currentScale / 1.2, 0.3);
+        }
+    }
+
+    /**
+     * Set up custom zoom handling for Ctrl+scroll wheel
+     */
+    private setupCustomZoomHandling(): void {
+        console.log(
+            "🔧 Setting up custom zoom handling for Ctrl+scroll wheel...",
+        );
+
+        // Add wheel event listener to the viewer container
+        const viewerContainer = document.getElementById("viewerContainer");
+        if (!viewerContainer) {
+            console.warn("⚠️ Viewer container not found for zoom handling");
+            return;
+        }
+
+        viewerContainer.addEventListener(
+            "wheel",
+            (event: WheelEvent) => {
+                // Only handle Ctrl+scroll events
+                if (!event.ctrlKey) {
+                    return;
+                }
+
+                // Prevent the default browser zoom behavior
+                event.preventDefault();
+                event.stopPropagation();
+
+                // Determine zoom direction based on wheel delta
+                const zoomDirection = event.deltaY < 0 ? "in" : "out";
+
+                // Apply zoom with more granular control than button clicks
+                this.performCustomZoom(zoomDirection, event);
+            },
+            { passive: false },
+        ); // passive: false allows preventDefault
+
+        // Also handle the document level to catch any events that bubble up
+        document.addEventListener(
+            "wheel",
+            (event: WheelEvent) => {
+                // Only handle Ctrl+scroll when we're in the PDF viewer area
+                if (!event.ctrlKey) {
+                    return;
+                }
+
+                // Check if the event target is within our PDF viewer
+                const target = event.target as Element;
+                const viewerContainer =
+                    document.getElementById("viewerContainer");
+
+                if (
+                    viewerContainer &&
+                    (viewerContainer.contains(target) ||
+                        target === viewerContainer)
+                ) {
+                    // Prevent default browser zoom
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            },
+            { passive: false },
+        );
+
+        console.log("✅ Custom zoom handling set up successfully");
+    }
+
+    /**
+     * Perform custom zoom with more granular control
+     */
+    private async performCustomZoom(
+        direction: "in" | "out",
+        event?: WheelEvent,
+    ): Promise<void> {
+        if (!this.pdfViewer) {
+            return;
+        }
+
+        const currentScale = this.pdfViewer.currentScale;
+        let newScale: number;
+
+        // Use smaller zoom increments for smoother scrolling experience
+        const zoomFactor = 1.1; // Smaller than button clicks (1.2) for smoother scrolling
+        const minScale = 0.25; // Allow zooming out more than button clicks
+        const maxScale = 5.0; // Allow zooming in more than button clicks
+
+        if (direction === "in") {
+            newScale = Math.min(currentScale * zoomFactor, maxScale);
+        } else {
+            newScale = Math.max(currentScale / zoomFactor, minScale);
+        }
+
+        // Only apply zoom if the scale actually changes
+        if (Math.abs(newScale - currentScale) > 0.001) {
+            this.pdfViewer.currentScale = newScale;
+
+            // Show temporary zoom indicator
+            this.showZoomIndicator(newScale);
+
+            // Optional: Log zoom changes for debugging
+            console.log(
+                `🔍 Custom zoom ${direction}: ${Math.round(currentScale * 100)}% → ${Math.round(newScale * 100)}%`,
+            );
+        }
+    }
+
+    /**
+     * Show temporary zoom level indicator
+     */
+    private showZoomIndicator(scale: number): void {
+        const zoomPercentage = Math.round(scale * 100);
+
+        // Update the existing zoom display
         this.updateScaleIndicator();
+
+        // Create or update temporary zoom overlay
+        let zoomOverlay = document.getElementById(
+            "zoom-overlay",
+        ) as HTMLElement;
+
+        if (!zoomOverlay) {
+            zoomOverlay = document.createElement("div");
+            zoomOverlay.id = "zoom-overlay";
+            document.body.appendChild(zoomOverlay);
+        }
+
+        zoomOverlay.textContent = `${zoomPercentage}%`;
+        zoomOverlay.className = "zoom-in"; // Trigger animation
+        zoomOverlay.style.opacity = "1";
+
+        // Clear any existing timeout
+        if ((zoomOverlay as any).hideTimeout) {
+            clearTimeout((zoomOverlay as any).hideTimeout);
+        }
+
+        // Hide overlay after a short delay
+        (zoomOverlay as any).hideTimeout = setTimeout(() => {
+            zoomOverlay.style.opacity = "0";
+            setTimeout(() => {
+                if (zoomOverlay.parentNode) {
+                    zoomOverlay.parentNode.removeChild(zoomOverlay);
+                }
+            }, 300); // Match CSS transition duration
+        }, 1200);
     }
 
     /**
@@ -507,12 +891,52 @@ export class TypeAgentPDFViewerApp {
     private showLoading(message: string): void {
         const container = document.getElementById("viewerContainer");
         if (container) {
-            container.innerHTML = `
+            // Remove any existing loading overlay
+            const existingOverlay = container.querySelector(".loading-overlay");
+            if (existingOverlay) {
+                existingOverlay.remove();
+            }
+
+            // Create loading overlay (don't replace container content)
+            const loadingOverlay = document.createElement("div");
+            loadingOverlay.className = "loading-overlay";
+            loadingOverlay.style.cssText = `
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(50, 54, 57, 0.9);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+
+            loadingOverlay.innerHTML = `
                 <div class="loading">
                     <div>🔄 ${message}</div>
                 </div>
             `;
+
+            container.appendChild(loadingOverlay);
         }
+    }
+
+    /**
+     * Hide loading state
+     */
+    private hideLoadingState(): void {
+        const container = document.getElementById("viewerContainer");
+        if (container) {
+            // Remove loading overlay
+            const loadingOverlay = container.querySelector(".loading-overlay");
+            if (loadingOverlay) {
+                loadingOverlay.remove();
+            }
+        }
+
+        console.log("📄 Loading state hidden");
     }
 
     /**
@@ -537,7 +961,7 @@ export class TypeAgentPDFViewerApp {
 
 // Initialize the application when DOM is ready
 document.addEventListener("DOMContentLoaded", async () => {
-    console.log("🚀 TypeAgent PDF Viewer starting...");
+    console.log("🚀 TypeAgent PDF Viewer starting with npm pdfjs-dist...");
     console.log("📄 DOM ready state:", document.readyState);
 
     // Double-check DOM is ready
@@ -554,12 +978,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         console.error("❌ Failed to start PDF viewer:", error);
     }
 });
-
-// Fallback in case DOMContentLoaded already fired
-if (document.readyState !== "loading") {
-    console.log("🔄 DOM already ready, initializing immediately...");
-    document.dispatchEvent(new Event("DOMContentLoaded"));
-}
 
 // Export for global access
 export default TypeAgentPDFViewerApp;

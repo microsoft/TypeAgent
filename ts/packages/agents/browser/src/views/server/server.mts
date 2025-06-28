@@ -29,8 +29,8 @@ async function main() {
     const server = new BaseServer(config);
 
     // Register features
-    server.registerFeature(PlansRoutes.createFeatureConfig());
-    server.registerFeature(PDFRoutes.createFeatureConfig());
+    await server.registerFeature(PlansRoutes.createFeatureConfig());
+    await server.registerFeature(PDFRoutes.createFeatureConfig());
 
     // Start server
     await server.start();
