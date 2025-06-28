@@ -2,15 +2,17 @@
 // Licensed under the MIT License.
 
 import { SelectionInfo } from "../core/textSelectionManager";
+import { ScreenshotData } from "./ScreenshotSelector";
 
 /**
  * Note Editor Component
- * Provides markdown editor for adding notes to selected text
+ * Provides markdown editor for adding notes to selected text or screenshots
  */
 
 export interface NoteData {
     content: string;
-    selectedText: string;
+    selectedText?: string;
+    screenshotData?: ScreenshotData;
 }
 
 export type NoteSaveCallback = (noteData: NoteData) => void;
@@ -20,6 +22,7 @@ export class NoteEditor {
     private isVisible = false;
     private callback: NoteSaveCallback | null = null;
     private currentSelection: SelectionInfo | null = null;
+    private currentScreenshot: ScreenshotData | null = null;
 
     constructor() {
         this.createEditorElement();
@@ -30,13 +33,30 @@ export class NoteEditor {
      * Show note editor for selected text
      */
     show(selection: SelectionInfo, callback: NoteSaveCallback, existingNote?: string): void {
+        this.currentSelection = selection;
+        this.currentScreenshot = null;
+        this.showEditor(callback, existingNote);
+    }
+
+    /**
+     * Show note editor for screenshot
+     */
+    showForScreenshot(screenshot: ScreenshotData, callback: NoteSaveCallback, existingNote?: string): void {
+        this.currentSelection = null;
+        this.currentScreenshot = screenshot;
+        this.showEditor(callback, existingNote);
+    }
+
+    /**
+     * Common show logic for both text and screenshot
+     */
+    private showEditor(callback: NoteSaveCallback, existingNote?: string): void {
         if (!this.element) return;
 
-        this.currentSelection = selection;
         this.callback = callback;
         
         // Populate the editor
-        this.populateEditor(selection, existingNote);
+        this.populateEditor(existingNote);
         
         // Show the modal
         this.element.classList.add("visible");
@@ -62,6 +82,7 @@ export class NoteEditor {
         this.element.classList.remove("visible");
         this.isVisible = false;
         this.currentSelection = null;
+        this.currentScreenshot = null;
         this.callback = null;
     }
 
@@ -154,15 +175,34 @@ export class NoteEditor {
     }
 
     /**
-     * Populate editor with selection and existing note content
+     * Populate editor with selection/screenshot and existing note content
      */
-    private populateEditor(selection: SelectionInfo, existingNote?: string): void {
+    private populateEditor(existingNote?: string): void {
         if (!this.element) return;
 
-        // Set selected text
-        const selectedTextQuote = this.element.querySelector(".selected-text-quote");
-        if (selectedTextQuote) {
-            selectedTextQuote.textContent = selection.text;
+        // Set content based on type (text selection or screenshot)
+        const selectedTextSection = this.element.querySelector(".selected-text-section");
+        if (selectedTextSection) {
+            if (this.currentSelection) {
+                // Text selection mode
+                selectedTextSection.innerHTML = `
+                    <label class="section-label">Selected Text:</label>
+                    <blockquote class="selected-text-quote">
+                        ${this.escapeHtml(this.currentSelection.text)}
+                    </blockquote>
+                `;
+            } else if (this.currentScreenshot) {
+                // Screenshot mode
+                selectedTextSection.innerHTML = `
+                    <label class="section-label">Selected Screenshot:</label>
+                    <div class="selected-screenshot">
+                        <img src="${this.currentScreenshot.imageData}" alt="Screenshot clipping" class="screenshot-preview" />
+                        <div class="screenshot-info">
+                            <small>Page ${this.currentScreenshot.region.pageNumber} • ${this.currentScreenshot.region.width}×${this.currentScreenshot.region.height}px</small>
+                        </div>
+                    </div>
+                `;
+            }
         }
 
         // Set existing note content if provided
@@ -173,6 +213,15 @@ export class NoteEditor {
 
         // Update preview if in preview mode
         this.updatePreview();
+    }
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    private escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**
@@ -217,7 +266,7 @@ export class NoteEditor {
      * Handle save action
      */
     private handleSave = (): void => {
-        if (!this.currentSelection || !this.callback) return;
+        if ((!this.currentSelection && !this.currentScreenshot) || !this.callback) return;
 
         const textArea = this.element?.querySelector(".note-editor-textarea") as HTMLTextAreaElement;
         if (!textArea) return;
@@ -231,7 +280,8 @@ export class NoteEditor {
 
         const noteData: NoteData = {
             content,
-            selectedText: this.currentSelection.text,
+            selectedText: this.currentSelection?.text,
+            screenshotData: this.currentScreenshot || undefined,
         };
 
         try {
@@ -372,6 +422,7 @@ export class NoteEditor {
         this.element = null;
         this.isVisible = false;
         this.currentSelection = null;
+        this.currentScreenshot = null;
         this.callback = null;
     }
 }

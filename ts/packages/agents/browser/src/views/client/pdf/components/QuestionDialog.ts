@@ -2,15 +2,17 @@
 // Licensed under the MIT License.
 
 import { SelectionInfo } from "../core/textSelectionManager";
+import { ScreenshotData } from "./ScreenshotSelector";
 
 /**
  * Question Dialog Component
- * Provides interface for asking questions about selected text
+ * Provides interface for asking questions about selected text or screenshots
  */
 
 export interface QuestionData {
     question: string;
-    selectedText: string;
+    selectedText?: string;
+    screenshotData?: ScreenshotData;
     context?: string;
 }
 
@@ -21,6 +23,7 @@ export class QuestionDialog {
     private isVisible = false;
     private callback: QuestionSubmitCallback | null = null;
     private currentSelection: SelectionInfo | null = null;
+    private currentScreenshot: ScreenshotData | null = null;
 
     constructor() {
         this.createDialogElement();
@@ -31,13 +34,30 @@ export class QuestionDialog {
      * Show question dialog for selected text
      */
     show(selection: SelectionInfo, callback: QuestionSubmitCallback): void {
+        this.currentSelection = selection;
+        this.currentScreenshot = null;
+        this.showDialog(callback);
+    }
+
+    /**
+     * Show question dialog for screenshot
+     */
+    showForScreenshot(screenshot: ScreenshotData, callback: QuestionSubmitCallback): void {
+        this.currentSelection = null;
+        this.currentScreenshot = screenshot;
+        this.showDialog(callback);
+    }
+
+    /**
+     * Common show logic for both text and screenshot
+     */
+    private showDialog(callback: QuestionSubmitCallback): void {
         if (!this.element) return;
 
-        this.currentSelection = selection;
         this.callback = callback;
         
         // Populate the dialog
-        this.populateDialog(selection);
+        this.populateDialog();
         
         // Show the modal
         this.element.classList.add("visible");
@@ -59,6 +79,7 @@ export class QuestionDialog {
         this.element.classList.remove("visible");
         this.isVisible = false;
         this.currentSelection = null;
+        this.currentScreenshot = null;
         this.callback = null;
         
         // Clear form
@@ -158,19 +179,47 @@ export class QuestionDialog {
     }
 
     /**
-     * Populate dialog with selection
+     * Populate dialog with selection or screenshot
      */
-    private populateDialog(selection: SelectionInfo): void {
+    private populateDialog(): void {
         if (!this.element) return;
 
-        // Set selected text
-        const selectedTextPreview = this.element.querySelector(".selected-text-preview");
-        if (selectedTextPreview) {
-            selectedTextPreview.textContent = selection.text;
+        // Set content based on type (text selection or screenshot)
+        const selectedTextSection = this.element.querySelector(".selected-text-section");
+        if (selectedTextSection) {
+            if (this.currentSelection) {
+                // Text selection mode
+                selectedTextSection.innerHTML = `
+                    <label class="section-label">Selected Text:</label>
+                    <div class="selected-text-preview">
+                        ${this.escapeHtml(this.currentSelection.text)}
+                    </div>
+                `;
+            } else if (this.currentScreenshot) {
+                // Screenshot mode
+                selectedTextSection.innerHTML = `
+                    <label class="section-label">Selected Screenshot:</label>
+                    <div class="selected-screenshot">
+                        <img src="${this.currentScreenshot.imageData}" alt="Screenshot clipping" class="screenshot-preview" />
+                        <div class="screenshot-info">
+                            <small>Page ${this.currentScreenshot.region.pageNumber} • ${this.currentScreenshot.region.width}×${this.currentScreenshot.region.height}px</small>
+                        </div>
+                    </div>
+                `;
+            }
         }
 
         // Clear previous input
         this.clearForm();
+    }
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    private escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**
@@ -265,7 +314,7 @@ export class QuestionDialog {
      * Handle submit action
      */
     private handleSubmit = (): void => {
-        if (!this.currentSelection || !this.callback) return;
+        if ((!this.currentSelection && !this.currentScreenshot) || !this.callback) return;
 
         const questionInput = this.element?.querySelector(".question-input") as HTMLTextAreaElement;
         const contextInput = this.element?.querySelector(".context-input") as HTMLTextAreaElement;
@@ -283,7 +332,8 @@ export class QuestionDialog {
 
         const questionData: QuestionData = {
             question,
-            selectedText: this.currentSelection.text,
+            selectedText: this.currentSelection?.text,
+            screenshotData: this.currentScreenshot || undefined,
             context: context || undefined,
         };
 
@@ -357,6 +407,7 @@ export class QuestionDialog {
         this.element = null;
         this.isVisible = false;
         this.currentSelection = null;
+        this.currentScreenshot = null;
         this.callback = null;
     }
 }

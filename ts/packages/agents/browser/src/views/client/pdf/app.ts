@@ -10,6 +10,8 @@ import { ContextualToolbar } from "./components/ContextualToolbar";
 import { ColorPicker, HighlightColor } from "./components/ColorPicker";
 import { NoteEditor, NoteData } from "./components/NoteEditor";
 import { QuestionDialog, QuestionData } from "./components/QuestionDialog";
+import { ScreenshotSelector, ScreenshotData } from "./components/ScreenshotSelector";
+import { ScreenshotToolbar } from "./components/ScreenshotToolbar";
 import { AnnotationManager, AnnotationCreationData } from "./core/annotationManager";
 
 import "./pdf-viewer.css";
@@ -18,6 +20,7 @@ import "./styles/color-picker.css";
 import "./styles/note-editor.css";
 import "./styles/question-dialog.css";
 import "./styles/annotation-styles.css";
+import "./styles/screenshot-styles.css";
 
 declare global {
     interface Window {
@@ -50,6 +53,8 @@ export class TypeAgentPDFViewerApp {
     private colorPicker: ColorPicker | null = null;
     private noteEditor: NoteEditor | null = null;
     private questionDialog: QuestionDialog | null = null;
+    private screenshotSelector: ScreenshotSelector | null = null;
+    private screenshotToolbar: ScreenshotToolbar | null = null;
     private annotationManager: AnnotationManager | null = null;
 
     constructor() {
@@ -85,12 +90,15 @@ export class TypeAgentPDFViewerApp {
         this.colorPicker = new ColorPicker();
         this.noteEditor = new NoteEditor();
         this.questionDialog = new QuestionDialog();
+        this.screenshotSelector = new ScreenshotSelector();
+        this.screenshotToolbar = new ScreenshotToolbar();
         this.annotationManager = new AnnotationManager(this.pdfViewer, this.pdfApiService);
 
         this.setupHighlightingWorkflows();
+        this.setupScreenshotWorkflows();
         this.setupRightClickMenu();
         
-        console.log("✅ All highlighting components initialized successfully");
+        console.log("✅ All highlighting and screenshot components initialized successfully");
     }
 
     private setupHighlightingWorkflows(): void {
@@ -124,6 +132,35 @@ export class TypeAgentPDFViewerApp {
             icon: "fas fa-question-circle", 
             action: (selection) => this.handleQuestionAction(selection),
         });
+    }
+
+    private setupScreenshotWorkflows(): void {
+        if (!this.screenshotToolbar) return;
+
+        // Set up screenshot toolbar actions - these will replace the default placeholder actions
+        const noteAction: ScreenshotAction = {
+            id: "note",
+            label: "Add Note",
+            icon: "fas fa-sticky-note",
+            action: (screenshotData) => {
+                console.log("📝 Note action clicked");
+                this.handleScreenshotNoteAction(screenshotData);
+            },
+        };
+
+        const questionAction: ScreenshotAction = {
+            id: "question",
+            label: "Ask Question", 
+            icon: "fas fa-question-circle",
+            action: (screenshotData) => {
+                console.log("❓ Question action clicked");
+                this.handleScreenshotQuestionAction(screenshotData);
+            },
+        };
+
+        // Replace the default actions with working implementations
+        this.screenshotToolbar.addAction(noteAction);
+        this.screenshotToolbar.addAction(questionAction);
     }
 
     private handleHighlightAction(selection: SelectionInfo): void {
@@ -265,6 +302,155 @@ export class TypeAgentPDFViewerApp {
         }
     }
 
+    // Screenshot functionality methods
+    private startScreenshotMode(): void {
+        if (!this.screenshotSelector) {
+            console.error("📸 Screenshot selector not initialized!");
+            return;
+        }
+
+        console.log("📸 Starting screenshot mode");
+        this.screenshotSelector.startSelection(
+            (screenshotData) => {
+                console.log("📸 Screenshot callback received in app.ts");
+                this.handleScreenshotSelection(screenshotData);
+            },
+            () => {
+                console.log("📸 Screenshot cancelled");
+                this.cancelScreenshotMode();
+            }
+        );
+    }
+
+    private cancelScreenshotMode(): void {
+        console.log("📸 Screenshot mode cancelled");
+        this.screenshotSelector?.stopSelection();
+        this.screenshotSelector?.clearSelection(); // Clear the selection outline
+        this.screenshotToolbar?.hide();
+    }
+
+    private handleScreenshotSelection(screenshotData: ScreenshotData): void {
+        console.log("📸 Screenshot captured in app.ts:", screenshotData);
+        
+        // Stop selection mode
+        this.screenshotSelector?.stopSelection();
+        console.log("📸 Selection mode stopped");
+        
+        // Show flash effect
+        this.showScreenshotFlash();
+        console.log("📸 Flash effect shown");
+        
+        // Show toolbar with options
+        if (this.screenshotToolbar) {
+            console.log("📸 Showing screenshot toolbar");
+            this.screenshotToolbar.show(screenshotData);
+        } else {
+            console.error("📸 Screenshot toolbar not available!");
+        }
+    }
+
+    private showScreenshotFlash(): void {
+        const flash = document.createElement("div");
+        flash.className = "screenshot-capture-flash";
+        document.body.appendChild(flash);
+        
+        setTimeout(() => {
+            if (flash.parentNode) {
+                flash.parentNode.removeChild(flash);
+            }
+        }, 200);
+    }
+
+    private handleScreenshotNoteAction(screenshotData: ScreenshotData): void {
+        console.log("📝 Adding note to screenshot");
+        this.screenshotToolbar?.hide();
+        
+        if (this.noteEditor) {
+            this.noteEditor.showForScreenshot(screenshotData, (noteData) => 
+                this.createScreenshotNote(screenshotData, noteData)
+            );
+        }
+    }
+
+    private handleScreenshotQuestionAction(screenshotData: ScreenshotData): void {
+        console.log("❓ Asking question about screenshot");
+        this.screenshotToolbar?.hide();
+        
+        if (this.questionDialog) {
+            this.questionDialog.showForScreenshot(screenshotData, (questionData) => 
+                this.createScreenshotQuestion(screenshotData, questionData)
+            );
+        }
+    }
+
+    private async createScreenshotNote(screenshotData: ScreenshotData, noteData: NoteData): Promise<void> {
+        if (!this.annotationManager) return;
+        
+        try {
+            // Create a fake selection for the screenshot region
+            const fakeSelection: SelectionInfo = {
+                text: `Screenshot from page ${screenshotData.region.pageNumber}`,
+                pageNumber: screenshotData.region.pageNumber,
+                rects: [{
+                    left: screenshotData.region.x,
+                    top: screenshotData.region.y,
+                    right: screenshotData.region.x + screenshotData.region.width,
+                    bottom: screenshotData.region.y + screenshotData.region.height,
+                    width: screenshotData.region.width,
+                    height: screenshotData.region.height,
+                } as DOMRect],
+                range: document.createRange(),
+                isValid: true,
+            };
+
+            await this.annotationManager.createAnnotation({ 
+                type: "note", 
+                selection: fakeSelection, 
+                content: noteData.content + `\n\n![Screenshot](${screenshotData.imageData})` 
+            });
+            
+            console.log("✅ Screenshot note created successfully");
+        } catch (error) {
+            console.error("❌ Failed to create screenshot note:", error);
+        }
+    }
+
+    private async createScreenshotQuestion(screenshotData: ScreenshotData, questionData: QuestionData): Promise<void> {
+        if (!this.annotationManager) return;
+        
+        try {
+            // Create a fake selection for the screenshot region
+            const fakeSelection: SelectionInfo = {
+                text: `Screenshot from page ${screenshotData.region.pageNumber}`,
+                pageNumber: screenshotData.region.pageNumber,
+                rects: [{
+                    left: screenshotData.region.x,
+                    top: screenshotData.region.y,
+                    right: screenshotData.region.x + screenshotData.region.width,
+                    bottom: screenshotData.region.y + screenshotData.region.height,
+                    width: screenshotData.region.width,
+                    height: screenshotData.region.height,
+                } as DOMRect],
+                range: document.createRange(),
+                isValid: true,
+            };
+
+            let content = questionData.question;
+            if (questionData.context) content += `\n\nContext: ${questionData.context}`;
+            content += `\n\n![Screenshot](${screenshotData.imageData})`;
+
+            await this.annotationManager.createAnnotation({ 
+                type: "question", 
+                selection: fakeSelection, 
+                content 
+            });
+            
+            console.log("✅ Screenshot question created successfully - ready for LLM integration");
+        } catch (error) {
+            console.error("❌ Failed to create screenshot question:", error);
+        }
+    }
+
     private async setupPDFJSViewer(): Promise<void> {
         if (!window.pdfjsLib || !window.pdfjsViewer) throw new Error("PDF.js not loaded");
 
@@ -337,8 +523,9 @@ export class TypeAgentPDFViewerApp {
         const pageNumInput = document.getElementById("pageNum") as HTMLInputElement;
         const zoomInBtn = document.getElementById("zoomIn");
         const zoomOutBtn = document.getElementById("zoomOut");
+        const clippingBtn = document.getElementById("clippingTool");
 
-        if (!prevBtn || !nextBtn || !pageNumInput || !zoomInBtn || !zoomOutBtn) {
+        if (!prevBtn || !nextBtn || !pageNumInput || !zoomInBtn || !zoomOutBtn || !clippingBtn) {
             setTimeout(() => this.setupEventHandlers(), 100);
             return;
         }
@@ -347,6 +534,7 @@ export class TypeAgentPDFViewerApp {
         nextBtn.addEventListener("click", () => this.goToNextPage());
         zoomInBtn.addEventListener("click", () => this.zoomIn());
         zoomOutBtn.addEventListener("click", () => this.zoomOut());
+        clippingBtn.addEventListener("click", () => this.startScreenshotMode());
 
         pageNumInput.addEventListener("change", (e) => {
             const target = e.target as HTMLInputElement;
@@ -560,6 +748,8 @@ export class TypeAgentPDFViewerApp {
         this.colorPicker?.destroy();
         this.noteEditor?.destroy();
         this.questionDialog?.destroy();
+        this.screenshotSelector?.destroy();
+        this.screenshotToolbar?.destroy();
         this.annotationManager?.destroy();
         if (this.sseClient) {
             try { (this.sseClient as any).close?.(); } catch (error) {
