@@ -46,7 +46,7 @@ export default defineConfig({
                 assetFileNames: (assetInfo) => {
                     const name = assetInfo.name || "";
                     // Handle PDF.js worker files specifically
-                    if (name.endsWith(".worker.mjs")) {
+                    if (name.includes("pdf.worker")) {
                         return "pdf/js/[name][extname]";
                     }
                     // Route other assets based on source
@@ -63,10 +63,7 @@ export default defineConfig({
                     return "assets/[name]-[hash][extname]";
                 },
             },
-            external: [
-                // PDF.js worker should be loaded separately
-                "pdfjs-dist/build/pdf.worker.mjs",
-            ],
+            external: [],
         },
     },
     logLevel: "error",
@@ -88,5 +85,8 @@ export default defineConfig({
         alias: {
             "@": resolve(__dirname, "src/views/client"),
         },
+    },
+    optimizeDeps: {
+        include: ["pdfjs-dist", "pdfjs-dist/web/pdf_viewer.mjs"],
     },
 });

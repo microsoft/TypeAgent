@@ -105,12 +105,17 @@ export class BaseServer {
     /**
      * Register a feature with the server
      */
-    registerFeature(featureConfig: FeatureConfig): void {
+    async registerFeature(featureConfig: FeatureConfig): Promise<void> {
         debug(
             `Registering feature: ${featureConfig.name} at ${featureConfig.basePath}`,
         );
 
         this.features.set(featureConfig.name, featureConfig);
+
+        // Initialize feature if needed
+        if (featureConfig.initialize) {
+            await featureConfig.initialize();
+        }
 
         // Setup feature routes
         featureConfig.setupRoutes(this.app);
