@@ -1,0 +1,321 @@
+/* PDF Annotation Styles */
+
+.custom-annotation-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* Highlight Annotations */
+.pdf-highlight {
+    position: absolute;
+    border-radius: 2px;
+    transition: opacity 0.15s ease;
+    pointer-events: auto;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.pdf-highlight:hover {
+    opacity: 0.6 !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+}
+
+/* Note Annotations */
+.pdf-note {
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 15;
+}
+
+.note-icon {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    background: #4fc3f7;
+    border: 2px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease;
+}
+
+.note-icon:hover {
+    background: #29b6f6;
+    transform: scale(1.1);
+}
+
+.note-content {
+    position: absolute;
+    top: 30px;
+    right: -8px;
+    min-width: 200px;
+    max-width: 300px;
+    background: rgba(42, 42, 42, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    color: #e8eaed;
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 20;
+    animation: noteAppear 0.2s ease-out;
+}
+
+.note-content::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    right: 12px;
+    width: 12px;
+    height: 12px;
+    background: rgba(42, 42, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: none;
+    border-right: none;
+    transform: rotate(45deg);
+}
+
+/* Question Annotations */
+.pdf-question {
+    position: absolute;
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 15;
+}
+
+.question-icon {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    background: #66bb6a;
+    border: 2px solid white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease;
+}
+
+.question-icon:hover {
+    background: #4caf50;
+    transform: scale(1.1);
+}
+
+.question-content {
+    position: absolute;
+    top: 30px;
+    right: -8px;
+    min-width: 200px;
+    max-width: 300px;
+    background: rgba(42, 42, 42, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px;
+    color: #e8eaed;
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 20;
+    animation: questionAppear 0.2s ease-out;
+}
+
+.question-content::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    right: 12px;
+    width: 12px;
+    height: 12px;
+    background: rgba(42, 42, 42, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: none;
+    border-right: none;
+    transform: rotate(45deg);
+}
+
+/* Animation keyframes */
+@keyframes noteAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes questionAppear {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Selected annotation styles */
+.pdf-highlight.selected {
+    outline: 2px solid #8ab4f8;
+    outline-offset: 1px;
+    z-index: 12;
+}
+
+.pdf-note.selected .note-icon,
+.pdf-question.selected .question-icon {
+    outline: 2px solid #8ab4f8;
+    outline-offset: 2px;
+}
+
+/* Annotation hover states for better UX */
+.pdf-note .note-content,
+.pdf-question .question-content {
+    transform-origin: top right;
+}
+
+/* Responsive adjustments for annotations */
+@media (max-width: 768px) {
+    .note-icon,
+    .question-icon {
+        width: 20px;
+        height: 20px;
+        font-size: 10px;
+        top: -6px;
+        right: -6px;
+    }
+    
+    .note-content,
+    .question-content {
+        min-width: 180px;
+        max-width: 250px;
+        font-size: 12px;
+        padding: 10px;
+        top: 24px;
+        right: -6px;
+    }
+    
+    .note-content::before,
+    .question-content::before {
+        right: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .note-content,
+    .question-content {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        right: auto;
+        transform: translate(-50%, -50%);
+        min-width: 280px;
+        max-width: 90vw;
+        z-index: 10004;
+    }
+    
+    .note-content::before,
+    .question-content::before {
+        display: none; /* Hide arrow on mobile */
+    }
+}
+
+/* Annotation context menu (for right-click) */
+.annotation-context-menu {
+    position: fixed;
+    background: rgba(42, 42, 42, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10005;
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(0.9);
+    transition: all 0.15s ease;
+}
+
+.annotation-context-menu.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+}
+
+.context-menu-item {
+    background: transparent;
+    border: none;
+    color: #e8eaed;
+    padding: 8px 12px;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font-size: 13px;
+    border-radius: 4px;
+    transition: background-color 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.context-menu-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.context-menu-item.danger {
+    color: #f48fb1;
+}
+
+.context-menu-item.danger:hover {
+    background: rgba(244, 143, 177, 0.15);
+}
+
+.context-menu-separator {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 4px 0;
+}
+
+/* Annotation selection outline */
+.annotation-selection-outline {
+    position: absolute;
+    border: 2px dashed #8ab4f8;
+    border-radius: 4px;
+    pointer-events: none;
+    z-index: 8;
+    opacity: 0.7;
+    animation: selectionPulse 2s infinite;
+}
+
+@keyframes selectionPulse {
+    0%, 100% {
+        opacity: 0.7;
+    }
+    50% {
+        opacity: 0.4;
+    }
+}
