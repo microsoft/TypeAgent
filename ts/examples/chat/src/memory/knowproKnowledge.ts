@@ -174,13 +174,17 @@ export class KnowledgeCompiler {
     ): kp.SearchSelectExpr {
         const searchTermGroup = kp.createOrTermGroup();
         this.compileEntities(knowledge.entities, searchTermGroup);
-        //this.compileTopics(knowledge.topics, searchTermGroup);
+        this.compileTopics(knowledge.topics, searchTermGroup);
+
         return {
             searchTermGroup,
         };
     }
-    /*
-    private compileTopics(topics: string[], termGroup: kp.SearchTermGroup) {
+
+    private compileTopics(
+        topics: string[],
+        termGroup: kp.SearchTermGroup,
+    ): void {
         if (topics.length === 0) {
             return;
         }
@@ -189,26 +193,29 @@ export class KnowledgeCompiler {
                 kp.createPropertySearchTerm(kp.PropertyNames.Topic, topic),
             );
         }
-        return termGroup;
     }
-    */
+
     private compileEntities(
         entities: kpLib.ConcreteEntity[],
         termGroup: kp.SearchTermGroup,
-    ) {
+    ): void {
         if (entities.length === 0) {
             return;
         }
+
         for (const entity of entities) {
-            this.compileEntity(entity, termGroup);
+            let entityGroup = kp.createOrTermGroup();
+            this.compileEntity(entity, entityGroup);
+            if (entityGroup.terms.length > 0) {
+                termGroup.terms.push(entityGroup);
+            }
         }
-        return termGroup;
     }
 
     private compileEntity(
         entity: kpLib.ConcreteEntity,
         termGroup: kp.SearchTermGroup,
-    ) {
+    ): void {
         termGroup.terms.push(
             kp.createPropertySearchTerm(
                 kp.PropertyNames.EntityName,
@@ -229,7 +236,9 @@ export class KnowledgeCompiler {
                 kp.createPropertySearchTerm(kp.PropertyNames.EntityType, type),
             );
         }
-        return termGroup;
+        if (entity.facets) {
+            //this.compileFacets(entity.facets, termGroup);
+        }
     }
     /*
     private compileFacets(
@@ -242,13 +251,7 @@ export class KnowledgeCompiler {
         for (const facet of facets) {
             termGroup.terms.push(
                 kp.createPropertySearchTerm(
-                    kp.PropertyNames.FacetName,
                     facet.name,
-                ),
-            );
-            termGroup.terms.push(
-                kp.createPropertySearchTerm(
-                    kp.PropertyNames.FacetValue,
                     this.facetValueToString(facet),
                 ),
             );
@@ -261,6 +264,41 @@ export class KnowledgeCompiler {
             return `${value.amount} ${value.units}`;
         }
         return value.toString();
+    }
+
+    private compileActions(
+        actions: kpLib.Action[],
+        termGroup: kp.SearchTermGroup,
+    ) {
+        for (const action of actions) {
+            this.compileAction(action, termGroup);
+        }
+    }
+
+    private compileAction(action: kpLib.Action, termGroup: kp.SearchTermGroup) {
+        if (action.subjectEntityName) {
+            termGroup.terms.push(
+                kp.createPropertySearchTerm(
+                    kp.PropertyNames.Subject,
+                    action.subjectEntityName,
+                ),
+            );
+        }
+        if (action.verbs) {
+            for (const verb of action.verbs) {
+                termGroup.terms.push(
+                    kp.createPropertySearchTerm(kp.PropertyNames.Verb, verb),
+                );
+            }
+        }
+        if (action.objectEntityName) {
+            termGroup.terms.push(
+                kp.createPropertySearchTerm(
+                    kp.PropertyNames.Object,
+                    action.objectEntityName,
+                ),
+            );
+        }
     }
         */
 }
