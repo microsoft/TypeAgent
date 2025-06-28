@@ -134,6 +134,7 @@ export async function execGetAnswerRequest(
         request,
         searchResults.data,
         progressCallback,
+        context.retryNoAnswer,
     );
     response.answerResponses = answerResponses;
     return response;

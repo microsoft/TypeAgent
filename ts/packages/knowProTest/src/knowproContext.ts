@@ -11,6 +11,7 @@ export class KnowproContext {
     public conversation?: kp.IConversation | undefined;
     public queryTranslator: kp.SearchQueryTranslator;
     public answerGenerator: kp.AnswerGenerator;
+    public retryNoAnswer: boolean;
 
     constructor(basePath?: string) {
         this.basePath = basePath ?? "/data/testChat/knowpro";
@@ -21,6 +22,7 @@ export class KnowproContext {
         this.answerGenerator = new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(this.knowledgeModel),
         );
+        this.retryNoAnswer = false;
     }
 
     public ensureConversationLoaded(): kp.IConversation {
