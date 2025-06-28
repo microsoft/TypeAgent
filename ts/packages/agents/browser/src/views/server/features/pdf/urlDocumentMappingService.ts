@@ -3,6 +3,7 @@
 
 import fs from "fs/promises";
 import path from "path";
+import * as os from "os";
 import crypto from "crypto";
 
 export interface UrlDocumentMapping {
@@ -33,7 +34,7 @@ export class UrlDocumentMappingService {
         // Get storage path from environment variable or use default
         this.storePath =
             process.env.TYPEAGENT_BROWSER_VIEWSTORE ||
-            path.join(process.cwd(), ".typeagent", "browser", "viewstore");
+            path.join(os.homedir(), ".typeagent", "browser", "viewstore");
         this.storeFile = path.join(this.storePath, "url-mappings.json");
     }
 
