@@ -3,7 +3,7 @@
   "compilerOptions": {
     "composite": true,
     "rootDir": ".",
-    "outDir": "../../dist/agent",
+    "outDir": "../../dist/agent"
   },
   "include": ["./**/*", "montageActionSchema.ts"],
   "ts-node": {

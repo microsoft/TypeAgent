@@ -1,6 +1,6 @@
 {
-    "extends": "../../tsconfig.web.json",
-    "compilerOptions": {
-        "composite": true,
-    },
+  "extends": "../../tsconfig.web.json",
+  "compilerOptions": {
+    "composite": true
+  }
 }

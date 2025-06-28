@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.bundle-typecheck.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "exactOptionalPropertyTypes": false,
+    "lib": ["DOM", "DOM.Iterable"],
+    "types": ["chrome"]
+  },
+  "include": ["./**/*.ts"]
+}

@@ -1,24 +1,24 @@
 {
-    "extends": "../../../../../tsconfig.base.json",
-    "compilerOptions": {
-      "composite": false,
-      "rootDir": ".",
-      "outDir": "../../dist/site",
-      "declaration": false,
-      "declarationMap": false,
-      "moduleResolution": "bundler",
-      "module": "ESNext",
-      "lib": ["DOM"],
-      "exactOptionalPropertyTypes": false,
-      "noImplicitAny": false,
-      "strictNullChecks": false,
-      "sourceMap": true
-    },
-    "include": ["./*"],
-    "ts-node": {
-      "esm": true
-    },
-    "references": [  
-      { "path": "../agent" } // Reference to the agent project  
-    ] 
-  }
+  "extends": "../../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "rootDir": ".",
+    "outDir": "../../dist/site",
+    "declaration": false,
+    "declarationMap": false,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "lib": ["DOM"],
+    "exactOptionalPropertyTypes": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "sourceMap": true
+  },
+  "include": ["./*"],
+  "ts-node": {
+    "esm": true
+  },
+  "references": [
+    { "path": "../agent" } // Reference to the agent project
+  ]
+}
