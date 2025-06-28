@@ -527,7 +527,7 @@ export interface IMessageTextIndex {
 //------------------------
 // Search Types
 //------------------------
-export type SearchTerm = {
+export interface SearchTerm {
     /**
      * Term being searched for
      */
@@ -540,7 +540,7 @@ export type SearchTerm = {
      * related term {@link ITermToRelatedTermsIndex} indexes available to it
      */
     relatedTerms?: Term[] | undefined;
-};
+}
 
 /**
  * Well known knowledge properties

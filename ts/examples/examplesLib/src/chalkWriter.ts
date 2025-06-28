@@ -76,6 +76,20 @@ export class ChalkWriter extends ConsoleWriter {
         return this;
     }
 
+    public writeLineInColor(
+        color: ChalkInstance,
+        text?: string,
+        isStyled: boolean = false,
+    ) {
+        const prevColor = this.setForeColor(color);
+        try {
+            this.write(text, isStyled);
+            this.write("\n");
+        } finally {
+            this.setForeColor(prevColor);
+        }
+    }
+
     public writeLines(lines: string[]): ChalkWriter {
         lines.forEach((l) => this.writeLine(l));
         return this;

@@ -1,8 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ChatModel, openai } from "aiclient";
+import { ChatModel } from "aiclient";
 import * as kp from "knowpro";
+import { createKnowledgeModel } from "./models.js";
 
 export class KnowproContext {
     public knowledgeModel: ChatModel;
@@ -10,6 +11,7 @@ export class KnowproContext {
     public conversation?: kp.IConversation | undefined;
     public queryTranslator: kp.SearchQueryTranslator;
     public answerGenerator: kp.AnswerGenerator;
+    public retryNoAnswer: boolean;
 
     constructor(basePath?: string) {
         this.basePath = basePath ?? "/data/testChat/knowpro";
@@ -20,6 +22,7 @@ export class KnowproContext {
         this.answerGenerator = new kp.AnswerGenerator(
             kp.createAnswerGeneratorSettings(this.knowledgeModel),
         );
+        this.retryNoAnswer = false;
     }
 
     public ensureConversationLoaded(): kp.IConversation {
@@ -28,17 +31,4 @@ export class KnowproContext {
         }
         return this.conversation!;
     }
-}
-
-export function createKnowledgeModel() {
-    const chatModelSettings = openai.apiSettingsFromEnv(openai.ModelType.Chat);
-    chatModelSettings.retryPauseMs = 10000;
-    const model = openai.createJsonChatModel(chatModelSettings, [
-        "knowproTest",
-    ]);
-    // Use 0 temperature and explicit seed to minimize variation
-    model.completionSettings.temperature = 0;
-    model.completionSettings.seed = 1234;
-
-    return model;
 }
