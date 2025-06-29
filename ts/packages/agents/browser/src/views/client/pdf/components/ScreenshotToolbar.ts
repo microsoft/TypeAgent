@@ -72,13 +72,26 @@ export class ScreenshotToolbar {
     }
 
     /**
-     * Add custom action (replace if exists)
+     * Add custom action (replace if exists, maintain Cancel at end)
      */
     addAction(action: ScreenshotAction): void {
         // Remove existing action with same ID
         this.actions = this.actions.filter(a => a.id !== action.id);
-        // Add the new action
-        this.actions.push(action);
+        
+        // If it's the cancel action, add it at the end
+        if (action.id === "cancel") {
+            this.actions.push(action);
+        } else {
+            // For non-cancel actions, find where to insert to keep cancel at the end
+            const cancelIndex = this.actions.findIndex(a => a.id === "cancel");
+            if (cancelIndex !== -1) {
+                // Insert before cancel action
+                this.actions.splice(cancelIndex, 0, action);
+            } else {
+                // No cancel action yet, just add normally
+                this.actions.push(action);
+            }
+        }
     }
 
     /**
@@ -102,6 +115,7 @@ export class ScreenshotToolbar {
         // Clear any existing actions first
         this.actions = [];
         
+        // Add actions in order: Note, Question, then Cancel (Cancel will be last/rightmost)
         this.actions.push({
             id: "note",
             label: "Add Note",
@@ -116,6 +130,7 @@ export class ScreenshotToolbar {
             action: () => {}, // Will be set by parent
         });
 
+        // Cancel action is added last so it appears on the right
         this.actions.push({
             id: "cancel",
             label: "Cancel",
@@ -131,7 +146,6 @@ export class ScreenshotToolbar {
         this.element = document.createElement("div");
         this.element.className = "screenshot-toolbar";
         this.element.innerHTML = `
-            <div class="toolbar-arrow"></div>
             <div class="toolbar-content">
                 <!-- Actions will be populated dynamically -->
             </div>
@@ -252,23 +266,6 @@ export class ScreenshotToolbar {
 
         this.element.style.top = `${top}px`;
         this.element.style.left = `${left}px`;
-        
-        // Update arrow position
-        this.updateArrowPosition(arrowPosition);
-    }
-
-    /**
-     * Update arrow position and styling
-     */
-    private updateArrowPosition(position: "top" | "bottom"): void {
-        if (!this.element) return;
-
-        const arrow = this.element.querySelector(".toolbar-arrow") as HTMLElement;
-        if (!arrow) return;
-
-        // Reset arrow classes
-        arrow.className = "toolbar-arrow";
-        arrow.classList.add(`arrow-${position}`);
     }
 
     /**

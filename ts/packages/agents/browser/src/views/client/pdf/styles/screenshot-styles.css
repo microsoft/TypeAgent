@@ -18,14 +18,14 @@
     border-radius: 2px;
 }
 
-/* Screenshot Toolbar Styles */
+/* Screenshot Toolbar Styles - Matching PDF Viewer Toolbar */
 .screenshot-toolbar {
     position: fixed;
-    background: white;
-    border: 1px solid #ddd;
+    background: #424242;
+    border: 1px solid #555;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    padding: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    margin: 8px;
     z-index: 10000;
     opacity: 0;
     transform: translateY(-10px);
@@ -38,38 +38,8 @@
     transform: translateY(0);
 }
 
-.screenshot-toolbar .toolbar-arrow {
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    background: white;
-    border: 1px solid #ddd;
-    border-bottom: none;
-    border-right: none;
-    transform: rotate(45deg);
-    z-index: -1;
-}
-
-.screenshot-toolbar .toolbar-arrow.arrow-top {
-    top: -7px;
-    left: 50%;
-    margin-left: -6px;
-}
-
-.screenshot-toolbar .toolbar-arrow.arrow-bottom {
-    bottom: -7px;
-    left: 50%;
-    margin-left: -6px;
-    transform: rotate(225deg);
-    border-top: none;
-    border-left: none;
-    border-bottom: 1px solid #ddd;
-    border-right: 1px solid #ddd;
-}
-
 .screenshot-toolbar .toolbar-content {
     display: flex;
-    gap: 8px;
     align-items: center;
 }
 
@@ -78,28 +48,30 @@
     align-items: center;
     gap: 6px;
     padding: 8px 12px;
-    border: 1px solid #ddd;
-    background: white;
+    border: none;
+    background: transparent;
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
-    transition: all 0.2s ease;
-    color: #333;
+    transition: background-color 0.2s ease;
+    color: #e8eaed;
+    font-family: system-ui, -apple-system, sans-serif;
 }
 
 .screenshot-toolbar .toolbar-action:hover {
-    background: #f5f5f5;
-    border-color: #007acc;
+    background: rgba(255, 255, 255, 0.1);
 }
 
+/* Cancel action styling - positioned at the right with visual separation */
 .screenshot-toolbar .toolbar-action.cancel-action {
-    color: #666;
+    color: #f28b82;
+    margin-left: 4px;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    padding-left: 12px;
 }
 
 .screenshot-toolbar .toolbar-action.cancel-action:hover {
-    background: #fee;
-    border-color: #dc3545;
-    color: #dc3545;
+    background: rgba(242, 139, 130, 0.1);
 }
 
 .screenshot-toolbar .toolbar-action i {
@@ -136,20 +108,8 @@
 
 /* Clipping Button in Toolbar */
 #clippingTool {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 8px 10px;
     cursor: pointer;
-    color: #333;
-    margin-right: 8px;
     transition: all 0.2s ease;
-}
-
-#clippingTool:hover {
-    background: #f5f5f5;
-    border-color: #007acc;
-    color: #007acc;
 }
 
 #clippingTool:active {
@@ -199,4 +159,38 @@
     0% { opacity: 0; }
     50% { opacity: 0.8; }
     100% { opacity: 0; }
+}
+
+/* Clipping Button Toolbar Integration */
+#clippingTool {
+    background: transparent;
+    color: #e8eaed;
+    border: none;
+    border-radius: 4px;
+    padding: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+#clippingTool:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#clippingTool:disabled {
+    color: #5f6368;
+    cursor: not-allowed;
+}
+
+#clippingTool:disabled:hover {
+    background: transparent;
+}
+
+#clippingTool i {
+    font-size: 16px;
 }

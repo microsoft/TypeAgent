@@ -60,7 +60,7 @@
     align-items: center;
     gap: 4px;
     transition: all 0.15s ease;
-    min-height: 50px;
+    min-height: 10px;
     position: relative;
     overflow: hidden;
 }
@@ -76,8 +76,8 @@
 }
 
 .color-preview {
-    width: 20px;
-    height: 20px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);

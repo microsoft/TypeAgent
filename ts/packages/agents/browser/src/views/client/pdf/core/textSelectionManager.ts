@@ -30,6 +30,7 @@ export class TextSelectionManager {
     private currentSelection: SelectionInfo | null = null;
     private selectionTimeout: number | null = null;
     private pdfViewer: any;
+    private contextualToolbar: any = null;
 
     constructor(pdfViewer: any) {
         this.pdfViewer = pdfViewer;
@@ -41,6 +42,13 @@ export class TextSelectionManager {
      */
     onSelectionChange(callback: SelectionChangeCallback): void {
         this.callbacks.push(callback);
+    }
+
+    /**
+     * Set reference to contextual toolbar for dropdown state checking
+     */
+    setContextualToolbar(toolbar: any): void {
+        this.contextualToolbar = toolbar;
     }
 
     /**
@@ -134,6 +142,15 @@ export class TextSelectionManager {
      * Handle mouse up events
      */
     private handleMouseUp = (event: MouseEvent): void => {
+        console.log("🖱️ Mouse up detected, checking if dropdown is open...");
+        
+        // Check if color dropdown is open before processing selection
+        if (this.contextualToolbar && this.contextualToolbar.isColorDropdownVisible()) {
+            console.log("🖱️ Color dropdown is open, suppressing selection processing");
+            return;
+        }
+        
+        console.log("🖱️ Dropdown not open, processing selection change");
         // Small delay to ensure selection is complete
         setTimeout(() => {
             this.processSelectionChange();

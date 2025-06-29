@@ -94,6 +94,9 @@ export class TypeAgentPDFViewerApp {
         this.screenshotToolbar = new ScreenshotToolbar();
         this.annotationManager = new AnnotationManager(this.pdfViewer, this.pdfApiService);
 
+        // Set toolbar reference in selection manager to check dropdown state
+        this.selectionManager.setContextualToolbar(this.contextualToolbar);
+
         this.setupHighlightingWorkflows();
         this.setupScreenshotWorkflows();
         this.setupRightClickMenu();
@@ -112,11 +115,22 @@ export class TypeAgentPDFViewerApp {
             }
         });
 
+        // Set up highlight color callback for dropdown
+        this.contextualToolbar.setHighlightColorCallback((color) => {
+            if (this.selectionManager) {
+                const selection = this.selectionManager.getCurrentSelection();
+                if (selection) {
+                    this.createHighlight(selection, color);
+                }
+            }
+        });
+
         this.contextualToolbar.addAction({
             id: "highlight",
             label: "Highlight",
             icon: "fas fa-highlighter",
-            action: (selection) => this.handleHighlightAction(selection),
+            action: () => {}, // Handled by dropdown click
+            hasDropdown: true,
         });
 
         this.contextualToolbar.addAction({
