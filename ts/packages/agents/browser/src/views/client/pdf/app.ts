@@ -43,6 +43,17 @@ declare global {
     }
 }
 
+// Configure PDF.js worker
+if (typeof window !== "undefined") {
+    // Ensure pdfjsLib is available globally
+    window.pdfjsLib = pdfjsLib;
+}
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.mjs",
+    import.meta.url,
+).toString();
+
 if (typeof window !== "undefined") {
     window.pdfjsLib = pdfjsLib;
 }
