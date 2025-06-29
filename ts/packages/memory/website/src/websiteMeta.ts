@@ -94,12 +94,101 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         const actions: any[] = [];
         const inverseActions: any[] = [];
 
-        // Add domain as entity
+        // Enhanced domain entity with rich facets
         if (this.domain) {
-            entities.push({
+            const domainEntity: any = {
                 name: this.domain,
                 type: ["website", "domain"],
-            });
+                facets: []
+            };
+
+            // Temporal facets for ordering queries
+            if (this.bookmarkDate) {
+                const bookmarkDate = new Date(this.bookmarkDate);
+                domainEntity.facets.push({name: "bookmarkDate", value: this.bookmarkDate});
+                domainEntity.facets.push({name: "bookmarkYear", value: bookmarkDate.getFullYear().toString()});
+            }
+
+            if (this.visitDate) {
+                const visitDate = new Date(this.visitDate);
+                domainEntity.facets.push({name: "visitDate", value: this.visitDate});
+                domainEntity.facets.push({name: "visitYear", value: visitDate.getFullYear().toString()});
+            }
+
+            // Frequency facets for popularity queries
+            if (this.visitCount !== undefined) {
+                domainEntity.facets.push({name: "visitCount", value: this.visitCount.toString()});
+                const frequency = this.calculateVisitFrequency();
+                domainEntity.facets.push({name: "visitFrequency", value: frequency});
+            }
+
+            // Category and source facets for filtering
+            if (this.pageType) {
+                domainEntity.facets.push({name: "category", value: this.pageType});
+                const confidence = this.calculatePageTypeConfidence();
+                domainEntity.facets.push({name: "categoryConfidence", value: confidence.toString()});
+            }
+
+            if (this.websiteSource) {
+                domainEntity.facets.push({name: "source", value: this.websiteSource});
+            }
+
+            // Folder context for bookmarks
+            if (this.folder && this.websiteSource === "bookmark") {
+                domainEntity.facets.push({name: "folder", value: this.folder});
+            }
+
+            entities.push(domainEntity);
+        }
+
+        // Enhanced temporal topics for LLM reasoning
+        if (this.bookmarkDate) {
+            const bookmarkDate = new Date(this.bookmarkDate);
+            const year = bookmarkDate.getFullYear();
+            const currentYear = new Date().getFullYear();
+            
+            topics.push(`bookmarked in ${year}`);
+            topics.push(`${this.domain} bookmark from ${year}`);
+            
+            // Relative temporal topics
+            const yearsAgo = currentYear - year;
+            if (yearsAgo === 0) {
+                topics.push("recent bookmark");
+                topics.push("new bookmark");
+            } else if (yearsAgo >= 3) {
+                topics.push("old bookmark");
+                topics.push("early bookmark");
+            }
+        }
+
+        if (this.visitDate) {
+            const visitDate = new Date(this.visitDate);
+            const year = visitDate.getFullYear();
+            topics.push(`visited in ${year}`);
+            topics.push(`${this.domain} visit from ${year}`);
+        }
+
+        // Frequency-derived topics
+        if (this.visitCount !== undefined && this.visitCount > 10) {
+            topics.push("frequently visited site");
+            topics.push("popular domain");
+            topics.push("often visited");
+        } else if (this.visitCount !== undefined && this.visitCount <= 2) {
+            topics.push("rarely visited site");
+            topics.push("infrequent visit");
+        }
+
+        // Enhanced category topics
+        if (this.pageType) {
+            topics.push(this.pageType);
+            topics.push(`${this.pageType} site`);
+            topics.push(`${this.pageType} website`);
+            
+            // Category-specific temporal topics
+            if (this.bookmarkDate) {
+                const year = new Date(this.bookmarkDate).getFullYear();
+                topics.push(`${this.pageType} bookmark from ${year}`);
+            }
         }
 
         // Add title as topic if available
@@ -110,30 +199,42 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         // Add folder as topic if it's a bookmark
         if (this.folder && this.websiteSource === "bookmark") {
             topics.push(this.folder);
-        }
-
-        // Add page type as topic
-        if (this.pageType) {
-            topics.push(this.pageType);
+            topics.push(`bookmark folder: ${this.folder}`);
         }
 
         // Add keywords as topics
         if (this.keywords) {
             for (const keyword of this.keywords) {
                 topics.push(keyword);
+                topics.push(`keyword: ${keyword}`);
             }
         }
 
-        // Add action based on source
-        const actionVerb =
-            this.websiteSource === "bookmark" ? "bookmarked" : "visited";
-        actions.push({
+        // Enhanced action with temporal and frequency context
+        const actionVerb = this.websiteSource === "bookmark" ? "bookmarked" : "visited";
+        const action: any = {
             verbs: [actionVerb],
             verbTense: "past",
-            subjectEntityName: "user", // The user performed the action
+            subjectEntityName: "user",
             objectEntityName: this.domain || this.url,
             indirectObjectEntityName: "none",
-        });
+            params: []
+        };
+
+        // Add temporal context to actions as parameters
+        const relevantDate = this.bookmarkDate || this.visitDate;
+        if (relevantDate) {
+            const date = new Date(relevantDate);
+            action.params.push({name: "actionDate", value: relevantDate});
+            action.params.push({name: "actionYear", value: date.getFullYear().toString()});
+        }
+
+        // Add frequency context to actions as parameters
+        if (this.visitCount !== undefined) {
+            action.params.push({name: "actionFrequency", value: this.visitCount.toString()});
+        }
+
+        actions.push(action);
 
         return {
             entities,
@@ -141,6 +242,31 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             actions,
             inverseActions,
         };
+    }
+
+    private calculateVisitFrequency(): "low" | "medium" | "high" {
+        if (!this.visitCount) return "low";
+        if (this.visitCount >= 20) return "high";
+        if (this.visitCount >= 5) return "medium";
+        return "low";
+    }
+
+    private calculatePageTypeConfidence(): number {
+        // Simple confidence scoring - can be enhanced later
+        if (!this.pageType) return 0.5;
+        
+        // Higher confidence for URL-based detection
+        if (this.url.toLowerCase().includes(this.pageType.toLowerCase())) {
+            return 0.9;
+        }
+        
+        // Medium confidence for title-based detection
+        if (this.title?.toLowerCase().includes(this.pageType.toLowerCase())) {
+            return 0.8;
+        }
+        
+        // Default confidence
+        return 0.7;
     }
 }
 

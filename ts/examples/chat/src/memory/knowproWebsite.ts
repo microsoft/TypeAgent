@@ -4,6 +4,7 @@
 import {
     arg,
     argBool,
+    argNum,
     CommandHandler,
     CommandMetadata,
     NamedArgs,
@@ -23,7 +24,11 @@ import {
     addMessagesToCollection,
     buildCollectionIndex,
 } from "./websiteMemory.js";
+
 import * as website from "website-memory";
+// import { createWebsiteAnswerGenerator } from "./websiteAnswerContext.js";
+import * as kp from "knowpro";
+import * as kpTest from "knowpro-test";
 
 export type KnowProWebsiteContext = {
     printer: KnowProPrinter;
@@ -48,6 +53,8 @@ export async function createKnowproWebsiteCommands(
     commands.kpWebsiteAddHistory = websiteAddHistory;
     commands.kpWebsiteClose = websiteClose;
     commands.kpWebsiteStats = websiteStats;
+    commands.kpWebsiteSearch = websiteSearch;
+    commands.kpWebsiteTestEnhanced = websiteTestEnhanced;
 
     function websiteAddDef(): CommandMetadata {
         return {
@@ -194,11 +201,13 @@ export async function createKnowproWebsiteCommands(
             );
             clock.stop();
             if (context.website) {
+                // Set up enhanced search context for website queries
+                kpContext.conversation = context.website;
+                
                 context.printer.writeTiming(chalk.gray, clock);
                 context.printer.writeLine(
-                    `Loaded website memory: ${namedArgs.name}`,
+                    `Loaded website memory with enhanced temporal/frequency search: ${namedArgs.name}`,
                 );
-                kpContext.conversation = context.website;
             }
         } catch (error) {
             context.printer.writeError(
@@ -504,6 +513,131 @@ export async function createKnowproWebsiteCommands(
             for (const [pageType, count] of pageTypeCounts.entries()) {
                 context.printer.writeLine(`  ${pageType}: ${count}`);
             }
+        }
+    }
+
+    function websiteSearchDef(): CommandMetadata {
+        return {
+            description: "Search website memory using natural language queries with temporal and frequency intelligence",
+            args: {
+                query: arg("Natural language search query")
+            },
+            options: {
+                maxToDisplay: argNum("Maximum results to display", 10),
+                showUrls: argBool("Show full URLs", true),
+                debug: argBool("Show debug information", false)
+            }
+        };
+    }
+    commands.kpWebsiteSearch.metadata = websiteSearchDef();
+    async function websiteSearch(args: string[]) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
+            return;
+        }
+        
+        if (!kpContext.conversation || kpContext.conversation !== websiteCollection) {
+            context.printer.writeError("Website memory not loaded as conversation. Please load with kpWebsiteLoad first.");
+            return;
+        }
+        
+        const namedArgs = parseNamedArguments(args, websiteSearchDef());
+        const query = namedArgs.query;
+        
+        context.printer.writeLine(`🔍 Searching website memory: "${query}"`);
+        context.printer.writeLine("=" .repeat(60));
+        
+        try {
+            // Use the knowpro search pattern with LLM query understanding
+            const searchResponse = await kpTest.execSearchRequest(
+                kpContext,
+                namedArgs,
+            );
+            
+            const searchResults = searchResponse.searchResults;
+            const debugContext = searchResponse.debugContext;
+            
+            if (!searchResults.success) {
+                context.printer.writeError(searchResults.message);
+                return;
+            }
+            
+            if (namedArgs.debug) {
+                context.printer.writeInColor(chalk.gray, () => {
+                    context.printer.writeLine();
+                    context.printer.writeDebugContext(debugContext);
+                });
+            }
+            
+            if (!kp.hasConversationResults(searchResults.data)) {
+                context.printer.writeLine("No matches found");
+                return;
+            }
+            
+            // Display results with website-specific formatting
+            for (let i = 0; i < searchResults.data.length; ++i) {
+                const searchQueryExpr = debugContext.searchQueryExpr![i];
+                const result = searchResults.data[i];
+                
+                if (!namedArgs.debug) {
+                    for (const selectExpr of searchQueryExpr.selectExpressions) {
+                        context.printer.writeSelectExpr(selectExpr, false);
+                    }
+                }
+                
+                // Use the standard search result writer
+                context.printer.writeLine("####");
+                context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
+                context.printer.writeLine("####");
+                context.printer.writeConversationSearchResult(
+                    kpContext.conversation!,
+                    result,
+                    true, // showKnowledge
+                    true, // showMessages
+                    namedArgs.maxToDisplay,
+                    true, // distinct
+                );
+            }
+            
+        } catch (error) {
+            context.printer.writeError(`Search failed: ${error}`);
+        }
+    }
+
+    function websiteTestEnhancedDef(): CommandMetadata {
+        return {
+            description: "Test enhanced natural language queries with temporal and frequency intelligence",
+            args: {
+                query: arg("Natural language query to test")
+            }
+        };
+    }
+    commands.kpWebsiteTestEnhanced.metadata = websiteTestEnhancedDef();
+    async function websiteTestEnhanced(args: string[]) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
+            return;
+        }
+        
+        const namedArgs = parseNamedArguments(args, websiteTestEnhancedDef());
+        const query = namedArgs.query;
+        
+        context.printer.writeLine(`🧪 Testing enhanced query: "${query}"`);
+        context.printer.writeLine("=" .repeat(60));
+        
+        try {
+            // Use the new LLM-based search with enhanced website context
+            if (kpContext.conversation === websiteCollection) {
+                await websiteSearch([query, "--debug", "true"]);
+                
+                context.printer.writeLine();
+                context.printer.writeInColor(chalk.green, "🧪 Enhanced test completed successfully!");
+            } else {
+                context.printer.writeError("Website memory not loaded as conversation. Use kpWebsiteLoad first.");
+            }
+            
+        } catch (error) {
+            context.printer.writeError(`Enhanced query failed: ${error}`);
         }
     }
 
