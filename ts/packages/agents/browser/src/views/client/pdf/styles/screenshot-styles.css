@@ -18,19 +18,19 @@
     border-radius: 2px;
 }
 
-/* Screenshot Toolbar Styles - Matching PDF Viewer Toolbar */
+/* Screenshot Toolbar Styles - Matching Contextual Toolbar */
 .screenshot-toolbar {
     position: fixed;
-    background: #424242;
-    border: 1px solid #555;
+    background: rgba(42, 42, 42, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    margin: 8px;
     z-index: 10000;
     opacity: 0;
     transform: translateY(-10px);
     transition: opacity 0.2s ease, transform 0.2s ease;
-    min-width: 280px;
+    font-family: system-ui, -apple-system, sans-serif;
 }
 
 .screenshot-toolbar.visible {
@@ -41,41 +41,49 @@
 .screenshot-toolbar .toolbar-content {
     display: flex;
     align-items: center;
+    padding: 4px;
 }
 
 .screenshot-toolbar .toolbar-action {
+    background: transparent;
+    color: #e8eaed;
+    border: none;
+    border-radius: 6px;
+    padding: 8px;
+    cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    border: none;
-    background: transparent;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: background-color 0.2s ease;
-    color: #e8eaed;
-    font-family: system-ui, -apple-system, sans-serif;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.15s ease;
+    min-width: 32px;
+    min-height: 32px;
+    position: relative;
 }
 
 .screenshot-toolbar .toolbar-action:hover {
     background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
 }
 
-/* Cancel action styling - positioned at the right with visual separation */
-.screenshot-toolbar .toolbar-action.cancel-action {
-    color: #f28b82;
-    margin-left: 4px;
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
-    padding-left: 12px;
-}
-
-.screenshot-toolbar .toolbar-action.cancel-action:hover {
-    background: rgba(242, 139, 130, 0.1);
+.screenshot-toolbar .toolbar-action:active {
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .screenshot-toolbar .toolbar-action i {
     font-size: 14px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* Vertical separator between toolbar actions */
+.screenshot-toolbar .toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 0 4px;
+    flex-shrink: 0;
 }
 
 /* Screenshot Preview in Dialogs */

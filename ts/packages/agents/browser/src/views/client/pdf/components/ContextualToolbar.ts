@@ -36,16 +36,16 @@ interface SelectionBounds {
 
 /**
  * ContextualToolbar - Shows action buttons for text selections
+ * Refactored to use persistent elements and avoid recreation
  */
 export class ContextualToolbar {
     private element: HTMLElement | null = null;
+    private colorDropdown: HTMLElement | null = null;
     private actions: ToolbarAction[] = [];
     private currentSelection: SelectionInfo | null = null;
     private isVisible: boolean = false;
-    private hideTimeout: number | null = null;
     private colorDropdownVisible: boolean = false;
     private highlightColorCallback: ((color: HighlightColor, selection: SelectionInfo) => void) | null = null;
-    private dropdownJustOpened: boolean = false;
 
     private readonly availableColors: HighlightColor[] = [
         { id: "yellow", name: "Yellow", color: "#ffff00", textColor: "#000000" },
@@ -59,7 +59,7 @@ export class ContextualToolbar {
     ];
 
     constructor() {
-        this.createToolbarElement();
+        this.createPersistentElements();
         this.setupEventListeners();
     }
 
@@ -75,6 +75,7 @@ export class ContextualToolbar {
      */
     addAction(action: ToolbarAction): void {
         this.actions.push(action);
+        this.updateToolbarContent(); // Update the persistent toolbar content
     }
 
     /**
@@ -82,6 +83,7 @@ export class ContextualToolbar {
      */
     removeAction(actionId: string): void {
         this.actions = this.actions.filter(action => action.id !== actionId);
+        this.updateToolbarContent(); // Update the persistent toolbar content
     }
 
     /**
@@ -96,181 +98,171 @@ export class ContextualToolbar {
         this.currentSelection = selection;
         
         if (!this.element) {
-            this.createToolbarElement();
+            console.error("❌ Toolbar element not created");
+            return;
         }
 
-        // Only update toolbar content if dropdown is not currently visible
-        // This prevents destroying the open dropdown during re-render
-        if (!this.colorDropdownVisible) {
-            this.updateToolbarContent();
-        }
-        
-        this.positionToolbar(selection);
-        
-        if (this.element) {
-            this.element.classList.add("visible");
-            this.isVisible = true;
-        }
+        // Calculate position
+        const bounds = this.calculateSelectionBounds(selection);
+        const position = this.calculatePosition(bounds);
 
-        // Cancel any pending hide
-        if (this.hideTimeout) {
-            clearTimeout(this.hideTimeout);
-            this.hideTimeout = null;
-        }
+        // Position and show the toolbar
+        this.element.style.top = `${position.top}px`;
+        this.element.style.left = `${position.left}px`;
+        this.element.style.display = "block";
+        this.element.classList.remove("hiding");
+        this.element.classList.add("visible");
+
+        this.isVisible = true;
     }
 
     /**
      * Hide the toolbar
      */
     hide(): void {
-        if (this.element) {
-            this.element.classList.remove("visible");
+        if (!this.isVisible || !this.element) {
+            return;
         }
+
+        this.element.style.display = "none";
+        this.element.classList.remove("visible");
+        this.element.classList.add("hiding");
+        
+        this.hideColorDropdown();
         this.isVisible = false;
         this.currentSelection = null;
-        this.hideColorDropdown();
     }
 
     /**
-     * Hide the toolbar with a delay
-     */
-    hideWithDelay(delay: number = 300): void {
-        if (this.hideTimeout) {
-            clearTimeout(this.hideTimeout);
-        }
-
-        this.hideTimeout = window.setTimeout(() => {
-            this.hide();
-            this.hideTimeout = null;
-        }, delay);
-    }
-
-    /**
-     * Cancel delayed hide
-     */
-    cancelHide(): void {
-        if (this.hideTimeout) {
-            clearTimeout(this.hideTimeout);
-            this.hideTimeout = null;
-        }
-    }
-
-    /**
-     * Check if toolbar is currently visible
-     */
-    isToolbarVisible(): boolean {
-        return this.isVisible;
-    }
-
-    /**
-     * Check if color dropdown is currently visible
+     * Check if color dropdown is visible (for selection manager)
      */
     isColorDropdownVisible(): boolean {
         return this.colorDropdownVisible;
     }
 
     /**
-     * Create the toolbar DOM element
+     * Create persistent DOM elements that will be reused
      */
-    private createToolbarElement(): void {
+    private createPersistentElements(): void {
+        // Create main toolbar element using CSS classes
         this.element = document.createElement("div");
+        this.element.id = "contextual-toolbar";
         this.element.className = "contextual-toolbar";
-        this.element.innerHTML = `
-            <div class="toolbar-content">
-                <!-- Actions will be populated dynamically -->
-            </div>
-        `;
 
-        // Add to document body
+        // Create toolbar content container
+        const toolbarContent = document.createElement("div");
+        toolbarContent.className = "toolbar-content";
+        this.element.appendChild(toolbarContent);
+
+        // Create color dropdown element
+        this.colorDropdown = document.createElement("div");
+        this.colorDropdown.className = "color-dropdown";
+
+        // Create color options
+        this.availableColors.forEach(color => {
+            const colorOption = document.createElement("div");
+            colorOption.className = "color-option";
+            colorOption.setAttribute("data-color-id", color.id);
+            colorOption.title = color.name;
+            colorOption.style.backgroundColor = color.color; // Only set the background color
+            
+            // Add click handler (only attached once!)
+            colorOption.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation(); // Stop all other handlers
+                this.handleColorSelection(event);
+            }, true); // Use capture phase to run before document handler
+            
+            this.colorDropdown.appendChild(colorOption);
+        });
+
+        // Add elements to document
         document.body.appendChild(this.element);
+        document.body.appendChild(this.colorDropdown);
+
+        // Initial content update
+        this.updateToolbarContent();
     }
 
     /**
-     * Update toolbar content based on current actions and selection
+     * Update the toolbar content without recreating elements
      */
     private updateToolbarContent(): void {
-        if (!this.element || !this.currentSelection) return;
+        if (!this.element) return;
 
-        const content = this.element.querySelector(".toolbar-content");
-        if (!content) return;
+        const toolbarContent = this.element.querySelector('.toolbar-content');
+        if (!toolbarContent) return;
 
-        // Store current dropdown state before re-rendering
-        const wasDropdownVisible = this.colorDropdownVisible;
-
-        // Filter actions based on conditions
         const availableActions = this.actions.filter(action => 
-            !action.condition || action.condition(this.currentSelection!)
+            !action.condition || !this.currentSelection || action.condition(this.currentSelection)
         );
 
-        // Create action buttons
-        content.innerHTML = availableActions.map(action => {
-            if (action.id === "highlight") {
-                return `
-                    <div class="toolbar-action-container">
-                        <button 
-                            type="button"
-                            class="toolbar-action highlight-action" 
-                            data-action-id="${action.id}"
-                            title="${action.label}"
-                        >
-                            <i class="${action.icon}"></i>
-                            <span class="action-label">${action.label}</span>
-                            <i class="fas fa-chevron-down dropdown-arrow"></i>
-                        </button>
-                        <div class="color-dropdown" style="display: ${wasDropdownVisible ? 'flex' : 'none'};">
-                            ${this.availableColors.map(color => `
-                                <div class="color-option" 
-                                     data-color-id="${color.id}" 
-                                     title="${color.name}"
-                                     style="background-color: ${color.color};">
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            } else {
-                return `
-                    <button 
-                        type="button"
-                        class="toolbar-action" 
-                        data-action-id="${action.id}"
-                        title="${action.label}"
-                    >
-                        <i class="${action.icon}"></i>
-                        <span class="action-label">${action.label}</span>
-                    </button>
-                `;
+        // Clear existing content but preserve the element
+        toolbarContent.innerHTML = "";
+
+        // Create action buttons with separators
+        availableActions.forEach((action, index) => {
+            // Add vertical separator before each action (except the first)
+            if (index > 0) {
+                const separator = document.createElement("div");
+                separator.className = "toolbar-separator";
+                toolbarContent.appendChild(separator);
             }
-        }).join("");
 
-        // Add click handlers
-        content.querySelectorAll(".toolbar-action").forEach(button => {
-            button.addEventListener("click", this.handleActionClick);
+            // Create button container for highlight action (to hold dropdown)
+            if (action.id === "highlight") {
+                const container = document.createElement("div");
+                container.className = "toolbar-action-container";
+                
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "toolbar-action highlight-action";
+                button.setAttribute("data-action-id", action.id);
+                button.title = action.label;
+
+                // Icon only
+                const icon = document.createElement("i");
+                icon.className = action.icon;
+                button.appendChild(icon);
+
+                // Dropdown arrow
+                const arrow = document.createElement("i");
+                arrow.className = "fas fa-chevron-down dropdown-arrow";
+                button.appendChild(arrow);
+
+                // Add click handler
+                button.addEventListener("click", this.handleActionClick);
+
+                container.appendChild(button);
+                toolbarContent.appendChild(container);
+            } else {
+                // Regular action button
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "toolbar-action";
+                button.setAttribute("data-action-id", action.id);
+                button.title = action.label;
+
+                // Icon only
+                const icon = document.createElement("i");
+                icon.className = action.icon;
+                button.appendChild(icon);
+
+                // Add click handler
+                button.addEventListener("click", this.handleActionClick);
+
+                toolbarContent.appendChild(button);
+            }
         });
-
-        // Add color dropdown handlers
-        content.querySelectorAll(".color-option").forEach(colorOption => {
-            colorOption.addEventListener("click", this.handleColorSelection);
-            // Prevent color option clicks from bubbling
-            colorOption.addEventListener("click", (e) => {
-                e.stopPropagation();
-            });
-        });
-
-        // Restore dropdown state after re-rendering
-        if (wasDropdownVisible) {
-            this.colorDropdownVisible = true;
-        }
     }
 
     /**
      * Handle action button clicks
      */
     private handleActionClick = (event: Event): void => {
-        // For ALL actions, stop the event from bubbling to document
         event.preventDefault();
         event.stopPropagation();
-        event.stopImmediatePropagation();
 
         const button = event.currentTarget as HTMLElement;
         const actionId = button.getAttribute("data-action-id");
@@ -280,19 +272,8 @@ export class ContextualToolbar {
         }
 
         if (actionId === "highlight") {
-            // Set flag to prevent immediate closure
-            this.dropdownJustOpened = true;
-            
-            // Toggle dropdown immediately
-            this.toggleColorDropdown(button);
-            
-            // Use requestAnimationFrame to ensure dropdown is rendered before allowing clicks
-            requestAnimationFrame(() => {
-                setTimeout(() => {
-                    this.dropdownJustOpened = false;
-                }, 50);
-            });
-            
+            // Show color dropdown
+            this.showColorDropdown(button);
         } else {
             // Execute normal action
             const action = this.actions.find(a => a.id === actionId);
@@ -300,7 +281,7 @@ export class ContextualToolbar {
                 try {
                     action.action(this.currentSelection);
                 } catch (error) {
-                    console.error(`Error executing action ${actionId}:`, error);
+                    console.error(`Failed to execute action ${actionId}:`, error);
                 }
             }
         }
@@ -312,6 +293,7 @@ export class ContextualToolbar {
     private handleColorSelection = (event: Event): void => {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation(); // Prevent any other handlers
 
         const colorOption = event.currentTarget as HTMLElement;
         const colorId = colorOption.getAttribute("data-color-id");
@@ -319,87 +301,53 @@ export class ContextualToolbar {
         if (colorId && this.highlightColorCallback && this.currentSelection) {
             const color = this.availableColors.find(c => c.id === colorId);
             if (color) {
-                // Pass the toolbar's stored selection instead of getting from selection manager
+                // Call the callback immediately
                 this.highlightColorCallback(color, this.currentSelection);
-                this.hideColorDropdown();
-                this.hide();
+                
+                // Hide after a small delay to ensure callback completes
+                setTimeout(() => {
+                    this.hideColorDropdown();
+                    this.hide();
+                }, 10);
             }
         }
     };
 
     /**
-     * Toggle color dropdown visibility
+     * Show color dropdown positioned relative to button
      */
-    private toggleColorDropdown(button: HTMLElement): void {
-        const container = button.closest(".toolbar-action-container");
-        const dropdown = container?.querySelector(".color-dropdown") as HTMLElement;
-        
-        if (!dropdown) {
+    private showColorDropdown(button: HTMLElement): void {
+        if (!this.colorDropdown) {
+            console.error("❌ Color dropdown element not found");
             return;
         }
 
-        if (this.colorDropdownVisible) {
-            this.hideColorDropdown();
-        } else {
-            this.showColorDropdown(dropdown);
-        }
-    }
+        // Position dropdown below the button
+        const buttonRect = button.getBoundingClientRect();
+        const dropdownTop = buttonRect.bottom + 5;
+        const dropdownLeft = buttonRect.left;
 
-    /**
-     * Show color dropdown
-     */
-    private showColorDropdown(dropdown: HTMLElement): void {
-        // Cancel any pending hide of the toolbar
-        this.cancelHide();
+        this.colorDropdown.style.top = `${dropdownTop}px`;
+        this.colorDropdown.style.left = `${dropdownLeft}px`;
+        this.colorDropdown.style.display = "flex";
         
-        // Hide any other dropdowns first (if we had multiple)
-        this.hideColorDropdown();
-        
-        // Show the dropdown
-        dropdown.style.display = "flex";
         this.colorDropdownVisible = true;
-        
-        // Add mouse event handlers to prevent toolbar hiding when interacting with dropdown
-        dropdown.addEventListener("mouseenter", this.cancelHide);
-        dropdown.addEventListener("mouseleave", () => {
-            this.hideWithDelay();
-        });
-        
-        // Ensure dropdown is properly positioned and visible
-        // Force a reflow to ensure the style is applied
-        dropdown.offsetHeight;
     }
 
     /**
      * Hide color dropdown
      */
     private hideColorDropdown(): void {
-        if (!this.element) return;
-        
-        const dropdown = this.element.querySelector(".color-dropdown") as HTMLElement;
-        if (dropdown) {
-            dropdown.style.display = "none";
-        }
+        if (!this.colorDropdown) return;
+
+        this.colorDropdown.style.display = "none";
         this.colorDropdownVisible = false;
-    };
-
-    /**
-     * Position the toolbar relative to the selection
-     */
-    private positionToolbar(selection: SelectionInfo): void {
-        if (!this.element) return;
-
-        const bounds = this.getSelectionBounds(selection);
-        const position = this.calculateOptimalPosition(bounds);
-        
-        this.element.style.top = `${position.top}px`;
-        this.element.style.left = `${position.left}px`;
     }
 
     /**
-     * Get selection bounds in viewport coordinates
+     * Calculate selection bounds
      */
-    private getSelectionBounds(selection: SelectionInfo): SelectionBounds {
+    private calculateSelectionBounds(selection: SelectionInfo): SelectionBounds {
         const rects = selection.rects;
         if (rects.length === 0) {
             return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
@@ -428,147 +376,107 @@ export class ContextualToolbar {
     }
 
     /**
-     * Calculate optimal position for the toolbar
+     * Calculate toolbar position
      */
-    private calculateOptimalPosition(bounds: SelectionBounds): ToolbarPosition {
-        if (!this.element) {
-            return { top: 0, left: 0, arrowPosition: "bottom" };
-        }
+    private calculatePosition(bounds: SelectionBounds): ToolbarPosition {
+        const toolbarHeight = 40; // Approximate toolbar height
+        const margin = 10;
 
-        const toolbarRect = this.element.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        
-        const padding = 10; // Minimum distance from viewport edges
-        const arrowOffset = 20; // Space for arrow
+        let top = bounds.top - toolbarHeight - margin;
+        let arrowPosition: "top" | "bottom" | "left" | "right" = "bottom";
 
-        // Calculate horizontal position
-        let left = bounds.left + (bounds.width / 2) - (toolbarRect.width / 2);
-        
-        // Keep toolbar within viewport horizontally
-        if (left < padding) {
-            left = padding;
-        } else if (left + toolbarRect.width > viewportWidth - padding) {
-            left = viewportWidth - toolbarRect.width - padding;
-        }
-
-        // Calculate vertical position
-        let top: number;
-        let arrowPosition: "top" | "bottom" | "left" | "right";
-
-        // Try to position above selection first
-        if (bounds.top - toolbarRect.height - arrowOffset > padding) {
-            top = bounds.top - toolbarRect.height - arrowOffset;
-            arrowPosition = "bottom";
-        }
-        // If not enough space above, position below
-        else if (bounds.bottom + toolbarRect.height + arrowOffset < viewportHeight - padding) {
-            top = bounds.bottom + arrowOffset;
+        // If toolbar would be off-screen at top, position below selection
+        if (top < margin) {
+            top = bounds.bottom + margin;
             arrowPosition = "top";
         }
-        // If not enough space above or below, position to the side
-        else {
-            top = bounds.top + (bounds.height / 2) - (toolbarRect.height / 2);
-            
-            // Keep toolbar within viewport vertically when positioned to side
-            if (top < padding) {
-                top = padding;
-            } else if (top + toolbarRect.height > viewportHeight - padding) {
-                top = viewportHeight - toolbarRect.height - padding;
-            }
 
-            // Determine left or right side
-            if (bounds.left - toolbarRect.width - arrowOffset > padding) {
-                left = bounds.left - toolbarRect.width - arrowOffset;
-                arrowPosition = "right";
-            } else {
-                left = bounds.right + arrowOffset;
-                arrowPosition = "left";
-            }
+        // Center horizontally on selection
+        let left = bounds.left + (bounds.width / 2) - 100; // Approximate half toolbar width
+
+        // Keep toolbar on screen horizontally
+        const viewportWidth = window.innerWidth;
+        if (left < margin) {
+            left = margin;
+        } else if (left + 200 > viewportWidth - margin) { // Approximate toolbar width
+            left = viewportWidth - 200 - margin;
         }
 
         return { top, left, arrowPosition };
     }
 
     /**
-     * Set up event listeners
+     * Setup global event listeners (attached once)
      */
     private setupEventListeners(): void {
-        if (!this.element) return;
-
-        // Prevent toolbar from disappearing when user interacts with it
-        this.element.addEventListener("mouseenter", this.cancelHide);
-        this.element.addEventListener("mouseleave", () => {
-            // Don't start hide timer if dropdown is open
-            if (this.colorDropdownVisible) {
-                return;
-            }
-            this.hideWithDelay();
-        });
-
-        // Handle clicks outside toolbar
+        // Handle clicks outside toolbar/dropdown - ONLY hiding mechanism
         document.addEventListener("click", this.handleDocumentClick);
         
-        // Handle escape key
+        // Handle escape key - ONLY other hiding mechanism
         document.addEventListener("keydown", this.handleKeyDown);
+
+        // NO mouse enter/leave events - these cause the show/hide cycling
     }
 
     /**
-     * Handle clicks outside the toolbar
+     * Handle clicks outside the toolbar/dropdown
      */
     private handleDocumentClick = (event: Event): void => {
-        // Don't handle document clicks if dropdown was just opened
-        if (this.dropdownJustOpened) {
-            return;
-        }
-        
         const target = event.target as Element;
         
-        // Don't hide if clicking within the toolbar (including dropdowns)
-        if (this.element?.contains(target)) {
+        // If we're clicking on a color option, let the color handler deal with it
+        if (target.classList.contains('color-option') || target.getAttribute('data-color-id')) {
+            return;
+        }
+        
+        // Don't hide if clicking within toolbar or dropdown
+        if (this.element?.contains(target) || this.colorDropdown?.contains(target)) {
             return;
         }
 
-        // If color dropdown is visible, only hide the dropdown on outside clicks
+        // Hide dropdown first, then toolbar
         if (this.colorDropdownVisible) {
             this.hideColorDropdown();
-            return;
+        } else if (this.isVisible) {
+            this.hide();
         }
-
-        // Hide toolbar on outside clicks
-        this.hide();
     };
 
     /**
      * Handle keyboard events
      */
     private handleKeyDown = (event: KeyboardEvent): void => {
-        if (event.key === "Escape" && this.isVisible) {
-            this.hide();
+        if (event.key === "Escape") {
+            if (this.colorDropdownVisible) {
+                this.hideColorDropdown();
+            } else if (this.isVisible) {
+                this.hide();
+            }
         }
     };
 
     /**
-     * Clean up and remove toolbar
+     * Cleanup resources
      */
     destroy(): void {
-        if (this.hideTimeout) {
-            clearTimeout(this.hideTimeout);
+        // Remove event listeners
+        document.removeEventListener("click", this.handleDocumentClick);
+        document.removeEventListener("keydown", this.handleKeyDown);
+        
+        // Remove elements from DOM
+        if (this.element && this.element.parentNode) {
+            this.element.parentNode.removeChild(this.element);
         }
-
-        if (this.element) {
-            document.removeEventListener("click", this.handleDocumentClick);
-            document.removeEventListener("keydown", this.handleKeyDown);
-            
-            if (this.element.parentNode) {
-                this.element.parentNode.removeChild(this.element);
-            }
+        
+        if (this.colorDropdown && this.colorDropdown.parentNode) {
+            this.colorDropdown.parentNode.removeChild(this.colorDropdown);
         }
-
+        
+        // Reset state
         this.element = null;
-        this.actions = [];
+        this.colorDropdown = null;
         this.currentSelection = null;
         this.isVisible = false;
-        this.dropdownJustOpened = false;
+        this.colorDropdownVisible = false;
     }
 }

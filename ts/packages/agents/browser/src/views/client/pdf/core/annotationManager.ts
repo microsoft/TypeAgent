@@ -45,6 +45,8 @@ export class AnnotationManager {
 
     /**
      * Load annotations for the current document
+     * Note: This now only loads custom annotations (notes, questions)
+     * PDF.js highlights are handled by PDFJSHighlightManager
      */
     async loadAnnotations(): Promise<void> {
         if (!this.documentId) {
@@ -53,17 +55,24 @@ export class AnnotationManager {
         }
 
         try {
-            const annotations = await this.apiService.getAnnotations(this.documentId);
+            const allAnnotations = await this.apiService.getAnnotations(this.documentId);
+            
+            // Filter out PDF.js highlights - only load custom annotations
+            const customAnnotations = allAnnotations.filter(annotation => 
+                annotation.storage !== 'pdfjs' && 
+                (annotation.type === 'note' || annotation.type === 'question' || 
+                 (annotation.type === 'highlight' && annotation.storage !== 'pdfjs'))
+            );
             
             // Clear existing annotations
             this.clearAllAnnotations();
             
-            // Render each annotation
-            for (const annotation of annotations) {
+            // Render each custom annotation
+            for (const annotation of customAnnotations) {
                 await this.renderAnnotation(annotation);
             }
             
-            console.log(`✅ Loaded ${annotations.length} annotations`);
+            console.log(`✅ Loaded ${customAnnotations.length} custom annotations (${allAnnotations.length - customAnnotations.length} PDF.js highlights handled separately)`);
         } catch (error) {
             console.error("❌ Failed to load annotations:", error);
         }
@@ -179,6 +188,7 @@ export class AnnotationManager {
             page: selection.pageNumber,
             type,
             coordinates: bounds,
+            storage: 'custom', // Mark as custom annotation (not PDF.js)
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };

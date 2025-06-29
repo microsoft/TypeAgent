@@ -10,7 +10,32 @@
     z-index: 5;
 }
 
-/* Highlight Annotations */
+/* PDF.js Highlight Layer */
+.pdfjs-highlight-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* PDF.js Highlights */
+.pdfjs-highlight {
+    position: absolute;
+    border-radius: 2px;
+    transition: opacity 0.15s ease;
+    pointer-events: auto;
+    cursor: pointer;
+    mix-blend-mode: multiply;
+}
+
+.pdfjs-highlight:hover {
+    opacity: 0.5 !important;
+}
+
+/* Custom Highlight Annotations */
 .pdf-highlight {
     position: absolute;
     border-radius: 2px;

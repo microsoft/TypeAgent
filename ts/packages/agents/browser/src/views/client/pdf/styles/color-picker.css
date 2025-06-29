@@ -52,7 +52,6 @@
 .color-option {
     background: transparent;
     border: 2px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
     padding: 6px;
     cursor: pointer;
     display: flex;
@@ -60,7 +59,6 @@
     align-items: center;
     gap: 4px;
     transition: all 0.15s ease;
-    min-height: 10px;
     position: relative;
     overflow: hidden;
 }

@@ -13,6 +13,7 @@ import { QuestionDialog, QuestionData } from "./components/QuestionDialog";
 import { ScreenshotSelector, ScreenshotData } from "./components/ScreenshotSelector";
 import { ScreenshotToolbar } from "./components/ScreenshotToolbar";
 import { AnnotationManager, AnnotationCreationData } from "./core/annotationManager";
+import { PDFJSHighlightManager } from "./core/pdfJSHighlightManager";
 
 import "./pdf-viewer.css";
 import "./styles/contextual-toolbar.css";
@@ -56,6 +57,7 @@ export class TypeAgentPDFViewerApp {
     private screenshotSelector: ScreenshotSelector | null = null;
     private screenshotToolbar: ScreenshotToolbar | null = null;
     private annotationManager: AnnotationManager | null = null;
+    private pdfJSHighlightManager: PDFJSHighlightManager | null = null;
     private wheelEventHandler: ((event: WheelEvent) => void) | null = null;
 
     constructor() {
@@ -94,6 +96,9 @@ export class TypeAgentPDFViewerApp {
         this.screenshotSelector = new ScreenshotSelector();
         this.screenshotToolbar = new ScreenshotToolbar();
         this.annotationManager = new AnnotationManager(this.pdfViewer, this.pdfApiService);
+        
+        // Initialize PDF.js highlight manager (new hybrid approach)
+        this.pdfJSHighlightManager = new PDFJSHighlightManager(this.pdfViewer, this.eventBus, this.pdfApiService);
 
         // Set toolbar reference in selection manager to check dropdown state
         this.selectionManager.setContextualToolbar(this.contextualToolbar);
@@ -109,10 +114,14 @@ export class TypeAgentPDFViewerApp {
         if (!this.selectionManager || !this.contextualToolbar) return;
 
         this.selectionManager.onSelectionChange((selection) => {
-            if (selection && selection.isValid) {
-                this.contextualToolbar!.show(selection);
+            // Don't hide toolbar if it's currently visible and user is interacting with it
+            if (!selection || !selection.isValid) {
+                // Only hide if the toolbar isn't currently visible or if no color dropdown is shown
+                if (!this.contextualToolbar!.isColorDropdownVisible()) {
+                    this.contextualToolbar!.hide();
+                }
             } else {
-                this.contextualToolbar!.hide();
+                this.contextualToolbar!.show(selection);
             }
         });
 
@@ -196,19 +205,39 @@ export class TypeAgentPDFViewerApp {
     }
 
     private async createHighlight(selection: SelectionInfo, color: HighlightColor): Promise<void> {
-        if (!this.annotationManager) {
+        // Use PDF.js highlight manager instead of custom annotation manager
+        if (!this.pdfJSHighlightManager) {
+            console.error("PDF.js highlight manager not initialized");
             return;
         }
         
         try {
-            await this.annotationManager.createAnnotation({ type: "highlight", selection, color });
-            console.log("✅ Highlight created successfully");
-            
-            // Hide toolbar and clear selection after successful highlight
-            this.contextualToolbar?.hide();
-            this.selectionManager?.clearSelection();
+            const highlightId = await this.pdfJSHighlightManager.createHighlight(selection, color);
+            if (highlightId) {
+                console.log("✅ PDF.js highlight created successfully:", highlightId);
+                
+                // Hide toolbar and clear selection after successful highlight
+                this.contextualToolbar?.hide();
+                this.selectionManager?.clearSelection();
+            } else {
+                throw new Error("Failed to create PDF.js highlight");
+            }
         } catch (error) {
-            console.error("❌ Failed to create highlight:", error);
+            console.error("❌ Failed to create PDF.js highlight:", error);
+            
+            // Fallback to custom annotation manager for backward compatibility
+            if (this.annotationManager) {
+                console.log("🔄 Falling back to custom annotation manager...");
+                try {
+                    await this.annotationManager.createAnnotation({ type: "highlight", selection, color });
+                    console.log("✅ Fallback highlight created successfully");
+                    
+                    this.contextualToolbar?.hide();
+                    this.selectionManager?.clearSelection();
+                } catch (fallbackError) {
+                    console.error("❌ Fallback highlight creation also failed:", fallbackError);
+                }
+            }
         }
     }
 
@@ -496,8 +525,9 @@ export class TypeAgentPDFViewerApp {
             eventBus: this.eventBus,
             linkService: linkService,
             renderer: "canvas",
-            textLayerMode: 2,
-            annotationMode: 2,
+            textLayerMode: 2, // Enable text layer for selection
+            annotationMode: 2, // Enable annotations with storage
+            annotationEditorMode: -1, // Disable default annotation editor (we'll handle it manually)
             removePageBorders: false,
             l10n: window.pdfjsViewer.NullL10n,
         });
@@ -522,11 +552,21 @@ export class TypeAgentPDFViewerApp {
     }
 
     private async loadAnnotationsWhenReady(): Promise<void> {
-        if (!this.annotationManager || !this.documentId) return;
+        if (!this.documentId) return;
+        
         try {
-            this.annotationManager.setDocumentId(this.documentId);
-            await this.annotationManager.loadAnnotations();
-            console.log("📝 Annotations loaded and rendered");
+            // Initialize both annotation managers with document ID
+            if (this.annotationManager) {
+                this.annotationManager.setDocumentId(this.documentId);
+                await this.annotationManager.loadAnnotations();
+            }
+            
+            if (this.pdfJSHighlightManager) {
+                this.pdfJSHighlightManager.setDocumentId(this.documentId);
+                await this.pdfJSHighlightManager.loadHighlights();
+            }
+            
+            console.log("📝 All annotations loaded and rendered");
         } catch (error) {
             console.error("❌ Failed to load annotations:", error);
         }

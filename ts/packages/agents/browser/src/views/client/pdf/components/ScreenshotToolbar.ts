@@ -72,26 +72,14 @@ export class ScreenshotToolbar {
     }
 
     /**
-     * Add custom action (replace if exists, maintain Cancel at end)
+     * Add custom action (replace if exists)
      */
     addAction(action: ScreenshotAction): void {
         // Remove existing action with same ID
         this.actions = this.actions.filter(a => a.id !== action.id);
         
-        // If it's the cancel action, add it at the end
-        if (action.id === "cancel") {
-            this.actions.push(action);
-        } else {
-            // For non-cancel actions, find where to insert to keep cancel at the end
-            const cancelIndex = this.actions.findIndex(a => a.id === "cancel");
-            if (cancelIndex !== -1) {
-                // Insert before cancel action
-                this.actions.splice(cancelIndex, 0, action);
-            } else {
-                // No cancel action yet, just add normally
-                this.actions.push(action);
-            }
-        }
+        // Add the action
+        this.actions.push(action);
     }
 
     /**
@@ -115,7 +103,7 @@ export class ScreenshotToolbar {
         // Clear any existing actions first
         this.actions = [];
         
-        // Add actions in order: Note, Question, then Cancel (Cancel will be last/rightmost)
+        // Add only note and question actions (no cancel button)
         this.actions.push({
             id: "note",
             label: "Add Note",
@@ -129,14 +117,6 @@ export class ScreenshotToolbar {
             icon: "fas fa-question-circle",
             action: () => {}, // Will be set by parent
         });
-
-        // Cancel action is added last so it appears on the right
-        this.actions.push({
-            id: "cancel",
-            label: "Cancel",
-            icon: "fas fa-times",
-            action: () => this.hide(),
-        });
     }
 
     /**
@@ -145,18 +125,18 @@ export class ScreenshotToolbar {
     private createToolbarElement(): void {
         this.element = document.createElement("div");
         this.element.className = "screenshot-toolbar";
-        this.element.innerHTML = `
-            <div class="toolbar-content">
-                <!-- Actions will be populated dynamically -->
-            </div>
-        `;
+        
+        // Create toolbar content container with same structure as contextual toolbar
+        const toolbarContent = document.createElement("div");
+        toolbarContent.className = "toolbar-content";
+        this.element.appendChild(toolbarContent);
 
         // Add to document body
         document.body.appendChild(this.element);
     }
 
     /**
-     * Update toolbar content
+     * Update toolbar content with icon-only buttons and separators
      */
     private updateToolbarContent(): void {
         if (!this.element || !this.currentScreenshot) return;
@@ -164,22 +144,34 @@ export class ScreenshotToolbar {
         const content = this.element.querySelector(".toolbar-content");
         if (!content) return;
 
-        // Create action buttons
-        content.innerHTML = this.actions.map(action => `
-            <button 
-                type="button"
-                class="toolbar-action ${action.id === 'cancel' ? 'cancel-action' : ''}" 
-                data-action-id="${action.id}"
-                title="${action.label}"
-            >
-                <i class="${action.icon}"></i>
-                <span class="action-label">${action.label}</span>
-            </button>
-        `).join("");
+        // Clear existing content
+        content.innerHTML = "";
 
-        // Add click handlers
-        content.querySelectorAll(".toolbar-action").forEach(button => {
+        // Create action buttons with separators (icon-only like contextual toolbar)
+        this.actions.forEach((action, index) => {
+            // Add vertical separator before each action (except the first)
+            if (index > 0) {
+                const separator = document.createElement("div");
+                separator.className = "toolbar-separator";
+                content.appendChild(separator);
+            }
+
+            // Create button (icon-only)
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "toolbar-action";
+            button.setAttribute("data-action-id", action.id);
+            button.title = action.label; // Show label in tooltip
+
+            // Icon only (no text label)
+            const icon = document.createElement("i");
+            icon.className = action.icon;
+            button.appendChild(icon);
+
+            // Add click handler
             button.addEventListener("click", this.handleActionClick);
+
+            content.appendChild(button);
         });
     }
 
