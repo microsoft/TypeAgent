@@ -44,7 +44,7 @@ export class ContextualToolbar {
     private isVisible: boolean = false;
     private hideTimeout: number | null = null;
     private colorDropdownVisible: boolean = false;
-    private highlightColorCallback: ((color: HighlightColor) => void) | null = null;
+    private highlightColorCallback: ((color: HighlightColor, selection: SelectionInfo) => void) | null = null;
     private dropdownJustOpened: boolean = false;
 
     private readonly availableColors: HighlightColor[] = [
@@ -66,7 +66,7 @@ export class ContextualToolbar {
     /**
      * Set callback for highlight color selection
      */
-    setHighlightColorCallback(callback: (color: HighlightColor) => void): void {
+    setHighlightColorCallback(callback: (color: HighlightColor, selection: SelectionInfo) => void): void {
         this.highlightColorCallback = callback;
     }
 
@@ -102,10 +102,7 @@ export class ContextualToolbar {
         // Only update toolbar content if dropdown is not currently visible
         // This prevents destroying the open dropdown during re-render
         if (!this.colorDropdownVisible) {
-            console.log("🔄 Updating toolbar content (dropdown not visible)");
             this.updateToolbarContent();
-        } else {
-            console.log("🔄 Skipping toolbar content update (dropdown is visible)");
         }
         
         this.positionToolbar(selection);
@@ -199,7 +196,6 @@ export class ContextualToolbar {
 
         // Store current dropdown state before re-rendering
         const wasDropdownVisible = this.colorDropdownVisible;
-        console.log("🔄 Updating toolbar content, dropdown was visible:", wasDropdownVisible);
 
         // Filter actions based on conditions
         const availableActions = this.actions.filter(action => 
@@ -259,14 +255,10 @@ export class ContextualToolbar {
             colorOption.addEventListener("click", (e) => {
                 e.stopPropagation();
             });
-            
-            // Add debugging for color options
-            console.log("🎨 Added click handler to color option:", colorOption.getAttribute("data-color-id"));
         });
 
         // Restore dropdown state after re-rendering
         if (wasDropdownVisible) {
-            console.log("🔄 Restoring dropdown visibility after re-render");
             this.colorDropdownVisible = true;
         }
     }
@@ -275,8 +267,6 @@ export class ContextualToolbar {
      * Handle action button clicks
      */
     private handleActionClick = (event: Event): void => {
-        console.log("🔘 Action click detected:", event.target);
-        
         // For ALL actions, stop the event from bubbling to document
         event.preventDefault();
         event.stopPropagation();
@@ -285,16 +275,11 @@ export class ContextualToolbar {
         const button = event.currentTarget as HTMLElement;
         const actionId = button.getAttribute("data-action-id");
         
-        console.log("🔘 Action ID:", actionId);
-        
         if (!actionId || !this.currentSelection) {
-            console.log("🔘 Missing actionId or selection");
             return;
         }
 
         if (actionId === "highlight") {
-            console.log("🔘 Highlight action - toggling dropdown");
-            
             // Set flag to prevent immediate closure
             this.dropdownJustOpened = true;
             
@@ -305,12 +290,10 @@ export class ContextualToolbar {
             requestAnimationFrame(() => {
                 setTimeout(() => {
                     this.dropdownJustOpened = false;
-                    console.log("🎨 Dropdown protection flag cleared");
                 }, 50);
             });
             
         } else {
-            console.log("🔘 Executing normal action:", actionId);
             // Execute normal action
             const action = this.actions.find(a => a.id === actionId);
             if (action) {
@@ -333,13 +316,11 @@ export class ContextualToolbar {
         const colorOption = event.currentTarget as HTMLElement;
         const colorId = colorOption.getAttribute("data-color-id");
         
-        console.log("🎨 Color selected:", colorId);
-        
-        if (colorId && this.highlightColorCallback) {
+        if (colorId && this.highlightColorCallback && this.currentSelection) {
             const color = this.availableColors.find(c => c.id === colorId);
             if (color) {
-                console.log("🎨 Executing highlight with color:", color);
-                this.highlightColorCallback(color);
+                // Pass the toolbar's stored selection instead of getting from selection manager
+                this.highlightColorCallback(color, this.currentSelection);
                 this.hideColorDropdown();
                 this.hide();
             }
@@ -350,24 +331,16 @@ export class ContextualToolbar {
      * Toggle color dropdown visibility
      */
     private toggleColorDropdown(button: HTMLElement): void {
-        console.log("🎨 Toggle dropdown called, current state:", this.colorDropdownVisible);
-        
         const container = button.closest(".toolbar-action-container");
         const dropdown = container?.querySelector(".color-dropdown") as HTMLElement;
         
-        console.log("🎨 Container found:", !!container);
-        console.log("🎨 Dropdown found:", !!dropdown);
-        
         if (!dropdown) {
-            console.error("🎨 Dropdown element not found!");
             return;
         }
 
         if (this.colorDropdownVisible) {
-            console.log("🎨 Hiding dropdown");
             this.hideColorDropdown();
         } else {
-            console.log("🎨 Showing dropdown");
             this.showColorDropdown(dropdown);
         }
     }
@@ -376,8 +349,6 @@ export class ContextualToolbar {
      * Show color dropdown
      */
     private showColorDropdown(dropdown: HTMLElement): void {
-        console.log("🎨 showColorDropdown called");
-        
         // Cancel any pending hide of the toolbar
         this.cancelHide();
         
@@ -387,40 +358,29 @@ export class ContextualToolbar {
         // Show the dropdown
         dropdown.style.display = "flex";
         this.colorDropdownVisible = true;
-        console.log("🎨 Dropdown display set to flex, visible flag set to true");
         
         // Add mouse event handlers to prevent toolbar hiding when interacting with dropdown
         dropdown.addEventListener("mouseenter", this.cancelHide);
         dropdown.addEventListener("mouseleave", () => {
-            console.log("🎨 Mouse left dropdown - starting hide timer");
             this.hideWithDelay();
         });
         
         // Ensure dropdown is properly positioned and visible
         // Force a reflow to ensure the style is applied
         dropdown.offsetHeight;
-        
-        console.log("🎨 Dropdown should now be visible, computed display:", 
-            window.getComputedStyle(dropdown).display);
     }
 
     /**
      * Hide color dropdown
      */
     private hideColorDropdown(): void {
-        console.log("🎨 hideColorDropdown called");
-        
         if (!this.element) return;
         
         const dropdown = this.element.querySelector(".color-dropdown") as HTMLElement;
         if (dropdown) {
-            console.log("🎨 Setting dropdown display to none");
             dropdown.style.display = "none";
-        } else {
-            console.log("🎨 No dropdown found to hide");
         }
         this.colorDropdownVisible = false;
-        console.log("🎨 Dropdown visible flag set to false");
     };
 
     /**
@@ -541,10 +501,8 @@ export class ContextualToolbar {
         this.element.addEventListener("mouseleave", () => {
             // Don't start hide timer if dropdown is open
             if (this.colorDropdownVisible) {
-                console.log("🖱️ Mouseleave detected but dropdown is open - not hiding");
                 return;
             }
-            console.log("🖱️ Mouseleave detected - starting hide timer");
             this.hideWithDelay();
         });
 
@@ -559,34 +517,25 @@ export class ContextualToolbar {
      * Handle clicks outside the toolbar
      */
     private handleDocumentClick = (event: Event): void => {
-        console.log("📄 Document click detected, dropdown just opened:", this.dropdownJustOpened);
-        
         // Don't handle document clicks if dropdown was just opened
         if (this.dropdownJustOpened) {
-            console.log("📄 Ignoring document click - dropdown just opened");
             return;
         }
         
         const target = event.target as Element;
-        console.log("📄 Click target:", target);
         
         // Don't hide if clicking within the toolbar (including dropdowns)
         if (this.element?.contains(target)) {
-            console.log("📄 Click is within toolbar, ignoring");
             return;
         }
 
-        console.log("📄 Click is outside toolbar, dropdown visible:", this.colorDropdownVisible);
-
         // If color dropdown is visible, only hide the dropdown on outside clicks
         if (this.colorDropdownVisible) {
-            console.log("📄 Hiding color dropdown");
             this.hideColorDropdown();
             return;
         }
 
         // Hide toolbar on outside clicks
-        console.log("📄 Hiding entire toolbar");
         this.hide();
     };
 

@@ -116,13 +116,8 @@ export class TypeAgentPDFViewerApp {
         });
 
         // Set up highlight color callback for dropdown
-        this.contextualToolbar.setHighlightColorCallback((color) => {
-            if (this.selectionManager) {
-                const selection = this.selectionManager.getCurrentSelection();
-                if (selection) {
-                    this.createHighlight(selection, color);
-                }
-            }
+        this.contextualToolbar.setHighlightColorCallback((color, selection) => {
+            this.createHighlight(selection, color);
         });
 
         this.contextualToolbar.addAction({
@@ -200,12 +195,17 @@ export class TypeAgentPDFViewerApp {
     }
 
     private async createHighlight(selection: SelectionInfo, color: HighlightColor): Promise<void> {
-        if (!this.annotationManager) return;
+        if (!this.annotationManager) {
+            return;
+        }
+        
         try {
             await this.annotationManager.createAnnotation({ type: "highlight", selection, color });
+            console.log("✅ Highlight created successfully");
+            
+            // Hide toolbar and clear selection after successful highlight
             this.contextualToolbar?.hide();
             this.selectionManager?.clearSelection();
-            console.log("✅ Highlight created successfully");
         } catch (error) {
             console.error("❌ Failed to create highlight:", error);
         }
