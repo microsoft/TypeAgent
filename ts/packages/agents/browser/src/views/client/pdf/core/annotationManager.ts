@@ -502,13 +502,22 @@ export class AnnotationManager {
         
         if (annotation.type === "note" || annotation.type === "question") {
             // Position note/question icon in the top-right corner of the selected area
-            const iconSize = 20 * scaleRatio; // Scale icon size
-            const margin = 2 * scaleRatio; // Scale margin
+            // Base size that scales with zoom
+            const baseIconSize = 20; // Base size at 1x scale
+            const baseMargin = 2; // Base margin at 1x scale
             
-            element.style.left = `${(x + width - 20 - 2) * scaleRatio}px`;
-            element.style.top = `${(y + 2) * scaleRatio}px`;
-            element.style.width = `${iconSize}px`;
-            element.style.height = `${iconSize}px`;
+            const scaledIconSize = baseIconSize * scaleRatio;
+            const scaledMargin = baseMargin * scaleRatio;
+            
+            // Calculate position: top-right corner with scaled positioning
+            const scaledX = x * scaleRatio;
+            const scaledY = y * scaleRatio;
+            const scaledWidth = width * scaleRatio;
+            
+            element.style.left = `${scaledX + scaledWidth - scaledIconSize - scaledMargin}px`;
+            element.style.top = `${scaledY + scaledMargin}px`;
+            element.style.width = `${scaledIconSize}px`;
+            element.style.height = `${scaledIconSize}px`;
         } else {
             // For other annotation types (highlights, questions), use full area with scaling
             element.style.left = `${x * scaleRatio}px`;
