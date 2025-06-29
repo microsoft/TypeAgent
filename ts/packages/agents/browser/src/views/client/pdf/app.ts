@@ -56,6 +56,7 @@ export class TypeAgentPDFViewerApp {
     private screenshotSelector: ScreenshotSelector | null = null;
     private screenshotToolbar: ScreenshotToolbar | null = null;
     private annotationManager: AnnotationManager | null = null;
+    private wheelEventHandler: ((event: WheelEvent) => void) | null = null;
 
     constructor() {
         this.pdfApiService = new PDFApiService();
@@ -559,6 +560,42 @@ export class TypeAgentPDFViewerApp {
                 target.value = this.currentPage.toString();
             }
         });
+
+        // Add custom zoom handler for Ctrl+scroll wheel
+        this.setupZoomHandler();
+    }
+
+    /**
+     * Set up custom zoom handler for Ctrl+scroll wheel
+     */
+    private setupZoomHandler(): void {
+        const viewerContainer = document.getElementById("viewerContainer");
+        if (!viewerContainer) {
+            return;
+        }
+
+        // Create and store the wheel event handler
+        this.wheelEventHandler = (event: WheelEvent) => {
+            // Only handle zoom when Ctrl (or Cmd on Mac) is pressed
+            if (event.ctrlKey || event.metaKey) {
+                // Prevent default browser zoom behavior
+                event.preventDefault();
+                event.stopPropagation();
+
+                // Determine zoom direction based on wheel delta
+                const delta = event.deltaY;
+                
+                if (delta < 0) {
+                    // Scrolling up = zoom in
+                    this.zoomIn();
+                } else if (delta > 0) {
+                    // Scrolling down = zoom out
+                    this.zoomOut();
+                }
+            }
+        };
+
+        viewerContainer.addEventListener("wheel", this.wheelEventHandler, { passive: false });
     }
 
     private extractDocumentId(): void {
@@ -655,14 +692,81 @@ export class TypeAgentPDFViewerApp {
 
     async zoomIn(): Promise<void> {
         if (this.pdfViewer) {
-            this.pdfViewer.currentScale = Math.min(this.pdfViewer.currentScale * 1.2, 3.0);
+            const newScale = Math.min(this.pdfViewer.currentScale * 1.2, 3.0);
+            this.pdfViewer.currentScale = newScale;
+            this.updateZoomDisplay();
         }
     }
 
     async zoomOut(): Promise<void> {
         if (this.pdfViewer) {
-            this.pdfViewer.currentScale = Math.max(this.pdfViewer.currentScale / 1.2, 0.3);
+            const newScale = Math.max(this.pdfViewer.currentScale / 1.2, 0.3);
+            this.pdfViewer.currentScale = newScale;
+            this.updateZoomDisplay();
         }
+    }
+
+    /**
+     * Update zoom percentage display in UI (if available)
+     */
+    private updateZoomDisplay(): void {
+        if (this.pdfViewer) {
+            const zoomPercentage = Math.round(this.pdfViewer.currentScale * 100);
+            
+            // Update any zoom display elements if they exist
+            const zoomDisplay = document.getElementById("zoomDisplay");
+            if (zoomDisplay) {
+                zoomDisplay.textContent = `${zoomPercentage}%`;
+            }
+            
+            // Optional: Show temporary zoom indicator
+            this.showZoomIndicator(zoomPercentage);
+        }
+    }
+
+    /**
+     * Show a temporary zoom level indicator
+     */
+    private showZoomIndicator(zoomPercentage: number): void {
+        // Remove any existing zoom indicator
+        let indicator = document.getElementById("zoomIndicator");
+        if (indicator) {
+            indicator.remove();
+        }
+
+        // Create new zoom indicator
+        indicator = document.createElement("div");
+        indicator.id = "zoomIndicator";
+        indicator.textContent = `${zoomPercentage}%`;
+        indicator.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 10000;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        `;
+
+        document.body.appendChild(indicator);
+
+        // Fade out and remove after 1 second
+        setTimeout(() => {
+            if (indicator) {
+                indicator.style.opacity = "0";
+                setTimeout(() => {
+                    if (indicator && indicator.parentNode) {
+                        indicator.parentNode.removeChild(indicator);
+                    }
+                }, 300);
+            }
+        }, 700);
     }
 
     private updatePageCount(): void {
@@ -757,6 +861,16 @@ export class TypeAgentPDFViewerApp {
     }
 
     destroy(): void {
+        // Clean up zoom wheel event handler
+        if (this.wheelEventHandler) {
+            const viewerContainer = document.getElementById("viewerContainer");
+            if (viewerContainer) {
+                viewerContainer.removeEventListener("wheel", this.wheelEventHandler);
+            }
+            this.wheelEventHandler = null;
+        }
+
+        // Clean up components
         this.selectionManager?.destroy();
         this.contextualToolbar?.destroy();
         this.colorPicker?.destroy();
@@ -765,6 +879,7 @@ export class TypeAgentPDFViewerApp {
         this.screenshotSelector?.destroy();
         this.screenshotToolbar?.destroy();
         this.annotationManager?.destroy();
+        
         if (this.sseClient) {
             try { (this.sseClient as any).close?.(); } catch (error) {
                 console.warn("Error closing SSE connection:", error);
