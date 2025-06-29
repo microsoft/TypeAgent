@@ -199,7 +199,7 @@ body {
 .pdfViewer .textLayer .highlight {
   margin: -1px;
   padding: 1px;
-  background-color: rgba(180, 0, 170, 1);
+  background-color: rgba(0, 120, 255, 0.3);
   border-radius: 4px;
 }
 
@@ -216,7 +216,16 @@ body {
 }
 
 .pdfViewer .textLayer .highlight.selected {
-  background-color: rgba(0, 100, 0, 1);
+  background-color: rgba(0, 120, 255, 0.5);
+}
+
+/* Native text selection styling for consistency */
+.pdfViewer .textLayer ::selection {
+  background-color: rgba(0, 120, 255, 1);
+}
+
+.pdfViewer .textLayer ::-moz-selection {
+  background-color: rgba(0, 120, 255, 1);
 }
 
 /* Annotation layer styles */

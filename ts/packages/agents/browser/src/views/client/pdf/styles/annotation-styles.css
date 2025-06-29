@@ -1,0 +1,226 @@
+/* PDF Annotation Styles */
+
+.custom-annotation-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* PDF.js Highlight Layer */
+.pdfjs-highlight-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* PDF.js Highlights */
+.pdfjs-highlight {
+  position: absolute;
+  border-radius: 2px;
+  transition: opacity 0.15s ease;
+  pointer-events: auto;
+  cursor: pointer;
+  mix-blend-mode: multiply;
+}
+
+.pdfjs-highlight:hover {
+  opacity: 0.5 !important;
+}
+
+/* Custom Highlight Annotations */
+.pdf-highlight {
+  position: absolute;
+  border-radius: 2px;
+  transition: opacity 0.15s ease;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.pdf-highlight:hover {
+  opacity: 0.6 !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+/* Note Annotations */
+.pdf-note {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 15;
+  /* Note: width and height are set dynamically for proper positioning */
+}
+
+.note-icon {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.note-icon i {
+  font-size: 80%; /* Icon takes most of the space, leaving some padding */
+  color: #4fc3f7; /* Blue color for notes */
+  transition: all 0.15s ease;
+  display: block; /* Ensure proper sizing */
+}
+
+.note-icon:hover i {
+  color: #29b6f6; /* Darker blue on hover */
+  transform: scale(1.1);
+}
+
+/* Question Annotations */
+.pdf-question {
+  position: absolute;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 15;
+  /* Note: width and height are set dynamically for proper positioning */
+}
+
+.question-icon {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.question-icon i {
+  font-size: 80%; /* Icon takes most of the space, leaving some padding */
+  color: #66bb6a; /* Green color for questions */
+  transition: all 0.15s ease;
+  display: block; /* Ensure proper sizing */
+}
+
+.question-icon:hover i {
+  color: #4caf50; /* Darker green on hover */
+  transform: scale(1.1);
+}
+
+/* Animation keyframes */
+/* Note: Removed noteAppear and questionAppear animations since we no longer use click flyouts */
+
+/* Selected annotation styles */
+.pdf-highlight.selected {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 1px;
+  z-index: 12;
+}
+
+.pdf-note.selected .note-icon i,
+.pdf-question.selected .question-icon i {
+  outline: 2px solid #8ab4f8;
+  outline-offset: 2px;
+  border-radius: 2px; /* Small radius for outline visibility */
+}
+
+/* Annotation hover states for better UX */
+/* Note: Removed note-content and question-content transform-origin since we no longer use click flyouts */
+
+/* Responsive adjustments for annotations */
+@media (max-width: 768px) {
+  .note-icon i,
+  .question-icon i {
+    font-size: 75%; /* Slightly smaller on mobile for better touch targets */
+  }
+}
+
+@media (max-width: 480px) {
+  /* Note: Removed mobile flyout styles since we no longer use click flyouts */
+  /* Only hover tooltips are used now, which have their own responsive styles */
+}
+
+/* Annotation context menu (for right-click) */
+.annotation-context-menu {
+  position: fixed;
+  background: rgba(42, 42, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10005;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.9);
+  transition: all 0.15s ease;
+}
+
+.annotation-context-menu.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: scale(1);
+}
+
+.context-menu-item {
+  background: transparent;
+  border: none;
+  color: #e8eaed;
+  padding: 8px 12px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.context-menu-item.danger {
+  color: #f48fb1;
+}
+
+.context-menu-item.danger:hover {
+  background: rgba(244, 143, 177, 0.15);
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+}
+
+/* Annotation selection outline */
+.annotation-selection-outline {
+  position: absolute;
+  border: 2px dashed #8ab4f8;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 8;
+  opacity: 0.7;
+  animation: selectionPulse 2s infinite;
+}
+
+@keyframes selectionPulse {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
