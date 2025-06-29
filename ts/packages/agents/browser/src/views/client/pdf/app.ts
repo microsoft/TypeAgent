@@ -159,7 +159,7 @@ export class TypeAgentPDFViewerApp {
         this.contextualToolbar.addAction({
             id: "question",
             label: "Ask Question",
-            icon: "fas fa-question-circle", 
+            icon: "fas fa-comments", 
             action: (selection) => this.handleQuestionAction(selection),
         });
 
@@ -195,7 +195,7 @@ export class TypeAgentPDFViewerApp {
         const questionAction: ScreenshotAction = {
             id: "question",
             label: "Ask Question", 
-            icon: "fas fa-question-circle",
+            icon: "fas fa-comments",
             action: (screenshotData) => {
                 console.log("❓ Question action clicked");
                 this.handleScreenshotQuestionAction(screenshotData);
@@ -348,7 +348,13 @@ export class TypeAgentPDFViewerApp {
         if (questionData.context) content += `\n\nContext: ${questionData.context}`;
         
         try {
-            await this.annotationManager.createAnnotation({ type: "question", selection, content });
+            await this.annotationManager.createAnnotation({ 
+                type: "question", 
+                selection, 
+                content,
+                blockquoteContent: questionData.blockquoteContent,
+                screenshotData: questionData.screenshotData
+            });
             this.selectionManager?.clearSelection();
             console.log("✅ Question created successfully - ready for LLM integration");
         } catch (error) {
@@ -443,6 +449,42 @@ export class TypeAgentPDFViewerApp {
                 }, 
                 annotation.annotation.content,
                 existingNoteData
+            );
+        } else if (annotation.annotation.type === "question" && this.questionDialog) {
+            const fakeSelection: SelectionInfo = {
+                text: annotation.annotation.metadata?.blockquoteContent || "Selected text",
+                pageNumber: annotation.annotation.page,
+                rects: [],
+                range: document.createRange(),
+                isValid: true,
+            };
+            
+            // Prepare existing question data
+            const existingQuestionData: QuestionData = {
+                question: annotation.annotation.content,
+                blockquoteContent: annotation.annotation.metadata?.blockquoteContent,
+                screenshotData: annotation.annotation.metadata?.screenshotData,
+                context: annotation.annotation.metadata?.context
+            };
+            
+            this.questionDialog.show(
+                fakeSelection,
+                (questionData) => {
+                    let content = questionData.question;
+                    if (questionData.context) content += `\n\nContext: ${questionData.context}`;
+                    
+                    this.updateAnnotation(annotation.id, {
+                        content: content,
+                        metadata: {
+                            ...annotation.annotation.metadata,
+                            blockquoteContent: questionData.blockquoteContent,
+                            screenshotData: questionData.screenshotData,
+                            context: questionData.context
+                        }
+                    });
+                },
+                annotation.annotation.content,
+                existingQuestionData
             );
         }
     }
@@ -592,12 +634,12 @@ export class TypeAgentPDFViewerApp {
 
             let content = questionData.question;
             if (questionData.context) content += `\n\nContext: ${questionData.context}`;
-            content += `\n\n![Screenshot](${screenshotData.imageData})`;
 
             await this.annotationManager.createAnnotation({ 
                 type: "question", 
                 selection: fakeSelection, 
-                content 
+                content: content,
+                screenshotData: screenshotData
             });
             
             console.log("✅ Screenshot question created successfully - ready for LLM integration");

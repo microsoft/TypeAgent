@@ -100,22 +100,21 @@ export class ScreenshotToolbar {
      * Set up default actions
      */
     private setupDefaultActions(): void {
-        // Clear any existing actions first
         this.actions = [];
+       
         
-        // Add only note and question actions (no cancel button)
         this.actions.push({
             id: "note",
             label: "Add Note",
             icon: "fas fa-sticky-note",
-            action: () => {}, // Will be set by parent
+            action: () => {},
         });
 
         this.actions.push({
             id: "question", 
             label: "Ask Question",
-            icon: "fas fa-question-circle",
-            action: () => {}, // Will be set by parent
+            icon: "fas fa-comments",
+            action: () => {},
         });
     }
 
@@ -126,12 +125,10 @@ export class ScreenshotToolbar {
         this.element = document.createElement("div");
         this.element.className = "screenshot-toolbar";
         
-        // Create toolbar content container with same structure as contextual toolbar
         const toolbarContent = document.createElement("div");
         toolbarContent.className = "toolbar-content";
         this.element.appendChild(toolbarContent);
 
-        // Add to document body
         document.body.appendChild(this.element);
     }
 

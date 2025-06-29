@@ -91,6 +91,7 @@
 }
 
 .selected-text-section,
+.selected-content-section,
 .question-section,
 .context-section {
     margin-bottom: 20px;
@@ -115,6 +116,49 @@
     max-height: 100px;
     overflow-y: auto;
     font-size: 14px;
+}
+
+/* Enhanced content section styles for questions */
+.selected-content-container {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.selected-text-quote {
+    background: rgba(102, 187, 106, 0.1);
+    border-left: 4px solid #66bb6a;
+    border-radius: 0 4px 4px 0;
+    padding: 12px 16px;
+    margin: 0;
+    color: #c9d1d9;
+    font-style: italic;
+    line-height: 1.5;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.selected-screenshot {
+    margin: 8px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.screenshot-preview {
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+    object-fit: contain;
+    display: block;
+}
+
+.screenshot-info {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #9aa0a6;
+    font-size: 12px;
+    text-align: center;
 }
 
 .question-input,

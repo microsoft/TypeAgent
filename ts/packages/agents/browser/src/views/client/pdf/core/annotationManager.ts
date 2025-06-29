@@ -182,8 +182,20 @@ export class AnnotationManager {
     private selectionToAnnotation(data: AnnotationCreationData): Partial<PDFAnnotation> {
         const { selection, type, color, content, blockquoteContent, screenshotData } = data;
         
-        // Calculate coordinates from selection rectangles
-        const bounds = this.calculateSelectionBounds(selection);
+        // For screenshot-based annotations, use the screenshot region coordinates directly
+        let bounds;
+        if (screenshotData && screenshotData.region) {
+            // Screenshot coordinates are already relative to the page
+            bounds = {
+                x: screenshotData.region.x,
+                y: screenshotData.region.y,
+                width: screenshotData.region.width,
+                height: screenshotData.region.height,
+            };
+        } else {
+            // For text selections, calculate coordinates from selection rectangles
+            bounds = this.calculateSelectionBounds(selection);
+        }
         
         const annotation: Partial<PDFAnnotation> = {
             documentId: this.documentId!,
@@ -355,7 +367,7 @@ export class AnnotationManager {
     }
 
     /**
-     * Create tooltip content for note hover
+     * Create tooltip content for note/question hover
      */
     private createNoteTooltipContent(annotation: PDFAnnotation): string {
         let content = '';
@@ -378,10 +390,11 @@ export class AnnotationManager {
             `;
         }
         
-        // Add note content rendered from markdown
+        // Add content rendered from markdown (works for both notes and questions)
         if (annotation.content) {
+            const contentType = annotation.type === 'question' ? 'question' : 'note';
             content += `
-                <div class="tooltip-note-content">
+                <div class="tooltip-${contentType}-content">
                     ${this.markdownToHtml(annotation.content)}
                 </div>
             `;
@@ -430,7 +443,7 @@ export class AnnotationManager {
         
         element.innerHTML = `
             <div class="question-icon">
-                <i class="fas fa-question-circle"></i>
+                <i class="fas fa-comments"></i>
             </div>
             <div class="note-tooltip" style="display: none;">
                 ${tooltipContent}

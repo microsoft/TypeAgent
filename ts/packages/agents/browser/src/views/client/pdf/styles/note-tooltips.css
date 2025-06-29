@@ -46,9 +46,16 @@
     color: #e8eaed;
 }
 
+.tooltip-question-content {
+    color: #e8eaed;
+}
+
 .tooltip-note-content h1,
 .tooltip-note-content h2,
-.tooltip-note-content h3 {
+.tooltip-note-content h3,
+.tooltip-question-content h1,
+.tooltip-question-content h2,
+.tooltip-question-content h3 {
     color: #ffffff;
     margin: 0 0 8px 0;
     font-size: 14px;
@@ -59,17 +66,20 @@
 .tooltip-note-content h2 { font-size: 15px; }
 .tooltip-note-content h3 { font-size: 14px; }
 
-.tooltip-note-content strong {
+.tooltip-note-content strong,
+.tooltip-question-content strong {
     color: #ffffff;
     font-weight: 600;
 }
 
-.tooltip-note-content em {
+.tooltip-note-content em,
+.tooltip-question-content em {
     color: #c9d1d9;
     font-style: italic;
 }
 
-.tooltip-note-content code {
+.tooltip-note-content code,
+.tooltip-question-content code {
     background: rgba(255, 255, 255, 0.1);
     padding: 2px 4px;
     border-radius: 2px;
@@ -78,21 +88,25 @@
     color: #f8f8f2;
 }
 
-.tooltip-note-content ul {
+.tooltip-note-content ul,
+.tooltip-question-content ul {
     margin: 4px 0;
     padding-left: 16px;
 }
 
-.tooltip-note-content li {
+.tooltip-note-content li,
+.tooltip-question-content li {
     margin: 2px 0;
 }
 
-.tooltip-note-content a {
+.tooltip-note-content a,
+.tooltip-question-content a {
     color: #8ab4f8;
     text-decoration: none;
 }
 
-.tooltip-note-content a:hover {
+.tooltip-note-content a:hover,
+.tooltip-question-content a:hover {
     text-decoration: underline;
 }
 

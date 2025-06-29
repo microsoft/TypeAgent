@@ -14,6 +14,7 @@ export interface QuestionData {
     selectedText?: string;
     screenshotData?: ScreenshotData;
     context?: string;
+    blockquoteContent?: string; // Store the blockquote separately
 }
 
 export type QuestionSubmitCallback = (questionData: QuestionData) => void;
@@ -31,33 +32,33 @@ export class QuestionDialog {
     }
 
     /**
-     * Show question dialog for selected text
+     * Show question dialog for selected text with existing question data
      */
-    show(selection: SelectionInfo, callback: QuestionSubmitCallback): void {
+    show(selection: SelectionInfo, callback: QuestionSubmitCallback, existingQuestion?: string, existingQuestionData?: QuestionData): void {
         this.currentSelection = selection;
         this.currentScreenshot = null;
-        this.showDialog(callback);
+        this.showDialog(callback, existingQuestion, existingQuestionData);
     }
 
     /**
-     * Show question dialog for screenshot
+     * Show question dialog for screenshot with existing question data
      */
-    showForScreenshot(screenshot: ScreenshotData, callback: QuestionSubmitCallback): void {
+    showForScreenshot(screenshot: ScreenshotData, callback: QuestionSubmitCallback, existingQuestion?: string, existingQuestionData?: QuestionData): void {
         this.currentSelection = null;
         this.currentScreenshot = screenshot;
-        this.showDialog(callback);
+        this.showDialog(callback, existingQuestion, existingQuestionData);
     }
 
     /**
      * Common show logic for both text and screenshot
      */
-    private showDialog(callback: QuestionSubmitCallback): void {
+    private showDialog(callback: QuestionSubmitCallback, existingQuestion?: string, existingQuestionData?: QuestionData): void {
         if (!this.element) return;
 
         this.callback = callback;
         
         // Populate the dialog
-        this.populateDialog();
+        this.populateDialog(existingQuestion, existingQuestionData);
         
         // Show the modal
         this.element.classList.add("visible");
@@ -67,6 +68,10 @@ export class QuestionDialog {
         const questionInput = this.element.querySelector(".question-input") as HTMLTextAreaElement;
         if (questionInput) {
             questionInput.focus();
+            // Position cursor at end if there's existing content
+            if (existingQuestion) {
+                questionInput.setSelectionRange(questionInput.value.length, questionInput.value.length);
+            }
         }
     }
 
@@ -105,7 +110,7 @@ export class QuestionDialog {
             <div class="question-dialog-container">
                 <div class="question-dialog-header">
                     <h3 class="dialog-title">
-                        <i class="fas fa-question-circle"></i>
+                        <i class="fas fa-comments"></i>
                         Ask a Question
                     </h3>
                     <button type="button" class="close-button" aria-label="Close">
@@ -114,10 +119,10 @@ export class QuestionDialog {
                 </div>
                 
                 <div class="question-dialog-content">
-                    <div class="selected-text-section">
-                        <label class="section-label">Selected Text:</label>
-                        <div class="selected-text-preview">
-                            <!-- Selected text will be inserted here -->
+                    <div class="selected-content-section">
+                        <label class="section-label">Selected Content:</label>
+                        <div class="selected-content-container">
+                            <!-- Selected text or screenshot will be inserted here -->
                         </div>
                     </div>
                     
@@ -179,38 +184,51 @@ export class QuestionDialog {
     }
 
     /**
-     * Populate dialog with selection or screenshot
+     * Populate dialog with selection or screenshot and existing question data
      */
-    private populateDialog(): void {
+    private populateDialog(existingQuestion?: string, existingQuestionData?: QuestionData): void {
         if (!this.element) return;
 
         // Set content based on type (text selection or screenshot)
-        const selectedTextSection = this.element.querySelector(".selected-text-section");
-        if (selectedTextSection) {
+        const selectedContentSection = this.element.querySelector(".selected-content-section");
+        if (selectedContentSection) {
             if (this.currentSelection) {
-                // Text selection mode
-                selectedTextSection.innerHTML = `
+                // Text selection mode - use existing blockquote if available
+                const blockquoteText = existingQuestionData?.blockquoteContent || this.currentSelection.text;
+                selectedContentSection.innerHTML = `
                     <label class="section-label">Selected Text:</label>
-                    <div class="selected-text-preview">
-                        ${this.escapeHtml(this.currentSelection.text)}
-                    </div>
+                    <blockquote class="selected-text-quote">
+                        ${this.escapeHtml(blockquoteText)}
+                    </blockquote>
                 `;
             } else if (this.currentScreenshot) {
-                // Screenshot mode
-                selectedTextSection.innerHTML = `
+                // Screenshot mode - show existing screenshot if available
+                const screenshotData = existingQuestionData?.screenshotData || this.currentScreenshot;
+                selectedContentSection.innerHTML = `
                     <label class="section-label">Selected Screenshot:</label>
                     <div class="selected-screenshot">
-                        <img src="${this.currentScreenshot.imageData}" alt="Screenshot clipping" class="screenshot-preview" />
+                        <img src="${screenshotData.imageData}" alt="Screenshot clipping" class="screenshot-preview" />
                         <div class="screenshot-info">
-                            <small>Page ${this.currentScreenshot.region.pageNumber} • ${this.currentScreenshot.region.width}×${this.currentScreenshot.region.height}px</small>
+                            <small>Page ${screenshotData.region.pageNumber} • ${screenshotData.region.width}×${screenshotData.region.height}px</small>
                         </div>
                     </div>
                 `;
             }
         }
 
-        // Clear previous input
-        this.clearForm();
+        // Set existing question and context content if provided
+        const questionInput = this.element.querySelector(".question-input") as HTMLTextAreaElement;
+        const contextInput = this.element.querySelector(".context-input") as HTMLTextAreaElement;
+        
+        if (questionInput) {
+            questionInput.value = existingQuestion || "";
+            this.adjustTextareaHeight(questionInput);
+        }
+        
+        if (contextInput && existingQuestionData?.context) {
+            contextInput.value = existingQuestionData.context;
+            this.adjustTextareaHeight(contextInput);
+        }
     }
 
     /**
@@ -335,6 +353,7 @@ export class QuestionDialog {
             selectedText: this.currentSelection?.text,
             screenshotData: this.currentScreenshot || undefined,
             context: context || undefined,
+            blockquoteContent: this.currentSelection?.text, // Store blockquote content separately
         };
 
         try {
