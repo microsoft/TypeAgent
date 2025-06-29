@@ -13,6 +13,7 @@ export interface NoteData {
     content: string;
     selectedText?: string;
     screenshotData?: ScreenshotData;
+    blockquoteContent?: string; // Store the blockquote separately
 }
 
 export type NoteSaveCallback = (noteData: NoteData) => void;
@@ -30,33 +31,33 @@ export class NoteEditor {
     }
 
     /**
-     * Show note editor for selected text
+     * Show note editor for selected text with existing note data
      */
-    show(selection: SelectionInfo, callback: NoteSaveCallback, existingNote?: string): void {
+    show(selection: SelectionInfo, callback: NoteSaveCallback, existingNote?: string, existingNoteData?: NoteData): void {
         this.currentSelection = selection;
         this.currentScreenshot = null;
-        this.showEditor(callback, existingNote);
+        this.showEditor(callback, existingNote, existingNoteData);
     }
 
     /**
-     * Show note editor for screenshot
+     * Show note editor for screenshot with existing note data
      */
-    showForScreenshot(screenshot: ScreenshotData, callback: NoteSaveCallback, existingNote?: string): void {
+    showForScreenshot(screenshot: ScreenshotData, callback: NoteSaveCallback, existingNote?: string, existingNoteData?: NoteData): void {
         this.currentSelection = null;
         this.currentScreenshot = screenshot;
-        this.showEditor(callback, existingNote);
+        this.showEditor(callback, existingNote, existingNoteData);
     }
 
     /**
      * Common show logic for both text and screenshot
      */
-    private showEditor(callback: NoteSaveCallback, existingNote?: string): void {
+    private showEditor(callback: NoteSaveCallback, existingNote?: string, existingNoteData?: NoteData): void {
         if (!this.element) return;
 
         this.callback = callback;
         
         // Populate the editor
-        this.populateEditor(existingNote);
+        this.populateEditor(existingNote, existingNoteData);
         
         // Show the modal
         this.element.classList.add("visible");
@@ -111,11 +112,11 @@ export class NoteEditor {
                 </div>
                 
                 <div class="note-editor-content">
-                    <div class="selected-text-section">
-                        <label class="section-label">Selected Text:</label>
-                        <blockquote class="selected-text-quote">
-                            <!-- Selected text will be inserted here -->
-                        </blockquote>
+                    <div class="selected-content-section">
+                        <label class="section-label">Selected Content:</label>
+                        <div class="selected-content-container">
+                            <!-- Selected text or screenshot will be inserted here -->
+                        </div>
                     </div>
                     
                     <div class="note-content-section">
@@ -177,28 +178,30 @@ export class NoteEditor {
     /**
      * Populate editor with selection/screenshot and existing note content
      */
-    private populateEditor(existingNote?: string): void {
+    private populateEditor(existingNote?: string, existingNoteData?: NoteData): void {
         if (!this.element) return;
 
         // Set content based on type (text selection or screenshot)
-        const selectedTextSection = this.element.querySelector(".selected-text-section");
-        if (selectedTextSection) {
+        const selectedContentSection = this.element.querySelector(".selected-content-section");
+        if (selectedContentSection) {
             if (this.currentSelection) {
-                // Text selection mode
-                selectedTextSection.innerHTML = `
+                // Text selection mode - use existing blockquote if available
+                const blockquoteText = existingNoteData?.blockquoteContent || this.currentSelection.text;
+                selectedContentSection.innerHTML = `
                     <label class="section-label">Selected Text:</label>
                     <blockquote class="selected-text-quote">
-                        ${this.escapeHtml(this.currentSelection.text)}
+                        ${this.escapeHtml(blockquoteText)}
                     </blockquote>
                 `;
             } else if (this.currentScreenshot) {
-                // Screenshot mode
-                selectedTextSection.innerHTML = `
+                // Screenshot mode - show existing screenshot if available
+                const screenshotData = existingNoteData?.screenshotData || this.currentScreenshot;
+                selectedContentSection.innerHTML = `
                     <label class="section-label">Selected Screenshot:</label>
                     <div class="selected-screenshot">
-                        <img src="${this.currentScreenshot.imageData}" alt="Screenshot clipping" class="screenshot-preview" />
+                        <img src="${screenshotData.imageData}" alt="Screenshot clipping" class="screenshot-preview" />
                         <div class="screenshot-info">
-                            <small>Page ${this.currentScreenshot.region.pageNumber} • ${this.currentScreenshot.region.width}×${this.currentScreenshot.region.height}px</small>
+                            <small>Page ${screenshotData.region.pageNumber} • ${screenshotData.region.width}×${screenshotData.region.height}px</small>
                         </div>
                     </div>
                 `;
@@ -282,6 +285,7 @@ export class NoteEditor {
             content,
             selectedText: this.currentSelection?.text,
             screenshotData: this.currentScreenshot || undefined,
+            blockquoteContent: this.currentSelection?.text, // Store blockquote content separately
         };
 
         try {

@@ -6,7 +6,7 @@ import "pdfjs-dist/web/pdf_viewer.mjs";
 import { PDFApiService } from "./services/pdfApiService";
 import { PDFSSEClient } from "./services/pdfSSEClient";
 import { TextSelectionManager, SelectionInfo } from "./core/textSelectionManager";
-import { ContextualToolbar } from "./components/ContextualToolbar";
+import { ContextualToolbar, ToolbarContext } from "./components/ContextualToolbar";
 import { ColorPicker, HighlightColor } from "./components/ColorPicker";
 import { NoteEditor, NoteData } from "./components/NoteEditor";
 import { QuestionDialog, QuestionData } from "./components/QuestionDialog";
@@ -19,6 +19,7 @@ import "./pdf-viewer.css";
 import "./styles/contextual-toolbar.css";
 import "./styles/color-picker.css";
 import "./styles/note-editor.css";
+import "./styles/note-tooltips.css";
 import "./styles/question-dialog.css";
 import "./styles/annotation-styles.css";
 import "./styles/screenshot-styles.css";
@@ -130,6 +131,16 @@ export class TypeAgentPDFViewerApp {
             this.createHighlight(selection, color);
         });
 
+        // Set up delete callback for highlights
+        this.contextualToolbar.setDeleteCallback((context) => {
+            this.handleDeleteAction(context);
+        });
+
+        // Set up highlight click callback
+        this.pdfJSHighlightManager.setHighlightClickCallback((highlightId, highlightData, event) => {
+            this.handleHighlightClick(highlightId, highlightData, event);
+        });
+
         this.contextualToolbar.addAction({
             id: "highlight",
             label: "Highlight",
@@ -150,6 +161,20 @@ export class TypeAgentPDFViewerApp {
             label: "Ask Question",
             icon: "fas fa-question-circle", 
             action: (selection) => this.handleQuestionAction(selection),
+        });
+
+        // Add delete action (only shown for existing highlights/annotations)
+        this.contextualToolbar.addAction({
+            id: "delete",
+            label: "Delete",
+            icon: "fas fa-trash",
+            action: (selection, context) => {
+                // This will be handled by the delete callback
+            },
+            condition: (selection, context) => {
+                // Only show delete button for existing highlights or annotations
+                return context?.type === 'highlight' || context?.type === 'note';
+            }
         });
     }
 
@@ -204,6 +229,65 @@ export class TypeAgentPDFViewerApp {
         this.questionDialog.show(selection, (questionData) => this.createQuestion(selection, questionData));
     }
 
+    /**
+     * Handle clicks on existing highlights
+     */
+    private handleHighlightClick(highlightId: string, highlightData: any, event: MouseEvent): void {
+        console.log("🎯 Highlight clicked:", highlightId);
+        
+        // Create a fake selection for the highlight area
+        const fakeSelection: SelectionInfo = {
+            text: highlightData.text || "Highlighted text",
+            pageNumber: highlightData.pageNumber,
+            rects: [{
+                left: event.clientX - 10,
+                top: event.clientY - 10,
+                right: event.clientX + 10,
+                bottom: event.clientY + 10,
+                width: 20,
+                height: 20
+            } as DOMRect],
+            range: document.createRange(),
+            isValid: true,
+        };
+
+        // Show toolbar with highlight context
+        const context: ToolbarContext = {
+            type: 'highlight',
+            highlightId: highlightId,
+            data: highlightData
+        };
+
+        this.contextualToolbar?.show(fakeSelection, context);
+    }
+
+    /**
+     * Handle delete action based on context
+     */
+    private handleDeleteAction(context: ToolbarContext): void {
+        console.log("🗑️ Delete action triggered:", context);
+        
+        if (context.type === 'highlight' && context.highlightId) {
+            this.deleteHighlight(context.highlightId);
+        } else if (context.type === 'note' && context.annotationId) {
+            this.deleteAnnotation(context.annotationId);
+        }
+    }
+
+    /**
+     * Delete a highlight
+     */
+    private async deleteHighlight(highlightId: string): Promise<void> {
+        if (!this.pdfJSHighlightManager) return;
+        
+        try {
+            await this.pdfJSHighlightManager.deleteHighlight(highlightId);
+            console.log("✅ Highlight deleted successfully");
+        } catch (error) {
+            console.error("❌ Failed to delete highlight:", error);
+        }
+    }
+
     private async createHighlight(selection: SelectionInfo, color: HighlightColor): Promise<void> {
         // Use PDF.js highlight manager instead of custom annotation manager
         if (!this.pdfJSHighlightManager) {
@@ -244,7 +328,13 @@ export class TypeAgentPDFViewerApp {
     private async createNote(selection: SelectionInfo, noteData: NoteData): Promise<void> {
         if (!this.annotationManager) return;
         try {
-            await this.annotationManager.createAnnotation({ type: "note", selection, content: noteData.content });
+            await this.annotationManager.createAnnotation({ 
+                type: "note", 
+                selection, 
+                content: noteData.content,
+                blockquoteContent: noteData.blockquoteContent,
+                screenshotData: noteData.screenshotData
+            });
             this.selectionManager?.clearSelection();
             console.log("✅ Note created successfully");
         } catch (error) {
@@ -325,15 +415,35 @@ export class TypeAgentPDFViewerApp {
     private editAnnotation(annotation: any): void {
         if (annotation.annotation.type === "note" && this.noteEditor) {
             const fakeSelection: SelectionInfo = {
-                text: "Selected text",
+                text: annotation.annotation.metadata?.blockquoteContent || "Selected text",
                 pageNumber: annotation.annotation.page,
                 rects: [],
                 range: document.createRange(),
                 isValid: true,
             };
-            this.noteEditor.show(fakeSelection, (noteData) => {
-                this.updateAnnotation(annotation.id, { content: noteData.content });
-            }, annotation.annotation.content);
+            
+            // Prepare existing note data
+            const existingNoteData: NoteData = {
+                content: annotation.annotation.content,
+                blockquoteContent: annotation.annotation.metadata?.blockquoteContent,
+                screenshotData: annotation.annotation.metadata?.screenshotData
+            };
+            
+            this.noteEditor.show(
+                fakeSelection, 
+                (noteData) => {
+                    this.updateAnnotation(annotation.id, { 
+                        content: noteData.content,
+                        metadata: {
+                            ...annotation.annotation.metadata,
+                            blockquoteContent: noteData.blockquoteContent,
+                            screenshotData: noteData.screenshotData
+                        }
+                    });
+                }, 
+                annotation.annotation.content,
+                existingNoteData
+            );
         }
     }
 
@@ -450,7 +560,8 @@ export class TypeAgentPDFViewerApp {
             await this.annotationManager.createAnnotation({ 
                 type: "note", 
                 selection: fakeSelection, 
-                content: noteData.content + `\n\n![Screenshot](${screenshotData.imageData})` 
+                content: noteData.content,
+                screenshotData: screenshotData
             });
             
             console.log("✅ Screenshot note created successfully");

@@ -15,6 +15,7 @@ export class PDFJSHighlightManager {
     private apiService: PDFApiService;
     private documentId: string | null = null;
     private highlights: Map<string, any> = new Map();
+    private highlightClickCallback: ((highlightId: string, highlightData: any, event: MouseEvent) => void) | null = null;
 
     constructor(pdfViewer: any, eventBus: any, apiService: PDFApiService) {
         this.pdfViewer = pdfViewer;
@@ -23,6 +24,13 @@ export class PDFJSHighlightManager {
         this.setupEventListeners();
         
         console.log("🎨 PDF.js Highlight Manager initialized");
+    }
+
+    /**
+     * Set callback for highlight click events
+     */
+    setHighlightClickCallback(callback: (highlightId: string, highlightData: any, event: MouseEvent) => void): void {
+        this.highlightClickCallback = callback;
     }
 
     /**
@@ -256,6 +264,16 @@ export class PDFJSHighlightManager {
                 highlightElement.style.opacity = '0.3';
             });
 
+            // Add click handler for highlight interaction
+            highlightElement.addEventListener('click', (event: MouseEvent) => {
+                event.stopPropagation();
+                event.preventDefault();
+                
+                if (this.highlightClickCallback) {
+                    this.highlightClickCallback(highlightData.id, highlightData, event);
+                }
+            });
+
             // Add to layer
             highlightLayer.appendChild(highlightElement);
             
@@ -272,6 +290,13 @@ export class PDFJSHighlightManager {
         if (highlightElement && highlightElement.parentNode) {
             highlightElement.parentNode.removeChild(highlightElement);
         }
+    }
+
+    /**
+     * Get highlight data by ID
+     */
+    getHighlightData(highlightId: string): any | null {
+        return this.highlights.get(highlightId) || null;
     }
 
     /**

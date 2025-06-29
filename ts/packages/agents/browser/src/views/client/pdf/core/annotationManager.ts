@@ -16,6 +16,8 @@ export interface AnnotationCreationData {
     selection: SelectionInfo;
     color?: HighlightColor;
     content?: string;
+    blockquoteContent?: string; // For notes with blockquote content
+    screenshotData?: any; // For screenshot-based annotations
 }
 
 export interface RenderedAnnotation {
@@ -178,7 +180,7 @@ export class AnnotationManager {
      * Convert selection to annotation data
      */
     private selectionToAnnotation(data: AnnotationCreationData): Partial<PDFAnnotation> {
-        const { selection, type, color, content } = data;
+        const { selection, type, color, content, blockquoteContent, screenshotData } = data;
         
         // Calculate coordinates from selection rectangles
         const bounds = this.calculateSelectionBounds(selection);
@@ -201,6 +203,16 @@ export class AnnotationManager {
         
         if (content) {
             annotation.content = content;
+        }
+
+        // Store additional metadata for notes
+        if (type === "note" || type === "question") {
+            annotation.metadata = {
+                blockquoteContent,
+                screenshotData,
+                hasScreenshot: !!screenshotData,
+                hasBlockquote: !!blockquoteContent
+            };
         }
 
         return annotation;
@@ -317,31 +329,92 @@ export class AnnotationManager {
     }
 
     /**
-     * Create note element
+     * Create note element with enhanced hover support
      */
     private createNoteElement(annotation: PDFAnnotation): HTMLElement {
         const element = document.createElement("div");
         element.className = "pdf-note";
         element.setAttribute("data-annotation-id", annotation.id);
         
+        // Create tooltip content for hover
+        const tooltipContent = this.createNoteTooltipContent(annotation);
+        
         element.innerHTML = `
             <div class="note-icon">
                 <i class="fas fa-sticky-note"></i>
             </div>
-            <div class="note-content" style="display: none;">
-                ${annotation.content || ""}
+            <div class="note-tooltip" style="display: none;">
+                ${tooltipContent}
             </div>
         `;
         
-        // Add click handler to show/hide note content
-        element.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const content = element.querySelector(".note-content") as HTMLElement;
-            const isVisible = content.style.display !== "none";
-            content.style.display = isVisible ? "none" : "block";
-        });
+        // Add hover handlers for tooltip (only tooltip, no click flyout)
+        this.addNoteHoverHandlers(element, annotation);
         
         return element;
+    }
+
+    /**
+     * Create tooltip content for note hover
+     */
+    private createNoteTooltipContent(annotation: PDFAnnotation): string {
+        let content = '';
+        
+        // Add blockquote if available
+        if (annotation.metadata?.blockquoteContent) {
+            content += `
+                <div class="tooltip-blockquote">
+                    <blockquote>${this.escapeHtml(annotation.metadata.blockquoteContent)}</blockquote>
+                </div>
+            `;
+        }
+        
+        // Add screenshot if available
+        if (annotation.metadata?.screenshotData) {
+            content += `
+                <div class="tooltip-screenshot">
+                    <img src="${annotation.metadata.screenshotData.imageData}" alt="Screenshot" />
+                </div>
+            `;
+        }
+        
+        // Add note content rendered from markdown
+        if (annotation.content) {
+            content += `
+                <div class="tooltip-note-content">
+                    ${this.markdownToHtml(annotation.content)}
+                </div>
+            `;
+        }
+        
+        return content;
+    }
+
+    /**
+     * Add hover handlers for note tooltips
+     */
+    private addNoteHoverHandlers(element: HTMLElement, annotation: PDFAnnotation): void {
+        const tooltip = element.querySelector('.note-tooltip') as HTMLElement;
+        if (!tooltip) return;
+
+        let hoverTimeout: NodeJS.Timeout;
+
+        element.addEventListener('mouseenter', () => {
+            hoverTimeout = setTimeout(() => {
+                // Position tooltip
+                const rect = element.getBoundingClientRect();
+                tooltip.style.position = 'fixed';
+                tooltip.style.left = `${rect.right + 10}px`;
+                tooltip.style.top = `${rect.top}px`;
+                tooltip.style.zIndex = '10001';
+                tooltip.style.display = 'block';
+            }, 500); // Show after 500ms
+        });
+
+        element.addEventListener('mouseleave', () => {
+            clearTimeout(hoverTimeout);
+            tooltip.style.display = 'none';
+        });
     }
 
     /**
@@ -352,22 +425,20 @@ export class AnnotationManager {
         element.className = "pdf-question";
         element.setAttribute("data-annotation-id", annotation.id);
         
+        // Create tooltip content for hover (similar to notes)
+        const tooltipContent = this.createNoteTooltipContent(annotation);
+        
         element.innerHTML = `
             <div class="question-icon">
                 <i class="fas fa-question-circle"></i>
             </div>
-            <div class="question-content" style="display: none;">
-                ${annotation.content || ""}
+            <div class="note-tooltip" style="display: none;">
+                ${tooltipContent}
             </div>
         `;
         
-        // Add click handler to show/hide question content
-        element.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const content = element.querySelector(".question-content") as HTMLElement;
-            const isVisible = content.style.display !== "none";
-            content.style.display = isVisible ? "none" : "block";
-        });
+        // Add hover handlers for tooltip (consistent with notes)
+        this.addNoteHoverHandlers(element, annotation);
         
         return element;
     }
@@ -383,12 +454,25 @@ export class AnnotationManager {
         const { x, y, width, height } = annotation.coordinates;
         
         element.style.position = "absolute";
-        element.style.left = `${x}px`;
-        element.style.top = `${y}px`;
-        element.style.width = `${width}px`;
-        element.style.height = `${height}px`;
         element.style.pointerEvents = "auto";
         element.style.zIndex = "10";
+        
+        if (annotation.type === "note" || annotation.type === "question") {
+            // Position note/question icon in the top-right corner of the selected area
+            const iconSize = 20; // Size of the note/question icon
+            const margin = 2; // Small margin from the edge
+            
+            element.style.left = `${x + width - iconSize - margin}px`;
+            element.style.top = `${y + margin}px`;
+            element.style.width = `${iconSize}px`;
+            element.style.height = `${iconSize}px`;
+        } else {
+            // For other annotation types (highlights, questions), use full area
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
+            element.style.width = `${width}px`;
+            element.style.height = `${height}px`;
+        }
     }
 
     /**
@@ -416,8 +500,43 @@ export class AnnotationManager {
     }
 
     /**
-     * Get page element by page number
+     * Escape HTML to prevent XSS
      */
+    private escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    /**
+     * Simple markdown to HTML converter
+     */
+    private markdownToHtml(markdown: string): string {
+        let html = markdown;
+        
+        // Convert basic markdown formatting
+        html = html
+            // Headers
+            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+            // Bold
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            // Italic
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            // Code
+            .replace(/`(.*?)`/g, '<code>$1</code>')
+            // Links
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+            // Line breaks
+            .replace(/\n/g, '<br>');
+        
+        // Handle lists
+        html = html.replace(/^- (.*)$/gim, '<li>$1</li>');
+        html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+        
+        return html;
+    }
     private getPageElement(pageNumber: number): HTMLElement | null {
         return document.querySelector(`[data-page-number="${pageNumber}"]`) as HTMLElement;
     }

@@ -58,14 +58,13 @@
     pointer-events: auto;
     cursor: pointer;
     z-index: 15;
+    /* Note: width and height are set dynamically for proper positioning */
 }
 
 .note-icon {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 24px;
-    height: 24px;
+    position: relative;
+    width: 100%;
+    height: 100%;
     background: #4fc3f7;
     border: 2px solid white;
     border-radius: 50%;
@@ -83,53 +82,19 @@
     transform: scale(1.1);
 }
 
-.note-content {
-    position: absolute;
-    top: 30px;
-    right: -8px;
-    min-width: 200px;
-    max-width: 300px;
-    background: rgba(42, 42, 42, 0.95);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 12px;
-    color: #e8eaed;
-    font-size: 13px;
-    line-height: 1.4;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 20;
-    animation: noteAppear 0.2s ease-out;
-}
-
-.note-content::before {
-    content: "";
-    position: absolute;
-    top: -6px;
-    right: 12px;
-    width: 12px;
-    height: 12px;
-    background: rgba(42, 42, 42, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: none;
-    border-right: none;
-    transform: rotate(45deg);
-}
-
 /* Question Annotations */
 .pdf-question {
     position: absolute;
     pointer-events: auto;
     cursor: pointer;
     z-index: 15;
+    /* Note: width and height are set dynamically for proper positioning */
 }
 
 .question-icon {
-    position: absolute;
-    top: -8px;
-    right: -8px;
-    width: 24px;
-    height: 24px;
+    position: relative;
+    width: 100%;
+    height: 100%;
     background: #66bb6a;
     border: 2px solid white;
     border-radius: 50%;
@@ -147,61 +112,8 @@
     transform: scale(1.1);
 }
 
-.question-content {
-    position: absolute;
-    top: 30px;
-    right: -8px;
-    min-width: 200px;
-    max-width: 300px;
-    background: rgba(42, 42, 42, 0.95);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 12px;
-    color: #e8eaed;
-    font-size: 13px;
-    line-height: 1.4;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 20;
-    animation: questionAppear 0.2s ease-out;
-}
-
-.question-content::before {
-    content: "";
-    position: absolute;
-    top: -6px;
-    right: 12px;
-    width: 12px;
-    height: 12px;
-    background: rgba(42, 42, 42, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-bottom: none;
-    border-right: none;
-    transform: rotate(45deg);
-}
-
 /* Animation keyframes */
-@keyframes noteAppear {
-    from {
-        opacity: 0;
-        transform: scale(0.9) translateY(-8px);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1) translateY(0);
-    }
-}
-
-@keyframes questionAppear {
-    from {
-        opacity: 0;
-        transform: scale(0.9) translateY(-8px);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1) translateY(0);
-    }
-}
+/* Note: Removed noteAppear and questionAppear animations since we no longer use click flyouts */
 
 /* Selected annotation styles */
 .pdf-highlight.selected {
@@ -217,55 +129,21 @@
 }
 
 /* Annotation hover states for better UX */
-.pdf-note .note-content,
-.pdf-question .question-content {
-    transform-origin: top right;
-}
+/* Note: Removed note-content and question-content transform-origin since we no longer use click flyouts */
 
 /* Responsive adjustments for annotations */
 @media (max-width: 768px) {
     .note-icon,
     .question-icon {
-        width: 20px;
-        height: 20px;
         font-size: 10px;
-        top: -6px;
-        right: -6px;
     }
     
-    .note-content,
-    .question-content {
-        min-width: 180px;
-        max-width: 250px;
-        font-size: 12px;
-        padding: 10px;
-        top: 24px;
-        right: -6px;
-    }
-    
-    .note-content::before,
-    .question-content::before {
-        right: 10px;
-    }
+    /* Note: Removed responsive styles for note-content and question-content since they no longer exist */
 }
 
 @media (max-width: 480px) {
-    .note-content,
-    .question-content {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        right: auto;
-        transform: translate(-50%, -50%);
-        min-width: 280px;
-        max-width: 90vw;
-        z-index: 10004;
-    }
-    
-    .note-content::before,
-    .question-content::before {
-        display: none; /* Hide arrow on mobile */
-    }
+    /* Note: Removed mobile flyout styles since we no longer use click flyouts */
+    /* Only hover tooltips are used now, which have their own responsive styles */
 }
 
 /* Annotation context menu (for right-click) */

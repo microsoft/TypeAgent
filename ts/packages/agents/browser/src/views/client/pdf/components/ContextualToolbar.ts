@@ -8,9 +8,19 @@ export interface ToolbarAction {
     id: string;
     label: string;
     icon: string;
-    action: (selection: SelectionInfo) => void;
-    condition?: (selection: SelectionInfo) => boolean;
+    action: (selection: SelectionInfo, context?: any) => void;
+    condition?: (selection: SelectionInfo, context?: any) => boolean;
     hasDropdown?: boolean;
+}
+
+/**
+ * Context for toolbar - indicates what the user is interacting with
+ */
+export interface ToolbarContext {
+    type: 'selection' | 'highlight' | 'note';
+    highlightId?: string;
+    annotationId?: string;
+    data?: any;
 }
 
 /**
@@ -43,9 +53,11 @@ export class ContextualToolbar {
     private colorDropdown: HTMLElement | null = null;
     private actions: ToolbarAction[] = [];
     private currentSelection: SelectionInfo | null = null;
+    private currentContext: ToolbarContext | null = null;
     private isVisible: boolean = false;
     private colorDropdownVisible: boolean = false;
     private highlightColorCallback: ((color: HighlightColor, selection: SelectionInfo) => void) | null = null;
+    private deleteCallback: ((context: ToolbarContext) => void) | null = null;
 
     private readonly availableColors: HighlightColor[] = [
         { id: "yellow", name: "Yellow", color: "#ffff00", textColor: "#000000" },
@@ -71,6 +83,13 @@ export class ContextualToolbar {
     }
 
     /**
+     * Set callback for delete action
+     */
+    setDeleteCallback(callback: (context: ToolbarContext) => void): void {
+        this.deleteCallback = callback;
+    }
+
+    /**
      * Add an action to the toolbar
      */
     addAction(action: ToolbarAction): void {
@@ -87,20 +106,24 @@ export class ContextualToolbar {
     }
 
     /**
-     * Show the toolbar for a given selection
+     * Show the toolbar for a given selection with context
      */
-    show(selection: SelectionInfo): void {
+    show(selection: SelectionInfo, context?: ToolbarContext): void {
         if (!selection || !selection.isValid) {
             this.hide();
             return;
         }
 
         this.currentSelection = selection;
+        this.currentContext = context || { type: 'selection' };
         
         if (!this.element) {
             console.error("❌ Toolbar element not created");
             return;
         }
+
+        // Update toolbar content based on context
+        this.updateToolbarContent();
 
         // Calculate position
         const bounds = this.calculateSelectionBounds(selection);
@@ -131,6 +154,7 @@ export class ContextualToolbar {
         this.hideColorDropdown();
         this.isVisible = false;
         this.currentSelection = null;
+        this.currentContext = null;
     }
 
     /**
@@ -195,7 +219,7 @@ export class ContextualToolbar {
         if (!toolbarContent) return;
 
         const availableActions = this.actions.filter(action => 
-            !action.condition || !this.currentSelection || action.condition(this.currentSelection)
+            !action.condition || !this.currentSelection || action.condition(this.currentSelection, this.currentContext)
         );
 
         // Clear existing content but preserve the element
@@ -274,12 +298,22 @@ export class ContextualToolbar {
         if (actionId === "highlight") {
             // Show color dropdown
             this.showColorDropdown(button);
+        } else if (actionId === "delete") {
+            // Execute delete action
+            if (this.deleteCallback && this.currentContext) {
+                try {
+                    this.deleteCallback(this.currentContext);
+                    this.hide(); // Hide toolbar after delete
+                } catch (error) {
+                    console.error(`Failed to execute delete action:`, error);
+                }
+            }
         } else {
             // Execute normal action
             const action = this.actions.find(a => a.id === actionId);
             if (action) {
                 try {
-                    action.action(this.currentSelection);
+                    action.action(this.currentSelection, this.currentContext);
                 } catch (error) {
                     console.error(`Failed to execute action ${actionId}:`, error);
                 }
@@ -476,6 +510,7 @@ export class ContextualToolbar {
         this.element = null;
         this.colorDropdown = null;
         this.currentSelection = null;
+        this.currentContext = null;
         this.isVisible = false;
         this.colorDropdownVisible = false;
     }

@@ -84,6 +84,7 @@
 }
 
 .selected-text-section,
+.selected-content-section,
 .note-content-section,
 .note-preview-section {
     margin-bottom: 20px;
@@ -108,6 +109,36 @@
     line-height: 1.5;
     max-height: 120px;
     overflow-y: auto;
+}
+
+/* New styles for enhanced content sections */
+.selected-content-container {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.selected-screenshot {
+    margin: 8px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.screenshot-preview {
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+    object-fit: contain;
+    display: block;
+}
+
+.screenshot-info {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #9aa0a6;
+    font-size: 12px;
+    text-align: center;
 }
 
 .note-editor-textarea {
