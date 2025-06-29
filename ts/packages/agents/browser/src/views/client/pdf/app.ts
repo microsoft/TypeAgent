@@ -96,7 +96,7 @@ export class TypeAgentPDFViewerApp {
         this.questionDialog = new QuestionDialog();
         this.screenshotSelector = new ScreenshotSelector();
         this.screenshotToolbar = new ScreenshotToolbar();
-        this.annotationManager = new AnnotationManager(this.pdfViewer, this.pdfApiService);
+        this.annotationManager = new AnnotationManager(this.pdfViewer, this.pdfApiService, this.eventBus);
         
         // Initialize PDF.js highlight manager (new hybrid approach)
         this.pdfJSHighlightManager = new PDFJSHighlightManager(this.pdfViewer, this.eventBus, this.pdfApiService);

@@ -28,14 +28,38 @@ export interface RenderedAnnotation {
 
 export class AnnotationManager {
     private pdfViewer: any;
+    private eventBus: any;
     private apiService: PDFApiService;
     private documentId: string | null = null;
     private annotations: Map<string, RenderedAnnotation> = new Map();
     private annotationLayer: HTMLElement | null = null;
 
-    constructor(pdfViewer: any, apiService: PDFApiService) {
+    constructor(pdfViewer: any, apiService: PDFApiService, eventBus?: any) {
         this.pdfViewer = pdfViewer;
+        this.eventBus = eventBus;
         this.apiService = apiService;
+        
+        // Set up event listeners for scale changes if event bus is available
+        if (this.eventBus) {
+            this.setupEventListeners();
+        }
+    }
+
+    /**
+     * Set up event listeners for PDF.js events
+     */
+    private setupEventListeners(): void {
+        // Listen for page rendering to re-render annotations
+        this.eventBus.on('pagerendered', (evt: any) => {
+            this.reRenderAnnotationsOnPage(evt.pageNumber);
+        });
+
+        // Listen for scale changes to re-position annotations
+        this.eventBus.on('scalechanging', (evt: any) => {
+            setTimeout(() => {
+                this.reRenderAllAnnotations();
+            }, 100); // Small delay to ensure page is re-rendered
+        });
     }
 
     /**
@@ -223,7 +247,8 @@ export class AnnotationManager {
                 blockquoteContent,
                 screenshotData,
                 hasScreenshot: !!screenshotData,
-                hasBlockquote: !!blockquoteContent
+                hasBlockquote: !!blockquoteContent,
+                creationScale: this.pdfViewer.currentScale || 1, // Store creation scale
             };
         }
 
@@ -457,7 +482,7 @@ export class AnnotationManager {
     }
 
     /**
-     * Position annotation element on page
+     * Position annotation element on page with scale awareness
      */
     private positionAnnotationElement(
         element: HTMLElement,
@@ -466,25 +491,30 @@ export class AnnotationManager {
     ): void {
         const { x, y, width, height } = annotation.coordinates;
         
+        // Get current scale for proper positioning
+        const currentScale = this.pdfViewer.currentScale || 1;
+        const creationScale = annotation.metadata?.creationScale || 1;
+        const scaleRatio = currentScale / creationScale;
+        
         element.style.position = "absolute";
         element.style.pointerEvents = "auto";
         element.style.zIndex = "10";
         
         if (annotation.type === "note" || annotation.type === "question") {
             // Position note/question icon in the top-right corner of the selected area
-            const iconSize = 20; // Size of the note/question icon
-            const margin = 2; // Small margin from the edge
+            const iconSize = 20 * scaleRatio; // Scale icon size
+            const margin = 2 * scaleRatio; // Scale margin
             
-            element.style.left = `${x + width - iconSize - margin}px`;
-            element.style.top = `${y + margin}px`;
+            element.style.left = `${(x + width - 20 - 2) * scaleRatio}px`;
+            element.style.top = `${(y + 2) * scaleRatio}px`;
             element.style.width = `${iconSize}px`;
             element.style.height = `${iconSize}px`;
         } else {
-            // For other annotation types (highlights, questions), use full area
-            element.style.left = `${x}px`;
-            element.style.top = `${y}px`;
-            element.style.width = `${width}px`;
-            element.style.height = `${height}px`;
+            // For other annotation types (highlights, questions), use full area with scaling
+            element.style.left = `${x * scaleRatio}px`;
+            element.style.top = `${y * scaleRatio}px`;
+            element.style.width = `${width * scaleRatio}px`;
+            element.style.height = `${height * scaleRatio}px`;
         }
     }
 
@@ -579,6 +609,58 @@ export class AnnotationManager {
         for (const [id] of this.annotations) {
             this.removeAnnotation(id);
         }
+    }
+
+    /**
+     * Re-render annotations on a specific page
+     */
+    private reRenderAnnotationsOnPage(pageNumber: number): void {
+        try {
+            for (const [id, renderedAnnotation] of this.annotations) {
+                if (renderedAnnotation.annotation.page === pageNumber) {
+                    // Remove existing elements
+                    this.removeAnnotationFromDOM(id);
+                    // Re-render
+                    this.renderAnnotation(renderedAnnotation.annotation);
+                }
+            }
+        } catch (error) {
+            console.error(`❌ Failed to re-render annotations on page ${pageNumber}:`, error);
+        }
+    }
+
+    /**
+     * Re-render all annotations (useful after zoom/scale changes)
+     */
+    private reRenderAllAnnotations(): void {
+        try {
+            for (const [id, renderedAnnotation] of this.annotations) {
+                // Remove existing elements
+                this.removeAnnotationFromDOM(id);
+                // Re-render with updated positioning
+                this.renderAnnotation(renderedAnnotation.annotation);
+            }
+        } catch (error) {
+            console.error("❌ Failed to re-render all annotations:", error);
+        }
+    }
+
+    /**
+     * Remove annotation elements from DOM (helper for re-rendering)
+     */
+    private removeAnnotationFromDOM(annotationId: string): void {
+        const rendered = this.annotations.get(annotationId);
+        if (!rendered) return;
+
+        // Remove DOM elements
+        rendered.elements.forEach(element => {
+            if (element.parentNode) {
+                element.parentNode.removeChild(element);
+            }
+        });
+
+        // Update the rendered annotation to clear elements array
+        rendered.elements = [];
     }
 
     /**

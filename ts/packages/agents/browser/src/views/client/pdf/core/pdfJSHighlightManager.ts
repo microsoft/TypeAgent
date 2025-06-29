@@ -76,6 +76,7 @@ export class PDFJSHighlightManager {
                 coordinates,
                 pageNumber: selection.pageNumber,
                 text: selection.text,
+                creationScale: this.pdfViewer.currentScale || 1, // Store scale at creation time
             };
 
             // Store highlight
@@ -207,7 +208,7 @@ export class PDFJSHighlightManager {
     }
 
     /**
-     * Render highlight on the page using DOM overlay
+     * Render highlight on the page using DOM overlay with scale-aware positioning
      */
     private renderHighlight(highlightData: any): void {
         try {
@@ -241,13 +242,26 @@ export class PDFJSHighlightManager {
             highlightElement.className = 'pdfjs-highlight';
             highlightElement.setAttribute('data-highlight-id', highlightData.id);
             
+            // Get current scale and calculate scaled coordinates
+            const currentScale = this.pdfViewer.currentScale || 1;
+            const creationScale = highlightData.creationScale || 1;
             const coords = highlightData.coordinates;
+            
+            // Scale the coordinates: (original coordinates / creation scale) * current scale
+            const scaleRatio = currentScale / creationScale;
+            const scaledCoords = {
+                x: coords.x * scaleRatio,
+                y: coords.y * scaleRatio,
+                width: coords.width * scaleRatio,
+                height: coords.height * scaleRatio
+            };
+            
             highlightElement.style.cssText = `
                 position: absolute;
-                left: ${coords.x}px;
-                top: ${coords.y}px;
-                width: ${coords.width}px;
-                height: ${coords.height}px;
+                left: ${scaledCoords.x}px;
+                top: ${scaledCoords.y}px;
+                width: ${scaledCoords.width}px;
+                height: ${scaledCoords.height}px;
                 background-color: ${highlightData.color};
                 opacity: 0.3;
                 pointer-events: auto;
@@ -359,6 +373,7 @@ export class PDFJSHighlightManager {
             coordinates: apiAnnotation.coordinates,
             pageNumber: apiAnnotation.page,
             text: apiAnnotation.content || '',
+            creationScale: 1, // Assume existing highlights were created at 1x scale
         };
     }
 
