@@ -34,14 +34,14 @@ export class ScreenshotToolbar {
      */
     show(screenshotData: ScreenshotData): void {
         this.currentScreenshot = screenshotData;
-        
+
         if (!this.element) {
             this.createToolbarElement();
         }
 
         this.updateToolbarContent();
         this.positionToolbar(screenshotData);
-        
+
         if (this.element) {
             this.element.classList.add("visible");
             this.isVisible = true;
@@ -63,11 +63,13 @@ export class ScreenshotToolbar {
         }
         this.isVisible = false;
         this.currentScreenshot = null;
-        
+
         // Clear the selection outline when toolbar is hidden
         // We'll need the app to handle this via a callback
         if ((window as any).TypeAgentPDFViewer?.screenshotSelector) {
-            (window as any).TypeAgentPDFViewer.screenshotSelector.clearSelection();
+            (
+                window as any
+            ).TypeAgentPDFViewer.screenshotSelector.clearSelection();
         }
     }
 
@@ -76,8 +78,8 @@ export class ScreenshotToolbar {
      */
     addAction(action: ScreenshotAction): void {
         // Remove existing action with same ID
-        this.actions = this.actions.filter(a => a.id !== action.id);
-        
+        this.actions = this.actions.filter((a) => a.id !== action.id);
+
         // Add the action
         this.actions.push(action);
     }
@@ -86,7 +88,7 @@ export class ScreenshotToolbar {
      * Remove action
      */
     removeAction(actionId: string): void {
-        this.actions = this.actions.filter(action => action.id !== actionId);
+        this.actions = this.actions.filter((action) => action.id !== actionId);
     }
 
     /**
@@ -101,8 +103,7 @@ export class ScreenshotToolbar {
      */
     private setupDefaultActions(): void {
         this.actions = [];
-       
-        
+
         this.actions.push({
             id: "note",
             label: "Add Note",
@@ -111,7 +112,7 @@ export class ScreenshotToolbar {
         });
 
         this.actions.push({
-            id: "question", 
+            id: "question",
             label: "Ask Question",
             icon: "fas fa-comments",
             action: () => {},
@@ -124,7 +125,7 @@ export class ScreenshotToolbar {
     private createToolbarElement(): void {
         this.element = document.createElement("div");
         this.element.className = "screenshot-toolbar";
-        
+
         const toolbarContent = document.createElement("div");
         toolbarContent.className = "toolbar-content";
         this.element.appendChild(toolbarContent);
@@ -181,24 +182,35 @@ export class ScreenshotToolbar {
 
         const button = event.currentTarget as HTMLElement;
         const actionId = button.getAttribute("data-action-id");
-        
+
         console.log("📸 Toolbar action clicked:", actionId);
-        
+
         if (!actionId || !this.currentScreenshot) {
-            console.error("📸 Missing actionId or screenshot data:", { actionId, hasScreenshot: !!this.currentScreenshot });
+            console.error("📸 Missing actionId or screenshot data:", {
+                actionId,
+                hasScreenshot: !!this.currentScreenshot,
+            });
             return;
         }
 
-        const action = this.actions.find(a => a.id === actionId);
+        const action = this.actions.find((a) => a.id === actionId);
         if (action) {
             console.log("📸 Executing action:", actionId);
             try {
                 action.action(this.currentScreenshot);
             } catch (error) {
-                console.error(`📸 Error executing screenshot action ${actionId}:`, error);
+                console.error(
+                    `📸 Error executing screenshot action ${actionId}:`,
+                    error,
+                );
             }
         } else {
-            console.error("📸 Action not found:", actionId, "Available actions:", this.actions.map(a => a.id));
+            console.error(
+                "📸 Action not found:",
+                actionId,
+                "Available actions:",
+                this.actions.map((a) => a.id),
+            );
         }
     };
 
@@ -210,7 +222,7 @@ export class ScreenshotToolbar {
 
         const { region } = screenshotData;
         const pageRect = region.pageElement.getBoundingClientRect();
-        
+
         // Calculate position relative to the selected region
         const regionLeft = pageRect.left + region.x;
         const regionTop = pageRect.top + region.y;
@@ -221,12 +233,12 @@ export class ScreenshotToolbar {
         const toolbarRect = this.element.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        
+
         const padding = 10;
         const arrowOffset = 20;
 
         // Calculate optimal position
-        let left = regionLeft + (region.width / 2) - (toolbarRect.width / 2);
+        let left = regionLeft + region.width / 2 - toolbarRect.width / 2;
         let top: number;
         let arrowPosition: "top" | "bottom";
 
@@ -238,7 +250,10 @@ export class ScreenshotToolbar {
         }
 
         // Try to position below the selection first
-        if (regionBottom + toolbarRect.height + arrowOffset < viewportHeight - padding) {
+        if (
+            regionBottom + toolbarRect.height + arrowOffset <
+            viewportHeight - padding
+        ) {
             top = regionBottom + arrowOffset;
             arrowPosition = "top";
         }
@@ -270,7 +285,7 @@ export class ScreenshotToolbar {
             }
 
             const target = event.target as Element;
-            
+
             // Don't hide if clicking within the toolbar
             if (this.element?.contains(target)) {
                 return;
@@ -283,7 +298,7 @@ export class ScreenshotToolbar {
 
         // Handle clicks outside toolbar
         document.addEventListener("click", this.documentClickHandler);
-        
+
         // Handle escape key
         document.addEventListener("keydown", this.handleKeyDown);
     }
@@ -305,7 +320,7 @@ export class ScreenshotToolbar {
             document.removeEventListener("click", this.documentClickHandler);
         }
         document.removeEventListener("keydown", this.handleKeyDown);
-        
+
         if (this.element) {
             if (this.element.parentNode) {
                 this.element.parentNode.removeChild(this.element);

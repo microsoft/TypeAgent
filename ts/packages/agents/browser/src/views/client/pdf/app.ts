@@ -5,14 +5,26 @@ import * as pdfjsLib from "pdfjs-dist";
 import "pdfjs-dist/web/pdf_viewer.mjs";
 import { PDFApiService } from "./services/pdfApiService";
 import { PDFSSEClient } from "./services/pdfSSEClient";
-import { TextSelectionManager, SelectionInfo } from "./core/textSelectionManager";
-import { ContextualToolbar, ToolbarContext } from "./components/ContextualToolbar";
+import {
+    TextSelectionManager,
+    SelectionInfo,
+} from "./core/textSelectionManager";
+import {
+    ContextualToolbar,
+    ToolbarContext,
+} from "./components/ContextualToolbar";
 import { ColorPicker, HighlightColor } from "./components/ColorPicker";
 import { NoteEditor, NoteData } from "./components/NoteEditor";
 import { QuestionDialog, QuestionData } from "./components/QuestionDialog";
-import { ScreenshotSelector, ScreenshotData } from "./components/ScreenshotSelector";
+import {
+    ScreenshotSelector,
+    ScreenshotData,
+} from "./components/ScreenshotSelector";
 import { ScreenshotToolbar } from "./components/ScreenshotToolbar";
-import { AnnotationManager, AnnotationCreationData } from "./core/annotationManager";
+import {
+    AnnotationManager,
+    AnnotationCreationData,
+} from "./core/annotationManager";
 import { PDFJSHighlightManager } from "./core/pdfJSHighlightManager";
 
 import "./pdf-viewer.css";
@@ -66,7 +78,9 @@ export class TypeAgentPDFViewerApp {
     }
 
     async initialize(): Promise<void> {
-        console.log("🚀 Initializing TypeAgent PDF Viewer with Complete Highlighting Support...");
+        console.log(
+            "🚀 Initializing TypeAgent PDF Viewer with Complete Highlighting Support...",
+        );
         try {
             await this.setupPDFJSViewer();
             this.setupEventHandlers();
@@ -79,16 +93,20 @@ export class TypeAgentPDFViewerApp {
                 await this.loadSampleDocument();
             }
 
-            console.log("✅ PDF Viewer with Complete Highlighting initialized successfully!");
+            console.log(
+                "✅ PDF Viewer with Complete Highlighting initialized successfully!",
+            );
         } catch (error) {
             console.error("❌ Failed to initialize PDF viewer:", error);
-            this.showError("Failed to initialize PDF viewer with highlighting features");
+            this.showError(
+                "Failed to initialize PDF viewer with highlighting features",
+            );
         }
     }
 
     private async initializeHighlightingComponents(): Promise<void> {
         console.log("🎨 Initializing highlighting components...");
-        
+
         this.selectionManager = new TextSelectionManager(this.pdfViewer);
         this.contextualToolbar = new ContextualToolbar();
         this.colorPicker = new ColorPicker();
@@ -96,10 +114,18 @@ export class TypeAgentPDFViewerApp {
         this.questionDialog = new QuestionDialog();
         this.screenshotSelector = new ScreenshotSelector();
         this.screenshotToolbar = new ScreenshotToolbar();
-        this.annotationManager = new AnnotationManager(this.pdfViewer, this.pdfApiService, this.eventBus);
-        
+        this.annotationManager = new AnnotationManager(
+            this.pdfViewer,
+            this.pdfApiService,
+            this.eventBus,
+        );
+
         // Initialize PDF.js highlight manager (new hybrid approach)
-        this.pdfJSHighlightManager = new PDFJSHighlightManager(this.pdfViewer, this.eventBus, this.pdfApiService);
+        this.pdfJSHighlightManager = new PDFJSHighlightManager(
+            this.pdfViewer,
+            this.eventBus,
+            this.pdfApiService,
+        );
 
         // Set toolbar reference in selection manager to check dropdown state
         this.selectionManager.setContextualToolbar(this.contextualToolbar);
@@ -107,8 +133,10 @@ export class TypeAgentPDFViewerApp {
         this.setupHighlightingWorkflows();
         this.setupScreenshotWorkflows();
         this.setupRightClickMenu();
-        
-        console.log("✅ All highlighting and screenshot components initialized successfully");
+
+        console.log(
+            "✅ All highlighting and screenshot components initialized successfully",
+        );
     }
 
     private setupHighlightingWorkflows(): void {
@@ -137,9 +165,11 @@ export class TypeAgentPDFViewerApp {
         });
 
         // Set up highlight click callback
-        this.pdfJSHighlightManager.setHighlightClickCallback((highlightId, highlightData, event) => {
-            this.handleHighlightClick(highlightId, highlightData, event);
-        });
+        this.pdfJSHighlightManager.setHighlightClickCallback(
+            (highlightId, highlightData, event) => {
+                this.handleHighlightClick(highlightId, highlightData, event);
+            },
+        );
 
         this.contextualToolbar.addAction({
             id: "highlight",
@@ -151,7 +181,7 @@ export class TypeAgentPDFViewerApp {
 
         this.contextualToolbar.addAction({
             id: "note",
-            label: "Add Note", 
+            label: "Add Note",
             icon: "fas fa-sticky-note",
             action: (selection) => this.handleNoteAction(selection),
         });
@@ -159,7 +189,7 @@ export class TypeAgentPDFViewerApp {
         this.contextualToolbar.addAction({
             id: "question",
             label: "Ask Question",
-            icon: "fas fa-comments", 
+            icon: "fas fa-comments",
             action: (selection) => this.handleQuestionAction(selection),
         });
 
@@ -173,8 +203,10 @@ export class TypeAgentPDFViewerApp {
             },
             condition: (selection, context) => {
                 // Only show delete button for existing highlights or annotations
-                return context?.type === 'highlight' || context?.type === 'note';
-            }
+                return (
+                    context?.type === "highlight" || context?.type === "note"
+                );
+            },
         });
     }
 
@@ -194,7 +226,7 @@ export class TypeAgentPDFViewerApp {
 
         const questionAction: ScreenshotAction = {
             id: "question",
-            label: "Ask Question", 
+            label: "Ask Question",
             icon: "fas fa-comments",
             action: (screenshotData) => {
                 console.log("❓ Question action clicked");
@@ -213,49 +245,59 @@ export class TypeAgentPDFViewerApp {
         this.colorPicker.show(
             bounds.left + bounds.width / 2,
             bounds.bottom + 10,
-            (color) => this.createHighlight(selection, color)
+            (color) => this.createHighlight(selection, color),
         );
     }
 
     private handleNoteAction(selection: SelectionInfo): void {
         if (!this.noteEditor) return;
         this.contextualToolbar?.hide();
-        this.noteEditor.show(selection, (noteData) => this.createNote(selection, noteData));
+        this.noteEditor.show(selection, (noteData) =>
+            this.createNote(selection, noteData),
+        );
     }
 
     private handleQuestionAction(selection: SelectionInfo): void {
         if (!this.questionDialog) return;
         this.contextualToolbar?.hide();
-        this.questionDialog.show(selection, (questionData) => this.createQuestion(selection, questionData));
+        this.questionDialog.show(selection, (questionData) =>
+            this.createQuestion(selection, questionData),
+        );
     }
 
     /**
      * Handle clicks on existing highlights
      */
-    private handleHighlightClick(highlightId: string, highlightData: any, event: MouseEvent): void {
+    private handleHighlightClick(
+        highlightId: string,
+        highlightData: any,
+        event: MouseEvent,
+    ): void {
         console.log("🎯 Highlight clicked:", highlightId);
-        
+
         // Create a fake selection for the highlight area
         const fakeSelection: SelectionInfo = {
             text: highlightData.text || "Highlighted text",
             pageNumber: highlightData.pageNumber,
-            rects: [{
-                left: event.clientX - 10,
-                top: event.clientY - 10,
-                right: event.clientX + 10,
-                bottom: event.clientY + 10,
-                width: 20,
-                height: 20
-            } as DOMRect],
+            rects: [
+                {
+                    left: event.clientX - 10,
+                    top: event.clientY - 10,
+                    right: event.clientX + 10,
+                    bottom: event.clientY + 10,
+                    width: 20,
+                    height: 20,
+                } as DOMRect,
+            ],
             range: document.createRange(),
             isValid: true,
         };
 
         // Show toolbar with highlight context
         const context: ToolbarContext = {
-            type: 'highlight',
+            type: "highlight",
             highlightId: highlightId,
-            data: highlightData
+            data: highlightData,
         };
 
         this.contextualToolbar?.show(fakeSelection, context);
@@ -266,10 +308,10 @@ export class TypeAgentPDFViewerApp {
      */
     private handleDeleteAction(context: ToolbarContext): void {
         console.log("🗑️ Delete action triggered:", context);
-        
-        if (context.type === 'highlight' && context.highlightId) {
+
+        if (context.type === "highlight" && context.highlightId) {
             this.deleteHighlight(context.highlightId);
-        } else if (context.type === 'note' && context.annotationId) {
+        } else if (context.type === "note" && context.annotationId) {
             this.deleteAnnotation(context.annotationId);
         }
     }
@@ -279,7 +321,7 @@ export class TypeAgentPDFViewerApp {
      */
     private async deleteHighlight(highlightId: string): Promise<void> {
         if (!this.pdfJSHighlightManager) return;
-        
+
         try {
             await this.pdfJSHighlightManager.deleteHighlight(highlightId);
             console.log("✅ Highlight deleted successfully");
@@ -288,18 +330,28 @@ export class TypeAgentPDFViewerApp {
         }
     }
 
-    private async createHighlight(selection: SelectionInfo, color: HighlightColor): Promise<void> {
+    private async createHighlight(
+        selection: SelectionInfo,
+        color: HighlightColor,
+    ): Promise<void> {
         // Use PDF.js highlight manager instead of custom annotation manager
         if (!this.pdfJSHighlightManager) {
             console.error("PDF.js highlight manager not initialized");
             return;
         }
-        
+
         try {
-            const highlightId = await this.pdfJSHighlightManager.createHighlight(selection, color);
+            const highlightId =
+                await this.pdfJSHighlightManager.createHighlight(
+                    selection,
+                    color,
+                );
             if (highlightId) {
-                console.log("✅ PDF.js highlight created successfully:", highlightId);
-                
+                console.log(
+                    "✅ PDF.js highlight created successfully:",
+                    highlightId,
+                );
+
                 // Hide toolbar and clear selection after successful highlight
                 this.contextualToolbar?.hide();
                 this.selectionManager?.clearSelection();
@@ -308,32 +360,42 @@ export class TypeAgentPDFViewerApp {
             }
         } catch (error) {
             console.error("❌ Failed to create PDF.js highlight:", error);
-            
+
             // Fallback to custom annotation manager for backward compatibility
             if (this.annotationManager) {
                 console.log("🔄 Falling back to custom annotation manager...");
                 try {
-                    await this.annotationManager.createAnnotation({ type: "highlight", selection, color });
+                    await this.annotationManager.createAnnotation({
+                        type: "highlight",
+                        selection,
+                        color,
+                    });
                     console.log("✅ Fallback highlight created successfully");
-                    
+
                     this.contextualToolbar?.hide();
                     this.selectionManager?.clearSelection();
                 } catch (fallbackError) {
-                    console.error("❌ Fallback highlight creation also failed:", fallbackError);
+                    console.error(
+                        "❌ Fallback highlight creation also failed:",
+                        fallbackError,
+                    );
                 }
             }
         }
     }
 
-    private async createNote(selection: SelectionInfo, noteData: NoteData): Promise<void> {
+    private async createNote(
+        selection: SelectionInfo,
+        noteData: NoteData,
+    ): Promise<void> {
         if (!this.annotationManager) return;
         try {
-            await this.annotationManager.createAnnotation({ 
-                type: "note", 
-                selection, 
+            await this.annotationManager.createAnnotation({
+                type: "note",
+                selection,
                 content: noteData.content,
                 blockquoteContent: noteData.blockquoteContent,
-                screenshotData: noteData.screenshotData
+                screenshotData: noteData.screenshotData,
             });
             this.selectionManager?.clearSelection();
             console.log("✅ Note created successfully");
@@ -342,21 +404,27 @@ export class TypeAgentPDFViewerApp {
         }
     }
 
-    private async createQuestion(selection: SelectionInfo, questionData: QuestionData): Promise<void> {
+    private async createQuestion(
+        selection: SelectionInfo,
+        questionData: QuestionData,
+    ): Promise<void> {
         if (!this.annotationManager) return;
         let content = questionData.question;
-        if (questionData.context) content += `\n\nContext: ${questionData.context}`;
-        
+        if (questionData.context)
+            content += `\n\nContext: ${questionData.context}`;
+
         try {
-            await this.annotationManager.createAnnotation({ 
-                type: "question", 
-                selection, 
+            await this.annotationManager.createAnnotation({
+                type: "question",
+                selection,
                 content,
                 blockquoteContent: questionData.blockquoteContent,
-                screenshotData: questionData.screenshotData
+                screenshotData: questionData.screenshotData,
             });
             this.selectionManager?.clearSelection();
-            console.log("✅ Question created successfully - ready for LLM integration");
+            console.log(
+                "✅ Question created successfully - ready for LLM integration",
+            );
         } catch (error) {
             console.error("❌ Failed to create question:", error);
         }
@@ -367,18 +435,30 @@ export class TypeAgentPDFViewerApp {
             const viewerContainer = document.getElementById("viewerContainer");
             if (!viewerContainer?.contains(event.target as Node)) return;
             event.preventDefault();
-            
-            const annotation = this.annotationManager?.getAnnotationAtPoint(event.clientX, event.clientY);
+
+            const annotation = this.annotationManager?.getAnnotationAtPoint(
+                event.clientX,
+                event.clientY,
+            );
             if (annotation) {
-                this.showAnnotationContextMenu(event.clientX, event.clientY, annotation);
+                this.showAnnotationContextMenu(
+                    event.clientX,
+                    event.clientY,
+                    annotation,
+                );
             } else {
                 const selection = this.selectionManager?.getCurrentSelection();
-                if (selection && selection.isValid) this.contextualToolbar?.show(selection);
+                if (selection && selection.isValid)
+                    this.contextualToolbar?.show(selection);
             }
         });
     }
 
-    private showAnnotationContextMenu(x: number, y: number, annotation: any): void {
+    private showAnnotationContextMenu(
+        x: number,
+        y: number,
+        annotation: any,
+    ): void {
         const menu = document.createElement("div");
         menu.className = "annotation-context-menu visible";
         menu.style.cssText = `position: fixed; left: ${x}px; top: ${y}px; z-index: 10005;`;
@@ -387,16 +467,18 @@ export class TypeAgentPDFViewerApp {
             <div class="context-menu-separator"></div>
             <button class="context-menu-item danger" data-action="delete"><i class="fas fa-trash"></i> Delete</button>
         `;
-        
+
         menu.onclick = (e) => {
-            const button = (e.target as Element).closest(".context-menu-item") as HTMLElement;
+            const button = (e.target as Element).closest(
+                ".context-menu-item",
+            ) as HTMLElement;
             if (!button) return;
             const action = button.getAttribute("data-action");
             if (action === "delete") this.deleteAnnotation(annotation.id);
             else if (action === "edit") this.editAnnotation(annotation);
             menu.remove();
         };
-        
+
         document.body.appendChild(menu);
         setTimeout(() => {
             const removeOnClick = (e: Event) => {
@@ -421,77 +503,93 @@ export class TypeAgentPDFViewerApp {
     private editAnnotation(annotation: any): void {
         if (annotation.annotation.type === "note" && this.noteEditor) {
             const fakeSelection: SelectionInfo = {
-                text: annotation.annotation.metadata?.blockquoteContent || "Selected text",
+                text:
+                    annotation.annotation.metadata?.blockquoteContent ||
+                    "Selected text",
                 pageNumber: annotation.annotation.page,
                 rects: [],
                 range: document.createRange(),
                 isValid: true,
             };
-            
+
             // Prepare existing note data
             const existingNoteData: NoteData = {
                 content: annotation.annotation.content,
-                blockquoteContent: annotation.annotation.metadata?.blockquoteContent,
-                screenshotData: annotation.annotation.metadata?.screenshotData
+                blockquoteContent:
+                    annotation.annotation.metadata?.blockquoteContent,
+                screenshotData: annotation.annotation.metadata?.screenshotData,
             };
-            
+
             this.noteEditor.show(
-                fakeSelection, 
+                fakeSelection,
                 (noteData) => {
-                    this.updateAnnotation(annotation.id, { 
+                    this.updateAnnotation(annotation.id, {
                         content: noteData.content,
                         metadata: {
                             ...annotation.annotation.metadata,
                             blockquoteContent: noteData.blockquoteContent,
-                            screenshotData: noteData.screenshotData
-                        }
+                            screenshotData: noteData.screenshotData,
+                        },
                     });
-                }, 
+                },
                 annotation.annotation.content,
-                existingNoteData
+                existingNoteData,
             );
-        } else if (annotation.annotation.type === "question" && this.questionDialog) {
+        } else if (
+            annotation.annotation.type === "question" &&
+            this.questionDialog
+        ) {
             const fakeSelection: SelectionInfo = {
-                text: annotation.annotation.metadata?.blockquoteContent || "Selected text",
+                text:
+                    annotation.annotation.metadata?.blockquoteContent ||
+                    "Selected text",
                 pageNumber: annotation.annotation.page,
                 rects: [],
                 range: document.createRange(),
                 isValid: true,
             };
-            
+
             // Prepare existing question data
             const existingQuestionData: QuestionData = {
                 question: annotation.annotation.content,
-                blockquoteContent: annotation.annotation.metadata?.blockquoteContent,
+                blockquoteContent:
+                    annotation.annotation.metadata?.blockquoteContent,
                 screenshotData: annotation.annotation.metadata?.screenshotData,
-                context: annotation.annotation.metadata?.context
+                context: annotation.annotation.metadata?.context,
             };
-            
+
             this.questionDialog.show(
                 fakeSelection,
                 (questionData) => {
                     let content = questionData.question;
-                    if (questionData.context) content += `\n\nContext: ${questionData.context}`;
-                    
+                    if (questionData.context)
+                        content += `\n\nContext: ${questionData.context}`;
+
                     this.updateAnnotation(annotation.id, {
                         content: content,
                         metadata: {
                             ...annotation.annotation.metadata,
                             blockquoteContent: questionData.blockquoteContent,
                             screenshotData: questionData.screenshotData,
-                            context: questionData.context
-                        }
+                            context: questionData.context,
+                        },
                     });
                 },
                 annotation.annotation.content,
-                existingQuestionData
+                existingQuestionData,
             );
         }
     }
 
-    private async updateAnnotation(annotationId: string, updates: any): Promise<void> {
+    private async updateAnnotation(
+        annotationId: string,
+        updates: any,
+    ): Promise<void> {
         try {
-            await this.annotationManager?.updateAnnotation(annotationId, updates);
+            await this.annotationManager?.updateAnnotation(
+                annotationId,
+                updates,
+            );
             console.log("✅ Annotation updated successfully");
         } catch (error) {
             console.error("❌ Failed to update annotation:", error);
@@ -514,7 +612,7 @@ export class TypeAgentPDFViewerApp {
             () => {
                 console.log("📸 Screenshot cancelled");
                 this.cancelScreenshotMode();
-            }
+            },
         );
     }
 
@@ -527,15 +625,15 @@ export class TypeAgentPDFViewerApp {
 
     private handleScreenshotSelection(screenshotData: ScreenshotData): void {
         console.log("📸 Screenshot captured in app.ts:", screenshotData);
-        
+
         // Stop selection mode
         this.screenshotSelector?.stopSelection();
         console.log("📸 Selection mode stopped");
-        
+
         // Show flash effect
         this.showScreenshotFlash();
         console.log("📸 Flash effect shown");
-        
+
         // Show toolbar with options
         if (this.screenshotToolbar) {
             console.log("📸 Showing screenshot toolbar");
@@ -549,7 +647,7 @@ export class TypeAgentPDFViewerApp {
         const flash = document.createElement("div");
         flash.className = "screenshot-capture-flash";
         document.body.appendChild(flash);
-        
+
         setTimeout(() => {
             if (flash.parentNode) {
                 flash.parentNode.removeChild(flash);
@@ -560,96 +658,122 @@ export class TypeAgentPDFViewerApp {
     private handleScreenshotNoteAction(screenshotData: ScreenshotData): void {
         console.log("📝 Adding note to screenshot");
         this.screenshotToolbar?.hide();
-        
+
         if (this.noteEditor) {
-            this.noteEditor.showForScreenshot(screenshotData, (noteData) => 
-                this.createScreenshotNote(screenshotData, noteData)
+            this.noteEditor.showForScreenshot(screenshotData, (noteData) =>
+                this.createScreenshotNote(screenshotData, noteData),
             );
         }
     }
 
-    private handleScreenshotQuestionAction(screenshotData: ScreenshotData): void {
+    private handleScreenshotQuestionAction(
+        screenshotData: ScreenshotData,
+    ): void {
         console.log("❓ Asking question about screenshot");
         this.screenshotToolbar?.hide();
-        
+
         if (this.questionDialog) {
-            this.questionDialog.showForScreenshot(screenshotData, (questionData) => 
-                this.createScreenshotQuestion(screenshotData, questionData)
+            this.questionDialog.showForScreenshot(
+                screenshotData,
+                (questionData) =>
+                    this.createScreenshotQuestion(screenshotData, questionData),
             );
         }
     }
 
-    private async createScreenshotNote(screenshotData: ScreenshotData, noteData: NoteData): Promise<void> {
+    private async createScreenshotNote(
+        screenshotData: ScreenshotData,
+        noteData: NoteData,
+    ): Promise<void> {
         if (!this.annotationManager) return;
-        
+
         try {
             // Create a fake selection for the screenshot region
             const fakeSelection: SelectionInfo = {
                 text: `Screenshot from page ${screenshotData.region.pageNumber}`,
                 pageNumber: screenshotData.region.pageNumber,
-                rects: [{
-                    left: screenshotData.region.x,
-                    top: screenshotData.region.y,
-                    right: screenshotData.region.x + screenshotData.region.width,
-                    bottom: screenshotData.region.y + screenshotData.region.height,
-                    width: screenshotData.region.width,
-                    height: screenshotData.region.height,
-                } as DOMRect],
+                rects: [
+                    {
+                        left: screenshotData.region.x,
+                        top: screenshotData.region.y,
+                        right:
+                            screenshotData.region.x +
+                            screenshotData.region.width,
+                        bottom:
+                            screenshotData.region.y +
+                            screenshotData.region.height,
+                        width: screenshotData.region.width,
+                        height: screenshotData.region.height,
+                    } as DOMRect,
+                ],
                 range: document.createRange(),
                 isValid: true,
             };
 
-            await this.annotationManager.createAnnotation({ 
-                type: "note", 
-                selection: fakeSelection, 
+            await this.annotationManager.createAnnotation({
+                type: "note",
+                selection: fakeSelection,
                 content: noteData.content,
-                screenshotData: screenshotData
+                screenshotData: screenshotData,
             });
-            
+
             console.log("✅ Screenshot note created successfully");
         } catch (error) {
             console.error("❌ Failed to create screenshot note:", error);
         }
     }
 
-    private async createScreenshotQuestion(screenshotData: ScreenshotData, questionData: QuestionData): Promise<void> {
+    private async createScreenshotQuestion(
+        screenshotData: ScreenshotData,
+        questionData: QuestionData,
+    ): Promise<void> {
         if (!this.annotationManager) return;
-        
+
         try {
             // Create a fake selection for the screenshot region
             const fakeSelection: SelectionInfo = {
                 text: `Screenshot from page ${screenshotData.region.pageNumber}`,
                 pageNumber: screenshotData.region.pageNumber,
-                rects: [{
-                    left: screenshotData.region.x,
-                    top: screenshotData.region.y,
-                    right: screenshotData.region.x + screenshotData.region.width,
-                    bottom: screenshotData.region.y + screenshotData.region.height,
-                    width: screenshotData.region.width,
-                    height: screenshotData.region.height,
-                } as DOMRect],
+                rects: [
+                    {
+                        left: screenshotData.region.x,
+                        top: screenshotData.region.y,
+                        right:
+                            screenshotData.region.x +
+                            screenshotData.region.width,
+                        bottom:
+                            screenshotData.region.y +
+                            screenshotData.region.height,
+                        width: screenshotData.region.width,
+                        height: screenshotData.region.height,
+                    } as DOMRect,
+                ],
                 range: document.createRange(),
                 isValid: true,
             };
 
             let content = questionData.question;
-            if (questionData.context) content += `\n\nContext: ${questionData.context}`;
+            if (questionData.context)
+                content += `\n\nContext: ${questionData.context}`;
 
-            await this.annotationManager.createAnnotation({ 
-                type: "question", 
-                selection: fakeSelection, 
+            await this.annotationManager.createAnnotation({
+                type: "question",
+                selection: fakeSelection,
                 content: content,
-                screenshotData: screenshotData
+                screenshotData: screenshotData,
             });
-            
-            console.log("✅ Screenshot question created successfully - ready for LLM integration");
+
+            console.log(
+                "✅ Screenshot question created successfully - ready for LLM integration",
+            );
         } catch (error) {
             console.error("❌ Failed to create screenshot question:", error);
         }
     }
 
     private async setupPDFJSViewer(): Promise<void> {
-        if (!window.pdfjsLib || !window.pdfjsViewer) throw new Error("PDF.js not loaded");
+        if (!window.pdfjsLib || !window.pdfjsViewer)
+            throw new Error("PDF.js not loaded");
 
         this.eventBus = new window.pdfjsViewer.EventBus();
         const viewerContainer = document.getElementById("viewerContainer");
@@ -666,12 +790,14 @@ export class TypeAgentPDFViewerApp {
 
         const toolbar = document.querySelector(".toolbar") as HTMLElement;
         const toolbarHeight = toolbar ? toolbar.offsetHeight : 56;
-        
+
         viewerContainer.style.cssText = `
             position: absolute; top: ${toolbarHeight}px; left: 0; right: 0; bottom: 0; overflow: auto;
         `;
 
-        const linkService = new window.pdfjsViewer.PDFLinkService({ eventBus: this.eventBus });
+        const linkService = new window.pdfjsViewer.PDFLinkService({
+            eventBus: this.eventBus,
+        });
         this.pdfViewer = new window.pdfjsViewer.PDFViewer({
             container: viewerContainer,
             viewer: viewerElement,
@@ -706,19 +832,19 @@ export class TypeAgentPDFViewerApp {
 
     private async loadAnnotationsWhenReady(): Promise<void> {
         if (!this.documentId) return;
-        
+
         try {
             // Initialize both annotation managers with document ID
             if (this.annotationManager) {
                 this.annotationManager.setDocumentId(this.documentId);
                 await this.annotationManager.loadAnnotations();
             }
-            
+
             if (this.pdfJSHighlightManager) {
                 this.pdfJSHighlightManager.setDocumentId(this.documentId);
                 await this.pdfJSHighlightManager.loadHighlights();
             }
-            
+
             console.log("📝 All annotations loaded and rendered");
         } catch (error) {
             console.error("❌ Failed to load annotations:", error);
@@ -728,12 +854,21 @@ export class TypeAgentPDFViewerApp {
     private setupEventHandlers(): void {
         const prevBtn = document.getElementById("prevPage");
         const nextBtn = document.getElementById("nextPage");
-        const pageNumInput = document.getElementById("pageNum") as HTMLInputElement;
+        const pageNumInput = document.getElementById(
+            "pageNum",
+        ) as HTMLInputElement;
         const zoomInBtn = document.getElementById("zoomIn");
         const zoomOutBtn = document.getElementById("zoomOut");
         const clippingBtn = document.getElementById("clippingTool");
 
-        if (!prevBtn || !nextBtn || !pageNumInput || !zoomInBtn || !zoomOutBtn || !clippingBtn) {
+        if (
+            !prevBtn ||
+            !nextBtn ||
+            !pageNumInput ||
+            !zoomInBtn ||
+            !zoomOutBtn ||
+            !clippingBtn
+        ) {
             setTimeout(() => this.setupEventHandlers(), 100);
             return;
         }
@@ -747,7 +882,11 @@ export class TypeAgentPDFViewerApp {
         pageNumInput.addEventListener("change", (e) => {
             const target = e.target as HTMLInputElement;
             const pageNum = parseInt(target.value);
-            if (pageNum && pageNum >= 1 && pageNum <= (this.pdfDoc?.numPages || 1)) {
+            if (
+                pageNum &&
+                pageNum >= 1 &&
+                pageNum <= (this.pdfDoc?.numPages || 1)
+            ) {
                 this.goToPage(pageNum);
             } else {
                 target.value = this.currentPage.toString();
@@ -777,7 +916,7 @@ export class TypeAgentPDFViewerApp {
 
                 // Determine zoom direction based on wheel delta
                 const delta = event.deltaY;
-                
+
                 if (delta < 0) {
                     // Scrolling up = zoom in
                     this.zoomIn();
@@ -788,7 +927,9 @@ export class TypeAgentPDFViewerApp {
             }
         };
 
-        viewerContainer.addEventListener("wheel", this.wheelEventHandler, { passive: false });
+        viewerContainer.addEventListener("wheel", this.wheelEventHandler, {
+            passive: false,
+        });
     }
 
     private extractDocumentId(): void {
@@ -808,20 +949,31 @@ export class TypeAgentPDFViewerApp {
             if (this.documentId) this.setupSSEConnection(this.documentId);
         } catch (error) {
             console.error("❌ Failed to load document:", error);
-            this.showError("Failed to load document with highlighting features");
+            this.showError(
+                "Failed to load document with highlighting features",
+            );
         }
     }
 
     private isUrl(str: string): boolean {
-        try { new URL(str); return true; } catch { return false; }
+        try {
+            new URL(str);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     async loadPDFFromUrl(url: string): Promise<void> {
         try {
-            const urlMapping = await this.pdfApiService.getDocumentIdFromUrl(url);
+            const urlMapping =
+                await this.pdfApiService.getDocumentIdFromUrl(url);
             this.documentId = urlMapping.documentId;
-            const response = await fetch(url, { headers: { Accept: "application/pdf" } });
-            if (!response.ok) throw new Error(`Failed to fetch PDF: ${response.status}`);
+            const response = await fetch(url, {
+                headers: { Accept: "application/pdf" },
+            });
+            if (!response.ok)
+                throw new Error(`Failed to fetch PDF: ${response.status}`);
             const arrayBuffer = await response.arrayBuffer();
             await this.loadPDFDocument(arrayBuffer);
         } catch (error) {
@@ -831,7 +983,8 @@ export class TypeAgentPDFViewerApp {
     }
 
     async loadSampleDocument(): Promise<void> {
-        const samplePdfUrl = "https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf";
+        const samplePdfUrl =
+            "https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf";
         await this.loadPDFFromUrl(samplePdfUrl);
     }
 
@@ -844,20 +997,22 @@ export class TypeAgentPDFViewerApp {
         });
 
         this.pdfDoc = await loadingTask.promise;
-        console.log(`📄 PDF loaded successfully: ${this.pdfDoc.numPages} pages`);
-        
+        console.log(
+            `📄 PDF loaded successfully: ${this.pdfDoc.numPages} pages`,
+        );
+
         if (!this.pdfViewer) {
             console.error("❌ PDF viewer not initialized!");
             throw new Error("PDF viewer not initialized");
         }
-        
+
         this.pdfViewer.setDocument(this.pdfDoc);
         console.log("📄 Document set on viewer");
-        
+
         this.updatePageCount();
         this.currentPage = 1;
         console.log("📄 PDF document loading complete");
-        
+
         // Fallback: Hide loading state after a delay if pagesinit doesn't fire
         setTimeout(() => {
             console.log("📄 Fallback: Hiding loading state");
@@ -872,13 +1027,22 @@ export class TypeAgentPDFViewerApp {
     }
 
     async goToNextPage(): Promise<void> {
-        if (this.pdfViewer && this.pdfDoc && this.currentPage < this.pdfDoc.numPages) {
+        if (
+            this.pdfViewer &&
+            this.pdfDoc &&
+            this.currentPage < this.pdfDoc.numPages
+        ) {
             this.pdfViewer.currentPageNumber = this.currentPage + 1;
         }
     }
 
     async goToPage(pageNum: number): Promise<void> {
-        if (this.pdfViewer && this.pdfDoc && pageNum >= 1 && pageNum <= this.pdfDoc.numPages) {
+        if (
+            this.pdfViewer &&
+            this.pdfDoc &&
+            pageNum >= 1 &&
+            pageNum <= this.pdfDoc.numPages
+        ) {
             this.pdfViewer.currentPageNumber = pageNum;
         }
     }
@@ -904,14 +1068,16 @@ export class TypeAgentPDFViewerApp {
      */
     private updateZoomDisplay(): void {
         if (this.pdfViewer) {
-            const zoomPercentage = Math.round(this.pdfViewer.currentScale * 100);
-            
+            const zoomPercentage = Math.round(
+                this.pdfViewer.currentScale * 100,
+            );
+
             // Update any zoom display elements if they exist
             const zoomDisplay = document.getElementById("zoomDisplay");
             if (zoomDisplay) {
                 zoomDisplay.textContent = `${zoomPercentage}%`;
             }
-            
+
             // Optional: Show temporary zoom indicator
             this.showZoomIndicator(zoomPercentage);
         }
@@ -970,13 +1136,20 @@ export class TypeAgentPDFViewerApp {
     }
 
     private updateCurrentPageIndicator(): void {
-        const pageNumInput = document.getElementById("pageNum") as HTMLInputElement;
-        const prevBtn = document.getElementById("prevPage") as HTMLButtonElement;
-        const nextBtn = document.getElementById("nextPage") as HTMLButtonElement;
+        const pageNumInput = document.getElementById(
+            "pageNum",
+        ) as HTMLInputElement;
+        const prevBtn = document.getElementById(
+            "prevPage",
+        ) as HTMLButtonElement;
+        const nextBtn = document.getElementById(
+            "nextPage",
+        ) as HTMLButtonElement;
 
         if (pageNumInput) pageNumInput.value = this.currentPage.toString();
         if (prevBtn) prevBtn.disabled = this.currentPage <= 1;
-        if (nextBtn && this.pdfDoc) nextBtn.disabled = this.currentPage >= this.pdfDoc.numPages;
+        if (nextBtn && this.pdfDoc)
+            nextBtn.disabled = this.currentPage >= this.pdfDoc.numPages;
     }
 
     private updateScaleIndicator(): void {
@@ -989,8 +1162,12 @@ export class TypeAgentPDFViewerApp {
     private setupSSEConnection(documentId: string): void {
         try {
             this.sseClient = new PDFSSEClient(documentId);
-            this.sseClient.on("annotation-added", () => this.loadAnnotationsWhenReady());
-            this.sseClient.on("annotation-updated", () => this.loadAnnotationsWhenReady());
+            this.sseClient.on("annotation-added", () =>
+                this.loadAnnotationsWhenReady(),
+            );
+            this.sseClient.on("annotation-updated", () =>
+                this.loadAnnotationsWhenReady(),
+            );
         } catch (error) {
             console.warn("⚠️ Failed to set up SSE connection:", error);
         }
@@ -1004,7 +1181,7 @@ export class TypeAgentPDFViewerApp {
             if (existingLoading) {
                 existingLoading.remove();
             }
-            
+
             // Add loading element without replacing entire content
             const loadingDiv = document.createElement("div");
             loadingDiv.className = "loading";
@@ -1034,7 +1211,7 @@ export class TypeAgentPDFViewerApp {
             if (loadingElement) {
                 loadingElement.remove();
             }
-            
+
             // Ensure viewer element exists
             let viewerElement = document.getElementById("viewer");
             if (!viewerElement) {
@@ -1058,7 +1235,10 @@ export class TypeAgentPDFViewerApp {
         if (this.wheelEventHandler) {
             const viewerContainer = document.getElementById("viewerContainer");
             if (viewerContainer) {
-                viewerContainer.removeEventListener("wheel", this.wheelEventHandler);
+                viewerContainer.removeEventListener(
+                    "wheel",
+                    this.wheelEventHandler,
+                );
             }
             this.wheelEventHandler = null;
         }
@@ -1072,9 +1252,11 @@ export class TypeAgentPDFViewerApp {
         this.screenshotSelector?.destroy();
         this.screenshotToolbar?.destroy();
         this.annotationManager?.destroy();
-        
+
         if (this.sseClient) {
-            try { (this.sseClient as any).close?.(); } catch (error) {
+            try {
+                (this.sseClient as any).close?.();
+            } catch (error) {
                 console.warn("Error closing SSE connection:", error);
             }
         }
@@ -1082,17 +1264,24 @@ export class TypeAgentPDFViewerApp {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    console.log("🚀 TypeAgent PDF Viewer with Complete Highlighting Support starting...");
+    console.log(
+        "🚀 TypeAgent PDF Viewer with Complete Highlighting Support starting...",
+    );
     try {
         const app = new TypeAgentPDFViewerApp();
         (window as any).TypeAgentPDFViewer = app;
         await app.initialize();
-        
+
         console.log("🎉 PDF Viewer with Complete Highlighting Features Ready!");
-        console.log("✨ Features: Text selection, 8-color highlighting, markdown notes, questions, right-click menus, real-time collaboration");
+        console.log(
+            "✨ Features: Text selection, 8-color highlighting, markdown notes, questions, right-click menus, real-time collaboration",
+        );
         console.log("🧪 Ready for end-to-end testing!");
     } catch (error) {
-        console.error("❌ Failed to start PDF viewer with highlighting:", error);
+        console.error(
+            "❌ Failed to start PDF viewer with highlighting:",
+            error,
+        );
     }
 });
 

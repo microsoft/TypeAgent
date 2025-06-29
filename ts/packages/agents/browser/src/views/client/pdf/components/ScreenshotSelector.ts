@@ -43,7 +43,7 @@ export class ScreenshotSelector {
      */
     startSelection(
         onSelect: ScreenshotSelectCallback,
-        onCancel: ScreenshotCancelCallback
+        onCancel: ScreenshotCancelCallback,
     ): void {
         if (this.isActive) return;
 
@@ -159,7 +159,7 @@ export class ScreenshotSelector {
 
         event.preventDefault();
         event.stopPropagation();
-        
+
         this.startPoint = { x: event.clientX, y: event.clientY };
         this.showSelectionBox(event.clientX, event.clientY, 0, 0);
     };
@@ -193,9 +193,9 @@ export class ScreenshotSelector {
 
         const width = Math.abs(event.clientX - this.startPoint.x);
         const height = Math.abs(event.clientY - this.startPoint.y);
-        
+
         console.log("📸 Screenshot selection:", { width, height });
-        
+
         // Minimum selection size
         if (width < 10 || height < 10) {
             console.log("📸 Selection too small, ignoring");
@@ -210,7 +210,12 @@ export class ScreenshotSelector {
         console.log("📸 Selection coordinates:", { left, top, width, height });
 
         // Find the page element under the selection
-        const pageElement = this.findPageElementInRegion(left, top, width, height);
+        const pageElement = this.findPageElementInRegion(
+            left,
+            top,
+            width,
+            height,
+        );
         if (!pageElement) {
             console.warn("📸 No page element found for selection");
             this.hideSelectionBox();
@@ -237,7 +242,7 @@ export class ScreenshotSelector {
 
         this.currentRegion = region;
         console.log("📸 Starting capture for region:", region);
-        
+
         // Add a small delay to ensure the mouse event has fully processed
         setTimeout(() => {
             this.captureRegion(region);
@@ -256,7 +261,12 @@ export class ScreenshotSelector {
     /**
      * Show selection box
      */
-    private showSelectionBox(left: number, top: number, width: number, height: number): void {
+    private showSelectionBox(
+        left: number,
+        top: number,
+        width: number,
+        height: number,
+    ): void {
         if (!this.selectionBox) return;
 
         this.selectionBox.style.left = `${left}px`;
@@ -282,22 +292,22 @@ export class ScreenshotSelector {
         left: number,
         top: number,
         width: number,
-        height: number
+        height: number,
     ): HTMLElement | null {
         const centerX = left + width / 2;
         const centerY = top + height / 2;
-        
+
         console.log("📸 Looking for element at:", { centerX, centerY });
-        
+
         // Temporarily hide the overlay to get the element underneath
         const overlay = this.overlay;
         if (overlay) overlay.style.display = "none";
-        
+
         const element = document.elementFromPoint(centerX, centerY);
-        
+
         // Restore overlay
         if (overlay) overlay.style.display = "block";
-        
+
         if (!element) {
             console.warn("📸 No element found at point");
             return null;
@@ -307,7 +317,7 @@ export class ScreenshotSelector {
 
         // Find the page element - try multiple strategies
         let pageElement: HTMLElement | null = null;
-        
+
         // Strategy 1: Look for data-page-number attribute
         pageElement = element.closest("[data-page-number]") as HTMLElement;
         if (pageElement) {
@@ -333,7 +343,9 @@ export class ScreenshotSelector {
         const viewerContainer = document.getElementById("viewerContainer");
         if (viewerContainer && viewerContainer.contains(element)) {
             // Get first child that might be a page
-            const pages = viewerContainer.querySelectorAll("[data-page-number], .page");
+            const pages = viewerContainer.querySelectorAll(
+                "[data-page-number], .page",
+            );
             if (pages.length > 0) {
                 console.log("📸 Using first page as fallback:", pages[0]);
                 return pages[0] as HTMLElement;
@@ -370,17 +382,17 @@ export class ScreenshotSelector {
     private async captureRegion(region: ScreenshotRegion): Promise<void> {
         try {
             console.log("📸 Starting screenshot capture...");
-            
+
             // Use html2canvas to capture the specific region
             const html2canvas = await this.loadHtml2Canvas();
             console.log("📸 html2canvas loaded successfully");
-            
+
             console.log("📸 Capturing region:", {
                 element: region.pageElement.tagName,
                 x: region.x,
                 y: region.y,
                 width: region.width,
-                height: region.height
+                height: region.height,
             });
 
             const canvas = await html2canvas(region.pageElement, {
@@ -397,7 +409,7 @@ export class ScreenshotSelector {
             console.log("📸 Canvas created:", canvas);
             const imageData = canvas.toDataURL("image/png");
             console.log("📸 Image data generated, length:", imageData.length);
-            
+
             const screenshotData: ScreenshotData = {
                 region,
                 imageData,
@@ -410,15 +422,17 @@ export class ScreenshotSelector {
             } else {
                 console.error("📸 No selectCallback available!");
             }
-
         } catch (error) {
             console.error("📸 Failed to capture screenshot:", error);
-            
+
             // Fallback to placeholder if html2canvas fails
             console.log("📸 Using placeholder fallback");
             const screenshotData: ScreenshotData = {
                 region,
-                imageData: this.createPlaceholderImage(region.width, region.height),
+                imageData: this.createPlaceholderImage(
+                    region.width,
+                    region.height,
+                ),
                 timestamp: new Date().toISOString(),
             };
 
@@ -432,24 +446,32 @@ export class ScreenshotSelector {
      * Create a placeholder image for testing
      */
     private createPlaceholderImage(width: number, height: number): string {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = Math.min(width, 300);
         canvas.height = Math.min(height, 200);
-        
-        const ctx = canvas.getContext('2d');
+
+        const ctx = canvas.getContext("2d");
         if (ctx) {
             // Create a simple placeholder
-            ctx.fillStyle = '#f0f0f0';
+            ctx.fillStyle = "#f0f0f0";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.fillStyle = '#007acc';
-            ctx.font = '16px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('Screenshot Placeholder', canvas.width / 2, canvas.height / 2 - 10);
-            ctx.fillText(`${width}×${height}px`, canvas.width / 2, canvas.height / 2 + 10);
+
+            ctx.fillStyle = "#007acc";
+            ctx.font = "16px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(
+                "Screenshot Placeholder",
+                canvas.width / 2,
+                canvas.height / 2 - 10,
+            );
+            ctx.fillText(
+                `${width}×${height}px`,
+                canvas.width / 2,
+                canvas.height / 2 + 10,
+            );
         }
-        
-        return canvas.toDataURL('image/png');
+
+        return canvas.toDataURL("image/png");
     }
 
     /**
@@ -463,7 +485,8 @@ export class ScreenshotSelector {
         // Load html2canvas from CDN
         return new Promise((resolve, reject) => {
             const script = document.createElement("script");
-            script.src = "https://html2canvas.hertzen.com/dist/html2canvas.min.js";
+            script.src =
+                "https://html2canvas.hertzen.com/dist/html2canvas.min.js";
             script.onload = () => {
                 resolve((window as any).html2canvas);
             };
@@ -489,7 +512,7 @@ export class ScreenshotSelector {
      */
     destroy(): void {
         this.stopSelection();
-        
+
         if (this.overlay && this.overlay.parentNode) {
             this.overlay.parentNode.removeChild(this.overlay);
         }

@@ -85,7 +85,14 @@ export class TextSelectionManager {
     getSelectionBounds(selection: SelectionInfo): SelectionBounds {
         const rects = selection.rects;
         if (rects.length === 0) {
-            return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+            return {
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: 0,
+                height: 0,
+            };
         }
 
         let minLeft = rects[0].left;
@@ -115,7 +122,10 @@ export class TextSelectionManager {
      */
     private setupEventListeners(): void {
         // Listen for selection changes
-        document.addEventListener("selectionchange", this.handleSelectionChange);
+        document.addEventListener(
+            "selectionchange",
+            this.handleSelectionChange,
+        );
 
         // Listen for mouse up events to catch selection completion
         document.addEventListener("mouseup", this.handleMouseUp);
@@ -143,10 +153,13 @@ export class TextSelectionManager {
      */
     private handleMouseUp = (event: MouseEvent): void => {
         // Check if color dropdown is open before processing selection
-        if (this.contextualToolbar && this.contextualToolbar.isColorDropdownVisible()) {
+        if (
+            this.contextualToolbar &&
+            this.contextualToolbar.isColorDropdownVisible()
+        ) {
             return;
         }
-        
+
         // Small delay to ensure selection is complete
         setTimeout(() => {
             this.processSelectionChange();
@@ -168,14 +181,14 @@ export class TextSelectionManager {
      */
     private processSelectionChange(): void {
         const selection = window.getSelection();
-        
+
         if (!selection || selection.rangeCount === 0) {
             this.updateSelection(null);
             return;
         }
 
         const range = selection.getRangeAt(0);
-        
+
         // Check if selection is empty or collapsed
         if (range.collapsed || selection.toString().trim().length === 0) {
             this.updateSelection(null);
@@ -184,7 +197,10 @@ export class TextSelectionManager {
 
         // Check if selection is within PDF viewer
         const viewerContainer = document.getElementById("viewerContainer");
-        if (!viewerContainer || !this.isSelectionInPDF(range, viewerContainer)) {
+        if (
+            !viewerContainer ||
+            !this.isSelectionInPDF(range, viewerContainer)
+        ) {
             this.updateSelection(null);
             return;
         }
@@ -198,7 +214,7 @@ export class TextSelectionManager {
 
         // Get selection rectangles
         const rects = this.getSelectionRects(range);
-        
+
         const selectionInfo: SelectionInfo = {
             text: selection.toString().trim(),
             pageNumber,
@@ -230,7 +246,7 @@ export class TextSelectionManager {
     private getPageNumberFromSelection(range: Range): number {
         // Find the page element that contains the selection
         let element = range.startContainer;
-        
+
         // If it's a text node, get its parent
         if (element.nodeType === Node.TEXT_NODE) {
             element = element.parentElement || element.parentNode;
@@ -239,7 +255,9 @@ export class TextSelectionManager {
         // Traverse up to find the page element
         while (element && element !== document.body) {
             if ((element as Element).classList?.contains("page")) {
-                const pageAttr = (element as Element).getAttribute("data-page-number");
+                const pageAttr = (element as Element).getAttribute(
+                    "data-page-number",
+                );
                 return pageAttr ? parseInt(pageAttr) : -1;
             }
             element = element.parentElement || element.parentNode;
@@ -253,11 +271,11 @@ export class TextSelectionManager {
      */
     private getSelectionRects(range: Range): DOMRect[] {
         const rects: DOMRect[] = [];
-        
+
         try {
             // Get all client rectangles for the selection
             const clientRects = range.getClientRects();
-            
+
             for (let i = 0; i < clientRects.length; i++) {
                 const rect = clientRects[i];
                 // Filter out zero-width/height rectangles
@@ -277,9 +295,9 @@ export class TextSelectionManager {
      */
     private updateSelection(selection: SelectionInfo | null): void {
         this.currentSelection = selection;
-        
+
         // Notify all callbacks
-        this.callbacks.forEach(callback => {
+        this.callbacks.forEach((callback) => {
             try {
                 callback(selection);
             } catch (error) {
@@ -292,14 +310,17 @@ export class TextSelectionManager {
      * Clean up event listeners
      */
     destroy(): void {
-        document.removeEventListener("selectionchange", this.handleSelectionChange);
+        document.removeEventListener(
+            "selectionchange",
+            this.handleSelectionChange,
+        );
         document.removeEventListener("mouseup", this.handleMouseUp);
         document.removeEventListener("keyup", this.handleKeyUp);
-        
+
         if (this.selectionTimeout) {
             clearTimeout(this.selectionTimeout);
         }
-        
+
         this.callbacks = [];
         this.currentSelection = null;
     }

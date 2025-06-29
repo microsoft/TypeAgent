@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import { SelectionInfo } from "../core/textSelectionManager";
 import { HighlightColor } from "./ColorPicker";
 
@@ -17,7 +20,7 @@ export interface ToolbarAction {
  * Context for toolbar - indicates what the user is interacting with
  */
 export interface ToolbarContext {
-    type: 'selection' | 'highlight' | 'note';
+    type: "selection" | "highlight" | "note";
     highlightId?: string;
     annotationId?: string;
     data?: any;
@@ -56,16 +59,33 @@ export class ContextualToolbar {
     private currentContext: ToolbarContext | null = null;
     private isVisible: boolean = false;
     private colorDropdownVisible: boolean = false;
-    private highlightColorCallback: ((color: HighlightColor, selection: SelectionInfo) => void) | null = null;
+    private highlightColorCallback:
+        | ((color: HighlightColor, selection: SelectionInfo) => void)
+        | null = null;
     private deleteCallback: ((context: ToolbarContext) => void) | null = null;
 
     private readonly availableColors: HighlightColor[] = [
-        { id: "yellow", name: "Yellow", color: "#ffff00", textColor: "#000000" },
+        {
+            id: "yellow",
+            name: "Yellow",
+            color: "#ffff00",
+            textColor: "#000000",
+        },
         { id: "green", name: "Green", color: "#00ff00", textColor: "#000000" },
         { id: "blue", name: "Blue", color: "#0080ff", textColor: "#ffffff" },
         { id: "pink", name: "Pink", color: "#ff69b4", textColor: "#000000" },
-        { id: "orange", name: "Orange", color: "#ffa500", textColor: "#000000" },
-        { id: "purple", name: "Purple", color: "#9370db", textColor: "#ffffff" },
+        {
+            id: "orange",
+            name: "Orange",
+            color: "#ffa500",
+            textColor: "#000000",
+        },
+        {
+            id: "purple",
+            name: "Purple",
+            color: "#9370db",
+            textColor: "#ffffff",
+        },
         { id: "red", name: "Red", color: "#ff4444", textColor: "#ffffff" },
         { id: "cyan", name: "Cyan", color: "#00ffff", textColor: "#000000" },
     ];
@@ -78,7 +98,9 @@ export class ContextualToolbar {
     /**
      * Set callback for highlight color selection
      */
-    setHighlightColorCallback(callback: (color: HighlightColor, selection: SelectionInfo) => void): void {
+    setHighlightColorCallback(
+        callback: (color: HighlightColor, selection: SelectionInfo) => void,
+    ): void {
         this.highlightColorCallback = callback;
     }
 
@@ -101,7 +123,7 @@ export class ContextualToolbar {
      * Remove an action from the toolbar
      */
     removeAction(actionId: string): void {
-        this.actions = this.actions.filter(action => action.id !== actionId);
+        this.actions = this.actions.filter((action) => action.id !== actionId);
         this.updateToolbarContent(); // Update the persistent toolbar content
     }
 
@@ -115,8 +137,8 @@ export class ContextualToolbar {
         }
 
         this.currentSelection = selection;
-        this.currentContext = context || { type: 'selection' };
-        
+        this.currentContext = context || { type: "selection" };
+
         if (!this.element) {
             console.error("❌ Toolbar element not created");
             return;
@@ -150,7 +172,7 @@ export class ContextualToolbar {
         this.element.style.display = "none";
         this.element.classList.remove("visible");
         this.element.classList.add("hiding");
-        
+
         this.hideColorDropdown();
         this.isVisible = false;
         this.currentSelection = null;
@@ -183,21 +205,25 @@ export class ContextualToolbar {
         this.colorDropdown.className = "color-dropdown";
 
         // Create color options
-        this.availableColors.forEach(color => {
+        this.availableColors.forEach((color) => {
             const colorOption = document.createElement("div");
             colorOption.className = "color-option";
             colorOption.setAttribute("data-color-id", color.id);
             colorOption.title = color.name;
             colorOption.style.backgroundColor = color.color; // Only set the background color
-            
+
             // Add click handler (only attached once!)
-            colorOption.addEventListener("click", (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                event.stopImmediatePropagation(); // Stop all other handlers
-                this.handleColorSelection(event);
-            }, true); // Use capture phase to run before document handler
-            
+            colorOption.addEventListener(
+                "click",
+                (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation(); // Stop all other handlers
+                    this.handleColorSelection(event);
+                },
+                true,
+            ); // Use capture phase to run before document handler
+
             this.colorDropdown.appendChild(colorOption);
         });
 
@@ -215,11 +241,14 @@ export class ContextualToolbar {
     private updateToolbarContent(): void {
         if (!this.element) return;
 
-        const toolbarContent = this.element.querySelector('.toolbar-content');
+        const toolbarContent = this.element.querySelector(".toolbar-content");
         if (!toolbarContent) return;
 
-        const availableActions = this.actions.filter(action => 
-            !action.condition || !this.currentSelection || action.condition(this.currentSelection, this.currentContext)
+        const availableActions = this.actions.filter(
+            (action) =>
+                !action.condition ||
+                !this.currentSelection ||
+                action.condition(this.currentSelection, this.currentContext),
         );
 
         // Clear existing content but preserve the element
@@ -238,7 +267,7 @@ export class ContextualToolbar {
             if (action.id === "highlight") {
                 const container = document.createElement("div");
                 container.className = "toolbar-action-container";
-                
+
                 const button = document.createElement("button");
                 button.type = "button";
                 button.className = "toolbar-action highlight-action";
@@ -290,7 +319,7 @@ export class ContextualToolbar {
 
         const button = event.currentTarget as HTMLElement;
         const actionId = button.getAttribute("data-action-id");
-        
+
         if (!actionId || !this.currentSelection) {
             return;
         }
@@ -310,12 +339,15 @@ export class ContextualToolbar {
             }
         } else {
             // Execute normal action
-            const action = this.actions.find(a => a.id === actionId);
+            const action = this.actions.find((a) => a.id === actionId);
             if (action) {
                 try {
                     action.action(this.currentSelection, this.currentContext);
                 } catch (error) {
-                    console.error(`Failed to execute action ${actionId}:`, error);
+                    console.error(
+                        `Failed to execute action ${actionId}:`,
+                        error,
+                    );
                 }
             }
         }
@@ -331,13 +363,13 @@ export class ContextualToolbar {
 
         const colorOption = event.currentTarget as HTMLElement;
         const colorId = colorOption.getAttribute("data-color-id");
-        
+
         if (colorId && this.highlightColorCallback && this.currentSelection) {
-            const color = this.availableColors.find(c => c.id === colorId);
+            const color = this.availableColors.find((c) => c.id === colorId);
             if (color) {
                 // Call the callback immediately
                 this.highlightColorCallback(color, this.currentSelection);
-                
+
                 // Hide after a small delay to ensure callback completes
                 setTimeout(() => {
                     this.hideColorDropdown();
@@ -364,7 +396,7 @@ export class ContextualToolbar {
         this.colorDropdown.style.top = `${dropdownTop}px`;
         this.colorDropdown.style.left = `${dropdownLeft}px`;
         this.colorDropdown.style.display = "flex";
-        
+
         this.colorDropdownVisible = true;
     }
 
@@ -381,10 +413,19 @@ export class ContextualToolbar {
     /**
      * Calculate selection bounds
      */
-    private calculateSelectionBounds(selection: SelectionInfo): SelectionBounds {
+    private calculateSelectionBounds(
+        selection: SelectionInfo,
+    ): SelectionBounds {
         const rects = selection.rects;
         if (rects.length === 0) {
-            return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+            return {
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: 0,
+                height: 0,
+            };
         }
 
         let minLeft = rects[0].left;
@@ -426,13 +467,14 @@ export class ContextualToolbar {
         }
 
         // Center horizontally on selection
-        let left = bounds.left + (bounds.width / 2) - 100; // Approximate half toolbar width
+        let left = bounds.left + bounds.width / 2 - 100; // Approximate half toolbar width
 
         // Keep toolbar on screen horizontally
         const viewportWidth = window.innerWidth;
         if (left < margin) {
             left = margin;
-        } else if (left + 200 > viewportWidth - margin) { // Approximate toolbar width
+        } else if (left + 200 > viewportWidth - margin) {
+            // Approximate toolbar width
             left = viewportWidth - 200 - margin;
         }
 
@@ -445,7 +487,7 @@ export class ContextualToolbar {
     private setupEventListeners(): void {
         // Handle clicks outside toolbar/dropdown - ONLY hiding mechanism
         document.addEventListener("click", this.handleDocumentClick);
-        
+
         // Handle escape key - ONLY other hiding mechanism
         document.addEventListener("keydown", this.handleKeyDown);
 
@@ -457,14 +499,20 @@ export class ContextualToolbar {
      */
     private handleDocumentClick = (event: Event): void => {
         const target = event.target as Element;
-        
+
         // If we're clicking on a color option, let the color handler deal with it
-        if (target.classList.contains('color-option') || target.getAttribute('data-color-id')) {
+        if (
+            target.classList.contains("color-option") ||
+            target.getAttribute("data-color-id")
+        ) {
             return;
         }
-        
+
         // Don't hide if clicking within toolbar or dropdown
-        if (this.element?.contains(target) || this.colorDropdown?.contains(target)) {
+        if (
+            this.element?.contains(target) ||
+            this.colorDropdown?.contains(target)
+        ) {
             return;
         }
 
@@ -496,16 +544,16 @@ export class ContextualToolbar {
         // Remove event listeners
         document.removeEventListener("click", this.handleDocumentClick);
         document.removeEventListener("keydown", this.handleKeyDown);
-        
+
         // Remove elements from DOM
         if (this.element && this.element.parentNode) {
             this.element.parentNode.removeChild(this.element);
         }
-        
+
         if (this.colorDropdown && this.colorDropdown.parentNode) {
             this.colorDropdown.parentNode.removeChild(this.colorDropdown);
         }
-        
+
         // Reset state
         this.element = null;
         this.colorDropdown = null;

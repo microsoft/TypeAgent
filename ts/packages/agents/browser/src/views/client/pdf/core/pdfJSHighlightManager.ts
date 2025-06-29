@@ -15,21 +15,29 @@ export class PDFJSHighlightManager {
     private apiService: PDFApiService;
     private documentId: string | null = null;
     private highlights: Map<string, any> = new Map();
-    private highlightClickCallback: ((highlightId: string, highlightData: any, event: MouseEvent) => void) | null = null;
+    private highlightClickCallback:
+        | ((highlightId: string, highlightData: any, event: MouseEvent) => void)
+        | null = null;
 
     constructor(pdfViewer: any, eventBus: any, apiService: PDFApiService) {
         this.pdfViewer = pdfViewer;
         this.eventBus = eventBus;
         this.apiService = apiService;
         this.setupEventListeners();
-        
+
         console.log("🎨 PDF.js Highlight Manager initialized");
     }
 
     /**
      * Set callback for highlight click events
      */
-    setHighlightClickCallback(callback: (highlightId: string, highlightData: any, event: MouseEvent) => void): void {
+    setHighlightClickCallback(
+        callback: (
+            highlightId: string,
+            highlightData: any,
+            event: MouseEvent,
+        ) => void,
+    ): void {
         this.highlightClickCallback = callback;
     }
 
@@ -45,8 +53,8 @@ export class PDFJSHighlightManager {
      * Create a highlight annotation
      */
     async createHighlight(
-        selection: SelectionInfo, 
-        color: HighlightColor
+        selection: SelectionInfo,
+        color: HighlightColor,
     ): Promise<string | null> {
         if (!this.documentId) {
             console.error("No document ID set for creating PDF.js highlight");
@@ -54,20 +62,23 @@ export class PDFJSHighlightManager {
         }
 
         try {
-            console.log("🎨 Creating PDF.js highlight with selection:", selection);
+            console.log(
+                "🎨 Creating PDF.js highlight with selection:",
+                selection,
+            );
             console.log("🎨 Color:", color);
-            
+
             // Generate unique ID
             const highlightId = this.generateAnnotationId();
-            
+
             // Convert selection to coordinates
             const coordinates = this.convertSelectionToCoordinates(selection);
             if (!coordinates) {
                 throw new Error("Failed to convert selection to coordinates");
             }
-            
+
             console.log("📐 Calculated coordinates:", coordinates);
-            
+
             // Create highlight data for rendering
             const highlightData = {
                 id: highlightId,
@@ -81,16 +92,18 @@ export class PDFJSHighlightManager {
 
             // Store highlight
             this.highlights.set(highlightId, highlightData);
-            
+
             // Render highlight on page
             this.renderHighlight(highlightData);
-            
+
             // Persist to API
             await this.persistHighlightToAPI(highlightData);
-            
-            console.log("✅ PDF.js highlight created successfully:", highlightId);
+
+            console.log(
+                "✅ PDF.js highlight created successfully:",
+                highlightId,
+            );
             return highlightId;
-            
         } catch (error) {
             console.error("❌ Failed to create PDF.js highlight:", error);
             return null;
@@ -108,21 +121,23 @@ export class PDFJSHighlightManager {
 
         try {
             // Get highlights from API (filter for PDF.js storage type)
-            const annotations = await this.apiService.getAnnotations(this.documentId);
-            const highlights = annotations.filter(ann => 
-                ann.type === 'highlight' && ann.storage === 'pdfjs'
+            const annotations = await this.apiService.getAnnotations(
+                this.documentId,
             );
-            
+            const highlights = annotations.filter(
+                (ann) => ann.type === "highlight" && ann.storage === "pdfjs",
+            );
+
             // Clear existing highlights
             this.clearAllHighlights();
-            
+
             // Load and render each highlight
             for (const highlight of highlights) {
-                const highlightData = this.convertAPIDataToHighlightData(highlight);
+                const highlightData =
+                    this.convertAPIDataToHighlightData(highlight);
                 this.highlights.set(highlight.id, highlightData);
                 this.renderHighlight(highlightData);
             }
-            
         } catch (error) {
             console.error("❌ Failed to load PDF.js highlights:", error);
         }
@@ -135,17 +150,19 @@ export class PDFJSHighlightManager {
         try {
             // Remove from local storage
             this.highlights.delete(annotationId);
-            
+
             // Remove from DOM
             this.removeHighlightFromDOM(annotationId);
-            
+
             // Delete from API
             if (this.documentId) {
-                await this.apiService.deleteAnnotation(this.documentId, annotationId);
+                await this.apiService.deleteAnnotation(
+                    this.documentId,
+                    annotationId,
+                );
             }
-            
+
             console.log("✅ PDF.js highlight deleted:", annotationId);
-            
         } catch (error) {
             console.error("❌ Failed to delete PDF.js highlight:", error);
         }
@@ -154,24 +171,31 @@ export class PDFJSHighlightManager {
     /**
      * Convert selection to coordinates using PDF.js viewport
      */
-    private convertSelectionToCoordinates(selection: SelectionInfo): any | null {
+    private convertSelectionToCoordinates(
+        selection: SelectionInfo,
+    ): any | null {
         try {
-            const pageView = this.pdfViewer.getPageView(selection.pageNumber - 1);
+            const pageView = this.pdfViewer.getPageView(
+                selection.pageNumber - 1,
+            );
             if (!pageView) {
-                console.error("Page view not found for page:", selection.pageNumber);
+                console.error(
+                    "Page view not found for page:",
+                    selection.pageNumber,
+                );
                 return null;
             }
 
             const viewport = pageView.viewport;
             const pageElement = pageView.div;
-            
+
             if (!pageElement) {
                 console.error("Page element not found");
                 return null;
             }
 
             const pageRect = pageElement.getBoundingClientRect();
-            
+
             // Calculate bounds from selection rectangles relative to page
             let minLeft = Infinity;
             let maxRight = -Infinity;
@@ -197,10 +221,9 @@ export class PDFJSHighlightManager {
                 height: maxBottom - minTop,
                 pageRect: {
                     width: pageRect.width,
-                    height: pageRect.height
-                }
+                    height: pageRect.height,
+                },
             };
-            
         } catch (error) {
             console.error("Failed to convert selection to coordinates:", error);
             return null;
@@ -212,19 +235,23 @@ export class PDFJSHighlightManager {
      */
     private renderHighlight(highlightData: any): void {
         try {
-            const pageView = this.pdfViewer.getPageView(highlightData.pageNumber - 1);
+            const pageView = this.pdfViewer.getPageView(
+                highlightData.pageNumber - 1,
+            );
             if (!pageView || !pageView.div) {
                 console.error("Page view or div not found for rendering");
                 return;
             }
 
             const pageElement = pageView.div;
-            
+
             // Create or get highlight layer
-            let highlightLayer = pageElement.querySelector('.pdfjs-highlight-layer');
+            let highlightLayer = pageElement.querySelector(
+                ".pdfjs-highlight-layer",
+            );
             if (!highlightLayer) {
-                highlightLayer = document.createElement('div');
-                highlightLayer.className = 'pdfjs-highlight-layer';
+                highlightLayer = document.createElement("div");
+                highlightLayer.className = "pdfjs-highlight-layer";
                 highlightLayer.style.cssText = `
                     position: absolute;
                     top: 0;
@@ -238,24 +265,27 @@ export class PDFJSHighlightManager {
             }
 
             // Create highlight element
-            const highlightElement = document.createElement('div');
-            highlightElement.className = 'pdfjs-highlight';
-            highlightElement.setAttribute('data-highlight-id', highlightData.id);
-            
+            const highlightElement = document.createElement("div");
+            highlightElement.className = "pdfjs-highlight";
+            highlightElement.setAttribute(
+                "data-highlight-id",
+                highlightData.id,
+            );
+
             // Get current scale and calculate scaled coordinates
             const currentScale = this.pdfViewer.currentScale || 1;
             const creationScale = highlightData.creationScale || 1;
             const coords = highlightData.coordinates;
-            
+
             // Scale the coordinates: (original coordinates / creation scale) * current scale
             const scaleRatio = currentScale / creationScale;
             const scaledCoords = {
                 x: coords.x * scaleRatio,
                 y: coords.y * scaleRatio,
                 width: coords.width * scaleRatio,
-                height: coords.height * scaleRatio
+                height: coords.height * scaleRatio,
             };
-            
+
             highlightElement.style.cssText = `
                 position: absolute;
                 left: ${scaledCoords.x}px;
@@ -270,27 +300,30 @@ export class PDFJSHighlightManager {
             `;
 
             // Add hover effect
-            highlightElement.addEventListener('mouseenter', () => {
-                highlightElement.style.opacity = '0.5';
+            highlightElement.addEventListener("mouseenter", () => {
+                highlightElement.style.opacity = "0.5";
             });
-            
-            highlightElement.addEventListener('mouseleave', () => {
-                highlightElement.style.opacity = '0.3';
+
+            highlightElement.addEventListener("mouseleave", () => {
+                highlightElement.style.opacity = "0.3";
             });
 
             // Add click handler for highlight interaction
-            highlightElement.addEventListener('click', (event: MouseEvent) => {
+            highlightElement.addEventListener("click", (event: MouseEvent) => {
                 event.stopPropagation();
                 event.preventDefault();
-                
+
                 if (this.highlightClickCallback) {
-                    this.highlightClickCallback(highlightData.id, highlightData, event);
+                    this.highlightClickCallback(
+                        highlightData.id,
+                        highlightData,
+                        event,
+                    );
                 }
             });
 
             // Add to layer
             highlightLayer.appendChild(highlightElement);
-            
         } catch (error) {
             console.error("❌ Failed to render highlight:", error);
         }
@@ -300,7 +333,9 @@ export class PDFJSHighlightManager {
      * Remove highlight from DOM
      */
     private removeHighlightFromDOM(highlightId: string): void {
-        const highlightElement = document.querySelector(`[data-highlight-id="${highlightId}"]`);
+        const highlightElement = document.querySelector(
+            `[data-highlight-id="${highlightId}"]`,
+        );
         if (highlightElement && highlightElement.parentNode) {
             highlightElement.parentNode.removeChild(highlightElement);
         }
@@ -318,13 +353,13 @@ export class PDFJSHighlightManager {
      */
     private clearAllHighlights(): void {
         // Remove all highlight elements
-        const highlightElements = document.querySelectorAll('.pdfjs-highlight');
-        highlightElements.forEach(element => {
+        const highlightElements = document.querySelectorAll(".pdfjs-highlight");
+        highlightElements.forEach((element) => {
             if (element.parentNode) {
                 element.parentNode.removeChild(element);
             }
         });
-        
+
         // Clear local storage
         this.highlights.clear();
     }
@@ -334,13 +369,13 @@ export class PDFJSHighlightManager {
      */
     private async persistHighlightToAPI(highlightData: any): Promise<void> {
         if (!this.documentId) return;
-        
+
         try {
             const apiAnnotation = {
                 id: highlightData.id,
                 documentId: this.documentId,
                 page: highlightData.pageNumber,
-                type: 'highlight' as const,
+                type: "highlight" as const,
                 coordinates: {
                     x: highlightData.coordinates.x,
                     y: highlightData.coordinates.y,
@@ -350,13 +385,12 @@ export class PDFJSHighlightManager {
                 color: highlightData.color,
                 opacity: 0.3,
                 content: highlightData.text,
-                storage: 'pdfjs' as const,
+                storage: "pdfjs" as const,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             };
-            
+
             await this.apiService.addAnnotation(this.documentId, apiAnnotation);
-            
         } catch (error) {
             console.error("❌ Failed to persist highlight to API:", error);
             // Don't throw - highlight is still created locally
@@ -372,7 +406,7 @@ export class PDFJSHighlightManager {
             color: apiAnnotation.color,
             coordinates: apiAnnotation.coordinates,
             pageNumber: apiAnnotation.page,
-            text: apiAnnotation.content || '',
+            text: apiAnnotation.content || "",
             creationScale: 1, // Assume existing highlights were created at 1x scale
         };
     }
@@ -389,12 +423,12 @@ export class PDFJSHighlightManager {
      */
     private setupEventListeners(): void {
         // Listen for page rendering to re-render highlights
-        this.eventBus.on('pagerendered', (evt: any) => {
+        this.eventBus.on("pagerendered", (evt: any) => {
             this.reRenderHighlightsOnPage(evt.pageNumber);
         });
 
         // Listen for scale changes to re-position highlights
-        this.eventBus.on('scalechanging', (evt: any) => {
+        this.eventBus.on("scalechanging", (evt: any) => {
             setTimeout(() => {
                 this.reRenderAllHighlights();
             }, 100); // Small delay to ensure page is re-rendered
@@ -415,7 +449,10 @@ export class PDFJSHighlightManager {
                 }
             }
         } catch (error) {
-            console.error(`❌ Failed to re-render highlights on page ${pageNumber}:`, error);
+            console.error(
+                `❌ Failed to re-render highlights on page ${pageNumber}:`,
+                error,
+            );
         }
     }
 

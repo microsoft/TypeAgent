@@ -33,7 +33,12 @@ export class NoteEditor {
     /**
      * Show note editor for selected text with existing note data
      */
-    show(selection: SelectionInfo, callback: NoteSaveCallback, existingNote?: string, existingNoteData?: NoteData): void {
+    show(
+        selection: SelectionInfo,
+        callback: NoteSaveCallback,
+        existingNote?: string,
+        existingNoteData?: NoteData,
+    ): void {
         this.currentSelection = selection;
         this.currentScreenshot = null;
         this.showEditor(callback, existingNote, existingNoteData);
@@ -42,7 +47,12 @@ export class NoteEditor {
     /**
      * Show note editor for screenshot with existing note data
      */
-    showForScreenshot(screenshot: ScreenshotData, callback: NoteSaveCallback, existingNote?: string, existingNoteData?: NoteData): void {
+    showForScreenshot(
+        screenshot: ScreenshotData,
+        callback: NoteSaveCallback,
+        existingNote?: string,
+        existingNoteData?: NoteData,
+    ): void {
         this.currentSelection = null;
         this.currentScreenshot = screenshot;
         this.showEditor(callback, existingNote, existingNoteData);
@@ -51,25 +61,34 @@ export class NoteEditor {
     /**
      * Common show logic for both text and screenshot
      */
-    private showEditor(callback: NoteSaveCallback, existingNote?: string, existingNoteData?: NoteData): void {
+    private showEditor(
+        callback: NoteSaveCallback,
+        existingNote?: string,
+        existingNoteData?: NoteData,
+    ): void {
         if (!this.element) return;
 
         this.callback = callback;
-        
+
         // Populate the editor
         this.populateEditor(existingNote, existingNoteData);
-        
+
         // Show the modal
         this.element.classList.add("visible");
         this.isVisible = true;
-        
+
         // Focus the editor
-        const textArea = this.element.querySelector(".note-editor-textarea") as HTMLTextAreaElement;
+        const textArea = this.element.querySelector(
+            ".note-editor-textarea",
+        ) as HTMLTextAreaElement;
         if (textArea) {
             textArea.focus();
             // Position cursor at end if there's existing content
             if (existingNote) {
-                textArea.setSelectionRange(textArea.value.length, textArea.value.length);
+                textArea.setSelectionRange(
+                    textArea.value.length,
+                    textArea.value.length,
+                );
             }
         }
     }
@@ -100,7 +119,7 @@ export class NoteEditor {
     private createEditorElement(): void {
         this.element = document.createElement("div");
         this.element.className = "note-editor-modal";
-        
+
         this.element.innerHTML = `
             <div class="note-editor-backdrop"></div>
             <div class="note-editor-container">
@@ -178,15 +197,22 @@ export class NoteEditor {
     /**
      * Populate editor with selection/screenshot and existing note content
      */
-    private populateEditor(existingNote?: string, existingNoteData?: NoteData): void {
+    private populateEditor(
+        existingNote?: string,
+        existingNoteData?: NoteData,
+    ): void {
         if (!this.element) return;
 
         // Set content based on type (text selection or screenshot)
-        const selectedContentSection = this.element.querySelector(".selected-content-section");
+        const selectedContentSection = this.element.querySelector(
+            ".selected-content-section",
+        );
         if (selectedContentSection) {
             if (this.currentSelection) {
                 // Text selection mode - use existing blockquote if available
-                const blockquoteText = existingNoteData?.blockquoteContent || this.currentSelection.text;
+                const blockquoteText =
+                    existingNoteData?.blockquoteContent ||
+                    this.currentSelection.text;
                 selectedContentSection.innerHTML = `
                     <label class="section-label">Selected Text:</label>
                     <blockquote class="selected-text-quote">
@@ -195,7 +221,8 @@ export class NoteEditor {
                 `;
             } else if (this.currentScreenshot) {
                 // Screenshot mode - show existing screenshot if available
-                const screenshotData = existingNoteData?.screenshotData || this.currentScreenshot;
+                const screenshotData =
+                    existingNoteData?.screenshotData || this.currentScreenshot;
                 selectedContentSection.innerHTML = `
                     <label class="section-label">Selected Screenshot:</label>
                     <div class="selected-screenshot">
@@ -209,7 +236,9 @@ export class NoteEditor {
         }
 
         // Set existing note content if provided
-        const textArea = this.element.querySelector(".note-editor-textarea") as HTMLTextAreaElement;
+        const textArea = this.element.querySelector(
+            ".note-editor-textarea",
+        ) as HTMLTextAreaElement;
         if (textArea) {
             textArea.value = existingNote || "";
         }
@@ -222,7 +251,7 @@ export class NoteEditor {
      * Escape HTML to prevent XSS
      */
     private escapeHtml(text: string): string {
-        const div = document.createElement('div');
+        const div = document.createElement("div");
         div.textContent = text;
         return div.innerHTML;
     }
@@ -246,7 +275,9 @@ export class NoteEditor {
         saveButton?.addEventListener("click", () => this.handleSave());
 
         // Preview toggle
-        const previewButton = this.element.querySelector(".preview-toggle-button");
+        const previewButton = this.element.querySelector(
+            ".preview-toggle-button",
+        );
         previewButton?.addEventListener("click", () => this.togglePreview());
 
         // Backdrop click to close
@@ -269,9 +300,15 @@ export class NoteEditor {
      * Handle save action
      */
     private handleSave = (): void => {
-        if ((!this.currentSelection && !this.currentScreenshot) || !this.callback) return;
+        if (
+            (!this.currentSelection && !this.currentScreenshot) ||
+            !this.callback
+        )
+            return;
 
-        const textArea = this.element?.querySelector(".note-editor-textarea") as HTMLTextAreaElement;
+        const textArea = this.element?.querySelector(
+            ".note-editor-textarea",
+        ) as HTMLTextAreaElement;
         if (!textArea) return;
 
         const content = textArea.value.trim();
@@ -303,17 +340,22 @@ export class NoteEditor {
     private togglePreview(): void {
         if (!this.element) return;
 
-        const previewSection = this.element.querySelector(".note-preview-section") as HTMLElement;
-        const previewButton = this.element.querySelector(".preview-toggle-button") as HTMLElement;
-        
+        const previewSection = this.element.querySelector(
+            ".note-preview-section",
+        ) as HTMLElement;
+        const previewButton = this.element.querySelector(
+            ".preview-toggle-button",
+        ) as HTMLElement;
+
         const isVisible = previewSection.style.display !== "none";
-        
+
         if (isVisible) {
             previewSection.style.display = "none";
             previewButton.innerHTML = '<i class="fas fa-eye"></i> Preview';
         } else {
             previewSection.style.display = "block";
-            previewButton.innerHTML = '<i class="fas fa-eye-slash"></i> Hide Preview';
+            previewButton.innerHTML =
+                '<i class="fas fa-eye-slash"></i> Hide Preview';
             this.updatePreview();
         }
     }
@@ -324,9 +366,13 @@ export class NoteEditor {
     private updatePreview(): void {
         if (!this.element) return;
 
-        const textArea = this.element.querySelector(".note-editor-textarea") as HTMLTextAreaElement;
-        const previewContent = this.element.querySelector(".note-preview-content");
-        
+        const textArea = this.element.querySelector(
+            ".note-editor-textarea",
+        ) as HTMLTextAreaElement;
+        const previewContent = this.element.querySelector(
+            ".note-preview-content",
+        );
+
         if (!textArea || !previewContent) return;
 
         const markdown = textArea.value;
@@ -340,28 +386,31 @@ export class NoteEditor {
      */
     private markdownToHtml(markdown: string): string {
         let html = markdown;
-        
+
         // Convert basic markdown formatting
         html = html
             // Headers
-            .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-            .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-            .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+            .replace(/^### (.*$)/gim, "<h3>$1</h3>")
+            .replace(/^## (.*$)/gim, "<h2>$1</h2>")
+            .replace(/^# (.*$)/gim, "<h1>$1</h1>")
             // Bold
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
             // Italic
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/\*(.*?)\*/g, "<em>$1</em>")
             // Code
-            .replace(/`(.*?)`/g, '<code>$1</code>')
+            .replace(/`(.*?)`/g, "<code>$1</code>")
             // Links
-            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+            .replace(
+                /\[([^\]]+)\]\(([^)]+)\)/g,
+                '<a href="$2" target="_blank">$1</a>',
+            )
             // Line breaks
-            .replace(/\n/g, '<br>');
-        
+            .replace(/\n/g, "<br>");
+
         // Handle lists
-        html = html.replace(/^- (.*)$/gim, '<li>$1</li>');
-        html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
-        
+        html = html.replace(/^- (.*)$/gim, "<li>$1</li>");
+        html = html.replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>");
+
         return html;
     }
 
@@ -373,11 +422,11 @@ export class NoteEditor {
         const errorDiv = document.createElement("div");
         errorDiv.className = "note-editor-error";
         errorDiv.textContent = message;
-        
+
         const footer = this.element?.querySelector(".note-editor-footer");
         if (footer) {
             footer.insertBefore(errorDiv, footer.firstChild);
-            
+
             // Remove error after 3 seconds
             setTimeout(() => {
                 if (errorDiv.parentNode) {
@@ -397,13 +446,13 @@ export class NoteEditor {
         if (event.key === "Escape") {
             this.hide();
         }
-        
+
         // Ctrl+Enter or Cmd+Enter to save
         if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
             event.preventDefault();
             this.handleSave();
         }
-        
+
         // Ctrl+P or Cmd+P to toggle preview
         if ((event.ctrlKey || event.metaKey) && event.key === "p") {
             event.preventDefault();
@@ -416,7 +465,7 @@ export class NoteEditor {
      */
     destroy(): void {
         document.removeEventListener("keydown", this.handleKeyDown);
-        
+
         if (this.element) {
             if (this.element.parentNode) {
                 this.element.parentNode.removeChild(this.element);
