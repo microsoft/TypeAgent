@@ -3,20 +3,20 @@
 
 import { createChatTranslator, loadSchema } from "typeagent";
 import { ChatModel } from "aiclient";
-import { ContentAnalysis } from "./contentAnalysisSchema.js";
+import { ContentAnalysis } from "./schemas/contentAnalysisSchema.js";
 import {
     PageContent,
     MetaTagCollection,
     StructuredDataCollection,
 } from "./contentExtractor.js";
 
-export class IntelligentContentAnalyzer {
+export class ContentAnalyzer {
     private translator: any;
 
     constructor(model: ChatModel) {
         this.translator = createChatTranslator<ContentAnalysis>(
             model,
-            loadSchema(["contentAnalysisSchema.ts"], import.meta.url),
+            loadSchema(["schemas/contentAnalysisSchema.ts"], import.meta.url),
             "ContentAnalysis",
         );
     }
@@ -107,17 +107,6 @@ ${pageContent.codeBlocks
 
 `;
         }
-
-        prompt += `Please analyze this content and classify it according to the ContentAnalysis schema. Consider:
-
-1. What type of content this is (tutorial, documentation, article, etc.)
-2. The technical level and target audience
-3. Key technologies, domains, and concepts covered
-4. Content characteristics (has code, interactive elements, etc.)
-5. Educational value and purpose
-6. Main topics for search enhancement
-
-Focus on extracting actionable insights that will help users discover and categorize this content effectively.`;
 
         return prompt;
     }

@@ -11,7 +11,7 @@ import {
     ExtractionMode,
     EnhancedContent,
 } from "./contentExtractor.js";
-import { IntelligentContentAnalyzer } from "./intelligentContentAnalyzer.js";
+import { ContentAnalyzer } from "./contentAnalyzer.js";
 import { ChatModel } from "aiclient";
 import path from "path";
 import fs from "fs";
@@ -28,17 +28,14 @@ export interface ImportOptions {
     limit?: number;
     days?: number;
 
-    // NEW: Content extraction options
     extractContent?: boolean;
     extractionMode?: ExtractionMode;
     contentTimeout?: number;
     maxConcurrent?: number;
 
-    // NEW: Intelligent analysis options
     enableIntelligentAnalysis?: boolean;
     model?: ChatModel;
 
-    // NEW: Action detection options
     enableActionDetection?: boolean;
     actionTimeout?: number;
     actionConfidence?: number;
@@ -511,10 +508,10 @@ async function enhanceWithContent(
         enableActionDetection: options.enableActionDetection,
     });
 
-    // Initialize intelligent analyzer if enabled and model is provided
-    let analyzer: IntelligentContentAnalyzer | undefined;
+    // Initialize content analyzer if enabled and model is provided
+    let analyzer: ContentAnalyzer | undefined;
     if (options.enableIntelligentAnalysis && options.model) {
-        analyzer = new IntelligentContentAnalyzer(options.model);
+        analyzer = new ContentAnalyzer(options.model);
     }
 
     const maxConcurrent = options.maxConcurrent || 3;
