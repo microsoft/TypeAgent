@@ -362,6 +362,14 @@ export async function createAgentRpcClient(
                 param.defaultId,
             );
         },
+        queueToggleTransientAgent: async (
+            contextId: number,
+            agentName: string,
+            active: boolean,
+        ) => {
+            const context = actionContextMap.get(contextId);
+            return context.queueToggleTransientAgent(agentName, active);
+        },
     };
 
     const agentContextCallHandlers: AgentContextCallFunctions = {

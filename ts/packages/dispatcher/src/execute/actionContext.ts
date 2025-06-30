@@ -79,6 +79,18 @@ export function getActionContext(
         get actionIO() {
             return actionIO;
         },
+        async queueToggleTransientAgent(subAgentName: string, active: boolean) {
+            if (!subAgentName.startsWith(`${appAgentName}.`)) {
+                throw new Error(`Invalid sub agent name: ${subAgentName}`);
+            }
+            const state = context.agents.getTransientState(subAgentName);
+            if (state === undefined) {
+                throw new Error(
+                    `Transient sub agent not found: ${subAgentName}`,
+                );
+            }
+            context.pendingToggleTransientAgents.push([subAgentName, active]);
+        },
     };
     return {
         actionContext,

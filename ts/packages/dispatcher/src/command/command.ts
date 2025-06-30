@@ -22,6 +22,7 @@ import { parseParams } from "./parameters.js";
 import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 import { CommandResult } from "../dispatcher.js";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
+import { getAppAgentName } from "../internal.js";
 
 const debugCommand = registerDebug("typeagent:dispatcher:command");
 const debugCommandError = registerDebug("typeagent:dispatcher:command:error");
@@ -310,6 +311,24 @@ function endProcessCommand(
     requestId: RequestId,
     context: CommandHandlerContext,
 ) {
+    const pendingToggleTransientAgents = context.pendingToggleTransientAgents;
+    if (pendingToggleTransientAgents.length !== 0) {
+        for (const [agentName, active] of pendingToggleTransientAgents) {
+            context.agents.toggleTransient(agentName, active);
+        }
+
+        // Because of the embedded switcher, we need to clear the cache.
+        context.translatorCache.clear();
+
+        const [agentName, active] = pendingToggleTransientAgents.pop()!;
+        if (active) {
+            context.lastActionSchemaName = agentName;
+        } else if (context.lastActionSchemaName === agentName) {
+            context.lastActionSchemaName = getAppAgentName(agentName);
+        }
+        context.pendingToggleTransientAgents.length = 0; // clear the pending toggle agents.
+    }
+
     context.commandProfiler?.stop();
     context.commandProfiler = undefined;
 
