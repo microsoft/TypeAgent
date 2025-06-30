@@ -15,7 +15,7 @@ export function createWebsiteAnswerGenerator(model: ChatModel) {
         loadSchema(["websiteAnswerSchema.ts"], import.meta.url),
         "WebsiteAnswerResponse",
     );
-    
+
     return translator;
 }
 
@@ -45,8 +45,8 @@ FREQUENCY PATTERNS:
 - "popular sites" → Use visitFrequency="high" or high visitCount
 - "rarely visited" → Use visitFrequency="low" or low visitCount
 
-Include relevant facet values in responses for context and insights.`
-        }
+Include relevant facet values in responses for context and insights.`,
+        },
     ];
 }
 
@@ -56,17 +56,17 @@ Include relevant facet values in responses for context and insights.`
 export async function searchWebsiteWithContext(
     query: string,
     searchFunction: Function,
-    options?: any
+    options?: any,
 ): Promise<any> {
     const websiteInstructions = createWebsiteAnswerInstructions();
-    
+
     const searchOptions = {
         ...options,
         modelInstructions: [
             ...(options?.modelInstructions || []),
-            ...websiteInstructions
-        ]
+            ...websiteInstructions,
+        ],
     };
-    
+
     return await searchFunction(query, searchOptions);
 }

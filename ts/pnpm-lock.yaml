@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      cheerio:
-        specifier: ^1.1.0
-        version: 1.1.0
     devDependencies:
       '@fluidframework/build-tools':
         specifier: ^0.56.0

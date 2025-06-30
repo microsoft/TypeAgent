@@ -3,19 +3,13 @@
 
 export type WebsiteQueryType =
     | "temporal"
-    | "frequency" 
+    | "frequency"
     | "category"
     | "general";
 
-export type TemporalScope =
-    | "bookmark"
-    | "visit"
-    | "any";
+export type TemporalScope = "bookmark" | "visit" | "any";
 
-export type FrequencyLevel =
-    | "high"
-    | "medium"
-    | "low";
+export type FrequencyLevel = "high" | "medium" | "low";
 
 export type WebsiteFacets = {
     bookmarkDate?: string;
