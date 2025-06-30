@@ -66,25 +66,33 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, searchBatchDef());
-        const destPath =
-            namedArgs.destPath ??
-            changeFileExt(namedArgs.srcPath, ".json", "_results");
-        const results = await kpTest.runSearchBatch(
-            context,
-            namedArgs.srcPath,
-            destPath,
-            (srResult, index, total) => {
-                if (srResult.success) {
-                    context.printer.writeProgress(index + 1, total);
-                    context.printer.writeLine(srResult.data.searchText);
-                } else {
-                    context.printer.writeError(srResult.message);
-                }
-            },
-        );
-        if (!results.success) {
-            context.printer.writeError(results.message);
+        try {
+            beginTestBatch();
+
+            const namedArgs = parseNamedArguments(args, searchBatchDef());
+            const destPath =
+                namedArgs.destPath ??
+                changeFileExt(namedArgs.srcPath, ".json", "_results");
+            const results = await kpTest.runSearchBatch(
+                context,
+                namedArgs.srcPath,
+                destPath,
+                (srResult, index, total) => {
+                    if (srResult.success) {
+                        context.printer.writeProgress(index + 1, total);
+                        context.printer.writeLine(
+                            srResult.data.cmd ?? srResult.data.searchText,
+                        );
+                    } else {
+                        context.printer.writeError(srResult.message);
+                    }
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+            }
+        } finally {
+            endTestBatch();
         }
     }
 
@@ -106,29 +114,34 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        try {
+            beginTestBatch();
 
-        const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
-        const srcPath = namedArgs.srcPath;
-        let errorCount = 0;
-        const results = await kpTest.verifyLangSearchResultsBatch(
-            context,
-            srcPath,
-            (result, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                if (result.success) {
-                    if (!writeSearchScore(result.data, namedArgs.verbose)) {
-                        errorCount++;
+            const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
+            const srcPath = namedArgs.srcPath;
+            let errorCount = 0;
+            const results = await kpTest.verifyLangSearchResultsBatch(
+                context,
+                srcPath,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        if (!writeSearchScore(result.data, namedArgs.verbose)) {
+                            errorCount++;
+                        }
+                    } else {
+                        context.printer.writeError(result.message);
                     }
-                } else {
-                    context.printer.writeError(result.message);
-                }
-            },
-        );
-        if (!results.success) {
-            context.printer.writeError(results.message);
-        }
-        if (errorCount > 0) {
-            context.printer.writeLine(`${errorCount} errors`);
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+            }
+            if (errorCount > 0) {
+                context.printer.writeLine(`${errorCount} errors`);
+            }
+        } finally {
+            endTestBatch();
         }
     }
 
@@ -148,27 +161,36 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, answerBatchDef());
-        const srcPath = namedArgs.srcPath;
-        const destPath =
-            namedArgs.destPath ?? changeFileExt(srcPath, ".json", "_results");
-        await kpTest.runAnswerBatch(
-            context,
-            namedArgs.srcPath,
-            destPath,
-            (result, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                if (result.success) {
-                    context.printer.writeLine(result.data.question);
-                    context.printer.writeInColor(
-                        chalk.greenBright,
-                        result.data.answer,
-                    );
-                } else {
-                    context.printer.writeError(result.message);
-                }
-            },
-        );
+        try {
+            beginTestBatch();
+
+            const namedArgs = parseNamedArguments(args, answerBatchDef());
+            const srcPath = namedArgs.srcPath;
+            const destPath =
+                namedArgs.destPath ??
+                changeFileExt(srcPath, ".json", "_results");
+            await kpTest.runAnswerBatch(
+                context,
+                namedArgs.srcPath,
+                destPath,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        context.printer.writeLine(
+                            result.data.cmd ?? result.data.question,
+                        );
+                        context.printer.writeInColor(
+                            chalk.greenBright,
+                            result.data.answer,
+                        );
+                    } else {
+                        context.printer.writeError(result.message);
+                    }
+                },
+            );
+        } finally {
+            endTestBatch();
+        }
     }
 
     function verifyAnswerBatchDef(): CommandMetadata {
@@ -191,30 +213,36 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
-        const minSimilarity = namedArgs.similarity;
-        const srcPath = namedArgs.srcPath;
+        try {
+            beginTestBatch();
 
-        const model = openai.createEmbeddingModel();
-        const results = await kpTest.verifyQuestionAnswerBatch(
-            context,
-            srcPath,
-            model,
-            (result, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                if (result.success) {
-                    writeAnswerScore(
-                        result.data,
-                        minSimilarity,
-                        namedArgs.verbose,
-                    );
-                } else {
-                    context.printer.writeError(result.message);
-                }
-            },
-        );
-        if (!results.success) {
-            context.printer.writeError(results.message);
+            const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
+            const minSimilarity = namedArgs.similarity;
+            const srcPath = namedArgs.srcPath;
+
+            const model = openai.createEmbeddingModel();
+            const results = await kpTest.verifyQuestionAnswerBatch(
+                context,
+                srcPath,
+                model,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        writeAnswerScore(
+                            result.data,
+                            minSimilarity,
+                            namedArgs.verbose,
+                        );
+                    } else {
+                        context.printer.writeError(result.message);
+                    }
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+            }
+        } finally {
+            endTestBatch();
         }
     }
 
@@ -309,5 +337,11 @@ export async function createKnowproTestCommands(
         }
     }
 
+    function beginTestBatch() {
+        context.retryNoAnswer = true;
+    }
+    function endTestBatch() {
+        context.retryNoAnswer = false;
+    }
     return;
 }

@@ -65,25 +65,29 @@ export function isPropertyTerm(
 }
 
 export function isEntityPropertyTerm(term: PropertySearchTerm): boolean {
-    switch (term.propertyName) {
-        default:
-            break;
-        case "name":
-        case "type":
-            return true;
+    if (typeof term.propertyName === "string") {
+        switch (term.propertyName) {
+            default:
+                break;
+            case "name":
+            case "type":
+                return true;
+        }
     }
     return false;
 }
 
 export function isActionPropertyTerm(term: PropertySearchTerm): boolean {
-    switch (term.propertyName) {
-        default:
-            break;
-        case "subject":
-        case "verb":
-        case "object":
-        case "indirectObject":
-            return true;
+    if (typeof term.propertyName === "string") {
+        switch (term.propertyName) {
+            default:
+                break;
+            case "subject":
+            case "verb":
+            case "object":
+            case "indirectObject":
+                return true;
+        }
     }
 
     return false;
@@ -95,7 +99,22 @@ export function isSearchGroupTerm(
     return term.hasOwnProperty("booleanOp");
 }
 
+export interface CompiledSearchTerm extends SearchTerm {
+    /**
+     * The compiler will eliminate overlapping related terms to reduce hit duplication.
+     * This is because different search terms may end up with the same related terms.
+     * However, we don' want to do this when the query includes explicit property matching
+     */
+    relatedTermsRequired?: boolean | undefined;
+}
+
+export function toRequiredSearchTerm(term: SearchTerm): CompiledSearchTerm {
+    const compiledTerm: CompiledSearchTerm = term;
+    compiledTerm.relatedTermsRequired = true;
+    return compiledTerm;
+}
+
 export type CompiledTermGroup = {
     booleanOp: BooleanOp;
-    terms: SearchTerm[];
+    terms: CompiledSearchTerm[];
 };

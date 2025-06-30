@@ -38,6 +38,7 @@ import {
     isEntityPropertyTerm,
     isPropertyTerm,
     isSearchGroupTerm,
+    toRequiredSearchTerm,
 } from "./compileLib.js";
 import { NormalizedEmbedding } from "typeagent";
 import { getTimestampedScoredSemanticRefOrdinals } from "./knowledgeLib.js";
@@ -520,9 +521,13 @@ class QueryCompiler {
             if (isPropertyTerm(term)) {
                 termExpressions.push(this.compilePropertyTerm(term));
                 if (typeof term.propertyName !== "string") {
-                    compiledTerms[0].terms.push(term.propertyName);
+                    compiledTerms[0].terms.push(
+                        toRequiredSearchTerm(term.propertyName),
+                    );
                 }
-                compiledTerms[0].terms.push(term.propertyValue);
+                compiledTerms[0].terms.push(
+                    toRequiredSearchTerm(term.propertyValue),
+                );
             } else if (isSearchGroupTerm(term)) {
                 const [nestedTerms, groupExpr] = this.compileSearchGroup(
                     term,

@@ -824,6 +824,8 @@ export function addStandardHandlers(
     handlers.commands.metadata = "List all commands";
     handlers.cls = cls;
     handlers.cls.metadata = "Clear the screen";
+    handlers.sleep = sleep;
+    handlers.sleep.metadata = sleepDef();
 
     async function help(args: string[], io: InteractiveIo): Promise<void> {
         displayHelp(args, handlers, io);
@@ -838,6 +840,25 @@ export function addStandardHandlers(
         // From: https://stackoverflow.com/questions/9006988/node-js-on-windows-how-to-clear-console
         io.stdout.write("\x1Bc");
     }
+
+    function sleepDef(): CommandMetadata {
+        return {
+            description: "Sleep for a given number of milliseconds",
+            args: {
+                ms: argNum("Number of milliseconds to sleep for"),
+            },
+        };
+    }
+    async function sleep(args: string[]): Promise<void> {
+        const namedArgs = parseNamedArguments(args, sleepDef());
+        const ms = namedArgs.ms;
+        if (ms !== undefined && ms > 0) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+        return Promise.resolve();
+    }
+
+    return;
 }
 
 export function addBatchHandler(app: InteractiveApp) {

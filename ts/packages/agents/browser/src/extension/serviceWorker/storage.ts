@@ -84,66 +84,6 @@ export async function deleteStoredPageProperty(
 }
 
 /**
- * Stores schema for a page
- * @param url The URL of the page
- * @param schema The schema to store
- */
-export async function setPageSchema(url: string, schema: any): Promise<void> {
-    let value = await chrome.storage.session.get(["pageSchema"]);
-    let updatedSchema = value.pageSchema;
-
-    if (value && Array.isArray(value.pageSchema)) {
-        updatedSchema = value.pageSchema.filter(
-            (c: { url: string }) => c.url !== url,
-        );
-    } else {
-        updatedSchema = [];
-    }
-
-    updatedSchema.push({
-        url: url,
-        body: schema,
-    });
-
-    await chrome.storage.session.set({ pageSchema: updatedSchema });
-}
-
-/**
- * Gets schema for a page
- * @param url The URL of the page
- * @returns The stored schema or undefined
- */
-export async function getPageSchema(url: string): Promise<any> {
-    const value = await chrome.storage.session.get(["pageSchema"]);
-    if (value && Array.isArray(value.pageSchema)) {
-        const targetSchema = value.pageSchema.filter(
-            (c: { url: string }) => c.url === url,
-        );
-
-        if (targetSchema && targetSchema.length > 0) {
-            return targetSchema[0].body;
-        }
-    }
-
-    return undefined;
-}
-
-/**
- * Removes schema for a page
- * @param url The URL of the page
- */
-export async function removePageSchema(url: string): Promise<void> {
-    const value = await chrome.storage.session.get(["pageSchema"]);
-    if (value && Array.isArray(value.pageSchema)) {
-        const updatedSchema = value.pageSchema.filter(
-            (c: { url: string }) => c.url !== url,
-        );
-
-        await chrome.storage.session.set({ pageSchema: updatedSchema });
-    }
-}
-
-/**
  * Saves recorded actions to storage
  * @param recordedActions The recorded actions
  * @param recordedActionPageHTML The HTML of the page during recording

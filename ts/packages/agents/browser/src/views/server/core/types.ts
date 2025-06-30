@@ -17,6 +17,7 @@ export interface FeatureConfig {
     basePath: string;
     setupRoutes: (app: any) => void;
     setupSSE?: (sseManager: SSEManager) => void;
+    initialize?: () => Promise<void>;
 }
 
 export interface SSEManager {

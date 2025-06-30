@@ -72,6 +72,8 @@ import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
+import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
+import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -92,6 +94,7 @@ export type BrowserActionContext = {
     useExternalBrowserControl: boolean;
     webSocket?: WebSocket | undefined;
     webAgentChannels?: WebAgentChannels | undefined;
+    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
     crossWordState?: Crossword | undefined;
     browserConnector?: BrowserConnector | undefined;
     browserProcess?: ChildProcess | undefined;
@@ -264,6 +267,10 @@ async function updateBrowserContext(
                                 targetTranslator,
                                 false,
                             );
+                            break;
+                        }
+                        case "removeCrosswordPageCache": {
+                            await deleteCachedSchema(context, data.params.url);
                             break;
                         }
                         case "addTabIdToIndex":
@@ -889,7 +896,7 @@ export const handlers: CommandHandlerTable = {
                 close: new CloseBrowserHandler(),
             },
         },
-
+        crossword: getCrosswordCommandHandlerTable(),
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
         external: {
