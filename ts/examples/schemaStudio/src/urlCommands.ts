@@ -171,6 +171,14 @@ export function createURLValidateCommands(
         let failCount = 0;
         for (const url of urls) {
             const temp = url.split("\t");
+            
+            if (temp.length < 2) {
+                io.writer.writeLine(
+                    `Skipping invalid line: ${url}. Expected format: "utterance\\tsite"`,
+                );
+                continue;
+            }
+
             const utterance = temp[0].trim();
             const site = temp[1].trim();
 

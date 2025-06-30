@@ -288,13 +288,15 @@ export async function validateURL(
                                 (response.parsedBody as any).status !=
                                     "completed"
                             ) {
-                                //if (!run.completedAt) {
-                                await project.agents.runs.cancel(
-                                    thread.id,
-                                    (response.parsedBody as any).id,
-                                );
-                                console.log(`TIMEOUT - Canceled ${utterance}`);
-                                //}
+                                try  {
+                                    await project.agents.runs.cancel(
+                                        thread.id,
+                                        (response.parsedBody as any).id,
+                                    );
+                                    console.log(`TIMEOUT - Canceled ${utterance}`);
+                                } catch (cancelError) {
+                                    console.error(`Error canceling run: ${cancelError}`);
+                                }
                             }
                         },
                     },
