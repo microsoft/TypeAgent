@@ -192,6 +192,15 @@ export function createExternalBrowserServer(channel: RpcChannel) {
 
             return url;
         },
+
+        closeWindow: async () => {
+            const current = await chrome.windows.getCurrent();
+            if (current.id) {
+                await chrome.windows.remove(current.id);
+            } else {
+                throw new Error("No current window found to close.");
+            }
+        },
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

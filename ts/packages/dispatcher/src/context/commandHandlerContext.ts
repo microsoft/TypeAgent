@@ -120,6 +120,7 @@ export type CommandHandlerContext = {
     // Runtime context
     commandLock: Limiter; // Make sure we process one command at a time.
     lastActionSchemaName: string;
+    pendingToggleTransientAgents: [string, boolean][];
     translatorCache: Map<string, TypeAgentTranslator>;
     agentCache: AgentCache;
     currentScriptDir: string;
@@ -437,6 +438,7 @@ export async function initializeCommandHandlerContext(
 
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
+            pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,
                 agents,

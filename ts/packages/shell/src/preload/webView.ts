@@ -180,12 +180,6 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
-        case "closeWindow": {
-            window.close();
-            // todo: call method on IPC process to close the window/view
-
-            break;
-        }
 
         default:
             throw new Error(`Invalid action: ${actionName}`);
