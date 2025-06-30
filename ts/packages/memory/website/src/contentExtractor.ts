@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as cheerio from 'cheerio';
+import { ActionExtractor, DetectedAction, ActionSummary } from './actionExtractor.js';
 
 export type ExtractionMode = 'basic' | 'content' | 'actions' | 'full';
 
@@ -62,19 +63,29 @@ export interface EnhancedContent {
     extractionTime: number;
     success: boolean;
     error?: string;
+    
+    // NEW: Action detection results
+    detectedActions?: DetectedAction[];
+    actionSummary?: ActionSummary;
 }
 
 export class ContentExtractor {
     private userAgent = 'Mozilla/5.0 (compatible; TypeAgent-WebMemory/1.0)';
     private defaultTimeout = 10000;
+    private actionExtractor: ActionExtractor;
 
     constructor(private config?: {
         timeout?: number;
         userAgent?: string;
         maxContentLength?: number;
+        enableActionDetection?: boolean;
     }) {
         if (config?.timeout) this.defaultTimeout = config.timeout;
         if (config?.userAgent) this.userAgent = config.userAgent;
+        this.actionExtractor = new ActionExtractor({
+            minConfidence: 0.5,
+            maxActions: 20
+        });
     }
 
     async extractFromUrl(url: string, mode: ExtractionMode = 'content'): Promise<EnhancedContent> {
@@ -118,6 +129,18 @@ export class ContentExtractor {
 
         if (mode === 'full') {
             result.structuredData = this.extractStructuredData($);
+        }
+
+        // NEW: Action detection for 'actions' and 'full' modes
+        if (['actions', 'full'].includes(mode) && this.config?.enableActionDetection !== false) {
+            try {
+                result.detectedActions = await this.actionExtractor.extractActionsFromHtml(html);
+                result.actionSummary = this.actionExtractor.createActionSummary(result.detectedActions);
+            } catch (error) {
+                console.warn('Action detection failed:', error);
+                result.detectedActions = [];
+                result.actionSummary = this.actionExtractor.createActionSummary([]);
+            }
         }
 
         return result;
@@ -475,7 +498,14 @@ export class ContentExtractor {
             },
             metaTags: { custom: {} },
             structuredData: {},
-            actions: []
+            actions: [],
+            detectedActions: [],
+            actionSummary: {
+                totalActions: 0,
+                actionTypes: [],
+                highConfidenceActions: 0,
+                actionDistribution: {}
+            }
         };
     }
 }

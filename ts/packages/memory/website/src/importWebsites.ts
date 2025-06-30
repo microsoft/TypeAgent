@@ -37,6 +37,11 @@ export interface ImportOptions {
     // NEW: Intelligent analysis options
     enableIntelligentAnalysis?: boolean;
     model?: ChatModel;
+    
+    // NEW: Action detection options
+    enableActionDetection?: boolean;
+    actionTimeout?: number;
+    actionConfidence?: number;
 }
 
 export interface ChromeBookmark {
@@ -493,7 +498,8 @@ async function enhanceWithContent(
 ): Promise<Website[]> {
     const extractor = new ContentExtractor({
         timeout: options.contentTimeout || 10000,
-        maxContentLength: 20000
+        maxContentLength: 20000,
+        enableActionDetection: options.enableActionDetection
     });
     
     // Initialize intelligent analyzer if enabled and model is provided
@@ -596,6 +602,10 @@ function createEnhancedWebsite(originalWebsite: Website, contentData: EnhancedCo
     if (contentData.metaTags) enhancedVisitInfo.metaTags = contentData.metaTags;
     if (contentData.structuredData) enhancedVisitInfo.structuredData = contentData.structuredData;
     if (contentData.actions) enhancedVisitInfo.extractedActions = contentData.actions;
+    
+    // NEW: Action detection data
+    if (contentData.detectedActions) enhancedVisitInfo.detectedActions = contentData.detectedActions;
+    if (contentData.actionSummary) enhancedVisitInfo.actionSummary = contentData.actionSummary;
     
     // Add intelligent analysis if available
     if (intelligentAnalysis) {

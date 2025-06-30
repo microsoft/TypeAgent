@@ -56,6 +56,10 @@ export async function createKnowproWebsiteCommands(
     commands.kpWebsiteSearch = websiteSearch;
     commands.kpWebsiteAnalyzeContent = websiteAnalyzeContent;
     commands.kpWebsiteTestEnhanced = websiteTestEnhanced;
+    
+    // NEW: Action detection commands
+    commands.kpWebsiteAnalyzeActions = websiteAnalyzeActions;
+    commands.kpWebsiteListActions = websiteListActions;
 
     function websiteAddDef(): CommandMetadata {
         return {
@@ -232,7 +236,11 @@ export async function createKnowproWebsiteCommands(
                 extractContent: argBool("Extract page content", false),
                 extractionMode: arg("Extraction mode: basic | content | actions | full", "content"),
                 maxConcurrent: argNum("Max concurrent extractions", 3),
-                contentTimeout: argNum("Content extraction timeout (ms)", 10000)
+                contentTimeout: argNum("Content extraction timeout (ms)", 10000),
+                
+                // NEW: Action detection options
+                enableActionDetection: argBool("Enable action detection", true),
+                actionConfidence: argNum("Minimum action confidence threshold", 0.7)
             },
         };
     }
@@ -290,6 +298,10 @@ export async function createKnowproWebsiteCommands(
                 context.printer.writeLine(`🔍 Extracting content in ${namedArgs.extractionMode} mode...`);
                 context.printer.writeLine(`⚙️  Max concurrent: ${namedArgs.maxConcurrent}, Timeout: ${namedArgs.contentTimeout}ms`);
                 
+                if (namedArgs.enableActionDetection && (namedArgs.extractionMode === 'actions' || namedArgs.extractionMode === 'full')) {
+                    context.printer.writeLine(`🎯 Action detection enabled (min confidence: ${namedArgs.actionConfidence})`);
+                }
+                
                 websites = await website.importWebsitesWithContent(
                     namedArgs.source as "chrome" | "edge",
                     "bookmarks",
@@ -299,7 +311,9 @@ export async function createKnowproWebsiteCommands(
                         extractContent: true,
                         extractionMode: namedArgs.extractionMode as any,
                         maxConcurrent: namedArgs.maxConcurrent,
-                        contentTimeout: namedArgs.contentTimeout
+                        contentTimeout: namedArgs.contentTimeout,
+                        enableActionDetection: namedArgs.enableActionDetection,
+                        actionConfidence: namedArgs.actionConfidence
                     },
                     (current, total, item) => {
                         // writeProgress might only expect one argument  
@@ -313,6 +327,20 @@ export async function createKnowproWebsiteCommands(
                 const enhancedCount = websites.filter(w => w.metadata.pageContent).length;
                 if (enhancedCount > 0) {
                     context.printer.writeLine(`📄 ${enhancedCount} bookmarks now have enhanced content`);
+                }
+                
+                // Report action detection results
+                if (namedArgs.enableActionDetection && (namedArgs.extractionMode === 'actions' || namedArgs.extractionMode === 'full')) {
+                    const actionStats = calculateActionStats(websites);
+                    if (actionStats.sitesWithActions > 0) {
+                        context.printer.writeLine(`✅ Action detection completed:`);
+                        context.printer.writeLine(`   • ${actionStats.sitesWithActions} sites have detectable actions`);
+                        context.printer.writeLine(`   • ${actionStats.totalActions} total actions found`);
+                        context.printer.writeLine(`   • ${actionStats.actionTypes.join(', ')} action types detected`);
+                        context.printer.writeLine(`   • ${actionStats.highConfidenceActions} high-confidence actions (>80%)`);
+                    } else {
+                        context.printer.writeLine(`ℹ️  No high-confidence actions detected in imported bookmarks`);
+                    }
                 }
             } else {
                 // Use existing basic import
@@ -779,6 +807,177 @@ export async function createKnowproWebsiteCommands(
 
     async function websiteClose() {
         closeWebsite();
+    }
+
+    // NEW: Action Analysis Commands
+    
+    function websiteAnalyzeActionsDef(): CommandMetadata {
+        return {
+            description: "Analyze actions available on specific URLs",
+            args: {
+                url: arg("URL to analyze for actions")
+            },
+            options: {
+                confidence: arg("Minimum confidence threshold", "0.5"),
+                showDetails: argBool("Show detailed action information", false)
+            }
+        };
+    }
+    commands.kpWebsiteAnalyzeActions.metadata = websiteAnalyzeActionsDef();
+    
+    async function websiteAnalyzeActions(args: string[]) {
+        const namedArgs = parseNamedArguments(args, websiteAnalyzeActionsDef());
+        
+        try {
+            context.printer.writeLine(`🎯 Analyzing actions: ${namedArgs.url}`);
+            
+            const actionExtractor = new website.ActionExtractor({
+                minConfidence: parseFloat(namedArgs.confidence) || 0.5
+            });
+            
+            const actions = await actionExtractor.extractActionsFromUrl(namedArgs.url);
+            
+            if (actions.length === 0) {
+                context.printer.writeLine(`❌ No actions found with confidence >= ${namedArgs.confidence}`);
+                return;
+            }
+            
+            context.printer.writeLine(`\n🎯 Found ${actions.length} actions:`);
+            
+            // Group by action type
+            const groupedActions = new Map<string, any[]>();
+            actions.forEach(action => {
+                if (!groupedActions.has(action.actionType)) {
+                    groupedActions.set(action.actionType, []);
+                }
+                groupedActions.get(action.actionType)!.push(action);
+            });
+            
+            for (const [actionType, actionGroup] of groupedActions) {
+                context.printer.writeLine(`\n📋 ${actionType} (${actionGroup.length}):`);
+                
+                actionGroup.forEach(action => {
+                    const confidenceIcon = action.confidence > 0.8 ? '🟢' : action.confidence > 0.6 ? '🟡' : '🔴';
+                    context.printer.writeLine(`   ${confidenceIcon} ${action.name} (${(action.confidence * 100).toFixed(0)}%)`);
+                    
+                    if (namedArgs.showDetails) {
+                        if (action.target) {
+                            context.printer.writeLine(`      Target: ${action.target.type} - ${action.target.name || 'N/A'}`);
+                        }
+                        if (action.selectors && action.selectors.length > 0) {
+                            context.printer.writeLine(`      Selectors: ${action.selectors.slice(0, 2).join(', ')}`);
+                        }
+                        if (action.url && action.url !== namedArgs.url) {
+                            context.printer.writeLine(`      Action URL: ${action.url}`);
+                        }
+                    }
+                });
+            }
+            
+        } catch (error) {
+            context.printer.writeError(`Action analysis failed: ${error}`);
+        }
+    }
+
+    function websiteListActionsDef(): CommandMetadata {
+        return {
+            description: "List all sites with specific action types",
+            options: {
+                actionType: arg("Filter by action type (BuyAction, DownloadAction, etc.)"),
+                confidence: arg("Minimum confidence threshold", "0.7"),
+                limit: arg("Maximum results to show", "10")
+            }
+        };
+    }
+    commands.kpWebsiteListActions.metadata = websiteListActionsDef();
+    
+    async function websiteListActions(args: string[]) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) return;
+        
+        const namedArgs = parseNamedArguments(args, websiteListActionsDef());
+        const minConfidence = parseFloat(namedArgs.confidence) || 0.7;
+        const limit = parseInt(namedArgs.limit) || 10;
+        
+        context.printer.writeLine(`🎯 Finding sites with actions (confidence >= ${minConfidence}):`);
+        
+        const sitesWithActions: any[] = [];
+        
+        for (let i = 0; i < websiteCollection.messages.length; i++) {
+            const website = websiteCollection.messages.get(i);
+            if (!website?.metadata.detectedActions) continue;
+            
+            const relevantActions = website.metadata.detectedActions.filter(action => {
+                const meetsConfidence = action.confidence >= minConfidence;
+                const meetsType = !namedArgs.actionType || action.actionType === namedArgs.actionType;
+                return meetsConfidence && meetsType;
+            });
+            
+            if (relevantActions.length > 0) {
+                sitesWithActions.push({
+                    url: website.metadata.url,
+                    title: website.metadata.title,
+                    domain: website.metadata.domain,
+                    actions: relevantActions
+                });
+            }
+        }
+        
+        if (sitesWithActions.length === 0) {
+            context.printer.writeLine(`❌ No sites found with matching actions`);
+            return;
+        }
+        
+        context.printer.writeLine(`\n📊 Found ${sitesWithActions.length} sites with actions:\n`);
+        
+        sitesWithActions
+            .sort((a, b) => b.actions.length - a.actions.length)
+            .slice(0, limit)
+            .forEach((site, index) => {
+                context.printer.writeLine(`${index + 1}. **${site.title || site.domain}**`);
+                context.printer.writeLine(`   URL: ${site.url}`);
+                
+                const actionSummary = site.actions
+                    .map(a => `${a.actionType.replace('Action', '')} (${(a.confidence * 100).toFixed(0)}%)`)
+                    .join(', ');
+                context.printer.writeLine(`   Actions: ${actionSummary}`);
+                
+                // Show high-confidence actions
+                const highConfActions = site.actions.filter(a => a.confidence > 0.8);
+                if (highConfActions.length > 0) {
+                    context.printer.writeLine(`   High-confidence: ${highConfActions.map(a => a.name).join(', ')}`);
+                }
+                
+                context.printer.writeLine('');
+            });
+    }
+
+    function calculateActionStats(websites: website.Website[]) {
+        let sitesWithActions = 0;
+        let totalActions = 0;
+        let highConfidenceActions = 0;
+        const actionTypesSet = new Set<string>();
+        
+        websites.forEach(w => {
+            if (w.metadata.detectedActions && w.metadata.detectedActions.length > 0) {
+                sitesWithActions++;
+                totalActions += w.metadata.detectedActions.length;
+                
+                w.metadata.detectedActions.forEach(action => {
+                    actionTypesSet.add(action.actionType.replace('Action', ''));
+                    if (action.confidence > 0.8) {
+                        highConfidenceActions++;
+                    }
+                });
+            }
+        });
+        
+        return {
+            sitesWithActions,
+            totalActions,
+            highConfidenceActions,
+            actionTypes: Array.from(actionTypesSet)
+        };
     }
 
     function ensureMemoryLoaded() {
