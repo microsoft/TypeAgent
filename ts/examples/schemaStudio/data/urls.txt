@@ -59,7 +59,7 @@ xhamster	xhamster
 desivocabulary	https://www.youtube.com/@desivocabulary1001
 rakuten	https://www.rakuten.com/
 flipkart	https://www.flipkart.com/
-bbc	bbc
+bbc	https://www.bbc.com
 justdial	https://profile.justdial.com/
 shabdkosh	shabdkosh
 adobe	https://www.adobe.com/
@@ -215,7 +215,7 @@ softonic	https://en.softonic.com/
 nhl	https://www.nhl.com/
 westernunion	https://www.westernunion.com/us/en/home.html
 harvard	https://www.harvard.edu/
-medium	
+medium  https://medium.com/
 gsmarena	https://www.gsmarena.com/
 mercadolibre	https://www.mercadolibre.com/
 verywellhealth	https://www.verywellhealth.com/
@@ -323,7 +323,7 @@ bbcgoodfood	https://www.bbcgoodfood.com/
 google	https://www.google.com/
 bajajfinserv	https://www.bajajfinserv.in/
 hamariweb	https://www.hamariweb.com/
-nhk	
+nhk https://www.nhk.or.jp/
 goibibo	https://www.goibibo.com/
 threads	https://www.threads.com
 eksisozluk	https://eksisozluk.com/
@@ -486,7 +486,7 @@ kidshealth	https://kidshealth.org/
 usda	https://www.usda.gov/
 longdo	https://dict.longdo.com/
 twitch	https://www.twitch.tv/
-un	
+un  https://www.un.org/en/
 allareacodes	https://www.allareacodes.com/
 altibbi	https://altibbi.com/
 pantip	https://pantip.com/
@@ -496,7 +496,7 @@ meta	https://en.wikipedia.org/wiki/Meta_Platforms
 researchgate	https://www.researchgate.net/
 youm7	https://www.youm7.com/
 mykhel	https://www.mykhel.com/
-si	
+si	https://www.si.com/
 lachainemeteo	https://www.lachainemeteo.com/meteo-france/previsions-meteo-france-aujourdhui
 npr	https://www.npr.org/
 elle	https://www.elleinternational.com/
@@ -649,9 +649,9 @@ dooflixapk	https://www.dooflixapk.com/
 haberturk	https://www.haberturk.com/
 beinsports	https://www.beinsports.com/en-us
 pro-football-reference	https://www.pro-football-reference.com/
-ups	ups
+ups	https://www.ups.com/
 about.google	https://about.google/
-turkiye	https://tr.wikipedia.org/wiki/T%C3%BCrkiye
+turkiye	https://en.wikipedia.org/wiki/Turkey
 gamewith	https://gamewith.net/
 statmuse	https://www.statmuse.com/
 walmart	https://www.walmart.com/
@@ -776,7 +776,7 @@ indiatvnews	https://www.indiatvnews.com/
 instacart	https://www.instacart.com/
 nefisyemektarifleri	https://www.nefisyemektarifleri.com/
 pokemon	https://www.pokemon.com/us
-azlyrics	
+azlyrics    https://lyrics.az/	
 tasteofhome	https://www.tasteofhome.com/
 nu	https://www.nu.edu/
 coinmarketcap	https://coinmarketcap.com/
@@ -877,7 +877,7 @@ ixigo	https://www.ixigo.com/
 steamcommunity	https://steamcommunity.com/
 newsnow	https://www.newsnow.com/us/
 meteored	https://www.meteored.com/
-deloitte	deloitte
+deloitte	https://www.deloitte.com/
 food	https://www.foodnetwork.com/
 thesprucepets	https://www.thesprucepets.com/
 gazzetta	https://www.gazzetta.it/
@@ -889,9 +889,9 @@ purdue	https://www.purdue.edu/
 diyanet	https://www.diyanet.gov.tr/
 commonsensemedia	https://www.commonsensemedia.org/
 heart	https://en.wikipedia.org/wiki/Heart
-gnavi	
+gnavi   https://www.gnavi.co.jp/
 sky	https://en.wikipedia.org/wiki/Sky
-timesprayer	timesprayer
+timesprayer	https://timesprayer.com/
 cbc	https://www.cbc.ca/
 giallozafferano	https://www.giallozafferano.it/
 sirogohan	https://www.sirogohan.com/

@@ -66,11 +66,12 @@ export function createURLResolverCommands(
             );
             let passFail = "";
 
-            if (resolved !== site) {
-                passFail = "FAIL";
+            // resolved site matches expected site accounting for varying / at the end
+            if (resolved === site || (site.endsWith("/") && site === `${resolved}/`) || (resolved?.endsWith("/") && `${site}/` === resolved)) {
+                passFail = "PASS";
                 failCount++;
             } else {
-                passFail = "PASS";
+                passFail = "FAIL";
                 passCount++;
             }
 
