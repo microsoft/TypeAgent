@@ -171,10 +171,9 @@ def main():
         for i in range(0, len(pairs), 10):
             print(
                 ", ".join(
-                    f"{score:.3f}({counter})"
-                for score, counter in pairs[i : i + 10]
+                    f"{score:.3f}({counter})" for score, counter in pairs[i : i + 10]
+                )
             )
-        )
 
 
 async def compare(
