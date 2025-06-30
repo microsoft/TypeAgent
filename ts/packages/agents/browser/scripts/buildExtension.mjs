@@ -21,6 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Helper function to create Vite build options that avoid TypeScript plugin conflicts
 function createBuildOptions(outDir, options = {}) {
     return {
+        configFile: false,
         logLevel: "error",
         plugins: [
             // Explicitly disable TypeScript plugin to avoid outDir conflicts
