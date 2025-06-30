@@ -8,6 +8,10 @@ import { runBrowserAction } from "./browserActions";
 import { createGenericChannel } from "agent-rpc/channel";
 import { createExternalBrowserServer } from "./externalBrowserControlServer";
 
+import registerDebug from "debug";
+const debugWebSocket = registerDebug("typeagent:browser:ws");
+const debugWebSocketError = registerDebug("typeagent:browser:ws:error");
+
 let webSocket: WebSocket | undefined;
 let settings: Record<string, any>;
 
@@ -25,19 +29,19 @@ export async function createWebSocket(): Promise<WebSocket | undefined> {
     socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
-        console.log("Connected to: " + socketEndpoint);
+        debugWebSocket("Connected to: " + socketEndpoint);
 
         webSocket.onopen = (event: Event) => {
-            console.log("websocket open");
+            debugWebSocket("websocket open");
             resolve(webSocket);
         };
         webSocket.onmessage = (event: MessageEvent) => {};
         webSocket.onclose = (event: CloseEvent) => {
-            console.log("websocket connection closed");
+            debugWebSocket("websocket connection closed");
             resolve(undefined);
         };
         webSocket.onerror = (event: Event) => {
-            console.error("websocket error");
+            debugWebSocketError("websocket error");
             resolve(undefined);
         };
     });
@@ -88,7 +92,7 @@ export async function ensureWebsocketConnected(): Promise<
 
             const data = JSON.parse(text) as WebSocketMessageV2;
             if (data.error) {
-                console.error(data.error);
+                debugWebSocketError(data.error);
                 return;
             }
             if (data.method === "browserControl/message") {
@@ -118,7 +122,7 @@ export async function ensureWebsocketConnected(): Promise<
         };
 
         webSocket.onclose = (event: CloseEvent) => {
-            console.log("websocket connection closed");
+            debugWebSocket("websocket connection closed");
             webSocket = undefined;
             showBadgeError();
             if (event.reason !== "duplicate") {
@@ -144,7 +148,7 @@ export function keepWebSocketAlive(webSocket: WebSocket): void {
                 }),
             );
         } else {
-            console.log("Clearing keepalive retry interval");
+            debugWebSocket("Clearing keepalive retry interval");
             clearInterval(keepAliveIntervalId);
         }
     }, 20 * 1000);
@@ -156,11 +160,11 @@ export function keepWebSocketAlive(webSocket: WebSocket): void {
 export function reconnectWebSocket(): void {
     const connectionCheckIntervalId = setInterval(async () => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-            console.log("Clearing reconnect retry interval");
+            debugWebSocket("Clearing reconnect retry interval");
             clearInterval(connectionCheckIntervalId);
             showBadgeHealthy();
         } else {
-            console.log("Retrying connection");
+            debugWebSocket("Retrying connection");
             await ensureWebsocketConnected();
         }
     }, 5 * 1000);
@@ -198,7 +202,7 @@ export async function sendActionToAgent(
 
                 webSocket.addEventListener("message", handler);
             } catch {
-                console.log("Unable to contact agent backend.");
+                debugWebSocketError("Unable to contact agent backend.");
                 reject("Unable to contact agent backend.");
             }
         } else {
