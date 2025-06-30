@@ -3,6 +3,13 @@
 
 import * as kp from "knowpro";
 import { conversation as kpLib } from "knowledge-processor";
+import { 
+    PageContent, 
+    MetaTagCollection, 
+    StructuredDataCollection,
+    ActionInfo 
+} from "./contentExtractor.js";
+import { ContentAnalysis } from "./schemas/contentAnalysisSchema.js";
 
 export interface WebsiteVisitInfo {
     url: string;
@@ -19,6 +26,14 @@ export interface WebsiteVisitInfo {
     visitCount?: number;
     lastVisitTime?: string;
     typedCount?: number;
+    
+    // NEW: Enhanced content fields
+    pageContent?: PageContent;
+    metaTags?: MetaTagCollection;
+    structuredData?: StructuredDataCollection;
+    extractedActions?: ActionInfo[];
+    contentSummary?: string;
+    intelligentAnalysis?: ContentAnalysis;
 }
 
 export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
@@ -36,6 +51,14 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
     public visitCount?: number;
     public lastVisitTime?: string;
     public typedCount?: number;
+    
+    // NEW: Enhanced content properties
+    public pageContent?: PageContent;
+    public metaTags?: MetaTagCollection;
+    public structuredData?: StructuredDataCollection;
+    public extractedActions?: ActionInfo[];
+    public contentSummary?: string;
+    public intelligentAnalysis?: ContentAnalysis;
 
     constructor(visitInfo: WebsiteVisitInfo) {
         this.url = visitInfo.url;
@@ -61,6 +84,20 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
             this.lastVisitTime = visitInfo.lastVisitTime;
         if (visitInfo.typedCount !== undefined)
             this.typedCount = visitInfo.typedCount;
+            
+        // NEW: Enhanced content properties
+        if (visitInfo.pageContent !== undefined)
+            this.pageContent = visitInfo.pageContent;
+        if (visitInfo.metaTags !== undefined)
+            this.metaTags = visitInfo.metaTags;
+        if (visitInfo.structuredData !== undefined)
+            this.structuredData = visitInfo.structuredData;
+        if (visitInfo.extractedActions !== undefined)
+            this.extractedActions = visitInfo.extractedActions;
+        if (visitInfo.contentSummary !== undefined)
+            this.contentSummary = visitInfo.contentSummary;
+        if (visitInfo.intelligentAnalysis !== undefined)
+            this.intelligentAnalysis = visitInfo.intelligentAnalysis;
     }
 
     public get source() {
@@ -236,6 +273,14 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
 
         actions.push(action);
 
+        // NEW: LLM-based intelligent content analysis
+        if (this.intelligentAnalysis) {
+            this.addIntelligentTopics(topics, this.intelligentAnalysis);
+        } else {
+            // Fallback: Basic content-derived knowledge (legacy approach)
+            this.addBasicContentTopics(topics);
+        }
+
         return {
             entities,
             topics,
@@ -267,6 +312,163 @@ export class WebsiteMeta implements kp.IMessageMetadata, kp.IKnowledgeSource {
         
         // Default confidence
         return 0.7;
+    }
+
+    private addIntelligentTopics(topics: string[], analysis: ContentAnalysis): void {
+        // Content type and classification
+        topics.push(analysis.contentType);
+        topics.push(`${analysis.contentType} content`);
+        
+        // Technical level
+        topics.push(`${analysis.technicalLevel} level`);
+        topics.push(`for ${analysis.technicalLevel} users`);
+        
+        // Content length
+        topics.push(analysis.contentLength.replace('_', ' '));
+        if (analysis.contentLength === 'comprehensive') {
+            topics.push("detailed content");
+            topics.push("in-depth coverage");
+        }
+        
+        // Technologies (high-value search terms)
+        analysis.technologies.forEach(tech => {
+            topics.push(tech);
+            topics.push(`${tech} content`);
+            topics.push(`${tech} ${analysis.contentType}`);
+        });
+        
+        // Domains and concepts
+        analysis.domains.forEach(domain => {
+            topics.push(domain);
+            topics.push(`${domain} content`);
+        });
+        
+        analysis.concepts.forEach(concept => {
+            topics.push(concept);
+            topics.push(`${concept} topic`);
+        });
+        
+        // Main and secondary topics
+        analysis.mainTopics.forEach(topic => {
+            topics.push(topic);
+            topics.push(`primary: ${topic}`);
+        });
+        
+        analysis.secondaryTopics.forEach(topic => {
+            topics.push(topic);
+        });
+        
+        // Content characteristics
+        if (analysis.hasProgrammingCode) {
+            topics.push("programming code");
+            topics.push("code examples");
+            topics.push("technical tutorial");
+        }
+        
+        if (analysis.hasVisualContent) {
+            topics.push("visual content");
+            topics.push("diagrams and images");
+        }
+        
+        if (analysis.hasDownloadableContent) {
+            topics.push("downloadable resources");
+            topics.push("files available");
+        }
+        
+        if (analysis.requiresSignup) {
+            topics.push("requires registration");
+            topics.push("gated content");
+        }
+        
+        // Educational value
+        if (analysis.isEducational) {
+            topics.push("educational content");
+            topics.push("learning material");
+        }
+        
+        if (analysis.isReference) {
+            topics.push("reference material");
+            topics.push("documentation");
+        }
+        
+        if (analysis.isPracticalExample) {
+            topics.push("practical examples");
+            topics.push("hands-on content");
+        }
+        
+        // Target audience
+        analysis.targetAudience.forEach(audience => {
+            topics.push(`for ${audience}`);
+            topics.push(`${audience} focused`);
+        });
+        
+        // Primary purpose as searchable topic
+        if (analysis.primaryPurpose) {
+            topics.push(analysis.primaryPurpose);
+        }
+        
+        // Quality indicators
+        if (analysis.isComprehensive) {
+            topics.push("comprehensive coverage");
+            topics.push("thorough content");
+        }
+        
+        if (analysis.isUpToDate) {
+            topics.push("current content");
+            topics.push("up to date");
+        }
+        
+        if (analysis.isWellStructured) {
+            topics.push("well organized");
+            topics.push("structured content");
+        }
+        
+        // Interactivity level
+        switch (analysis.interactivityLevel) {
+            case 'interactive':
+                topics.push("interactive content");
+                topics.push("hands-on experience");
+                break;
+            case 'highly_interactive':
+                topics.push("highly interactive");
+                topics.push("immersive experience");
+                break;
+        }
+    }
+
+    private addBasicContentTopics(topics: string[]): void {
+        // Fallback to basic content analysis when LLM analysis is not available
+        if (this.pageContent) {
+            // Add headings as topics
+            this.pageContent.headings.forEach(heading => {
+                topics.push(heading);
+                topics.push(`topic: ${heading}`);
+            });
+            
+            // Content characteristics
+            if (this.pageContent.codeBlocks && this.pageContent.codeBlocks.length > 0) {
+                topics.push("contains code examples");
+                topics.push("programming tutorial");
+                topics.push("technical documentation");
+            }
+            
+            // Reading time context
+            if (this.pageContent.readingTime > 10) {
+                topics.push("long form content");
+                topics.push("detailed article");
+            } else if (this.pageContent.readingTime < 3) {
+                topics.push("quick read");
+                topics.push("short content");
+            }
+        }
+        
+        // Meta tag derived knowledge
+        if (this.metaTags?.keywords) {
+            this.metaTags.keywords.forEach(keyword => {
+                topics.push(keyword);
+                topics.push(`keyword: ${keyword}`);
+            });
+        }
     }
 }
 

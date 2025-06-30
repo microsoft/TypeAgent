@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export * from "./contentExtractor.js";
 export * from "./importWebsites.js";
 export * from "./indexingService.js";
 export * from "./websiteCollection.js";

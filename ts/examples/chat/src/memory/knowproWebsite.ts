@@ -54,6 +54,7 @@ export async function createKnowproWebsiteCommands(
     commands.kpWebsiteClose = websiteClose;
     commands.kpWebsiteStats = websiteStats;
     commands.kpWebsiteSearch = websiteSearch;
+    commands.kpWebsiteAnalyzeContent = websiteAnalyzeContent;
     commands.kpWebsiteTestEnhanced = websiteTestEnhanced;
 
     function websiteAddDef(): CommandMetadata {
@@ -114,7 +115,7 @@ export async function createKnowproWebsiteCommands(
         context.printer.writeLine(`Adding website: ${visitInfo.url}`);
         const result = await addMessagesToCollection(
             websiteCollection,
-            websiteMessage,
+            [websiteMessage],
             namedArgs.updateIndex,
         );
 
@@ -226,6 +227,12 @@ export async function createKnowproWebsiteCommands(
                 limit: arg("Maximum number to import"),
                 days: arg("Only import bookmarks from last N days"),
                 updateIndex: argBool("Automatically update index", true),
+                
+                // NEW: Content extraction options
+                extractContent: argBool("Extract page content", false),
+                extractionMode: arg("Extraction mode: basic | content | actions | full", "content"),
+                maxConcurrent: argNum("Max concurrent extractions", 3),
+                contentTimeout: argNum("Content extraction timeout (ms)", 10000)
             },
         };
     }
@@ -277,20 +284,53 @@ export async function createKnowproWebsiteCommands(
             }
 
             let websites: website.Website[] = [];
-            if (namedArgs.source === "chrome") {
-                websites = await website.importWebsites(
-                    "chrome",
+            
+            // Enhanced import with content extraction
+            if (namedArgs.extractContent) {
+                context.printer.writeLine(`🔍 Extracting content in ${namedArgs.extractionMode} mode...`);
+                context.printer.writeLine(`⚙️  Max concurrent: ${namedArgs.maxConcurrent}, Timeout: ${namedArgs.contentTimeout}ms`);
+                
+                websites = await website.importWebsitesWithContent(
+                    namedArgs.source as "chrome" | "edge",
                     "bookmarks",
                     bookmarksPath,
-                    importOptions,
+                    {
+                        ...importOptions,
+                        extractContent: true,
+                        extractionMode: namedArgs.extractionMode as any,
+                        maxConcurrent: namedArgs.maxConcurrent,
+                        contentTimeout: namedArgs.contentTimeout
+                    },
+                    (current, total, item) => {
+                        // writeProgress might only expect one argument  
+                        context.printer.writeLine(`Processing ${current}/${total}: ${item}`);
+                    }
                 );
-            } else if (namedArgs.source === "edge") {
-                websites = await website.importWebsites(
-                    "edge",
-                    "bookmarks",
-                    bookmarksPath,
-                    importOptions,
-                );
+                
+                context.printer.writeLine(`✅ Content extraction completed for ${websites.length} bookmarks`);
+                
+                // Count websites with enhanced content
+                const enhancedCount = websites.filter(w => w.metadata.pageContent).length;
+                if (enhancedCount > 0) {
+                    context.printer.writeLine(`📄 ${enhancedCount} bookmarks now have enhanced content`);
+                }
+            } else {
+                // Use existing basic import
+                if (namedArgs.source === "chrome") {
+                    websites = await website.importWebsites(
+                        "chrome",
+                        "bookmarks",
+                        bookmarksPath,
+                        importOptions,
+                    );
+                } else if (namedArgs.source === "edge") {
+                    websites = await website.importWebsites(
+                        "edge",
+                        "bookmarks",
+                        bookmarksPath,
+                        importOptions,
+                    );
+                }
             }
 
             if (websites.length === 0) {
@@ -601,6 +641,102 @@ export async function createKnowproWebsiteCommands(
             
         } catch (error) {
             context.printer.writeError(`Search failed: ${error}`);
+        }
+    }
+
+    function websiteAnalyzeContentDef(): CommandMetadata {
+        return {
+            description: "Analyze content of specific URLs", 
+            args: {
+                url: arg("URL to analyze")
+            },
+            options: {
+                mode: arg("Analysis mode: content | actions | full", "content"),
+                addToMemory: argBool("Add to website memory", false),
+                showContent: argBool("Show extracted content", false)
+            }
+        };
+    }
+    commands.kpWebsiteAnalyzeContent.metadata = websiteAnalyzeContentDef();
+    async function websiteAnalyzeContent(args: string[]) {
+        const namedArgs = parseNamedArguments(args, websiteAnalyzeContentDef());
+        
+        const extractor = new website.ContentExtractor();
+        try {
+            context.printer.writeLine(`🔍 Analyzing content: ${namedArgs.url}`);
+            const analysis = await extractor.extractFromUrl(namedArgs.url, namedArgs.mode as any);
+            
+            if (!analysis.success) {
+                context.printer.writeError(`Analysis failed: ${analysis.error}`);
+                return;
+            }
+            
+            // Display analysis results
+            context.printer.writeLine(`\n📊 Content Analysis Results:`);
+            context.printer.writeLine(`Success: ${analysis.success}`);
+            context.printer.writeLine(`Extraction Time: ${analysis.extractionTime}ms`);
+            
+            if (analysis.pageContent) {
+                context.printer.writeLine(`Title: ${analysis.pageContent.title || 'N/A'}`);
+                context.printer.writeLine(`Word Count: ${analysis.pageContent.wordCount || 0}`);
+                context.printer.writeLine(`Reading Time: ${analysis.pageContent.readingTime || 0} minutes`);
+                
+                if (analysis.pageContent.headings?.length) {
+                    context.printer.writeLine(`Headings (${analysis.pageContent.headings.length}): ${analysis.pageContent.headings.slice(0, 5).join(', ')}${analysis.pageContent.headings.length > 5 ? '...' : ''}`);
+                }
+                
+                if (analysis.pageContent.codeBlocks?.length) {
+                    context.printer.writeLine(`Code Blocks: ${analysis.pageContent.codeBlocks.length} found`);
+                }
+            }
+            
+            if (analysis.metaTags?.keywords?.length) {
+                context.printer.writeLine(`Keywords: ${analysis.metaTags.keywords.join(', ')}`);
+            }
+            
+            if (analysis.structuredData?.schemaType) {
+                context.printer.writeLine(`Schema Type: ${analysis.structuredData.schemaType}`);
+            }
+            
+            if (analysis.actions?.length) {
+                context.printer.writeLine(`Actions Found: ${analysis.actions.length} (forms, buttons, links)`);
+            }
+            
+            if (namedArgs.showContent && analysis.pageContent?.mainContent) {
+                context.printer.writeLine(`\n📄 Main Content (first 500 chars):`);
+                context.printer.writeLine(analysis.pageContent.mainContent.substring(0, 500) + '...');
+            }
+            
+            if (namedArgs.addToMemory) {
+                const websiteCollection = ensureMemoryLoaded();
+                if (websiteCollection) {
+                    // Create enhanced website and add to memory
+                    const visitInfo: website.WebsiteVisitInfo = {
+                        url: namedArgs.url,
+                        source: "bookmark",
+                        visitDate: new Date().toISOString(),
+                    };
+                    
+                    // Add optional properties only if they exist
+                    if (analysis.pageContent?.title) visitInfo.title = analysis.pageContent.title;
+                    if (analysis.pageContent) visitInfo.pageContent = analysis.pageContent;
+                    if (analysis.metaTags) visitInfo.metaTags = analysis.metaTags;
+                    if (analysis.structuredData) visitInfo.structuredData = analysis.structuredData;
+                    if (analysis.actions) visitInfo.extractedActions = analysis.actions;
+                    
+                    const websiteMessage = website.importWebsiteVisit(visitInfo);
+                    const result = await addMessagesToCollection(websiteCollection, [websiteMessage], true);
+                    
+                    if (result.success) {
+                        context.printer.writeLine(`✅ Added to website memory with enhanced content`);
+                    } else {
+                        context.printer.writeError(`Failed to add to memory: ${result.message}`);
+                    }
+                }
+            }
+            
+        } catch (error) {
+            context.printer.writeError(`Content analysis failed: ${error}`);
         }
     }
 
