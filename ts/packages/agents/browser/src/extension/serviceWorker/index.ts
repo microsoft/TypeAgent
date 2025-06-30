@@ -11,6 +11,7 @@ import { toggleSiteTranslator } from "./siteTranslator";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { getActiveTab } from "./tabManager";
 import { handleMessage } from "./messageHandlers";
+import { PanelManager, handleExtensionIconClick } from "./panelManager";
 
 import {
     isWebAgentMessage,
@@ -38,6 +39,9 @@ export async function initialize(): Promise<void> {
         showBadgeError();
     }
 
+    // Initialize panel manager
+    await PanelManager.initialize();
+
     // Initialize context menu
     initializeContextMenu();
 
@@ -51,20 +55,7 @@ export async function initialize(): Promise<void> {
 function setupEventListeners(): void {
     // Browser action click
     chrome.action?.onClicked.addListener(async (tab) => {
-        try {
-            const connected = await ensureWebsocketConnected();
-            if (!connected) {
-                reconnectWebSocket();
-                showBadgeError();
-            } else {
-                await toggleSiteTranslator(tab);
-                showBadgeHealthy();
-            }
-        } catch (error) {
-            console.error("Error on browser action click:", error);
-            reconnectWebSocket();
-            showBadgeError();
-        }
+        await handleExtensionIconClick(tab);
     });
 
     // Tab activation
@@ -170,6 +161,7 @@ function setupEventListeners(): void {
     // Browser startup
     chrome.runtime.onStartup.addListener(async () => {
         console.log("Browser Agent Service Worker started");
+        await PanelManager.initialize();
         try {
             const connected = await ensureWebsocketConnected();
             if (!connected) {
