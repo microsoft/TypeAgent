@@ -52,6 +52,12 @@ export function createURLResolverCommands(
         // get the grounding config
         const groundingConfig = bingWithGrounding.apiSettingsFromEnv();
 
+        // delete the output file if it exists
+        const outputFile = "examples/schemaStudio/data/resolved.txt";
+        if (fs.existsSync(outputFile)) {
+            fs.unlinkSync(outputFile);
+        }
+
         // Start checking each URL
         let passCount = 0;
         let failCount = 0;
@@ -81,7 +87,7 @@ export function createURLResolverCommands(
             );
 
             fs.appendFileSync(
-                "examples/schemaStudio/data/resolved.txt",
+                outputFile,
                 `${passFail}\t${utterance}\t${site}\t${resolved}\n`,
             );
         }
