@@ -15,6 +15,7 @@ try:
 except ImportError:
     readline = None
 
+import colorama
 import typechat
 
 from ..aitools.utils import create_translator, load_dotenv, pretty_print, timelog
@@ -41,6 +42,7 @@ from ..podcasts.podcast import Podcast
 
 
 def main() -> None:
+    colorama.init(autoreset=True)
     load_dotenv()
     model = create_typechat_model()
     with timelog("create typechat translator"):
@@ -81,7 +83,6 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     context: QueryEvalContext[TMessage, TIndex],
     stream: io.TextIOWrapper,
 ) -> None:
-    print("_" * 80)
     ps1 = "--> "
     while True:
         query_text = read_one_line(ps1, stream)
@@ -114,6 +115,7 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                     continue
                 pretty_print(messages[msg_ord])
             case _:
+                print("-" * 50)
                 with timelog("Query processing"):
                     asyncio.run(
                         wrap_process_query(
@@ -123,7 +125,7 @@ def process_inputs[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
                             answer_translator,
                         )
                     )
-                print("_" * 80)
+                print("-" * 50)
 
 
 def read_one_line(ps1: str, stream: io.TextIOWrapper) -> str | None:
@@ -175,11 +177,11 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     )
     if debug_context:
         if debug_context.search_query:
-            print("-" * 50)
             pretty_print(debug_context.search_query)
-        if debug_context.search_query_expr:
             print("-" * 50)
+        if debug_context.search_query_expr:
             pretty_print(debug_context.search_query_expr)
+            print("-" * 50)
     if not isinstance(result, typechat.Success):
         print(f"Error searching conversation: {result.message}")
         return
@@ -190,14 +192,13 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     all_answers, combined_answer = await generate_answers(
         answer_translator, search_results, conversation, orig_query_text
     )
-    print("-" * 40)
     pretty_print(all_answers)
-    print("-" * 40)
+    print("-" * 50)
     if combined_answer.type == "NoAnswer":
-        print(f"Failure: {combined_answer.whyNoAnswer}")
+        print(colorama.Fore.RED + f"Failure: {combined_answer.whyNoAnswer}")
     else:
-        print(combined_answer.answer)
-    print("-" * 40)
+        print(colorama.Fore.GREEN + f"{combined_answer.answer}")
+    print("-" * 50)
 
 
 def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
