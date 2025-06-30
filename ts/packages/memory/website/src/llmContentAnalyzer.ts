@@ -3,7 +3,11 @@
 
 import { openai, ChatModel } from "aiclient";
 import { ContentAnalysis } from "./schemas/contentAnalysisSchema.js";
-import { PageContent, MetaTagCollection, ActionInfo } from "./contentExtractor.js";
+import {
+    PageContent,
+    MetaTagCollection,
+    ActionInfo,
+} from "./contentExtractor.js";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -21,9 +25,9 @@ export interface AnalysisInput {
 
 export class LLMContentAnalyzer {
     private chatModel: ChatModel;
-    private contentAnalysisSchema: string = '';
-    private pageTypeSchema: string = '';
-    
+    private contentAnalysisSchema: string = "";
+    private pageTypeSchema: string = "";
+
     constructor() {
         this.chatModel = openai.createChatModel();
         this.loadSchemas();
@@ -31,33 +35,46 @@ export class LLMContentAnalyzer {
 
     private loadSchemas(): void {
         // Load the content analysis schema file
-        const contentSchemaPath = path.join(__dirname, 'schemas', 'contentAnalysisSchema.ts');
-        this.contentAnalysisSchema = fs.readFileSync(contentSchemaPath, 'utf-8');
-        
+        const contentSchemaPath = path.join(
+            __dirname,
+            "schemas",
+            "contentAnalysisSchema.ts",
+        );
+        this.contentAnalysisSchema = fs.readFileSync(
+            contentSchemaPath,
+            "utf-8",
+        );
+
         // Load the page type schema file
-        const pageTypeSchemaPath = path.join(__dirname, 'schemas', 'pageTypeSchema.ts');
-        this.pageTypeSchema = fs.readFileSync(pageTypeSchemaPath, 'utf-8');
+        const pageTypeSchemaPath = path.join(
+            __dirname,
+            "schemas",
+            "pageTypeSchema.ts",
+        );
+        this.pageTypeSchema = fs.readFileSync(pageTypeSchemaPath, "utf-8");
     }
 
     /**
      * Analyze content using LLM to extract structured information
      */
-    async analyzeContent(input: AnalysisInput): Promise<ContentAnalysis | null> {
+    async analyzeContent(
+        input: AnalysisInput,
+    ): Promise<ContentAnalysis | null> {
         try {
             const prompt = this.buildAnalysisPrompt(input);
             const response = await this.chatModel.complete([
                 {
                     role: "system",
-                    content: this.getSystemPrompt()
+                    content: this.getSystemPrompt(),
                 },
                 {
-                    role: "user", 
-                    content: prompt
-                }
+                    role: "user",
+                    content: prompt,
+                },
             ]);
 
             if (!response.success) {
-                throw new Error(response.message || 'LLM request failed');
+                throw new Error(response.message || "LLM request failed");
             }
 
             return this.parseAnalysisResponse(response.data);
@@ -88,56 +105,71 @@ Rules:
 
     private buildAnalysisPrompt(input: AnalysisInput): string {
         let prompt = `Analyze this web page content:\n\n`;
-        
+
         prompt += `URL: ${input.url}\n`;
-        
+
         if (input.title) {
             prompt += `Title: ${input.title}\n`;
         }
-        
+
         if (input.metaTags?.description) {
             prompt += `Description: ${input.metaTags.description}\n`;
         }
-        
+
         if (input.metaTags?.keywords && input.metaTags.keywords.length > 0) {
             prompt += `Keywords: ${input.metaTags.keywords.join(", ")}\n`;
         }
-        
+
         if (input.pageContent) {
             prompt += `\nContent Analysis:\n`;
             prompt += `Word Count: ${input.pageContent.wordCount}\n`;
             prompt += `Reading Time: ${input.pageContent.readingTime} minutes\n`;
-            
+
             if (input.pageContent.headings.length > 0) {
                 prompt += `\nHeadings:\n${input.pageContent.headings.slice(0, 10).join("\n")}\n`;
             }
-            
-            if (input.pageContent.codeBlocks && input.pageContent.codeBlocks.length > 0) {
+
+            if (
+                input.pageContent.codeBlocks &&
+                input.pageContent.codeBlocks.length > 0
+            ) {
                 prompt += `\nHas ${input.pageContent.codeBlocks.length} code blocks\n`;
                 // Include first code block sample for analysis
                 if (input.pageContent.codeBlocks[0]) {
-                    const sample = input.pageContent.codeBlocks[0].substring(0, 200);
+                    const sample = input.pageContent.codeBlocks[0].substring(
+                        0,
+                        200,
+                    );
                     prompt += `Sample code: ${sample}${input.pageContent.codeBlocks[0].length > 200 ? "..." : ""}\n`;
                 }
             }
-            
-            if (input.pageContent.images && input.pageContent.images.length > 0) {
+
+            if (
+                input.pageContent.images &&
+                input.pageContent.images.length > 0
+            ) {
                 prompt += `\nHas ${input.pageContent.images.length} images\n`;
             }
-            
+
             // Include content sample for analysis
             if (input.pageContent.mainContent) {
-                const contentSample = input.pageContent.mainContent.substring(0, 1500);
+                const contentSample = input.pageContent.mainContent.substring(
+                    0,
+                    1500,
+                );
                 prompt += `\nContent Sample:\n${contentSample}${input.pageContent.mainContent.length > 1500 ? "..." : ""}\n`;
             }
         }
-        
+
         if (input.actions && input.actions.length > 0) {
             prompt += `\nInteractive Elements: ${input.actions.length} forms/buttons/actions\n`;
-            const actionSummary = input.actions.slice(0, 5).map(a => `${a.type}: ${a.text || a.action || "N/A"}`).join(", ");
+            const actionSummary = input.actions
+                .slice(0, 5)
+                .map((a) => `${a.type}: ${a.text || a.action || "N/A"}`)
+                .join(", ");
             prompt += `Actions: ${actionSummary}\n`;
         }
-        
+
         return prompt;
     }
 
@@ -145,24 +177,28 @@ Rules:
         try {
             // Clean the response - remove any markdown formatting or extra text
             let cleanResponse = response.trim();
-            
+
             // Find JSON object in response
-            const jsonStart = cleanResponse.indexOf('{');
-            const jsonEnd = cleanResponse.lastIndexOf('}') + 1;
-            
+            const jsonStart = cleanResponse.indexOf("{");
+            const jsonEnd = cleanResponse.lastIndexOf("}") + 1;
+
             if (jsonStart === -1 || jsonEnd === 0) {
                 throw new Error("No JSON object found in response");
             }
-            
+
             cleanResponse = cleanResponse.substring(jsonStart, jsonEnd);
-            
+
             const analysis = JSON.parse(cleanResponse) as ContentAnalysis;
-            
+
             // Validate required fields
-            if (!analysis.contentType || !analysis.technicalLevel || !analysis.contentLength) {
+            if (
+                !analysis.contentType ||
+                !analysis.technicalLevel ||
+                !analysis.contentLength
+            ) {
                 throw new Error("Missing required fields in analysis");
             }
-            
+
             // Ensure arrays are properly initialized
             analysis.technologies = analysis.technologies || [];
             analysis.domains = analysis.domains || [];
@@ -170,10 +206,11 @@ Rules:
             analysis.targetAudience = analysis.targetAudience || [];
             analysis.mainTopics = analysis.mainTopics || [];
             analysis.secondaryTopics = analysis.secondaryTopics || [];
-            
+
             // Ensure string fields are properly set
-            analysis.primaryPurpose = analysis.primaryPurpose || "General web content";
-            
+            analysis.primaryPurpose =
+                analysis.primaryPurpose || "General web content";
+
             return analysis;
         } catch (error) {
             console.warn("Failed to parse LLM analysis response:", error);
@@ -185,7 +222,11 @@ Rules:
     /**
      * Determine page type using LLM analysis (replaces hardcoded determinePageType function)
      */
-    async determinePageType(url: string, title?: string, description?: string): Promise<string> {
+    async determinePageType(
+        url: string,
+        title?: string,
+        description?: string,
+    ): Promise<string> {
         try {
             const prompt = `Analyze this web page and determine its primary type:
 
@@ -203,27 +244,28 @@ Respond with ONLY the type name, no explanations.`;
             const response = await this.chatModel.complete([
                 {
                     role: "system",
-                    content: "You are a web content classifier. Respond with only the content type, no additional text."
+                    content:
+                        "You are a web content classifier. Respond with only the content type, no additional text.",
                 },
                 {
                     role: "user",
-                    content: prompt
-                }
+                    content: prompt,
+                },
             ]);
 
             if (!response.success) {
-                throw new Error(response.message || 'LLM request failed');
+                throw new Error(response.message || "LLM request failed");
             }
 
             const pageType = response.data.trim().toLowerCase();
-            
+
             // Validate the response is one of our expected types
             const validTypes = this.getValidPageTypes();
-            
+
             if (validTypes.includes(pageType)) {
                 return pageType;
             }
-            
+
             // Fallback to mapping common types
             return this.mapToValidPageType(pageType);
         } catch (error) {
@@ -234,17 +276,17 @@ Respond with ONLY the type name, no explanations.`;
 
     private extractPageTypeDefinitions(): string {
         // Extract the type definitions and examples from the page type schema
-        const lines = this.pageTypeSchema.split('\n');
-        let definitions = 'Available page types and their definitions:\n';
+        const lines = this.pageTypeSchema.split("\n");
+        let definitions = "Available page types and their definitions:\n";
         let inTypeDefinition = false;
-        let currentType = '';
-        
+        let currentType = "";
+
         for (const line of lines) {
-            if (line.includes('export type PageType =')) {
+            if (line.includes("export type PageType =")) {
                 inTypeDefinition = true;
                 continue;
             }
-            
+
             if (inTypeDefinition) {
                 // Look for type definitions with comments
                 const typeMatch = line.match(/\|\s*"([^"]+)"/);
@@ -252,30 +294,40 @@ Respond with ONLY the type name, no explanations.`;
                     currentType = typeMatch[1];
                     continue;
                 }
-                
+
                 // Look for description comments
                 const commentMatch = line.match(/\/\*\*\s*(.+?)\s*\*\//);
                 if (commentMatch && currentType) {
                     definitions += `- ${currentType}: ${commentMatch[1]}\n`;
-                    currentType = '';
+                    currentType = "";
                 }
-                
+
                 // End of type definition
-                if (line.includes(';')) {
+                if (line.includes(";")) {
                     inTypeDefinition = false;
                     break;
                 }
             }
         }
-        
+
         return definitions;
     }
 
     private getValidPageTypes(): string[] {
         return [
-            "tutorial", "documentation", "article", "guide", "reference", 
-            "blog_post", "news", "product_page", "landing_page", 
-            "interactive_demo", "code_example", "api_docs", "other"
+            "tutorial",
+            "documentation",
+            "article",
+            "guide",
+            "reference",
+            "blog_post",
+            "news",
+            "product_page",
+            "landing_page",
+            "interactive_demo",
+            "code_example",
+            "api_docs",
+            "other",
         ];
     }
 
@@ -292,7 +344,7 @@ Respond with ONLY the type name, no explanations.`;
         if (pageType.includes("example")) return "code_example";
         if (pageType.includes("reference")) return "reference";
         if (pageType.includes("landing")) return "landing_page";
-        
+
         return "other";
     }
 }

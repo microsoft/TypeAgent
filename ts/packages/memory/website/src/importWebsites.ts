@@ -6,10 +6,10 @@ import {
     Website,
     importWebsiteVisit,
 } from "./websiteMeta.js";
-import { 
-    ContentExtractor, 
-    ExtractionMode, 
-    EnhancedContent 
+import {
+    ContentExtractor,
+    ExtractionMode,
+    EnhancedContent,
 } from "./contentExtractor.js";
 import { IntelligentContentAnalyzer } from "./intelligentContentAnalyzer.js";
 import { ChatModel } from "aiclient";
@@ -27,17 +27,17 @@ export interface ImportOptions {
     folder?: string;
     limit?: number;
     days?: number;
-    
+
     // NEW: Content extraction options
     extractContent?: boolean;
     extractionMode?: ExtractionMode;
     contentTimeout?: number;
     maxConcurrent?: number;
-    
+
     // NEW: Intelligent analysis options
     enableIntelligentAnalysis?: boolean;
     model?: ChatModel;
-    
+
     // NEW: Action detection options
     enableActionDetection?: boolean;
     actionTimeout?: number;
@@ -343,7 +343,7 @@ export async function importChromeHistory(
 
                 const domain = extractDomain(row.url);
                 const visitDate = chromeTimeToISOString(row.last_visit_time);
-                // Note: Using fallback pageType determination here. 
+                // Note: Using fallback pageType determination here.
                 // LLM-based classification happens later during content enhancement
                 const pageType = determinePageType(row.url, row.title);
 
@@ -469,7 +469,7 @@ export async function importWebsites(
  */
 export async function importWebsitesWithContent(
     source: "chrome" | "edge",
-    type: "bookmarks" | "history", 
+    type: "bookmarks" | "history",
     filePath: string,
     options?: Partial<ImportOptions> & {
         extractContent?: boolean;
@@ -479,49 +479,58 @@ export async function importWebsitesWithContent(
     },
     progressCallback?: ImportProgressCallback,
 ): Promise<Website[]> {
-    
     // Get basic websites using existing import
-    const basicWebsites = await importWebsites(source, type, filePath, options, progressCallback);
-    
+    const basicWebsites = await importWebsites(
+        source,
+        type,
+        filePath,
+        options,
+        progressCallback,
+    );
+
     // Enhance with content extraction if requested
     if (options?.extractContent) {
-        return await enhanceWithContent(basicWebsites, options, progressCallback);
+        return await enhanceWithContent(
+            basicWebsites,
+            options,
+            progressCallback,
+        );
     }
-    
+
     return basicWebsites;
 }
 
 async function enhanceWithContent(
     websites: Website[],
     options: any,
-    progressCallback?: ImportProgressCallback
+    progressCallback?: ImportProgressCallback,
 ): Promise<Website[]> {
     const extractor = new ContentExtractor({
         timeout: options.contentTimeout || 10000,
         maxContentLength: 20000,
-        enableActionDetection: options.enableActionDetection
+        enableActionDetection: options.enableActionDetection,
     });
-    
+
     // Initialize intelligent analyzer if enabled and model is provided
     let analyzer: IntelligentContentAnalyzer | undefined;
     if (options.enableIntelligentAnalysis && options.model) {
         analyzer = new IntelligentContentAnalyzer(options.model);
     }
-    
+
     const maxConcurrent = options.maxConcurrent || 3;
     const enhanced: Website[] = [];
-    
+
     // Process in batches to avoid overwhelming networks
     for (let i = 0; i < websites.length; i += maxConcurrent) {
         const batch = websites.slice(i, i + maxConcurrent);
-        
+
         const batchPromises = batch.map(async (website) => {
             try {
                 const contentData = await extractor.extractFromUrl(
                     website.metadata.url,
-                    options.extractionMode || 'content'
+                    options.extractionMode || "content",
                 );
-                
+
                 if (contentData.success) {
                     // Run intelligent analysis if available
                     let intelligentAnalysis;
@@ -530,96 +539,128 @@ async function enhanceWithContent(
                             website.metadata.url,
                             contentData.pageContent,
                             contentData.metaTags,
-                            contentData.structuredData
+                            contentData.structuredData,
                         );
                     }
-                    
+
                     // Create enhanced website with content and analysis
-                    return createEnhancedWebsite(website, contentData, intelligentAnalysis);
+                    return createEnhancedWebsite(
+                        website,
+                        contentData,
+                        intelligentAnalysis,
+                    );
                 } else {
-                    console.warn(`Content extraction failed for ${website.metadata.url}: ${contentData.error}`);
+                    console.warn(
+                        `Content extraction failed for ${website.metadata.url}: ${contentData.error}`,
+                    );
                     return website; // Return original on failure
                 }
-                
             } catch (error) {
-                console.warn(`Content extraction failed for ${website.metadata.url}:`, error);
+                console.warn(
+                    `Content extraction failed for ${website.metadata.url}:`,
+                    error,
+                );
                 return website; // Return original on failure
             }
         });
-        
+
         const batchResults = await Promise.allSettled(batchPromises);
-        batchResults.forEach(result => {
-            if (result.status === 'fulfilled') {
+        batchResults.forEach((result) => {
+            if (result.status === "fulfilled") {
                 enhanced.push(result.value);
             }
         });
-        
+
         // Progress reporting
         if (progressCallback) {
-            const message = analyzer ? 
-                `Processing content + AI analysis batch ${Math.floor(i / maxConcurrent) + 1}` :
-                `Processing content batch ${Math.floor(i / maxConcurrent) + 1}`;
+            const message = analyzer
+                ? `Processing content + AI analysis batch ${Math.floor(i / maxConcurrent) + 1}`
+                : `Processing content batch ${Math.floor(i / maxConcurrent) + 1}`;
             progressCallback(
                 Math.min(i + maxConcurrent, websites.length),
                 websites.length,
-                message
+                message,
             );
         }
-        
+
         // Brief pause between batches to be respectful
-        await new Promise(resolve => setTimeout(() => resolve(undefined), 200));
+        await new Promise((resolve) =>
+            setTimeout(() => resolve(undefined), 200),
+        );
     }
-    
+
     return enhanced;
 }
 
-function createEnhancedWebsite(originalWebsite: Website, contentData: EnhancedContent, intelligentAnalysis?: any): Website {
+function createEnhancedWebsite(
+    originalWebsite: Website,
+    contentData: EnhancedContent,
+    intelligentAnalysis?: any,
+): Website {
     // Create enhanced visit info with content
     const enhancedVisitInfo: WebsiteVisitInfo = {
         url: originalWebsite.metadata.url,
         source: originalWebsite.metadata.websiteSource,
     };
-    
+
     // Add optional properties only if they exist
-    const titleValue = contentData.pageContent?.title || originalWebsite.metadata.title;
+    const titleValue =
+        contentData.pageContent?.title || originalWebsite.metadata.title;
     if (titleValue) {
         enhancedVisitInfo.title = titleValue;
     }
-    if (originalWebsite.metadata.domain) enhancedVisitInfo.domain = originalWebsite.metadata.domain;
-    if (originalWebsite.metadata.visitDate) enhancedVisitInfo.visitDate = originalWebsite.metadata.visitDate;
-    if (originalWebsite.metadata.bookmarkDate) enhancedVisitInfo.bookmarkDate = originalWebsite.metadata.bookmarkDate;
-    if (originalWebsite.metadata.folder) enhancedVisitInfo.folder = originalWebsite.metadata.folder;
-    if (originalWebsite.metadata.pageType) enhancedVisitInfo.pageType = originalWebsite.metadata.pageType;
-    if (originalWebsite.metadata.keywords) enhancedVisitInfo.keywords = originalWebsite.metadata.keywords;
-    if (originalWebsite.metadata.description) enhancedVisitInfo.description = originalWebsite.metadata.description;
-    if (originalWebsite.metadata.favicon) enhancedVisitInfo.favicon = originalWebsite.metadata.favicon;
-    if (originalWebsite.metadata.visitCount !== undefined) enhancedVisitInfo.visitCount = originalWebsite.metadata.visitCount;
-    if (originalWebsite.metadata.lastVisitTime) enhancedVisitInfo.lastVisitTime = originalWebsite.metadata.lastVisitTime;
-    if (originalWebsite.metadata.typedCount !== undefined) enhancedVisitInfo.typedCount = originalWebsite.metadata.typedCount;
-    
+    if (originalWebsite.metadata.domain)
+        enhancedVisitInfo.domain = originalWebsite.metadata.domain;
+    if (originalWebsite.metadata.visitDate)
+        enhancedVisitInfo.visitDate = originalWebsite.metadata.visitDate;
+    if (originalWebsite.metadata.bookmarkDate)
+        enhancedVisitInfo.bookmarkDate = originalWebsite.metadata.bookmarkDate;
+    if (originalWebsite.metadata.folder)
+        enhancedVisitInfo.folder = originalWebsite.metadata.folder;
+    if (originalWebsite.metadata.pageType)
+        enhancedVisitInfo.pageType = originalWebsite.metadata.pageType;
+    if (originalWebsite.metadata.keywords)
+        enhancedVisitInfo.keywords = originalWebsite.metadata.keywords;
+    if (originalWebsite.metadata.description)
+        enhancedVisitInfo.description = originalWebsite.metadata.description;
+    if (originalWebsite.metadata.favicon)
+        enhancedVisitInfo.favicon = originalWebsite.metadata.favicon;
+    if (originalWebsite.metadata.visitCount !== undefined)
+        enhancedVisitInfo.visitCount = originalWebsite.metadata.visitCount;
+    if (originalWebsite.metadata.lastVisitTime)
+        enhancedVisitInfo.lastVisitTime =
+            originalWebsite.metadata.lastVisitTime;
+    if (originalWebsite.metadata.typedCount !== undefined)
+        enhancedVisitInfo.typedCount = originalWebsite.metadata.typedCount;
+
     // Enhanced content
-    if (contentData.pageContent) enhancedVisitInfo.pageContent = contentData.pageContent;
+    if (contentData.pageContent)
+        enhancedVisitInfo.pageContent = contentData.pageContent;
     if (contentData.metaTags) enhancedVisitInfo.metaTags = contentData.metaTags;
-    if (contentData.structuredData) enhancedVisitInfo.structuredData = contentData.structuredData;
-    if (contentData.actions) enhancedVisitInfo.extractedActions = contentData.actions;
-    
+    if (contentData.structuredData)
+        enhancedVisitInfo.structuredData = contentData.structuredData;
+    if (contentData.actions)
+        enhancedVisitInfo.extractedActions = contentData.actions;
+
     // NEW: Action detection data
-    if (contentData.detectedActions) enhancedVisitInfo.detectedActions = contentData.detectedActions;
-    if (contentData.actionSummary) enhancedVisitInfo.actionSummary = contentData.actionSummary;
-    
+    if (contentData.detectedActions)
+        enhancedVisitInfo.detectedActions = contentData.detectedActions;
+    if (contentData.actionSummary)
+        enhancedVisitInfo.actionSummary = contentData.actionSummary;
+
     // Add intelligent analysis if available
     if (intelligentAnalysis) {
         enhancedVisitInfo.intelligentAnalysis = intelligentAnalysis;
-        
+
         // Update page type based on LLM analysis (more accurate than hardcoded rules)
         if (intelligentAnalysis.contentType) {
             enhancedVisitInfo.pageType = intelligentAnalysis.contentType;
         }
     }
-    
+
     // Use page content as the main text if available, otherwise use existing text
-    const mainText = contentData.pageContent?.mainContent || '';
-    
+    const mainText = contentData.pageContent?.mainContent || "";
+
     return importWebsiteVisit(enhancedVisitInfo, mainText);
 }
 
@@ -790,7 +831,7 @@ export async function determinePageTypeWithLLM(
     url: string,
     title?: string,
     description?: string,
-    model?: ChatModel
+    model?: ChatModel,
 ): Promise<string> {
     // If no model provided, fall back to hardcoded classification
     if (!model) {
@@ -799,12 +840,17 @@ export async function determinePageTypeWithLLM(
 
     try {
         // Load page type schema for accurate classification
-        const pageTypeSchemaPath = path.join(__dirname, 'schemas', 'pageTypeSchema.ts');
-        const pageTypeSchema = fs.readFileSync(pageTypeSchemaPath, 'utf-8');
-        
+        const pageTypeSchemaPath = path.join(
+            __dirname,
+            "schemas",
+            "pageTypeSchema.ts",
+        );
+        const pageTypeSchema = fs.readFileSync(pageTypeSchemaPath, "utf-8");
+
         // Extract page type definitions from schema
-        const pageTypeDefinitions = extractPageTypeDefinitionsFromSchema(pageTypeSchema);
-        
+        const pageTypeDefinitions =
+            extractPageTypeDefinitionsFromSchema(pageTypeSchema);
+
         // Create a lightweight analysis prompt focused just on content type
         const prompt = `Analyze this web page and determine its primary content type:
 
@@ -822,27 +868,38 @@ Respond with ONLY the content type, no explanation.`;
         const response = await model.complete([
             {
                 role: "system",
-                content: "You are a web content classifier. Analyze the URL, title, and description to determine the primary content type. Respond with only the content type name from the provided list, no additional text or explanation."
+                content:
+                    "You are a web content classifier. Analyze the URL, title, and description to determine the primary content type. Respond with only the content type name from the provided list, no additional text or explanation.",
             },
             {
                 role: "user",
-                content: prompt
-            }
+                content: prompt,
+            },
         ]);
 
         if (!response.success) {
-            throw new Error(response.message || 'LLM request failed');
+            throw new Error(response.message || "LLM request failed");
         }
 
         const contentType = response.data.trim().toLowerCase();
-        
+
         // Validate the response
         const validTypes = [
-            "tutorial", "documentation", "article", "guide", "reference", 
-            "blog_post", "news", "product_page", "landing_page", 
-            "interactive_demo", "code_example", "api_docs", "other"
+            "tutorial",
+            "documentation",
+            "article",
+            "guide",
+            "reference",
+            "blog_post",
+            "news",
+            "product_page",
+            "landing_page",
+            "interactive_demo",
+            "code_example",
+            "api_docs",
+            "other",
         ];
-        
+
         if (validTypes.includes(contentType)) {
             return contentType;
         }
@@ -859,11 +916,12 @@ Respond with ONLY the content type, no explanation.`;
         if (contentType.includes("demo")) return "interactive_demo";
         if (contentType.includes("example")) return "code_example";
         if (contentType.includes("reference")) return "reference";
-        
+
         // Fallback to hardcoded if LLM response doesn't match expected format
-        console.warn(`LLM returned unexpected content type "${contentType}" for ${url}, falling back to hardcoded classification`);
+        console.warn(
+            `LLM returned unexpected content type "${contentType}" for ${url}, falling back to hardcoded classification`,
+        );
         return determinePageType(url, title);
-        
     } catch (error) {
         console.warn(`LLM page type determination failed for ${url}:`, error);
         return determinePageType(url, title);
@@ -874,17 +932,17 @@ Respond with ONLY the content type, no explanation.`;
  * Extract page type definitions from the schema file
  */
 function extractPageTypeDefinitionsFromSchema(schemaContent: string): string {
-    const lines = schemaContent.split('\n');
-    let definitions = 'Available page types and their definitions:\n';
+    const lines = schemaContent.split("\n");
+    let definitions = "Available page types and their definitions:\n";
     let inTypeDefinition = false;
-    let currentType = '';
-    
+    let currentType = "";
+
     for (const line of lines) {
-        if (line.includes('export type PageType =')) {
+        if (line.includes("export type PageType =")) {
             inTypeDefinition = true;
             continue;
         }
-        
+
         if (inTypeDefinition) {
             // Look for type definitions with comments
             const typeMatch = line.match(/\|\s*"([^"]+)"/);
@@ -892,21 +950,21 @@ function extractPageTypeDefinitionsFromSchema(schemaContent: string): string {
                 currentType = typeMatch[1];
                 continue;
             }
-            
+
             // Look for description comments
             const commentMatch = line.match(/\/\*\*\s*(.+?)\s*\*\//);
             if (commentMatch && currentType) {
                 definitions += `- ${currentType}: ${commentMatch[1]}\n`;
-                currentType = '';
+                currentType = "";
             }
-            
+
             // End of type definition
-            if (line.includes(';')) {
+            if (line.includes(";")) {
                 inTypeDefinition = false;
                 break;
             }
         }
     }
-    
+
     return definitions;
 }

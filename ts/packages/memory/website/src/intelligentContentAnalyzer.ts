@@ -4,7 +4,11 @@
 import { createChatTranslator, loadSchema } from "typeagent";
 import { ChatModel } from "aiclient";
 import { ContentAnalysis } from "./contentAnalysisSchema.js";
-import { PageContent, MetaTagCollection, StructuredDataCollection } from "./contentExtractor.js";
+import {
+    PageContent,
+    MetaTagCollection,
+    StructuredDataCollection,
+} from "./contentExtractor.js";
 
 export class IntelligentContentAnalyzer {
     private translator: any;
@@ -21,16 +25,23 @@ export class IntelligentContentAnalyzer {
         url: string,
         pageContent?: PageContent,
         metaTags?: MetaTagCollection,
-        structuredData?: StructuredDataCollection
+        structuredData?: StructuredDataCollection,
     ): Promise<ContentAnalysis | null> {
         try {
-            const analysisPrompt = this.buildAnalysisPrompt(url, pageContent, metaTags, structuredData);
+            const analysisPrompt = this.buildAnalysisPrompt(
+                url,
+                pageContent,
+                metaTags,
+                structuredData,
+            );
             const result = await this.translator.translate(analysisPrompt);
-            
+
             if (result.success) {
                 return result.data;
             } else {
-                console.warn(`Content analysis failed for ${url}: ${result.message}`);
+                console.warn(
+                    `Content analysis failed for ${url}: ${result.message}`,
+                );
                 return null;
             }
         } catch (error) {
@@ -43,7 +54,7 @@ export class IntelligentContentAnalyzer {
         url: string,
         pageContent?: PageContent,
         metaTags?: MetaTagCollection,
-        structuredData?: StructuredDataCollection
+        structuredData?: StructuredDataCollection,
     ): string {
         let prompt = `Analyze the following web page content and provide a structured analysis using the ContentAnalysis schema.
 
@@ -55,20 +66,23 @@ URL: ${url}
             prompt += `TITLE: ${pageContent.title}
 
 MAIN CONTENT (${pageContent.wordCount} words, ${pageContent.readingTime} min read):
-${pageContent.mainContent.substring(0, 2000)}${pageContent.mainContent.length > 2000 ? '...' : ''}
+${pageContent.mainContent.substring(0, 2000)}${pageContent.mainContent.length > 2000 ? "..." : ""}
 
 `;
 
             if (pageContent.headings.length > 0) {
                 prompt += `HEADINGS:
-${pageContent.headings.slice(0, 10).join('\n')}
+${pageContent.headings.slice(0, 10).join("\n")}
 
 `;
             }
 
             if (pageContent.codeBlocks && pageContent.codeBlocks.length > 0) {
                 prompt += `CODE EXAMPLES (${pageContent.codeBlocks.length} blocks):
-${pageContent.codeBlocks.slice(0, 3).map(code => code.substring(0, 200)).join('\n---\n')}
+${pageContent.codeBlocks
+    .slice(0, 3)
+    .map((code) => code.substring(0, 200))
+    .join("\n---\n")}
 
 `;
             }
@@ -82,7 +96,7 @@ ${pageContent.codeBlocks.slice(0, 3).map(code => code.substring(0, 200)).join('\
             }
 
             if (metaTags.keywords && metaTags.keywords.length > 0) {
-                prompt += `KEYWORDS: ${metaTags.keywords.join(', ')}
+                prompt += `KEYWORDS: ${metaTags.keywords.join(", ")}
 
 `;
             }
