@@ -51,7 +51,7 @@ export async function confirmTranslation(
     requestAction: RequestAction,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<{
-    requestAction: RequestAction | undefined | null;
+    requestAction: RequestAction;
     replacedAction?: ExecutableAction[];
 }> {
     const actions = requestAction.actions;

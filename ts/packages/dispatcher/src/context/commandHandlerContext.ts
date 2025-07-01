@@ -40,6 +40,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { Profiler } from "telemetry";
 import { conversation as Conversation } from "knowledge-processor";
+import { ConversationMemory } from "conversation-memory";
 import {
     AppAgentManager,
     AppAgentStateInitSettings,
@@ -71,6 +72,7 @@ import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
+import { initializeMemory } from "./memory.js";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -110,6 +112,7 @@ export type CommandHandlerContext = {
 
     activityContext?: ActivityContext | undefined;
     conversationManager?: Conversation.ConversationManager | undefined;
+    conversationMemory?: ConversationMemory | undefined;
     // Per activation configs
     developerMode?: boolean;
     explanationAsynchronousMode: boolean;
@@ -430,8 +433,6 @@ export async function initializeCommandHandlerContext(
             persistDir,
             cacheDir,
             embeddingCacheDir,
-            conversationManager:
-                await createConversationManager(sessionDirPath),
             explanationAsynchronousMode,
             dblogging: options?.dblogging ?? false,
             clientIO,
@@ -461,6 +462,7 @@ export async function initializeCommandHandlerContext(
             indexManager: IndexManager.getInstance(),
         };
 
+        await initializeMemory(context, sessionDirPath);
         await addAppAgentProviders(context, options?.appAgentProviders);
 
         const appAgentStateSettings = getAppAgentStateSettings(
@@ -570,18 +572,6 @@ export async function closeCommandHandlerContext(
     }
 }
 
-async function createConversationManager(
-    sessionDirPath: string | undefined,
-): Promise<Conversation.ConversationManager | undefined> {
-    return sessionDirPath
-        ? await Conversation.createConversationManager(
-              {},
-              "conversation",
-              sessionDirPath,
-              false,
-          )
-        : undefined;
-}
 export async function setSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     session: Session,
@@ -589,9 +579,7 @@ export async function setSessionOnCommandHandlerContext(
     context.session = session;
     await context.agents.close();
 
-    context.conversationManager = await createConversationManager(
-        session.getSessionDirPath(),
-    );
+    await initializeMemory(context, session.getSessionDirPath());
     context.agentCache = await getAgentCache(
         context.session,
         context.agents,
