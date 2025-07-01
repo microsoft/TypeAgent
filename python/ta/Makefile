@@ -16,7 +16,7 @@ check: venv
 
 .PHONY: test
 test: venv
-	.venv/bin/python -m pytest test
+	.venv/bin/python -m coverage run --source=typeagent -m pytest test
 
 .PHONY: demo
 demo: venv
