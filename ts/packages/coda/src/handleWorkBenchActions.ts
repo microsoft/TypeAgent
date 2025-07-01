@@ -103,7 +103,11 @@ export async function findMatchingFolders(
             }
 
             if (type === vscode.FileType.Directory) {
-                if (name === relativeFolderName) {
+                if (
+                    name.localeCompare(relativeFolderName, undefined, {
+                        sensitivity: "accent",
+                    }) === 0
+                ) {
                     foundFolders.push(childUri);
                 }
                 // Recurse into subdirectory
@@ -194,81 +198,6 @@ async function handleOpenFileAction(action: any): Promise<ActionResult> {
     return actionResult;
 }
 
-export async function handleCreateFolderFromExplorer1(
-    action: any,
-): Promise<ActionResult> {
-    let actionResult: ActionResult = {
-        handled: true,
-        message: "Ok",
-    };
-
-    const parameters = action?.parameters;
-    if (!parameters || typeof parameters.folderName !== "string") {
-        vscode.window.showErrorMessage(
-            "Missing or invalid 'folderName' parameter.",
-        );
-        actionResult.handled = false;
-        actionResult.message = "Missing or invalid 'folderName' parameter.";
-        return actionResult;
-    }
-
-    const { folderName, relativeTo, resolutionHint } = parameters;
-    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!workspaceRoot) {
-        vscode.window.showErrorMessage("No workspace folder is open.");
-        actionResult.handled = false;
-        actionResult.message = "No workspace folder is open.";
-        return actionResult;
-    }
-
-    let baseDir: string | undefined;
-
-    if (relativeTo) {
-        // Attempt to resolve relativeTo
-        const searchPattern = `**/${relativeTo}`;
-        const matches = await vscode.workspace.findFiles(
-            searchPattern,
-            "**/node_modules/**",
-            1,
-        );
-
-        if (matches.length > 0) {
-            const matchPath = matches[0].fsPath;
-            const stats = await fs.stat(matchPath);
-            baseDir = stats.isDirectory() ? matchPath : path.dirname(matchPath);
-        } else if (resolutionHint === "workspaceRoot") {
-            baseDir = workspaceRoot;
-        } else {
-            vscode.window.showErrorMessage(
-                `Could not find folder or file matching '${relativeTo}'.`,
-            );
-            actionResult.handled = false;
-            actionResult.message = `Could not find folder or file matching '${relativeTo}'.`;
-            return actionResult;
-        }
-    }
-
-    // Fallback to workspace root if baseDir still undefined
-    if (!baseDir) {
-        baseDir = workspaceRoot;
-    }
-
-    const targetPath = path.join(baseDir, folderName);
-
-    try {
-        await fs.mkdir(targetPath, { recursive: true });
-        vscode.window.showInformationMessage(
-            `✅ Folder created: ${vscode.workspace.asRelativePath(targetPath)}`,
-        );
-        actionResult.message = `✅ Folder created: ${vscode.workspace.asRelativePath(targetPath)}`;
-    } catch (err) {
-        vscode.window.showErrorMessage(`❌ Failed to create folder: ${err}`);
-        actionResult.handled = false;
-        actionResult.message = `❌ Failed to create folder: ${err}`;
-    }
-    return actionResult;
-}
-
 async function handleCreateFolderFromExplorer(
     action: any,
 ): Promise<ActionResult> {
@@ -338,6 +267,118 @@ async function handleCreateFolderFromExplorer(
             return { handled: false, message: msg };
         }
     }
+}
+
+export async function checkTasksJsonExists(): Promise<boolean> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        console.error("❌ No workspace or folder is open.");
+        return false;
+    }
+
+    for (const folder of workspaceFolders) {
+        const tasksJsonUri = vscode.Uri.joinPath(
+            folder.uri,
+            ".vscode",
+            "tasks.json",
+        );
+        try {
+            await vscode.workspace.fs.stat(tasksJsonUri);
+            console.log(`✅ Found tasks.json in: ${folder.uri.fsPath}`);
+            return true;
+        } catch {
+            continue;
+        }
+    }
+
+    console.warn("⚠️ No tasks.json found in any workspace folders.");
+    return false;
+}
+
+export async function handleFolderTaskAction(
+    action: any,
+    taskCommand:
+        | "workbench.action.tasks.build"
+        | "workbench.action.tasks.clean"
+        | "workbench.action.tasks.rebuild",
+    actionLabel: string, // "Build", "Clean", "Rebuild"
+): Promise<ActionResult> {
+    const parameters = action?.parameters ?? {};
+    const folderName = parameters.folderName;
+
+    const tasksJsonExists = await checkTasksJsonExists();
+    if (!tasksJsonExists) {
+        vscode.window.showWarningMessage(
+            `⚠️ No '.vscode/tasks.json' found. ${actionLabel} may not work unless your environment or extensions provide auto-detected tasks.`,
+        );
+    }
+
+    if (folderName) {
+        const matches = await findMatchingFolders(path.basename(folderName));
+        if (matches.length === 0) {
+            const msg = `❌ No folders found matching '${folderName}'.`;
+            vscode.window.showErrorMessage(msg);
+            return { handled: false, message: msg };
+        }
+
+        let targetFolder: vscode.Uri;
+        if (matches.length === 1) {
+            targetFolder = matches[0];
+        } else {
+            const pick = await vscode.window.showQuickPick(
+                matches.map((uri) => ({
+                    label: vscode.workspace.asRelativePath(uri),
+                    uri,
+                })),
+                {
+                    placeHolder: `Multiple folders found. Select which folder to ${actionLabel.toLowerCase()}:`,
+                },
+            );
+            if (!pick) {
+                const msg = `⚠️ ${actionLabel} cancelled by user.`;
+                vscode.window.showInformationMessage(msg);
+                return { handled: false, message: msg };
+            }
+            targetFolder = pick.uri;
+        }
+
+        await vscode.commands.executeCommand("revealInExplorer", targetFolder);
+    }
+
+    try {
+        await vscode.commands.executeCommand(taskCommand);
+        const msg = `✅ ${actionLabel} task triggered via VSCode Tasks (${folderName ?? "workspace"}).`;
+        vscode.window.showInformationMessage(msg);
+        return { handled: true, message: msg };
+    } catch (err) {
+        const msg = `❌ Failed to execute ${actionLabel} task: ${err}`;
+        vscode.window.showErrorMessage(msg);
+        return { handled: false, message: msg };
+    }
+}
+
+export async function handleFolderBuild(action: any): Promise<ActionResult> {
+    return handleFolderTaskAction(
+        action,
+        "workbench.action.tasks.build",
+        "Build",
+    );
+}
+
+export async function handleFolderClean(action: any): Promise<ActionResult> {
+    return handleFolderTaskAction(
+        action,
+        "workbench.action.tasks.clean",
+        "Clean",
+    );
+}
+
+export async function handleFolderRebuild(action: any): Promise<ActionResult> {
+    return handleFolderTaskAction(
+        action,
+        "workbench.action.tasks.rebuild",
+        "Rebuild",
+    );
 }
 
 export async function handleWorkbenchActions(
