@@ -286,7 +286,6 @@ export class HtmlToMdConvertor {
     private prefix: string[];
 
     private listStack: string[];
-
     public curBlock: string;
 
     public tagsToIgnore: string[];
@@ -378,6 +377,7 @@ export class HtmlToMdConvertor {
                                 this.$(childElement).text(),
                                 Number.parseInt(tagName[tagName.length - 1]),
                             );
+                            this.endBlock();
                             break;
                         case "p":
                             this.beginBlock(tagName);
