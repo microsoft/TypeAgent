@@ -103,6 +103,7 @@ export async function createKnowproTestCommands(
         let html = await readAllText(filePath);
         let parts = cm.docPartsFromHtmlEx(html, namedArgs.rootTag);
         for (const part of parts) {
+            context.printer.writeLine("----------------");
             context.printer.writeDocPart(part);
         }
     }

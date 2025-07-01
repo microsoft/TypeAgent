@@ -609,17 +609,25 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         knowledge?: knowLib.conversation.KnowledgeResponse | undefined,
     ): void {
         if (knowledge) {
-            this.writeLineInColor(chalk.cyan, "Topics");
-            knowledge.topics.forEach((t) => this.writeLine(t));
-            this.writeLineInColor(chalk.cyan, "Actions");
-            knowledge.actions.forEach((a) => this.writeAction(a));
-            this.writeLineInColor(chalk.cyan, "Entities");
-            knowledge.entities.forEach((e) => this.writeEntity(e));
+            if (knowledge.topics.length > 0) {
+                this.writeLineInColor(chalk.cyan, "Topics");
+                knowledge.topics.forEach((t) => this.writeLine(t));
+            }
+            if (knowledge.actions.length > 0) {
+                this.writeLineInColor(chalk.cyan, "Actions");
+                knowledge.actions.forEach((a) => this.writeAction(a));
+            }
+            if (knowledge.entities.length > 0) {
+                this.writeLineInColor(chalk.cyan, "Entities");
+                knowledge.entities.forEach((e) => this.writeEntity(e));
+            }
         }
     }
 
     public writeDocPart(docPart: cm.DocPart) {
-        this.writeLines(docPart.textChunks);
+        for (const text of docPart.textChunks) {
+            this.writeLine(text);
+        }
         this.writeKnowledge(docPart.knowledge);
         return this;
     }

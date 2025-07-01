@@ -238,7 +238,7 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
                 ? new DocPartMeta(this.sourceUrl)
                 : undefined;
             const docPart = new DocPart(
-                textBlocks[i],
+                textBlocks[i].trim(),
                 meta,
                 undefined,
                 undefined,
