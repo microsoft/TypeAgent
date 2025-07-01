@@ -35,9 +35,7 @@ class Context:
 def main():
     # Parse arguments.
 
-    default_qafile = (
-        "../../../AISystems-Archive/data/knowpro/test/Episode_53_Answer_results.json"
-    )
+    default_qafile = "testdata/Episode_53_Answer_results.json"
     default_podcast_file = "testdata/Episode_53_AdrianTchaikovsky_index"
 
     explanation = "a list of objects with 'question' and 'answer' keys"
