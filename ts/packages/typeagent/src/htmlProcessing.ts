@@ -342,13 +342,10 @@ export class HtmlToMdConvertor {
 
     public getMarkdownBlocks(rootPath: string = "body"): string[] {
         this.start();
-        this.beginBlock("body");
-
         const root: cheerio.AnyNode = this.$(rootPath)[0];
         if (root && root.type === "tag") {
             this.traverseChildren(root as cheerio.Element);
         }
-        this.endBlock();
         return this.textBlocks;
     }
 
@@ -367,7 +364,6 @@ export class HtmlToMdConvertor {
                 default:
                     break;
                 case "tag":
-                    this.depth++;
                     const childElement = child as cheerio.Element;
                     const tagName = childElement.tagName;
                     switch (tagName) {
@@ -511,7 +507,6 @@ export class HtmlToMdConvertor {
                             this.appendLineBreak();
                             break;
                     }
-                    this.depth--;
                     break;
                 case "text":
                     let text = this.getInnerText(child);
@@ -550,19 +545,23 @@ export class HtmlToMdConvertor {
     }
 
     private beginBlock(name: string): void {
+        this.depth++;
         if (this.depth <= this.maxBlockDepth) {
-            this.endBlock();
+            this.endBlock(false);
             this.eventHandler?.onBlockStart(this, name);
         }
     }
 
-    private endBlock(): void {
+    private endBlock(reduceDepth: boolean = true): void {
         if (this.depth <= this.maxBlockDepth) {
             if (this.curBlock.length > 0) {
                 this.textBlocks.push(this.curBlock);
                 this.eventHandler?.onBlockEnd(this);
             }
             this.curBlock = "";
+        }
+        if (this.depth > 0 && reduceDepth) {
+            this.depth--;
         }
     }
 
