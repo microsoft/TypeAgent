@@ -274,9 +274,23 @@ export function htmlToMd(html: string, rootTag: string = "body"): string {
     return convertor.getMarkdown(rootTag);
 }
 
+export interface HtmlToMdConvertorEvents {
+    onBlockStart(convertor: HtmlToMdConvertor, tagName: string): void;
+    onHeading(
+        convertor: HtmlToMdConvertor,
+        tagName: string,
+        level: number,
+    ): void;
+    onLink(convertor: HtmlToMdConvertor, text: string, url: string): void;
+    onBlockEnd(convertor: HtmlToMdConvertor): void;
+}
+
 /**
+ * Basic HTML to MD text convertor
+ *
  * https://www.markdownguide.org/basic-syntax/
  * https://www.markdownguide.org/extended-syntax/#tables
+ *
  */
 export class HtmlToMdConvertor {
     private $: cheerio.CheerioAPI;
@@ -290,7 +304,10 @@ export class HtmlToMdConvertor {
 
     public tagsToIgnore: string[];
 
-    constructor(public html: string) {
+    constructor(
+        public html: string,
+        public eventHandler?: HtmlToMdConvertorEvents,
+    ) {
         html = removeExtraWhitespace(html);
         this.$ = cheerio.load(html);
         this.tagsToIgnore = [
@@ -319,15 +336,15 @@ export class HtmlToMdConvertor {
         this.listStack = [];
     }
 
-    public getMarkdown(elementPath: string = "body"): string {
-        return this.getMarkdownBlocks().join("");
+    public getMarkdown(rootPath = "body"): string {
+        return this.getMarkdownBlocks(rootPath).join("");
     }
 
-    public getMarkdownBlocks(elementPath: string = "body"): string[] {
+    public getMarkdownBlocks(rootPath: string = "body"): string[] {
         this.start();
         this.beginBlock("body");
 
-        const root: cheerio.AnyNode = this.$(elementPath)[0];
+        const root: cheerio.AnyNode = this.$(rootPath)[0];
         if (root && root.type === "tag") {
             this.traverseChildren(root as cheerio.Element);
         }
@@ -486,7 +503,7 @@ export class HtmlToMdConvertor {
                                 if (text) {
                                     const href = childElement.attribs["href"];
                                     this.append(`[${text}](${href})`);
-                                    this.onLink(text, href);
+                                    this.eventHandler?.onLink(this, text, href);
                                 }
                             }
                             break;
@@ -535,7 +552,7 @@ export class HtmlToMdConvertor {
     private beginBlock(name: string): void {
         if (this.depth <= this.maxBlockDepth) {
             this.endBlock();
-            this.onBlockStart(name);
+            this.eventHandler?.onBlockStart(this, name);
         }
     }
 
@@ -543,8 +560,8 @@ export class HtmlToMdConvertor {
         if (this.depth <= this.maxBlockDepth) {
             if (this.curBlock.length > 0) {
                 this.textBlocks.push(this.curBlock);
+                this.eventHandler?.onBlockEnd(this);
             }
-            this.onBlockEnd();
             this.curBlock = "";
         }
     }
@@ -591,7 +608,7 @@ export class HtmlToMdConvertor {
         this.append(text);
         this.append("\n");
 
-        this.onHeading(text, level);
+        this.eventHandler?.onHeading(this, text, level);
     }
 
     private isTableHeader(element: cheerio.Element): boolean {
@@ -603,9 +620,4 @@ export class HtmlToMdConvertor {
         }
         return true;
     }
-
-    protected onBlockStart(name: string): void {}
-    protected onHeading(name: string, level: number): void {}
-    protected onLink(text: string, href: string): void {}
-    protected onBlockEnd(): void {}
 }
