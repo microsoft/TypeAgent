@@ -461,12 +461,14 @@ export class HtmlToMdConvertor {
                             this.append("__");
                             break;
                         case "a":
-                            this.append("[");
-                            this.traverseChildren(childElement);
-                            this.append("]");
-                            const href = childElement.attribs["href"];
-                            if (href) {
-                                this.append(`(${href})`);
+                            if (childElement.children.length > 0) {
+                                this.append("[");
+                                this.traverseChildren(childElement);
+                                this.append("]");
+                                const href = childElement.attribs["href"];
+                                if (href) {
+                                    this.append(`(${href})`);
+                                }
                             }
                             break;
                         case "br":
@@ -478,20 +480,26 @@ export class HtmlToMdConvertor {
                 case "text":
                     const childNode = this.$(child);
                     let text = childNode.text();
+                    text = text.replaceAll("\t", "");
                     let originalLength = text.length;
+                    let spacesAdded = 0;
                     if (originalLength > 0) {
                         // Spaces are meaningful, but generated html can contain unnecessary whitespace
                         text = text.trimStart();
                         if (originalLength - text.length > 0) {
                             text = " " + text;
                             originalLength = text.length;
+                            spacesAdded++;
                         }
                         text = text.trimEnd();
                         if (originalLength - text.length > 0) {
                             // More than one trailing space.
                             text += " ";
+                            spacesAdded++;
                         }
-                        this.append(text);
+                        if (spacesAdded === 0 || text.length > spacesAdded) {
+                            this.append(text);
+                        }
                     }
                     break;
             }
