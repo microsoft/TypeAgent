@@ -269,9 +269,9 @@ function getRemovableAttrPrefixes(): string[] {
     ];
 }
 
-export function htmlToMd(html: string): string {
+export function htmlToMd(html: string, rootTag: string = "body"): string {
     const convertor = new HtmlToMdConvertor(html);
-    return convertor.getMarkdown();
+    return convertor.getMarkdown(rootTag);
 }
 
 /**
@@ -320,12 +320,16 @@ export class HtmlToMdConvertor {
         this.listStack = [];
     }
 
-    public getMarkdown(): string {
+    public getMarkdown(elementPath: string = "body"): string {
         this.start();
         this.beginBlock("body");
-        this.traverseChildren(this.$("body")[0]);
+
+        const root: cheerio.AnyNode = this.$(elementPath)[0];
+        if (root && root.type === "tag") {
+            this.traverseChildren(root as cheerio.Element);
+        }
         this.endBlock();
-        return this.textBlocks.join();
+        return this.textBlocks.join("");
     }
 
     private start(): void {
@@ -365,6 +369,7 @@ export class HtmlToMdConvertor {
                         case "h5":
                         case "h6":
                             this.beginBlock(tagName);
+                            this.appendPrefix();
                             this.appendHeading(
                                 this.$(childElement).text(),
                                 Number.parseInt(tagName[tagName.length - 1]),
@@ -373,15 +378,17 @@ export class HtmlToMdConvertor {
                             break;
                         case "p":
                             this.beginBlock(tagName);
+                            this.appendPrefix();
                             this.traverseChildren(childElement);
                             this.append("\n");
                             this.appendBlankLine();
                             this.endBlock();
                             break;
                         case "div":
+                            this.appendPrefix();
                             this.traverseChildren(childElement);
-                            //this.appendLineBreak();
-                            this.append("\n");
+                            this.appendLineBreak();
+                            //this.append("\n");
                             break;
                         case "span":
                             this.traverseChildren(childElement);
@@ -393,6 +400,8 @@ export class HtmlToMdConvertor {
                         case "blockquote":
                             this.beginBlock(tagName);
                             this.appendBlankLine();
+
+                            this.appendPrefix();
                             this.append("> ");
 
                             this.prefix.push(">");
@@ -405,6 +414,7 @@ export class HtmlToMdConvertor {
                             break;
                         case "code":
                             this.beginBlock(tagName);
+                            this.appendPrefix();
                             this.append("\t");
                             this.traverseChildren(childElement);
                             this.append("\n");
@@ -419,10 +429,11 @@ export class HtmlToMdConvertor {
                             this.endBlock();
                             break;
                         case "li":
+                            this.appendPrefix();
                             if (this.listStack.length > 0) {
                                 if (
                                     this.listStack[
-                                        (this.listStack.length = 1)
+                                        this.listStack.length - 1
                                     ] === "ul"
                                 ) {
                                     this.append("- ");
@@ -537,6 +548,7 @@ export class HtmlToMdConvertor {
     private beginList(tagName: string): void {
         this.listStack.push(tagName);
         if (this.listStack.length > 1) {
+            this.append("\n");
             this.prefix.push("  ");
         }
     }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    arg,
     argBool,
     argNum,
     CommandHandler,
@@ -53,13 +54,26 @@ export async function createKnowproTestCommands(
         context.printer.writeLine(text);
     }
 
+    function testHtmlDef(): CommandMetadata {
+        return {
+            description: "Convert to MD",
+            args: {
+                filePath: arg("File path"),
+            },
+            options: {
+                rootTag: arg("Root tag", "body"),
+            },
+        };
+    }
+    commands.kpTestHtmlMd.metadata = testHtmlDef();
     async function testHtmlToMd(args: string[]) {
-        const filePath = args[0];
+        const namedArgs = parseNamedArguments(args, testHtmlDef());
+        const filePath = namedArgs.filePath;
         if (!filePath) {
             return;
         }
-        let html = await readAllText(args[0]);
-        const md = htmlToMd(html);
+        let html = await readAllText(filePath);
+        const md = htmlToMd(html, namedArgs.rootTag);
         context.printer.writeLine(md);
         const destPath = changeFileExt(filePath, ".md");
         fs.writeFileSync(destPath, md);
