@@ -581,6 +581,14 @@ export function createAgentRpcServer(
             get actionIO() {
                 return actionIO;
             },
+            queueToggleTransientAgent(agentName: string, active: boolean) {
+                return rpc.invoke(
+                    "queueToggleTransientAgent",
+                    actionContextId,
+                    agentName,
+                    active,
+                );
+            },
         };
     }
 

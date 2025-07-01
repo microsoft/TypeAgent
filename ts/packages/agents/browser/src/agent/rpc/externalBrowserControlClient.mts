@@ -89,5 +89,8 @@ export function createExternalBrowserClient(
         followLinkByPosition: (...args) => {
             return rpc.invoke("followLinkByPosition", ...args);
         },
+        closeWindow: async () => {
+            return rpc.invoke("closeWindow");
+        },
     };
 }

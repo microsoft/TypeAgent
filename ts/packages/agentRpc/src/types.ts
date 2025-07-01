@@ -119,6 +119,12 @@ export type AgentContextInvokeFunctions = {
         choices?: string[] | undefined;
         defaultId?: number | undefined;
     }) => Promise<number>;
+
+    queueToggleTransientAgent: (
+        contextId: number,
+        agentName: string,
+        active: boolean,
+    ) => Promise<void>;
 };
 
 export type AgentCallFunctions = {

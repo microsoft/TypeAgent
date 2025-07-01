@@ -507,75 +507,86 @@ async function executeBrowserAction(
 
     context: ActionContext<BrowserActionContext>,
 ) {
-    if (action.schemaName === "browser") {
-        switch (action.actionName) {
-            case "openWebPage":
-                return openWebPage(context, action);
-            case "closeWebPage":
-                return closeWebPage(context);
-            case "importWebsiteData":
-                return importWebsiteData(context, action);
-            case "searchWebsites":
-                return searchWebsites(context, action);
-            case "getWebsiteStats":
-                return getWebsiteStats(context, action);
-            case "goForward":
-                await getActionBrowserControl(context).goForward();
-                return;
-            case "goBack":
-                await getActionBrowserControl(context).goBack();
-                return;
-            case "reloadPage":
-                // REVIEW: do we need to clear page schema?
-                await getActionBrowserControl(context).reload();
-                return;
-            case "scrollUp":
-                await getActionBrowserControl(context).scrollUp();
-                return;
-            case "scrollDown":
-                await getActionBrowserControl(context).scrollDown();
-                return;
-            case "zoomIn":
-                await getActionBrowserControl(context).zoomIn();
-                return;
-            case "zoomOut":
-                await getActionBrowserControl(context).zoomOut();
-                return;
-            case "zoomReset":
-                await getActionBrowserControl(context).zoomReset();
-                return;
-            case "followLinkByText": {
-                const control = getActionBrowserControl(context);
-                const { keywords, openInNewTab } = action.parameters;
-                const url = await control.followLinkByText(
-                    keywords,
-                    openInNewTab,
-                );
-                if (!url) {
-                    throw new Error(`No link found for '${keywords}'`);
-                }
+    switch (action.schemaName) {
+        case "browser":
+            switch (action.actionName) {
+                case "openWebPage":
+                    return openWebPage(context, action);
+                case "closeWebPage":
+                    return closeWebPage(context);
+                case "importWebsiteData":
+                    return importWebsiteData(context, action);
+                case "searchWebsites":
+                    return searchWebsites(context, action);
+                case "getWebsiteStats":
+                    return getWebsiteStats(context, action);
+                case "goForward":
+                    await getActionBrowserControl(context).goForward();
+                    return;
+                case "goBack":
+                    await getActionBrowserControl(context).goBack();
+                    return;
+                case "reloadPage":
+                    // REVIEW: do we need to clear page schema?
+                    await getActionBrowserControl(context).reload();
+                    return;
+                case "scrollUp":
+                    await getActionBrowserControl(context).scrollUp();
+                    return;
+                case "scrollDown":
+                    await getActionBrowserControl(context).scrollDown();
+                    return;
+                case "zoomIn":
+                    await getActionBrowserControl(context).zoomIn();
+                    return;
+                case "zoomOut":
+                    await getActionBrowserControl(context).zoomOut();
+                    return;
+                case "zoomReset":
+                    await getActionBrowserControl(context).zoomReset();
+                    return;
+                case "followLinkByText": {
+                    const control = getActionBrowserControl(context);
+                    const { keywords, openInNewTab } = action.parameters;
+                    const url = await control.followLinkByText(
+                        keywords,
+                        openInNewTab,
+                    );
+                    if (!url) {
+                        throw new Error(`No link found for '${keywords}'`);
+                    }
 
-                return createActionResultFromMarkdownDisplay(
-                    `Navigated to link for [${keywords}](${url})`,
-                    `Navigated to link for '${keywords}'`,
-                );
-            }
-            case "followLinkByPosition":
-                const control = getActionBrowserControl(context);
-                const url = await control.followLinkByPosition(
-                    action.parameters.position,
-                    action.parameters.openInNewTab,
-                );
-                if (!url) {
-                    throw new Error(
-                        `No link found at position ${action.parameters.position}`,
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to link for [${keywords}](${url})`,
+                        `Navigated to link for '${keywords}'`,
                     );
                 }
-                return createActionResultFromMarkdownDisplay(
-                    `Navigated to [link](${url}) at position ${action.parameters.position}`,
-                    `Navigated to link at position ${action.parameters.position}`,
-                );
-        }
+                case "followLinkByPosition":
+                    const control = getActionBrowserControl(context);
+                    const url = await control.followLinkByPosition(
+                        action.parameters.position,
+                        action.parameters.openInNewTab,
+                    );
+                    if (!url) {
+                        throw new Error(
+                            `No link found at position ${action.parameters.position}`,
+                        );
+                    }
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to [link](${url}) at position ${action.parameters.position}`,
+                        `Navigated to link at position ${action.parameters.position}`,
+                    );
+            }
+            break;
+        case "browser.external":
+            switch (action.actionName) {
+                case "closeWindow": {
+                    const control = getActionBrowserControl(context);
+                    await control.closeWindow();
+                    return;
+                }
+            }
+            break;
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
@@ -916,6 +927,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = true;
+                        await context.queueToggleTransientAgent(
+                            "browser.external",
+                            true,
+                        );
                         displaySuccess(
                             "Using external browser control.",
                             context,
@@ -935,6 +950,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = false;
+                        await context.queueToggleTransientAgent(
+                            "browser.external",
+                            false,
+                        );
                         displaySuccess("Use client browser control.", context);
                     },
                 },
