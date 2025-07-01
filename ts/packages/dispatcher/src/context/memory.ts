@@ -8,15 +8,32 @@ import {
     createConversationMemory,
 } from "conversation-memory";
 
-import type { CommandHandlerContext } from "./commandHandlerContext.js";
+import {
+    changeContextConfig,
+    type CommandHandlerContext,
+} from "./commandHandlerContext.js";
 import type {
+    ActionContext,
     ActionResult,
     ActionResultActivityContext,
     Entity,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import { ExecutableAction, getFullActionName } from "agent-cache";
 import { CachedImageWithDetails } from "common-utils";
 import { getAppAgentName } from "../internal.js";
+import {
+    CommandHandler,
+    CommandHandlerTable,
+} from "@typeagent/agent-sdk/helpers/command";
+import { getToggleHandlerTable } from "../command/handlerUtils.js";
+import registerDebug from "debug";
+import {
+    displayError,
+    displayResult,
+} from "@typeagent/agent-sdk/helpers/display";
+
+const debug = registerDebug("typeagent:dispatcher:memory");
 
 export async function initializeMemory(
     context: CommandHandlerContext,
@@ -174,4 +191,81 @@ export function addActionResultToMemory(
             result.activityContext,
         );
     }
+}
+
+export async function lookupAndAnswerFromMemory(
+    context: ActionContext<CommandHandlerContext>,
+    question: string,
+): Promise<string[]> {
+    const systemContext = context.sessionContext.agentContext;
+    const conversationMemory = systemContext.conversationMemory;
+    if (conversationMemory === undefined) {
+        throw new Error("Conversation memory is undefined!");
+    }
+
+    const result = await conversationMemory.getAnswerFromLanguage(question);
+    if (!result.success) {
+        throw new Error(`Conversation memory search failed: ${result.message}`);
+    }
+
+    const literalText: string[] = [];
+    for (const [searchResult, answer] of result.data) {
+        debug("Conversation memory search result:", searchResult);
+        if (answer.type === "Answered") {
+            literalText.push(answer.answer!);
+            displayResult(answer.answer!, context);
+        } else {
+            literalText.push(answer.whyNoAnswer!);
+            displayError(answer.whyNoAnswer!, context);
+        }
+    }
+    // TODO: how about entities?
+    return literalText;
+}
+
+function checkLegacyMemory(context: ActionContext<CommandHandlerContext>) {
+    const systemContext = context.sessionContext.agentContext;
+    if (systemContext.session.getConfig().execution.memory.legacy) {
+        throw new Error("Legacy memory is enabled. Command not supported.");
+    }
+}
+class MemoryAnswerCommandHandler implements CommandHandler {
+    public readonly description = "Answer a question using conversation memory";
+    public readonly parameters = {
+        args: {
+            question: {
+                type: "string",
+                description: "Question to ask the conversation memory",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        checkLegacyMemory(context);
+        await lookupAndAnswerFromMemory(context, params.args.question);
+    }
+}
+
+export function getMemoryCommandHandlers(): CommandHandlerTable {
+    return {
+        description: "Memory commands",
+        commands: {
+            legacy: getToggleHandlerTable("legacy", async (context, enable) => {
+                await changeContextConfig(
+                    {
+                        execution: {
+                            memory: {
+                                legacy: enable,
+                            },
+                        },
+                    },
+                    context,
+                );
+            }),
+
+            answer: new MemoryAnswerCommandHandler(),
+        },
+    };
 }
