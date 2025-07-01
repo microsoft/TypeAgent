@@ -44,6 +44,10 @@ export function simplifyHtml(html: string): string {
     return editor.getHtml();
 }
 
+function removeExtraWhitespace(html: string): string {
+    return html.replaceAll(/\s+/g, " ");
+}
+
 class HtmlEditor {
     private $: cheerio.CheerioAPI;
     private tagsToKeep: Set<string>;
@@ -53,6 +57,7 @@ class HtmlEditor {
         public html: string,
         tagsToKeep?: string[] | undefined,
     ) {
+        html = removeExtraWhitespace(html);
         this.$ = cheerio.load(html);
         this.tagsToKeep = new Set(tagsToKeep ?? getTypicalTagNames());
         this.removableAttrPrefixes = getRemovableAttrPrefixes();
@@ -287,6 +292,7 @@ export class HtmlToMdConvertor {
     public tagsToIgnore: string[];
 
     constructor(public html: string) {
+        html = removeExtraWhitespace(html);
         this.$ = cheerio.load(html);
         this.tagsToIgnore = [
             "header",
@@ -297,7 +303,7 @@ export class HtmlToMdConvertor {
             "meta",
             "form",
             "button",
-            "svg",
+            //"svg",
             "summary",
             "dialog",
             "details",
@@ -462,12 +468,10 @@ export class HtmlToMdConvertor {
                             break;
                         case "a":
                             if (childElement.children.length > 0) {
-                                this.append("[");
-                                this.traverseChildren(childElement);
-                                this.append("]");
-                                const href = childElement.attribs["href"];
-                                if (href) {
-                                    this.append(`(${href})`);
+                                const text = this.getInnerText(childElement);
+                                if (text) {
+                                    const href = childElement.attribs["href"];
+                                    this.append(`[${text}](${href})`);
                                 }
                             }
                             break;
@@ -478,32 +482,39 @@ export class HtmlToMdConvertor {
                     this.depth--;
                     break;
                 case "text":
-                    const childNode = this.$(child);
-                    let text = childNode.text();
-                    text = text.replaceAll("\t", "");
-                    let originalLength = text.length;
-                    let spacesAdded = 0;
-                    if (originalLength > 0) {
-                        // Spaces are meaningful, but generated html can contain unnecessary whitespace
-                        text = text.trimStart();
-                        if (originalLength - text.length > 0) {
-                            text = " " + text;
-                            originalLength = text.length;
-                            spacesAdded++;
-                        }
-                        text = text.trimEnd();
-                        if (originalLength - text.length > 0) {
-                            // More than one trailing space.
-                            text += " ";
-                            spacesAdded++;
-                        }
-                        if (spacesAdded === 0 || text.length > spacesAdded) {
-                            this.append(text);
-                        }
+                    let text = this.getInnerText(child);
+                    if (text && text.length > 0) {
+                        this.append(text);
                     }
                     break;
             }
         }
+    }
+
+    private getInnerText(node: any): string | undefined {
+        const childNode = this.$(node);
+        let text = childNode.text();
+        let originalLength = text.length;
+        let spacesAdded = 0;
+        if (originalLength > 0) {
+            // Spaces are meaningful, but generated html can contain unnecessary whitespace
+            text = text.trimStart();
+            if (originalLength - text.length > 0) {
+                text = " " + text;
+                originalLength = text.length;
+                spacesAdded++;
+            }
+            text = text.trimEnd();
+            if (originalLength - text.length > 0) {
+                // More than one trailing space.
+                text += " ";
+                spacesAdded++;
+            }
+            if (spacesAdded === 0 || text.length > spacesAdded) {
+                return text;
+            }
+        }
+        return undefined;
     }
 
     private beginBlock(name: string): void {
