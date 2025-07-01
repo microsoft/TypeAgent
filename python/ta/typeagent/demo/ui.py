@@ -49,6 +49,8 @@ def main() -> None:
         query_translator = create_translator(model, SearchQuery)
         answer_translator = create_translator(model, AnswerResponse)
 
+    print(colorama.Fore.YELLOW + query_translator.schema_str)  # For debugging purposes.
+
     file = "testdata/Episode_53_AdrianTchaikovsky_index"
     with timelog("create conversation settings"):
         settings = ConversationSettings()
@@ -186,9 +188,9 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
         print(f"Error searching conversation: {result.message}")
         return
     search_results = result.value
-    # for sr in search_results:
-    #     print("-" * 50)
-    #     print_result(sr, conversation)
+    for sr in search_results:
+        print_result(sr, conversation)
+        print("-" * 50)
     all_answers, combined_answer = await generate_answers(
         answer_translator, search_results, conversation, orig_query_text
     )
@@ -204,7 +206,11 @@ async def process_query[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
 def print_result[TMessage: IMessage, TIndex: ITermToSemanticRefIndex](
     result: ConversationSearchResult, conversation: IConversation[TMessage, TIndex]
 ) -> None:
-    print(f"Raw query: {result.raw_query_text}")
+    print(
+        f"Raw query: {result.raw_query_text};",
+        f"{len(result.message_matches)} message matches,",
+        f"{len(result.knowledge_matches)} knowledge matches",
+    )
     if result.message_matches:
         print("Message matches:")
         for scored_ord in sorted(
