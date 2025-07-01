@@ -276,8 +276,13 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
     }
 
     onBlockEnd(convertor: HtmlToMdConvertor): void {
-        // Include all heads in scope.. as topics and entities
-        for (const hLevel of this.headingsInScope.keys()) {
+        // Include top K headings in scope.. as topics and entities
+        const topK = 2;
+        let headingLevelsInscope = [...this.headingsInScope.keys()].sort(
+            (x, y) => y - x, // Descending
+        );
+        headingLevelsInscope = headingLevelsInscope.slice(0, topK);
+        for (const hLevel of headingLevelsInscope) {
             const hText = this.headingsInScope.get(hLevel)!;
             this.curKnowledge.topics.push(hText);
             this.curKnowledge.entities.push(headingToEntity(hText, hLevel));

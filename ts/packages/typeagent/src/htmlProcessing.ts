@@ -372,13 +372,13 @@ export class HtmlToMdConvertor {
                     const tagName = childElement.tagName;
                     switch (tagName) {
                         default:
-                            if (
-                                !this.tagsToIgnore.some(
-                                    (tagPrefix) =>
-                                        tagName === tagPrefix ||
-                                        tagName.startsWith(tagPrefix),
-                                )
-                            ) {
+                            const shouldSkipTag = this.tagsToIgnore.some(
+                                (tagPrefix) =>
+                                    tagName === tagPrefix ||
+                                    tagName.startsWith(tagPrefix),
+                            );
+
+                            if (!shouldSkipTag) {
                                 this.traverseChildren(childElement);
                             }
                             break;
