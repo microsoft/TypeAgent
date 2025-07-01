@@ -15,12 +15,14 @@ import * as kpTest from "knowpro-test";
 import {
     changeFileExt,
     getAbsolutePath,
+    htmlToMd,
     readAllText,
     simplifyHtml,
     simplifyText,
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
+import * as fs from "fs";
 
 /**
  * Test related commands
@@ -37,16 +39,30 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
     commands.kpTestHtmlText = testHtmlText;
+    commands.kpTestHtmlMd = testHtmlToMd;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
         const simpleHtml = simplifyHtml(html);
         context.printer.writeLine(simpleHtml);
     }
+
     async function testHtmlText(args: string[]) {
         const html = await readAllText(args[0]);
         const text = simplifyText(html);
         context.printer.writeLine(text);
+    }
+
+    async function testHtmlToMd(args: string[]) {
+        const filePath = args[0];
+        if (!filePath) {
+            return;
+        }
+        let html = await readAllText(args[0]);
+        const md = htmlToMd(html);
+        context.printer.writeLine(md);
+        const destPath = changeFileExt(filePath, ".md");
+        fs.writeFileSync(destPath, md);
     }
 
     function searchBatchDef(): CommandMetadata {
