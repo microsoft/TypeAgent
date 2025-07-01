@@ -4,6 +4,7 @@
 import {
     arg,
     argBool,
+    argNum,
     CommandHandler,
     CommandMetadata,
     NamedArgs,
@@ -23,7 +24,12 @@ import {
     addMessagesToCollection,
     buildCollectionIndex,
 } from "./websiteMemory.js";
+
 import * as website from "website-memory";
+import type { DetectedAction } from "website-memory";
+// import { createWebsiteAnswerGenerator } from "./websiteAnswerContext.js";
+import * as kp from "knowpro";
+import * as kpTest from "knowpro-test";
 
 export type KnowProWebsiteContext = {
     printer: KnowProPrinter;
@@ -48,6 +54,13 @@ export async function createKnowproWebsiteCommands(
     commands.kpWebsiteAddHistory = websiteAddHistory;
     commands.kpWebsiteClose = websiteClose;
     commands.kpWebsiteStats = websiteStats;
+    commands.kpWebsiteSearch = websiteSearch;
+    commands.kpWebsiteAnalyzeContent = websiteAnalyzeContent;
+    commands.kpWebsiteTestEnhanced = websiteTestEnhanced;
+
+    // NEW: Action detection commands
+    commands.kpWebsiteAnalyzeActions = websiteAnalyzeActions;
+    commands.kpWebsiteListActions = websiteListActions;
 
     function websiteAddDef(): CommandMetadata {
         return {
@@ -107,7 +120,7 @@ export async function createKnowproWebsiteCommands(
         context.printer.writeLine(`Adding website: ${visitInfo.url}`);
         const result = await addMessagesToCollection(
             websiteCollection,
-            websiteMessage,
+            [websiteMessage],
             namedArgs.updateIndex,
         );
 
@@ -194,11 +207,13 @@ export async function createKnowproWebsiteCommands(
             );
             clock.stop();
             if (context.website) {
+                // Set up enhanced search context for website queries
+                kpContext.conversation = context.website;
+
                 context.printer.writeTiming(chalk.gray, clock);
                 context.printer.writeLine(
-                    `Loaded website memory: ${namedArgs.name}`,
+                    `Loaded website memory with enhanced temporal/frequency search: ${namedArgs.name}`,
                 );
-                kpContext.conversation = context.website;
             }
         } catch (error) {
             context.printer.writeError(
@@ -217,6 +232,25 @@ export async function createKnowproWebsiteCommands(
                 limit: arg("Maximum number to import"),
                 days: arg("Only import bookmarks from last N days"),
                 updateIndex: argBool("Automatically update index", true),
+
+                // NEW: Content extraction options
+                extractContent: argBool("Extract page content", false),
+                extractionMode: arg(
+                    "Extraction mode: basic | content | actions | full",
+                    "content",
+                ),
+                maxConcurrent: argNum("Max concurrent extractions", 3),
+                contentTimeout: argNum(
+                    "Content extraction timeout (ms)",
+                    10000,
+                ),
+
+                // NEW: Action detection options
+                enableActionDetection: argBool("Enable action detection", true),
+                actionConfidence: argNum(
+                    "Minimum action confidence threshold",
+                    0.7,
+                ),
             },
         };
     }
@@ -268,20 +302,107 @@ export async function createKnowproWebsiteCommands(
             }
 
             let websites: website.Website[] = [];
-            if (namedArgs.source === "chrome") {
-                websites = await website.importWebsites(
-                    "chrome",
+
+            // Enhanced import with content extraction
+            if (namedArgs.extractContent) {
+                context.printer.writeLine(
+                    `🔍 Extracting content in ${namedArgs.extractionMode} mode...`,
+                );
+                context.printer.writeLine(
+                    `⚙️  Max concurrent: ${namedArgs.maxConcurrent}, Timeout: ${namedArgs.contentTimeout}ms`,
+                );
+
+                if (
+                    namedArgs.enableActionDetection &&
+                    (namedArgs.extractionMode === "actions" ||
+                        namedArgs.extractionMode === "full")
+                ) {
+                    context.printer.writeLine(
+                        `🎯 Action detection enabled (min confidence: ${namedArgs.actionConfidence})`,
+                    );
+                }
+
+                websites = await website.importWebsitesWithContent(
+                    namedArgs.source as "chrome" | "edge",
                     "bookmarks",
                     bookmarksPath,
-                    importOptions,
+                    {
+                        ...importOptions,
+                        extractContent: true,
+                        extractionMode: namedArgs.extractionMode as any,
+                        maxConcurrent: namedArgs.maxConcurrent,
+                        contentTimeout: namedArgs.contentTimeout,
+                        enableActionDetection: namedArgs.enableActionDetection,
+                        actionConfidence: namedArgs.actionConfidence,
+                    },
+                    (current, total, item) => {
+                        // writeProgress might only expect one argument
+                        context.printer.writeLine(
+                            `Processing ${current}/${total}: ${item}`,
+                        );
+                    },
                 );
-            } else if (namedArgs.source === "edge") {
-                websites = await website.importWebsites(
-                    "edge",
-                    "bookmarks",
-                    bookmarksPath,
-                    importOptions,
+
+                context.printer.writeLine(
+                    `✅ Content extraction completed for ${websites.length} bookmarks`,
                 );
+
+                // Count websites with enhanced content
+                const enhancedCount = websites.filter(
+                    (w) => w.metadata.pageContent,
+                ).length;
+                if (enhancedCount > 0) {
+                    context.printer.writeLine(
+                        `📄 ${enhancedCount} bookmarks now have enhanced content`,
+                    );
+                }
+
+                // Report action detection results
+                if (
+                    namedArgs.enableActionDetection &&
+                    (namedArgs.extractionMode === "actions" ||
+                        namedArgs.extractionMode === "full")
+                ) {
+                    const actionStats = calculateActionStats(websites);
+                    if (actionStats.sitesWithActions > 0) {
+                        context.printer.writeLine(
+                            `✅ Action detection completed:`,
+                        );
+                        context.printer.writeLine(
+                            `   • ${actionStats.sitesWithActions} sites have detectable actions`,
+                        );
+                        context.printer.writeLine(
+                            `   • ${actionStats.totalActions} total actions found`,
+                        );
+                        context.printer.writeLine(
+                            `   • ${actionStats.actionTypes.join(", ")} action types detected`,
+                        );
+                        context.printer.writeLine(
+                            `   • ${actionStats.highConfidenceActions} high-confidence actions (>80%)`,
+                        );
+                    } else {
+                        context.printer.writeLine(
+                            `ℹ️  No high-confidence actions detected in imported bookmarks`,
+                        );
+                    }
+                }
+            } else {
+                // Use existing basic import
+                if (namedArgs.source === "chrome") {
+                    websites = await website.importWebsites(
+                        "chrome",
+                        "bookmarks",
+                        bookmarksPath,
+                        importOptions,
+                    );
+                } else if (namedArgs.source === "edge") {
+                    websites = await website.importWebsites(
+                        "edge",
+                        "bookmarks",
+                        bookmarksPath,
+                        importOptions,
+                    );
+                }
             }
 
             if (websites.length === 0) {
@@ -432,7 +553,15 @@ export async function createKnowproWebsiteCommands(
 
     function websiteStatsDef(): CommandMetadata {
         return {
-            description: "Show statistics about the website memory",
+            description:
+                "Show detailed statistics about the website memory including domains, entities, topics, and actions",
+            options: {
+                detailed: argBool("Show detailed breakdowns", false),
+                limit: argNum("Limit top results shown", 10),
+                showActions: argBool("Show action statistics", true),
+                showContent: argBool("Show content analysis stats", true),
+                showTemporal: argBool("Show temporal distribution", true),
+            },
         };
     }
     commands.kpWebsiteStats.metadata = websiteStatsDef();
@@ -442,73 +571,1091 @@ export async function createKnowproWebsiteCommands(
             return;
         }
 
+        const namedArgs = parseNamedArguments(args, websiteStatsDef());
+        const limit = namedArgs.limit || 10;
+
         const totalMessages = websiteCollection.messages.length;
         const indexingState = getIndexingState(websiteCollection);
         const indexedMessages = indexingState.lastMessageOrdinal + 1;
 
-        context.printer.writeLine(`Website Memory Statistics:`);
+        context.printer.writeLine(`🌐 Website Memory Statistics:`);
+        context.printer.writeLine(`${"=".repeat(50)}`);
+        context.printer.writeLine(`📊 Overview:`);
         context.printer.writeLine(`  Total visits: ${totalMessages}`);
         context.printer.writeLine(`  Indexed visits: ${indexedMessages}`);
         context.printer.writeLine(
             `  Pending indexing: ${totalMessages - indexedMessages}`,
         );
 
-        // Count by source type
+        // Initialize tracking variables
         const sourceCounts = new Map<string, number>();
         const domainCounts = new Map<string, number>();
         const pageTypeCounts = new Map<string, number>();
+        const actionTypeCounts = new Map<string, number>();
+        const topicCounts = new Map<string, number>();
+        const entityCounts = new Map<string, number>();
+        const temporalData = new Map<string, number>();
 
+        let totalActions = 0;
+        let highConfidenceActions = 0;
+        let sitesWithContent = 0;
+        let totalWordCount = 0;
+        let sitesWithActions = 0;
+
+        // Analyze each message
         for (let i = 0; i < totalMessages; i++) {
             const message = websiteCollection.messages.get(i);
-            if (message) {
-                const source = message.metadata.websiteSource;
-                sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
+            if (!message) continue;
 
-                if (message.metadata.domain) {
-                    const domain = message.metadata.domain;
-                    domainCounts.set(
-                        domain,
-                        (domainCounts.get(domain) || 0) + 1,
-                    );
+            const metadata = message.metadata;
+
+            // Source tracking
+            const source = metadata.websiteSource || "unknown";
+            sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
+
+            // Domain tracking
+            if (metadata.domain) {
+                domainCounts.set(
+                    metadata.domain,
+                    (domainCounts.get(metadata.domain) || 0) + 1,
+                );
+            }
+
+            // Page type tracking
+            if (metadata.pageType) {
+                pageTypeCounts.set(
+                    metadata.pageType,
+                    (pageTypeCounts.get(metadata.pageType) || 0) + 1,
+                );
+            }
+
+            // Content analysis
+            if (metadata.pageContent) {
+                sitesWithContent++;
+                if (metadata.pageContent.wordCount) {
+                    totalWordCount += metadata.pageContent.wordCount;
                 }
 
-                if (message.metadata.pageType) {
-                    const pageType = message.metadata.pageType;
-                    pageTypeCounts.set(
-                        pageType,
-                        (pageTypeCounts.get(pageType) || 0) + 1,
-                    );
+                // Extract topics from headings and keywords
+                if (metadata.pageContent.headings) {
+                    metadata.pageContent.headings.forEach((heading) => {
+                        const topics = extractTopicsFromText(heading);
+                        topics.forEach((topic) => {
+                            topicCounts.set(
+                                topic,
+                                (topicCounts.get(topic) || 0) + 1,
+                            );
+                        });
+                    });
                 }
+            }
+
+            // Meta tags analysis for entities/keywords
+            if (metadata.metaTags && metadata.metaTags.keywords) {
+                metadata.metaTags.keywords.forEach((keyword) => {
+                    const entity = keyword.toLowerCase().trim();
+                    if (entity.length > 2) {
+                        entityCounts.set(
+                            entity,
+                            (entityCounts.get(entity) || 0) + 1,
+                        );
+                    }
+                });
+            }
+
+            // Action analysis
+            if (
+                metadata.detectedActions &&
+                metadata.detectedActions.length > 0
+            ) {
+                sitesWithActions++;
+                totalActions += metadata.detectedActions.length;
+
+                metadata.detectedActions.forEach((action: DetectedAction) => {
+                    const actionType = action.actionType.replace("Action", "");
+                    actionTypeCounts.set(
+                        actionType,
+                        (actionTypeCounts.get(actionType) || 0) + 1,
+                    );
+
+                    if (action.confidence > 0.8) {
+                        highConfidenceActions++;
+                    }
+                });
+            }
+
+            // Temporal analysis
+            if (metadata.visitDate || metadata.bookmarkDate) {
+                const date = new Date(
+                    metadata.visitDate || metadata.bookmarkDate!,
+                );
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+                temporalData.set(
+                    monthKey,
+                    (temporalData.get(monthKey) || 0) + 1,
+                );
             }
         }
 
+        // Display source breakdown
         if (sourceCounts.size > 0) {
-            context.printer.writeLine(`\nBy Source:`);
+            context.printer.writeLine(`\n📥 Sources:`);
             for (const [source, count] of sourceCounts.entries()) {
-                context.printer.writeLine(`  ${source}: ${count}`);
+                const percentage = ((count / totalMessages) * 100).toFixed(1);
+                context.printer.writeLine(
+                    `  ${source}: ${count} (${percentage}%)`,
+                );
             }
         }
 
+        // Display top domains
         if (domainCounts.size > 0) {
-            context.printer.writeLine(`\nTop Domains:`);
+            context.printer.writeLine(`\n🌍 Top ${limit} Domains:`);
             const sortedDomains = Array.from(domainCounts.entries())
                 .sort((a, b) => b[1] - a[1])
-                .slice(0, 10);
-            for (const [domain, count] of sortedDomains) {
-                context.printer.writeLine(`  ${domain}: ${count} visits`);
+                .slice(0, limit);
+
+            sortedDomains.forEach(([domain, count], index) => {
+                const percentage = ((count / totalMessages) * 100).toFixed(1);
+                context.printer.writeLine(
+                    `  ${index + 1}. ${domain}: ${count} visits (${percentage}%)`,
+                );
+            });
+        }
+
+        // Display page types
+        if (pageTypeCounts.size > 0) {
+            context.printer.writeLine(`\n📄 Page Types:`);
+            const sortedPageTypes = Array.from(pageTypeCounts.entries()).sort(
+                (a, b) => b[1] - a[1],
+            );
+
+            sortedPageTypes.forEach(([pageType, count]) => {
+                const percentage = ((count / totalMessages) * 100).toFixed(1);
+                context.printer.writeLine(
+                    `  ${pageType}: ${count} (${percentage}%)`,
+                );
+            });
+        }
+
+        // Display content analysis stats
+        if (namedArgs.showContent && sitesWithContent > 0) {
+            const avgWordCount = Math.round(totalWordCount / sitesWithContent);
+            context.printer.writeLine(`\n📚 Content Analysis:`);
+            context.printer.writeLine(
+                `  Sites with extracted content: ${sitesWithContent}/${totalMessages} (${((sitesWithContent / totalMessages) * 100).toFixed(1)}%)`,
+            );
+            context.printer.writeLine(
+                `  Total words extracted: ${totalWordCount.toLocaleString()}`,
+            );
+            context.printer.writeLine(
+                `  Average words per site: ${avgWordCount.toLocaleString()}`,
+            );
+
+            // Show top topics if available
+            if (topicCounts.size > 0) {
+                context.printer.writeLine(
+                    `\n🏷️  Top ${Math.min(limit, topicCounts.size)} Topics:`,
+                );
+                const sortedTopics = Array.from(topicCounts.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, limit);
+
+                sortedTopics.forEach(([topic, count], index) => {
+                    context.printer.writeLine(
+                        `  ${index + 1}. ${topic}: ${count} mentions`,
+                    );
+                });
             }
         }
 
-        if (pageTypeCounts.size > 0) {
-            context.printer.writeLine(`\nBy Page Type:`);
-            for (const [pageType, count] of pageTypeCounts.entries()) {
-                context.printer.writeLine(`  ${pageType}: ${count}`);
+        // Display common entities/keywords
+        if (entityCounts.size > 0) {
+            context.printer.writeLine(`\n🔍 Common Keywords/Entities:`);
+            const sortedEntities = Array.from(entityCounts.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, limit);
+
+            sortedEntities.forEach(([entity, count], index) => {
+                context.printer.writeLine(
+                    `  ${index + 1}. ${entity}: ${count} occurrences`,
+                );
+            });
+        }
+
+        // Display action statistics
+        if (namedArgs.showActions && sitesWithActions > 0) {
+            context.printer.writeLine(`\n🎯 Action Detection Summary:`);
+            context.printer.writeLine(
+                `  Sites with actions: ${sitesWithActions}/${totalMessages} (${((sitesWithActions / totalMessages) * 100).toFixed(1)}%)`,
+            );
+            context.printer.writeLine(
+                `  Total actions detected: ${totalActions}`,
+            );
+            context.printer.writeLine(
+                `  High-confidence actions: ${highConfidenceActions} (>${((highConfidenceActions / totalActions) * 100).toFixed(1)}%)`,
+            );
+
+            if (actionTypeCounts.size > 0) {
+                context.printer.writeLine(`\n🎭 Action Types:`);
+                const sortedActionTypes = Array.from(
+                    actionTypeCounts.entries(),
+                ).sort((a, b) => b[1] - a[1]);
+
+                sortedActionTypes.forEach(([actionType, count]) => {
+                    const percentage = ((count / totalActions) * 100).toFixed(
+                        1,
+                    );
+                    context.printer.writeLine(
+                        `  ${actionType}: ${count} (${percentage}%)`,
+                    );
+                });
             }
+        }
+
+        // Display temporal distribution
+        if (namedArgs.showTemporal && temporalData.size > 0) {
+            context.printer.writeLine(`\n📅 Temporal Distribution (by Month):`);
+            const sortedTemporal = Array.from(temporalData.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .slice(-6); // Show last 6 months
+
+            sortedTemporal.forEach(([month, count]) => {
+                const bar = "█".repeat(
+                    Math.min(
+                        20,
+                        Math.round(
+                            (count / Math.max(...temporalData.values())) * 20,
+                        ),
+                    ),
+                );
+                context.printer.writeLine(
+                    `  ${month}: ${count.toString().padStart(3)} ${bar}`,
+                );
+            });
+        }
+
+        // Detailed breakdown if requested
+        if (namedArgs.detailed) {
+            context.printer.writeLine(`\n🔬 Detailed Analysis:`);
+            context.printer.writeLine(`  Unique domains: ${domainCounts.size}`);
+            context.printer.writeLine(
+                `  Unique page types: ${pageTypeCounts.size}`,
+            );
+            context.printer.writeLine(
+                `  Unique action types: ${actionTypeCounts.size}`,
+            );
+            context.printer.writeLine(
+                `  Unique topics identified: ${topicCounts.size}`,
+            );
+            context.printer.writeLine(
+                `  Unique entities/keywords: ${entityCounts.size}`,
+            );
+
+            if (sitesWithContent > 0) {
+                const contentPercentage = (
+                    (sitesWithContent / totalMessages) *
+                    100
+                ).toFixed(1);
+                context.printer.writeLine(
+                    `  Content extraction success rate: ${contentPercentage}%`,
+                );
+            }
+
+            if (sitesWithActions > 0) {
+                const actionPercentage = (
+                    (sitesWithActions / totalMessages) *
+                    100
+                ).toFixed(1);
+                const avgActionsPerSite = (
+                    totalActions / sitesWithActions
+                ).toFixed(1);
+                context.printer.writeLine(
+                    `  Action detection success rate: ${actionPercentage}%`,
+                );
+                context.printer.writeLine(
+                    `  Average actions per actionable site: ${avgActionsPerSite}`,
+                );
+            }
+        }
+    }
+
+    // Helper function to write website search results without content (filtered metadata)
+    function writeWebsiteSearchResultWithoutContent(
+        conversation: kp.IConversation,
+        searchResult: kp.ConversationSearchResult | undefined,
+        maxToDisplay: number,
+        distinct: boolean,
+    ) {
+        if (searchResult && kp.hasConversationResult(searchResult)) {
+            // Show knowledge matches
+            context.printer.writeKnowledgeSearchResults(
+                conversation,
+                searchResult.knowledgeMatches,
+                maxToDisplay,
+                distinct,
+            );
+
+            // Show messages with filtered metadata (no content)
+            if (searchResult.messageMatches) {
+                const matchesToDisplay = searchResult.messageMatches.slice(
+                    0,
+                    maxToDisplay,
+                );
+                context.printer.writeLine(
+                    `Displaying ${matchesToDisplay.length} matches of total ${searchResult.messageMatches.length}`,
+                );
+
+                for (let i = 0; i < matchesToDisplay.length; ++i) {
+                    const scoredMessage = matchesToDisplay[i];
+                    const message = conversation.messages.get(
+                        scoredMessage.messageOrdinal,
+                    );
+
+                    context.printer.writeInColor(
+                        chalk.green,
+                        `#${i + 1} / ${matchesToDisplay.length}: <${scoredMessage.messageOrdinal}> [${scoredMessage.score}]`,
+                    );
+
+                    if (message) {
+                        // Write message with filtered metadata
+                        writeMessageWithFilteredMetadata(message);
+                    }
+                    context.printer.writeLine();
+                }
+            }
+        } else {
+            context.printer.writeLine("No matches");
+        }
+    }
+
+    // Helper function to write a message with filtered metadata (removes content fields)
+    function writeMessageWithFilteredMetadata(message: kp.IMessage) {
+        const prevColor = context.printer.setForeColor(chalk.cyan);
+        try {
+            context.printer.writeNameValue("Timestamp", message.timestamp);
+            if (message.tags && message.tags.length > 0) {
+                context.printer.writeList(message.tags, {
+                    type: "csv",
+                    title: "Tags",
+                });
+            }
+
+            // Filter out content-heavy fields from metadata
+            const metadata = message.metadata as any;
+            if (metadata) {
+                const filteredMetadata: any = {};
+
+                // Copy all metadata except content fields
+                for (const [key, value] of Object.entries(metadata)) {
+                    if (!isContentField(key)) {
+                        filteredMetadata[key] = value;
+                    }
+                }
+
+                context.printer.write("Metadata: ").writeJson(filteredMetadata);
+            }
+        } finally {
+            context.printer.setForeColor(prevColor);
+        }
+
+        // Don't write text chunks when content is filtered - they contain the page content
+        // Text chunks are suppressed to keep output clean when --includeContent false
+
+        context.printer.writeLine();
+    }
+
+    // Helper function to identify content fields that should be filtered out
+    function isContentField(fieldName: string): boolean {
+        const contentFields = [
+            "pageContent",
+            "mainContent",
+            "metaTags",
+            "structuredData",
+            "detectedActions",
+            "extractedActions",
+        ];
+        return contentFields.includes(fieldName);
+    }
+
+    // Helper function to write website search results with optional content
+    function writeWebsiteSearchResultWithContent(
+        conversation: kp.IConversation,
+        searchResult: kp.ConversationSearchResult | undefined,
+        maxToDisplay: number,
+        distinct: boolean,
+    ) {
+        if (searchResult && kp.hasConversationResult(searchResult)) {
+            // Show knowledge matches
+            context.printer.writeKnowledgeSearchResults(
+                conversation,
+                searchResult.knowledgeMatches,
+                maxToDisplay,
+                distinct,
+            );
+
+            // Show messages with enhanced content display
+            if (searchResult.messageMatches) {
+                const matchesToDisplay = searchResult.messageMatches.slice(
+                    0,
+                    maxToDisplay,
+                );
+                context.printer.writeLine(
+                    `Displaying ${matchesToDisplay.length} matches of total ${searchResult.messageMatches.length}`,
+                );
+
+                for (let i = 0; i < matchesToDisplay.length; ++i) {
+                    const scoredMessage = matchesToDisplay[i];
+                    const message = conversation.messages.get(
+                        scoredMessage.messageOrdinal,
+                    );
+
+                    context.printer.writeInColor(
+                        chalk.green,
+                        `#${i + 1} / ${matchesToDisplay.length}: <${scoredMessage.messageOrdinal}> [${scoredMessage.score}]`,
+                    );
+
+                    if (message) {
+                        // Standard message display
+                        context.printer.writeMessage(message);
+
+                        // Add enhanced content display for websites
+                        const metadata = message.metadata as any; // Cast to access website-specific metadata
+                        if (metadata && metadata.pageContent) {
+                            context.printer.writeLine();
+                            context.printer.writeInColor(
+                                chalk.yellow,
+                                "📄 Page Content:",
+                            );
+
+                            if (metadata.pageContent.title) {
+                                context.printer.writeLine(
+                                    `Title: ${metadata.pageContent.title}`,
+                                );
+                            }
+
+                            if (
+                                metadata.pageContent.headings &&
+                                metadata.pageContent.headings.length > 0
+                            ) {
+                                context.printer.writeLine(
+                                    `Headings: ${metadata.pageContent.headings.slice(0, 3).join(" | ")}${metadata.pageContent.headings.length > 3 ? "..." : ""}`,
+                                );
+                            }
+
+                            if (metadata.pageContent.mainContent) {
+                                const truncatedContent =
+                                    metadata.pageContent.mainContent.length >
+                                    300
+                                        ? metadata.pageContent.mainContent.substring(
+                                              0,
+                                              300,
+                                          ) + "..."
+                                        : metadata.pageContent.mainContent;
+                                context.printer.writeLine(
+                                    `Content: ${truncatedContent}`,
+                                );
+                            }
+
+                            if (metadata.pageContent.wordCount) {
+                                context.printer.writeLine(
+                                    `Word Count: ${metadata.pageContent.wordCount}`,
+                                );
+                            }
+
+                            // Show detected actions if available
+                            if (
+                                metadata.detectedActions &&
+                                metadata.detectedActions.length > 0
+                            ) {
+                                context.printer.writeInColor(
+                                    chalk.magenta,
+                                    "🎯 Available Actions:",
+                                );
+                                const highConfActions =
+                                    metadata.detectedActions.filter(
+                                        (a: DetectedAction) =>
+                                            a.confidence > 0.7,
+                                    );
+                                if (highConfActions.length > 0) {
+                                    const actionSummary = highConfActions
+                                        .map(
+                                            (a: DetectedAction) =>
+                                                `${a.actionType.replace("Action", "")} (${(a.confidence * 100).toFixed(0)}%)`,
+                                        )
+                                        .join(", ");
+                                    context.printer.writeLine(
+                                        `${actionSummary}`,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    context.printer.writeLine();
+                }
+            }
+        } else {
+            context.printer.writeLine("No matches");
+        }
+    }
+
+    // Helper function to extract topics from text
+    function extractTopicsFromText(text: string): string[] {
+        const commonWords = new Set([
+            "the",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "how",
+            "what",
+            "when",
+            "where",
+            "why",
+            "which",
+            "who",
+            "that",
+            "this",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "can",
+            "may",
+            "might",
+            "must",
+            "a",
+            "an",
+        ]);
+
+        return text
+            .toLowerCase()
+            .replace(/[^\w\s]/g, " ")
+            .split(/\s+/)
+            .filter((word) => word.length > 3 && !commonWords.has(word))
+            .filter((word) => /^[a-zA-Z]+$/.test(word)); // Only alphabetic words
+    }
+
+    function websiteSearchDef(): CommandMetadata {
+        return {
+            description:
+                "Search website memory using natural language queries with temporal and frequency intelligence",
+            args: {
+                query: arg("Natural language search query"),
+            },
+            options: {
+                maxToDisplay: argNum("Maximum results to display", 10),
+                showUrls: argBool("Show full URLs", true),
+                includeContent: argBool(
+                    "Include page content in response items",
+                    false,
+                ),
+                debug: argBool("Show debug information", false),
+            },
+        };
+    }
+    commands.kpWebsiteSearch.metadata = websiteSearchDef();
+    async function websiteSearch(args: string[]) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
+            return;
+        }
+
+        if (
+            !kpContext.conversation ||
+            kpContext.conversation !== websiteCollection
+        ) {
+            context.printer.writeError(
+                "Website memory not loaded as conversation. Please load with kpWebsiteLoad first.",
+            );
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, websiteSearchDef());
+        const query = namedArgs.query;
+
+        context.printer.writeLine(`🔍 Searching website memory: "${query}"`);
+        context.printer.writeLine("=".repeat(60));
+
+        try {
+            // Use the knowpro search pattern with LLM query understanding
+            const searchResponse = await kpTest.execSearchRequest(
+                kpContext,
+                namedArgs,
+            );
+
+            const searchResults = searchResponse.searchResults;
+            const debugContext = searchResponse.debugContext;
+
+            if (!searchResults.success) {
+                context.printer.writeError(searchResults.message);
+                return;
+            }
+
+            if (namedArgs.debug) {
+                context.printer.writeInColor(chalk.gray, () => {
+                    context.printer.writeLine();
+                    context.printer.writeDebugContext(debugContext);
+                });
+            }
+
+            if (!kp.hasConversationResults(searchResults.data)) {
+                context.printer.writeLine("No matches found");
+                return;
+            }
+
+            // Display results with website-specific formatting
+            for (let i = 0; i < searchResults.data.length; ++i) {
+                const searchQueryExpr = debugContext.searchQueryExpr![i];
+                const result = searchResults.data[i];
+
+                if (!namedArgs.debug) {
+                    for (const selectExpr of searchQueryExpr.selectExpressions) {
+                        context.printer.writeSelectExpr(selectExpr, false);
+                    }
+                }
+
+                // Use custom website search result writer with content option
+                context.printer.writeLine("####");
+                context.printer.writeInColor(
+                    chalk.cyan,
+                    searchQueryExpr.rawQuery!,
+                );
+                context.printer.writeLine("####");
+
+                if (namedArgs.includeContent) {
+                    writeWebsiteSearchResultWithContent(
+                        kpContext.conversation!,
+                        result,
+                        namedArgs.maxToDisplay,
+                        true, // distinct
+                    );
+                } else {
+                    writeWebsiteSearchResultWithoutContent(
+                        kpContext.conversation!,
+                        result,
+                        namedArgs.maxToDisplay,
+                        true, // distinct
+                    );
+                }
+            }
+        } catch (error) {
+            context.printer.writeError(`Search failed: ${error}`);
+        }
+    }
+
+    function websiteAnalyzeContentDef(): CommandMetadata {
+        return {
+            description: "Analyze content of specific URLs",
+            args: {
+                url: arg("URL to analyze"),
+            },
+            options: {
+                mode: arg("Analysis mode: content | actions | full", "content"),
+                addToMemory: argBool("Add to website memory", false),
+                showContent: argBool("Show extracted content", false),
+            },
+        };
+    }
+    commands.kpWebsiteAnalyzeContent.metadata = websiteAnalyzeContentDef();
+    async function websiteAnalyzeContent(args: string[]) {
+        const namedArgs = parseNamedArguments(args, websiteAnalyzeContentDef());
+
+        const extractor = new website.ContentExtractor();
+        try {
+            context.printer.writeLine(`🔍 Analyzing content: ${namedArgs.url}`);
+            const analysis = await extractor.extractFromUrl(
+                namedArgs.url,
+                namedArgs.mode as any,
+            );
+
+            if (!analysis.success) {
+                context.printer.writeError(
+                    `Analysis failed: ${analysis.error}`,
+                );
+                return;
+            }
+
+            // Display analysis results
+            context.printer.writeLine(`\n📊 Content Analysis Results:`);
+            context.printer.writeLine(`Success: ${analysis.success}`);
+            context.printer.writeLine(
+                `Extraction Time: ${analysis.extractionTime}ms`,
+            );
+
+            if (analysis.pageContent) {
+                context.printer.writeLine(
+                    `Title: ${analysis.pageContent.title || "N/A"}`,
+                );
+                context.printer.writeLine(
+                    `Word Count: ${analysis.pageContent.wordCount || 0}`,
+                );
+                context.printer.writeLine(
+                    `Reading Time: ${analysis.pageContent.readingTime || 0} minutes`,
+                );
+
+                if (analysis.pageContent.headings?.length) {
+                    context.printer.writeLine(
+                        `Headings (${analysis.pageContent.headings.length}): ${analysis.pageContent.headings.slice(0, 5).join(", ")}${analysis.pageContent.headings.length > 5 ? "..." : ""}`,
+                    );
+                }
+
+                if (analysis.pageContent.codeBlocks?.length) {
+                    context.printer.writeLine(
+                        `Code Blocks: ${analysis.pageContent.codeBlocks.length} found`,
+                    );
+                }
+            }
+
+            if (analysis.metaTags?.keywords?.length) {
+                context.printer.writeLine(
+                    `Keywords: ${analysis.metaTags.keywords.join(", ")}`,
+                );
+            }
+
+            if (analysis.structuredData?.schemaType) {
+                context.printer.writeLine(
+                    `Schema Type: ${analysis.structuredData.schemaType}`,
+                );
+            }
+
+            if (analysis.actions?.length) {
+                context.printer.writeLine(
+                    `Actions Found: ${analysis.actions.length} (forms, buttons, links)`,
+                );
+            }
+
+            if (namedArgs.showContent && analysis.pageContent?.mainContent) {
+                context.printer.writeLine(
+                    `\n📄 Main Content (first 500 chars):`,
+                );
+                context.printer.writeLine(
+                    analysis.pageContent.mainContent.substring(0, 500) + "...",
+                );
+            }
+
+            if (namedArgs.addToMemory) {
+                const websiteCollection = ensureMemoryLoaded();
+                if (websiteCollection) {
+                    // Create enhanced website and add to memory
+                    const visitInfo: website.WebsiteVisitInfo = {
+                        url: namedArgs.url,
+                        source: "bookmark",
+                        visitDate: new Date().toISOString(),
+                    };
+
+                    // Add optional properties only if they exist
+                    if (analysis.pageContent?.title)
+                        visitInfo.title = analysis.pageContent.title;
+                    if (analysis.pageContent)
+                        visitInfo.pageContent = analysis.pageContent;
+                    if (analysis.metaTags)
+                        visitInfo.metaTags = analysis.metaTags;
+                    if (analysis.structuredData)
+                        visitInfo.structuredData = analysis.structuredData;
+                    if (analysis.actions)
+                        visitInfo.extractedActions = analysis.actions;
+
+                    const websiteMessage =
+                        website.importWebsiteVisit(visitInfo);
+                    const result = await addMessagesToCollection(
+                        websiteCollection,
+                        [websiteMessage],
+                        true,
+                    );
+
+                    if (result.success) {
+                        context.printer.writeLine(
+                            `✅ Added to website memory with enhanced content`,
+                        );
+                    } else {
+                        context.printer.writeError(
+                            `Failed to add to memory: ${result.message}`,
+                        );
+                    }
+                }
+            }
+        } catch (error) {
+            context.printer.writeError(`Content analysis failed: ${error}`);
+        }
+    }
+
+    function websiteTestEnhancedDef(): CommandMetadata {
+        return {
+            description:
+                "Test enhanced natural language queries with temporal and frequency intelligence",
+            args: {
+                query: arg("Natural language query to test"),
+            },
+        };
+    }
+    commands.kpWebsiteTestEnhanced.metadata = websiteTestEnhancedDef();
+    async function websiteTestEnhanced(args: string[]) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) {
+            return;
+        }
+
+        const namedArgs = parseNamedArguments(args, websiteTestEnhancedDef());
+        const query = namedArgs.query;
+
+        context.printer.writeLine(`🧪 Testing enhanced query: "${query}"`);
+        context.printer.writeLine("=".repeat(60));
+
+        try {
+            // Use the new LLM-based search with enhanced website context
+            if (kpContext.conversation === websiteCollection) {
+                await websiteSearch([query, "--debug", "true"]);
+
+                context.printer.writeLine();
+                context.printer.writeInColor(
+                    chalk.green,
+                    "🧪 Enhanced test completed successfully!",
+                );
+            } else {
+                context.printer.writeError(
+                    "Website memory not loaded as conversation. Use kpWebsiteLoad first.",
+                );
+            }
+        } catch (error) {
+            context.printer.writeError(`Enhanced query failed: ${error}`);
         }
     }
 
     async function websiteClose() {
         closeWebsite();
+    }
+
+    // NEW: Action Analysis Commands
+
+    function websiteAnalyzeActionsDef(): CommandMetadata {
+        return {
+            description: "Analyze actions available on specific URLs",
+            args: {
+                url: arg("URL to analyze for actions"),
+            },
+            options: {
+                confidence: arg("Minimum confidence threshold", "0.5"),
+                showDetails: argBool("Show detailed action information", false),
+            },
+        };
+    }
+    commands.kpWebsiteAnalyzeActions.metadata = websiteAnalyzeActionsDef();
+
+    async function websiteAnalyzeActions(args: string[]) {
+        const namedArgs = parseNamedArguments(args, websiteAnalyzeActionsDef());
+
+        try {
+            context.printer.writeLine(`🎯 Analyzing actions: ${namedArgs.url}`);
+
+            const actionExtractor = new website.ActionExtractor({
+                minConfidence: parseFloat(namedArgs.confidence) || 0.5,
+            });
+
+            const actions = await actionExtractor.extractActionsFromUrl(
+                namedArgs.url,
+            );
+
+            if (actions.length === 0) {
+                context.printer.writeLine(
+                    `❌ No actions found with confidence >= ${namedArgs.confidence}`,
+                );
+                return;
+            }
+
+            context.printer.writeLine(`\n🎯 Found ${actions.length} actions:`);
+
+            // Group by action type
+            const groupedActions = new Map<string, any[]>();
+            actions.forEach((action) => {
+                if (!groupedActions.has(action.actionType)) {
+                    groupedActions.set(action.actionType, []);
+                }
+                groupedActions.get(action.actionType)!.push(action);
+            });
+
+            for (const [actionType, actionGroup] of groupedActions) {
+                context.printer.writeLine(
+                    `\n📋 ${actionType} (${actionGroup.length}):`,
+                );
+
+                actionGroup.forEach((action: DetectedAction) => {
+                    const confidenceIcon =
+                        action.confidence > 0.8
+                            ? "🟢"
+                            : action.confidence > 0.6
+                              ? "🟡"
+                              : "🔴";
+                    context.printer.writeLine(
+                        `   ${confidenceIcon} ${action.name} (${(action.confidence * 100).toFixed(0)}%)`,
+                    );
+
+                    if (namedArgs.showDetails) {
+                        if (action.target) {
+                            context.printer.writeLine(
+                                `      Target: ${action.target.type} - ${action.target.name || "N/A"}`,
+                            );
+                        }
+                        if (action.selectors && action.selectors.length > 0) {
+                            context.printer.writeLine(
+                                `      Selectors: ${action.selectors.slice(0, 2).join(", ")}`,
+                            );
+                        }
+                        if (action.url && action.url !== namedArgs.url) {
+                            context.printer.writeLine(
+                                `      Action URL: ${action.url}`,
+                            );
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            context.printer.writeError(`Action analysis failed: ${error}`);
+        }
+    }
+
+    function websiteListActionsDef(): CommandMetadata {
+        return {
+            description: "List all sites with specific action types",
+            options: {
+                actionType: arg(
+                    "Filter by action type (BuyAction, DownloadAction, etc.)",
+                ),
+                confidence: arg("Minimum confidence threshold", "0.7"),
+                limit: arg("Maximum results to show", "10"),
+            },
+        };
+    }
+    commands.kpWebsiteListActions.metadata = websiteListActionsDef();
+
+    async function websiteListActions(args: string[]) {
+        const websiteCollection = ensureMemoryLoaded();
+        if (!websiteCollection) return;
+
+        const namedArgs = parseNamedArguments(args, websiteListActionsDef());
+        const minConfidence = parseFloat(namedArgs.confidence) || 0.7;
+        const limit = parseInt(namedArgs.limit) || 10;
+
+        context.printer.writeLine(
+            `🎯 Finding sites with actions (confidence >= ${minConfidence}):`,
+        );
+
+        const sitesWithActions: any[] = [];
+
+        for (let i = 0; i < websiteCollection.messages.length; i++) {
+            const website = websiteCollection.messages.get(i);
+            if (!website?.metadata.detectedActions) continue;
+
+            const relevantActions = website.metadata.detectedActions.filter(
+                (action) => {
+                    const meetsConfidence = action.confidence >= minConfidence;
+                    const meetsType =
+                        !namedArgs.actionType ||
+                        action.actionType === namedArgs.actionType;
+                    return meetsConfidence && meetsType;
+                },
+            );
+
+            if (relevantActions.length > 0) {
+                sitesWithActions.push({
+                    url: website.metadata.url,
+                    title: website.metadata.title,
+                    domain: website.metadata.domain,
+                    actions: relevantActions,
+                });
+            }
+        }
+
+        if (sitesWithActions.length === 0) {
+            context.printer.writeLine(
+                `❌ No sites found with matching actions`,
+            );
+            return;
+        }
+
+        context.printer.writeLine(
+            `\n📊 Found ${sitesWithActions.length} sites with actions:\n`,
+        );
+
+        sitesWithActions
+            .sort((a, b) => b.actions.length - a.actions.length)
+            .slice(0, limit)
+            .forEach((site, index) => {
+                context.printer.writeLine(
+                    `${index + 1}. **${site.title || site.domain}**`,
+                );
+                context.printer.writeLine(`   URL: ${site.url}`);
+
+                const actionSummary = site.actions
+                    .map(
+                        (a: DetectedAction) =>
+                            `${a.actionType.replace("Action", "")} (${(a.confidence * 100).toFixed(0)}%)`,
+                    )
+                    .join(", ");
+                context.printer.writeLine(`   Actions: ${actionSummary}`);
+
+                // Show high-confidence actions
+                const highConfActions = site.actions.filter(
+                    (a: DetectedAction) => a.confidence > 0.8,
+                );
+                if (highConfActions.length > 0) {
+                    context.printer.writeLine(
+                        `   High-confidence: ${highConfActions.map((a: DetectedAction) => a.name).join(", ")}`,
+                    );
+                }
+
+                context.printer.writeLine("");
+            });
+    }
+
+    function calculateActionStats(websites: website.Website[]) {
+        let sitesWithActions = 0;
+        let totalActions = 0;
+        let highConfidenceActions = 0;
+        const actionTypesSet = new Set<string>();
+
+        websites.forEach((w) => {
+            if (
+                w.metadata.detectedActions &&
+                w.metadata.detectedActions.length > 0
+            ) {
+                sitesWithActions++;
+                totalActions += w.metadata.detectedActions.length;
+
+                w.metadata.detectedActions.forEach((action) => {
+                    actionTypesSet.add(action.actionType.replace("Action", ""));
+                    if (action.confidence > 0.8) {
+                        highConfidenceActions++;
+                    }
+                });
+            }
+        });
+
+        return {
+            sitesWithActions,
+            totalActions,
+            highConfidenceActions,
+            actionTypes: Array.from(actionTypesSet),
+        };
     }
 
     function ensureMemoryLoaded() {

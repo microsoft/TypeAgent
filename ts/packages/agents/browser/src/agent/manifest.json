@@ -12,7 +12,7 @@
     }
   },
   "subActionManifests": {
-    "externalBrowser": {
+    "external": {
       "defaultEnabled": false,
       "transient": true,
       "schema": {

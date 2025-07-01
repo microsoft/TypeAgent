@@ -356,7 +356,7 @@ export class ShellWindow {
     public closeInlineBrowser(save: boolean = true) {
         const inlineWebContentView = this.inlineWebContentView;
         if (inlineWebContentView === undefined) {
-            return;
+            return false;
         }
         const browserBounds = inlineWebContentView.getBounds();
         inlineWebContentView.webContents.close();
@@ -375,6 +375,7 @@ export class ShellWindow {
             this.targetUrl = undefined;
             this.setUserSettingValue("canvas", undefined);
         }
+        return true;
     }
 
     // ================================================================

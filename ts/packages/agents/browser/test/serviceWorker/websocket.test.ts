@@ -24,13 +24,15 @@ jest.mock("../../src/extension/serviceWorker/browserActions", () => ({
 let websocketModule: any;
 
 describe("WebSocket Module", () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.clearAllMocks();
 
         jest.useFakeTimers();
         jest.resetModules();
 
-        websocketModule = require("../../src/extension/serviceWorker/websocket");
+        websocketModule = await import(
+            "../../src/extension/serviceWorker/websocket"
+        );
     });
 
     afterEach(() => {
