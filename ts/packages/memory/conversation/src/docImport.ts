@@ -212,6 +212,7 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
     private htmlToMd: HtmlToMdConvertor;
     private knowledgeBlocks: kpLib.KnowledgeResponse[];
     private headingsInScope: Map<number, string>;
+    private linksInScope: Map<string, string>;
     private curKnowledge: kpLib.KnowledgeResponse;
 
     constructor(
@@ -222,6 +223,7 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
         this.knowledgeBlocks = [];
         this.curKnowledge = kp.createKnowledgeResponse();
         this.headingsInScope = new Map<number, string>();
+        this.linksInScope = new Map<string, string>();
     }
 
     public getParts(rootPath: string = "body") {
@@ -251,6 +253,8 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
 
     private start(): void {
         this.knowledgeBlocks = [];
+        this.headingsInScope.clear();
+        this.linksInScope.clear();
         this.curKnowledge = kp.createKnowledgeResponse();
     }
 
@@ -272,7 +276,7 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
     }
 
     onLink(convertor: HtmlToMdConvertor, text: string, url: string): void {
-        this.curKnowledge.entities.push(linkToEntity(text, url));
+        this.linksInScope.set(text, url);
     }
 
     onBlockEnd(convertor: HtmlToMdConvertor): void {
@@ -287,9 +291,22 @@ class HtmlImporter implements HtmlToMdConvertorEvents {
             this.curKnowledge.topics.push(hText);
             this.curKnowledge.entities.push(headingToEntity(hText, hLevel));
         }
+        //
+        // Also include all links
+        //
+        for (const linkText of this.linksInScope.keys()) {
+            this.curKnowledge.entities.push(
+                linkToEntity(linkText, this.linksInScope.get(linkText)!),
+            );
+        }
         this.knowledgeBlocks.push(this.curKnowledge);
-
+        //
+        // Start next block
+        // Note: do not clear headingsInScope as they stay active for the duration of the conversion pass
+        // Links are only active for the current block
+        //
         this.curKnowledge = kp.createKnowledgeResponse();
+        this.linksInScope.clear();
     }
 }
 
