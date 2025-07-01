@@ -17,6 +17,7 @@ import {
     changeFileExt,
     getAbsolutePath,
     htmlToMd,
+    HtmlToMdConvertor,
     readAllText,
     simplifyHtml,
     simplifyText,
@@ -62,6 +63,7 @@ export async function createKnowproTestCommands(
             },
             options: {
                 rootTag: arg("Root tag", "body"),
+                blocks: argBool("Print blocks", true),
             },
         };
     }
@@ -73,8 +75,19 @@ export async function createKnowproTestCommands(
             return;
         }
         let html = await readAllText(filePath);
-        const md = htmlToMd(html, namedArgs.rootTag);
-        context.printer.writeLine(md);
+        let md: string;
+        if (namedArgs.blocks) {
+            const convertor = new HtmlToMdConvertor(html);
+            const blocks = convertor.getMarkdownBlocks(namedArgs.rootTag);
+            for (const block of blocks) {
+                context.printer.writeLine("========================");
+                context.printer.writeLine(block);
+            }
+            md = blocks.join("");
+        } else {
+            md = htmlToMd(html, namedArgs.rootTag);
+            context.printer.writeLine(md);
+        }
         const destPath = changeFileExt(filePath, ".md");
         fs.writeFileSync(destPath, md);
     }

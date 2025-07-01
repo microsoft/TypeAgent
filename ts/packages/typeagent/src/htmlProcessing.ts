@@ -321,6 +321,10 @@ export class HtmlToMdConvertor {
     }
 
     public getMarkdown(elementPath: string = "body"): string {
+        return this.getMarkdownBlocks().join("");
+    }
+
+    public getMarkdownBlocks(elementPath: string = "body"): string[] {
         this.start();
         this.beginBlock("body");
 
@@ -329,7 +333,7 @@ export class HtmlToMdConvertor {
             this.traverseChildren(root as cheerio.Element);
         }
         this.endBlock();
-        return this.textBlocks.join("");
+        return this.textBlocks;
     }
 
     private start(): void {
@@ -374,7 +378,6 @@ export class HtmlToMdConvertor {
                                 this.$(childElement).text(),
                                 Number.parseInt(tagName[tagName.length - 1]),
                             );
-                            this.endBlock();
                             break;
                         case "p":
                             this.beginBlock(tagName);
@@ -483,6 +486,7 @@ export class HtmlToMdConvertor {
                                 if (text) {
                                     const href = childElement.attribs["href"];
                                     this.append(`[${text}](${href})`);
+                                    this.onLink(text, href);
                                 }
                             }
                             break;
@@ -586,6 +590,8 @@ export class HtmlToMdConvertor {
         this.curBlock += " ";
         this.append(text);
         this.append("\n");
+
+        this.onHeading(text, level);
     }
 
     private isTableHeader(element: cheerio.Element): boolean {
@@ -598,6 +604,8 @@ export class HtmlToMdConvertor {
         return true;
     }
 
-    protected onBlockStart(name: string) {}
-    protected onBlockEnd() {}
+    protected onBlockStart(name: string): void {}
+    protected onHeading(name: string, level: number): void {}
+    protected onLink(text: string, href: string): void {}
+    protected onBlockEnd(): void {}
 }
