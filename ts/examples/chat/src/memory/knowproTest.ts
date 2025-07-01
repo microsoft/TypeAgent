@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    arg,
     argBool,
     argNum,
     CommandHandler,
@@ -12,15 +13,18 @@ import { KnowproContext } from "./knowproMemory.js";
 import { argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
+import * as cm from "conversation-memory";
 import {
     changeFileExt,
     getAbsolutePath,
+    htmlToMd,
     readAllText,
     simplifyHtml,
     simplifyText,
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
+import * as fs from "fs";
 
 /**
  * Test related commands
@@ -37,16 +41,71 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
     commands.kpTestHtmlText = testHtmlText;
+    commands.kpTestHtmlMd = testHtmlMd;
+    commands.kpTestHtmlParts = testHtmlParts;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
         const simpleHtml = simplifyHtml(html);
         context.printer.writeLine(simpleHtml);
     }
+
     async function testHtmlText(args: string[]) {
         const html = await readAllText(args[0]);
         const text = simplifyText(html);
         context.printer.writeLine(text);
+    }
+
+    function testHtmlMdDef(): CommandMetadata {
+        return {
+            description: "Html to MD",
+            args: {
+                filePath: arg("File path"),
+            },
+            options: {
+                rootTag: arg("Root tag", "body"),
+            },
+        };
+    }
+    commands.kpTestHtmlMd.metadata = testHtmlMdDef();
+    async function testHtmlMd(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testHtmlMdDef());
+        const filePath = namedArgs.filePath;
+        if (!filePath) {
+            return;
+        }
+        let html = await readAllText(filePath);
+        let md = htmlToMd(html, namedArgs.rootTag);
+        context.printer.writeLine(md);
+
+        const destPath = changeFileExt(filePath, ".md");
+        fs.writeFileSync(destPath, md);
+    }
+
+    function testHtmlPartsDef(): CommandMetadata {
+        return {
+            description: "Html to to DocParts",
+            args: {
+                filePath: arg("File path"),
+            },
+            options: {
+                rootTag: arg("Root tag", "body"),
+            },
+        };
+    }
+    commands.kpTestHtmlParts.metadata = testHtmlPartsDef();
+    async function testHtmlParts(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testHtmlPartsDef());
+        const filePath = namedArgs.filePath;
+        if (!filePath) {
+            return;
+        }
+        let html = await readAllText(filePath);
+        let parts = cm.docPartsFromHtmlEx(html, namedArgs.rootTag);
+        for (const part of parts) {
+            context.printer.writeLine("----------------");
+            context.printer.writeDocPart(part);
+        }
     }
 
     function searchBatchDef(): CommandMetadata {

@@ -604,6 +604,33 @@ export class KnowProPrinter extends MemoryConsoleWriter {
         }
         return this;
     }
+
+    public writeKnowledge(
+        knowledge?: knowLib.conversation.KnowledgeResponse | undefined,
+    ): void {
+        if (knowledge) {
+            if (knowledge.topics.length > 0) {
+                this.writeLineInColor(chalk.cyan, "Topics");
+                knowledge.topics.forEach((t) => this.writeLine(t));
+            }
+            if (knowledge.actions.length > 0) {
+                this.writeLineInColor(chalk.cyan, "Actions");
+                knowledge.actions.forEach((a) => this.writeAction(a));
+            }
+            if (knowledge.entities.length > 0) {
+                this.writeLineInColor(chalk.cyan, "Entities");
+                knowledge.entities.forEach((e) => this.writeEntity(e));
+            }
+        }
+    }
+
+    public writeDocPart(docPart: cm.DocPart) {
+        for (const text of docPart.textChunks) {
+            this.writeLine(text);
+        }
+        this.writeKnowledge(docPart.knowledge);
+        return this;
+    }
 }
 
 function getPodcastParticipants(podcast: cm.Podcast) {
