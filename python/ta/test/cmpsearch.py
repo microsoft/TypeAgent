@@ -28,7 +28,8 @@ class Context:
     query_translator: typechat.TypeChatJsonTranslator[SearchQuery]
     answer_translator: typechat.TypeChatJsonTranslator[AnswerResponse]
     embedding_model: AsyncEmbeddingModel
-    options: None
+    lang_search_options: searchlang.LanguageSearchOptions
+    answer_options: answers.AnswerContextOptions
     interactive: bool
 
 
@@ -105,9 +106,20 @@ def main():
         query_translator,
         answer_translator,
         AsyncEmbeddingModel(),
-        options=None,  # TODO: Set options if needed
+        lang_search_options=searchlang.LanguageSearchOptions(
+            compile_options=searchlang.LanguageQueryCompileOptions(
+                exact_scope=False, verb_scope=True, term_filter=None, apply_scope=True
+            ),
+            exact_match=False,
+            max_message_matches=25,
+        ),
+        answer_options=answers.AnswerContextOptions(
+            entities_top_k=50, topics_top_k=50, messages_top_k=None, chunking=None
+        ),
         interactive=args.interactive,
     )
+    utils.pretty_print(context.lang_search_options)
+    utils.pretty_print(context.answer_options)
 
     # Loop over eval data, skipping duplicate questions
     # (Those differ in 'cmd' value, which we don't support yet.)
@@ -150,6 +162,9 @@ def main():
         print(sep * 25, counter, sep * 25)
         print(f"Score: {score:.3f}; Question: {question}", flush=True)
         if context.interactive or not good_enough:
+            cmd = qa_pair.get("cmd")
+            if cmd and cmd != f'@kpAnswer --query "{question}"':
+                print(f"Command: {cmd}")
             print(f"Expected answer:\n{answer}")
             print("-" * 20)
             print(f"Actual answer:\n{actual_answer}", flush=True)
@@ -203,14 +218,18 @@ async def compare(
         context.conversation,
         context.query_translator,
         question,
-        context.options,
+        context.lang_search_options,
     )
     print("-" * 40)
     if not isinstance(result, typechat.Success):
         print("Error:", result.message)
     else:
         all_answers, combined_answer = await answers.generate_answers(
-            context.answer_translator, result.value, context.conversation, question
+            context.answer_translator,
+            result.value,
+            context.conversation,
+            question,
+            options=context.answer_options,
         )
         print("-" * 40)
         if combined_answer.type == "NoAnswer":
