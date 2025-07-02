@@ -32,6 +32,10 @@ import {
     displayError,
     displayResult,
 } from "@typeagent/agent-sdk/helpers/display";
+import {
+    createStyledOutput,
+    writeConversationSearchResult,
+} from "./memoryPrinter.js";
 
 const debug = registerDebug("typeagent:dispatcher:memory");
 
@@ -246,6 +250,10 @@ class MemoryAnswerCommandHandler implements CommandHandler {
             },
         },
         flags: {
+            asc: {
+                description: "Sort results in ascending order",
+                default: true,
+            },
             message: {
                 description: "Display message",
                 default: false,
@@ -257,6 +265,10 @@ class MemoryAnswerCommandHandler implements CommandHandler {
             count: {
                 description: "Display count of results",
                 default: 25,
+            },
+            distinct: {
+                description: "Display distinct results",
+                default: false,
             },
         },
     } as const;
@@ -281,12 +293,24 @@ class MemoryAnswerCommandHandler implements CommandHandler {
                     context,
                 );
             }
-            if (flags.knowledge && searchResult.knowledgeMatches.size > 0) {
-                displayResult(
-                    `Knowledge matches: ${Array.from(searchResult.knowledgeMatches).join(", ")}`,
-                    context,
-                );
-            }
+
+            const out = createStyledOutput(
+                context.actionIO.appendDisplay.bind(context.actionIO),
+            );
+
+            writeConversationSearchResult(
+                out,
+                memory,
+                searchResult,
+                flags.knowledge,
+                flags.message,
+                {
+                    maxToDisplay: flags.count,
+                    sortAsc: flags.asc,
+                    distinct: flags.distinct,
+                },
+            );
+
             if (answer.type === "Answered") {
                 displayResult(`Answer: ${answer.answer!}`, context);
             } else {
