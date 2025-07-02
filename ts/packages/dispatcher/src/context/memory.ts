@@ -223,19 +223,40 @@ export async function lookupAndAnswerFromMemory(
     return literalText;
 }
 
-function checkLegacyMemory(context: ActionContext<CommandHandlerContext>) {
+function ensureMemory(context: ActionContext<CommandHandlerContext>) {
     const systemContext = context.sessionContext.agentContext;
     if (systemContext.session.getConfig().execution.memory.legacy) {
         throw new Error("Legacy memory is enabled. Command not supported.");
     }
+
+    const memory = systemContext.conversationMemory;
+    if (memory === undefined) {
+        throw new Error("Conversation memory is not initialized.");
+    }
+    return memory;
 }
+
 class MemoryAnswerCommandHandler implements CommandHandler {
     public readonly description = "Answer a question using conversation memory";
     public readonly parameters = {
         args: {
             question: {
-                type: "string",
                 description: "Question to ask the conversation memory",
+                implicitQuotes: true,
+            },
+        },
+        flags: {
+            message: {
+                description: "Display message",
+                default: false,
+            },
+            knowledge: {
+                description: "Display knowledge",
+                default: false,
+            },
+            count: {
+                description: "Display count of results",
+                default: 25,
             },
         },
     } as const;
@@ -243,8 +264,35 @@ class MemoryAnswerCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        checkLegacyMemory(context);
-        await lookupAndAnswerFromMemory(context, params.args.question);
+        const { args, flags } = params;
+        const memory = ensureMemory(context);
+
+        const result = await memory.getAnswerFromLanguage(args.question);
+        if (!result.success) {
+            throw new Error(
+                `Conversation memory search failed: ${result.message}`,
+            );
+        }
+
+        for (const [searchResult, answer] of result.data) {
+            if (searchResult.rawSearchQuery) {
+                displayResult(
+                    `Raw search query: ${searchResult.rawSearchQuery}`,
+                    context,
+                );
+            }
+            if (flags.knowledge && searchResult.knowledgeMatches.size > 0) {
+                displayResult(
+                    `Knowledge matches: ${Array.from(searchResult.knowledgeMatches).join(", ")}`,
+                    context,
+                );
+            }
+            if (answer.type === "Answered") {
+                displayResult(`Answer: ${answer.answer!}`, context);
+            } else {
+                displayError(`No answer: ${answer.whyNoAnswer!}`, context);
+            }
+        }
     }
 }
 
