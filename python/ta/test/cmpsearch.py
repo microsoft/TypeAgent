@@ -233,7 +233,7 @@ async def compare(
         )
         print("-" * 40)
         if combined_answer.type == "NoAnswer":
-            if "[ANSWER CONTEXT]" in answer:
+            if "[ANSWER CONTEXT]" in answer or "answer context" in answer:
                 score = 1.0
             print("Failure:", combined_answer.whyNoAnswer)
             print("All answers:")
