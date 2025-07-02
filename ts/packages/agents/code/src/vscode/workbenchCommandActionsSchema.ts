@@ -4,10 +4,11 @@
 export type CodeWorkbenchActions =
     | WorkbenchActionFilesOpenFile
     | WorkbenchActionFilesCreateFolderFromExplorer
-    | WorkbenchActionBuildRelatedFolderTask;
+    | WorkbenchActionBuildRelatedFolderTask
+    | WorkbenchActionOpenInIntegratedTerminal;
 
 export type WorkbenchActionFilesOpenFile = {
-    actionName: "WorkbenchOpenFile";
+    actionName: "workbenchOpenFile";
     parameters: {
         // The name of the file to open (e.g., "main.ts")
         fileName: string;
@@ -21,7 +22,7 @@ export type WorkbenchActionFilesOpenFile = {
 };
 
 export type WorkbenchActionFilesCreateFolderFromExplorer = {
-    actionName: "WorkbenchCreateFolderFromExplorer";
+    actionName: "workbenchCreateFolderFromExplorer";
     parameters: {
         folderName: string; // Required: "tests"
         relativeTo?: string; // Optional: "src/utils"
@@ -30,10 +31,22 @@ export type WorkbenchActionFilesCreateFolderFromExplorer = {
 };
 
 export type WorkbenchActionBuildRelatedFolderTask = {
-    actionName: "WorkbenchBuildRelatedTask";
+    actionName: "workbenchBuildRelatedTask";
     parameters: {
         task: "build" | "rebuild" | "clean"; // build type
         folderName?: string; // optional folder/project name; if omitted, builds workspace/root
         taskSelection?: string | number; // optional: select task by label or index
+    };
+};
+
+export type WorkbenchActionOpenInIntegratedTerminal = {
+    actionName: "openInIntegratedTerminal";
+    parameters: {
+        // Optional: folder to open terminal in
+        folderName?: string;
+        // Optional: command to execute immediately
+        commandToExecute?: string;
+        // Optional: risk of command
+        commandRiskLevel?: "low" | "medium" | "high";
     };
 };

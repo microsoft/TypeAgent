@@ -424,13 +424,13 @@ export async function handleWorkbenchActions(
         action.actionName ?? action.fullActionName.split(".").at(-1);
 
     switch (actionName) {
-        case "WorkbenchOpenFile":
+        case "workbenchOpenFile":
             actionResult = await handleOpenFileAction(action);
             break;
-        case "WorkbenchCreateFolderFromExplorer":
+        case "workbenchCreateFolderFromExplorer":
             actionResult = await handleCreateFolderFromExplorer(action);
             break;
-        case "WorkbenchBuildRelatedTask":
+        case "workbenchBuildRelatedTask":
             actionResult = await handleFolderBuildRelatedTaskAction(action);
             break;
         default: {
