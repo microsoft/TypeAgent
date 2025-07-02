@@ -154,8 +154,7 @@ async function ensureResolverAgent(
             description: "Auto created URL Resolution Agent",
             temperature: 0.01,
             instructions: `
-You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  
-Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain.
+You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.  Choose to answer the user's question by favoring websites closer to the user. Don't restrict searches to specific domains unless the user provided the domain. If the user request doesn't specify or imply 'website', add that to the search terms.
 
 Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
 
@@ -288,14 +287,18 @@ export async function validateURL(
                                 (response.parsedBody as any).status !=
                                     "completed"
                             ) {
-                                try  {
+                                try {
                                     await project.agents.runs.cancel(
                                         thread.id,
                                         (response.parsedBody as any).id,
                                     );
-                                    console.log(`TIMEOUT - Canceled ${utterance}`);
+                                    console.log(
+                                        `TIMEOUT - Canceled ${utterance}`,
+                                    );
                                 } catch (cancelError) {
-                                    console.error(`Error canceling run: ${cancelError}`);
+                                    console.error(
+                                        `Error canceling run: ${cancelError}`,
+                                    );
                                 }
                             }
                         },

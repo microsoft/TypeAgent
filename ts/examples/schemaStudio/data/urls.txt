@@ -31,7 +31,7 @@ mayoclinic	https://www.mayoclinic.org/
 dictionary	https://www.merriam-webster.com/
 weather	https://www.accuweather.com/en/us/boydton/23917/weather-forecast/336242
 booking	https://www.booking.com/
-pornhub	pornhub
+pornhub	https://www.pornhub.com/
 nih	https://www.nih.gov/
 accuweather	https://www.accuweather.com/
 byjus	https://byjus.com/
@@ -45,7 +45,7 @@ wise	https://wise.com/
 wiktionary	https://en.wiktionary.org/wiki/Wiktionary:Main_Page
 rottentomatoes	https://www.rottentomatoes.com/
 whatsapp	https://www.whatsapp.com/
-indiatimes	indiatimes
+indiatimes	https://www.indiatimes.com/
 globo	https://www.globo.com/
 spotify	https://spotify.com/us/home-page/
 walmart	https://www.walmart.com/
@@ -54,14 +54,14 @@ webmd	https://www.webmd.com/
 timeanddate	https://www.timeanddate.com/
 indeed	https://www.indeed.com/
 netflix	https://www.netflix.com/
-xvideos	xvideos
-xhamster	xhamster
+xvideos	https://www.xvideos.com/
+xhamster	https://www.xhamster.com/
 desivocabulary	https://www.youtube.com/@desivocabulary1001
 rakuten	https://www.rakuten.com/
 flipkart	https://www.flipkart.com/
 bbc	https://www.bbc.com
 justdial	https://profile.justdial.com/
-shabdkosh	shabdkosh
+shabdkosh	https://www.shabdkosh.com/
 adobe	https://www.adobe.com/
 detik	https://www.detik.com/
 nytimes	https://www.nytimes.com/
@@ -87,14 +87,13 @@ canva	https://www.canva.com/
 uefa	https://www.uefa.com/
 mlb	https://www.mlb.com/
 investopedia	https://www.investopedia.com/
-olympics	
 www.nhs	https://www.nhs.uk/
 google	https://www.google.com/
 amazon	https://www.amazon.com/
 namu	https://namu.wiki/
 screener	https://www.screener.in/
 hindustantimes	https://www.hindustantimes.com/
-xnxx	xnxx
+xnxx	https://www.xnxx.com/
 sciencedirect	https://www.sciencedirect.com
 primevideo	https://www.primevideo.com/collection/IncludedwithPrime
 expedia	https://www.expedia.com/
@@ -111,13 +110,12 @@ github	https://github.com/
 sofascore	https://www.sofascore.com/
 tokopedia	https://www.tokopedia.com/
 waze	https://www.waze.com/live-map
-ndtv	ndtv
+ndtv	https://www.ndtv.com/
 tripadvisor	https://www.tripadvisor.com/
 cookpad	https://cookpad.com/us
 unsplash	https://unsplash.com/
-xhamster	xhamster
+xhamster	https://www.xhamster.com/
 shopee	https://shopee.com/
-dpbossss.services	
 mapquest	https://www.mapquest.com/
 nfl	https://www.nfl.com/
 usatoday	https://www.usatoday.com/
@@ -132,7 +130,7 @@ investing	https://www.investing.com/
 geeksforgeeks	https://www.geeksforgeeks.org/
 ikea	https://www.ikea.com/us/en/
 premierleague	https://www.premierleague.com/
-cnn	cnn
+cnn	https://www.cnn.com/
 google	https://www.google.com/
 mcdonalds	https://www.mcdonalds.com/us/en-us.html
 zomato	https://www.zomato.com/
@@ -146,7 +144,7 @@ cbsnews	https://www.cbsnews.com/
 easyhindityping	https://www.easyhindityping.com/
 satta-king-fast	https://satta-king-fast.com/
 testbook	https://testbook.com/
-people	people
+people	https://people.com/
 hinkhoj	https://hinkhoj.com/
 skysports	https://www.skysports.com/
 nike	https://www.nike.com/
@@ -178,13 +176,12 @@ pexels	https://www.pexels.com/
 europa	https://en.wikipedia.org/wiki/Europa_(moon)
 cnbc	https://www.cnbc.com/
 amazon	https://www.amazon.com/
-time	
 ck12	https://www.ck12.org/
 bestbuy	https://www.bestbuy.com/
 amazon	https://www.amazon.com/
 trendyol	https://www.trendyol.com/
 inchcalculator	https://www.inchcalculator.com/
-indianexpress	indianexpress
+indianexpress	https://indianexpress.com/
 pixabay	https://pixabay.com/
 poki	https://poki.com/
 aajtak	https://www.aajtak.in/
@@ -196,12 +193,10 @@ tradingview	https://www.tradingview.com/
 climatempo	https://www.climatempo.com.br/
 tenki	https://tenki.jp/
 unacademy	https://unacademy.com/
-xnxx	xnxx
 foxsports	https://www.foxsports.com/
 gettyimages	https://www.gettyimages.com/
 india	https://en.wikipedia.org/wiki/India
-xhopen	xhopen
-dailymotion	dailymotion
+dailymotion	https://www.dailymotion.com/
 usps	https://www.usps.com/
 indiamart	https://www.indiamart.com/
 pons	https://en.pons.com/translate
@@ -237,11 +232,9 @@ nasa	https://www.nasa.gov/
 sattamatkachart	https://sattamatkachart.org/
 allegro	https://allegro.pl/
 msdmanuals	https://www.msdmanuals.com/
-www.gov	
 hdfcbank	https://www.hdfcbank.com/
 snapinsta	https://snapinsta.to/en
 icc-cricket	https://www.icc-cricket.com/
-state	
 techtarget	https://www.techtarget.com/
 amazon	https://www.amazon.com/
 gramedia	https://www.gramedia.com/
@@ -263,7 +256,7 @@ hotpepper	https://www.hotpepper.jp/
 iplt20	https://www.iplt20.com/
 transfermarkt	https://www.transfermarkt.com/
 screenrant	https://screenrant.com/
-tuasaude	tuasaude
+tuasaude	https://www.tuasaude.com/
 kayak	https://www.kayak.com/
 moovitapp	https://moovitapp.com/
 larousse	https://www.larousse.fr/
@@ -278,20 +271,18 @@ ropentable	https://www.opentable.com/
 bikewale	https://www.bikewale.com/
 nordstrom	https://www.nordstrom.com/
 wordhippo	https://www.wordhippo.com/
-xhamster19	xhamster19
 livehindustan	https://www.livehindustan.com/
 grammarly	https://www.grammarly.com/
 news18	https://www.news18.com/
-bab	bab
 latempo	https://latempo-sabae.com/
 blibli	https://www.blibli.com/
 sarkariresult	https://www.sarkariresult.com/
 wunderground	https://www.wunderground.com/
 canada	https://www.canada.ca/en.html
-transfermarkt	transfermarkt
+transfermarkt	https://www.transfermarkt.com/
 revolut	https://www.revolut.com/en-US/
 khanacademy	https://www.khanacademy.org/
-tribunnews	tribunnews
+tribunnews	https://www.tribunnews.com/
 fastdl	https://developer.valvesoftware.com/wiki/FastDL
 omnicalculator	https://www.omnicalculator.com/
 drugs	https://www.drugs.com/
@@ -309,7 +300,6 @@ grubhub	https://www.grubhub.com/
 spboss	https://spboss.mobi/
 tripadvisor	https://www.tripadvisor.com/
 traveloka	https://www.traveloka.com/
-qorno	qorno
 playstation	https://www.playstation.com/en-us/
 oed	https://www.oed.com/
 thecalculatorsite	https://www.thecalculatorsite.com/
@@ -333,11 +323,11 @@ cnnbrasil	https://www.cnnbrasil.com.br/
 navitime	https://www.navitime.co.jp/
 ameblo	https://ameblo.jp/
 jagranjosh	https://www.jagranjosh.com/
-hm	
+hm	https://www.hm.com/
 who	https://www.who.int/
 pcmag	https://www.pcmag.com/
 noaa	https://www.noaa.gov/
-indiatoday	indiatoday
+indiatoday	https://www.indiatoday.in/
 goodreturns	https://www.goodreturns.in/
 toppr	https://www.toppr.com/
 meteofrance	https://meteofrance.com/
@@ -367,17 +357,16 @@ stackexchange	https://stackexchange.com/
 edmunds	https://www.edmunds.com/
 foodnetwork	https://www.foodnetwork.com/
 amazon	https://www.amazon.com/
-strip	
 groupon	https://www.groupon.com/
 independent	https://www.independent.co.uk/
 libretexts	https://libretexts.org/
 flashscore	https://www.flashscore.com/
 thekitchn	https://www.thekitchn.com/
 google	https://www.google.com/
-imd	
+imd	    https://www.imd.org/
 infoxnews	https://infoxnews.com/
 bseindia	https://www.bseindia.com/
-dailymail	dailymail
+dailymail	https://www.dailymail.co.uk/
 nasdaq	https://www.nasdaq.com/
 holidify	https://www.holidify.com/
 office	https://www.office.com/
@@ -385,7 +374,7 @@ howstuffworks	https://www.howstuffworks.com/
 irs	https://www.irs.gov/
 nerdwallet	https://www.nerdwallet.com/
 sinoptik	https://www.sinoptik.bg/
-elmundo	elmundo
+elmundo	https://www.elmundo.es/
 delishkitchen	https://delishkitchen.tv/
 usa	https://en.wikipedia.org/wiki/United_States
 apnews	https://apnews.com/
@@ -393,7 +382,7 @@ www.gob	https://www.gob.mx/
 w3schools	https://www.w3schools.com/
 91mobiles	https://www.91mobiles.com/
 themoviedb	https://www.themoviedb.org/
-fandango	fandango
+fandango	https://www.fandango.com/
 walgreens	https://www.walgreens.com/
 mercadolibre	https://www.mercadolibre.com/
 bloomberg	https://www.bloomberg.com/
@@ -625,10 +614,10 @@ gadgets360	https://www.gadgets360.com/
 interia	https://www.interia.pl/
 shopify	https://www.shopify.com/
 trueid	https://www.trueid.net/th-th
-almanac	almanac
+almanac	https://www.almanac.com/
 stackoverflow	https://stackoverflow.com/
 consultaremedios	https://consultaremedios.com.br/
-rea	
+rea https://rea.com/
 tvinsider	https://www.tvinsider.com/
 telangana	https://www.telangana.gov.in/home/20-2/
 bikedekho	https://www.bikedekho.com/
@@ -661,7 +650,6 @@ timesnownews	https://www.timesnownews.com/
 indianrail	http://indianrail.gov.in/
 almasryalyoum	https://www.almasryalyoum.com/
 mawdoo3	https://mawdoo3.com/
-bihar	bihar
 trulia	https://www.trulia.com/
 mi	https://www.mi.com/global/
 onet	https://www.onetonline.org/
@@ -680,7 +668,6 @@ indiapost	https://www.indiapost.gov.in/
 legacy	https://www.legacy.com/
 flightaware	https://www.flightaware.com/
 aboutamazon	https://www.aboutamazon.com/
-t	
 gettyimages	https://www.gettyimages.com/
 biblestudytools	https://www.biblestudytools.com/
 transfermarkt	https://www.transfermarkt.com/
@@ -695,7 +682,7 @@ swiggy	https://www.swiggy.com/
 theworlds50best	https://www.theworlds50best.com/
 duckduckgo	https://duckduckgo.com/
 sikayetvar	https://www.sikayetvar.com/
-latimes	latimes
+latimes https://www.latimes.com
 united	https://www.united.com/ual/en/us/
 alltrails	https://www.alltrails.com/
 meteofor	https://meteofor.com/
@@ -727,7 +714,7 @@ lingvanex	https://lingvanex.com/
 siloamhospitals	https://www.siloamhospitals.com/en/
 ilmeteo	https://www.ilmeteo.it/
 nyc	https://www.nyc.gov/
-washingtonpost	washingtonpost
+washingtonpost	https://www.washingtonpost.com/
 corriere	https://www.corriere.it/
 tripadvisor	https://www.tripadvisor.com/
 baseball-reference	https://www.baseball-reference.com/
@@ -737,7 +724,6 @@ thepioneerwoman	https://www.thepioneerwoman.com/
 mundodeportivo	https://www.mundodeportivo.com/
 kicker	https://www.kicker.com/
 hyatt	https://www.hyatt.com/
-mp	
 hp	https://www.hp.com/us-en/home.html
 nationalgeographic	https://www.nationalgeographic.com/
 exame	https://exame.com/
@@ -764,10 +750,8 @@ indiarailinfo	https://indiarailinfo.com/
 baomoi	https://baomoi.com/
 verizon	https://www.verizon.com/
 meteored	https://www.meteored.com/
-remove	
 akakce	https://www.akakce.com/
 couponfollow	https://couponfollow.com
-theporndude	theporndude
 hellosehat	https://hellosehat.com/
 hollywoodreporter	https://www.hollywoodreporter.com/
 wired	https://www.wired.com
@@ -796,9 +780,7 @@ bleacherreport	https://bleacherreport.com/
 leroymerlin	https://www.leroymerlin.fr/
 tirto	https://tirto.id/
 cntraveler	https://www.cntraveller.com/
-columbia	
 dpboss	https://www.dpboss.best/
-bostongali-result	
 loc	https://www.loc.gov/
 similarweb	https://www.similarweb.com/
 archive	https://archive.org/
@@ -840,7 +822,7 @@ unesco	https://www.unesco.org/en
 kohls	https://www.kohls.com/
 expedia	https://www.expedia.com/
 my-personaltrainer	https://www.my-personaltrainer.it/
-sindonews	sindonews
+sindonews	https://www.sindonews.com/
 espn	https://www.espn.com/
 infopedia	https://www.infopedia.pt/
 typingbaba	https://www.typingbaba.com/
@@ -857,10 +839,10 @@ nutritionix	https://nutritionix.com/
 formula1	https://www.formula1.com/
 mit	https://web.mit.edu/
 google	https://www.google.com/
-ew	
+ew  https://ew.com
+entertainment weekly https://ew.com/
 linguee	https://www.linguee.com/
 tfl	https://tfl.gov.uk/
-xvideosporno.blog	xvideosporno.blog
 louisvuitton	https://us.louisvuitton.com/eng-us/homepage
 tabletki	https://tabletki.ua/
 chefkoch	https://www.chefkoch.de/
@@ -910,13 +892,11 @@ crunchbase	https://www.crunchbase.com/
 bilibili	https://www.bilibili.com/
 parivahan	https://parivahan.gov.in/parivahan/
 zozo	https://zozo.jp/
-time	
 programme-television	https://www.programme-television.org/
 justanswer	https://www.justanswer.com/
 kleinanzeigen	https://www.kleinanzeigen.de/
 menshealth	https://www.menshealth.com/
 vivo	https://www.vivo.com/en/
-last	
 delish	https://www.delish.com/
 nbc	https://www.nbc.com/
 apkpure	https://apkpure.com/
@@ -940,7 +920,6 @@ zdf	https://www.zdf.de/
 nhsinform	https://www.nhsinform.scot/
 pngtree	https://pngtree.com/
 byrdie	https://www.byrdie.com/
-simon	
 aptoide	https://en.aptoide.com/
 mercari	https://www.mercari.com/
 tacobell	https://www.tacobell.com/
@@ -955,7 +934,6 @@ dennys	https://www.dennys.com/
 paisabazaar	https://www.paisabazaar.com/
 easynepalityping	https://www.easynepalityping.com/
 minhngoc	https://www.minhngoc.net.vn/
-lance	
 english-bangla	https://translate.google.com.bd/?hl=en
 angelone	https://www.angelone.in/login/
 hubspot	https://www.hubspot.com/
@@ -980,7 +958,6 @@ prabhatkhabar	https://www.prabhatkhabar.com/
 olx	https://www.olx.com/
 masterclass	https://www.masterclass.com/
 premiumoutlets	https://www.premiumoutlets.com/
-wp	wp
 umich	https://umich.edu/
 deadline	https://deadline.com/
 jma	https://www.jma.go.jp/jma/index.html
@@ -991,7 +968,6 @@ freeconvert	https://www.freeconvert.com/
 americanexpress	https://www.americanexpress.com/
 marksandspencer	https://www.marksandspencer.com/
 uscis	https://www.uscis.gov/
-sexvid	sexvid
 francetvinfo	https://www.france.tv/franceinfo/
 bls	https://www.bls.gov/
 fdown	https://www.fdown.net/
@@ -1835,3 +1811,5 @@ get the wikipedia page for babla	https://en.wikipedia.org/wiki/Babala
 get the wikipedia page for tagesschau	https://en.wikipedia.org/wiki/Tagesschau_(German_TV_programme)
 lego death star instructions    https://www.lego.com/en-us/service/building-instructions/75159
 official shake it off music video   https://www.youtube.com/watch?v=M_JiMkVx0FU
+sounders FC home page https://www.soundersfc.com/
+sounder at heart    https://www.sounderatheart.com/

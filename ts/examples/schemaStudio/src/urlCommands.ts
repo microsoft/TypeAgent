@@ -38,6 +38,7 @@ export function createURLResolverCommands(
         io: InteractiveIo,
     ): Promise<CommandResult> {
         const namedArgs = parseNamedArguments(args, argDef);
+        const runStarted = Date.now();
 
         registerDebug.enable("*");
 
@@ -63,8 +64,16 @@ export function createURLResolverCommands(
         let failCount = 0;
         for (const url of urls) {
             const temp = url.split("\t");
-            const utterance = temp[0].trim();
-            const site = temp[1].trim();
+
+            if (temp.length < 2) {
+                io.writer.writeLine(
+                    `Skipping invalid line: '${url}'. Expected format: "utterance\\tsite"`,
+                );
+                continue;
+            }
+
+            const utterance = temp[0] ? temp[0].trim() : "";
+            const site = temp[1] ? temp[1].trim() : "";
 
             const resolved = await urlResolver.resolveURLWithSearch(
                 utterance,
@@ -74,12 +83,16 @@ export function createURLResolverCommands(
 
             // resolved site matches expected site accounting for varying / at the end
             // TODO: handle redirects + default parameters, etc.
-            if (resolved === site || (site.endsWith("/") && site === `${resolved}/`) || (resolved?.endsWith("/") && `${site}/` === resolved)) {
+            if (
+                resolved === site ||
+                (site.endsWith("/") && site === `${resolved}/`) ||
+                (resolved?.endsWith("/") && `${site}/` === resolved)
+            ) {
                 passFail = "PASS";
-                failCount++;
+                passCount++;
             } else {
                 passFail = "FAIL";
-                passCount++;
+                failCount++;
             }
 
             io.writer.writeLine(
@@ -96,6 +109,8 @@ export function createURLResolverCommands(
             "URL resolution complete. Results written to resolved.txt",
         );
         io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
+
+        io.writer.writeLine(`Duration: ${Date.now() - runStarted}ms`);
     };
 
     handler.metadata = argDef;
@@ -138,6 +153,7 @@ export function createURLValidateCommands(
         io: InteractiveIo,
     ): Promise<CommandResult> {
         const namedArgs = parseNamedArguments(args, argDef);
+        const runStarted = Date.now();
 
         if (namedArgs.flushAgents) {
             io.writer.writeLine("Flushing agents...");
@@ -179,7 +195,7 @@ export function createURLValidateCommands(
         let failCount = 0;
         for (const url of urls) {
             const temp = url.split("\t");
-            
+
             if (temp.length < 2) {
                 io.writer.writeLine(
                     `Skipping invalid line: ${url}. Expected format: "utterance\\tsite"`,
@@ -187,8 +203,8 @@ export function createURLValidateCommands(
                 continue;
             }
 
-            const utterance = temp[0].trim();
-            const site = temp[1].trim();
+            const utterance = temp[0] ? temp[0].trim() : "";
+            const site = temp[1] ? temp[1].trim() : "";
 
             const siteValidity: urlResolver.urlValidityAction | undefined =
                 await urlResolver.validateURL(utterance, site, groundingConfig);
@@ -207,6 +223,7 @@ export function createURLValidateCommands(
             "URL resolution complete. Results written to resolved.txt",
         );
         io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
+        io.writer.writeLine(`Duration: ${Date.now() - runStarted}ms`);
     };
 
     handler.metadata = argDef;
