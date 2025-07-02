@@ -3,7 +3,8 @@
 
 export type CodeWorkbenchActions =
     | WorkbenchActionFilesOpenFile
-    | WorkbenchActionFilesCreateFolderFromExplorer;
+    | WorkbenchActionFilesCreateFolderFromExplorer
+    | WorkbenchActionBuildRelatedFolderTask;
 
 export type WorkbenchActionFilesOpenFile = {
     actionName: "WorkbenchOpenFile";
@@ -25,5 +26,14 @@ export type WorkbenchActionFilesCreateFolderFromExplorer = {
         folderName: string; // Required: "tests"
         relativeTo?: string; // Optional: "src/utils"
         resolutionHint?: "inferFromName" | "workspaceRoot" | "activeSelection";
+    };
+};
+
+export type WorkbenchActionBuildRelatedFolderTask = {
+    actionName: "WorkbenchBuildRelatedTask";
+    parameters: {
+        task: "build" | "rebuild" | "clean"; // build type
+        folderName?: string; // optional folder/project name; if omitted, builds workspace/root
+        taskSelection?: string | number; // optional: select task by label or index
     };
 };

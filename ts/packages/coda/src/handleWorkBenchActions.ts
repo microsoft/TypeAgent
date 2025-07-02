@@ -295,24 +295,38 @@ export async function checkTasksJsonExists(): Promise<boolean> {
     return false;
 }
 
-export async function handleFolderTaskAction(
+export async function handleFolderBuildRelatedTaskAction(
     action: any,
-    taskCommand:
+): Promise<ActionResult> {
+    const { parameters } = action;
+    const { folderName, taskSelection, task } = parameters ?? {};
+
+    let taskCommand:
         | "workbench.action.tasks.build"
         | "workbench.action.tasks.clean"
-        | "workbench.action.tasks.rebuild",
-    actionLabel: string, // "Build", "Clean", "Rebuild"
-): Promise<ActionResult> {
-    const parameters = action?.parameters ?? {};
-    const folderName = parameters.folderName;
+        | "workbench.action.tasks.rebuild";
+    let actionLabel: string;
 
-    const tasksJsonExists = await checkTasksJsonExists();
-    if (!tasksJsonExists) {
-        vscode.window.showWarningMessage(
-            `⚠️ No '.vscode/tasks.json' found. ${actionLabel} may not work unless your environment or extensions provide auto-detected tasks.`,
-        );
+    switch (task) {
+        case "build":
+            taskCommand = "workbench.action.tasks.build";
+            actionLabel = "Build";
+            break;
+        case "clean":
+            taskCommand = "workbench.action.tasks.clean";
+            actionLabel = "Clean";
+            break;
+        case "rebuild":
+            taskCommand = "workbench.action.tasks.rebuild";
+            actionLabel = "Rebuild";
+            break;
+        default:
+            const msg = `❌ Unsupported task type: ${task}`;
+            vscode.window.showErrorMessage(msg);
+            return { handled: false, message: msg };
     }
 
+    // Reveal folder in Explorer if provided (context only, does not affect VSCode task detection)
     if (folderName) {
         const matches = await findMatchingFolders(path.basename(folderName));
         if (matches.length === 0) {
@@ -331,7 +345,7 @@ export async function handleFolderTaskAction(
                     uri,
                 })),
                 {
-                    placeHolder: `Multiple folders found. Select which folder to ${actionLabel.toLowerCase()}:`,
+                    placeHolder: `Multiple folders found. Select which folder to reveal for ${actionLabel.toLowerCase()}:`,
                 },
             );
             if (!pick) {
@@ -345,40 +359,57 @@ export async function handleFolderTaskAction(
         await vscode.commands.executeCommand("revealInExplorer", targetFolder);
     }
 
+    // Handle explicit taskSelection if provided
+    if (taskSelection !== undefined) {
+        try {
+            const tasks = await vscode.tasks.fetchTasks();
+            let selectedTask: vscode.Task | undefined;
+
+            if (typeof taskSelection === "number") {
+                if (taskSelection >= 0 && taskSelection < tasks.length) {
+                    selectedTask = tasks[taskSelection];
+                } else {
+                    const msg = `❌ Task index ${taskSelection} is out of range (${tasks.length} tasks available).`;
+                    vscode.window.showErrorMessage(msg);
+                    return { handled: false, message: msg };
+                }
+            } else if (typeof taskSelection === "string") {
+                selectedTask = tasks.find(
+                    (t) =>
+                        t.name === taskSelection ||
+                        t.definition.label === taskSelection,
+                );
+                if (!selectedTask) {
+                    const msg = `❌ No task found with label '${taskSelection}'.`;
+                    vscode.window.showErrorMessage(msg);
+                    return { handled: false, message: msg };
+                }
+            }
+
+            if (selectedTask) {
+                await vscode.tasks.executeTask(selectedTask);
+                const msg = `✅ ${actionLabel} task '${selectedTask.name}' triggered successfully.`;
+                vscode.window.showInformationMessage(msg);
+                return { handled: true, message: msg };
+            }
+        } catch (err) {
+            const msg = `❌ Failed to execute ${actionLabel} task using selection: ${err}`;
+            vscode.window.showErrorMessage(msg);
+            return { handled: false, message: msg };
+        }
+    }
+
+    // Default: mimic Ctrl+Shift+B behavior with native VSCode fallback
     try {
         await vscode.commands.executeCommand(taskCommand);
-        const msg = `✅ ${actionLabel} task triggered via VSCode Tasks (${folderName ?? "workspace"}).`;
+        const msg = `✅ ${actionLabel} triggered via VSCode Tasks (${folderName ?? "workspace"}).`;
         vscode.window.showInformationMessage(msg);
         return { handled: true, message: msg };
     } catch (err) {
-        const msg = `❌ Failed to execute ${actionLabel} task: ${err}`;
+        const msg = `❌ Failed to execute ${actionLabel}: ${err}`;
         vscode.window.showErrorMessage(msg);
         return { handled: false, message: msg };
     }
-}
-
-export async function handleFolderBuild(action: any): Promise<ActionResult> {
-    return handleFolderTaskAction(
-        action,
-        "workbench.action.tasks.build",
-        "Build",
-    );
-}
-
-export async function handleFolderClean(action: any): Promise<ActionResult> {
-    return handleFolderTaskAction(
-        action,
-        "workbench.action.tasks.clean",
-        "Clean",
-    );
-}
-
-export async function handleFolderRebuild(action: any): Promise<ActionResult> {
-    return handleFolderTaskAction(
-        action,
-        "workbench.action.tasks.rebuild",
-        "Rebuild",
-    );
 }
 
 export async function handleWorkbenchActions(
@@ -398,6 +429,9 @@ export async function handleWorkbenchActions(
             break;
         case "WorkbenchCreateFolderFromExplorer":
             actionResult = await handleCreateFolderFromExplorer(action);
+            break;
+        case "WorkbenchBuildRelatedTask":
+            actionResult = await handleFolderBuildRelatedTaskAction(action);
             break;
         default: {
             actionResult.message = `Did not understand the request for action: "${actionName}"`;
