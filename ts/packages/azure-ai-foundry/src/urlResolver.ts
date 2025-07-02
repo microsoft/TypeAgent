@@ -247,7 +247,7 @@ export async function validateURL(
         );
 
         let retryCount = 0;
-        const maxRetries = 5;
+        const maxRetries = 10;
         let success = false;
         let lastResponse;
 

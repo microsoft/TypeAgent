@@ -9,14 +9,13 @@ reddit	https://www.reddit.com
 imdb	https://www.imdb.com/
 merriam-webster	https://www.merriam-webster.com/
 apple	https://www.apple.com/
-cambridge	https://en.wikipedia.org/wiki/Cambridge
 amazon	https://www.amazon.com/
 pinterest	https://www.pinterest.com/
 tripadvisor	https://www.tripadvisor.com/
 britannica	https://www.britannica.com/
 x	https://x.com/
 fandom	https://www.fandom.com/
-twitter	https://x.com
+twitter	https://twitter.com
 yelp	https://www.yelp.com
 espn	https://www.espn.com/
 tiktok	https://www.tiktok.com/
@@ -28,8 +27,8 @@ quora	https://www.quora.com
 cricbuzz	https://www.cricbuzz.com/
 amazon	https://www.amazon.com/
 mayoclinic	https://www.mayoclinic.org/
-dictionary	https://www.merriam-webster.com/
-weather	https://www.accuweather.com/en/us/boydton/23917/weather-forecast/336242
+dictionary	https://www.dictionary.com/
+weather	https://www.weather.com/
 booking	https://www.booking.com/
 pornhub	https://www.pornhub.com/
 nih	https://www.nih.gov/
@@ -42,7 +41,7 @@ moneycontrol	https://www.moneycontrol.com/
 yahoo	https://www.yahoo.com/
 microsoft	https://www.microsoft.com/en-us/
 wise	https://wise.com/
-wiktionary	https://en.wiktionary.org/wiki/Wiktionary:Main_Page
+wiktionary	https://www.wiktionary.org/
 rottentomatoes	https://www.rottentomatoes.com/
 whatsapp	https://www.whatsapp.com/
 indiatimes	https://www.indiatimes.com/
@@ -54,8 +53,6 @@ webmd	https://www.webmd.com/
 timeanddate	https://www.timeanddate.com/
 indeed	https://www.indeed.com/
 netflix	https://www.netflix.com/
-xvideos	https://www.xvideos.com/
-xhamster	https://www.xhamster.com/
 desivocabulary	https://www.youtube.com/@desivocabulary1001
 rakuten	https://www.rakuten.com/
 flipkart	https://www.flipkart.com/
@@ -75,7 +72,7 @@ medlineplus	https://medlineplus.gov/
 nba	https://www.nba.com/
 medicalnewstoday	https://www.medicalnewstoday.com/
 amazon	https://www.amazon.com/
-hotels	https://www.kayak.com/Boydton-Hotels.22166.hotel.ksp
+hotels	https://www.hotels.com/
 istockphoto	https://www.istockphoto.com/
 rapidtables	https://www.rapidtables.com/
 genius	https://en.wikipedia.org/wiki/Genius
@@ -97,7 +94,7 @@ xnxx	https://www.xnxx.com/
 sciencedirect	https://www.sciencedirect.com
 primevideo	https://www.primevideo.com/collection/IncludedwithPrime
 expedia	https://www.expedia.com/
-xosodaiphat	https://xosodaiphat.org/
+xosodaiphat	https://xosodaiphat.net/
 study	https://study.com/
 etsy	https://www.etsy.com/
 allrecipes	https://www.allrecipes.com/
@@ -114,7 +111,6 @@ ndtv	https://www.ndtv.com/
 tripadvisor	https://www.tripadvisor.com/
 cookpad	https://cookpad.com/us
 unsplash	https://unsplash.com/
-xhamster	https://www.xhamster.com/
 shopee	https://shopee.com/
 mapquest	https://www.mapquest.com/
 nfl	https://www.nfl.com/
@@ -134,7 +130,7 @@ cnn	https://www.cnn.com/
 google	https://www.google.com/
 mcdonalds	https://www.mcdonalds.com/us/en-us.html
 zomato	https://www.zomato.com/
-theguardian	https://theguardian.com
+theguardian	https://www.theguardian.com
 1mg	https://www.1mg.com/
 usnews	https://www.usnews.com/
 cuemath	https://www.cuemath.com/
@@ -173,7 +169,7 @@ nseindia	https://www.nseindia.com/
 wikihow	https://www.wikihow.com/Main-Page
 hopkinsmedicine	https://www.hopkinsmedicine.org/
 pexels	https://www.pexels.com/
-europa	https://en.wikipedia.org/wiki/Europa_(moon)
+europa	https://european-union.europa.eu/
 cnbc	https://www.cnbc.com/
 amazon	https://www.amazon.com/
 ck12	https://www.ck12.org/
@@ -185,7 +181,7 @@ indianexpress	https://indianexpress.com/
 pixabay	https://pixabay.com/
 poki	https://poki.com/
 aajtak	https://www.aajtak.in/
-quillbot	https://quillbot.com/paraphrasing-tool
+quillbot	https://quillbot.com/
 shiksha	https://www.shiksha.com/
 vedantu	https://www.vedantu.com/
 akc	https://www.akc.org/
@@ -195,7 +191,7 @@ tenki	https://tenki.jp/
 unacademy	https://unacademy.com/
 foxsports	https://www.foxsports.com/
 gettyimages	https://www.gettyimages.com/
-india	https://en.wikipedia.org/wiki/India
+india	https://www.india.gov.in/
 dailymotion	https://www.dailymotion.com/
 usps	https://www.usps.com/
 indiamart	https://www.indiamart.com/
@@ -222,9 +218,9 @@ hotstar	https://www.hotstar.com/
 halodoc	https://www.halodoc.com/
 amazon	https://www.amazon.com/
 lowes	https://www.lowes.com/
-abplive	https://news.abplive.com/
+abplive	https://www.abplive.com/
 weather	https://www.accuweather.com/en/us/boydton/23917/weather-forecast/336242
-cancer	https://www.cancer.gov/about-cancer/understanding/what-is-cancer
+cancer	https://www.cancer.org/
 xoso	https://www.minhngoc.net.vn/
 thehindu	https://www.thehindu.com/
 go	https://go.dev/
@@ -276,11 +272,11 @@ grammarly	https://www.grammarly.com/
 news18	https://www.news18.com/
 latempo	https://latempo-sabae.com/
 blibli	https://www.blibli.com/
-sarkariresult	https://www.sarkariresult.com/
+sarkariresult	https://www.sarkariresult.app/
 wunderground	https://www.wunderground.com/
 canada	https://www.canada.ca/en.html
 transfermarkt	https://www.transfermarkt.com/
-revolut	https://www.revolut.com/en-US/
+revolut	https://www.revolut.com/
 khanacademy	https://www.khanacademy.org/
 tribunnews	https://www.tribunnews.com/
 fastdl	https://developer.valvesoftware.com/wiki/FastDL
@@ -473,7 +469,7 @@ flashscore	https://www.flashscore.com/
 dickssportinggoods	https://www.dickssportinggoods.com/
 kidshealth	https://kidshealth.org/
 usda	https://www.usda.gov/
-longdo	https://dict.longdo.com/
+longdo	https://www.longdo.com/
 twitch	https://www.twitch.tv/
 un  https://www.un.org/en/
 allareacodes	https://www.allareacodes.com/
@@ -481,12 +477,12 @@ altibbi	https://altibbi.com/
 pantip	https://pantip.com/
 sportskeeda	https://www.sportskeeda.com/
 dominos	https://www.dominos.com/
-meta	https://en.wikipedia.org/wiki/Meta_Platforms
+meta	https://www.meta.com/
 researchgate	https://www.researchgate.net/
 youm7	https://www.youm7.com/
 mykhel	https://www.mykhel.com/
 si	https://www.si.com/
-lachainemeteo	https://www.lachainemeteo.com/meteo-france/previsions-meteo-france-aujourdhui
+lachainemeteo	https://www.lachainemeteo.com/
 npr	https://www.npr.org/
 elle	https://www.elleinternational.com/
 idntimes	https://www.idntimes.com/
@@ -554,8 +550,7 @@ atptour	https://www.atptour.com/home
 yandex	https://yandex.com/
 docomo	https://www.docomo.ne.jp/
 worldometers	https://www.worldometers.info/
-youporn	youporn
-compensador	
+compensador https://compensador.es/	
 oneindia	https://www.oneindia.com/
 crunchyroll	https://www.crunchyroll.com/
 mapsofindia	https://www.mapsofindia.com/
@@ -568,7 +563,6 @@ tn	https://www.tn.gov/
 si	https://www.si.com/
 urbandictionary	https://www.urbandictionary.com/
 bbb	https://www.bbb.org/
-translate	
 tenor	https://tenor.com/
 thefreedictionary	https://www.thefreedictionary.com/
 starbucks	https://www.starbucks.com/
@@ -609,7 +603,7 @@ soccerway	https://www.soccerway.com/
 nsw	https://www.nsw.gov.au/
 gamerant	https://gamerant.com/
 google	https://www.google.com/
-lanacion	lanacion
+lanacion	https://www.lanacion.com.ar/
 gadgets360	https://www.gadgets360.com/
 interia	https://www.interia.pl/
 shopify	https://www.shopify.com/
@@ -711,7 +705,7 @@ ldoceonline	https://www.ldoceonline.com/
 max	https://www.max.com/
 statista	https://www.statista.com/
 lingvanex	https://lingvanex.com/
-siloamhospitals	https://www.siloamhospitals.com/en/
+siloamhospitals	https://www.siloamhospitals.com/
 ilmeteo	https://www.ilmeteo.it/
 nyc	https://www.nyc.gov/
 washingtonpost	https://www.washingtonpost.com/
@@ -731,11 +725,11 @@ wellsfargo	https://www.wellsfargo.com/
 tradingeconomics	https://tradingeconomics.com/
 mhlw	https://www.mhlw.go.jp/english/
 storysaver	https://www.storysaver.net/
-wikivoyage	https://en.wikivoyage.org/wiki/Main_Page
+wikivoyage	https://en.wikivoyage.org/
 live	https://outlook.live.com/
-accor	https://all.accor.com/a/en.html
+accor	https://all.accor.com/
 ndtv	https://www.ndtv.com/
-kikkoman	https://www.kikkoman.com/en/
+kikkoman	https://www.kikkoman.com/
 bild	https://www.bild.de/
 sssinstagram	https://sssinstagram.com/
 mydramalist	https://mydramalist.com/
@@ -775,7 +769,6 @@ sephora	https://www.sephora.com/
 ibomma	https://one.ibomma.foo/
 day	https://en.wikipedia.org/wiki/Day
 lemonde	https://www.lemonde.fr/
-memorial	https://www.merriam-webster.com/dictionary/memorial
 bleacherreport	https://bleacherreport.com/
 leroymerlin	https://www.leroymerlin.fr/
 tirto	https://tirto.id/
@@ -843,7 +836,7 @@ ew  https://ew.com
 entertainment weekly https://ew.com/
 linguee	https://www.linguee.com/
 tfl	https://tfl.gov.uk/
-louisvuitton	https://us.louisvuitton.com/eng-us/homepage
+louisvuitton	https://us.louisvuitton.com/
 tabletki	https://tabletki.ua/
 chefkoch	https://www.chefkoch.de/
 tesco	https://www.tesco.com/
@@ -863,7 +856,7 @@ deloitte	https://www.deloitte.com/
 food	https://www.foodnetwork.com/
 thesprucepets	https://www.thesprucepets.com/
 gazzetta	https://www.gazzetta.it/
-incredibleindia	https://www.incredibleindia.gov.in/en
+incredibleindia	https://www.incredibleindia.gov.in/
 google	https://www.google.com/
 foodandwine	https://www.foodandwine.com/
 drogasil	https://www.drogasil.com.br/
@@ -913,7 +906,7 @@ usgs	https://www.usgs.gov/
 xfinity	https://www.xfinity.com/
 amazon	https://www.amazon.com/
 usembassy	https://www.usembassy.gov/
-pharmeasy	https://www.pharmeasy.in
+pharmeasy	https://pharmeasy.in
 ameli	https://www.ameli.fr/
 biography	https://en.wikipedia.org/wiki/Biography
 zdf	https://www.zdf.de/
@@ -976,6 +969,7 @@ capitalone	https://www.capitalone.com/
 farfetch	https://www.farfetch.com/
 babla	https://bab.la/
 tagesschau	https://www.tagesschau.de/
+simon https://www.simon.com/
 get the wikipedia page for wikipedia	https://en.wikipedia.org/wiki/Wikipedia
 get the wikipedia page for youtube	https://en.wikipedia.org/wiki/YouTube
 get the wikipedia page for instagram	https://en.wikipedia.org/wiki/Instagram
@@ -1086,7 +1080,6 @@ get the wikipedia page for ndtv	https://en.wikipedia.org/wiki/NDTV
 get the wikipedia page for tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor
 get the wikipedia page for cookpad	https://en.wikipedia.org/wiki/Cookpad
 get the wikipedia page for unsplash	https://en.wikipedia.org/wiki/Unsplash
-get the wikipedia page for xhamster	https://en.wikipedia.org/wiki/XHamster
 get the wikipedia page for shopee	https://en.wikipedia.org/wiki/Shopee
 get the wikipedia page for mapquest	https://en.wikipedia.org/wiki/MapQuest
 get the wikipedia page for nfl	https://en.wikipedia.org/wiki/National_Football_League
@@ -1108,7 +1101,7 @@ get the wikipedia page for zomato	https://en.wikipedia.org/wiki/Zomato
 get the wikipedia page for theguardian	https://en.wikipedia.org/wiki/The_Guardian
 get the wikipedia page for 1mg	https://en.wikipedia.org/wiki/Tata_1mg
 get the wikipedia page for usnews	https://en.wikipedia.org/wiki/U.S._News_%26_World_Report
-get the wikipedia page for rae	https://en.wikipedia.org/wiki/Rae_(given_name)
+get the wikipedia page for rae	https://en.wikipedia.org/wiki/RAE
 get the wikipedia page for openai	https://en.wikipedia.org/wiki/OpenAI
 get the wikipedia page for cbsnews	https://en.wikipedia.org/wiki/CBS_News
 get the wikipedia page for testbook	https://en.wikipedia.org/wiki/Testbook
@@ -1212,7 +1205,6 @@ get the wikipedia page for cardekho	https://en.wikipedia.org/wiki/CarDekho_Group
 get the wikipedia page for jiocinema	https://en.wikipedia.org/wiki/JioCinema
 get the wikipedia page for nps	https://en.wikipedia.org/wiki/National_Park_Service
 get the wikipedia page for ubereats	https://en.wikipedia.org/wiki/Uber_Eats
-get the wikipedia page for carwale	https://en.wikipedia.org/wiki/CarTrade.com
 get the wikipedia page for livemint	https://en.wikipedia.org/wiki/Mint_(newspaper)
 get the wikipedia page for hotpepper	https://en.wikipedia.org/wiki/Chili_pepper
 get the wikipedia page for iplt20	https://en.wikipedia.org/wiki/Indian_Premier_League
@@ -1287,7 +1279,7 @@ get the wikipedia page for apollopharmacy	https://en.wikipedia.org/wiki/Apollo_H
 get the wikipedia page for az24	https://en.wikipedia.org/wiki/Arizona_State_Route_24
 get the wikipedia page for theweathernetwork	https://en.wikipedia.org/wiki/The_Weather_Network
 get the wikipedia page for cnet	https://en.wikipedia.org/wiki/CNET
-get the wikipedia page for today	https://en.wikipedia.org/wiki/Portal:Current_events/2025_June_19
+get the wikipedia page for today	https://en.wikipedia.org/wiki/Today
 get the wikipedia page for bola	https://en.wikipedia.org/wiki/Bola
 get the wikipedia page for disneyplus	https://en.wikipedia.org/wiki/Disney%2B
 get the wikipedia page for jiosaavn	https://en.wikipedia.org/wiki/JioSaavn
@@ -1302,7 +1294,6 @@ get the wikipedia page for amazon	https://en.wikipedia.org/wiki/Amazon_(company)
 get the wikipedia page for groupon	https://en.wikipedia.org/wiki/Groupon
 get the wikipedia page for independent	https://en.wikipedia.org/wiki/Independent
 get the wikipedia page for libretexts	https://en.wikipedia.org/wiki/LibreTexts
-get the wikipedia page for thekitchn	https://en.wikipedia.org/?title=Thekitchn.com&redirect=no
 get the wikipedia page for google	https://en.wikipedia.org/wiki/Google
 get the wikipedia page for imd	https://en.wikipedia.org/wiki/India_Meteorological_Department
 get the wikipedia page for bseindia	https://en.wikipedia.org/wiki/Bombay_Stock_Exchange
@@ -1327,7 +1318,6 @@ get the wikipedia page for tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor
 get the wikipedia page for letras	https://es.wikipedia.org/wiki/Letra
 get the wikipedia page for wetter	https://de.wikipedia.org/wiki/Wetter
 get the wikipedia page for concepto	https://es.wikipedia.org/wiki/Concepto
-get the wikipedia page for basketball-reference	https://en.wikipedia.org/wiki/Sports_Reference
 get the wikipedia page for southernliving	https://en.wikipedia.org/wiki/Southern_Living
 get the wikipedia page for yandex	https://en.wikipedia.org/wiki/Yandex
 get the wikipedia page for ouest-france	https://en.wikipedia.org/wiki/Ouest-France
@@ -1358,7 +1348,6 @@ get the wikipedia page for google	https://en.wikipedia.org/wiki/Google
 get the wikipedia page for ntv	https://en.wikipedia.org/wiki/NTV
 get the wikipedia page for macys	https://en.wikipedia.org/wiki/Macy%27s
 get the wikipedia page for justwatch	https://en.wikipedia.org/wiki/JustWatch
-get the wikipedia page for uidai	https://en.wikipedia.org/wiki/Aadhaar
 get the wikipedia page for kbb	https://en.wikipedia.org/wiki/Kelley_Blue_Book
 get the wikipedia page for treccani	https://en.wikipedia.org/wiki/Treccani
 get the wikipedia page for history	https://en.wikipedia.org/wiki/History
@@ -1386,7 +1375,7 @@ get the wikipedia page for smallpdf	https://en.wikipedia.org/wiki/Smallpdf.com
 get the wikipedia page for recipetineats	https://en.wikipedia.org/wiki/Nagi_Maehashi
 get the wikipedia page for bankrate	https://en.wikipedia.org/wiki/Bankrate
 get the wikipedia page for xbox	https://en.wikipedia.org/wiki/Xbox
-get the wikipedia page for variety	https://en.wikipedia.org/wiki/Variety_(magazine)
+get the wikipedia page for variety magazine	https://en.wikipedia.org/wiki/Variety_(magazine)
 get the wikipedia page for sportingnews	https://en.wikipedia.org/wiki/The_Sporting_News
 get the wikipedia page for dickssportinggoods	https://en.wikipedia.org/wiki/Dick%27s_Sporting_Goods
 get the wikipedia page for usda	https://en.wikipedia.org/wiki/United_States_Department_of_Agriculture
@@ -1449,7 +1438,6 @@ get the wikipedia page for ibm	https://en.wikipedia.org/wiki/IBM
 get the wikipedia page for bing	https://en.wikipedia.org/wiki/Microsoft_Bing
 get the wikipedia page for jansatta	https://hi.wikipedia.org/wiki/%E0%A4%9C%E0%A4%A8%E0%A4%B8%E0%A4%A4%E0%A5%8D%E0%A4%A4%E0%A4%BE
 get the wikipedia page for mashable	https://en.wikipedia.org/wiki/Mashable
-get the wikipedia page for fast	https://en.wikipedia.org/wiki/Fast_%26_Furious
 get the wikipedia page for apple	https://en.wikipedia.org/wiki/Apple
 get the wikipedia page for figaro	https://en.wikipedia.org/wiki/Figaro
 get the wikipedia page for atptour	https://en.wikipedia.org/wiki/ATP_Tour
@@ -1502,7 +1490,6 @@ get the wikipedia page for thegioididong	https://vi.wikipedia.org/wiki/Thegioidi
 get the wikipedia page for mozilla	https://en.wikipedia.org/wiki/Mozilla
 get the wikipedia page for soccerway	https://en.wikipedia.org/wiki/Soccerway
 get the wikipedia page for nsw	https://en.wikipedia.org/wiki/New_South_Wales
-get the wikipedia page for gamerant	get the wikipedia page for gamerant
 get the wikipedia page for google	https://en.wikipedia.org/wiki/Google
 get the wikipedia page for lanacion	https://en.wikipedia.org/wiki/La_Naci%C3%B3n
 get the wikipedia page for interia	https://en.wikipedia.org/wiki/Interia
@@ -1513,7 +1500,6 @@ get the wikipedia page for stackoverflow	https://en.wikipedia.org/wiki/Stack_Ove
 get the wikipedia page for rea	https://en.wikipedia.org/wiki/Rea
 get the wikipedia page for tvinsider	https://en.wikipedia.org/?title=TV_Insider&redirect=no
 get the wikipedia page for telangana	https://en.wikipedia.org/wiki/Telangana
-get the wikipedia page for bikedekho	https://en.wikipedia.org/wiki/CarDekho_Group
 get the wikipedia page for wongnai	https://th.wikipedia.org/wiki/%E0%B8%A7%E0%B8%87%E0%B9%83%E0%B8%99
 get the wikipedia page for naukri	https://en.wikipedia.org/wiki/Naukri.com
 get the wikipedia page for t-mobile	https://en.wikipedia.org/wiki/T-Mobile_US
@@ -1549,7 +1535,6 @@ get the wikipedia page for weather	https://en.wikipedia.org/wiki/Weather
 get the wikipedia page for techradar	https://en.wikipedia.org/wiki/TechRadar
 get the wikipedia page for kenhub	https://fr.wikipedia.org/wiki/Kenhub
 get the wikipedia page for tudogostoso	https://pt.wikipedia.org/wiki/TudoGostoso
-get the wikipedia page for game8	https://en.wikipedia.org/wiki/List_of_video_game_websites
 get the wikipedia page for thairath	https://en.wikipedia.org/wiki/Thairath
 get the wikipedia page for shutterfly	https://en.wikipedia.org/wiki/Shutterfly
 get the wikipedia page for indiapost	https://en.wikipedia.org/wiki/India_Post
@@ -1706,7 +1691,6 @@ get the wikipedia page for toyota	https://en.wikipedia.org/wiki/Toyota
 get the wikipedia page for geology	https://en.wikipedia.org/wiki/Geology
 get the wikipedia page for google	https://en.wikipedia.org/wiki/Google
 get the wikipedia page for ixigo	https://en.wikipedia.org/wiki/Ixigo
-get the wikipedia page for steamcommunity	https://en.wikipedia.org/wiki/Steam_(service)
 get the wikipedia page for newsnow	https://en.wikipedia.org/wiki/NewsNow
 get the wikipedia page for deloitte	https://en.wikipedia.org/wiki/Deloitte
 get the wikipedia page for food	https://en.wikipedia.org/wiki/Food
@@ -1719,7 +1703,6 @@ get the wikipedia page for purdue	https://en.wikipedia.org/wiki/Purdue_Universit
 get the wikipedia page for diyanet	https://en.wikipedia.org/wiki/Presidency_of_Religious_Affairs
 get the wikipedia page for commonsensemedia	https://en.wikipedia.org/wiki/Common_Sense_Media
 get the wikipedia page for heart	https://en.wikipedia.org/wiki/Heart
-get the wikipedia page for gnavi	https://handwiki.org/wiki/Software:GNAVI
 get the wikipedia page for sky	https://en.wikipedia.org/wiki/Sky
 get the wikipedia page for cbc	https://en.wikipedia.org/wiki/Canadian_Broadcasting_Corporation
 get the wikipedia page for giallozafferano	https://it.wikipedia.org/wiki/GialloZafferano
@@ -1759,7 +1742,6 @@ get the wikipedia page for pharmeasy	https://en.wikipedia.org/wiki/PharmEasy
 get the wikipedia page for ameli	https://en.wikipedia.org/wiki/Am%C3%A9lie
 get the wikipedia page for biography	https://en.wikipedia.org/wiki/Biography
 get the wikipedia page for zdf	https://en.wikipedia.org/wiki/ZDF
-get the wikipedia page for byrdie	https://en.wikipedia.org/?title=Byrdie&redirect=no
 get the wikipedia page for simon	https://en.wikipedia.org/wiki/Simon
 get the wikipedia page for aptoide	https://en.wikipedia.org/wiki/Aptoide
 get the wikipedia page for mercari	https://en.wikipedia.org/wiki/Mercari

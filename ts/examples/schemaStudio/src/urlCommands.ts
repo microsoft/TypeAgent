@@ -62,6 +62,7 @@ export function createURLResolverCommands(
         // Start checking each URL
         let passCount = 0;
         let failCount = 0;
+        let redirectCount = 0;
         for (const url of urls) {
             const temp = url.split("\t");
 
@@ -90,6 +91,9 @@ export function createURLResolverCommands(
             ) {
                 passFail = "PASS";
                 passCount++;
+            } else if (resolved?.startsWith(site)) {
+                passFail = "REDIRECT";
+                redirectCount++;
             } else {
                 passFail = "FAIL";
                 failCount++;
@@ -108,7 +112,9 @@ export function createURLResolverCommands(
         io.writer.writeLine(
             "URL resolution complete. Results written to resolved.txt",
         );
-        io.writer.writeLine(`Passed: ${passCount}, Failed: ${failCount}`);
+        io.writer.writeLine(
+            `Passed: ${passCount}, Failed: ${failCount}, Redirect: ${redirectCount}`,
+        );
 
         io.writer.writeLine(`Duration: ${Date.now() - runStarted}ms`);
     };
