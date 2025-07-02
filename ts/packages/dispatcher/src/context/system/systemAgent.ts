@@ -44,6 +44,7 @@ import { RunCommandScriptHandler } from "./handlers/runScriptCommandHandler.js";
 import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
 import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 import { getIndexCommandHandlers } from "./handlers/indexCommandHandler.js";
+import { getMemoryCommandHandlers } from "../memory.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -51,6 +52,7 @@ export const systemHandlers: CommandHandlerTable = {
         action: new ActionCommandHandler(),
         session: getSessionCommandHandlers(),
         history: getHistoryCommandHandlers(),
+        memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
         config: getConfigCommandHandlers(),
         display: new DisplayCommandHandler(),

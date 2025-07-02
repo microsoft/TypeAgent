@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.8.0",
-    "@modelcontextprotocol/server-filesystem": "2025.1.14",
+    "@modelcontextprotocol/server-filesystem": "2025.7.1",
     "@typeagent/agent-sdk": "workspace:*",
     "action-schema": "workspace:*",
     "agent-cache": "workspace:*",

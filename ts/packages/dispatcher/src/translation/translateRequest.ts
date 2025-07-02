@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 import {
-    displayError,
     displayStatus,
     displayWarn,
 } from "@typeagent/agent-sdk/helpers/display";
@@ -316,7 +315,7 @@ async function translateRequestWithSchema(
     usageCallback: (usage: ai.CompletionUsageStats) => void,
     streamingActionIndex?: number,
     disableOptimize: boolean = false,
-): Promise<TranslateStepResult | undefined> {
+): Promise<TranslateStepResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
     const prefix = getSchemaNamePrefix(schemaName, systemContext);
@@ -344,9 +343,6 @@ async function translateRequestWithSchema(
                 usageCallback,
                 streamingActionIndex,
             );
-            if (translatedAction === undefined) {
-                return undefined;
-            }
 
             if (!needAllAction(translatedAction, schemaName)) {
                 return {
@@ -367,12 +363,10 @@ async function translateRequestWithSchema(
         streamingActionIndex,
     );
 
-    return translatedAction
-        ? {
-              translatedAction,
-              translator,
-          }
-        : undefined;
+    return {
+        translatedAction,
+        translator,
+    };
 }
 
 async function translateWithTranslator(
@@ -455,8 +449,7 @@ async function translateWithTranslator(
         );
 
         if (!response.success) {
-            displayError(response.message, context);
-            return undefined;
+            throw new Error(response.message);
         }
         return response.data;
     } finally {
@@ -579,7 +572,7 @@ async function finalizeAction(
     usageCallback: (usage: ai.CompletionUsageStats) => void,
     resultEntityId?: string,
     streamingActionIndex?: number,
-): Promise<ExecutableAction | ExecutableAction[] | undefined> {
+): Promise<ExecutableAction | ExecutableAction[]> {
     let currentAction = action;
     let currentTranslator = translator;
     let currentSchemaName: string = schemaName;
@@ -614,9 +607,6 @@ async function finalizeAction(
             streamingActionIndex,
             nextSchemaName === currentSchemaName, // If we are retrying the same schema, then disable optimize
         );
-        if (result === undefined) {
-            return undefined;
-        }
 
         currentAction = result.translatedAction;
         currentTranslator = result.translator;
@@ -675,7 +665,7 @@ async function finalizeMultipleActions(
     attachments: CachedImageWithDetails[] | undefined,
     context: ActionContext<CommandHandlerContext>,
     usageCallback: CompleteUsageStatsCallback,
-): Promise<ExecutableAction[] | undefined> {
+): Promise<ExecutableAction[]> {
     if (attachments !== undefined && attachments.length !== 0) {
         // TODO: What to do with attachments with multiple actions?
         throw new Error("Attachments with multiple actions not supported");
@@ -698,9 +688,6 @@ async function finalizeMultipleActions(
             usageCallback,
             request.resultEntityId,
         );
-        if (finalizedActions === undefined) {
-            return undefined;
-        }
         if (Array.isArray(finalizedActions)) {
             actions.push(...finalizedActions);
         } else {
@@ -752,12 +739,11 @@ export async function translateRequest(
     history?: HistoryContext,
     attachments?: CachedImageWithDetails[],
     streamingActionIndex?: number,
-): Promise<TranslationResult | undefined | null> {
+): Promise<TranslationResult> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
     if (!config.translation.enabled) {
-        displayError("Translation is disabled.", context);
-        return;
+        throw new Error("Translation is disabled.");
     }
 
     if (history) {
@@ -790,9 +776,6 @@ export async function translateRequest(
         usageCallback,
         streamingActionIndex,
     );
-    if (result === undefined) {
-        return undefined;
-    }
 
     const { translatedAction, translator } = result;
 
@@ -816,9 +799,6 @@ export async function translateRequest(
               usageCallback,
           );
 
-    if (executableAction === undefined) {
-        return undefined;
-    }
     const translated = RequestAction.create(request, executableAction, history);
 
     const elapsedMs = performance.now() - startTime;
@@ -829,33 +809,29 @@ export async function translateRequest(
         context,
     );
 
-    if (requestAction) {
-        if (!systemContext.batchMode) {
-            systemContext.logger?.logEvent("translation", {
-                elapsedMs,
-                schemaName,
-                request,
-                actions: requestAction.actions,
-                replacedAction,
-                developerMode: systemContext.developerMode,
-                history,
-                config: systemContext.session.getConfig().translation,
-                metrics: systemContext.metricsManager?.getMeasures(
-                    systemContext.requestId!,
-                    ProfileNames.translate,
-                ),
-            });
-        }
-        return {
-            requestAction,
+    if (!systemContext.batchMode) {
+        systemContext.logger?.logEvent("translation", {
             elapsedMs,
-            fromCache: false,
-            fromUser: replacedAction !== undefined,
-            tokenUsage,
-        };
+            schemaName,
+            request,
+            actions: requestAction.actions,
+            replacedAction,
+            developerMode: systemContext.developerMode,
+            history,
+            config: systemContext.session.getConfig().translation,
+            metrics: systemContext.metricsManager?.getMeasures(
+                systemContext.requestId!,
+                ProfileNames.translate,
+            ),
+        });
     }
-
-    return requestAction;
+    return {
+        requestAction,
+        elapsedMs,
+        fromCache: false,
+        fromUser: replacedAction !== undefined,
+        tokenUsage,
+    };
 }
 
 export function translatePendingRequestAction(
@@ -863,13 +839,18 @@ export function translatePendingRequestAction(
     context: ActionContext<CommandHandlerContext>,
     actionIndex?: number,
 ) {
-    const systemContext = context.sessionContext.agentContext;
-    const history = getHistoryContext(systemContext);
-    return translateRequest(
-        action.parameters.pendingRequest,
-        context,
-        history,
-        undefined,
-        actionIndex,
-    );
+    try {
+        const systemContext = context.sessionContext.agentContext;
+        const history = getHistoryContext(systemContext);
+        return translateRequest(
+            action.parameters.pendingRequest,
+            context,
+            history,
+            undefined,
+            actionIndex,
+        );
+    } catch (e: any) {
+        e.message = `Error translating pending request action: ${e.message}`;
+        throw e;
+    }
 }

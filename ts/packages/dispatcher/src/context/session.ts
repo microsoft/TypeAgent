@@ -130,6 +130,9 @@ export type DispatcherConfig = {
     // Execution configurations
     execution: {
         history: boolean;
+        memory: {
+            legacy: boolean; // use legacy memory behavior
+        };
     };
     explainer: {
         enabled: boolean;
@@ -209,6 +212,9 @@ const defaultSessionConfig: SessionConfig = {
     },
     execution: {
         history: true,
+        memory: {
+            legacy: true, // use the new memory behavior
+        },
     },
     explainer: {
         enabled: true,

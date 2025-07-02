@@ -15,53 +15,55 @@ describe("Enhanced Website Knowledge Generation", () => {
             bookmarkDate: "2024-01-15T10:30:00Z",
             source: "bookmark",
             pageType: "development",
-            visitCount: 25
+            visitCount: 25,
         };
 
         const meta = new WebsiteMeta(visitInfo);
         const knowledge = meta.getKnowledge();
 
         // Check enhanced domain entity with facets
-        const domainEntity = knowledge.entities.find(e => e.name === "github.com");
+        const domainEntity = knowledge.entities.find(
+            (e) => e.name === "github.com",
+        );
         expect(domainEntity).toBeDefined();
         expect(domainEntity!.type).toContain("website");
         expect(domainEntity!.type).toContain("domain");
-        
+
         // Check temporal facets
         expect(domainEntity!.facets).toContainEqual({
             name: "bookmarkDate",
-            value: "2024-01-15T10:30:00Z"
+            value: "2024-01-15T10:30:00Z",
         });
         expect(domainEntity!.facets).toContainEqual({
-            name: "bookmarkYear", 
-            value: "2024"
+            name: "bookmarkYear",
+            value: "2024",
         });
-        
+
         // Check frequency facets
         expect(domainEntity!.facets).toContainEqual({
             name: "visitCount",
-            value: "25"
+            value: "25",
         });
         expect(domainEntity!.facets).toContainEqual({
             name: "visitFrequency",
-            value: "high"
+            value: "high",
         });
-        
+
         // Check category facets
         expect(domainEntity!.facets).toContainEqual({
             name: "category",
-            value: "development"
+            value: "development",
         });
 
         // Check temporal topics
         expect(knowledge.topics).toContain("bookmarked in 2024");
         expect(knowledge.topics).toContain("github.com bookmark from 2024");
         expect(knowledge.topics).toContain("recent bookmark");
-        
-        // Check frequency topics  
+
+        // Check frequency topics
         expect(knowledge.topics).toContain("frequently visited site");
         expect(knowledge.topics).toContain("popular domain");
-        
+
         // Check category topics
         expect(knowledge.topics).toContain("development");
         expect(knowledge.topics).toContain("development site");
@@ -72,12 +74,12 @@ describe("Enhanced Website Knowledge Generation", () => {
         expect(bookmarkAction.verbs).toContain("bookmarked");
         expect(bookmarkAction.subjectEntityName).toBe("user");
         expect(bookmarkAction.objectEntityName).toBe("github.com");
-        
+
         // Actions can have parameters for temporal/frequency context
         expect(bookmarkAction.params).toBeDefined();
         if (bookmarkAction.params) {
-            const actionDate = bookmarkAction.params.find(p => 
-                typeof p === 'object' && p.name === "actionDate"
+            const actionDate = bookmarkAction.params.find(
+                (p) => typeof p === "object" && p.name === "actionDate",
             );
             expect(actionDate).toBeDefined();
         }
@@ -87,19 +89,19 @@ describe("Enhanced Website Knowledge Generation", () => {
         // Early bookmark (2022)
         const earlyBookmark = new WebsiteMeta({
             url: "https://github.com/early-repo",
-            domain: "github.com", 
+            domain: "github.com",
             bookmarkDate: "2022-01-01T00:00:00Z",
             source: "bookmark",
-            pageType: "development"
+            pageType: "development",
         });
 
         // Recent bookmark (current year)
         const recentBookmark = new WebsiteMeta({
             url: "https://github.com/recent-repo",
             domain: "github.com",
-            bookmarkDate: "2024-12-01T00:00:00Z", 
+            bookmarkDate: "2024-12-01T00:00:00Z",
             source: "bookmark",
-            pageType: "development"
+            pageType: "development",
         });
 
         const earlyKnowledge = earlyBookmark.getKnowledge();
@@ -110,7 +112,7 @@ describe("Enhanced Website Knowledge Generation", () => {
         expect(earlyKnowledge.topics).toContain("early bookmark");
         expect(earlyKnowledge.topics).toContain("bookmarked in 2022");
 
-        // Recent bookmark should have "recent bookmark" topics  
+        // Recent bookmark should have "recent bookmark" topics
         expect(recentKnowledge.topics).toContain("recent bookmark");
         expect(recentKnowledge.topics).toContain("new bookmark");
         expect(recentKnowledge.topics).toContain("bookmarked in 2024");
@@ -123,7 +125,7 @@ describe("Enhanced Website Knowledge Generation", () => {
             domain: "stackoverflow.com",
             source: "history",
             visitCount: 45,
-            pageType: "development"
+            pageType: "development",
         });
 
         // Medium frequency site
@@ -132,7 +134,7 @@ describe("Enhanced Website Knowledge Generation", () => {
             domain: "docs.react.dev",
             source: "bookmark",
             visitCount: 8,
-            pageType: "development"
+            pageType: "development",
         });
 
         // Low frequency site
@@ -140,7 +142,7 @@ describe("Enhanced Website Knowledge Generation", () => {
             url: "https://example.com",
             domain: "example.com",
             source: "history",
-            visitCount: 1
+            visitCount: 1,
         });
 
         const highKnowledge = highFreqSite.getKnowledge();
@@ -148,26 +150,32 @@ describe("Enhanced Website Knowledge Generation", () => {
         const lowKnowledge = lowFreqSite.getKnowledge();
 
         // Check frequency facets
-        const highEntity = highKnowledge.entities.find(e => e.name === "stackoverflow.com");
+        const highEntity = highKnowledge.entities.find(
+            (e) => e.name === "stackoverflow.com",
+        );
         expect(highEntity).toBeDefined();
         expect(highEntity!.facets).toContainEqual({
             name: "visitFrequency",
-            value: "high"
+            value: "high",
         });
         expect(highKnowledge.topics).toContain("frequently visited site");
 
-        const medEntity = medKnowledge.entities.find(e => e.name === "docs.react.dev");
+        const medEntity = medKnowledge.entities.find(
+            (e) => e.name === "docs.react.dev",
+        );
         expect(medEntity).toBeDefined();
         expect(medEntity!.facets).toContainEqual({
             name: "visitFrequency",
-            value: "medium"
+            value: "medium",
         });
 
-        const lowEntity = lowKnowledge.entities.find(e => e.name === "example.com");
+        const lowEntity = lowKnowledge.entities.find(
+            (e) => e.name === "example.com",
+        );
         expect(lowEntity).toBeDefined();
         expect(lowEntity!.facets).toContainEqual({
             name: "visitFrequency",
-            value: "low"
+            value: "low",
         });
         expect(lowKnowledge.topics).toContain("rarely visited site");
     });
@@ -179,7 +187,7 @@ describe("Enhanced Website Knowledge Generation", () => {
             bookmarkDate: "2023-06-15T14:20:00Z",
             source: "bookmark",
             pageType: "development",
-            title: "TypeScript Documentation"
+            title: "TypeScript Documentation",
         });
 
         const knowledge = devSite.getKnowledge();
@@ -200,22 +208,24 @@ describe("Enhanced Website Knowledge Generation", () => {
             domain: "react.dev",
             source: "bookmark",
             folder: "Development/Frontend",
-            title: "React Documentation"
+            title: "React Documentation",
         });
 
         const knowledge = bookmarkWithFolder.getKnowledge();
 
         // Should include folder in facets
-        const entity = knowledge.entities.find(e => e.name === "react.dev");
+        const entity = knowledge.entities.find((e) => e.name === "react.dev");
         expect(entity).toBeDefined();
         expect(entity!.facets).toContainEqual({
             name: "folder",
-            value: "Development/Frontend"
+            value: "Development/Frontend",
         });
 
         // Should include folder in topics
         expect(knowledge.topics).toContain("Development/Frontend");
-        expect(knowledge.topics).toContain("bookmark folder: Development/Frontend");
+        expect(knowledge.topics).toContain(
+            "bookmark folder: Development/Frontend",
+        );
     });
 
     test("should handle history vs bookmark source differences", () => {
@@ -223,32 +233,36 @@ describe("Enhanced Website Knowledge Generation", () => {
             url: "https://github.com/user/repo",
             domain: "github.com",
             bookmarkDate: "2024-01-15T10:00:00Z",
-            source: "bookmark"
+            source: "bookmark",
         });
 
         const historyVisit = new WebsiteMeta({
             url: "https://github.com/user/other-repo",
             domain: "github.com",
             visitDate: "2024-01-15T11:00:00Z",
-            source: "history"
+            source: "history",
         });
 
         const bookmarkKnowledge = bookmark.getKnowledge();
         const historyKnowledge = historyVisit.getKnowledge();
 
         // Check source facets
-        const bookmarkEntity = bookmarkKnowledge.entities.find(e => e.name === "github.com");
+        const bookmarkEntity = bookmarkKnowledge.entities.find(
+            (e) => e.name === "github.com",
+        );
         expect(bookmarkEntity).toBeDefined();
         expect(bookmarkEntity!.facets).toContainEqual({
             name: "source",
-            value: "bookmark"
+            value: "bookmark",
         });
 
-        const historyEntity = historyKnowledge.entities.find(e => e.name === "github.com");
+        const historyEntity = historyKnowledge.entities.find(
+            (e) => e.name === "github.com",
+        );
         expect(historyEntity).toBeDefined();
         expect(historyEntity!.facets).toContainEqual({
             name: "source",
-            value: "history"
+            value: "history",
         });
 
         // Check action verbs
@@ -267,34 +281,42 @@ describe("Enhanced Website Query Integration", () => {
     test("should support temporal ordering queries", () => {
         // This would be tested in a real environment with actual website collection
         // For now, we verify the knowledge structure supports temporal queries
-        
+
         const sites = [
             new WebsiteMeta({
                 url: "https://github.com/first-repo",
                 domain: "github.com",
                 bookmarkDate: "2022-01-01T00:00:00Z",
                 source: "bookmark",
-                title: "First GitHub Repo"
+                title: "First GitHub Repo",
             }),
             new WebsiteMeta({
-                url: "https://github.com/second-repo", 
+                url: "https://github.com/second-repo",
                 domain: "github.com",
                 bookmarkDate: "2024-01-01T00:00:00Z",
                 source: "bookmark",
-                title: "Second GitHub Repo"
-            })
+                title: "Second GitHub Repo",
+            }),
         ];
 
         // Verify both have the facets needed for temporal ordering
-        sites.forEach(site => {
+        sites.forEach((site) => {
             const knowledge = site.getKnowledge();
-            const entity = knowledge.entities.find(e => e.name === "github.com");
-            
+            const entity = knowledge.entities.find(
+                (e) => e.name === "github.com",
+            );
+
             expect(entity).toBeDefined();
             expect(entity!.facets).toBeDefined();
-            expect(entity!.facets!.some(f => f.name === "bookmarkDate")).toBe(true);
-            expect(entity!.facets!.some(f => f.name === "bookmarkYear")).toBe(true);
-            expect(knowledge.topics.some(t => t.includes("bookmarked in"))).toBe(true);
+            expect(entity!.facets!.some((f) => f.name === "bookmarkDate")).toBe(
+                true,
+            );
+            expect(entity!.facets!.some((f) => f.name === "bookmarkYear")).toBe(
+                true,
+            );
+            expect(
+                knowledge.topics.some((t) => t.includes("bookmarked in")),
+            ).toBe(true);
         });
     });
 });

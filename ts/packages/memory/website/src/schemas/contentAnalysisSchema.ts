@@ -1,11 +1,9 @@
-/**
- * Content Analysis Schema
- * This schema defines the structure for LLM-based content analysis results
- */
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
-export type ContentType = 
+export type ContentType =
     | "tutorial"
-    | "documentation" 
+    | "documentation"
     | "article"
     | "guide"
     | "reference"
@@ -20,85 +18,57 @@ export type ContentType =
 
 export type TechnicalLevel =
     | "beginner"
-    | "intermediate" 
+    | "intermediate"
     | "advanced"
     | "expert"
     | "mixed";
 
 export type ContentLength =
-    | "quick_read"      // < 3 minutes
-    | "short"           // 3-7 minutes  
-    | "medium"          // 7-15 minutes
-    | "long"            // 15-30 minutes
-    | "comprehensive";  // 30+ minutes
+    | "quick_read" // < 3 minutes
+    | "short" // 3-7 minutes
+    | "medium" // 7-15 minutes
+    | "long" // 15-30 minutes
+    | "comprehensive"; // 30+ minutes
 
 export type InteractivityLevel =
-    | "static"          // No interactive elements
-    | "basic"           // Simple forms/buttons
-    | "interactive"     // Multiple interactive elements
+    | "static" // No interactive elements
+    | "basic" // Simple forms/buttons
+    | "interactive" // Multiple interactive elements
     | "highly_interactive"; // Rich interactive experience
 
 export interface ContentAnalysis {
-    /** Primary classification of the content type */
-    contentType: "tutorial" | "documentation" | "article" | "guide" | "reference" | "blog_post" | "news" | "product_page" | "landing_page" | "interactive_demo" | "code_example" | "api_docs" | "other";
-    
-    /** Technical difficulty level of the content */
-    technicalLevel: "beginner" | "intermediate" | "advanced" | "expert" | "mixed";
-    
-    /** Estimated reading time and content depth */
-    contentLength: "quick_read" | "short" | "medium" | "long" | "comprehensive";
-    
-    /** Level of interactive elements present */
-    interactivityLevel: "static" | "basic" | "interactive" | "highly_interactive";
-    
-    /** Specific technologies mentioned or used (e.g., React, Python, Docker) */
-    technologies: string[];
-    
-    /** Broad domain areas covered (e.g., web development, machine learning) */
-    domains: string[];
-    
-    /** Specific concepts and topics discussed (e.g., authentication, state management) */
-    concepts: string[];
-    
-    /** Whether the content contains actual programming code examples */
+    // Primary content classification
+    contentType: ContentType;
+    technicalLevel: TechnicalLevel;
+    contentLength: ContentLength;
+    interactivityLevel: InteractivityLevel;
+
+    // Technology and domain topics
+    technologies: string[]; // e.g., ["React", "TypeScript", "Node.js"]
+    domains: string[]; // e.g., ["web development", "machine learning", "DevOps"]
+    concepts: string[]; // e.g., ["authentication", "state management", "API design"]
+
+    // Content characteristics
     hasProgrammingCode: boolean;
-    
-    /** Whether the content includes images, diagrams, videos, or visual aids */
-    hasVisualContent: boolean;
-    
-    /** Whether downloadable resources are available (files, tools, etc.) */
+    hasVisualContent: boolean; // images, diagrams, videos
     hasDownloadableContent: boolean;
-    
-    /** Whether the content requires user registration or signup to access */
     requiresSignup: boolean;
-    
-    /** Whether the content is designed for learning and education */
+
+    // Learning and reference value
     isEducational: boolean;
-    
-    /** Whether the content serves as reference material or documentation */
     isReference: boolean;
-    
-    /** Whether the content provides practical, hands-on examples */
     isPracticalExample: boolean;
-    
-    /** Target audience groups (e.g., developers, beginners, data scientists) */
-    targetAudience: string[];
-    
-    /** Single sentence describing the primary purpose of the content */
-    primaryPurpose: string;
-    
-    /** 3-5 primary topics that are central to the content */
-    mainTopics: string[];
-    
-    /** Additional relevant topics covered in the content */
-    secondaryTopics: string[];
-    
-    /** Whether the content provides comprehensive coverage of its topic */
-    isComprehensive: boolean;
-    
-    /** Whether the content appears current and up-to-date */
-    isUpToDate: boolean;
-    
-    /** Whether the content is well-organized with clear structure */
-    isWellStructured: boolean;
+
+    // Audience and purpose
+    targetAudience: string[]; // e.g., ["developers", "beginners", "React developers"]
+    primaryPurpose: string; // e.g., "teach React hooks", "document API endpoints"
+
+    // Key topics and themes (for enhanced search)
+    mainTopics: string[]; // 3-5 primary topics
+    secondaryTopics: string[]; // Additional relevant topics
+
+    // Content quality indicators
+    isComprehensive: boolean; // Covers topic thoroughly
+    isUpToDate: boolean; // Based on mentions of recent versions/dates
+    isWellStructured: boolean; // Clear headings, good organization
 }
