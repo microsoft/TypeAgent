@@ -165,6 +165,8 @@ def main():
             cmd = qa_pair.get("cmd")
             if cmd and cmd != f'@kpAnswer --query "{question}"':
                 print(f"Command: {cmd}")
+            if qa_pair.get("hasNoAnswer"):
+                answer = f"Failure: {answer}"
             print(f"Expected answer:\n{answer}")
             print("-" * 20)
             print(f"Actual answer:\n{actual_answer}", flush=True)
@@ -197,6 +199,7 @@ async def compare(
 
     question = qa_pair.get("question")
     answer = qa_pair.get("answer")
+    failed = qa_pair.get("hasNoAnswer")
     cmd = qa_pair.get("cmd")
     if not (question and answer):
         return None, score
@@ -233,16 +236,20 @@ async def compare(
         )
         print("-" * 40)
         if combined_answer.type == "NoAnswer":
-            if "[ANSWER CONTEXT]" in answer or "answer context" in answer:
+            if failed:
                 score = 1.0
-            print("Failure:", combined_answer.whyNoAnswer)
+            the_answer = f"Failure: {combined_answer.whyNoAnswer}"
+            print(the_answer)
             print("All answers:")
             if context.interactive:
                 utils.pretty_print(all_answers)
         else:
             assert combined_answer.answer is not None, "Expected an answer"
             the_answer = combined_answer.answer
-            score = await equality_score(context, answer, the_answer)
+            if failed:
+                score = 0.0
+            else:
+                score = await equality_score(context, answer, the_answer)
             print(the_answer)
             print("Correctness score:", score)
     print("=" * 40)
