@@ -88,7 +88,18 @@ export async function ensureWebsocketConnected(): Promise<
         });
         createExternalBrowserServer(browserControlChannel.channel);
         webSocket.onmessage = async (event: MessageEvent) => {
-            const text = await (event.data as Blob).text();
+            let text: string;
+
+            if (typeof event.data === "string") {
+                text = event.data;
+            } else if (event.data instanceof Blob) {
+                text = await event.data.text();
+            } else if (event.data instanceof ArrayBuffer) {
+                text = new TextDecoder().decode(event.data);
+            } else {
+                console.warn("Unknown message type:", typeof event.data);
+                return;
+            }
 
             const data = JSON.parse(text) as WebSocketMessageV2;
             if (data.error) {
@@ -192,7 +203,22 @@ export async function sendActionToAgent(
                 );
 
                 const handler = async (event: MessageEvent) => {
-                    const text = await (event.data as Blob).text();
+                    let text: string;
+
+                    if (typeof event.data === "string") {
+                        text = event.data;
+                    } else if (event.data instanceof Blob) {
+                        text = await event.data.text();
+                    } else if (event.data instanceof ArrayBuffer) {
+                        text = new TextDecoder().decode(event.data);
+                    } else {
+                        console.warn(
+                            "Unknown message type:",
+                            typeof event.data,
+                        );
+                        return;
+                    }
+
                     const data = JSON.parse(text);
                     if (data.id == callId && data.result) {
                         webSocket!.removeEventListener("message", handler);

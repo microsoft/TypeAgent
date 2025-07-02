@@ -45,16 +45,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        id: "extractSchemaCurrentPage",
-        title: "Get schema.org metadata from this page",
-        contexts: ["page"],
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        id: "extractSchemaLinkedPages",
-        title: "Get schema.org metadata from linked pages",
-        contexts: ["page"],
+        title: "Extract knowledge from page",
+        id: "extractKnowledgeFromPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 }
@@ -112,6 +104,12 @@ export async function handleContextMenuClick(
         }
         case "discoverPageSchema": {
             await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "sidepanel.html",
+                enabled: true,
+            });
             break;
         }
         case "sidepanel-registerAgent": {
@@ -121,24 +119,16 @@ export async function handleContextMenuClick(
             });
             break;
         }
-        case "extractSchemaCurrentPage": {
-            await chrome.tabs.sendMessage(
-                tab.id!,
-                {
-                    type: "extractSchemaCurrentPage",
-                },
-                { frameId: 0 },
-            );
-            break;
-        }
-        case "extractSchemaLinkedPages": {
-            await chrome.tabs.sendMessage(
-                tab.id!,
-                {
-                    type: "extractSchemaLinkedPages",
-                },
-                { frameId: 0 },
-            );
+
+        case "extractKnowledgeFromPage": {
+            await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "knowledgePanel.html",
+                enabled: true,
+            });
+
             break;
         }
     }

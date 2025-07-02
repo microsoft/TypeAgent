@@ -47,6 +47,7 @@ import registerDebug from "debug";
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
+import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -306,6 +307,30 @@ async function updateBrowserContext(
                                     result: discoveryResult.data,
                                 }),
                             );
+                            break;
+                        }
+
+                        // NEW: Knowledge extraction actions
+                        case "extractKnowledgeFromPage":
+                        case "indexWebPageContent":
+                        case "queryWebKnowledge":
+                        case "checkPageIndexStatus":
+                        case "getKnowledgeIndexStats":
+                        case "clearKnowledgeIndex":
+                        case "exportKnowledgeData": {
+                            const knowledgeResult = await handleKnowledgeAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
                         }
                     }
                 }
