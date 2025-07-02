@@ -8,11 +8,14 @@ import {
     clearRecordedActions,
     saveRecordedActions,
 } from "./storage";
-import { sendActionToAgent, ensureWebsocketConnected, getWebSocket } from "./websocket";
-import { PanelManager } from "./panelManager";
+import {
+    sendActionToAgent,
+    ensureWebsocketConnected,
+    getWebSocket,
+} from "./websocket";
 
 /**
- * Handles messages from content scripts and popup
+ * Handles messages from content scripts
  * @param message The message received
  * @param sender The sender of the message
  * @returns Promise resolving to the result of handling the message
@@ -166,13 +169,17 @@ export async function handleMessage(
             return {};
         }
 
-        // NEW: Knowledge extraction cases
         case "extractPageKnowledge": {
             const targetTab = await getActiveTab();
             if (targetTab) {
                 try {
-                    const htmlFragments = await getTabHTMLFragments(targetTab, false, false, true);
-                    
+                    const htmlFragments = await getTabHTMLFragments(
+                        targetTab,
+                        false,
+                        false,
+                        true,
+                    );
+
                     const knowledgeResult = await sendActionToAgent({
                         actionName: "extractKnowledgeFromPage",
                         parameters: {
@@ -185,15 +192,21 @@ export async function handleMessage(
                             quality: message.quality || "balanced",
                         },
                     });
-                    
+
+                    console.log(
+                        "Knowledge extraction result:",
+                        knowledgeResult,
+                    );
+
                     return {
                         knowledge: {
                             entities: knowledgeResult.entities || [],
                             relationships: knowledgeResult.relationships || [],
                             keyTopics: knowledgeResult.keyTopics || [],
-                            suggestedQuestions: knowledgeResult.suggestedQuestions || [],
+                            suggestedQuestions:
+                                knowledgeResult.suggestedQuestions || [],
                             summary: knowledgeResult.summary || "",
-                        }
+                        },
                     };
                 } catch (error) {
                     console.error("Error extracting knowledge:", error);
@@ -213,7 +226,7 @@ export async function handleMessage(
                         searchScope: message.searchScope || "current_page",
                     },
                 });
-                
+
                 return {
                     answer: result.answer || "No answer found",
                     sources: result.sources || [],
@@ -228,7 +241,10 @@ export async function handleMessage(
         case "indexPageContentDirect": {
             const targetTab = await getActiveTab();
             if (targetTab) {
-                const success = await indexPageContent(targetTab, message.showNotification !== false);
+                const success = await indexPageContent(
+                    targetTab,
+                    message.showNotification !== false,
+                );
                 return { success };
             }
             return { success: false, error: "No active tab found" };
@@ -236,7 +252,7 @@ export async function handleMessage(
 
         case "autoIndexPage": {
             const targetTab = await getActiveTab();
-            if (targetTab && await shouldIndexPage(targetTab.url!)) {
+            if (targetTab && (await shouldIndexPage(targetTab.url!))) {
                 const success = await indexPageContent(targetTab, false, {
                     quality: message.quality,
                     textOnly: message.textOnly,
@@ -254,7 +270,7 @@ export async function handleMessage(
                         url: message.url,
                     },
                 });
-                
+
                 return {
                     isIndexed: result.isIndexed || false,
                     lastIndexed: result.lastIndexed || null,
@@ -272,7 +288,7 @@ export async function handleMessage(
                     actionName: "getKnowledgeIndexStats",
                     parameters: {},
                 });
-                
+
                 return {
                     totalPages: result.totalPages || 0,
                     totalEntities: result.totalEntities || 0,
@@ -299,26 +315,45 @@ export async function handleMessage(
             };
         }
 
-        case "openPanel": {
+        case "openPanelWithGesture": {
             const tabId = message.tabId;
             const panel = message.panel;
-            
-            if (panel === "schema") {
-                await PanelManager.openSchemaPanel(tabId);
-            } else if (panel === "knowledge") {
-                await PanelManager.openKnowledgePanel(tabId);
-                
-                // If there's a specific action, trigger it
-                if (message.action === "extractKnowledge") {
-                    setTimeout(() => {
-                        chrome.tabs.sendMessage(tabId, {
-                            type: "triggerKnowledgeExtraction",
-                        }, { frameId: 0 });
-                    }, 500);
+
+            try {
+                if (panel === "schema") {
+                    await chrome.sidePanel.setOptions({
+                        tabId: tabId,
+                        path: "sidepanel.html",
+                        enabled: true,
+                    });
+                    await chrome.sidePanel.open({ tabId });
+                } else if (panel === "knowledge") {
+                    await chrome.sidePanel.setOptions({
+                        tabId: tabId,
+                        path: "knowledgePanel.html",
+                        enabled: true,
+                    });
+                    await chrome.sidePanel.open({ tabId });
+
+                    // If there's a specific action, trigger it
+                    if (message.action === "extractKnowledge") {
+                        setTimeout(() => {
+                            chrome.tabs.sendMessage(
+                                tabId,
+                                {
+                                    type: "triggerKnowledgeExtraction",
+                                },
+                                { frameId: 0 },
+                            );
+                        }, 500);
+                    }
                 }
+
+                return { success: true };
+            } catch (error) {
+                console.error("Error opening panel with gesture:", error);
+                return { success: false, error: String(error) };
             }
-            
-            return { success: true };
         }
 
         case "autoIndexSettingChanged": {
@@ -333,22 +368,22 @@ export async function handleMessage(
 
 // Helper functions for knowledge indexing
 async function indexPageContent(
-    tab: chrome.tabs.Tab, 
+    tab: chrome.tabs.Tab,
     showNotification: boolean = true,
     options: {
         quality?: "fast" | "balanced" | "deep";
         textOnly?: boolean;
-    } = {}
+    } = {},
 ): Promise<boolean> {
     try {
         const htmlFragments = await getTabHTMLFragments(
-            tab, 
-            false, 
-            false, 
+            tab,
+            false,
+            false,
             true, // extract text
-            false // useTimestampIds
+            false, // useTimestampIds
         );
-        
+
         await sendActionToAgent({
             actionName: "indexWebPageContent",
             parameters: {
@@ -361,27 +396,33 @@ async function indexPageContent(
                 textOnly: options.textOnly || false,
             },
         });
-        
+
         if (showNotification) {
             chrome.action.setBadgeText({ text: "✓", tabId: tab.id });
-            chrome.action.setBadgeBackgroundColor({ color: "#28a745", tabId: tab.id });
+            chrome.action.setBadgeBackgroundColor({
+                color: "#28a745",
+                tabId: tab.id,
+            });
             setTimeout(() => {
                 chrome.action.setBadgeText({ text: "", tabId: tab.id });
             }, 3000);
         }
-        
+
         return true;
     } catch (error) {
         console.error("Error indexing page content:", error);
-        
+
         if (showNotification) {
             chrome.action.setBadgeText({ text: "✗", tabId: tab.id });
-            chrome.action.setBadgeBackgroundColor({ color: "#dc3545", tabId: tab.id });
+            chrome.action.setBadgeBackgroundColor({
+                color: "#dc3545",
+                tabId: tab.id,
+            });
             setTimeout(() => {
                 chrome.action.setBadgeText({ text: "", tabId: tab.id });
             }, 3000);
         }
-        
+
         return false;
     }
 }
@@ -389,41 +430,59 @@ async function indexPageContent(
 // Enhanced shouldIndexPage with more sophisticated checks
 async function shouldIndexPage(url: string): Promise<boolean> {
     const settings = await chrome.storage.sync.get([
-        "autoIndexing", 
+        "autoIndexing",
         "excludeSensitiveSites",
-        "indexOnlyTextContent"
+        "indexOnlyTextContent",
     ]);
-    
+
     if (!settings.autoIndexing) {
         return false;
     }
-    
+
     // Check sensitive sites
     if (settings.excludeSensitiveSites) {
         const sensitivePatterns = [
-            /banking/i, /bank\./i, /login/i, /signin/i, /auth/i,
-            /healthcare/i, /medical/i, /patient/i, /health/i,
-            /paypal/i, /payment/i, /checkout/i, /billing/i,
-            /admin/i, /dashboard/i, /account/i, /profile/i,
+            /banking/i,
+            /bank\./i,
+            /login/i,
+            /signin/i,
+            /auth/i,
+            /healthcare/i,
+            /medical/i,
+            /patient/i,
+            /health/i,
+            /paypal/i,
+            /payment/i,
+            /checkout/i,
+            /billing/i,
+            /admin/i,
+            /dashboard/i,
+            /account/i,
+            /profile/i,
         ];
-        
-        if (sensitivePatterns.some(pattern => pattern.test(url))) {
+
+        if (sensitivePatterns.some((pattern) => pattern.test(url))) {
             return false;
         }
     }
-    
+
     // Don't index localhost, internal IPs, or file:// URLs
-    if (url.includes("localhost") || url.startsWith("file://") || 
-        url.includes("127.0.0.1") || url.includes("192.168.") ||
-        url.includes(".local")) {
+    if (
+        url.includes("localhost") ||
+        url.startsWith("file://") ||
+        url.includes("127.0.0.1") ||
+        url.includes("192.168.") ||
+        url.includes(".local")
+    ) {
         return false;
     }
-    
+
     // Don't index media files or downloads
-    const mediaExtensions = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|exe|dmg|pkg|mp4|mp3|avi|mov|jpg|jpeg|png|gif|svg)$/i;
+    const mediaExtensions =
+        /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|zip|rar|exe|dmg|pkg|mp4|mp3|avi|mov|jpg|jpeg|png|gif|svg)$/i;
     if (mediaExtensions.test(url)) {
         return false;
     }
-    
+
     return true;
 }

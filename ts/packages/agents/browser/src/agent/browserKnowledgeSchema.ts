@@ -37,7 +37,7 @@ export interface ActionInfo {
     /** Optional CSS selector for the actionable element */
     selector?: string;
     /** Type of action that can be performed */
-    actionType: 'click' | 'navigate' | 'copy' | 'download' | 'form' | 'search';
+    actionType: "click" | "navigate" | "copy" | "download" | "form" | "search";
     /** Confidence score (0-1) for action detection */
     confidence: number;
 }
@@ -138,7 +138,7 @@ export type ExtractPageKnowledge = {
         /** Optional page title (if not extractable from HTML) */
         title?: string;
         /** Analysis depth: 'basic' focuses on main content, 'detailed' includes more comprehensive analysis */
-        depth?: 'basic' | 'detailed' | 'full';
+        depth?: "basic" | "detailed" | "full";
         /** Optional user context for more targeted extraction */
         userContext?: string;
     };
@@ -178,7 +178,7 @@ export type ConfigureAutoIndexing = {
         /** Enable or disable automatic indexing */
         enabled: boolean;
         /** Depth of analysis for auto-indexing */
-        autoDepth?: 'basic' | 'detailed';
+        autoDepth?: "basic" | "detailed";
         /** Domains to exclude from auto-indexing */
         excludeDomains?: string[];
         /** Domains to include for auto-indexing (if specified, only these will be indexed) */
@@ -212,7 +212,7 @@ export type ExportKnowledge = {
     actionName: "exportKnowledge";
     parameters: {
         /** Export format: 'json', 'csv', 'rdf' */
-        format: 'json' | 'csv' | 'rdf';
+        format: "json" | "csv" | "rdf";
         /** Optional filter criteria */
         filter?: {
             domains?: string[];
@@ -236,7 +236,7 @@ export type BrowserKnowledgeActions =
 
 export interface KnowledgeExtractionSettings {
     /** Default extraction depth */
-    defaultDepth: 'basic' | 'detailed' | 'full';
+    defaultDepth: "basic" | "detailed" | "full";
     /** Entity extraction confidence threshold */
     entityConfidenceThreshold: number;
     /** Relationship extraction confidence threshold */
@@ -257,7 +257,7 @@ export interface AutoIndexingSettings {
     /** Whether auto-indexing is enabled */
     enabled: boolean;
     /** Depth of auto-indexing analysis */
-    depth: 'basic' | 'detailed';
+    depth: "basic" | "detailed";
     /** Domains to exclude from auto-indexing */
     excludeDomains: string[];
     /** Domains to include for auto-indexing */
@@ -296,7 +296,12 @@ export interface KnowledgeStats {
 
 // Error types for knowledge extraction
 export interface KnowledgeExtractionError {
-    code: 'EXTRACTION_FAILED' | 'INVALID_HTML' | 'TIMEOUT' | 'STORAGE_FULL' | 'NETWORK_ERROR';
+    code:
+        | "EXTRACTION_FAILED"
+        | "INVALID_HTML"
+        | "TIMEOUT"
+        | "STORAGE_FULL"
+        | "NETWORK_ERROR";
     message: string;
     details?: any;
     url?: string;
@@ -305,7 +310,12 @@ export interface KnowledgeExtractionError {
 
 // Event types for knowledge extraction lifecycle
 export interface KnowledgeExtractionEvent {
-    type: 'extraction_started' | 'extraction_completed' | 'extraction_failed' | 'query_executed' | 'settings_changed';
+    type:
+        | "extraction_started"
+        | "extraction_completed"
+        | "extraction_failed"
+        | "query_executed"
+        | "settings_changed";
     timestamp: number;
     data: any;
     url?: string;

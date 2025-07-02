@@ -30,31 +30,33 @@ class KnowledgePanel {
 
     async initialize() {
         console.log("Initializing Knowledge Panel");
-        
+
         // Setup event listeners
         this.setupEventListeners();
-        
+
         // Load current page info
         await this.loadCurrentPageInfo();
-        
+
         // Check auto-index setting
         await this.loadAutoIndexSetting();
-        
+
         // Load index statistics
         await this.loadIndexStats();
-        
+
         // Check connection status
         await this.checkConnectionStatus();
-        
+
         // Load any cached knowledge for current page
         await this.loadCachedKnowledge();
     }
 
     private setupEventListeners() {
         // Extract knowledge button
-        document.getElementById("extractKnowledge")!.addEventListener("click", () => {
-            this.extractKnowledge();
-        });
+        document
+            .getElementById("extractKnowledge")!
+            .addEventListener("click", () => {
+                this.extractKnowledge();
+            });
 
         // Index page button
         document.getElementById("indexPage")!.addEventListener("click", () => {
@@ -62,27 +64,35 @@ class KnowledgePanel {
         });
 
         // Auto-index toggle
-        document.getElementById("autoIndexToggle")!.addEventListener("change", (e) => {
-            const checkbox = e.target as HTMLInputElement;
-            this.toggleAutoIndex(checkbox.checked);
-        });
+        document
+            .getElementById("autoIndexToggle")!
+            .addEventListener("change", (e) => {
+                const checkbox = e.target as HTMLInputElement;
+                this.toggleAutoIndex(checkbox.checked);
+            });
 
         // Query submission
-        document.getElementById("submitQuery")!.addEventListener("click", () => {
-            this.submitQuery();
-        });
+        document
+            .getElementById("submitQuery")!
+            .addEventListener("click", () => {
+                this.submitQuery();
+            });
 
         // Enter key for query input
-        document.getElementById("knowledgeQuery")!.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") {
-                this.submitQuery();
-            }
-        });
+        document
+            .getElementById("knowledgeQuery")!
+            .addEventListener("keypress", (e) => {
+                if (e.key === "Enter") {
+                    this.submitQuery();
+                }
+            });
 
         // Settings button
-        document.getElementById("openSettings")!.addEventListener("click", () => {
-            chrome.runtime.openOptionsPage();
-        });
+        document
+            .getElementById("openSettings")!
+            .addEventListener("click", () => {
+                chrome.runtime.openOptionsPage();
+            });
 
         // Listen for tab changes
         chrome.tabs.onActivated.addListener(() => {
@@ -98,14 +108,17 @@ class KnowledgePanel {
 
     private async loadCurrentPageInfo() {
         try {
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabs = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
             if (tabs.length > 0) {
                 const tab = tabs[0];
                 this.currentUrl = tab.url || "";
-                
+
                 const pageInfo = document.getElementById("currentPageInfo")!;
                 const domain = new URL(this.currentUrl).hostname;
-                
+
                 pageInfo.innerHTML = `
                     <div class="d-flex align-items-center">
                         <img src="https://www.google.com/s2/favicons?domain=${domain}" 
@@ -131,7 +144,7 @@ class KnowledgePanel {
                 type: "getPageIndexStatus",
                 url: this.currentUrl,
             });
-            
+
             if (response.isIndexed) {
                 return '<span class="badge bg-success">Indexed</span>';
             } else {
@@ -145,7 +158,9 @@ class KnowledgePanel {
     private async loadAutoIndexSetting() {
         try {
             const settings = await chrome.storage.sync.get(["autoIndexing"]);
-            const toggle = document.getElementById("autoIndexToggle") as HTMLInputElement;
+            const toggle = document.getElementById(
+                "autoIndexToggle",
+            ) as HTMLInputElement;
             toggle.checked = settings.autoIndexing || false;
         } catch (error) {
             console.error("Error loading auto-index setting:", error);
@@ -155,11 +170,13 @@ class KnowledgePanel {
     private async toggleAutoIndex(enabled: boolean) {
         try {
             await chrome.storage.sync.set({ autoIndexing: enabled });
-            
+
             // Update status indicator
-            const statusText = enabled ? "Auto-indexing enabled" : "Auto-indexing disabled";
+            const statusText = enabled
+                ? "Auto-indexing enabled"
+                : "Auto-indexing disabled";
             this.showTemporaryStatus(statusText, enabled ? "success" : "info");
-            
+
             // Notify background script
             chrome.runtime.sendMessage({
                 type: "autoIndexSettingChanged",
@@ -172,45 +189,52 @@ class KnowledgePanel {
 
     private async extractKnowledge() {
         this.showKnowledgeLoading();
-        
+
         try {
             const response = await chrome.runtime.sendMessage({
                 type: "extractPageKnowledge",
                 url: this.currentUrl,
             });
-            
+
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
                 this.renderKnowledgeResults(this.knowledgeData);
-                
+
                 // Cache the knowledge for this page
                 await this.cacheKnowledge(this.knowledgeData);
             }
-            
-            this.showTemporaryStatus("Knowledge extracted successfully!", "success");
+
+            this.showTemporaryStatus(
+                "Knowledge extracted successfully!",
+                "success",
+            );
         } catch (error) {
             console.error("Error extracting knowledge:", error);
-            this.showKnowledgeError("Failed to extract knowledge. Please check your connection.");
+            this.showKnowledgeError(
+                "Failed to extract knowledge. Please check your connection.",
+            );
         }
     }
 
     private async indexCurrentPage() {
-        const button = document.getElementById("indexPage") as HTMLButtonElement;
+        const button = document.getElementById(
+            "indexPage",
+        ) as HTMLButtonElement;
         const originalContent = button.innerHTML;
-        
+
         button.innerHTML = '<i class="bi bi-hourglass-split"></i> Indexing...';
         button.disabled = true;
-        
+
         try {
             await chrome.runtime.sendMessage({
                 type: "indexPageContentDirect",
                 url: this.currentUrl,
             });
-            
+
             // Update page status
             await this.loadCurrentPageInfo();
             await this.loadIndexStats();
-            
+
             this.showTemporaryStatus("Page indexed successfully!", "success");
         } catch (error) {
             console.error("Error indexing page:", error);
@@ -222,19 +246,21 @@ class KnowledgePanel {
     }
 
     private async submitQuery() {
-        const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+        const queryInput = document.getElementById(
+            "knowledgeQuery",
+        ) as HTMLInputElement;
         const queryResults = document.getElementById("queryResults")!;
         const query = queryInput.value.trim();
-        
+
         if (!query) return;
-        
+
         queryResults.innerHTML = `
             <div class="d-flex align-items-center text-muted">
                 <div class="spinner-border spinner-border-sm me-2" role="status"></div>
                 <span>Searching knowledge...</span>
             </div>
         `;
-        
+
         try {
             const response = await chrome.runtime.sendMessage({
                 type: "queryKnowledge",
@@ -242,7 +268,7 @@ class KnowledgePanel {
                 url: this.currentUrl,
                 searchScope: "current_page",
             });
-            
+
             queryResults.innerHTML = `
                 <div class="alert alert-info mb-0">
                     <div class="d-flex align-items-start">
@@ -250,17 +276,21 @@ class KnowledgePanel {
                         <div class="flex-grow-1">
                             <div class="fw-semibold">Answer:</div>
                             <p class="mb-2">${response.answer}</p>
-                            ${response.sources && response.sources.length > 0 ? `
+                            ${
+                                response.sources && response.sources.length > 0
+                                    ? `
                                 <hr class="my-2">
                                 <small class="text-muted">
-                                    <strong>Sources:</strong> ${response.sources.map((s: any) => s.title).join(', ')}
+                                    <strong>Sources:</strong> ${response.sources.map((s: any) => s.title).join(", ")}
                                 </small>
-                            ` : ''}
+                            `
+                                    : ""
+                            }
                         </div>
                     </div>
                 </div>
             `;
-            
+
             queryInput.value = ""; // Clear input
         } catch (error) {
             console.error("Error querying knowledge:", error);
@@ -306,19 +336,73 @@ class KnowledgePanel {
         // Show knowledge section
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
-        
+        knowledgeSection.innerHTML = `
+            <!-- Entities Card -->
+            <div class="knowledge-card card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-tags"></i> Entities
+                        <span id="entitiesCount" class="badge bg-secondary ms-2">0</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="entitiesContainer">
+                        <div class="text-muted text-center">
+                            <i class="bi bi-info-circle"></i>
+                            No entities extracted yet
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Relationships Card -->
+            <div class="knowledge-card card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-diagram-3"></i> Relationships
+                        <span id="relationshipsCount" class="badge bg-secondary ms-2">0</span>
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="relationshipsContainer">
+                        <div class="text-muted text-center">
+                            <i class="bi bi-info-circle"></i>
+                            No relationships found yet
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Topics Card -->
+            <div class="knowledge-card card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-bookmark"></i> Key Topics
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="topicsContainer">
+                        <div class="text-muted text-center">
+                            <i class="bi bi-info-circle"></i>
+                            No topics identified yet
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
         // Render entities
         this.renderEntities(knowledge.entities);
-        
+
         // Render relationships
         this.renderRelationships(knowledge.relationships);
-        
+
         // Render key topics
         this.renderKeyTopics(knowledge.keyTopics);
-        
+
         // Render suggested questions
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
-        
+
         // Show questions section
         const questionsSection = document.getElementById("questionsSection")!;
         questionsSection.className = "knowledge-card card";
@@ -327,9 +411,9 @@ class KnowledgePanel {
     private renderEntities(entities: Entity[]) {
         const container = document.getElementById("entitiesContainer")!;
         const countBadge = document.getElementById("entitiesCount")!;
-        
+
         countBadge.textContent = entities.length.toString();
-        
+
         if (entities.length === 0) {
             container.innerHTML = `
                 <div class="text-muted text-center">
@@ -339,8 +423,10 @@ class KnowledgePanel {
             `;
             return;
         }
-        
-        container.innerHTML = entities.map(entity => `
+
+        container.innerHTML = entities
+            .map(
+                (entity) => `
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <div>
                     <span class="fw-semibold">${entity.name}</span>
@@ -352,16 +438,18 @@ class KnowledgePanel {
                     </div>
                 </div>
             </div>
-            ${entity.description ? `<small class="text-muted">${entity.description}</small><hr class="my-2">` : ''}
-        `).join('');
+            ${entity.description ? `<small class="text-muted">${entity.description}</small><hr class="my-2">` : ""}
+        `,
+            )
+            .join("");
     }
 
     private renderRelationships(relationships: Relationship[]) {
         const container = document.getElementById("relationshipsContainer")!;
         const countBadge = document.getElementById("relationshipsCount")!;
-        
+
         countBadge.textContent = relationships.length.toString();
-        
+
         if (relationships.length === 0) {
             container.innerHTML = `
                 <div class="text-muted text-center">
@@ -371,8 +459,10 @@ class KnowledgePanel {
             `;
             return;
         }
-        
-        container.innerHTML = relationships.map(rel => `
+
+        container.innerHTML = relationships
+            .map(
+                (rel) => `
             <div class="relationship-item rounded">
                 <span class="fw-semibold">${rel.from}</span>
                 <i class="bi bi-arrow-right mx-2 text-muted"></i>
@@ -380,12 +470,14 @@ class KnowledgePanel {
                 <i class="bi bi-arrow-right mx-2 text-muted"></i>
                 <span class="fw-semibold">${rel.to}</span>
             </div>
-        `).join('');
+        `,
+            )
+            .join("");
     }
 
     private renderKeyTopics(topics: string[]) {
         const container = document.getElementById("topicsContainer")!;
-        
+
         if (topics.length === 0) {
             container.innerHTML = `
                 <div class="text-muted text-center">
@@ -395,15 +487,19 @@ class KnowledgePanel {
             `;
             return;
         }
-        
-        container.innerHTML = topics.map(topic => `
+
+        container.innerHTML = topics
+            .map(
+                (topic) => `
             <span class="badge bg-primary me-1 mb-1">${topic}</span>
-        `).join('');
+        `,
+            )
+            .join("");
     }
 
     private renderSuggestedQuestions(questions: string[]) {
         const container = document.getElementById("suggestedQuestions")!;
-        
+
         if (questions.length === 0) {
             container.innerHTML = `
                 <div class="text-muted text-center">
@@ -413,20 +509,28 @@ class KnowledgePanel {
             `;
             return;
         }
-        
+
         container.innerHTML = `
             <div class="mb-2"><small class="text-muted">Click a question to ask:</small></div>
-            ${questions.map(question => `
+            ${questions
+                .map(
+                    (question) => `
                 <div class="question-item list-group-item list-group-item-action p-2 mb-1 rounded">
                     <i class="bi bi-question-circle me-2"></i>${question}
                 </div>
-            `).join('')}
+            `,
+                )
+                .join("")}
         `;
-        
+
         // Add click listeners to questions
-        container.querySelectorAll('.question-item').forEach((item, index) => {
-            item.addEventListener('click', () => {
-                (document.getElementById('knowledgeQuery') as HTMLInputElement).value = questions[index];
+        container.querySelectorAll(".question-item").forEach((item, index) => {
+            item.addEventListener("click", () => {
+                (
+                    document.getElementById(
+                        "knowledgeQuery",
+                    ) as HTMLInputElement
+                ).value = questions[index];
                 this.submitQuery();
             });
         });
@@ -437,10 +541,13 @@ class KnowledgePanel {
             const response = await chrome.runtime.sendMessage({
                 type: "getIndexStats",
             });
-            
-            document.getElementById("totalPages")!.textContent = response.totalPages.toString();
-            document.getElementById("totalEntities")!.textContent = response.totalEntities.toString();
-            document.getElementById("lastIndexed")!.textContent = response.lastIndexed || "Never";
+
+            document.getElementById("totalPages")!.textContent =
+                response.totalPages.toString();
+            document.getElementById("totalEntities")!.textContent =
+                response.totalEntities.toString();
+            document.getElementById("lastIndexed")!.textContent =
+                response.lastIndexed || "Never";
         } catch (error) {
             console.error("Error loading index stats:", error);
         }
@@ -451,7 +558,7 @@ class KnowledgePanel {
             const response = await chrome.runtime.sendMessage({
                 type: "checkConnection",
             });
-            
+
             this.isConnected = response.connected;
             this.updateConnectionStatus();
         } catch (error) {
@@ -463,7 +570,7 @@ class KnowledgePanel {
     private updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus")!;
         const indicator = statusElement.querySelector(".status-indicator")!;
-        
+
         if (this.isConnected) {
             indicator.className = "status-indicator status-connected";
             statusElement.innerHTML = `
@@ -487,9 +594,11 @@ class KnowledgePanel {
 
     private async loadCachedKnowledge() {
         try {
-            const cached = await chrome.storage.local.get([`knowledge_${this.currentUrl}`]);
+            const cached = await chrome.storage.local.get([
+                `knowledge_${this.currentUrl}`,
+            ]);
             const knowledgeKey = `knowledge_${this.currentUrl}`;
-            
+
             if (cached[knowledgeKey]) {
                 this.knowledgeData = cached[knowledgeKey];
                 if (this.knowledgeData) {
@@ -497,10 +606,12 @@ class KnowledgePanel {
                 }
             } else {
                 // Hide knowledge section if no cached data
-                const knowledgeSection = document.getElementById("knowledgeSection")!;
+                const knowledgeSection =
+                    document.getElementById("knowledgeSection")!;
                 knowledgeSection.className = "d-none";
-                
-                const questionsSection = document.getElementById("questionsSection")!;
+
+                const questionsSection =
+                    document.getElementById("questionsSection")!;
                 questionsSection.className = "knowledge-card card d-none";
             }
         } catch (error) {
@@ -519,21 +630,29 @@ class KnowledgePanel {
         }
     }
 
-    private showTemporaryStatus(message: string, type: "success" | "danger" | "info") {
+    private showTemporaryStatus(
+        message: string,
+        type: "success" | "danger" | "info",
+    ) {
         const alertClass = `alert-${type}`;
-        const iconClass = type === "success" ? "bi-check-circle" : 
-                         type === "danger" ? "bi-exclamation-triangle" : "bi-info-circle";
-        
+        const iconClass =
+            type === "success"
+                ? "bi-check-circle"
+                : type === "danger"
+                  ? "bi-exclamation-triangle"
+                  : "bi-info-circle";
+
         const statusDiv = document.createElement("div");
         statusDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
-        statusDiv.style.cssText = "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
+        statusDiv.style.cssText =
+            "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
         statusDiv.innerHTML = `
             <i class="${iconClass} me-2"></i>${message}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
-        
+
         document.body.appendChild(statusDiv);
-        
+
         // Auto-dismiss after 3 seconds
         setTimeout(() => {
             if (statusDiv.parentNode) {

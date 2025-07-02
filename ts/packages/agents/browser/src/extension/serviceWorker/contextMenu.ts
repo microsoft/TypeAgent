@@ -3,7 +3,6 @@
 
 import { sendActionToAgent } from "./websocket";
 import { getWebSocket } from "./websocket";
-import { PanelManager } from "./panelManager";
 
 /**
  * Initializes the context menu items
@@ -46,41 +45,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        id: "extractSchemaCurrentPage",
-        title: "Get schema.org metadata from this page",
-        contexts: ["page"],
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        id: "extractSchemaLinkedPages",
-        title: "Get schema.org metadata from linked pages",
-        contexts: ["page"],
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    // Add separator for knowledge features
-    chrome.contextMenus.create({
-        type: "separator",
-        id: "menuSeparator3",
-    });
-
-    // NEW: Knowledge-related menu items
-    chrome.contextMenus.create({
         title: "Extract knowledge from page",
         id: "extractKnowledgeFromPage",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        title: "Open Knowledge Panel",
-        id: "openKnowledgePanel",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        title: "Index this page content",
-        id: "indexPageContent",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 }
@@ -137,7 +103,13 @@ export async function handleContextMenuClick(
             break;
         }
         case "discoverPageSchema": {
-            await PanelManager.openSchemaPanel(tab.id!);
+            await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "sidepanel.html",
+                enabled: true,
+            });
             break;
         }
         case "sidepanel-registerAgent": {
@@ -147,55 +119,16 @@ export async function handleContextMenuClick(
             });
             break;
         }
-        case "extractSchemaCurrentPage": {
-            await chrome.tabs.sendMessage(
-                tab.id!,
-                {
-                    type: "extractSchemaCurrentPage",
-                },
-                { frameId: 0 },
-            );
-            break;
-        }
-        case "extractSchemaLinkedPages": {
-            await chrome.tabs.sendMessage(
-                tab.id!,
-                {
-                    type: "extractSchemaLinkedPages",
-                },
-                { frameId: 0 },
-            );
-            break;
-        }
 
-        // NEW: Knowledge-related cases
         case "extractKnowledgeFromPage": {
-            await PanelManager.openKnowledgePanel(tab.id!);
-            // Send message to knowledge panel to start extraction
-            setTimeout(() => {
-                chrome.tabs.sendMessage(tab.id!, {
-                    type: "triggerKnowledgeExtraction",
-                }, { frameId: 0 });
-            }, 500); // Small delay to ensure panel is loaded
-            break;
-        }
+            await chrome.sidePanel.open({ tabId: tab.id! });
 
-        case "openKnowledgePanel": {
-            await PanelManager.openKnowledgePanel(tab.id!);
-            break;
-        }
-
-        case "indexPageContent": {
-            // Index page without opening panel
-            await chrome.tabs.sendMessage(tab.id!, {
-                type: "indexPageContentDirect",
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "knowledgePanel.html",
+                enabled: true,
             });
-            
-            // Show brief success notification
-            chrome.action.setBadgeText({ text: "✓", tabId: tab.id });
-            setTimeout(() => {
-                chrome.action.setBadgeText({ text: "", tabId: tab.id });
-            }, 2000);
+
             break;
         }
     }

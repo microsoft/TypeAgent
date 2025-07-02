@@ -3,17 +3,7 @@
 import { build } from "vite";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import {
-    copyFileSync,
-    mkdirSync,
-    cpSync,
-    readFileSync,
-    writeFileSync,
-    existsSync,
-    statSync,
-    readdirSync,
-} from "fs";
-import { createHash } from "crypto";
+import { copyFileSync, mkdirSync, cpSync } from "fs";
 import chalk from "chalk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -50,90 +40,6 @@ function createBuildOptions(outDir, options = {}) {
     };
 }
 
-// --- 🔧 Incremental build detection ---
-function checkIncrementalBuild() {
-    const buildHashFile = resolve(
-        __dirname,
-        "../.build.cache/.extension-build-hash",
-    );
-
-    try {
-        // Get modification times of key directories
-        const srcExtensionPath = resolve(__dirname, "../src/extension");
-        const srcElectronPath = resolve(__dirname, "../src/electron");
-        const scriptPath = resolve(__dirname, "buildExtension.mjs");
-
-        const getLastModified = (dirPath) => {
-            if (!existsSync(dirPath)) return 0;
-            const stat = statSync(dirPath);
-            if (stat.isFile()) return stat.mtimeMs;
-
-            let maxTime = stat.mtimeMs;
-            try {
-                const items = readdirSync(dirPath);
-                for (const item of items) {
-                    const itemPath = resolve(dirPath, item);
-                    const itemTime = getLastModified(itemPath);
-                    maxTime = Math.max(maxTime, itemTime);
-                }
-            } catch (e) {
-                // Skip directories we can't read
-            }
-            return maxTime;
-        };
-
-        const lastModified = Math.max(
-            getLastModified(srcExtensionPath),
-            getLastModified(srcElectronPath),
-            getLastModified(scriptPath),
-        );
-
-        const currentHash = createHash("md5")
-            .update(lastModified.toString())
-            .digest("hex");
-
-        // Check if build is up to date
-        if (existsSync(buildHashFile)) {
-            const lastHash = readFileSync(buildHashFile, "utf8").trim();
-            if (lastHash === currentHash) {
-                console.log(
-                    chalk.green(
-                        "✅ Extension build is up to date, skipping...",
-                    ),
-                );
-                process.exit(0);
-            }
-        }
-
-        // Store current hash for next time - ONLY update if we actually built
-        return (actuallyBuilt) => {
-            if (actuallyBuilt) {
-                // Ensure cache directory exists
-                const cacheDir = dirname(buildHashFile);
-                if (!existsSync(cacheDir)) {
-                    mkdirSync(cacheDir, { recursive: true });
-                }
-                writeFileSync(buildHashFile, currentHash);
-            }
-        };
-    } catch (error) {
-        // If hash checking fails, proceed with build
-        console.warn(
-            chalk.yellow(
-                "⚠️  Could not check incremental build status, proceeding...",
-            ),
-        );
-        return (actuallyBuilt) => {
-            if (actuallyBuilt) {
-                console.warn(chalk.yellow("⚠️  Could not update build hash"));
-            }
-        };
-    }
-}
-
-// const updateBuildHash = checkIncrementalBuild();
-
-// --- 🔧 Detect dev mode ---
 const isDev =
     process.argv.includes("--dev") ||
     process.argv.includes("--mode=development");
@@ -151,6 +57,7 @@ const sharedScripts = {
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
     options: "options.ts",
     sidepanel: "sidepanel.ts",
+    knowledgePanel: "knowledgePanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
 };
@@ -232,6 +139,10 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
 copyFileSync(`${srcDir}/sidepanel.html`, `${chromeOutDir}/sidepanel.html`);
+copyFileSync(
+    `${srcDir}/knowledgePanel.html`,
+    `${chromeOutDir}/knowledgePanel.html`,
+);
 copyFileSync(`${srcDir}/options.html`, `${chromeOutDir}/options.html`);
 mkdirSync(`${chromeOutDir}/sites`, { recursive: true });
 copyFileSync(

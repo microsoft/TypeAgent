@@ -29,19 +29,23 @@ export interface ContentSection {
 }
 
 function getPrefixPromptSection() {
-    return [{
-        type: "text",
-        text: "You are an AI assistant specialized in extracting structured knowledge from web page content.",
-    }];
+    return [
+        {
+            type: "text",
+            text: "You are an AI assistant specialized in extracting structured knowledge from web page content.",
+        },
+    ];
 }
 
 function getSuffixPromptSection() {
-    return [{
-        type: "text",
-        text: `
+    return [
+        {
+            type: "text",
+            text: `
 The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
 `,
-    }];
+        },
+    ];
 }
 
 async function getSchemaFileContents(fileName: string): Promise<string> {
@@ -62,7 +66,12 @@ async function getSchemaFileContents(fileName: string): Promise<string> {
 }
 
 export async function createKnowledgeTranslator(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI" = "GPT_4_O",
+    model:
+        | "GPT_35_TURBO"
+        | "GPT_4"
+        | "GPT_v"
+        | "GPT_4_O"
+        | "GPT_4_O_MINI" = "GPT_4_O",
 ) {
     const knowledgeSchema = await getSchemaFileContents(
         "knowledgeExtraction.mts",
@@ -113,13 +122,30 @@ export class KnowledgeAgent {
         suggestQuestions: boolean = true,
     ) {
         const maxContentLength = this.getMaxContentLength(quality);
-        const truncatedContent = textContent.length > maxContentLength 
-            ? textContent.substring(0, maxContentLength) + "..."
-            : textContent;
+        const truncatedContent =
+            textContent.length > maxContentLength
+                ? textContent.substring(0, maxContentLength) + "..."
+                : textContent;
 
-        const entityCount = quality === "fast" ? "5-10" : quality === "balanced" ? "10-20" : "20-50";
-        const topicCount = quality === "fast" ? "3-5" : quality === "balanced" ? "5-8" : "8-12";
-        const questionCount = suggestQuestions ? (quality === "fast" ? "3-5" : quality === "balanced" ? "5-8" : "8-12") : "0";
+        const entityCount =
+            quality === "fast"
+                ? "5-10"
+                : quality === "balanced"
+                  ? "10-20"
+                  : "20-50";
+        const topicCount =
+            quality === "fast"
+                ? "3-5"
+                : quality === "balanced"
+                  ? "5-8"
+                  : "8-12";
+        const questionCount = suggestQuestions
+            ? quality === "fast"
+                ? "3-5"
+                : quality === "balanced"
+                  ? "5-8"
+                  : "8-12"
+            : "0";
 
         const promptSections = [
             ...getPrefixPromptSection(),
@@ -175,16 +201,24 @@ ${this.translator.validator.getSchemaText()}
 Based on the following web content from the user's browsing history, answer this question: "${query}"
 
 Available content:
-${relevantContent.map((content, index) => `
+${relevantContent
+    .map(
+        (content, index) => `
 **Source ${index + 1}: ${content.title}** (${content.url})
-${content.summary ? `Summary: ${content.summary}` : ''}
+${content.summary ? `Summary: ${content.summary}` : ""}
 Content: ${content.content}
-Key entities: ${content.entities.map((e: any) => e.name).join(', ')}
----`).join('\n')}
+Key entities: ${content.entities.map((e: any) => e.name).join(", ")}
+---`,
+    )
+    .join("\n")}
 
-${relatedEntities.length > 0 ? `
-Related entities from knowledge graph: ${relatedEntities.map((e: any) => e.name).join(', ')}
-` : ''}
+${
+    relatedEntities.length > 0
+        ? `
+Related entities from knowledge graph: ${relatedEntities.map((e: any) => e.name).join(", ")}
+`
+        : ""
+}
 
 Instructions:
 - Provide a comprehensive answer based on the available content
@@ -202,10 +236,14 @@ Answer:`;
 
     private getMaxContentLength(quality: string): number {
         switch (quality) {
-            case "fast": return 2000;
-            case "balanced": return 4000;
-            case "deep": return 8000;
-            default: return 4000;
+            case "fast":
+                return 2000;
+            case "balanced":
+                return 4000;
+            case "deep":
+                return 8000;
+            default:
+                return 4000;
         }
     }
 }

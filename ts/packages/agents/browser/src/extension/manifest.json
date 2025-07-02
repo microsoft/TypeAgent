@@ -4,9 +4,7 @@
   "version": "1.1",
   "description": "Automates various browser actions.",
   "minimum_chrome_version": "116",
-  "action": {
-    "default_popup": "popup.html"
-  },
+  "action": {},
   "background": {
     "service_worker": "serviceWorker.js",
     "type": "module"
@@ -47,12 +45,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": [
-        "sidepanel.html",
-        "knowledgePanel.html",
-        "sites/paleobiodb.js", 
-        "sites/paleobiodbSchema.mts"
-      ],
+      "resources": ["sites/paleobiodb.js", "sites/paleobiodbSchema.mts"],
       "matches": ["https://paleobiodb.org/*"]
     },
     {

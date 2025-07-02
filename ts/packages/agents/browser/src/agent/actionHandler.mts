@@ -321,7 +321,7 @@ async function updateBrowserContext(
                             const knowledgeResult = await handleKnowledgeAction(
                                 data.method,
                                 data.params,
-                                context
+                                context,
                             );
 
                             webSocket.send(
