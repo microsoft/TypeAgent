@@ -47,7 +47,16 @@ import registerDebug from "debug";
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
-import { handleKnowledgeAction } from "./knowledge/knowledgeHandlerAdapter.mjs";
+import * as website from "website-memory";
+import {
+    extractKnowledgeFromPageDirect,
+    indexWebPageContentDirect,
+    queryWebKnowledgeDirect,
+    checkPageIndexStatusDirect,
+    getKnowledgeIndexStatsDirect,
+    clearKnowledgeIndexDirect,
+    exportKnowledgeDataDirect,
+} from "./knowledge/knowledgeHandler.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -69,7 +78,6 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
@@ -311,15 +319,98 @@ async function updateBrowserContext(
                         }
 
                         // Knowledge extraction actions
-                        case "extractKnowledgeFromPage":
-                        case "indexWebPageContent":
-                        case "queryWebKnowledge":
-                        case "checkPageIndexStatus":
-                        case "getKnowledgeIndexStats":
-                        case "clearKnowledgeIndex":
+                        case "extractKnowledgeFromPage": {
+                            const knowledgeResult = await extractKnowledgeFromPageDirect(
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "indexWebPageContent": {
+                            const knowledgeResult = await indexWebPageContentDirect(
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "queryWebKnowledge": {
+                            const knowledgeResult = await queryWebKnowledgeDirect(
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "checkPageIndexStatus": {
+                            const knowledgeResult = await checkPageIndexStatusDirect(
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "getKnowledgeIndexStats": {
+                            const knowledgeResult = await getKnowledgeIndexStatsDirect(
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "clearKnowledgeIndex": {
+                            const knowledgeResult = await clearKnowledgeIndexDirect(
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
                         case "exportKnowledgeData": {
-                            const knowledgeResult = await handleKnowledgeAction(
-                                data.method,
+                            const knowledgeResult = await exportKnowledgeDataDirect(
                                 data.params,
                                 context,
                             );
