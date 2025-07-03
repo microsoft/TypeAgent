@@ -310,7 +310,7 @@ async function updateBrowserContext(
                             break;
                         }
 
-                        // NEW: Knowledge extraction actions
+                        // Knowledge extraction actions
                         case "extractKnowledgeFromPage":
                         case "indexWebPageContent":
                         case "queryWebKnowledge":
