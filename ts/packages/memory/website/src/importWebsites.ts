@@ -340,8 +340,6 @@ export async function importChromeHistory(
 
                 const domain = extractDomain(row.url);
                 const visitDate = chromeTimeToISOString(row.last_visit_time);
-                // Note: Using fallback pageType determination here.
-                // LLM-based classification happens later during content enhancement
                 const pageType = determinePageType(row.url, row.title);
 
                 const visitInfo: WebsiteVisitInfo = {

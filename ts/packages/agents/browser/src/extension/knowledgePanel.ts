@@ -23,7 +23,6 @@ interface Relationship {
     confidence: number;
 }
 
-// NEW: Enhanced extraction modes
 interface ExtractionSettings {
     mode: "basic" | "content" | "actions" | "full";
     enableIntelligentAnalysis: boolean;
@@ -32,7 +31,6 @@ interface ExtractionSettings {
     quality: "fast" | "balanced" | "deep";
 }
 
-// NEW: Page source information
 interface PageSourceInfo {
     isBookmarked: boolean;
     isInHistory: boolean;
@@ -49,7 +47,6 @@ class KnowledgePanel {
     private extractionSettings: ExtractionSettings;
 
     constructor() {
-        // Default extraction settings - enhanced for websiteMemory
         this.extractionSettings = {
             mode: "full",
             enableIntelligentAnalysis: true,
@@ -62,48 +59,28 @@ class KnowledgePanel {
     async initialize() {
         console.log("Initializing Enhanced Knowledge Panel");
 
-        // Setup event listeners
         this.setupEventListeners();
-
-        // Load current page info with source detection
         await this.loadCurrentPageInfo();
-        
-        // NEW: Load page source information (bookmark/history status)
         await this.loadPageSourceInfo();
-
-        // Check auto-index setting
         await this.loadAutoIndexSetting();
-
-        // Load index statistics
         await this.loadIndexStats();
-
-        // Check connection status
         await this.checkConnectionStatus();
-
-        // Load any cached knowledge for current page
         await this.loadCachedKnowledge();
-        
-        // NEW: Setup extraction mode controls
         this.setupExtractionModeControls();
-        
-        // NEW: Load extraction settings from storage
         await this.loadExtractionSettings();
     }
 
     private setupEventListeners() {
-        // Extract knowledge button
         document
             .getElementById("extractKnowledge")!
             .addEventListener("click", () => {
                 this.extractKnowledge();
             });
 
-        // Index page button
         document.getElementById("indexPage")!.addEventListener("click", () => {
             this.indexCurrentPage();
         });
 
-        // Auto-index toggle
         document
             .getElementById("autoIndexToggle")!
             .addEventListener("change", (e) => {
@@ -111,14 +88,12 @@ class KnowledgePanel {
                 this.toggleAutoIndex(checkbox.checked);
             });
 
-        // Query submission
         document
             .getElementById("submitQuery")!
             .addEventListener("click", () => {
                 this.submitQuery();
             });
 
-        // Enter key for query input
         document
             .getElementById("knowledgeQuery")!
             .addEventListener("keypress", (e) => {
@@ -127,14 +102,12 @@ class KnowledgePanel {
                 }
             });
 
-        // Settings button
         document
             .getElementById("openSettings")!
             .addEventListener("click", () => {
                 chrome.runtime.openOptionsPage();
             });
 
-        // Listen for tab changes
         chrome.tabs.onActivated.addListener(() => {
             this.onTabChange();
         });
@@ -233,17 +206,13 @@ class KnowledgePanel {
             const response = await chrome.runtime.sendMessage({
                 type: "extractPageKnowledge",
                 url: this.currentUrl,
-                extractionSettings: this.extractionSettings, // NEW: Send extraction settings
+                extractionSettings: this.extractionSettings,
             });
 
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
                 this.renderKnowledgeResults(this.knowledgeData);
-
-                // Cache the knowledge for this page
                 await this.cacheKnowledge(this.knowledgeData);
-                
-                // NEW: Show extraction mode used
                 this.showExtractionInfo();
             }
 
@@ -274,7 +243,6 @@ class KnowledgePanel {
                 url: this.currentUrl,
             });
 
-            // Update page status
             await this.loadCurrentPageInfo();
             await this.loadIndexStats();
 
@@ -334,7 +302,7 @@ class KnowledgePanel {
                 </div>
             `;
 
-            queryInput.value = ""; // Clear input
+            queryInput.value = "";
         } catch (error) {
             console.error("Error querying knowledge:", error);
             queryResults.innerHTML = `
@@ -376,7 +344,6 @@ class KnowledgePanel {
     }
 
     private renderKnowledgeResults(knowledge: KnowledgeData) {
-        // Show knowledge section
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = `
@@ -434,19 +401,11 @@ class KnowledgePanel {
             </div>
         `;
 
-        // Render entities
         this.renderEntities(knowledge.entities);
-
-        // Render relationships
         this.renderRelationships(knowledge.relationships);
-
-        // Render key topics
         this.renderKeyTopics(knowledge.keyTopics);
-
-        // Render suggested questions
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
 
-        // Show questions section
         const questionsSection = document.getElementById("questionsSection")!;
         questionsSection.className = "knowledge-card card";
     }
@@ -560,7 +519,6 @@ class KnowledgePanel {
             <i class="bi bi-lightbulb"></i> Click a question to ask, or type your own below:
         </small></div>`;
 
-        // NEW: Render questions in categories
         if (categorizedQuestions.content.length > 0) {
             questionsHtml += `<div class="mb-3">
                 <h6 class="text-muted mb-2"><i class="bi bi-file-text"></i> About Content</h6>
@@ -589,7 +547,6 @@ class KnowledgePanel {
             </div>`;
         }
 
-        // Fallback for uncategorized questions
         if (categorizedQuestions.other.length > 0) {
             questionsHtml += `<div class="mb-3">
                 ${this.renderQuestionList(categorizedQuestions.other, "other")}
@@ -598,7 +555,6 @@ class KnowledgePanel {
 
         container.innerHTML = questionsHtml;
 
-        // Add click listeners to questions
         container.querySelectorAll(".question-item").forEach((item, index) => {
             item.addEventListener("click", () => {
                 const questionText = item.getAttribute("data-question")!;
@@ -608,7 +564,6 @@ class KnowledgePanel {
         });
     }
 
-    // NEW: Categorize questions for better organization
     private categorizeQuestions(questions: string[]) {
         const categories = {
             content: [] as string[],
@@ -637,7 +592,6 @@ class KnowledgePanel {
         return categories;
     }
 
-    // NEW: Render a list of questions with icons
     private renderQuestionList(questions: string[], category: string): string {
         const icons = {
             content: "bi-file-text",
@@ -672,7 +626,6 @@ class KnowledgePanel {
         }
     }
 
-    // NEW: Load page source information (bookmarks/history status)
     private async loadPageSourceInfo() {
         try {
             const response = await chrome.runtime.sendMessage({
@@ -687,7 +640,6 @@ class KnowledgePanel {
         }
     }
 
-    // NEW: Update page source display
     private updatePageSourceDisplay() {
         const pageInfo = document.getElementById("currentPageInfo")!;
         const existingContent = pageInfo.innerHTML;
@@ -721,13 +673,10 @@ class KnowledgePanel {
         }
     }
 
-    // NEW: Setup extraction mode controls
     private setupExtractionModeControls() {
-        // Add extraction mode selector to the page
         const extractButton = document.getElementById("extractKnowledge")!;
         const buttonGroup = extractButton.parentElement!;
         
-        // Create mode selector dropdown
         const modeSelector = document.createElement("div");
         modeSelector.className = "btn-group btn-group-sm ms-2";
         modeSelector.innerHTML = 
@@ -758,7 +707,6 @@ class KnowledgePanel {
         
         buttonGroup.appendChild(modeSelector);
         
-        // Add event listeners for mode selection
         document.getElementById("extractionModeMenu")!.addEventListener("click", (e) => {
             e.preventDefault();
             const target = e.target as HTMLElement;
@@ -779,27 +727,23 @@ class KnowledgePanel {
         });
     }
 
-    // NEW: Update extraction mode display
     private updateExtractionModeDisplay() {
         const button = document.getElementById("extractionModeButton")!;
         button.innerHTML = '<i class="bi bi-gear"></i> ' + this.extractionSettings.mode;
     }
 
-    // NEW: Toggle quality setting
     private toggleQualitySetting() {
         const qualities = ["fast", "balanced", "deep"];
         const currentIndex = qualities.indexOf(this.extractionSettings.quality);
         const nextIndex = (currentIndex + 1) % qualities.length;
         this.extractionSettings.quality = qualities[nextIndex] as any;
         
-        // Update the menu display
         const qualityItem = document.querySelector('[data-option="quality"]')!;
         qualityItem.innerHTML = '<i class="bi bi-sliders"></i> Quality: ' + this.extractionSettings.quality;
         
         this.saveExtractionSettings();
     }
 
-    // NEW: Load extraction settings from storage
     private async loadExtractionSettings() {
         try {
             const settings = await chrome.storage.sync.get(["extractionSettings"]);
@@ -812,7 +756,6 @@ class KnowledgePanel {
         }
     }
 
-    // NEW: Save extraction settings to storage
     private async saveExtractionSettings() {
         try {
             await chrome.storage.sync.set({ extractionSettings: this.extractionSettings });
@@ -881,7 +824,6 @@ class KnowledgePanel {
         }
     }
     private async onTabChange() {
-        // Reload page info when tab changes
         await this.loadCurrentPageInfo();
         await this.loadCachedKnowledge();
     }
@@ -897,7 +839,6 @@ class KnowledgePanel {
                     this.renderKnowledgeResults(this.knowledgeData);
                 }
             } else {
-                // Hide knowledge section if no cached data
                 const knowledgeSection =
                     document.getElementById("knowledgeSection")!;
                 knowledgeSection.className = "d-none";
@@ -944,7 +885,6 @@ class KnowledgePanel {
 
         document.body.appendChild(statusDiv);
 
-        // Auto-dismiss after 3 seconds
         setTimeout(() => {
             if (statusDiv.parentNode) {
                 statusDiv.remove();
@@ -953,7 +893,6 @@ class KnowledgePanel {
     }
 }
 
-// Initialize the knowledge panel when DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
     const panel = new KnowledgePanel();
     panel.initialize();

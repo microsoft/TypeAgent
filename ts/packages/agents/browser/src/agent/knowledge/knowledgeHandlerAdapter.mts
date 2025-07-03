@@ -7,8 +7,6 @@ import {
     findRequestedWebsites,
 } from "../websiteMemory.mjs";
 import * as website from "website-memory";
-
-// Legacy interfaces from knowledgeHandler for backward compatibility
 export interface KnowledgeExtractionResult {
     entities: Entity[];
     relationships: Relationship[];
@@ -38,17 +36,12 @@ export interface WebPageReference {
     lastIndexed: string;
 }
 
-/**
- * Adapter layer to route old knowledgeHandler API calls to websiteMemory
- * This maintains backward compatibility during the migration
- */
 export async function handleKnowledgeAction(
     actionName: string,
     parameters: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<any> {
     console.log(`[ADAPTER] Routing knowledge action: ${actionName}`);
-    
     switch (actionName) {
         case "extractKnowledgeFromPage":
             return await extractKnowledgeFromPageAdapter(context, parameters);
@@ -76,9 +69,6 @@ export async function handleKnowledgeAction(
     }
 }
 
-/**
- * Adapter for extractKnowledgeFromPage -> enhanced website knowledge extraction
- */
 async function extractKnowledgeFromPageAdapter(
     context: SessionContext<BrowserActionContext>,
     parameters: {
@@ -93,7 +83,6 @@ async function extractKnowledgeFromPageAdapter(
 ): Promise<KnowledgeExtractionResult> {
     console.log(`[ADAPTER] Extracting knowledge from: ${parameters.title} (${parameters.url})`);
 
-    // Extract text content from HTML fragments
     const textContent = parameters.htmlFragments
         .map((fragment) => fragment.text || "")
         .join("\n\n")
@@ -110,37 +99,32 @@ async function extractKnowledgeFromPageAdapter(
     }
 
     try {
-        // Create a temporary website object for knowledge extraction
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
             title: parameters.title,
-            source: "history", // Temporary classification
+            source: "history",
             visitDate: new Date().toISOString(),
-            description: textContent.substring(0, 500), // Use first 500 chars as description
+            description: textContent.substring(0, 500),
         };
 
         const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
         
-        // Extract knowledge using websiteMemory's built-in capabilities
         const knowledge = websiteObj.getKnowledge();
         
-        // Generate suggested questions if requested
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
             suggestedQuestions.push(...await generateSuggestedQuestions(knowledge, textContent, parameters.title));
         }
 
-        // Transform websiteMemory knowledge format to legacy format
         const entities: Entity[] = knowledge?.entities?.map(entity => ({
             name: entity.name,
             type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
             description: entity.facets?.find(f => f.name === "description")?.value as string,
-            confidence: 0.8, // Default confidence since websiteMemory doesn't provide this
+            confidence: 0.8,
         })) || [];
 
         const keyTopics: string[] = knowledge?.topics || [];
 
-        // Extract relationships from actions (websiteMemory represents relationships as actions)
         const relationships: Relationship[] = knowledge?.actions?.map(action => ({
             from: action.subjectEntityName || "unknown",
             relationship: action.verbs?.join(", ") || "related to",
@@ -171,9 +155,6 @@ async function extractKnowledgeFromPageAdapter(
     }
 }
 
-/**
- * Adapter for indexWebPageContent -> add website to collection with knowledge
- */
 async function indexWebPageContentAdapter(
     context: SessionContext<BrowserActionContext>,
     parameters: {
@@ -193,12 +174,10 @@ async function indexWebPageContentAdapter(
     console.log(`[ADAPTER] Indexing web page: ${parameters.title} (${parameters.url})`);
 
     try {
-        // Extract text content
         const textContent = parameters.htmlFragments
             .map((fragment) => fragment.text || "")
             .join("\n\n");
 
-        // Create website visit info
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
             title: parameters.title,
@@ -206,23 +185,18 @@ async function indexWebPageContentAdapter(
             visitDate: parameters.timestamp,
         };
 
-        // Determine page type based on content
         visitInfo.pageType = website.determinePageType(parameters.url, parameters.title);
 
-        // Create website object
         const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
 
-        // Add to website collection if it exists
         if (context.agentContext.websiteCollection) {
             context.agentContext.websiteCollection.addWebsites([websiteObj]);
             
-            // Build index if requested
             if (parameters.extractKnowledge) {
                 await context.agentContext.websiteCollection.buildIndex();
             }
         }
 
-        // Get knowledge for entity count
         const knowledge = websiteObj.getKnowledge();
         const entityCount = knowledge?.entities?.length || 0;
 
@@ -243,9 +217,6 @@ async function indexWebPageContentAdapter(
     }
 }
 
-/**
- * Adapter for queryWebKnowledge -> semantic search with answer generation
- */
 async function queryWebKnowledgeAdapter(
     context: SessionContext<BrowserActionContext>,
     parameters: {
@@ -271,12 +242,11 @@ async function queryWebKnowledgeAdapter(
             };
         }
 
-        // Use websiteMemory's semantic search
         const searchResults = await findRequestedWebsites(
             [parameters.query],
             context.agentContext,
-            false, // not exact match
-            0.3,   // lower minimum score for broader results
+            false,
+            0.3,
         );
 
         if (searchResults.length === 0) {
@@ -287,18 +257,15 @@ async function queryWebKnowledgeAdapter(
             };
         }
 
-        // Generate answer from search results
         const answer = await generateAnswerFromResults(parameters.query, searchResults);
 
-        // Create source references
         const sources: WebPageReference[] = searchResults.slice(0, 5).map((website: any) => ({
             url: website.metadata.url,
             title: website.metadata.title || website.metadata.url,
-            relevanceScore: 0.8, // Default relevance
+            relevanceScore: 0.8,
             lastIndexed: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
         }));
 
-        // Extract related entities
         const relatedEntities: Entity[] = [];
         for (const site of searchResults.slice(0, 3)) {
             const knowledge = site.getKnowledge();
@@ -330,9 +297,6 @@ async function queryWebKnowledgeAdapter(
     }
 }
 
-/**
- * Adapter for checkPageIndexStatus -> check if URL exists in collection
- */
 async function checkPageIndexStatusAdapter(
     context: SessionContext<BrowserActionContext>,
     parameters: { url: string },
@@ -348,7 +312,6 @@ async function checkPageIndexStatusAdapter(
             return { isIndexed: false, lastIndexed: null, entityCount: 0 };
         }
 
-        // Find website by URL
         const websites = websiteCollection.messages.getAll();
         const foundWebsite = websites.find((site: any) => site.metadata.url === parameters.url);
 
@@ -368,9 +331,6 @@ async function checkPageIndexStatusAdapter(
     }
 }
 
-/**
- * Adapter for getKnowledgeIndexStats -> get website collection statistics
- */
 async function getKnowledgeIndexStatsAdapter(
     context: SessionContext<BrowserActionContext>,
     parameters: {},
@@ -403,7 +363,7 @@ async function getKnowledgeIndexStatsAdapter(
             const knowledge = site.getKnowledge();
             if (knowledge) {
                 totalEntities += knowledge.entities?.length || 0;
-                totalRelationships += knowledge.actions?.length || 0; // Using actions as relationships
+                totalRelationships += knowledge.actions?.length || 0;
             }
 
             const siteDate = site.metadata.visitDate || site.metadata.bookmarkDate;
@@ -412,7 +372,6 @@ async function getKnowledgeIndexStatsAdapter(
             }
         }
 
-        // Estimate index size
         const totalContent = websites.reduce((sum: number, site: any) => 
             sum + (site.textChunks?.join("").length || 0), 0);
         const indexSize = `${Math.round(totalContent / 1024)} KB`;
@@ -436,9 +395,6 @@ async function getKnowledgeIndexStatsAdapter(
     }
 }
 
-/**
- * Adapter for clearKnowledgeIndex -> clear website collection
- */
 async function clearKnowledgeIndexAdapter(
     context: SessionContext<BrowserActionContext>,
     parameters: {},
@@ -455,7 +411,6 @@ async function clearKnowledgeIndexAdapter(
 
         const itemsCleared = websiteCollection.messages.length;
         
-        // Create new empty collection
         context.agentContext.websiteCollection = new website.WebsiteCollection();
 
         return {
@@ -471,9 +426,6 @@ async function clearKnowledgeIndexAdapter(
     }
 }
 
-/**
- * Adapter for exportKnowledgeData -> export website collection data
- */
 async function exportKnowledgeDataAdapter(
     context: SessionContext<BrowserActionContext>,
     parameters: {},
@@ -493,7 +445,7 @@ async function exportKnowledgeDataAdapter(
         const exportData: any = {
             metadata: {
                 exportDate: new Date().toISOString(),
-                version: "2.0", // Updated version for websiteMemory format
+                version: "2.0",
                 totalPages: websites.length,
             },
             webPages: websites.map((site: any) => {
@@ -529,9 +481,6 @@ async function exportKnowledgeDataAdapter(
 
 // Helper Functions
 
-/**
- * Generate suggested questions based on extracted knowledge
- */
 async function generateSuggestedQuestions(
     knowledge: any,
     content: string,
@@ -539,36 +488,29 @@ async function generateSuggestedQuestions(
 ): Promise<string[]> {
     const questions: string[] = [];
     
-    // Content-based questions
     if (knowledge.entities && knowledge.entities.length > 0) {
         const mainEntity = knowledge.entities[0];
         questions.push(`What is ${mainEntity.name}?`);
         questions.push(`Tell me more about ${mainEntity.name}`);
     }
     
-    // Topic-based questions
     if (knowledge.topics && knowledge.topics.length > 0) {
         const mainTopic = knowledge.topics[0];
         questions.push(`What else do I have about ${mainTopic}?`);
     }
     
-    // Temporal questions
     questions.push(`When did I first encounter this information?`);
     questions.push(`What other similar pages have I visited?`);
     
-    // Generic helpful questions
     questions.push(`Summarize the key points from this page`);
     questions.push(`What actions can I take based on this information?`);
     
-    return questions.slice(0, 6); // Limit to 6 questions
+    return questions.slice(0, 6);
 }
 
-/**
- * Generate answer from search results
- */
 async function generateAnswerFromResults(
     query: string,
-    results: any[], // Using any[] to avoid type issues
+    results: any[],
 ): Promise<string> {
     if (results.length === 0) {
         return "No relevant information found for your query.";
@@ -577,14 +519,12 @@ async function generateAnswerFromResults(
     const topResult = results[0];
     const resultCount = results.length;
     
-    // Build context from top results
     const context = results.slice(0, 3).map(site => {
         const knowledge = site.getKnowledge();
         const topics = knowledge?.topics?.slice(0, 3).join(", ") || "";
         return `${site.metadata.title}: ${topics}`;
     }).join("; ");
 
-    // Generate a contextual answer
     const answer = `Based on your browsing history, I found ${resultCount} relevant result${resultCount > 1 ? 's' : ''} for "${query}". ` +
         `The most relevant appears to be "${topResult.metadata.title}" (${topResult.metadata.url}). ` +
         (context ? `Related topics include: ${context}. ` : "") +
