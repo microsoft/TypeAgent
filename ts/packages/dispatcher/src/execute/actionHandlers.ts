@@ -160,14 +160,6 @@ async function executeAction(
         debugActions(actionResultToString(result));
     }
 
-    // add the action result to memory.
-    addActionResultToMemory(
-        systemContext,
-        executableAction,
-        schemaName,
-        result,
-    );
-
     // Display the action result.
     if (result.error !== undefined) {
         displayError(result.error, actionContext);
@@ -344,7 +336,9 @@ export async function executeActions(
     let actionIndex = 0;
 
     while (actionQueue.length !== 0) {
-        const { executableAction, resultEntityResolver } = actionQueue.shift()!;
+        const pending = actionQueue.shift()!;
+        const executableAction = pending.executableAction;
+
         const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
@@ -365,12 +359,20 @@ export async function executeActions(
         }
         const appAgentName = getAppAgentName(action.schemaName);
         // resolve result entities.
+        const resultEntityResolver = pending.resultEntityResolver;
+        let resolvedEntities = pending.resolvedEntities;
         if (resultEntityResolver !== undefined) {
-            await resolveEntities(
+            const resultResolvedEntities = await resolveEntities(
                 systemContext.agents,
                 action,
                 resultEntityResolver,
             );
+            if (resultResolvedEntities !== undefined) {
+                if (resolvedEntities === undefined) {
+                    resolvedEntities = [];
+                }
+                resolvedEntities.push(...resultResolvedEntities);
+            }
         }
         const result = await executeAction(
             executableAction,
@@ -402,6 +404,15 @@ export async function executeActions(
                 },
             );
         }
+
+        // add the action result to memory.
+        addActionResultToMemory(
+            systemContext,
+            executableAction,
+            resolvedEntities,
+            action.schemaName,
+            result,
+        );
 
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {
