@@ -60,7 +60,7 @@ def main():
                     if score >= 0.999:
                         output = Style.BRIGHT + output + Style.RESET_ALL
                 elif score >= 0.9:
-                    output = Fore.YELLOW + output + Fore.RESET
+                    output = Fore.BLUE + output + Fore.RESET
                 else:
                     output = Fore.RED + output + Fore.RESET
                     if score == 0.0:
