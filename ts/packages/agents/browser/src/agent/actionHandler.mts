@@ -49,14 +49,14 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
 import * as website from "website-memory";
 import {
-    extractKnowledgeFromPageDirect,
-    indexWebPageContentDirect,
-    queryWebKnowledgeDirect,
-    checkPageIndexStatusDirect,
-    getKnowledgeIndexStatsDirect,
-    clearKnowledgeIndexDirect,
-    exportKnowledgeDataDirect,
-} from "./knowledge/knowledgeHandler.mjs";
+    extractKnowledgeFromPage,
+    indexWebPageContent,
+    queryWebKnowledge,
+    checkPageIndexStatus,
+    getKnowledgeIndexStats,
+    clearKnowledgeIndex,
+    exportKnowledgeData,
+} from "./knowledge/integration.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -320,7 +320,7 @@ async function updateBrowserContext(
 
                         // Knowledge extraction actions
                         case "extractKnowledgeFromPage": {
-                            const knowledgeResult = await extractKnowledgeFromPageDirect(
+                            const knowledgeResult = await extractKnowledgeFromPage(
                                 data.params,
                                 context,
                             );
@@ -335,7 +335,7 @@ async function updateBrowserContext(
                         }
 
                         case "indexWebPageContent": {
-                            const knowledgeResult = await indexWebPageContentDirect(
+                            const knowledgeResult = await indexWebPageContent(
                                 data.params,
                                 context,
                             );
@@ -350,7 +350,7 @@ async function updateBrowserContext(
                         }
 
                         case "queryWebKnowledge": {
-                            const knowledgeResult = await queryWebKnowledgeDirect(
+                            const knowledgeResult = await queryWebKnowledge(
                                 data.params,
                                 context,
                             );
@@ -365,7 +365,7 @@ async function updateBrowserContext(
                         }
 
                         case "checkPageIndexStatus": {
-                            const knowledgeResult = await checkPageIndexStatusDirect(
+                            const knowledgeResult = await checkPageIndexStatus(
                                 data.params,
                                 context,
                             );
@@ -380,7 +380,7 @@ async function updateBrowserContext(
                         }
 
                         case "getKnowledgeIndexStats": {
-                            const knowledgeResult = await getKnowledgeIndexStatsDirect(
+                            const knowledgeResult = await getKnowledgeIndexStats(
                                 data.params,
                                 context,
                             );
@@ -395,7 +395,7 @@ async function updateBrowserContext(
                         }
 
                         case "clearKnowledgeIndex": {
-                            const knowledgeResult = await clearKnowledgeIndexDirect(
+                            const knowledgeResult = await clearKnowledgeIndex(
                                 data.params,
                                 context,
                             );
@@ -410,7 +410,7 @@ async function updateBrowserContext(
                         }
 
                         case "exportKnowledgeData": {
-                            const knowledgeResult = await exportKnowledgeDataDirect(
+                            const knowledgeResult = await exportKnowledgeData(
                                 data.params,
                                 context,
                             );

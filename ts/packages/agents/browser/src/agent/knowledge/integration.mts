@@ -12,7 +12,7 @@ import {
     WebPageReference,
 } from "./schema/knowledgeExtraction.mjs";
 
-export async function extractKnowledgeFromPageDirect(
+export async function extractKnowledgeFromPage(
     parameters: {
         url: string;
         title: string;
@@ -53,7 +53,7 @@ export async function extractKnowledgeFromPageDirect(
         
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
-            suggestedQuestions.push(...await generateSuggestedQuestionsDirect(knowledge, textContent, parameters.title));
+            suggestedQuestions.push(...await generateSuggestedQuestions(knowledge, textContent, parameters.title));
         }
 
         const entities: Entity[] = knowledge?.entities?.map(entity => ({
@@ -93,7 +93,7 @@ export async function extractKnowledgeFromPageDirect(
     }
 }
 
-export async function indexWebPageContentDirect(
+export async function indexWebPageContent(
     parameters: {
         url: string;
         title: string;
@@ -150,7 +150,7 @@ export async function indexWebPageContentDirect(
     }
 }
 
-export async function queryWebKnowledgeDirect(
+export async function queryWebKnowledge(
     parameters: {
         query: string;
         url?: string;
@@ -188,7 +188,7 @@ export async function queryWebKnowledgeDirect(
             };
         }
 
-        const answer = await generateAnswerFromResultsDirect(parameters.query, searchResults);
+        const answer = await generateAnswerFromResults(parameters.query, searchResults);
 
         const sources: WebPageReference[] = searchResults.slice(0, 5).map((website: any) => ({
             url: website.metadata.url,
@@ -226,7 +226,7 @@ export async function queryWebKnowledgeDirect(
     }
 }
 
-export async function checkPageIndexStatusDirect(
+export async function checkPageIndexStatus(
     parameters: { url: string },
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -260,7 +260,7 @@ export async function checkPageIndexStatusDirect(
     }
 }
 
-export async function getKnowledgeIndexStatsDirect(
+export async function getKnowledgeIndexStats(
     parameters: {},
     context: SessionContext<BrowserActionContext>,
 ): Promise<{
@@ -324,7 +324,7 @@ export async function getKnowledgeIndexStatsDirect(
     }
 }
 
-export async function clearKnowledgeIndexDirect(
+export async function clearKnowledgeIndex(
     parameters: {},
     context: SessionContext<BrowserActionContext>,
 ): Promise<{ success: boolean; message: string }> {
@@ -354,7 +354,7 @@ export async function clearKnowledgeIndexDirect(
     }
 }
 
-export async function exportKnowledgeDataDirect(
+export async function exportKnowledgeData(
     parameters: {},
     context: SessionContext<BrowserActionContext>,
 ): Promise<{ data: any; exportDate: string }> {
@@ -407,7 +407,7 @@ export async function exportKnowledgeDataDirect(
     }
 }
 
-async function generateSuggestedQuestionsDirect(
+async function generateSuggestedQuestions(
     knowledge: any,
     content: string,
     title: string,
@@ -433,7 +433,7 @@ async function generateSuggestedQuestionsDirect(
     return questions.slice(0, 6);
 }
 
-async function generateAnswerFromResultsDirect(
+async function generateAnswerFromResults(
     query: string,
     results: any[],
 ): Promise<string> {
