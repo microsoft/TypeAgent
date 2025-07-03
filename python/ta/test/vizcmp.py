@@ -2,15 +2,17 @@ import os
 import glob
 import re
 import statistics
+import sys
 
 from colorama import Back, Fore, Style
 
 
 def main():
+    files = sys.argv[1:] or glob.glob("evals/eval-*.txt")
     table = {}  # {file: {counter: score, ...}, ...}
 
     # Fill table with scoring data from eval files
-    for file in glob.glob("evals/eval-*.txt"):
+    for file in files:
         with open(file, "r") as f:
             lines = f.readlines()
         i = lines.index("==================================================\n")
