@@ -18,6 +18,7 @@ import {
 import { getAppAgentName } from "../internal.js";
 import {
     ActionContext,
+    Entity,
     ResolveEntityResult,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -470,11 +471,26 @@ export async function resolveEntities(
         );
     }
 
+    let resolvedEntities: Entity[] | undefined;
+    const trackedEntityResolver: EntityResolver = {
+        resolve: async (...args) => {
+            const result = await entityResolver.resolve(...args);
+            if (result !== undefined) {
+                if (resolvedEntities === undefined) {
+                    resolvedEntities = [];
+                }
+                resolvedEntities.push(result);
+            }
+            return result;
+        },
+        setResultEntity: entityResolver.setResultEntity.bind(entityResolver),
+    };
+
     const entities = await getParameterObjectEntities(
         action,
         parameters,
         parameterType,
-        entityResolver,
+        trackedEntityResolver,
         action.entities as EntityObject | undefined,
     );
     if (entities !== undefined) {
@@ -487,11 +503,12 @@ export async function resolveEntities(
         );
         action.entities = entities as any;
     }
-    return;
+    return resolvedEntities;
 }
 
 export type PendingAction = {
     executableAction: ExecutableAction;
+    resolvedEntities?: Entity[] | undefined;
     resultEntityResolver?: EntityResolver | undefined;
 };
 
@@ -517,7 +534,11 @@ export async function toPendingActions(
     const pendingActions: PendingAction[] = [];
 
     for (const executableAction of actions) {
-        await resolveEntities(agents, executableAction.action, entityResolver);
+        const resolvedEntities = await resolveEntities(
+            agents,
+            executableAction.action,
+            entityResolver,
+        );
 
         if (entityResolver.clarifyResolvedEntities.length > 0) {
             const clarifyEntityAction: TypeAgentAction<ClarifyEntityAction> = {
@@ -549,6 +570,7 @@ export async function toPendingActions(
         }
         const pending: PendingAction = {
             executableAction,
+            resolvedEntities,
             resultEntityResolver,
         };
         pendingActions.push(pending);

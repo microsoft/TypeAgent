@@ -156,7 +156,9 @@ export function writeConversationSearchResult(
         out.writeLine("No matches");
         return;
     }
-
+    out.writeLine(
+        `Total knowledge matches: ${searchResult.knowledgeMatches.size}`,
+    );
     if (showKnowledge) {
         writeKnowledgeSearchResults(
             out,
@@ -165,8 +167,9 @@ export function writeConversationSearchResult(
             options,
         );
     }
+
     out.writeLine(
-        `Total knowledge matches: ${searchResult.knowledgeMatches.size}`,
+        `Total Message matches: ${searchResult.messageMatches.length}`,
     );
     if (showMessages) {
         writeScoredMessages(
@@ -176,13 +179,9 @@ export function writeConversationSearchResult(
             options,
         );
     }
-
-    out.writeLine(
-        `Total Message matches: ${searchResult.messageMatches.length}`,
-    );
 }
 
-function writeKnowledgeSearchResults(
+export function writeKnowledgeSearchResults(
     out: StyledOutput,
     conversation: kp.IConversation,
     results: Map<kp.KnowledgeType, kp.SemanticRefSearchResult>,
