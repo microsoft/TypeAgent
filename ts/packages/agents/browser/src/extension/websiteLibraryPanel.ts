@@ -48,9 +48,6 @@ interface SearchFilters {
     sourceType?: "bookmarks" | "history";
     domain?: string;
     minRelevance?: number;
-    knowledgeStatus?: "extracted" | "pending" | "none";
-    entityTypes?: string[];
-    minConfidence?: number;
 }
 
 interface KnowledgeStatus {
@@ -224,9 +221,6 @@ class WebsiteLibraryPanel {
         const relevanceFilter = document.getElementById(
             "relevanceFilter",
         ) as HTMLInputElement;
-        const confidenceFilter = document.getElementById(
-            "confidenceFilter",
-        ) as HTMLInputElement;
 
         // Search input handlers
         searchInput.addEventListener("input", (e) => {
@@ -251,13 +245,6 @@ class WebsiteLibraryPanel {
                 `${value}%`;
         });
 
-        // Confidence filter update
-        confidenceFilter.addEventListener("input", (e) => {
-            const value = (e.target as HTMLInputElement).value;
-            document.getElementById("confidenceValue")!.textContent =
-                `${value}%`;
-        });
-
         // Filter change handlers
         [
             "dateFrom",
@@ -265,8 +252,6 @@ class WebsiteLibraryPanel {
             "sourceFilter",
             "domainFilter",
             "relevanceFilter",
-            "knowledgeStatusFilter",
-            "confidenceFilter",
         ].forEach((id) => {
             const element = document.getElementById(id);
             if (element) {
@@ -1238,13 +1223,6 @@ class WebsiteLibraryPanel {
             (document.getElementById("relevanceFilter") as HTMLInputElement)
                 .value,
         );
-        const knowledgeStatus = (
-            document.getElementById("knowledgeStatusFilter") as HTMLSelectElement
-        ).value;
-        const confidence = parseInt(
-            (document.getElementById("confidenceFilter") as HTMLInputElement)
-                .value,
-        );
 
         const filters: SearchFilters = {};
         if (dateFrom) filters.dateFrom = dateFrom;
@@ -1253,9 +1231,6 @@ class WebsiteLibraryPanel {
             filters.sourceType = sourceType as "bookmarks" | "history";
         if (domain) filters.domain = domain;
         if (relevance > 0) filters.minRelevance = relevance / 100;
-        if (knowledgeStatus) 
-            filters.knowledgeStatus = knowledgeStatus as "extracted" | "pending" | "none";
-        if (confidence > 0) filters.minConfidence = confidence / 100;
 
         return filters;
     }
@@ -1264,19 +1239,15 @@ class WebsiteLibraryPanel {
         // Enhance results with knowledge status
         const enhancedWebsites = await this.checkKnowledgeStatus(results.websites);
         
-        // Apply knowledge-based filtering on client side
-        const filteredWebsites = this.applyKnowledgeFilters(enhancedWebsites, results.filters);
-        
-        this.currentResults = filteredWebsites;
-        results.websites = filteredWebsites;
+        this.currentResults = enhancedWebsites;
+        results.websites = enhancedWebsites;
 
         // Show results card
         const resultsCard = document.getElementById("searchResultsCard")!;
         resultsCard.classList.remove("d-none");
         resultsCard.scrollIntoView({ behavior: "smooth" });
 
-        // Render summary (update count after filtering)
-        results.summary.totalFound = filteredWebsites.length;
+        // Render summary
         this.renderResultsSummary(results);
 
         // Render AI summary if available
@@ -1286,28 +1257,6 @@ class WebsiteLibraryPanel {
 
         // Render results based on current view mode
         this.rerenderResults();
-    }
-
-    private applyKnowledgeFilters(websites: Website[], filters: SearchFilters): Website[] {
-        return websites.filter(website => {
-            // Knowledge status filter
-            if (filters.knowledgeStatus) {
-                const status = website.knowledge?.status || 'none';
-                if (status !== filters.knowledgeStatus) {
-                    return false;
-                }
-            }
-            
-            // Knowledge confidence filter
-            if (filters.minConfidence && filters.minConfidence > 0) {
-                const confidence = website.knowledge?.confidence || 0;
-                if (confidence < filters.minConfidence) {
-                    return false;
-                }
-            }
-            
-            return true;
-        });
     }
 
     private renderResultsSummary(results: SearchResult) {
