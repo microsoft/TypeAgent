@@ -1,0 +1,246 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>TypeAgent Knowledge Panel</title>
+    <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css" />
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-size: 0.875rem;
+        background-color: #f8f9fa;
+      }
+      .knowledge-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        margin: -0.5rem -0.5rem 1rem -0.5rem;
+      }
+      .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+      }
+      .status-connected {
+        background-color: #28a745;
+      }
+      .status-disconnected {
+        background-color: #dc3545;
+      }
+      .status-indexing {
+        background-color: #ffc107;
+      }
+      .knowledge-card {
+        border: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1rem;
+      }
+      .entity-badge {
+        font-size: 0.75rem;
+        margin-right: 0.25rem;
+      }
+      .relationship-item {
+        padding: 0.5rem;
+        border-left: 3px solid #667eea;
+        background-color: #f8f9fa;
+        margin-bottom: 0.5rem;
+      }
+      .question-item {
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      .question-item:hover {
+        background-color: #e9ecef;
+      }
+      .auto-index-toggle {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid p-3">
+      <!-- Header Section -->
+      <div class="knowledge-header rounded">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h4 class="mb-1"><i class="bi bi-brain"></i> Knowledge Panel</h4>
+            <small id="connectionStatus">
+              <span class="status-indicator status-connected"></span>
+              Connected to TypeAgent
+            </small>
+          </div>
+          <div class="auto-index-toggle">
+            <div class="form-check form-switch">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="autoIndexToggle"
+              />
+              <label class="form-check-label text-white" for="autoIndexToggle">
+                Auto-index
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Page Section -->
+      <div class="knowledge-card card">
+        <div
+          class="card-header d-flex justify-content-between align-items-center"
+        >
+          <h6 class="mb-0"><i class="bi bi-globe"></i> Current Page</h6>
+          <div class="btn-group btn-group-sm">
+            <button id="extractKnowledge" class="btn btn-primary">
+              <i class="bi bi-search"></i> Extract
+            </button>
+            <button id="indexPage" class="btn btn-outline-primary">
+              <i class="bi bi-plus-circle"></i> Index
+            </button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="currentPageInfo">
+            <div class="text-center text-muted">
+              <i class="bi bi-hourglass-split"></i>
+              <p class="mb-0">Loading page information...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Knowledge Results Section -->
+      <div id="knowledgeSection" class="d-none">
+        <!-- Entities Card -->
+        <div class="knowledge-card card">
+          <div class="card-header">
+            <h6 class="mb-0">
+              <i class="bi bi-tags"></i> Entities
+              <span id="entitiesCount" class="badge bg-secondary ms-2">0</span>
+            </h6>
+          </div>
+          <div class="card-body">
+            <div id="entitiesContainer">
+              <div class="text-muted text-center">
+                <i class="bi bi-info-circle"></i>
+                No entities extracted yet
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Relationships Card -->
+        <div class="knowledge-card card">
+          <div class="card-header">
+            <h6 class="mb-0">
+              <i class="bi bi-diagram-3"></i> Relationships
+              <span id="relationshipsCount" class="badge bg-secondary ms-2"
+                >0</span
+              >
+            </h6>
+          </div>
+          <div class="card-body">
+            <div id="relationshipsContainer">
+              <div class="text-muted text-center">
+                <i class="bi bi-info-circle"></i>
+                No relationships found yet
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Key Topics Card -->
+        <div class="knowledge-card card">
+          <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-bookmark"></i> Key Topics</h6>
+          </div>
+          <div class="card-body">
+            <div id="topicsContainer">
+              <div class="text-muted text-center">
+                <i class="bi bi-info-circle"></i>
+                No topics identified yet
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suggested Questions Section -->
+      <div id="questionsSection" class="knowledge-card card d-none">
+        <div class="card-header">
+          <h6 class="mb-0">
+            <i class="bi bi-question-circle"></i> Ask About This Page
+          </h6>
+        </div>
+        <div class="card-body">
+          <div id="suggestedQuestions" class="mb-3">
+            <!-- Suggested questions will be populated here -->
+          </div>
+
+          <div class="input-group">
+            <input
+              type="text"
+              id="knowledgeQuery"
+              class="form-control form-control-sm"
+              placeholder="What would you like to know?"
+            />
+            <button id="submitQuery" class="btn btn-outline-primary btn-sm">
+              <i class="bi bi-send"></i>
+            </button>
+          </div>
+
+          <div id="queryResults" class="mt-3">
+            <!-- Query results will appear here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Index Status Section -->
+      <div class="knowledge-card card">
+        <div class="card-header">
+          <h6 class="mb-0"><i class="bi bi-database"></i> Index Status</h6>
+        </div>
+        <div class="card-body">
+          <div id="indexStats">
+            <div class="row text-center">
+              <div class="col-4">
+                <div class="h5 mb-0" id="totalPages">0</div>
+                <small class="text-muted">Pages</small>
+              </div>
+              <div class="col-4">
+                <div class="h5 mb-0" id="totalEntities">0</div>
+                <small class="text-muted">Entities</small>
+              </div>
+              <div class="col-4">
+                <div class="h5 mb-0" id="lastIndexed">Never</div>
+                <small class="text-muted">Last Index</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <button
+              id="openSettings"
+              class="btn btn-outline-secondary btn-sm w-100"
+            >
+              <i class="bi bi-gear"></i> Configure Knowledge Settings
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="knowledgePanel.js"></script>
+  </body>
+</html>

@@ -26,7 +26,7 @@ type SingleFlagDefinition<T extends FlagDefinitionValueTypes> = {
     description: string;
     multiple?: false;
     char?: string;
-    type?: FlagValueLiteral<T>;
+    type?: FlagValueLiteral<T>; // default is the type of the default value, or "string" if no default value
     default?: T;
 };
 
@@ -34,7 +34,7 @@ type MultipleFlagDefinition<T extends FlagDefinitionValueTypes> = {
     description: string;
     multiple: true;
     char?: string;
-    type?: FlagValueLiteral<T>;
+    type?: FlagValueLiteral<T>; // default is the type of the default value, or "string" if no default value
     default?: readonly T[];
 };
 
@@ -49,7 +49,7 @@ export type FlagDefinitions = Record<string, FlagDefinition>;
 // Arguments
 export type ArgDefinition = {
     description: string;
-    type?: "string" | "number" | "json";
+    type?: "string" | "number" | "json"; // default is "string"
     optional?: boolean;
     multiple?: boolean;
     implicitQuotes?: boolean; // implicitly assume there are quotes and take the whole string as the argument
