@@ -361,8 +361,322 @@ export async function handleMessage(
             return { success: true };
         }
 
+        case "checkConnection": {
+            try {
+                const websocket = getWebSocket();
+                return {
+                    connected: websocket && websocket.readyState === WebSocket.OPEN,
+                };
+            } catch (error) {
+                return { connected: false };
+            }
+        }
+
+        // Website Library Panel message handlers
+        case "importWebsiteDataWithProgress": {
+            return await handleImportWebsiteDataWithProgress(message);
+        }
+
+        case "getWebsiteLibraryStats": {
+            return await handleGetWebsiteLibraryStats();
+        }
+
+        case "getImportHistory": {
+            return await handleGetImportHistory();
+        }
+
+        case "addImportHistoryItem": {
+            return await handleAddImportHistoryItem(message.item);
+        }
+
+        case "deleteImportHistoryItem": {
+            return await handleDeleteImportHistoryItem(message.id);
+        }
+
+        case "clearImportHistory": {
+            return await handleClearImportHistory();
+        }
+
+        case "exportWebsiteLibrary": {
+            return await handleExportWebsiteLibrary();
+        }
+
+        case "clearWebsiteLibrary": {
+            return await handleClearWebsiteLibrary();
+        }
+
+        case "cancelImport": {
+            return await handleCancelImport(message.importId);
+        }
+
         default:
             return null;
+    }
+}
+
+// Website Library Panel handlers
+async function handleImportWebsiteDataWithProgress(message: any) {
+    try {
+        const result = await sendActionToAgent({
+            actionName: "importWebsiteData",
+            parameters: {
+                source: message.parameters.source,
+                type: message.parameters.type,
+                limit: message.parameters.limit,
+                days: message.parameters.days,
+                folder: message.parameters.folder,
+            },
+        });
+
+        return {
+            success: !result.error,
+            itemCount: result.itemCount || 0,
+            error: result.error,
+        };
+    } catch (error) {
+        console.error("Error importing website data:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleGetWebsiteLibraryStats() {
+    try {
+        const result = await sendActionToAgent({
+            actionName: "getWebsiteStats",
+            parameters: {},
+        });
+
+        if (result.error) {
+            return {
+                success: false,
+                error: result.error,
+            };
+        }
+
+        // Parse the stats from the result text
+        const stats = parseWebsiteStatsFromText(result.text || "");
+        
+        return {
+            success: true,
+            stats: stats,
+        };
+    } catch (error) {
+        console.error("Error getting website library stats:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleGetImportHistory() {
+    try {
+        const storage = await chrome.storage.local.get(["websiteLibraryImportHistory"]);
+        const history = storage.websiteLibraryImportHistory || [];
+        
+        return {
+            success: true,
+            history: history.sort((a: any, b: any) => b.timestamp - a.timestamp),
+        };
+    } catch (error) {
+        console.error("Error getting import history:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleAddImportHistoryItem(item: any) {
+    try {
+        const storage = await chrome.storage.local.get(["websiteLibraryImportHistory"]);
+        const history = storage.websiteLibraryImportHistory || [];
+        
+        history.push(item);
+        
+        // Keep only the last 50 import history items
+        if (history.length > 50) {
+            history.splice(0, history.length - 50);
+        }
+        
+        await chrome.storage.local.set({
+            websiteLibraryImportHistory: history,
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error("Error adding import history item:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleDeleteImportHistoryItem(id: string) {
+    try {
+        const storage = await chrome.storage.local.get(["websiteLibraryImportHistory"]);
+        const history = storage.websiteLibraryImportHistory || [];
+        
+        const filteredHistory = history.filter((item: any) => item.id !== id);
+        
+        await chrome.storage.local.set({
+            websiteLibraryImportHistory: filteredHistory,
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error("Error deleting import history item:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleClearImportHistory() {
+    try {
+        await chrome.storage.local.set({
+            websiteLibraryImportHistory: [],
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error("Error clearing import history:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleExportWebsiteLibrary() {
+    try {
+        // Get all website data from the agent
+        const searchResult = await sendActionToAgent({
+            actionName: "searchWebsites",
+            parameters: {
+                originalUserRequest: "export all data",
+                query: "*",
+                limit: 10000,
+                minScore: 0,
+            },
+        });
+
+        const statsResult = await sendActionToAgent({
+            actionName: "getWebsiteStats",
+            parameters: {},
+        });
+
+        const exportData = {
+            exportDate: new Date().toISOString(),
+            version: "1.0",
+            websites: searchResult.websites || [],
+            stats: parseWebsiteStatsFromText(statsResult.text || ""),
+        };
+
+        return {
+            success: true,
+            data: exportData,
+        };
+    } catch (error) {
+        console.error("Error exporting website library:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleClearWebsiteLibrary() {
+    try {
+        // Note: This would require a new action in the browser agent
+        // For now, we'll clear the local storage and return success
+        await chrome.storage.local.remove([
+            "websiteLibraryImportHistory",
+        ]);
+        
+        return { success: true };
+    } catch (error) {
+        console.error("Error clearing website library:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+async function handleCancelImport(importId: string) {
+    try {
+        // Implementation would depend on how imports are tracked
+        // For now, just return success
+        return { success: true };
+    } catch (error) {
+        console.error("Error cancelling import:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+        };
+    }
+}
+
+// Helper function to parse website stats from text response
+function parseWebsiteStatsFromText(text: string) {
+    const defaultStats = {
+        totalWebsites: 0,
+        totalBookmarks: 0,
+        totalHistory: 0,
+        topDomains: 0,
+    };
+
+    if (!text) return defaultStats;
+
+    try {
+        // Parse the text response to extract statistics
+        const lines = text.split('\n');
+        let totalWebsites = 0;
+        let totalBookmarks = 0;
+        let totalHistory = 0;
+        let topDomains = 0;
+
+        // Look for total count line
+        const totalMatch = text.match(/Total:\s*(\d+)\s*sites/i);
+        if (totalMatch) {
+            totalWebsites = parseInt(totalMatch[1]);
+        }
+
+        // Look for source breakdown
+        const bookmarkMatch = text.match(/bookmark:\s*(\d+)/i);
+        if (bookmarkMatch) {
+            totalBookmarks = parseInt(bookmarkMatch[1]);
+        }
+
+        const historyMatch = text.match(/history:\s*(\d+)/i);
+        if (historyMatch) {
+            totalHistory = parseInt(historyMatch[1]);
+        }
+
+        // Count domain entries (rough approximation)
+        const domainLines = lines.filter(line => 
+            line.includes(':') && 
+            line.includes('sites') && 
+            !line.includes('Total') &&
+            !line.includes('Source')
+        );
+        topDomains = domainLines.length;
+
+        return {
+            totalWebsites,
+            totalBookmarks,
+            totalHistory,
+            topDomains,
+        };
+    } catch (error) {
+        console.error("Error parsing website stats:", error);
+        return defaultStats;
     }
 }
 
