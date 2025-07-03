@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { htmlPrefilter } from "jquery";
 import { setStoredPageProperty, getStoredPageProperty } from "./storage";
 
 let recording = false;
@@ -31,52 +30,35 @@ class ActionDiscoveryPanel {
     async initialize() {
         console.log("Initializing Action Discovery Panel");
 
-        // Setup event listeners
         this.setupEventListeners();
-
-        // Load current page URL
         launchUrl = await this.getActiveTabUrl();
-
-        // Update connection status
         await this.updateConnectionStatus();
-
-        // Load auto-discovery setting
         await this.loadAutoDiscoverySettings();
-
-        // Initial schema fetch
         await this.requestSchemaUpdate();
-
-        // Load user actions
         await this.updateUserActionsUI();
     }
 
     private setupEventListeners() {
-        // Refresh detected actions
         document
             .getElementById("refreshDetectedActions")!
             .addEventListener("click", () => this.requestSchemaUpdate(true));
 
-        // Add new action
         document
             .getElementById("addPageAction")!
             .addEventListener("click", () => this.toggleActionForm());
 
-        // Clear actions
         document
             .getElementById("clearRecordedActions")!
             .addEventListener("click", () => this.clearRecordedUserAction());
 
-        // Save action
         document
             .getElementById("saveAction")!
             .addEventListener("click", () => this.saveUserAction());
 
-        // Cancel action
         document
             .getElementById("cancelAddingAction")!
             .addEventListener("click", () => this.cancelActionForm());
 
-        // Recording controls
         document
             .getElementById("recordAction")!
             .addEventListener("click", () => this.startRecording());
@@ -85,7 +67,6 @@ class ActionDiscoveryPanel {
             .getElementById("stopRecording")!
             .addEventListener("click", () => this.stopRecording());
 
-        // Auto-discovery toggle
         document
             .getElementById("autoDiscoveryToggle")!
             .addEventListener("change", (e) => {
@@ -93,7 +74,6 @@ class ActionDiscoveryPanel {
                 this.toggleAutoDiscovery(checkbox.checked);
             });
 
-        // Listen for tab changes
         chrome.tabs.onActivated.addListener(() => {
             this.onTabChange();
         });
@@ -117,7 +97,6 @@ class ActionDiscoveryPanel {
         const indicator = statusElement.querySelector(".status-indicator")!;
 
         try {
-            // Test connection to extension
             const response = await chrome.runtime.sendMessage({ type: "ping" });
             this.connectionStatus.connected = true;
 
@@ -202,7 +181,6 @@ class ActionDiscoveryPanel {
         ) as HTMLButtonElement;
         const originalHtml = refreshButton.innerHTML;
 
-        // Show loading state
         this.showLoadingState(itemsList, "Scanning page for actions...");
         refreshButton.innerHTML =
             '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning...';
@@ -297,7 +275,6 @@ class ActionDiscoveryPanel {
     }
 
     private showActionDetails(action: any) {
-        // Create modal or expandable details view
         const modal = document.createElement("div");
         modal.className = "modal fade";
         modal.innerHTML = `
@@ -315,11 +292,9 @@ class ActionDiscoveryPanel {
         `;
         document.body.appendChild(modal);
 
-        // Show modal using Bootstrap
         const bsModal = new (window as any).bootstrap.Modal(modal);
         bsModal.show();
 
-        // Clean up when hidden
         modal.addEventListener("hidden.bs.modal", () => {
             document.body.removeChild(modal);
         });
@@ -338,12 +313,10 @@ class ActionDiscoveryPanel {
         const formTitle = document.getElementById("formTitle")!;
 
         if (form.classList.contains("d-none")) {
-            // Show form
             form.classList.remove("d-none");
             formTitle.textContent = "Create New Action";
             this.clearFormFields();
         } else {
-            // Hide form
             form.classList.add("d-none");
         }
     }
@@ -353,7 +326,6 @@ class ActionDiscoveryPanel {
         form.classList.add("d-none");
         this.clearFormFields();
 
-        // Stop recording if active
         if (recording) {
             this.stopRecording();
         }
@@ -376,7 +348,6 @@ class ActionDiscoveryPanel {
               </div>
         `;
 
-        // Reset recording state
         this.resetRecordingUI();
     }
 
@@ -398,7 +369,6 @@ class ActionDiscoveryPanel {
                 .classList.remove("d-none");
             this.updateRecordingStatus(true);
 
-            // Clear previous recording data
             const stepsContainer = document.getElementById(
                 "stepsTimelineContainer",
             )!;
@@ -469,7 +439,6 @@ class ActionDiscoveryPanel {
         ) as HTMLButtonElement;
         const originalContent = saveButton.innerHTML;
 
-        // Show saving state
         saveButton.innerHTML =
             '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
         saveButton.disabled = true;
@@ -531,7 +500,6 @@ class ActionDiscoveryPanel {
 
             const processedActionName = response.intentJson.actionName;
 
-            // Save all action data
             await this.addEntryToStoredPageProperties(
                 processedActionName,
                 "userActions",
@@ -745,7 +713,6 @@ class ActionDiscoveryPanel {
             </div>
         `;
 
-        // Add event listeners for buttons
         const viewButton = actionElement.querySelector('[data-action="view"]');
         const deleteButton = actionElement.querySelector(
             '[data-action="delete"]',
@@ -767,7 +734,6 @@ class ActionDiscoveryPanel {
 
         userActionsContainer.appendChild(actionElement);
 
-        // Render steps in the details section
         if (action.steps) {
             const stepsContent = actionElement.querySelector(
                 `#stepsContent${index}`,
@@ -853,7 +819,6 @@ class ActionDiscoveryPanel {
   }
 `;
 
-        // Attach event listeners
         container.querySelectorAll(".toggle-details-btn").forEach((button) => {
             button.addEventListener("click", () => {
                 const index = button.getAttribute("data-index");
@@ -891,7 +856,6 @@ class ActionDiscoveryPanel {
     }
 
     private filterStepData(step: any) {
-        // Remove internal properties that are not useful for display
         const { boundingBox, timestamp, id, ...filteredStep } = step;
         return filteredStep;
     }
@@ -937,7 +901,6 @@ class ActionDiscoveryPanel {
         message: string,
         type: "success" | "error" | "info" = "info",
     ) {
-        // Create a toast notification
         const toast = document.createElement("div");
         toast.className = `alert alert-${type === "error" ? "danger" : type === "success" ? "success" : "info"} alert-dismissible position-fixed`;
         toast.style.cssText =
@@ -950,7 +913,6 @@ class ActionDiscoveryPanel {
 
         document.body.appendChild(toast);
 
-        // Auto-remove after 3 seconds
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.parentNode.removeChild(toast);
@@ -986,7 +948,6 @@ class ActionDiscoveryPanel {
                     </div>
                 `;
 
-                // Add click handler for details
                 const detailsButton = actionItem.querySelector("button");
                 detailsButton?.addEventListener("click", () => {
                     this.showActionDetails(action);
@@ -1005,29 +966,9 @@ class ActionDiscoveryPanel {
     }
 }
 
-// Initialize the panel when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
     const panel = new ActionDiscoveryPanel();
     await panel.initialize();
 
-    // Save last scan time
     await chrome.storage.local.set({ lastScanTime: Date.now() });
 });
-
-// Legacy functions for backwards compatibility (can be removed after full migration)
-async function getActiveTabUrl(): Promise<string | null> {
-    const panel = new ActionDiscoveryPanel();
-    return await (panel as any).getActiveTabUrl();
-}
-
-function copySchemaToClipboard() {
-    chrome.runtime.sendMessage({ type: "refreshSchema" }, (schema) => {
-        const schemaText = JSON.stringify(schema, null, 2);
-        navigator.clipboard
-            .writeText(schemaText)
-            .then(() => {
-                alert("Schema copied to clipboard!");
-            })
-            .catch((err) => console.error("Failed to copy schema: ", err));
-    });
-}
