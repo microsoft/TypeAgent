@@ -409,6 +409,27 @@ export async function handleMessage(
             return await handleCancelImport(message.importId);
         }
 
+        // Enhanced search message handlers
+        case "searchWebsitesEnhanced": {
+            return await handleSearchWebsitesEnhanced(message);
+        }
+
+        case "getSearchSuggestions": {
+            return await handleGetSearchSuggestions(message);
+        }
+
+        case "saveSearchHistory": {
+            return await handleSaveSearchHistory(message);
+        }
+
+        case "getSearchHistory": {
+            return await handleGetSearchHistory();
+        }
+
+        case "getSuggestedSearches": {
+            return await handleGetSuggestedSearches();
+        }
+
         default:
             return null;
     }
@@ -623,6 +644,139 @@ async function handleCancelImport(importId: string) {
     }
 }
 
+// Enhanced search handlers
+async function handleSearchWebsitesEnhanced(message: any) {
+    try {
+        const startTime = Date.now();
+        
+        // Perform the search using existing searchWebsites action
+        const searchResult = await sendActionToAgent({
+            actionName: "searchWebsites",
+            parameters: {
+                originalUserRequest: message.parameters.query,
+                query: message.parameters.query,
+                limit: message.parameters.limit || 50,
+                minScore: message.parameters.filters?.minRelevance || 0,
+            }
+        });
+
+        const searchTime = Date.now() - startTime;
+        
+        // Generate AI summary if requested
+        let summary = null;
+        if (message.parameters.includeSummary && searchResult.websites?.length > 0) {
+            summary = await generateSearchSummary(searchResult.websites, message.parameters.query);
+        }
+
+        return {
+            success: true,
+            results: {
+                websites: searchResult.websites || [],
+                summary: {
+                    text: summary || "",
+                    totalFound: searchResult.websites?.length || 0,
+                    searchTime: searchTime,
+                    sources: extractSources(searchResult.websites || []),
+                    entities: searchResult.entities || []
+                },
+                query: message.parameters.query,
+                filters: message.parameters.filters || {}
+            }
+        };
+    } catch (error) {
+        console.error("Error in enhanced search:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+        };
+    }
+}
+
+async function handleGetSearchSuggestions(message: any) {
+    try {
+        // Get recent searches from storage for suggestions
+        const storage = await chrome.storage.local.get(["searchHistory"]);
+        const searchHistory = storage.searchHistory || [];
+        
+        const query = message.parameters.query.toLowerCase();
+        const suggestions = searchHistory
+            .filter((search: string) => search.toLowerCase().includes(query))
+            .slice(0, message.parameters.limit || 5);
+
+        return {
+            success: true,
+            suggestions: suggestions
+        };
+    } catch (error) {
+        console.error("Error getting search suggestions:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+        };
+    }
+}
+
+async function handleSaveSearchHistory(message: any) {
+    try {
+        const storage = await chrome.storage.local.get(["searchHistory"]);
+        const searchHistory = storage.searchHistory || [];
+        
+        // Add new search to beginning, remove duplicates, keep last 20
+        const updatedHistory = [message.query, ...searchHistory.filter((s: string) => s !== message.query)].slice(0, 20);
+        
+        await chrome.storage.local.set({
+            searchHistory: updatedHistory
+        });
+        
+        return { success: true };
+    } catch (error) {
+        console.error("Error saving search history:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+        };
+    }
+}
+
+async function handleGetSearchHistory() {
+    try {
+        const storage = await chrome.storage.local.get(["searchHistory"]);
+        return {
+            success: true,
+            searches: storage.searchHistory || []
+        };
+    } catch (error) {
+        console.error("Error getting search history:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+        };
+    }
+}
+
+async function handleGetSuggestedSearches() {
+    try {
+        // Get website stats to generate suggestions
+        const statsResult = await sendActionToAgent({
+            actionName: "getWebsiteStats",
+            parameters: {},
+        });
+
+        const suggestions = generateSuggestionsFromStats(statsResult.text || "");
+        
+        return {
+            success: true,
+            suggestions: suggestions
+        };
+    } catch (error) {
+        console.error("Error getting suggested searches:", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+        };
+    }
+}
+
 // Helper function to parse website stats from text response
 function parseWebsiteStatsFromText(text: string) {
     const defaultStats = {
@@ -799,4 +953,85 @@ async function shouldIndexPage(url: string): Promise<boolean> {
     }
 
     return true;
+}
+
+// Search helper functions
+async function generateSearchSummary(websites: any[], query: string): Promise<string> {
+    try {
+        // Use the first few websites to generate a summary
+        const topSites = websites.slice(0, 5);
+        const domains = [...new Set(topSites.map(site => site.domain))];
+        const sources = topSites.filter(site => site.source === 'bookmarks').length > 0 ? 
+            (topSites.filter(site => site.source === 'history').length > 0 ? 'bookmarks and browsing history' : 'bookmarks') :
+            'browsing history';
+        
+        return `Found ${websites.length} results for "${query}" across ${domains.length} domains from your ${sources}. Top domains include: ${domains.slice(0, 3).join(', ')}.`;
+    } catch (error) {
+        console.error("Error generating search summary:", error);
+        return `Found ${websites.length} results for "${query}".`;
+    }
+}
+
+function extractSources(websites: any[]): any[] {
+    return websites.slice(0, 10).map(site => ({
+        url: site.url,
+        title: site.title || site.url,
+        relevance: site.score || 0.5
+    }));
+}
+
+function generateSuggestionsFromStats(statsText: string): any {
+    const suggestions = {
+        recentFinds: [] as any[],
+        popularDomains: [] as any[],
+        exploreTopics: [] as any[]
+    };
+
+    try {
+        const lines = statsText.split('\n');
+        
+        // Extract domain information for popular domains
+        const domainLines = lines.filter(line => 
+            line.includes(':') && 
+            line.includes('sites') && 
+            !line.includes('Total') &&
+            !line.includes('Source')
+        );
+
+        // Generate popular domain suggestions
+        domainLines.slice(0, 3).forEach(line => {
+            const domainMatch = line.match(/^([^:]+):/);
+            if (domainMatch) {
+                const domain = domainMatch[1].trim();
+                suggestions.popularDomains.push({
+                    query: `site:${domain}`,
+                    category: "Popular Domains",
+                    description: `Search content from ${domain}`,
+                    estimatedResults: parseInt(line.match(/(\d+)\s*sites?/)?.[1] || "0")
+                });
+            }
+        });
+
+        // Generate topic suggestions based on common patterns
+        const topicSuggestions = [
+            { query: "documentation", description: "Find technical documentation and guides", estimatedResults: 0 },
+            { query: "tutorial", description: "Discover learning resources and tutorials", estimatedResults: 0 },
+            { query: "github", description: "Explore your saved repositories and code", estimatedResults: 0 }
+        ];
+
+        suggestions.exploreTopics = topicSuggestions;
+
+        // Generate recent finds suggestions
+        const recentSuggestions = [
+            { query: "last week", description: "Recently visited or bookmarked sites", estimatedResults: 0 },
+            { query: "today", description: "Sites from today", estimatedResults: 0 }
+        ];
+
+        suggestions.recentFinds = recentSuggestions;
+
+    } catch (error) {
+        console.error("Error generating suggestions from stats:", error);
+    }
+
+    return suggestions;
 }

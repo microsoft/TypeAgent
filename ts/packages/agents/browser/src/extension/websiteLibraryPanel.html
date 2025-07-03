@@ -143,6 +143,147 @@
         margin-bottom: 1rem;
         opacity: 0.5;
       }
+      /* Search Interface Styling */
+      .search-container {
+        position: relative;
+      }
+      .search-suggestions {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .suggestion-item {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f8f9fa;
+      }
+      .suggestion-item:hover {
+        background-color: #f8f9fa;
+      }
+      .suggestion-item:last-child {
+        border-bottom: none;
+      }
+      .recent-search-tag {
+        display: inline-block;
+        background-color: #e9ecef;
+        color: #495057;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        margin-right: 0.5rem;
+        margin-bottom: 0.25rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .recent-search-tag:hover {
+        background-color: #667eea;
+        color: white;
+      }
+      /* Search Results Styling */
+      .search-result-item {
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s ease;
+      }
+      .search-result-item:hover {
+        border-color: #667eea;
+        background-color: #f8f9ff;
+      }
+      .result-card {
+        height: 250px;
+        overflow: hidden;
+      }
+      .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        margin-bottom: 1rem;
+      }
+      .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: 0.5rem;
+        top: 0.5rem;
+        width: 2px;
+        height: calc(100% - 1rem);
+        background-color: #667eea;
+      }
+      .timeline-item::after {
+        content: '';
+        position: absolute;
+        left: 0.25rem;
+        top: 0.5rem;
+        width: 0.5rem;
+        height: 0.5rem;
+        background-color: #667eea;
+        border-radius: 50%;
+      }
+      .domain-group {
+        border-left: 3px solid #667eea;
+        padding-left: 1rem;
+        margin-bottom: 1.5rem;
+      }
+      .domain-header {
+        background-color: #f8f9ff;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        margin-bottom: 0.75rem;
+      }
+      .suggested-search-item {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .suggested-search-item:hover {
+        border-color: #667eea;
+        background-color: #f0f2ff;
+      }
+      .ai-summary {
+        background: linear-gradient(135deg, #f8f9ff 0%, #e9ecff 100%);
+        border-left: 4px solid #667eea;
+        padding: 1rem;
+        border-radius: 0.375rem;
+        margin-bottom: 1rem;
+      }
+      .entity-badge {
+        display: inline-block;
+        background-color: #667eea;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        margin-right: 0.5rem;
+        margin-bottom: 0.25rem;
+      }
+      .result-favicon {
+        width: 16px;
+        height: 16px;
+        margin-right: 0.5rem;
+      }
+      .result-domain {
+        color: #6c757d;
+        font-size: 0.8rem;
+      }
+      .result-score {
+        background-color: #28a745;
+        color: white;
+        padding: 0.125rem 0.25rem;
+        border-radius: 0.125rem;
+        font-size: 0.7rem;
+      }
     </style>
   </head>
   <body>
@@ -207,6 +348,154 @@
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Smart Search Interface Card -->
+      <div class="library-card card" id="searchInterfaceCard">
+        <div class="card-header">
+          <h6 class="mb-0"><i class="bi bi-search"></i> Search Your Library</h6>
+        </div>
+        <div class="card-body">
+          <!-- Search Input with Auto-complete -->
+          <div class="search-container mb-3">
+            <div class="input-group">
+              <input type="text" id="searchInput" class="form-control" 
+                     placeholder="Search websites, bookmarks, and pages...">
+              <button id="searchButton" class="btn btn-primary" type="button">
+                <i class="bi bi-search"></i>
+              </button>
+              <button id="voiceSearchButton" class="btn btn-outline-secondary" type="button" disabled>
+                <i class="bi bi-mic"></i>
+              </button>
+            </div>
+            <!-- Auto-complete dropdown -->
+            <div id="searchSuggestions" class="search-suggestions d-none"></div>
+          </div>
+          
+          <!-- Advanced Filters (Collapsible) -->
+          <div class="mb-3">
+            <button class="btn btn-outline-secondary btn-sm" type="button" 
+                    data-bs-toggle="collapse" data-bs-target="#searchFilters">
+              <i class="bi bi-funnel"></i> Advanced Filters
+            </button>
+            
+            <div class="collapse mt-3" id="searchFilters">
+              <div class="card card-body bg-light">
+                <div class="row">
+                  <div class="col-md-6">
+                    <!-- Date Range Filter -->
+                    <label class="form-label">Date Range</label>
+                    <div class="d-flex gap-2">
+                      <input type="date" id="dateFrom" class="form-control form-control-sm">
+                      <input type="date" id="dateTo" class="form-control form-control-sm">
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <!-- Source Filter -->
+                    <label class="form-label">Source Type</label>
+                    <select id="sourceFilter" class="form-select form-select-sm">
+                      <option value="">All Sources</option>
+                      <option value="bookmarks">Bookmarks Only</option>
+                      <option value="history">History Only</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div class="row mt-3">
+                  <div class="col-md-6">
+                    <!-- Domain Filter -->
+                    <label class="form-label">Domain</label>
+                    <input type="text" id="domainFilter" class="form-control form-control-sm" 
+                           placeholder="e.g., github.com">
+                  </div>
+                  <div class="col-md-6">
+                    <!-- Relevance Score -->
+                    <label class="form-label">Minimum Relevance: <span id="relevanceValue">0%</span></label>
+                    <input type="range" id="relevanceFilter" class="form-range" 
+                           min="0" max="100" step="10" value="0">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Search History -->
+          <div id="recentSearches" class="recent-searches">
+            <small class="text-muted">Recent searches:</small>
+            <div id="recentSearchesList" class="mt-1">
+              <span class="text-muted">No recent searches</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suggested Searches Card -->
+      <div class="library-card card" id="suggestedSearchesCard">
+        <div class="card-header">
+          <h6 class="mb-0"><i class="bi bi-lightbulb"></i> Discover Your Data</h6>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-4">
+              <h6 class="text-muted">Recent Finds</h6>
+              <div id="recentFindsContainer">
+                <div class="text-muted small">Import data to see suggestions</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <h6 class="text-muted">Popular Domains</h6>
+              <div id="popularDomainsContainer">
+                <div class="text-muted small">Import data to see suggestions</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <h6 class="text-muted">Explore Topics</h6>
+              <div id="exploreTopicsContainer">
+                <div class="text-muted small">Import data to see suggestions</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search Results Card -->
+      <div id="searchResultsCard" class="library-card card d-none">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h6 class="mb-0"><i class="bi bi-list-task"></i> Search Results</h6>
+          <div class="view-mode-selector">
+            <div class="btn-group btn-group-sm" role="group">
+              <input type="radio" class="btn-check" name="viewMode" id="listView" checked>
+              <label class="btn btn-outline-secondary" for="listView">
+                <i class="bi bi-list"></i>
+              </label>
+              <input type="radio" class="btn-check" name="viewMode" id="cardView">
+              <label class="btn btn-outline-secondary" for="cardView">
+                <i class="bi bi-grid"></i>
+              </label>
+              <input type="radio" class="btn-check" name="viewMode" id="timelineView">
+              <label class="btn btn-outline-secondary" for="timelineView">
+                <i class="bi bi-clock"></i>
+              </label>
+              <input type="radio" class="btn-check" name="viewMode" id="domainView">
+              <label class="btn btn-outline-secondary" for="domainView">
+                <i class="bi bi-globe"></i>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Results Summary -->
+          <div id="resultsSummary" class="mb-3"></div>
+          
+          <!-- AI Summary Section -->
+          <div id="aiSummarySection" class="mb-4 d-none"></div>
+          
+          <!-- Results Container -->
+          <div id="searchResultsContainer"></div>
+          
+          <!-- Pagination -->
+          <div id="resultsPagination" class="mt-3"></div>
         </div>
       </div>
 
