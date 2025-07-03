@@ -60,14 +60,15 @@ export async function deleteThreads(
 export async function resolveURLWithSearch(
     site: string,
     groundingConfig: bingWithGrounding.ApiSettings,
-): Promise<string | undefined> {
-    let retVal: string = site;
+): Promise<string | undefined | null> {
+    let retVal: string | undefined | null = site;
     const project = new AIProjectClient(
         groundingConfig.endpoint!,
         new DefaultAzureCredential(),
     );
 
     const agent = await ensureResolverAgent(groundingConfig, project);
+    let inCompleteReason;
 
     if (!agent) {
         throw new Error(
@@ -76,7 +77,7 @@ export async function resolveURLWithSearch(
     }
 
     try {
-        const thread = await project.agents.threads.create();
+        const thread = await project.agents.threads.create();        
 
         // the question that needs answering
         await project.agents.messages.create(thread.id, "user", site);
@@ -91,6 +92,11 @@ export async function resolveURLWithSearch(
                 },
                 onResponse: (response): void => {
                     debug(`Received response with status: ${response.status}`);
+
+                    const pb: any = response.parsedBody;
+                    if (pb?.incomplete_details?.reason) {
+                        inCompleteReason = pb.incomplete_details.reason;
+                    }
                 },
             },
         );
@@ -130,6 +136,12 @@ export async function resolveURLWithSearch(
         project.agents.threads.delete(thread.id);
     } catch (e) {
         debug(`Error resolving URL with search: ${e}`);
+
+        if (inCompleteReason === "content_filter") {
+            retVal = null;
+        } else {
+            retVal = undefined;
+        }
     }
 
     // return assistant messages
@@ -149,7 +161,7 @@ async function ensureResolverAgent(
         groundingConfig.urlResolutionAgentId!,
         project,
         {
-            model: "gpt-4o",
+            model: "gpt-4.1",
             name: "TypeAgent_URLResolverAgent",
             description: "Auto created URL Resolution Agent",
             temperature: 0.01,
@@ -189,7 +201,7 @@ async function ensureValidatorAgent(
         groundingConfig.validatorAgentId!,
         project,
         {
-            model: "gpt-4o",
+            model: "gpt-4.1",
             name: "TypeAgent_URLValidatorAgent",
             description: "Auto created URL Validation Agent",
             temperature: 0.01,
