@@ -267,7 +267,7 @@ export class KnowProPrinter extends MemoryConsoleWriter {
 
     public writeSemanticRefSearchResult(
         conversation: kp.IConversation,
-        result: kp.SemanticRefSearchResult | undefined,
+        result: kp.SemanticRefSearchResult,
         maxToDisplay: number,
     ) {
         if (result) {
