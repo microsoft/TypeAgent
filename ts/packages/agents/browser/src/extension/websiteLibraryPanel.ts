@@ -115,6 +115,7 @@ class WebsiteLibraryPanel {
     // Index management properties
     private indexExists: boolean = false;
     private indexCreating: boolean = false;
+    private settingsModal: any = null;
 
     async initialize() {
         console.log("Initializing Website Library Panel");
@@ -179,6 +180,12 @@ class WebsiteLibraryPanel {
             .getElementById("clearImportHistory")!
             .addEventListener("click", () => {
                 this.clearImportHistory();
+            });
+
+        document
+            .getElementById("settingsButton")!
+            .addEventListener("click", () => {
+                this.showSettings();
             });
 
         chrome.runtime.onMessage.addListener(
@@ -307,18 +314,30 @@ class WebsiteLibraryPanel {
         // Refresh content when switching to specific tabs
         if (tabName === "discover") {
             this.loadSuggestedSearches();
-        } else if (tabName === "import") {
-            this.checkIndexStatus();
         }
     }
 
-    switchToImportTab() {
-        const importTab = document.getElementById(
-            "import-tab",
-        ) as HTMLButtonElement;
-        if (importTab) {
-            importTab.click();
+    showSettings() {
+        if (!this.settingsModal) {
+            const settingsModalElement = document.getElementById("settingsModal")!;
+            this.settingsModal = new (window as any).bootstrap.Modal(settingsModalElement);
+            
+            // Add event listeners for proper cleanup
+            settingsModalElement.addEventListener('hidden.bs.modal', () => {
+                // Remove any lingering backdrop
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) {
+                    backdrop.remove();
+                }
+                // Ensure body classes are cleaned up
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+            });
         }
+        
+        this.settingsModal.show();
+        this.checkIndexStatus();
     }
 
     private async checkIndexStatus() {
