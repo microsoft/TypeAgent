@@ -47,7 +47,7 @@ import registerDebug from "debug";
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
-import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
+import { handleKnowledgeAction } from "./knowledge/knowledgeHandlerAdapter.mjs";
 
 import {
     loadAllowDynamicAgentDomains,

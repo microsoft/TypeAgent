@@ -23,19 +23,53 @@ interface Relationship {
     confidence: number;
 }
 
+// NEW: Enhanced extraction modes
+interface ExtractionSettings {
+    mode: "basic" | "content" | "actions" | "full";
+    enableIntelligentAnalysis: boolean;
+    enableActionDetection: boolean;
+    suggestQuestions: boolean;
+    quality: "fast" | "balanced" | "deep";
+}
+
+// NEW: Page source information
+interface PageSourceInfo {
+    isBookmarked: boolean;
+    isInHistory: boolean;
+    visitCount?: number;
+    lastVisited?: string;
+    bookmarkFolder?: string;
+}
+
 class KnowledgePanel {
     private currentUrl: string = "";
     private isConnected: boolean = false;
     private knowledgeData: KnowledgeData | null = null;
+    private pageSourceInfo: PageSourceInfo | null = null;
+    private extractionSettings: ExtractionSettings;
+
+    constructor() {
+        // Default extraction settings - enhanced for websiteMemory
+        this.extractionSettings = {
+            mode: "full",
+            enableIntelligentAnalysis: true,
+            enableActionDetection: true,
+            suggestQuestions: true,
+            quality: "balanced",
+        };
+    }
 
     async initialize() {
-        console.log("Initializing Knowledge Panel");
+        console.log("Initializing Enhanced Knowledge Panel");
 
         // Setup event listeners
         this.setupEventListeners();
 
-        // Load current page info
+        // Load current page info with source detection
         await this.loadCurrentPageInfo();
+        
+        // NEW: Load page source information (bookmark/history status)
+        await this.loadPageSourceInfo();
 
         // Check auto-index setting
         await this.loadAutoIndexSetting();
@@ -48,6 +82,12 @@ class KnowledgePanel {
 
         // Load any cached knowledge for current page
         await this.loadCachedKnowledge();
+        
+        // NEW: Setup extraction mode controls
+        this.setupExtractionModeControls();
+        
+        // NEW: Load extraction settings from storage
+        await this.loadExtractionSettings();
     }
 
     private setupEventListeners() {
@@ -119,19 +159,18 @@ class KnowledgePanel {
                 const pageInfo = document.getElementById("currentPageInfo")!;
                 const domain = new URL(this.currentUrl).hostname;
 
-                pageInfo.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <img src="https://www.google.com/s2/favicons?domain=${domain}" 
-                             width="16" height="16" class="me-2" alt="favicon">
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold">${tab.title || "Untitled"}</div>
-                            <small class="text-muted">${domain}</small>
-                        </div>
-                        <div id="pageStatus" class="ms-2">
-                            ${await this.getPageIndexStatus()}
-                        </div>
-                    </div>
-                `;
+                pageInfo.innerHTML = 
+                    '<div class="d-flex align-items-center">' +
+                    '<img src="https://www.google.com/s2/favicons?domain=' + domain + '" ' +
+                    'width="16" height="16" class="me-2" alt="favicon">' +
+                    '<div class="flex-grow-1">' +
+                    '<div class="fw-semibold">' + (tab.title || "Untitled") + '</div>' +
+                    '<small class="text-muted">' + domain + '</small>' +
+                    '</div>' +
+                    '<div id="pageStatus" class="ms-2">' +
+                    (await this.getPageIndexStatus()) +
+                    '</div>' +
+                    '</div>';
             }
         } catch (error) {
             console.error("Error loading page info:", error);
@@ -194,6 +233,7 @@ class KnowledgePanel {
             const response = await chrome.runtime.sendMessage({
                 type: "extractPageKnowledge",
                 url: this.currentUrl,
+                extractionSettings: this.extractionSettings, // NEW: Send extraction settings
             });
 
             this.knowledgeData = response.knowledge;
@@ -202,10 +242,13 @@ class KnowledgePanel {
 
                 // Cache the knowledge for this page
                 await this.cacheKnowledge(this.knowledgeData);
+                
+                // NEW: Show extraction mode used
+                this.showExtractionInfo();
             }
 
             this.showTemporaryStatus(
-                "Knowledge extracted successfully!",
+                "Knowledge extracted successfully using " + this.extractionSettings.mode + " mode!",
                 "success",
             );
         } catch (error) {
@@ -510,30 +553,106 @@ class KnowledgePanel {
             return;
         }
 
-        container.innerHTML = `
-            <div class="mb-2"><small class="text-muted">Click a question to ask:</small></div>
-            ${questions
-                .map(
-                    (question) => `
-                <div class="question-item list-group-item list-group-item-action p-2 mb-1 rounded">
-                    <i class="bi bi-question-circle me-2"></i>${question}
-                </div>
-            `,
-                )
-                .join("")}
-        `;
+        // NEW: Categorize questions for better organization
+        const categorizedQuestions = this.categorizeQuestions(questions);
+        
+        let questionsHtml = `<div class="mb-2"><small class="text-muted">
+            <i class="bi bi-lightbulb"></i> Click a question to ask, or type your own below:
+        </small></div>`;
+
+        // NEW: Render questions in categories
+        if (categorizedQuestions.content.length > 0) {
+            questionsHtml += `<div class="mb-3">
+                <h6 class="text-muted mb-2"><i class="bi bi-file-text"></i> About Content</h6>
+                ${this.renderQuestionList(categorizedQuestions.content, "content")}
+            </div>`;
+        }
+
+        if (categorizedQuestions.temporal.length > 0) {
+            questionsHtml += `<div class="mb-3">
+                <h6 class="text-muted mb-2"><i class="bi bi-clock"></i> Timeline</h6>
+                ${this.renderQuestionList(categorizedQuestions.temporal, "temporal")}
+            </div>`;
+        }
+
+        if (categorizedQuestions.pattern.length > 0) {
+            questionsHtml += `<div class="mb-3">
+                <h6 class="text-muted mb-2"><i class="bi bi-search"></i> Discovery</h6>
+                ${this.renderQuestionList(categorizedQuestions.pattern, "pattern")}
+            </div>`;
+        }
+
+        if (categorizedQuestions.action.length > 0) {
+            questionsHtml += `<div class="mb-3">
+                <h6 class="text-muted mb-2"><i class="bi bi-lightning"></i> Actions</h6>
+                ${this.renderQuestionList(categorizedQuestions.action, "action")}
+            </div>`;
+        }
+
+        // Fallback for uncategorized questions
+        if (categorizedQuestions.other.length > 0) {
+            questionsHtml += `<div class="mb-3">
+                ${this.renderQuestionList(categorizedQuestions.other, "other")}
+            </div>`;
+        }
+
+        container.innerHTML = questionsHtml;
 
         // Add click listeners to questions
         container.querySelectorAll(".question-item").forEach((item, index) => {
             item.addEventListener("click", () => {
-                (
-                    document.getElementById(
-                        "knowledgeQuery",
-                    ) as HTMLInputElement
-                ).value = questions[index];
+                const questionText = item.getAttribute("data-question")!;
+                (document.getElementById("knowledgeQuery") as HTMLInputElement).value = questionText;
                 this.submitQuery();
             });
         });
+    }
+
+    // NEW: Categorize questions for better organization
+    private categorizeQuestions(questions: string[]) {
+        const categories = {
+            content: [] as string[],
+            temporal: [] as string[],
+            pattern: [] as string[],
+            action: [] as string[],
+            other: [] as string[]
+        };
+
+        questions.forEach(question => {
+            const lowerQ = question.toLowerCase();
+            
+            if (lowerQ.includes("when") || lowerQ.includes("first") || lowerQ.includes("time")) {
+                categories.temporal.push(question);
+            } else if (lowerQ.includes("what is") || lowerQ.includes("tell me") || lowerQ.includes("summarize") || lowerQ.includes("about")) {
+                categories.content.push(question);
+            } else if (lowerQ.includes("other") || lowerQ.includes("similar") || lowerQ.includes("else")) {
+                categories.pattern.push(question);
+            } else if (lowerQ.includes("action") || lowerQ.includes("can i") || lowerQ.includes("do")) {
+                categories.action.push(question);
+            } else {
+                categories.other.push(question);
+            }
+        });
+
+        return categories;
+    }
+
+    // NEW: Render a list of questions with icons
+    private renderQuestionList(questions: string[], category: string): string {
+        const icons = {
+            content: "bi-file-text",
+            temporal: "bi-clock",
+            pattern: "bi-search",
+            action: "bi-lightning",
+            other: "bi-question-circle"
+        };
+
+        return questions.map(question => 
+            '<div class="question-item list-group-item list-group-item-action p-2 mb-1 rounded" ' +
+            'data-question="' + question.replace(/"/g, '&quot;') + '" data-category="' + category + '">' +
+            '<i class="' + icons[category as keyof typeof icons] + ' me-2 text-muted"></i>' + question +
+            '</div>'
+        ).join("");
     }
 
     private async loadIndexStats() {
@@ -550,6 +669,184 @@ class KnowledgePanel {
                 response.lastIndexed || "Never";
         } catch (error) {
             console.error("Error loading index stats:", error);
+        }
+    }
+
+    // NEW: Load page source information (bookmarks/history status)
+    private async loadPageSourceInfo() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getPageSourceInfo",
+                url: this.currentUrl,
+            });
+
+            this.pageSourceInfo = response.sourceInfo;
+            this.updatePageSourceDisplay();
+        } catch (error) {
+            console.error("Error loading page source info:", error);
+        }
+    }
+
+    // NEW: Update page source display
+    private updatePageSourceDisplay() {
+        const pageInfo = document.getElementById("currentPageInfo")!;
+        const existingContent = pageInfo.innerHTML;
+        
+        if (this.pageSourceInfo) {
+            const sourceIndicators = [];
+            
+            if (this.pageSourceInfo.isBookmarked) {
+                sourceIndicators.push(
+                    '<span class="badge bg-primary me-1" title="This page is bookmarked">' +
+                    '<i class="bi bi-bookmark-star"></i> Bookmarked' +
+                    '</span>'
+                );
+            }
+            
+            if (this.pageSourceInfo.isInHistory) {
+                const visitText = this.pageSourceInfo.visitCount 
+                    ? this.pageSourceInfo.visitCount + " visits"
+                    : "In History";
+                sourceIndicators.push(
+                    '<span class="badge bg-info me-1" title="This page is in your browser history">' +
+                    '<i class="bi bi-clock-history"></i> ' + visitText +
+                    '</span>'
+                );
+            }
+            
+            if (sourceIndicators.length > 0) {
+                const sourceDiv = '<div class="mt-2">' + sourceIndicators.join('') + '</div>';
+                pageInfo.innerHTML = existingContent + sourceDiv;
+            }
+        }
+    }
+
+    // NEW: Setup extraction mode controls
+    private setupExtractionModeControls() {
+        // Add extraction mode selector to the page
+        const extractButton = document.getElementById("extractKnowledge")!;
+        const buttonGroup = extractButton.parentElement!;
+        
+        // Create mode selector dropdown
+        const modeSelector = document.createElement("div");
+        modeSelector.className = "btn-group btn-group-sm ms-2";
+        modeSelector.innerHTML = 
+            '<button type="button" class="btn btn-outline-secondary dropdown-toggle" ' +
+            'data-bs-toggle="dropdown" aria-expanded="false" id="extractionModeButton">' +
+            '<i class="bi bi-gear"></i> ' + this.extractionSettings.mode +
+            '</button>' +
+            '<ul class="dropdown-menu" id="extractionModeMenu">' +
+            '<li><h6 class="dropdown-header">Extraction Mode</h6></li>' +
+            '<li><a class="dropdown-item" href="#" data-mode="basic">' +
+            '<i class="bi bi-speedometer"></i> Basic - Fast extraction' +
+            '</a></li>' +
+            '<li><a class="dropdown-item" href="#" data-mode="content">' +
+            '<i class="bi bi-file-text"></i> Content - Include page analysis' +
+            '</a></li>' +
+            '<li><a class="dropdown-item" href="#" data-mode="actions">' +
+            '<i class="bi bi-lightning"></i> Actions - Detect actionable elements' +
+            '</a></li>' +
+            '<li><a class="dropdown-item" href="#" data-mode="full">' +
+            '<i class="bi bi-cpu"></i> Full - Complete analysis' +
+            '</a></li>' +
+            '<li><hr class="dropdown-divider"></li>' +
+            '<li><h6 class="dropdown-header">Options</h6></li>' +
+            '<li><a class="dropdown-item" href="#" data-option="quality">' +
+            '<i class="bi bi-sliders"></i> Quality: ' + this.extractionSettings.quality +
+            '</a></li>' +
+            '</ul>';
+        
+        buttonGroup.appendChild(modeSelector);
+        
+        // Add event listeners for mode selection
+        document.getElementById("extractionModeMenu")!.addEventListener("click", (e) => {
+            e.preventDefault();
+            const target = e.target as HTMLElement;
+            const item = target.closest(".dropdown-item") as HTMLElement;
+            
+            if (item) {
+                const mode = item.getAttribute("data-mode");
+                const option = item.getAttribute("data-option");
+                
+                if (mode) {
+                    this.extractionSettings.mode = mode as any;
+                    this.updateExtractionModeDisplay();
+                    this.saveExtractionSettings();
+                } else if (option === "quality") {
+                    this.toggleQualitySetting();
+                }
+            }
+        });
+    }
+
+    // NEW: Update extraction mode display
+    private updateExtractionModeDisplay() {
+        const button = document.getElementById("extractionModeButton")!;
+        button.innerHTML = '<i class="bi bi-gear"></i> ' + this.extractionSettings.mode;
+    }
+
+    // NEW: Toggle quality setting
+    private toggleQualitySetting() {
+        const qualities = ["fast", "balanced", "deep"];
+        const currentIndex = qualities.indexOf(this.extractionSettings.quality);
+        const nextIndex = (currentIndex + 1) % qualities.length;
+        this.extractionSettings.quality = qualities[nextIndex] as any;
+        
+        // Update the menu display
+        const qualityItem = document.querySelector('[data-option="quality"]')!;
+        qualityItem.innerHTML = '<i class="bi bi-sliders"></i> Quality: ' + this.extractionSettings.quality;
+        
+        this.saveExtractionSettings();
+    }
+
+    // NEW: Load extraction settings from storage
+    private async loadExtractionSettings() {
+        try {
+            const settings = await chrome.storage.sync.get(["extractionSettings"]);
+            if (settings.extractionSettings) {
+                this.extractionSettings = { ...this.extractionSettings, ...settings.extractionSettings };
+                this.updateExtractionModeDisplay();
+            }
+        } catch (error) {
+            console.error("Error loading extraction settings:", error);
+        }
+    }
+
+    // NEW: Save extraction settings to storage
+    private async saveExtractionSettings() {
+        try {
+            await chrome.storage.sync.set({ extractionSettings: this.extractionSettings });
+        } catch (error) {
+            console.error("Error saving extraction settings:", error);
+        }
+    }
+
+    // NEW: Show extraction information
+    private showExtractionInfo() {
+        if (!this.knowledgeData) return;
+        
+        const infoDiv = document.createElement("div");
+        infoDiv.className = "alert alert-info mt-2";
+        
+        let content = '<small>' +
+            '<i class="bi bi-info-circle"></i>' +
+            'Extracted using <strong>' + this.extractionSettings.mode + '</strong> mode ' +
+            '(' + this.extractionSettings.quality + ' quality)';
+        
+        if (this.pageSourceInfo?.isBookmarked) {
+            content += ' • Available in bookmarks';
+        }
+        if (this.pageSourceInfo?.isInHistory) {
+            content += ' • Available in history';
+        }
+        
+        content += '</small>';
+        infoDiv.innerHTML = content;
+        
+        const knowledgeSection = document.getElementById("knowledgeSection")!;
+        const firstCard = knowledgeSection.querySelector(".knowledge-card");
+        if (firstCard) {
+            knowledgeSection.insertBefore(infoDiv, firstCard);
         }
     }
 
@@ -573,19 +870,16 @@ class KnowledgePanel {
 
         if (this.isConnected) {
             indicator.className = "status-indicator status-connected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
+            statusElement.innerHTML = 
+                '<span class="status-indicator status-connected"></span>' +
+                'Connected to TypeAgent';
         } else {
             indicator.className = "status-indicator status-disconnected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-disconnected"></span>
-                Disconnected from TypeAgent
-            `;
+            statusElement.innerHTML = 
+                '<span class="status-indicator status-disconnected"></span>' +
+                'Disconnected from TypeAgent';
         }
     }
-
     private async onTabChange() {
         // Reload page info when tab changes
         await this.loadCurrentPageInfo();
@@ -594,10 +888,8 @@ class KnowledgePanel {
 
     private async loadCachedKnowledge() {
         try {
-            const cached = await chrome.storage.local.get([
-                `knowledge_${this.currentUrl}`,
-            ]);
-            const knowledgeKey = `knowledge_${this.currentUrl}`;
+            const knowledgeKey = "knowledge_" + this.currentUrl;
+            const cached = await chrome.storage.local.get([knowledgeKey]);
 
             if (cached[knowledgeKey]) {
                 this.knowledgeData = cached[knowledgeKey];
@@ -621,10 +913,10 @@ class KnowledgePanel {
 
     private async cacheKnowledge(knowledge: KnowledgeData) {
         try {
-            const cacheKey = `knowledge_${this.currentUrl}`;
-            await chrome.storage.local.set({
-                [cacheKey]: knowledge,
-            });
+            const cacheKey = "knowledge_" + this.currentUrl;
+            const cacheObject: any = {};
+            cacheObject[cacheKey] = knowledge;
+            await chrome.storage.local.set(cacheObject);
         } catch (error) {
             console.error("Error caching knowledge:", error);
         }
@@ -634,7 +926,7 @@ class KnowledgePanel {
         message: string,
         type: "success" | "danger" | "info",
     ) {
-        const alertClass = `alert-${type}`;
+        const alertClass = "alert-" + type;
         const iconClass =
             type === "success"
                 ? "bi-check-circle"
@@ -643,13 +935,12 @@ class KnowledgePanel {
                   : "bi-info-circle";
 
         const statusDiv = document.createElement("div");
-        statusDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+        statusDiv.className = "alert " + alertClass + " alert-dismissible fade show position-fixed";
         statusDiv.style.cssText =
             "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
-        statusDiv.innerHTML = `
-            <i class="${iconClass} me-2"></i>${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
+        statusDiv.innerHTML = 
+            '<i class="' + iconClass + ' me-2"></i>' + message +
+            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
 
         document.body.appendChild(statusDiv);
 
