@@ -1,36 +1,35 @@
 PASS	wikipedia	https://www.wikipedia.org/	https://www.wikipedia.org/
 PASS	yahoo	https://www.yahoo.com/	https://www.yahoo.com/
 PASS	youtube	https://www.youtube.com/	https://www.youtube.com/
-PASS	instagram	https://www.instagram.com/	https://www.instagram.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	instagram	https://www.instagram.com/	https://www.instagram.com/login
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	facebook	https://www.facebook.com/	https://www.facebook.com
 PASS	reddit	https://www.reddit.com	https://www.reddit.com
 PASS	imdb	https://www.imdb.com/	https://www.imdb.com/
 PASS	merriam-webster	https://www.merriam-webster.com/	https://www.merriam-webster.com/
 PASS	apple	https://www.apple.com/	https://www.apple.com/
-FAIL	cambridge	https://en.wikipedia.org/wiki/Cambridge	https://www.cam.ac.uk/
 PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
 PASS	pinterest	https://www.pinterest.com/	https://www.pinterest.com/
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
 PASS	britannica	https://www.britannica.com/	https://www.britannica.com/
 FAIL	x	https://x.com/	
 PASS	fandom	https://www.fandom.com/	https://www.fandom.com/
-FAIL	twitter	https://x.com	https://twitter.com
+FAIL	twitter	https://twitter.com	https://x.com
 PASS	yelp	https://www.yelp.com	https://www.yelp.com
 PASS	espn	https://www.espn.com/	https://www.espn.com/
 PASS	tiktok	https://www.tiktok.com/	https://www.tiktok.com/
 PASS	linkedin	https://www.linkedin.com/	https://www.linkedin.com/
-PASS	clevelandclinic	https://my.clevelandclinic.org/	https://my.clevelandclinic.org/
+FAIL	clevelandclinic	https://my.clevelandclinic.org/	clevelandclinic
 PASS	espncricinfo	https://www.espncricinfo.com/	https://www.espncricinfo.com/
 PASS	yahoo	https://www.yahoo.com/	https://www.yahoo.com/
 PASS	quora	https://www.quora.com	https://www.quora.com/
 PASS	cricbuzz	https://www.cricbuzz.com/	https://www.cricbuzz.com/
 FAIL	amazon	https://www.amazon.com/	amazon
-PASS	mayoclinic	https://www.mayoclinic.org/	https://www.mayoclinic.org/
-FAIL	dictionary	https://www.merriam-webster.com/	https://www.dictionary.com/
-FAIL	weather	https://www.accuweather.com/en/us/boydton/23917/weather-forecast/336242	https://weather.com/
+FAIL	mayoclinic	https://www.mayoclinic.org/	mayoclinic
+PASS	dictionary	https://www.dictionary.com/	https://www.dictionary.com/
+FAIL	weather	https://www.weather.com/	https://weather.com/
 PASS	booking	https://www.booking.com/	https://www.booking.com/
-PASS	pornhub	pornhub	pornhub
+FAIL	pornhub	https://www.pornhub.com/	pornhub
 PASS	nih	https://www.nih.gov/	https://www.nih.gov/
 PASS	accuweather	https://www.accuweather.com/	https://www.accuweather.com/
 PASS	byjus	https://byjus.com/	https://byjus.com/
@@ -41,26 +40,24 @@ PASS	moneycontrol	https://www.moneycontrol.com/	https://www.moneycontrol.com/
 PASS	yahoo	https://www.yahoo.com/	https://www.yahoo.com/
 PASS	microsoft	https://www.microsoft.com/en-us/	https://www.microsoft.com/en-us/
 PASS	wise	https://wise.com/	https://wise.com/
-FAIL	wiktionary	https://en.wiktionary.org/wiki/Wiktionary:Main_Page	https://www.wiktionary.org/
+PASS	wiktionary	https://www.wiktionary.org/	https://www.wiktionary.org/
 PASS	rottentomatoes	https://www.rottentomatoes.com/	https://www.rottentomatoes.com/
 PASS	whatsapp	https://www.whatsapp.com/	https://www.whatsapp.com/
-FAIL	indiatimes	indiatimes	https://www.indiatimes.com/
+FAIL	indiatimes	https://www.indiatimes.com/	indiatimes
 PASS	globo	https://www.globo.com/	https://www.globo.com/
-PASS	spotify	https://spotify.com/us/home-page/	https://spotify.com/us/home-page/
+FAIL	spotify	https://spotify.com/us/home-page/	https://open.spotify.com/
 PASS	walmart	https://www.walmart.com/	https://www.walmart.com/
 PASS	deepl	https://www.deepl.com/en/translator	https://www.deepl.com/en/translator
-PASS	webmd	https://www.webmd.com/	https://www.webmd.com
+PASS	webmd	https://www.webmd.com/	https://www.webmd.com/
 PASS	timeanddate	https://www.timeanddate.com/	https://www.timeanddate.com/
-PASS	indeed	https://www.indeed.com/	https://www.indeed.com/
+FAIL	indeed	https://www.indeed.com/	indeed
 PASS	netflix	https://www.netflix.com/	https://www.netflix.com/
-PASS	xvideos	xvideos	xvideos
-PASS	xhamster	xhamster	xhamster
 FAIL	desivocabulary	https://www.youtube.com/@desivocabulary1001	
 PASS	rakuten	https://www.rakuten.com/	https://www.rakuten.com/
 PASS	flipkart	https://www.flipkart.com/	https://www.flipkart.com/
 PASS	bbc	https://www.bbc.com	https://www.bbc.com
-FAIL	justdial	https://profile.justdial.com/	https://www.justdial.com/
-FAIL	shabdkosh	shabdkosh	https://www.shabdkosh.com/mobi/archives/about/about-shabdkosh-dictionary-portal
+FAIL	justdial	https://profile.justdial.com/	https://www.justdial.com
+PASS	shabdkosh	https://www.shabdkosh.com/	https://www.shabdkosh.com
 PASS	adobe	https://www.adobe.com/	https://www.adobe.com/
 PASS	detik	https://www.detik.com/	https://www.detik.com/
 FAIL	nytimes	https://www.nytimes.com/	
@@ -71,10 +68,10 @@ PASS	reverso	https://www.reverso.net/	https://www.reverso.net/
 PASS	uol	https://www.uol.com.br/	https://www.uol.com.br/
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
 PASS	medlineplus	https://medlineplus.gov/	https://medlineplus.gov/
-PASS	nba	https://www.nba.com/	https://www.nba.com/
+FAIL	nba	https://www.nba.com/	nba
 PASS	medicalnewstoday	https://www.medicalnewstoday.com/	https://www.medicalnewstoday.com/
-FAIL	amazon	https://www.amazon.com/	amazon
-FAIL	hotels	https://www.kayak.com/Boydton-Hotels.22166.hotel.ksp	https://www.hotels.com/
+PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
+FAIL	hotels	https://www.hotels.com/	https://www.booking.com/
 PASS	istockphoto	https://www.istockphoto.com/	https://www.istockphoto.com/
 PASS	rapidtables	https://www.rapidtables.com/	https://www.rapidtables.com/
 FAIL	genius	https://en.wikipedia.org/wiki/Genius	https://genius.com
@@ -86,22 +83,21 @@ PASS	canva	https://www.canva.com/	https://www.canva.com/
 PASS	uefa	https://www.uefa.com/	https://www.uefa.com/
 PASS	mlb	https://www.mlb.com/	https://www.mlb.com/
 PASS	investopedia	https://www.investopedia.com/	https://www.investopedia.com/
-FAIL	olympics		https://www.olympics.com/en/
 PASS	www.nhs	https://www.nhs.uk/	https://www.nhs.uk/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
-PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
+FAIL	amazon	https://www.amazon.com/	amazon
 FAIL	namu	https://namu.wiki/	https://en.namu.wiki/
-FAIL	screener	https://www.screener.in/	https://www.screener.in/home/
-PASS	hindustantimes	https://www.hindustantimes.com/	https://www.hindustantimes.com/
-PASS	xnxx	xnxx	xnxx
+REDIRECT	screener	https://www.screener.in/	https://www.screener.in/home/
+FAIL	hindustantimes	https://www.hindustantimes.com/	hindustantimes
+FAIL	xnxx	https://www.xnxx.com/	xnxx
 PASS	sciencedirect	https://www.sciencedirect.com	https://www.sciencedirect.com/
-FAIL	primevideo	https://www.primevideo.com/collection/IncludedwithPrime	https://www.amazon.com/gp/video/storefront/
+FAIL	primevideo	https://www.primevideo.com/collection/IncludedwithPrime	https://www.primevideo.com/storefront/?contentId=home&contentType=home
 PASS	expedia	https://www.expedia.com/	https://www.expedia.com/
-FAIL	xosodaiphat	https://xosodaiphat.org/	https://xosodaiphat.net/
+PASS	xosodaiphat	https://xosodaiphat.net/	https://xosodaiphat.net/
 FAIL	study	https://study.com/	https://www.studytogether.com/
 PASS	etsy	https://www.etsy.com/	https://www.etsy.com/
-PASS	allrecipes	https://www.allrecipes.com/	https://www.allrecipes.com/
-PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
+FAIL	allrecipes	https://www.allrecipes.com/	allrecipes
+FAIL	amazon	https://www.amazon.com/	amazon
 PASS	target	https://www.target.com/	https://www.target.com/
 PASS	shutterstock	https://www.shutterstock.com/	https://www.shutterstock.com/
 PASS	mercadolivre	https://www.mercadolivre.com.br/	https://www.mercadolivre.com.br/
@@ -110,13 +106,11 @@ PASS	github	https://github.com/	https://github.com/
 PASS	sofascore	https://www.sofascore.com/	https://www.sofascore.com/
 PASS	tokopedia	https://www.tokopedia.com/	https://www.tokopedia.com/
 PASS	waze	https://www.waze.com/live-map	https://www.waze.com/live-map
-FAIL	ndtv	ndtv	https://www.ndtv.com/
+PASS	ndtv	https://www.ndtv.com/	https://www.ndtv.com/
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
 PASS	cookpad	https://cookpad.com/us	https://cookpad.com/us
 PASS	unsplash	https://unsplash.com/	https://unsplash.com/
-PASS	xhamster	xhamster	xhamster
 PASS	shopee	https://shopee.com/	https://shopee.com/
-FAIL	dpbossss.services		https://www.dpbosssss.com/
 PASS	mapquest	https://www.mapquest.com/	https://www.mapquest.com/
 PASS	nfl	https://www.nfl.com/	https://www.nfl.com/
 PASS	usatoday	https://www.usatoday.com/	https://www.usatoday.com/
@@ -131,11 +125,11 @@ PASS	investing	https://www.investing.com/	https://www.investing.com/
 PASS	geeksforgeeks	https://www.geeksforgeeks.org/	https://www.geeksforgeeks.org/
 PASS	ikea	https://www.ikea.com/us/en/	https://www.ikea.com/us/en/
 PASS	premierleague	https://www.premierleague.com/	https://www.premierleague.com/
-PASS	cnn	cnn	cnn
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+PASS	cnn	https://www.cnn.com/	https://www.cnn.com/
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	mcdonalds	https://www.mcdonalds.com/us/en-us.html	https://www.mcdonalds.com/us/en-us.html
 PASS	zomato	https://www.zomato.com/	https://www.zomato.com/
-FAIL	theguardian	https://theguardian.com	https://www.theguardian.com
+PASS	theguardian	https://www.theguardian.com	https://www.theguardian.com
 PASS	1mg	https://www.1mg.com/	https://www.1mg.com/
 PASS	usnews	https://www.usnews.com/	https://www.usnews.com/
 PASS	cuemath	https://www.cuemath.com/	https://www.cuemath.com/
@@ -145,7 +139,7 @@ PASS	cbsnews	https://www.cbsnews.com/	https://www.cbsnews.com/
 PASS	easyhindityping	https://www.easyhindityping.com/	https://www.easyhindityping.com/
 PASS	satta-king-fast	https://satta-king-fast.com/	https://satta-king-fast.com/
 PASS	testbook	https://testbook.com/	https://testbook.com/
-PASS	people	people	people
+FAIL	people	https://people.com/	people
 PASS	hinkhoj	https://hinkhoj.com/	https://hinkhoj.com/
 PASS	skysports	https://www.skysports.com/	https://www.skysports.com/
 PASS	nike	https://www.nike.com/	https://www.nike.com/
@@ -174,20 +168,19 @@ PASS	nseindia	https://www.nseindia.com/	https://www.nseindia.com/
 PASS	wikihow	https://www.wikihow.com/Main-Page	https://www.wikihow.com/Main-Page
 PASS	hopkinsmedicine	https://www.hopkinsmedicine.org/	https://www.hopkinsmedicine.org/
 PASS	pexels	https://www.pexels.com/	https://www.pexels.com/
-FAIL	europa	https://en.wikipedia.org/wiki/Europa_(moon)	https://european-union.europa.eu/index_en
+REDIRECT	europa	https://european-union.europa.eu/	https://european-union.europa.eu/index_en
 PASS	cnbc	https://www.cnbc.com/	https://www.cnbc.com/
 FAIL	amazon	https://www.amazon.com/	amazon
-PASS	time		
 PASS	ck12	https://www.ck12.org/	https://www.ck12.org/
 PASS	bestbuy	https://www.bestbuy.com/	https://www.bestbuy.com/
 PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
-FAIL	trendyol	https://www.trendyol.com/	https://www.trendyol.com/en
+REDIRECT	trendyol	https://www.trendyol.com/	https://www.trendyol.com/en
 PASS	inchcalculator	https://www.inchcalculator.com/	https://www.inchcalculator.com/
-FAIL	indianexpress	indianexpress	https://indianexpress.com/
+PASS	indianexpress	https://indianexpress.com/	https://indianexpress.com/
 PASS	pixabay	https://pixabay.com/	https://pixabay.com/
 PASS	poki	https://poki.com/	https://poki.com/
 PASS	aajtak	https://www.aajtak.in/	https://www.aajtak.in/
-FAIL	quillbot	https://quillbot.com/paraphrasing-tool	https://quillbot.com/
+PASS	quillbot	https://quillbot.com/	https://quillbot.com/
 PASS	shiksha	https://www.shiksha.com/	https://www.shiksha.com/
 PASS	vedantu	https://www.vedantu.com/	https://www.vedantu.com/
 PASS	akc	https://www.akc.org/	https://www.akc.org/
@@ -195,19 +188,17 @@ PASS	tradingview	https://www.tradingview.com/	https://www.tradingview.com/
 PASS	climatempo	https://www.climatempo.com.br/	https://www.climatempo.com.br/
 PASS	tenki	https://tenki.jp/	https://tenki.jp/
 PASS	unacademy	https://unacademy.com/	https://unacademy.com/
-PASS	xnxx	xnxx	xnxx
 PASS	foxsports	https://www.foxsports.com/	https://www.foxsports.com/
 PASS	gettyimages	https://www.gettyimages.com/	https://www.gettyimages.com/
-FAIL	india	https://en.wikipedia.org/wiki/India	https://www.india.gov.in/
-FAIL	xhopen	xhopen	https://www.twitch.tv/xhopen
-FAIL	dailymotion	dailymotion	https://www.dailymotion.com/
+PASS	india	https://www.india.gov.in/	https://www.india.gov.in/
+PASS	dailymotion	https://www.dailymotion.com/	https://www.dailymotion.com/
 PASS	usps	https://www.usps.com/	https://www.usps.com/
 PASS	indiamart	https://www.indiamart.com/	https://www.indiamart.com/
 PASS	pons	https://en.pons.com/translate	https://en.pons.com/translate
-PASS	goodreads	https://www.goodreads.com/	https://www.goodreads.com/
+FAIL	goodreads	https://www.goodreads.com/	goodreads
 PASS	pixiv	https://www.pixiv.net/en/	https://www.pixiv.net/en/
 PASS	heylink	https://heylink.me/	https://heylink.me/
-PASS	goal	https://www.goal.com/en	https://www.goal.com/en
+FAIL	goal	https://www.goal.com/en	https://www.goal.com
 FAIL	calculator	https://www.online-calculator.com/	https://www.desmos.com/scientific
 FAIL	wordpress	https://wordpress.org/download/	https://wordpress.com/
 PASS	softonic	https://en.softonic.com/	https://en.softonic.com/
@@ -216,30 +207,28 @@ PASS	westernunion	https://www.westernunion.com/us/en/home.html	https://www.weste
 PASS	harvard	https://www.harvard.edu/	https://www.harvard.edu/
 PASS	gsmarena	https://www.gsmarena.com/	https://www.gsmarena.com/
 PASS	mercadolibre	https://www.mercadolibre.com/	https://www.mercadolibre.com/
-PASS	verywellhealth	https://www.verywellhealth.com/	https://www.verywellhealth.com/
-FAIL	jalan	https://www.jalan.net/	https://www.jalan.net/en/japan_hotels_ryokan/
+FAIL	verywellhealth	https://www.verywellhealth.com/	verywellhealth
+REDIRECT	jalan	https://www.jalan.net/	https://www.jalan.net/en/japan_hotels_ryokan/
 PASS	allocine	https://www.allocine.fr/	https://www.allocine.fr/
 PASS	tvguide	https://www.tvguide.com/	https://www.tvguide.com/
 PASS	costco	https://www.costco.com/	https://www.costco.com/
-FAIL	hotstar	https://www.hotstar.com/	https://www.hotstar.com/IN/HOME
+PASS	hotstar	https://www.hotstar.com/	https://www.hotstar.com/
 PASS	halodoc	https://www.halodoc.com/	https://www.halodoc.com/
 FAIL	amazon	https://www.amazon.com/	amazon
 PASS	lowes	https://www.lowes.com/	https://www.lowes.com/
-FAIL	abplive	https://news.abplive.com/	https://www.abplive.com/
+FAIL	abplive	https://www.abplive.com/	https://news.abplive.com/
 FAIL	weather	https://www.accuweather.com/en/us/boydton/23917/weather-forecast/336242	https://weather.com/
-FAIL	cancer	https://www.cancer.gov/about-cancer/understanding/what-is-cancer	https://www.cancer.org/
-FAIL	xoso	https://www.minhngoc.net.vn/	
-FAIL	thehindu	https://www.thehindu.com/	thehindu
+PASS	cancer	https://www.cancer.org/	https://www.cancer.org/
+FAIL	xoso	https://www.minhngoc.net.vn/	https://xoso.com.vn/
+PASS	thehindu	https://www.thehindu.com/	https://www.thehindu.com/
 PASS	go	https://go.dev/	https://go.dev/
 PASS	nasa	https://www.nasa.gov/	https://www.nasa.gov/
 PASS	sattamatkachart	https://sattamatkachart.org/	https://sattamatkachart.org/
 PASS	allegro	https://allegro.pl/	https://allegro.pl/
 PASS	msdmanuals	https://www.msdmanuals.com/	https://www.msdmanuals.com/
-PASS	www.gov		
 PASS	hdfcbank	https://www.hdfcbank.com/	https://www.hdfcbank.com/
 PASS	snapinsta	https://snapinsta.to/en	https://snapinsta.to/en
 PASS	icc-cricket	https://www.icc-cricket.com/	https://www.icc-cricket.com/
-PASS	state		
 PASS	techtarget	https://www.techtarget.com/	https://www.techtarget.com/
 PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
 PASS	gramedia	https://www.gramedia.com/	https://www.gramedia.com/
@@ -261,7 +250,7 @@ FAIL	hotpepper	https://www.hotpepper.jp/	https://global.hotpepper.jp/en
 PASS	iplt20	https://www.iplt20.com/	https://www.iplt20.com/
 PASS	transfermarkt	https://www.transfermarkt.com/	https://www.transfermarkt.com/
 PASS	screenrant	https://screenrant.com/	https://screenrant.com/
-FAIL	tuasaude	tuasaude	https://www.tuasaude.com/
+FAIL	tuasaude	https://www.tuasaude.com/	tuasaude
 PASS	kayak	https://www.kayak.com/	https://www.kayak.com/
 PASS	moovitapp	https://moovitapp.com/	https://moovitapp.com/
 PASS	larousse	https://www.larousse.fr/	https://www.larousse.fr/
@@ -276,20 +265,18 @@ PASS	ropentable	https://www.opentable.com/	https://www.opentable.com/
 PASS	bikewale	https://www.bikewale.com/	https://www.bikewale.com/
 PASS	nordstrom	https://www.nordstrom.com/	https://www.nordstrom.com/
 PASS	wordhippo	https://www.wordhippo.com/	https://www.wordhippo.com/
-PASS	xhamster19	xhamster19	xhamster19
 PASS	livehindustan	https://www.livehindustan.com/	https://www.livehindustan.com/
 PASS	grammarly	https://www.grammarly.com/	https://www.grammarly.com/
-FAIL	news18	https://www.news18.com/	news18
-FAIL	bab	bab	
+PASS	news18	https://www.news18.com/	https://www.news18.com/
 PASS	latempo	https://latempo-sabae.com/	https://latempo-sabae.com/
 PASS	blibli	https://www.blibli.com/	https://www.blibli.com/
-FAIL	sarkariresult	https://www.sarkariresult.com/	https://www.sarkariresult.app/
+FAIL	sarkariresult	https://www.sarkariresult.app/	https://sarkaresult.in/
 PASS	wunderground	https://www.wunderground.com/	https://www.wunderground.com/
 PASS	canada	https://www.canada.ca/en.html	https://www.canada.ca/en.html
-FAIL	transfermarkt	transfermarkt	https://www.transfermarkt.com/
-FAIL	revolut	https://www.revolut.com/en-US/	https://www.revolut.com/
+PASS	transfermarkt	https://www.transfermarkt.com/	https://www.transfermarkt.com/
+REDIRECT	revolut	https://www.revolut.com/	https://www.revolut.com/en-US/
 PASS	khanacademy	https://www.khanacademy.org/	https://www.khanacademy.org/
-PASS	tribunnews	tribunnews	tribunnews
+FAIL	tribunnews	https://www.tribunnews.com/	tribunnews
 FAIL	fastdl	https://developer.valvesoftware.com/wiki/FastDL	https://www.fastdl.live/
 PASS	omnicalculator	https://www.omnicalculator.com/	https://www.omnicalculator.com/
 PASS	drugs	https://www.drugs.com/	https://www.drugs.com/
@@ -299,7 +286,7 @@ PASS	cnnindonesia	https://www.cnnindonesia.com/	https://www.cnnindonesia.com/
 PASS	speedtest	https://www.speedtest.net/	https://www.speedtest.net/
 PASS	apartments	https://www.apartments.com/	https://www.apartments.com/
 PASS	parade	https://parade.com/	https://parade.com/
-FAIL	infobae	https://www.infobae.com/	infobae
+PASS	infobae	https://www.infobae.com/	https://www.infobae.com/
 PASS	business-standard	https://www.business-standard.com/	https://www.business-standard.com/
 PASS	magazineluiza	https://www.magazineluiza.com.br/	https://www.magazineluiza.com.br/
 FAIL	as	https://as.com/	https://en.as.com/
@@ -307,22 +294,21 @@ PASS	grubhub	https://www.grubhub.com/	https://www.grubhub.com/
 FAIL	spboss	https://spboss.mobi/	https://www.spmatka.net/
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
 PASS	traveloka	https://www.traveloka.com/	https://www.traveloka.com/
-FAIL	qorno	qorno	https://qorno-online.com/
 PASS	playstation	https://www.playstation.com/en-us/	https://www.playstation.com/en-us/
 PASS	oed	https://www.oed.com/	https://www.oed.com/
 PASS	thecalculatorsite	https://www.thecalculatorsite.com/	https://www.thecalculatorsite.com/
 PASS	cvs	https://www.cvs.com/	https://www.cvs.com/
-PASS	soundcloud	https://soundcloud.com/	https://soundcloud.com/
-PASS	caranddriver	https://www.caranddriver.com/	https://www.caranddriver.com
+FAIL	soundcloud	https://soundcloud.com/	soundcloud
+PASS	caranddriver	https://www.caranddriver.com/	https://www.caranddriver.com/
 PASS	milliyet	https://www.milliyet.com.tr/	https://www.milliyet.com.tr/
 PASS	aiscore	https://www.aiscore.com/	https://www.aiscore.com/
 PASS	espn	https://www.espn.com/	https://www.espn.com/
 PASS	bbcgoodfood	https://www.bbcgoodfood.com/	https://www.bbcgoodfood.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	bajajfinserv	https://www.bajajfinserv.in/	https://www.bajajfinserv.in/
 FAIL	hamariweb	https://www.hamariweb.com/	https://hamariweb.com/
 PASS	goibibo	https://www.goibibo.com/	https://www.goibibo.com/
-FAIL	threads	https://www.threads.com	https://www.threads.net
+FAIL	threads	https://www.threads.com	https://threads.net
 PASS	eksisozluk	https://eksisozluk.com/	https://eksisozluk.com/
 PASS	amarujala	https://www.amarujala.com/	https://www.amarujala.com/
 PASS	realtor	https://www.realtor.com/	https://www.realtor.com/
@@ -330,13 +316,13 @@ PASS	cnnbrasil	https://www.cnnbrasil.com.br/	https://www.cnnbrasil.com.br/
 PASS	navitime	https://www.navitime.co.jp/	https://www.navitime.co.jp/
 PASS	ameblo	https://ameblo.jp/	https://ameblo.jp/
 PASS	jagranjosh	https://www.jagranjosh.com/	https://www.jagranjosh.com/
-PASS	hm		
+FAIL	hm	https://www.hm.com/	
 PASS	who	https://www.who.int/	https://www.who.int/
 PASS	pcmag	https://www.pcmag.com/	https://www.pcmag.com/
 PASS	noaa	https://www.noaa.gov/	https://www.noaa.gov/
-PASS	indiatoday	indiatoday	indiatoday
+PASS	indiatoday	https://www.indiatoday.in/	https://www.indiatoday.in/
 PASS	goodreturns	https://www.goodreturns.in/	https://www.goodreturns.in/
-FAIL	toppr	https://www.toppr.com/	https://www.toppr.com/features/
+REDIRECT	toppr	https://www.toppr.com/	https://www.toppr.com/?utmsource=blog
 PASS	meteofrance	https://meteofrance.com/	https://meteofrance.com/
 PASS	carfax	https://www.carfax.com/	https://www.carfax.com/
 FAIL	terra	https://en.wikipedia.org/wiki/Terra	
@@ -354,27 +340,26 @@ PASS	cleartax	https://cleartax.in/	https://cleartax.in/
 FAIL	bola	https://www.abola.pt/	https://www.bola.com/
 PASS	disneyplus	https://www.disneyplus.com/	https://www.disneyplus.com/
 PASS	jiosaavn	https://www.jiosaavn.com/	https://www.jiosaavn.com/
-PASS	biblegateway	https://www.biblegateway.com/	https://www.biblegateway.com/
+FAIL	biblegateway	https://www.biblegateway.com/	biblegateway
 PASS	petmd	https://www.petmd.com/	https://www.petmd.com/
 PASS	lequipe	https://www.lequipe.fr/	https://www.lequipe.fr/
 PASS	bankbazaar	https://www.bankbazaar.com/	https://www.bankbazaar.com/
 FAIL	ny	https://en.wikipedia.org/wiki/New_York_City	https://www.ny.gov/
-PASS	cosmopolitan	https://cosmopolitanlasvegas.mgmresorts.com/en.html	https://cosmopolitanlasvegas.mgmresorts.com/en.html
+FAIL	cosmopolitan	https://cosmopolitanlasvegas.mgmresorts.com/en.html	
 PASS	stackexchange	https://stackexchange.com/	https://stackexchange.com/
 PASS	edmunds	https://www.edmunds.com/	https://www.edmunds.com/
 PASS	foodnetwork	https://www.foodnetwork.com/	https://www.foodnetwork.com/
 FAIL	amazon	https://www.amazon.com/	amazon
-FAIL	strip		https://stripe.com/
 PASS	groupon	https://www.groupon.com/	https://www.groupon.com/
 PASS	independent	https://www.independent.co.uk/	https://www.independent.co.uk/
 PASS	libretexts	https://libretexts.org/	https://libretexts.org/
 PASS	flashscore	https://www.flashscore.com/	https://www.flashscore.com/
 PASS	thekitchn	https://www.thekitchn.com/	https://www.thekitchn.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
-FAIL	imd		https://mausam.imd.gov.in/
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
+FAIL	imd	https://www.imd.org/	https://mausam.imd.gov.in/
 PASS	infoxnews	https://infoxnews.com/	https://infoxnews.com/
 PASS	bseindia	https://www.bseindia.com/	https://www.bseindia.com/
-FAIL	dailymail	dailymail	https://www.dailymail.co.uk/home/index.html
+FAIL	dailymail	https://www.dailymail.co.uk/	dailymail
 PASS	nasdaq	https://www.nasdaq.com/	https://www.nasdaq.com/
 PASS	holidify	https://www.holidify.com/	https://www.holidify.com/
 PASS	office	https://www.office.com/	https://www.office.com/
@@ -382,50 +367,50 @@ PASS	howstuffworks	https://www.howstuffworks.com/	https://www.howstuffworks.com/
 PASS	irs	https://www.irs.gov/	https://www.irs.gov/
 PASS	nerdwallet	https://www.nerdwallet.com/	https://www.nerdwallet.com/
 FAIL	sinoptik	https://www.sinoptik.bg/	https://sinoptik.ua/
-PASS	elmundo	elmundo	elmundo
+FAIL	elmundo	https://www.elmundo.es/	elmundo
 PASS	delishkitchen	https://delishkitchen.tv/	https://delishkitchen.tv/
 FAIL	usa	https://en.wikipedia.org/wiki/United_States	https://www.usa.gov/
 FAIL	apnews	https://apnews.com/	apnews
-PASS	www.gob	https://www.gob.mx/	https://www.gob.mx/
+FAIL	www.gob	https://www.gob.mx/	
 PASS	w3schools	https://www.w3schools.com/	https://www.w3schools.com/
 PASS	91mobiles	https://www.91mobiles.com/	https://www.91mobiles.com/
 PASS	themoviedb	https://www.themoviedb.org/	https://www.themoviedb.org/
-FAIL	fandango	fandango	https://www.fandango.com/
+PASS	fandango	https://www.fandango.com/	https://www.fandango.com/
 PASS	walgreens	https://www.walgreens.com/	https://www.walgreens.com/
 PASS	mercadolibre	https://www.mercadolibre.com/	https://www.mercadolibre.com/
 PASS	bloomberg	https://www.bloomberg.com/	https://www.bloomberg.com/
-PASS	ziprecruiter	https://www.ziprecruiter.com/	https://www.ziprecruiter.com/
+FAIL	ziprecruiter	https://www.ziprecruiter.com/	ziprecruiter
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
 PASS	letras	https://www.letras.com/	https://www.letras.com/
 PASS	company-information.service	https://find-and-update.company-information.service.gov.uk/	https://find-and-update.company-information.service.gov.uk/
 PASS	convertunits	https://www.convertunits.com/	https://www.convertunits.com/
-FAIL	wetter	https://www.wetteronline.de/	https://weather.com/
-PASS	programme-tv	https://www.programme-tv.net/	https://www.programme-tv.net/
-FAIL	concepto	https://concepto.de/	
+FAIL	wetter	https://www.wetteronline.de/	https://www.wetter.net/
+FAIL	programme-tv	https://www.programme-tv.net/	https://programme-tv.nouvelobs.com/?home=1
+REDIRECT	concepto	https://concepto.de/	https://concepto.de/pagina-web/
 PASS	basketball-reference	https://www.basketball-reference.com/	https://www.basketball-reference.com/
 PASS	southernliving	https://www.southernliving.com/	https://www.southernliving.com/
 PASS	yandex	https://yandex.com/	https://yandex.com/
 PASS	ouest-france	https://www.ouest-france.fr/	https://www.ouest-france.fr/
 PASS	loveandlemons	https://www.loveandlemons.com/	https://www.loveandlemons.com/
 PASS	craigslist	https://www.craigslist.org	https://www.craigslist.org/
-FAIL	housing		https://www.zillow.com/
+REDIRECT	housing		https://www.zillow.com/
 PASS	spanishdict	https://www.spanishdict.com/	https://www.spanishdict.com/
 PASS	sahibinden	https://www.sahibinden.com/	https://www.sahibinden.com/
-PASS	note		
+REDIRECT	note		https://onlinenotepad.org/notepad
 PASS	xhamster1	xhamster1	xhamster1
 PASS	crazygames	https://www.crazygames.com/	https://www.crazygames.com/
 PASS	calculatorsoup	https://www.calculatorsoup.com/	https://www.calculatorsoup.com/
 PASS	zara	https://www.zara.com/	https://www.zara.com/
 PASS	snaptik	https://snaptik.app/en2	https://snaptik.app/en2
 PASS	seatgeek	https://seatgeek.com/	https://seatgeek.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	sanook	https://www.sanook.com/	https://www.sanook.com/
 PASS	mountsinai	https://www.mountsinai.org/	https://www.mountsinai.org/
-FAIL	mynavi	https://www.mynavi.jp/	https://www.mynavi.jp/eng/
+FAIL	mynavi	https://www.mynavi.jp/	https://job.mynavi.jp/2026/
 PASS	goodrx	https://www.goodrx.com/	https://www.goodrx.com/
 PASS	nationalgeographic	https://www.nationalgeographic.com/	https://www.nationalgeographic.com/
 PASS	metoffice	https://www.metoffice.gov.uk/	https://www.metoffice.gov.uk/
-FAIL	filmaffinity	https://www.filmaffinity.com/	https://www.filmaffinity.com/us/main.html
+REDIRECT	filmaffinity	https://www.filmaffinity.com/	https://www.filmaffinity.com/us/main.html
 PASS	americanas	https://www.americanas.com.br/	https://www.americanas.com.br/
 PASS	yourdictionary	https://www.yourdictionary.com/	https://www.yourdictionary.com/
 PASS	bankofamerica	https://www.bankofamerica.com/	https://www.bankofamerica.com/
@@ -433,7 +418,7 @@ PASS	hepsiburada	https://www.hepsiburada.com/	https://www.hepsiburada.com/
 PASS	shopee	https://shopee.com/	https://shopee.com/
 PASS	roblox	https://www.roblox.com/	https://www.roblox.com/
 PASS	gaana	https://gaana.com/	https://gaana.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 FAIL	ntv	https://ntvkenya.co.ke/live/	https://www.ntv.co.ug/
 PASS	macys	https://www.macys.com/	https://www.macys.com/
 PASS	justwatch	https://www.justwatch.com/	https://www.justwatch.com/
@@ -445,61 +430,61 @@ PASS	glosbe	https://glosbe.com/	https://glosbe.com/
 PASS	history	https://www.history.com/	https://www.history.com/
 PASS	brainly	https://brainly.com/	https://brainly.com/
 FAIL	chordtela	chordtela	https://www.chordtela.com/
-FAIL	xhaccess	xhaccess	
-FAIL	alc	alc	
-PASS	kemdikbud	https://www.kemendikdasmen.go.id/	https://www.kemendikdasmen.go.id/
+PASS	xhaccess	xhaccess	xhaccess
+FAIL	alc	alc	https://www.alc.ca/content/alc/en.html
+FAIL	kemdikbud	https://www.kemendikdasmen.go.id/	https://www.kemendikbud.go.id/
 PASS	blog.google	https://blog.google/	https://blog.google/
-PASS	nbcnews	https://www.nbcnews.com/	https://www.nbcnews.com/
+FAIL	nbcnews	https://www.nbcnews.com/	nbcnews
 PASS	mgm	https://www.mgmresorts.com/en.html	https://www.mgmresorts.com/en.html
 PASS	lazada	https://www.lazada.com/	https://www.lazada.com/
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
-FAIL	timeout		https://www.timeout.com/
+REDIRECT	timeout		https://www.timeout.com/
 PASS	brainly	https://brainly.com/	https://brainly.com/
 PASS	kotobank	https://kotobank.jp/	https://kotobank.jp/
-PASS	elpais	https://elpais.com/	https://elpais.com/
+FAIL	elpais	https://elpais.com/	elpais
 PASS	rozetka	https://rozetka.com.ua/	https://rozetka.com.ua/
 PASS	filmweb	https://www.filmweb.pl/	https://www.filmweb.pl/
 PASS	olx	https://www.olx.com/	https://www.olx.com/
 PASS	paytm	https://paytm.com/	https://paytm.com/
 FAIL	rajasthan	https://en.wikipedia.org/wiki/Rajasthan	https://rajasthan.gov.in/
 PASS	nintendo	https://www.nintendo.com/us/	https://www.nintendo.com/us/
-FAIL	amazon	https://www.amazon.com/	amazon
+PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
 FAIL	weathernews	https://weathernews.jp/	https://global.weathernews.com/
-PASS	reuters	https://www.reuters.com/	https://www.reuters.com
+PASS	reuters	https://www.reuters.com/	https://www.reuters.com/
 PASS	smallpdf	https://smallpdf.com/	https://smallpdf.com/
 PASS	xvideos2	xvideos2	xvideos2
 PASS	recipetineats	https://www.recipetineats.com/	https://www.recipetineats.com/
-FAIL	my-best	https://us.my-best.com/	https://www.mybestwebsitebuilder.com/
+PASS	my-best	https://us.my-best.com/	https://us.my-best.com/
 PASS	bankrate	https://www.bankrate.com/	https://www.bankrate.com/
-FAIL	xbox	https://www.xbox.com/	https://www.xbox.com/en-US/
+REDIRECT	xbox	https://www.xbox.com/	https://www.xbox.com/en-US/
 PASS	variety	https://variety.com/	https://variety.com/
-PASS	satta-king-fixed-no	https://satta-king-fixed-no.in/	https://satta-king-fixed-no.in/
+FAIL	satta-king-fixed-no	https://satta-king-fixed-no.in/	https://www.scamadviser.com/check-website/satta-king-fixed-no.in
 PASS	99acres	https://www.99acres.com/	https://www.99acres.com/
 PASS	sportingnews	https://www.sportingnews.com/	https://www.sportingnews.com/
 PASS	thespruce	https://www.thespruce.com/	https://www.thespruce.com/
 PASS	flashscore	https://www.flashscore.com/	https://www.flashscore.com/
-PASS	dickssportinggoods	https://www.dickssportinggoods.com/	https://www.dickssportinggoods.com/
+FAIL	dickssportinggoods	https://www.dickssportinggoods.com/	dickssportinggoods
 PASS	kidshealth	https://kidshealth.org/	https://kidshealth.org/
 PASS	usda	https://www.usda.gov/	https://www.usda.gov/
-FAIL	longdo	https://dict.longdo.com/	https://www.longdo.com/en/front
+REDIRECT	longdo	https://www.longdo.com/	https://www.longdo.com/en/front
 PASS	twitch	https://www.twitch.tv/	https://www.twitch.tv/
 PASS	allareacodes	https://www.allareacodes.com/	https://www.allareacodes.com/
 PASS	altibbi	https://altibbi.com/	https://altibbi.com/
 PASS	pantip	https://pantip.com/	https://pantip.com/
 PASS	sportskeeda	https://www.sportskeeda.com/	https://www.sportskeeda.com/
-FAIL	dominos	https://www.dominos.com/	https://www.dominos.com/en/
-FAIL	meta	https://en.wikipedia.org/wiki/Meta_Platforms	https://www.meta.com/
+REDIRECT	dominos	https://www.dominos.com/	https://www.dominos.com/en/
+PASS	meta	https://www.meta.com/	https://www.meta.com/
 PASS	researchgate	https://www.researchgate.net/	https://www.researchgate.net
 PASS	youm7	https://www.youm7.com/	https://www.youm7.com/
 PASS	mykhel	https://www.mykhel.com/	https://www.mykhel.com/
 FAIL	si	https://www.si.com/	
-PASS	lachainemeteo	https://www.lachainemeteo.com/meteo-france/previsions-meteo-france-aujourdhui	https://www.lachainemeteo.com/meteo-france/previsions-meteo-france-aujourdhui
+REDIRECT	lachainemeteo	https://www.lachainemeteo.com/	https://www.lachainemeteo.com/meteo-france/previsions-meteo-france-aujourdhui
 PASS	npr	https://www.npr.org/	https://www.npr.org/
 FAIL	elle	https://www.elleinternational.com/	https://www.elle.com/
 PASS	idntimes	https://www.idntimes.com/	https://www.idntimes.com/
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
 PASS	simplyrecipes	https://www.simplyrecipes.com/	https://www.simplyrecipes.com/
-PASS	tumblr	https://www.tumblr.com/	https://www.tumblr.com
+PASS	tumblr	https://www.tumblr.com/	https://www.tumblr.com/
 PASS	pagesjaunes	https://www.pagesjaunes.fr/	https://www.pagesjaunes.fr/
 PASS	realmadrid	https://www.realmadrid.com/en-US	https://www.realmadrid.com/en-US
 PASS	manutd	https://www.manutd.com/	https://www.manutd.com/
@@ -507,14 +492,14 @@ PASS	igram.world	https://igram.world/	https://igram.world/
 PASS	bhaskar	https://www.bhaskar.com/	https://www.bhaskar.com/
 PASS	cnbcindonesia	https://www.cnbcindonesia.com/	https://www.cnbcindonesia.com/
 PASS	epfindia	https://www.epfindia.gov.in/	https://www.epfindia.gov.in/
-PASS	service-public	https://www.service-public.fr/	https://www.service-public.fr/
+REDIRECT	service-public	https://www.service-public.fr/	https://www.service-public.fr/?lang=en_gb
 PASS	slideshare	https://www.slideshare.net/	https://www.slideshare.net/
 PASS	cornell	https://www.cornell.edu/	https://www.cornell.edu/
 PASS	railyatri	https://www.railyatri.in/	https://www.railyatri.in/
 FAIL	xsmn	https://xosodaiphat.com/xsmn-xo-so-mien-nam.html	https://sxmn.com.vn/
 PASS	worldtimebuddy	https://www.worldtimebuddy.com/	https://www.worldtimebuddy.com/
 PASS	aliexpress	https://www.aliexpress.com/	https://www.aliexpress.com/
-FAIL	vnexpress	https://vnexpress.net/	vnexpress
+PASS	vnexpress	https://vnexpress.net/	https://vnexpress.net/
 PASS	kakaku	https://kakaku.com/	https://kakaku.com/
 PASS	livescore	https://www.livescore.com/en/	https://www.livescore.com/en/
 PASS	espn india	https://www.espn.in/	https://www.espn.in/
@@ -529,9 +514,9 @@ PASS	metric-conversions	https://www.metric-conversions.org/	https://www.metric-c
 FAIL	mappy	https://fr.mappy.com/itineraire	https://en.mappy.com/
 PASS	xhamster2	xhamster2	xhamster2
 PASS	eater	https://www.eater.com/	https://www.eater.com/
-FAIL	almaany	https://www.almaany.com/	https://www.almaany.com/en/dict/ar-en/
+REDIRECT	almaany	https://www.almaany.com/	https://www.almaany.com/en/dict/ar-en/
 PASS	medscape	https://www.medscape.com/	https://www.medscape.com/
-PASS	aljazeera	https://www.aljazeera.com/	https://www.aljazeera.com/
+FAIL	aljazeera	https://www.aljazeera.com/	aljazeera
 PASS	texas	https://www.texas.gov/	https://www.texas.gov/
 PASS	islamicfinder	https://www.islamicfinder.org/	https://www.islamicfinder.org/
 PASS	dicio	https://www.dicio.com.br/	https://www.dicio.com.br/
@@ -547,35 +532,33 @@ PASS	kooora	https://www.kooora.com/	https://www.kooora.com/
 PASS	iggroup	https://www.iggroup.com/	https://www.iggroup.com/
 PASS	adorocinema	https://www.adorocinema.com/	https://www.adorocinema.com/
 PASS	priberam	https://priberam.com/	https://priberam.com/
-PASS	lavanguardia	https://www.lavanguardia.com/	https://www.lavanguardia.com/
+FAIL	lavanguardia	https://www.lavanguardia.com/	lavanguardia
 PASS	ibm	https://www.ibm.com/	https://www.ibm.com/
 PASS	bing	https://www.bing.com/	https://www.bing.com/
 PASS	jansatta	https://www.jansatta.com/	https://www.jansatta.com/
 PASS	mashable	https://mashable.com/	https://mashable.com/
 PASS	fast	https://fast.com/	https://fast.com/
 PASS	blog.youtube	https://blog.youtube/	https://blog.youtube/
-FAIL	snapinsta	https://snapinsta.to/en	snapinsta
+PASS	snapinsta	https://snapinsta.to/en	https://snapinsta.to/en
 PASS	apple	https://www.apple.com/	https://www.apple.com/
 PASS	figaro	https://www.lefigaro.fr/	https://www.lefigaro.fr/
-FAIL	atptour	https://www.atptour.com/home	https://www.atptour.com/en
+PASS	atptour	https://www.atptour.com/home	https://www.atptour.com/home
 PASS	yandex	https://yandex.com/	https://yandex.com/
-FAIL	docomo	https://www.docomo.ne.jp/	https://www.docomo.ne.jp/english/
+REDIRECT	docomo	https://www.docomo.ne.jp/	https://www.docomo.ne.jp/english/
 PASS	worldometers	https://www.worldometers.info/	https://www.worldometers.info/
-PASS	youporn	youporn	youporn
-FAIL	compensador		https://compensador.es/
+REDIRECT	compensador https://compensador.es/		https://compensador.es/
 PASS	oneindia	https://www.oneindia.com/	https://www.oneindia.com/
 PASS	crunchyroll	https://www.crunchyroll.com/	https://www.crunchyroll.com/
 PASS	mapsofindia	https://www.mapsofindia.com/	https://www.mapsofindia.com/
 PASS	finology	https://www.finology.in/	https://www.finology.in/
 FAIL	icicidirect	https://secure.icicidirect.com/	https://www.icicidirect.com/
 PASS	youtubekids	https://www.youtubekids.com/	https://www.youtubekids.com/
-FAIL	lotterysambadresult	https://lotterysambadresult.in/	https://lotterysambadresult.org/
+FAIL	lotterysambadresult	https://lotterysambadresult.in/	https://www.lotterysambad.com/
 PASS	alamy	https://www.alamy.com/	https://www.alamy.com/
 PASS	tn	https://www.tn.gov/	https://www.tn.gov/
 FAIL	si	https://www.si.com/	
 PASS	urbandictionary	https://www.urbandictionary.com/	https://www.urbandictionary.com/
 PASS	bbb	https://www.bbb.org/	https://www.bbb.org/
-PASS	translate		
 PASS	tenor	https://tenor.com/	https://tenor.com/
 PASS	thefreedictionary	https://www.thefreedictionary.com/	https://www.thefreedictionary.com/
 PASS	starbucks	https://www.starbucks.com/	https://www.starbucks.com/
@@ -583,7 +566,7 @@ FAIL	xskt	https://xskt.com.vn/	https://xskt.net/
 FAIL	sabah	https://en.wikipedia.org/wiki/Sabah	https://sabah.gov.my/
 PASS	nypost	https://nypost.com/	https://nypost.com
 PASS	ultimate-guitar	https://www.ultimate-guitar.com/	https://www.ultimate-guitar.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	kurashiru	https://www.kurashiru.com/	https://www.kurashiru.com/
 PASS	michelin	https://www.michelinman.com/	https://www.michelinman.com/
 PASS	pbs	https://www.pbs.org/	https://www.pbs.org/
@@ -608,23 +591,22 @@ PASS	tameteo	https://www.tameteo.com/	https://www.tameteo.com/
 FAIL	aol	https://www.aol.com/	aol
 FAIL	nature	https://en.wikipedia.org/wiki/Nature	https://www.nature.org/en-us/
 PASS	transfermarkt	https://www.transfermarkt.com/	https://www.transfermarkt.com/
-PASS	wattpad	https://www.wattpad.com/	https://www.wattpad.com/
+FAIL	wattpad	https://www.wattpad.com/	wattpad
 PASS	ingles	https://www.ingles-markets.com/	https://www.ingles-markets.com/
 PASS	thegioididong	https://www.thegioididong.com/	https://www.thegioididong.com/
-FAIL	mozilla	https://www.mozilla.org/	https://www.mozilla.org/en-US/
+REDIRECT	mozilla	https://www.mozilla.org/	https://www.mozilla.org/en-US/
 PASS	soccerway	https://www.soccerway.com/	https://www.soccerway.com/
 PASS	nsw	https://www.nsw.gov.au/	https://www.nsw.gov.au/
 PASS	gamerant	https://gamerant.com/	https://gamerant.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
-FAIL	lanacion	lanacion	https://www.lanacion.com.ar/
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
+FAIL	lanacion	https://www.lanacion.com.ar/	lanacion
 PASS	gadgets360	https://www.gadgets360.com/	https://www.gadgets360.com/
 PASS	interia	https://www.interia.pl/	https://www.interia.pl/
 PASS	shopify	https://www.shopify.com/	https://www.shopify.com/
 PASS	trueid	https://www.trueid.net/th-th	https://www.trueid.net/th-th
-FAIL	almanac	almanac	https://www.almanac.com/
+PASS	almanac	https://www.almanac.com/	https://www.almanac.com/
 PASS	stackoverflow	https://stackoverflow.com/	https://stackoverflow.com/
 PASS	consultaremedios	https://consultaremedios.com.br/	https://consultaremedios.com.br/
-PASS	rea		
 PASS	tvinsider	https://www.tvinsider.com/	https://www.tvinsider.com/
 PASS	telangana	https://www.telangana.gov.in/home/20-2/	https://www.telangana.gov.in/home/20-2/
 PASS	bikedekho	https://www.bikedekho.com/	https://www.bikedekho.com/
@@ -633,8 +615,8 @@ PASS	naukri	https://www.naukri.com/	https://www.naukri.com/
 PASS	t-mobile	https://www.t-mobile.com/	https://www.t-mobile.com/
 PASS	prokerala	https://www.prokerala.com/	https://www.prokerala.com/
 PASS	foursquare	https://foursquare.com/	https://foursquare.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
-FAIL	amazon	https://www.amazon.com/	amazon
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
+PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
 PASS	japanpost	https://www.post.japanpost.jp/index_en.html	https://www.post.japanpost.jp/index_en.html
 PASS	thoughtco	https://www.thoughtco.com/	https://www.thoughtco.com/
 PASS	fedex	https://www.fedex.com/en-us/home.html	https://www.fedex.com/en-us/home.html
@@ -642,26 +624,25 @@ PASS	enterprise	https://www.enterprise.com/en/home.html	https://www.enterprise.c
 PASS	line	https://line.me/en/	https://line.me/en/
 PASS	tomsguide	https://www.tomsguide.com/	https://www.tomsguide.com/
 PASS	dooflixapk	https://www.dooflixapk.com/	https://www.dooflixapk.com/
-PASS	haberturk	https://www.haberturk.com/	https://www.haberturk.com/
+FAIL	haberturk	https://www.haberturk.com/	haberturk
 PASS	beinsports	https://www.beinsports.com/en-us	https://www.beinsports.com/en-us
 PASS	pro-football-reference	https://www.pro-football-reference.com/	https://www.pro-football-reference.com/
-FAIL	ups	https://www.ups.com/	ups
+REDIRECT	ups	https://www.ups.com/	https://www.ups.com/us/en/home
 PASS	about.google	https://about.google/	https://about.google/
-FAIL	turkiye	https://en.wikipedia.org/wiki/Turkey	https://www.mfa.gov.tr/default.en.mfa
+FAIL	turkiye	https://en.wikipedia.org/wiki/Turkey	https://www.turkiye.gov.tr/
 PASS	gamewith	https://gamewith.net/	https://gamewith.net/
 PASS	statmuse	https://www.statmuse.com/	https://www.statmuse.com/
 PASS	walmart	https://www.walmart.com/	https://www.walmart.com/
 FAIL	mymovies	https://www.mymovies.dk/products/	https://discover.mymovies.dk/
 PASS	health	https://www.healthline.com/	https://www.healthline.com/
-FAIL	timesnownews	https://www.timesnownews.com/	timesnownews
+PASS	timesnownews	https://www.timesnownews.com/	https://www.timesnownews.com/
 PASS	indianrail	http://indianrail.gov.in/	http://indianrail.gov.in/
 PASS	almasryalyoum	https://www.almasryalyoum.com/	https://www.almasryalyoum.com/
 PASS	mawdoo3	https://mawdoo3.com/	https://mawdoo3.com/
-FAIL	bihar	bihar	https://state.bihar.gov.in/
 PASS	trulia	https://www.trulia.com/	https://www.trulia.com/
 PASS	mi	https://www.mi.com/global/	https://www.mi.com/global/
 PASS	onet	https://www.onetonline.org/	https://www.onetonline.org/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	kapanlagi	https://www.kapanlagi.com/	https://www.kapanlagi.com/
 PASS	caixa	https://www.caixa.gov.br/	https://www.caixa.gov.br/
 FAIL	weather	https://www.accuweather.com/en/us/boydton/23917/weather-forecast/336242	https://weather.com/
@@ -675,13 +656,12 @@ PASS	shutterfly	https://www.shutterfly.com/	https://www.shutterfly.com/
 PASS	indiapost	https://www.indiapost.gov.in/	https://www.indiapost.gov.in/
 FAIL	legacy	https://www.legacy.com/	legacy
 PASS	flightaware	https://www.flightaware.com/	https://www.flightaware.com/
-FAIL	aboutamazon	https://www.aboutamazon.com/	aboutamazon
-PASS	t		
+PASS	aboutamazon	https://www.aboutamazon.com/	https://www.aboutamazon.com/
 PASS	gettyimages	https://www.gettyimages.com/	https://www.gettyimages.com/
-PASS	biblestudytools	https://www.biblestudytools.com/	https://www.biblestudytools.com/
+FAIL	biblestudytools	https://www.biblestudytools.com/	biblestudytools
 PASS	transfermarkt	https://www.transfermarkt.com/	https://www.transfermarkt.com/
 FAIL	physio-pedia	https://physio-pedia.com/home/	https://www.physio-pedia.com/home/
-FAIL	indown	https://indown.io/	indown
+PASS	indown	https://indown.io/	https://indown.io/
 PASS	lenovo	https://www.lenovo.com/us/en/	https://www.lenovo.com/us/en/
 PASS	wikiwand	https://www.wikiwand.com/	https://www.wikiwand.com/
 PASS	tureng	https://tureng.com/	https://tureng.com/
@@ -691,7 +671,6 @@ PASS	swiggy	https://www.swiggy.com/	https://www.swiggy.com/
 PASS	theworlds50best	https://www.theworlds50best.com/	https://www.theworlds50best.com/
 PASS	duckduckgo	https://duckduckgo.com/	https://duckduckgo.com/
 PASS	sikayetvar	https://www.sikayetvar.com/	https://www.sikayetvar.com/
-PASS	latimes	latimes	latimes
 FAIL	united	https://www.united.com/ual/en/us/	https://www.united.com/
 PASS	alltrails	https://www.alltrails.com/	https://www.alltrails.com/
 PASS	meteofor	https://meteofor.com/	https://meteofor.com/
@@ -702,16 +681,16 @@ FAIL	24h	https://www.24h.com.vn/
 PASS	theknot	https://www.theknot.com/	https://www.theknot.com/
 PASS	fcbarcelona	https://www.fcbarcelona.com/	https://www.fcbarcelona.com/
 PASS	hulu	https://www.hulu.com/	https://www.hulu.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	onlinesbi	https://www.onlinesbi.sbi/	https://www.onlinesbi.sbi/
-FAIL	ikyu	https://www.ikyu.com/	https://www.ikyu.com/en-us/
+REDIRECT	ikyu	https://www.ikyu.com/	https://www.ikyu.com/en-us/
 PASS	reclameaqui	https://www.reclameaqui.com.br/	https://www.reclameaqui.com.br/
 FAIL	redbus	https://www.redbus.com/	https://www.redbus.in/
 PASS	shopee	https://shopee.com/	https://shopee.com/
 PASS	bulbagarden	https://bulbagarden.net/home/	https://bulbagarden.net/home/
 FAIL	sbi	https://www.onlinesbi.sbi/	https://sbi.co.in/
 PASS	vecteezy	https://www.vecteezy.com/	https://www.vecteezy.com/
-FAIL	sarkariresult	https://www.sarkariresult.com/	https://www.sarkariresult.app/
+FAIL	sarkariresult	https://www.sarkariresult.com/	https://sarkaresult.in/
 PASS	croxyproxy	https://www.croxyproxy.com/	https://www.croxyproxy.com/
 PASS	stanford	https://www.stanford.edu/	https://www.stanford.edu/
 PASS	ncaa	https://www.ncaa.com/	https://www.ncaa.com/
@@ -719,32 +698,31 @@ PASS	ldoceonline	https://www.ldoceonline.com/	https://www.ldoceonline.com/
 PASS	max	https://www.max.com/	https://www.max.com/
 PASS	statista	https://www.statista.com/	https://www.statista.com/
 PASS	lingvanex	https://lingvanex.com/	https://lingvanex.com/
-FAIL	siloamhospitals	https://www.siloamhospitals.com/en/	https://www.siloamhospitals.com/
+PASS	siloamhospitals	https://www.siloamhospitals.com/	https://www.siloamhospitals.com/
 PASS	ilmeteo	https://www.ilmeteo.it/	https://www.ilmeteo.it/
 PASS	nyc	https://www.nyc.gov/	https://www.nyc.gov/
-PASS	washingtonpost	washingtonpost	washingtonpost
+FAIL	washingtonpost	https://www.washingtonpost.com/	washingtonpost
 PASS	corriere	https://www.corriere.it/	https://www.corriere.it/
 PASS	tripadvisor	https://www.tripadvisor.com/	https://www.tripadvisor.com/
 PASS	baseball-reference	https://www.baseball-reference.com/	https://www.baseball-reference.com/
 PASS	lego	https://www.lego.com/en-us	https://www.lego.com/en-us
 PASS	laliga	https://www.laliga.com/en-GB	https://www.laliga.com/en-GB
-FAIL	thepioneerwoman	https://www.thepioneerwoman.com/	http://reedrummond.com/
+PASS	thepioneerwoman	https://www.thepioneerwoman.com/	https://www.thepioneerwoman.com/
 PASS	mundodeportivo	https://www.mundodeportivo.com/	https://www.mundodeportivo.com/
 FAIL	kicker	https://www.kicker.com/	https://www.kicker.de/
 PASS	hyatt	https://www.hyatt.com/	https://www.hyatt.com/
-PASS	mp		
 PASS	hp	https://www.hp.com/us-en/home.html	https://www.hp.com/us-en/home.html
 PASS	nationalgeographic	https://www.nationalgeographic.com/	https://www.nationalgeographic.com/
-FAIL	exame	https://exame.com/	
+PASS	exame	https://exame.com/	https://exame.com/
 PASS	wellsfargo	https://www.wellsfargo.com/	https://www.wellsfargo.com/
 PASS	tradingeconomics	https://tradingeconomics.com/	https://tradingeconomics.com/
 PASS	mhlw	https://www.mhlw.go.jp/english/	https://www.mhlw.go.jp/english/
 PASS	storysaver	https://www.storysaver.net/	https://www.storysaver.net/
-PASS	wikivoyage	https://en.wikivoyage.org/wiki/Main_Page	https://en.wikivoyage.org/wiki/Main_Page
+REDIRECT	wikivoyage	https://en.wikivoyage.org/	https://en.wikivoyage.org/wiki/Main_Page
 FAIL	live	https://outlook.live.com/	
-PASS	accor	https://all.accor.com/a/en.html	https://all.accor.com/a/en.html
+REDIRECT	accor	https://all.accor.com/	https://all.accor.com/a/en.html
 PASS	ndtv	https://www.ndtv.com/	https://www.ndtv.com/
-PASS	kikkoman	https://www.kikkoman.com/en/	https://www.kikkoman.com/en/
+REDIRECT	kikkoman	https://www.kikkoman.com/	https://www.kikkoman.com/en/
 FAIL	bild	https://www.bild.de/	bild
 PASS	sssinstagram	https://sssinstagram.com/	https://sssinstagram.com/
 PASS	mydramalist	https://mydramalist.com/	https://mydramalist.com/
@@ -756,13 +734,11 @@ PASS	olx	https://www.olx.com/	https://www.olx.com/
 PASS	retty	https://retty.me/	https://retty.me/
 PASS	proxysite	https://www.proxysite.com/	https://www.proxysite.com/
 PASS	indiarailinfo	https://indiarailinfo.com/	https://indiarailinfo.com/
-FAIL	baomoi	https://baomoi.com/	http://baomoi.com/
+FAIL	baomoi	https://baomoi.com/	baomoi
 PASS	verizon	https://www.verizon.com/	https://www.verizon.com/
 PASS	meteored	https://www.meteored.com/	https://www.meteored.com/
-PASS	remove		
 PASS	akakce	https://www.akakce.com/	https://www.akakce.com/
 PASS	couponfollow	https://couponfollow.com	https://couponfollow.com
-PASS	theporndude	theporndude	theporndude
 PASS	hellosehat	https://hellosehat.com/	https://hellosehat.com/
 PASS	hollywoodreporter	https://www.hollywoodreporter.com/	https://www.hollywoodreporter.com/
 PASS	wired	https://www.wired.com	https://www.wired.com
@@ -771,29 +747,26 @@ FAIL	indiatvnews	https://www.indiatvnews.com/	indiatvnews
 PASS	instacart	https://www.instacart.com/	https://www.instacart.com/
 PASS	nefisyemektarifleri	https://www.nefisyemektarifleri.com/	https://www.nefisyemektarifleri.com/
 PASS	pokemon	https://www.pokemon.com/us	https://www.pokemon.com/us
-FAIL	azlyrics    https://lyrics.az/		https://lyrics.az/
+REDIRECT	azlyrics    https://lyrics.az/		https://lyrics.az/
 PASS	tasteofhome	https://www.tasteofhome.com/	https://www.tasteofhome.com/
-FAIL	nu	https://www.nu.edu/	
+PASS	nu	https://www.nu.edu/	https://www.nu.edu/
 PASS	coinmarketcap	https://coinmarketcap.com/	https://coinmarketcap.com/
 PASS	ebay	https://www.ebay.com/	https://www.ebay.com/
-PASS	eltiempo	https://www.eltiempo.com/	https://www.eltiempo.com/
+FAIL	eltiempo	https://www.eltiempo.com/	eltiempo
 PASS	shopee	https://shopee.com/	https://shopee.com/
 PASS	retailmenot	https://www.retailmenot.com/	https://www.retailmenot.com/
 PASS	coursera	https://www.coursera.org/	https://www.coursera.org/
 PASS	samsclub	https://www.samsclub.com/	https://www.samsclub.com/
 PASS	fotmob	https://www.fotmob.com/	https://www.fotmob.com/
 PASS	sephora	https://www.sephora.com/	https://www.sephora.com/
-PASS	ibomma	https://one.ibomma.foo/	https://one.ibomma.foo/
+FAIL	ibomma	https://one.ibomma.foo/	
 FAIL	day	https://en.wikipedia.org/wiki/Day	https://www.nationaldaycalendar.com/
 PASS	lemonde	https://www.lemonde.fr/	https://www.lemonde.fr/
-FAIL	memorial	https://www.merriam-webster.com/dictionary/memorial	https://www.everplans.com/articles/the-top-10-online-memorial-websites
 PASS	bleacherreport	https://bleacherreport.com/	https://bleacherreport.com/
 PASS	leroymerlin	https://www.leroymerlin.fr/	https://www.leroymerlin.fr/
 PASS	tirto	https://tirto.id/	https://tirto.id/
 PASS	cntraveler	https://www.cntraveller.com/	https://www.cntraveller.com/
-PASS	columbia		
-FAIL	dpboss	https://www.dpboss.best/	https://dpboss.website/
-PASS	bostongali-result		
+FAIL	dpboss	https://www.dpboss.best/	https://dpboss.com/
 PASS	loc	https://www.loc.gov/	https://www.loc.gov/
 PASS	similarweb	https://www.similarweb.com/	https://www.similarweb.com/
 PASS	archive	https://archive.org/	https://archive.org/
@@ -803,8 +776,8 @@ PASS	corporatefinanceinstitute	https://corporatefinanceinstitute.com/	https://co
 PASS	epicgames	https://www.epicgames.com/site/en-US/home	https://www.epicgames.com/site/en-US/home
 PASS	thebump	https://www.thebump.com/	https://www.thebump.com/
 PASS	rekhtadictionary	https://rekhtadictionary.com/	https://rekhtadictionary.com/
-FAIL	kapook	https://www.kapook.com/	kapook
-FAIL	mubi	https://mubi.com/	https://mubi.com/en/us
+PASS	kapook	https://www.kapook.com/	https://www.kapook.com/
+REDIRECT	mubi	https://mubi.com/	https://mubi.com/en/us
 FAIL	uta-net	https://www.uta-net.com/	
 PASS	icicibank	https://www.icicibank.com/	https://www.icicibank.com/
 PASS	ebsco	https://www.ebsco.com/	https://www.ebsco.com/
@@ -820,13 +793,13 @@ PASS	rightmove	https://www.rightmove.co.uk/	https://www.rightmove.co.uk/
 PASS	antaranews	https://www.antaranews.com/	https://www.antaranews.com/
 PASS	thespruceeats	https://www.thespruceeats.com/	https://www.thespruceeats.com/
 PASS	leverageedu	https://leverageedu.com/	https://leverageedu.com/
-FAIL	z-table	https://z-table.com/interactive-z-table.html	https://www.ztable.net
+FAIL	z-table	https://z-table.com/interactive-z-table.html	https://www.ztable.net/
 PASS	confirmtkt	https://www.confirmtkt.com/	https://www.confirmtkt.com/
 PASS	herzindagi	https://www.herzindagi.com/	https://www.herzindagi.com/
 PASS	splashlearn	https://www.splashlearn.com/	https://www.splashlearn.com/
-PASS	dmm	https://www.dmm.com/	https://www.dmm.com/
+FAIL	dmm	https://www.dmm.com/	dmm
 PASS	flightradar24	https://www.flightradar24.com/	https://www.flightradar24.com/
-PASS	wayfair	https://www.wayfair.com	https://www.wayfair.com/
+PASS	wayfair	https://www.wayfair.com	https://www.wayfair.com
 PASS	collider	https://collider.com/	https://collider.com/
 PASS	casasbahia	https://www.casasbahia.com.br/	https://www.casasbahia.com.br/
 FAIL	abril	https://es.wikipedia.org/wiki/Abril	https://abril.com.br/
@@ -835,7 +808,7 @@ PASS	unesco	https://www.unesco.org/en	https://www.unesco.org/en
 PASS	kohls	https://www.kohls.com/	https://www.kohls.com/
 PASS	expedia	https://www.expedia.com/	https://www.expedia.com/
 PASS	my-personaltrainer	https://www.my-personaltrainer.it/	https://www.my-personaltrainer.it/
-FAIL	sindonews	sindonews	https://www.sindonews.com/
+FAIL	sindonews	https://www.sindonews.com/	sindonews
 PASS	espn	https://www.espn.com/	https://www.espn.com/
 PASS	infopedia	https://www.infopedia.pt/	https://www.infopedia.pt/
 PASS	typingbaba	https://www.typingbaba.com/	https://www.typingbaba.com/
@@ -843,20 +816,18 @@ PASS	financialexpress	https://www.financialexpress.com/	https://www.financialexp
 PASS	ssa	https://www.ssa.gov/	https://www.ssa.gov/
 PASS	kroger	https://www.kroger.com/	https://www.kroger.com/
 PASS	space	https://www.space.com/	https://www.space.com/
-FAIL	dcinside	https://www.dcinside.com/	http://www.dcinside.com/
-PASS	bom	http://www.bom.gov.au/	http://www.bom.gov.au/
+FAIL	dcinside	https://www.dcinside.com/	https://en.dcinside.com/
+REDIRECT	bom	http://www.bom.gov.au/	http://www.bom.gov.au/australia/
 PASS	redfin	https://www.redfin.com/	https://www.redfin.com/
 PASS	tesla	https://www.tesla.com/	https://www.tesla.com/
-PASS	whitehouse	https://www.whitehouse.gov/	https://www.whitehouse.gov/
-FAIL	nutritionix	https://nutritionix.com/	https://www.nutritionix.com/
+FAIL	whitehouse	https://www.whitehouse.gov/	whitehouse
+PASS	nutritionix	https://nutritionix.com/	https://nutritionix.com/
 PASS	formula1	https://www.formula1.com/	https://www.formula1.com/
 PASS	mit	https://web.mit.edu/	https://web.mit.edu/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
-FAIL	ew		https://ew.com/
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	linguee	https://www.linguee.com/	https://www.linguee.com/
 PASS	tfl	https://tfl.gov.uk/	https://tfl.gov.uk/
-PASS	xvideosporno.blog	xvideosporno.blog	xvideosporno.blog
-PASS	louisvuitton	https://us.louisvuitton.com/eng-us/homepage	https://us.louisvuitton.com/eng-us/homepage
+REDIRECT	louisvuitton	https://us.louisvuitton.com/	https://us.louisvuitton.com/eng-us/homepage
 PASS	tabletki	https://tabletki.ua/	https://tabletki.ua/
 PASS	chefkoch	https://www.chefkoch.de/	https://www.chefkoch.de/
 PASS	tesco	https://www.tesco.com/	https://www.tesco.com/
@@ -867,17 +838,17 @@ PASS	fcbarcelona	https://www.fcbarcelona.com/	https://www.fcbarcelona.com/
 PASS	vividseats	https://www.vividseats.com/	https://www.vividseats.com/
 PASS	toyota	https://www.toyota.com/	https://www.toyota.com/
 FAIL	geology	https://en.wikipedia.org/wiki/Geology	https://geology.com/
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	ixigo	https://www.ixigo.com/	https://www.ixigo.com/
 PASS	steamcommunity	https://steamcommunity.com/	https://steamcommunity.com/
 PASS	newsnow	https://www.newsnow.com/us/	https://www.newsnow.com/us/
 PASS	meteored	https://www.meteored.com/	https://www.meteored.com/
-FAIL	deloitte	https://www.deloitte.com/	https://www.deloitte.com/global/en.html
+REDIRECT	deloitte	https://www.deloitte.com/	https://www.deloitte.com/global/en.html
 FAIL	food	https://www.foodnetwork.com/	https://www.food.com/
 PASS	thesprucepets	https://www.thesprucepets.com/	https://www.thesprucepets.com/
 PASS	gazzetta	https://www.gazzetta.it/	https://www.gazzetta.it/
-PASS	incredibleindia	https://www.incredibleindia.gov.in/en	https://www.incredibleindia.gov.in/en
-FAIL	google	https://www.google.com/	https://www.google.com/xhtml/search
+REDIRECT	incredibleindia	https://www.incredibleindia.gov.in/	https://www.incredibleindia.gov.in/en
+REDIRECT	google	https://www.google.com/	https://www.google.com/xhtml/search
 PASS	foodandwine	https://www.foodandwine.com/	https://www.foodandwine.com/
 PASS	drogasil	https://www.drogasil.com.br/	https://www.drogasil.com.br/
 PASS	purdue	https://www.purdue.edu/	https://www.purdue.edu/
@@ -885,33 +856,31 @@ PASS	diyanet	https://www.diyanet.gov.tr/	https://www.diyanet.gov.tr/
 PASS	commonsensemedia	https://www.commonsensemedia.org/	https://www.commonsensemedia.org/
 FAIL	heart	https://en.wikipedia.org/wiki/Heart	https://www.heart.org/
 FAIL	sky	https://en.wikipedia.org/wiki/Sky	https://www.sky.com/
-FAIL	timesprayer	https://timesprayer.com/	timesprayer
+FAIL	timesprayer	https://timesprayer.com/	https://timesprayer.org/
 PASS	cbc	https://www.cbc.ca/	https://www.cbc.ca/
 FAIL	giallozafferano	https://www.giallozafferano.it/	https://www.giallozafferano.com/
 PASS	sirogohan	https://www.sirogohan.com/	https://www.sirogohan.com/
-PASS	incometax	https://www.incometax.gov.in/iec/foportal/	https://www.incometax.gov.in/iec/foportal/
+FAIL	incometax	https://www.incometax.gov.in/iec/foportal/	https://www.irs.gov/
 PASS	wa	https://wa.gov/	https://wa.gov/
 PASS	deviantart	https://www.deviantart.com/	https://www.deviantart.com/
 PASS	bmkg	https://www.bmkg.go.id/	https://www.bmkg.go.id/
-PASS	telegram	https://telegram.org/	https://telegram.org/
+FAIL	telegram	https://telegram.org/	https://web.telegram.org/
 PASS	pennmedicine	https://www.pennmedicine.org/	https://www.pennmedicine.org/
 PASS	mancity	https://www.mancity.com/	https://www.mancity.com/
-FAIL	rollingstone	https://www.rollingstone.com/	rollingstone
+PASS	rollingstone	https://www.rollingstone.com/	https://www.rollingstone.com/
 PASS	filmibeat	https://www.filmibeat.com/	https://www.filmibeat.com/
 PASS	lotterypost	https://www.lotterypost.com/	https://www.lotterypost.com/
-FAIL	shein	https://us.shein.com/	https://us.shein.com/Home?cdn_rsite=cf&ref=www&rep=dir&ret=us
+PASS	shein	https://us.shein.com/	https://us.shein.com/
 PASS	crunchbase	https://www.crunchbase.com/	https://www.crunchbase.com/
 PASS	bilibili	https://www.bilibili.com/	https://www.bilibili.com/
 PASS	parivahan	https://parivahan.gov.in/parivahan/	https://parivahan.gov.in/parivahan/
 FAIL	zozo	https://zozo.jp/	https://corp.zozo.com/en/
-PASS	time		
-PASS	programme-television	https://www.programme-television.org/	https://www.programme-television.org/
+FAIL	programme-television	https://www.programme-television.org/	programme-television
 PASS	justanswer	https://www.justanswer.com/	https://www.justanswer.com/
 FAIL	kleinanzeigen	https://www.kleinanzeigen.de/	kleinanzeigen
-FAIL	menshealth	https://www.menshealth.com/	https://membership.menshealth.com/
+PASS	menshealth	https://www.menshealth.com/	https://www.menshealth.com/
 PASS	vivo	https://www.vivo.com/en/	https://www.vivo.com/en/
-PASS	last		
-FAIL	delish	https://www.delish.com/	https://delish.com/search/
+FAIL	delish	https://www.delish.com/	https://delish.com
 PASS	nbc	https://www.nbc.com/	https://www.nbc.com/
 PASS	apkpure	https://apkpure.com/	https://apkpure.com/
 PASS	bcci	https://www.bcci.tv/	https://www.bcci.tv/
@@ -927,14 +896,13 @@ PASS	usgs	https://www.usgs.gov/	https://www.usgs.gov/
 PASS	xfinity	https://www.xfinity.com/	https://www.xfinity.com/
 PASS	amazon	https://www.amazon.com/	https://www.amazon.com/
 PASS	usembassy	https://www.usembassy.gov/	https://www.usembassy.gov/
-FAIL	pharmeasy	https://www.pharmeasy.in	https://pharmeasy.in/
+PASS	pharmeasy	https://pharmeasy.in	https://pharmeasy.in/
 PASS	ameli	https://www.ameli.fr/	https://www.ameli.fr/
 FAIL	biography	https://en.wikipedia.org/wiki/Biography	https://www.biographyonline.net/
 PASS	zdf	https://www.zdf.de/	https://www.zdf.de/
 PASS	nhsinform	https://www.nhsinform.scot/	https://www.nhsinform.scot/
 PASS	pngtree	https://pngtree.com/	https://pngtree.com/
 PASS	byrdie	https://www.byrdie.com/	https://www.byrdie.com/
-FAIL	simon		https://www.simon.com/
 PASS	aptoide	https://en.aptoide.com/	https://en.aptoide.com/
 PASS	mercari	https://www.mercari.com/	https://www.mercari.com/
 PASS	tacobell	https://www.tacobell.com/	https://www.tacobell.com/
@@ -948,13 +916,12 @@ PASS	ulta	https://www.ulta.com/	https://www.ulta.com/
 PASS	dennys	https://www.dennys.com/	https://www.dennys.com/
 PASS	paisabazaar	https://www.paisabazaar.com/	https://www.paisabazaar.com/
 PASS	easynepalityping	https://www.easynepalityping.com/	https://www.easynepalityping.com/
-PASS	minhngoc	https://www.minhngoc.net.vn/	https://www.minhngoc.net.vn/
-PASS	lance		
+FAIL	minhngoc	https://www.minhngoc.net.vn/	https://www.minhngoc.net/
 FAIL	english-bangla	https://translate.google.com.bd/?hl=en	https://www.english-bangla.com/
 FAIL	angelone	https://www.angelone.in/login/	https://www.angelone.in/
 PASS	hubspot	https://www.hubspot.com/	https://www.hubspot.com/
-PASS	tsn	https://www.tsn.ca/	https://www.tsn.ca
-PASS	spiegel	https://www.spiegel.de	https://www.spiegel.de/
+REDIRECT	tsn	https://www.tsn.ca/	https://www.tsn.ca/home
+PASS	spiegel	https://www.spiegel.de	https://www.spiegel.de
 PASS	wholefoodsmarket	https://www.wholefoodsmarket.com/	https://www.wholefoodsmarket.com/
 FAIL	lerobert	https://dictionnaire.lerobert.com/	https://www.lerobert.com/
 PASS	snapsave	https://snapsave.app/	https://snapsave.app/
@@ -962,19 +929,18 @@ PASS	laodong	https://laodong.vn/	https://laodong.vn
 PASS	pizzahut	https://www.pizzahut.com/	https://www.pizzahut.com/
 FAIL	alberta	https://en.wikipedia.org/wiki/Alberta	https://www.travelalberta.com/
 PASS	argos	https://www.argos.co.uk/	https://www.argos.co.uk/
-PASS	medicinenet	https://www.medicinenet.com/	https://www.medicinenet.com/
+FAIL	medicinenet	https://www.medicinenet.com/	medicinenet
 PASS	kemenag	https://kemenag.go.id/	https://kemenag.go.id/
 PASS	va	https://www.va.gov/	https://www.va.gov/
 FAIL	telkomsel	https://www.telkomsel.com/en	https://www.telkomsel.com/
-FAIL	irctc	https://www.irctc.co.in/	https://www.irctc.co.in/nget/
+REDIRECT	irctc	https://www.irctc.co.in/	https://www.irctc.co.in/nget/
 FAIL	currency	https://en.wikipedia.org/wiki/Currency	https://www.xe.com/
 PASS	flashscore	https://www.flashscore.com/	https://www.flashscore.com/
-FAIL	nationsonline	https://nationsonline.org/	https://www.nationsonline.org/
+PASS	nationsonline	https://nationsonline.org/	https://nationsonline.org/
 PASS	prabhatkhabar	https://www.prabhatkhabar.com/	https://www.prabhatkhabar.com/
 PASS	olx	https://www.olx.com/	https://www.olx.com/
 PASS	masterclass	https://www.masterclass.com/	https://www.masterclass.com/
 PASS	premiumoutlets	https://www.premiumoutlets.com/	https://www.premiumoutlets.com/
-FAIL	wp	wp	https://wordpress.com/
 PASS	umich	https://umich.edu/	https://umich.edu/
 PASS	deadline	https://deadline.com/	https://deadline.com/
 FAIL	jma	https://www.jma.go.jp/jma/index.html	https://www.jma.go.jp/jma/en/menu.html
@@ -984,16 +950,15 @@ PASS	freeconvert	https://www.freeconvert.com/	https://www.freeconvert.com/
 PASS	americanexpress	https://www.americanexpress.com/	https://www.americanexpress.com/
 PASS	marksandspencer	https://www.marksandspencer.com/	https://www.marksandspencer.com/
 PASS	uscis	https://www.uscis.gov/	https://www.uscis.gov/
-PASS	sexvid	sexvid	sexvid
-PASS	francetvinfo	https://www.france.tv/franceinfo/	https://www.france.tv/franceinfo/
+FAIL	francetvinfo	https://www.france.tv/franceinfo/	https://www.francetvinfo.fr/
 PASS	bls	https://www.bls.gov/	https://www.bls.gov/
 PASS	fdown	https://www.fdown.net/	https://www.fdown.net/
 PASS	shopee	https://shopee.com/	https://shopee.com/
 PASS	capitalone	https://www.capitalone.com/	https://www.capitalone.com/
 PASS	farfetch	https://www.farfetch.com/	https://www.farfetch.com/
-PASS	babla	https://bab.la/	https://bab.la/
+FAIL	babla	https://bab.la/	https://en.bab.la/
 FAIL	tagesschau	https://www.tagesschau.de/	https://www.daserste.de/information/nachrichten-wetter/tagesschau/filter-tagesschau-das-neueste-video-100.html
-PASS	get the wikipedia page for wikipedia	https://en.wikipedia.org/wiki/Wikipedia	https://en.wikipedia.org/wiki/Wikipedia
+FAIL	get the wikipedia page for wikipedia	https://en.wikipedia.org/wiki/Wikipedia	https://www.wikipedia.org/
 FAIL	get the wikipedia page for youtube	https://en.wikipedia.org/wiki/YouTube	get the wikipedia page for youtube
 PASS	get the wikipedia page for instagram	https://en.wikipedia.org/wiki/Instagram	https://en.wikipedia.org/wiki/Instagram
 PASS	get the wikipedia page for google	https://en.wikipedia.org/wiki/Google	https://en.wikipedia.org/wiki/Google
@@ -1020,7 +985,7 @@ PASS	get the wikipedia page for yahoo	https://en.wikipedia.org/wiki/Yahoo	https:
 PASS	get the wikipedia page for quora	https://en.wikipedia.org/wiki/Quora	https://en.wikipedia.org/wiki/Quora
 PASS	get the wikipedia page for cricbuzz	https://en.wikipedia.org/wiki/Cricbuzz	https://en.wikipedia.org/wiki/Cricbuzz
 PASS	get the wikipedia page for amazon	https://en.wikipedia.org/wiki/Amazon_(company)	https://en.wikipedia.org/wiki/Amazon_(company)
-PASS	get the wikipedia page for mayoclinic	https://en.wikipedia.org/wiki/Mayo_Clinic	https://en.wikipedia.org/wiki/Mayo_Clinic
+FAIL	get the wikipedia page for mayoclinic	https://en.wikipedia.org/wiki/Mayo_Clinic	get the wikipedia page for mayoclinic
 PASS	get the wikipedia page for dictionary	https://en.wikipedia.org/wiki/Dictionary	https://en.wikipedia.org/wiki/Dictionary
 PASS	get the wikipedia page for weather	https://en.wikipedia.org/wiki/Weather	https://en.wikipedia.org/wiki/Weather
 PASS	get the wikipedia page for booking	https://en.wikipedia.org/wiki/Booking.com	https://en.wikipedia.org/wiki/Booking.com
@@ -1095,7 +1060,7 @@ PASS	get the wikipedia page for target	https://en.wikipedia.org/wiki/Target_Corp
 PASS	get the wikipedia page for shutterstock	https://en.wikipedia.org/wiki/Shutterstock	https://en.wikipedia.org/wiki/Shutterstock
 FAIL	get the wikipedia page for mercadolivre	https://pt.wikipedia.org/wiki/Mercado_Livre	https://en.wikipedia.org/wiki/Mercado_Libre
 PASS	get the wikipedia page for forbes	https://en.wikipedia.org/wiki/Forbes	https://en.wikipedia.org/wiki/Forbes
-PASS	get the wikipedia page for github	https://en.wikipedia.org/wiki/Github	https://en.wikipedia.org/wiki/Github
+FAIL	get the wikipedia page for github	https://en.wikipedia.org/wiki/Github	https://en.wikipedia.org/wiki/GitHub
 PASS	get the wikipedia page for sofascore	https://en.wikipedia.org/wiki/Sofascore	https://en.wikipedia.org/wiki/Sofascore
 PASS	get the wikipedia page for tokopedia	https://en.wikipedia.org/wiki/Tokopedia	https://en.wikipedia.org/wiki/Tokopedia
 PASS	get the wikipedia page for waze	https://en.wikipedia.org/wiki/Waze	https://en.wikipedia.org/wiki/Waze
@@ -1103,7 +1068,6 @@ PASS	get the wikipedia page for ndtv	https://en.wikipedia.org/wiki/NDTV	https://
 PASS	get the wikipedia page for tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor
 PASS	get the wikipedia page for cookpad	https://en.wikipedia.org/wiki/Cookpad	https://en.wikipedia.org/wiki/Cookpad
 PASS	get the wikipedia page for unsplash	https://en.wikipedia.org/wiki/Unsplash	https://en.wikipedia.org/wiki/Unsplash
-FAIL	get the wikipedia page for xhamster	https://en.wikipedia.org/wiki/XHamster	get the wikipedia page for xhamster
 PASS	get the wikipedia page for shopee	https://en.wikipedia.org/wiki/Shopee	https://en.wikipedia.org/wiki/Shopee
 PASS	get the wikipedia page for mapquest	https://en.wikipedia.org/wiki/MapQuest	https://en.wikipedia.org/wiki/MapQuest
 PASS	get the wikipedia page for nfl	https://en.wikipedia.org/wiki/National_Football_League	https://en.wikipedia.org/wiki/National_Football_League
@@ -1125,9 +1089,9 @@ PASS	get the wikipedia page for zomato	https://en.wikipedia.org/wiki/Zomato	http
 PASS	get the wikipedia page for theguardian	https://en.wikipedia.org/wiki/The_Guardian	https://en.wikipedia.org/wiki/The_Guardian
 PASS	get the wikipedia page for 1mg	https://en.wikipedia.org/wiki/Tata_1mg	https://en.wikipedia.org/wiki/Tata_1mg
 PASS	get the wikipedia page for usnews	https://en.wikipedia.org/wiki/U.S._News_%26_World_Report	https://en.wikipedia.org/wiki/U.S._News_%26_World_Report
-FAIL	get the wikipedia page for rae	https://en.wikipedia.org/wiki/Rae_(given_name)	https://en.wikipedia.org/wiki/RAE
+PASS	get the wikipedia page for rae	https://en.wikipedia.org/wiki/RAE	https://en.wikipedia.org/wiki/RAE
 PASS	get the wikipedia page for openai	https://en.wikipedia.org/wiki/OpenAI	https://en.wikipedia.org/wiki/OpenAI
-PASS	get the wikipedia page for cbsnews	https://en.wikipedia.org/wiki/CBS_News	https://en.wikipedia.org/wiki/CBS_News
+FAIL	get the wikipedia page for cbsnews	https://en.wikipedia.org/wiki/CBS_News	https://simple.wikipedia.org/wiki/CBS_News
 PASS	get the wikipedia page for testbook	https://en.wikipedia.org/wiki/Testbook	https://en.wikipedia.org/wiki/Testbook
 PASS	get the wikipedia page for people	https://en.wikipedia.org/wiki/People	https://en.wikipedia.org/wiki/People
 PASS	get the wikipedia page for skysports	https://en.wikipedia.org/wiki/Sky_Sports	https://en.wikipedia.org/wiki/Sky_Sports
@@ -1143,20 +1107,20 @@ PASS	get the wikipedia page for trustpilot	https://en.wikipedia.org/wiki/Trustpi
 PASS	get the wikipedia page for doordash	https://en.wikipedia.org/wiki/DoorDash	https://en.wikipedia.org/wiki/DoorDash
 PASS	get the wikipedia page for liputan6	https://en.wikipedia.org/wiki/Liputan_6	https://en.wikipedia.org/wiki/Liputan_6
 PASS	get the wikipedia page for tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor
-FAIL	get the wikipedia page for ca	https://en.wikipedia.org/wiki/CA	get the wikipedia page for ca
+FAIL	get the wikipedia page for ca	https://en.wikipedia.org/wiki/CA	https://en.wikipedia.org/wiki/California
 PASS	get the wikipedia page for oxfordlearnersdictionaries	https://en.wikipedia.org/wiki/Oxford_Advanced_Learner%27s_Dictionary	https://en.wikipedia.org/wiki/Oxford_Advanced_Learner%27s_Dictionary
 PASS	get the wikipedia page for gov.uk	https://en.wikipedia.org/wiki/Gov.uk	https://en.wikipedia.org/wiki/Gov.uk
 PASS	get the wikipedia page for magicbricks	https://en.wikipedia.org/wiki/MagicBricks	https://en.wikipedia.org/wiki/MagicBricks
 PASS	get the wikipedia page for cdc	https://en.wikipedia.org/wiki/Centers_for_Disease_Control_and_Prevention	https://en.wikipedia.org/wiki/Centers_for_Disease_Control_and_Prevention
 PASS	get the wikipedia page for agoda	https://en.wikipedia.org/wiki/Agoda	https://en.wikipedia.org/wiki/Agoda
-FAIL	get the wikipedia page for goo	https://en.wikipedia.org/wiki/Goo	https://en.wikipedia.org/wiki/Goo_(search_engine)
+REDIRECT	get the wikipedia page for goo	https://en.wikipedia.org/wiki/Goo	https://en.wikipedia.org/wiki/Goo_(search_engine)
 PASS	get the wikipedia page for alodokter	https://id.wikipedia.org/wiki/Alodokter	https://id.wikipedia.org/wiki/Alodokter
 PASS	get the wikipedia page for naver	https://en.wikipedia.org/wiki/Naver	https://en.wikipedia.org/wiki/Naver
 PASS	get the wikipedia page for nseindia	https://en.wikipedia.org/wiki/National_Stock_Exchange_of_India	https://en.wikipedia.org/wiki/National_Stock_Exchange_of_India
 PASS	get the wikipedia page for wikihow	https://en.wikipedia.org/wiki/WikiHow	https://en.wikipedia.org/wiki/WikiHow
 PASS	get the wikipedia page for hopkinsmedicine	https://en.wikipedia.org/wiki/Johns_Hopkins_School_of_Medicine	https://en.wikipedia.org/wiki/Johns_Hopkins_School_of_Medicine
 PASS	get the wikipedia page for pexels	https://en.wikipedia.org/wiki/Pexels	https://en.wikipedia.org/wiki/Pexels
-FAIL	get the wikipedia page for europa	https://en.wikipedia.org/wiki/Europa	https://en.wikipedia.org/wiki/Europa_(moon)
+REDIRECT	get the wikipedia page for europa	https://en.wikipedia.org/wiki/Europa	https://en.wikipedia.org/wiki/Europa_(moon)
 PASS	get the wikipedia page for cnbc	https://en.wikipedia.org/wiki/CNBC	https://en.wikipedia.org/wiki/CNBC
 PASS	get the wikipedia page for amazon	https://en.wikipedia.org/wiki/Amazon_(company)	https://en.wikipedia.org/wiki/Amazon_(company)
 PASS	get the wikipedia page for time	https://en.wikipedia.org/wiki/Time	https://en.wikipedia.org/wiki/Time
@@ -1194,7 +1158,7 @@ PASS	get the wikipedia page for westernunion	https://en.wikipedia.org/wiki/Weste
 PASS	get the wikipedia page for harvard	https://en.wikipedia.org/wiki/Harvard_University	https://en.wikipedia.org/wiki/Harvard_University
 PASS	get the wikipedia page for medium	https://en.wikipedia.org/wiki/Medium_(website)	https://en.wikipedia.org/wiki/Medium_(website)
 PASS	get the wikipedia page for mercadolibre	https://en.wikipedia.org/wiki/Mercado_Libre	https://en.wikipedia.org/wiki/Mercado_Libre
-PASS	get the wikipedia page for verywellhealth	https://en.wikipedia.org/wiki/Verywell	https://en.wikipedia.org/wiki/Verywell
+FAIL	get the wikipedia page for verywellhealth	https://en.wikipedia.org/wiki/Verywell	get the wikipedia page for verywellhealth
 PASS	get the wikipedia page for jalan	https://en.wikipedia.org/wiki/Jalan	https://en.wikipedia.org/wiki/Jalan
 PASS	get the wikipedia page for allocine	https://en.wikipedia.org/wiki/AlloCin%C3%A9	https://en.wikipedia.org/wiki/AlloCin%C3%A9
 PASS	get the wikipedia page for tvguide	https://en.wikipedia.org/wiki/TV_Guide	https://en.wikipedia.org/wiki/TV_Guide
@@ -1206,30 +1170,29 @@ PASS	get the wikipedia page for lowes	https://en.wikipedia.org/wiki/Lowe%27s	htt
 PASS	get the wikipedia page for abplive	https://en.wikipedia.org/wiki/ABP_News	https://en.wikipedia.org/wiki/ABP_News
 PASS	get the wikipedia page for weather	https://en.wikipedia.org/wiki/Weather	https://en.wikipedia.org/wiki/Weather
 PASS	get the wikipedia page for cancer	https://en.wikipedia.org/wiki/Cancer	https://en.wikipedia.org/wiki/Cancer
-FAIL	get the wikipedia page for thehindu	https://en.wikipedia.org/wiki/The_Hindu	get the wikipedia page for thehindu
-FAIL	get the wikipedia page for go	https://en.wikipedia.org/wiki/Go_(programming_language)	https://en.wikipedia.org/wiki/Go_(game)
+PASS	get the wikipedia page for thehindu	https://en.wikipedia.org/wiki/The_Hindu	https://en.wikipedia.org/wiki/The_Hindu
+PASS	get the wikipedia page for go	https://en.wikipedia.org/wiki/Go_(programming_language)	https://en.wikipedia.org/wiki/Go_(programming_language)
 PASS	get the wikipedia page for nasa	https://en.wikipedia.org/wiki/NASA	https://en.wikipedia.org/wiki/NASA
 FAIL	get the wikipedia page for allegro	https://en.wikipedia.org/wiki/Allegro	get the wikipedia page for allegro
 PASS	get the wikipedia page for msdmanuals	https://en.wikipedia.org/wiki/The_Merck_Manuals	https://en.wikipedia.org/wiki/The_Merck_Manuals
 PASS	get the wikipedia page for www.gov	https://en.wikipedia.org/wiki/.gov	https://en.wikipedia.org/wiki/.gov
 PASS	get the wikipedia page for hdfcbank	https://en.wikipedia.org/wiki/HDFC_Bank	https://en.wikipedia.org/wiki/HDFC_Bank
 PASS	get the wikipedia page for icc-cricket	https://en.wikipedia.org/wiki/International_Cricket_Council	https://en.wikipedia.org/wiki/International_Cricket_Council
-PASS	get the wikipedia page for state	https://en.wikipedia.org/wiki/State	https://en.wikipedia.org/wiki/State
+FAIL	get the wikipedia page for state	https://en.wikipedia.org/wiki/State	get the wikipedia page for state
 PASS	get the wikipedia page for techtarget	https://en.wikipedia.org/wiki/Informa_TechTarget	https://en.wikipedia.org/wiki/Informa_TechTarget
 PASS	get the wikipedia page for amazon	https://en.wikipedia.org/wiki/Amazon_(company)	https://en.wikipedia.org/wiki/Amazon_(company)
 PASS	get the wikipedia page for gramedia	https://en.wikipedia.org/wiki/Gramedia	https://en.wikipedia.org/wiki/Gramedia
-FAIL	get the wikipedia page for ig	https://en.wikipedia.org/wiki/IG	https://en.wikipedia.org/wiki/Instagram
+PASS	get the wikipedia page for ig	https://en.wikipedia.org/wiki/IG	https://en.wikipedia.org/wiki/IG
 PASS	get the wikipedia page for tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor
 PASS	get the wikipedia page for economictimes	https://en.wikipedia.org/wiki/The_Economic_Times	https://en.wikipedia.org/wiki/The_Economic_Times
 PASS	get the wikipedia page for ticketmaster	https://en.wikipedia.org/wiki/Ticketmaster	https://en.wikipedia.org/wiki/Ticketmaster
 PASS	get the wikipedia page for businessinsider	https://en.wikipedia.org/wiki/Business_Insider	https://en.wikipedia.org/wiki/Business_Insider
-FAIL	get the wikipedia page for uptodown	https://es.wikipedia.org/wiki/Uptodown	https://fr.wikipedia.org/wiki/Uptodown
+PASS	get the wikipedia page for uptodown	https://es.wikipedia.org/wiki/Uptodown	https://es.wikipedia.org/wiki/Uptodown
 PASS	get the wikipedia page for marca	https://en.wikipedia.org/wiki/Marca_(newspaper)	https://en.wikipedia.org/wiki/Marca_(newspaper)
 PASS	get the wikipedia page for cardekho	https://en.wikipedia.org/wiki/CarDekho_Group	https://en.wikipedia.org/wiki/CarDekho_Group
 PASS	get the wikipedia page for jiocinema	https://en.wikipedia.org/wiki/JioCinema	https://en.wikipedia.org/wiki/JioCinema
 PASS	get the wikipedia page for nps	https://en.wikipedia.org/wiki/National_Park_Service	https://en.wikipedia.org/wiki/National_Park_Service
 PASS	get the wikipedia page for ubereats	https://en.wikipedia.org/wiki/Uber_Eats	https://en.wikipedia.org/wiki/Uber_Eats
-PASS	get the wikipedia page for carwale	https://en.wikipedia.org/wiki/CarTrade.com	https://en.wikipedia.org/wiki/CarTrade.com
 PASS	get the wikipedia page for livemint	https://en.wikipedia.org/wiki/Mint_(newspaper)	https://en.wikipedia.org/wiki/Mint_(newspaper)
 PASS	get the wikipedia page for hotpepper	https://en.wikipedia.org/wiki/Chili_pepper	https://en.wikipedia.org/wiki/Chili_pepper
 PASS	get the wikipedia page for iplt20	https://en.wikipedia.org/wiki/Indian_Premier_League	https://en.wikipedia.org/wiki/Indian_Premier_League
@@ -1244,8 +1207,8 @@ PASS	get the wikipedia page for goodhousekeeping	https://en.wikipedia.org/wiki/G
 PASS	get the wikipedia page for msn	https://en.wikipedia.org/wiki/MSN	https://en.wikipedia.org/wiki/MSN
 PASS	get the wikipedia page for hurriyet	https://en.wikipedia.org/wiki/H%C3%BCrriyet	https://en.wikipedia.org/wiki/H%C3%BCrriyet
 PASS	get the wikipedia page for ropentable	https://en.wikipedia.org/wiki/OpenTable	https://en.wikipedia.org/wiki/OpenTable
-PASS	get the wikipedia page for nordstrom	https://en.wikipedia.org/wiki/Nordstrom	https://en.wikipedia.org/wiki/Nordstrom
-FAIL	get the wikipedia page for livehindustan	https://en.wikipedia.org/?title=Live_Hindustan&redirect=no	
+FAIL	get the wikipedia page for nordstrom	https://en.wikipedia.org/wiki/Nordstrom	get the wikipedia page for nordstrom
+FAIL	get the wikipedia page for livehindustan	https://en.wikipedia.org/?title=Live_Hindustan&redirect=no	https://en.wikipedia.org/wiki/Hindustan_(newspaper)
 PASS	get the wikipedia page for grammarly	https://en.wikipedia.org/wiki/Grammarly	https://en.wikipedia.org/wiki/Grammarly
 PASS	get the wikipedia page for news18	https://en.wikipedia.org/wiki/News18_India	https://en.wikipedia.org/wiki/News18_India
 PASS	get the wikipedia page for bab	https://en.wikipedia.org/wiki/B%C3%A1b	https://en.wikipedia.org/wiki/B%C3%A1b
@@ -1255,7 +1218,7 @@ PASS	get the wikipedia page for canada	https://en.wikipedia.org/wiki/Canada	http
 PASS	get the wikipedia page for transfermarkt	https://en.wikipedia.org/wiki/Transfermarkt	https://en.wikipedia.org/wiki/Transfermarkt
 PASS	get the wikipedia page for revolut	https://en.wikipedia.org/wiki/Revolut	https://en.wikipedia.org/wiki/Revolut
 PASS	get the wikipedia page for khanacademy	https://en.wikipedia.org/wiki/Khan_Academy	https://en.wikipedia.org/wiki/Khan_Academy
-FAIL	get the wikipedia page for tribunnews	https://en.wikipedia.org/wiki/Tribun_Network	https://id.wikipedia.org/wiki/Tribunnews
+FAIL	get the wikipedia page for tribunnews	https://en.wikipedia.org/wiki/Tribun_Network	get the wikipedia page for tribunnews
 PASS	get the wikipedia page for omnicalculator	https://pl.wikipedia.org/wiki/Omni_Calculator	https://pl.wikipedia.org/wiki/Omni_Calculator
 PASS	get the wikipedia page for drugs	https://en.wikipedia.org/wiki/Drug	https://en.wikipedia.org/wiki/Drug
 PASS	get the wikipedia page for india	https://en.wikipedia.org/wiki/India	https://en.wikipedia.org/wiki/India
@@ -1285,7 +1248,7 @@ PASS	get the wikipedia page for goibibo	https://en.wikipedia.org/wiki/Ibibo	http
 PASS	get the wikipedia page for threads	https://en.wikipedia.org/wiki/Threads_(social_network)	https://en.wikipedia.org/wiki/Threads_(social_network)
 PASS	get the wikipedia page for eksisozluk	https://en.wikipedia.org/wiki/Ek%C5%9Fi_S%C3%B6zl%C3%BCk	https://en.wikipedia.org/wiki/Ek%C5%9Fi_S%C3%B6zl%C3%BCk
 PASS	get the wikipedia page for amarujala	https://en.wikipedia.org/wiki/Amar_Ujala	https://en.wikipedia.org/wiki/Amar_Ujala
-FAIL	get the wikipedia page for realtor	https://en.wikipedia.org/wiki/Realtor	https://en.wikipedia.org/wiki/Realtor_(trademark)
+FAIL	get the wikipedia page for realtor	https://en.wikipedia.org/wiki/Realtor	https://en.wikipedia.org/wiki/National_Association_of_Realtors
 PASS	get the wikipedia page for cnnbrasil	https://en.wikipedia.org/wiki/CNN_Brasil	https://en.wikipedia.org/wiki/CNN_Brasil
 PASS	get the wikipedia page for navitime	https://ja.wikipedia.org/wiki/NAVITIME	https://ja.wikipedia.org/wiki/NAVITIME
 PASS	get the wikipedia page for ameblo	https://en.wikipedia.org/wiki/Ameba_(website)	https://en.wikipedia.org/wiki/Ameba_(website)
@@ -1304,11 +1267,11 @@ PASS	get the wikipedia page for apollopharmacy	https://en.wikipedia.org/wiki/Apo
 PASS	get the wikipedia page for az24	https://en.wikipedia.org/wiki/Arizona_State_Route_24	https://en.wikipedia.org/wiki/Arizona_State_Route_24
 PASS	get the wikipedia page for theweathernetwork	https://en.wikipedia.org/wiki/The_Weather_Network	https://en.wikipedia.org/wiki/The_Weather_Network
 PASS	get the wikipedia page for cnet	https://en.wikipedia.org/wiki/CNET	https://en.wikipedia.org/wiki/CNET
-FAIL	get the wikipedia page for today	https://en.wikipedia.org/wiki/Portal:Current_events/2025_June_19	https://en.wikipedia.org/wiki/Portal:Current_events/2025_July_1
+FAIL	get the wikipedia page for today	https://en.wikipedia.org/wiki/Today	https://en.wikipedia.org/wiki/Wikipedia:Main_Page_history/2025_July_2
 PASS	get the wikipedia page for bola	https://en.wikipedia.org/wiki/Bola	https://en.wikipedia.org/wiki/Bola
 PASS	get the wikipedia page for disneyplus	https://en.wikipedia.org/wiki/Disney%2B	https://en.wikipedia.org/wiki/Disney%2B
 PASS	get the wikipedia page for jiosaavn	https://en.wikipedia.org/wiki/JioSaavn	https://en.wikipedia.org/wiki/JioSaavn
-PASS	get the wikipedia page for biblegateway	https://en.wikipedia.org/wiki/BibleGateway	https://en.wikipedia.org/wiki/BibleGateway
+FAIL	get the wikipedia page for biblegateway	https://en.wikipedia.org/wiki/BibleGateway	get the wikipedia page for biblegateway
 PASS	get the wikipedia page for lequipe	https://en.wikipedia.org/wiki/L%27%C3%89quipe	https://en.wikipedia.org/wiki/L%27%C3%89quipe
 FAIL	get the wikipedia page for ny	https://en.wikipedia.org/wiki/New_York_City	https://en.wikipedia.org/wiki/NY
 PASS	get the wikipedia page for cosmopolitan	https://en.wikipedia.org/wiki/Cosmopolitan_(magazine)	https://en.wikipedia.org/wiki/Cosmopolitan_(magazine)
@@ -1319,7 +1282,6 @@ PASS	get the wikipedia page for amazon	https://en.wikipedia.org/wiki/Amazon_(com
 PASS	get the wikipedia page for groupon	https://en.wikipedia.org/wiki/Groupon	https://en.wikipedia.org/wiki/Groupon
 PASS	get the wikipedia page for independent	https://en.wikipedia.org/wiki/Independent	https://en.wikipedia.org/wiki/Independent
 PASS	get the wikipedia page for libretexts	https://en.wikipedia.org/wiki/LibreTexts	https://en.wikipedia.org/wiki/LibreTexts
-PASS	get the wikipedia page for thekitchn	https://en.wikipedia.org/?title=Thekitchn.com&redirect=no	https://en.wikipedia.org/?title=Thekitchn.com&redirect=no
 PASS	get the wikipedia page for google	https://en.wikipedia.org/wiki/Google	https://en.wikipedia.org/wiki/Google
 FAIL	get the wikipedia page for imd	https://en.wikipedia.org/wiki/India_Meteorological_Department	https://en.wikipedia.org/wiki/IMD
 PASS	get the wikipedia page for bseindia	https://en.wikipedia.org/wiki/Bombay_Stock_Exchange	https://en.wikipedia.org/wiki/Bombay_Stock_Exchange
@@ -1329,7 +1291,7 @@ PASS	get the wikipedia page for office	https://en.wikipedia.org/wiki/Office	http
 PASS	get the wikipedia page for howstuffworks	https://en.wikipedia.org/wiki/HowStuffWorks	https://en.wikipedia.org/wiki/HowStuffWorks
 PASS	get the wikipedia page for irs	https://en.wikipedia.org/wiki/Internal_Revenue_Service	https://en.wikipedia.org/wiki/Internal_Revenue_Service
 PASS	get the wikipedia page for nerdwallet	https://en.wikipedia.org/wiki/NerdWallet	https://en.wikipedia.org/wiki/NerdWallet
-FAIL	get the wikipedia page for sinoptik	https://ru.wikipedia.org/wiki/SINOPTIK	
+FAIL	get the wikipedia page for sinoptik	https://ru.wikipedia.org/wiki/SINOPTIK	https://uk.wikipedia.org/wiki/SINOPTIK
 PASS	get the wikipedia page for elmundo	https://en.wikipedia.org/wiki/El_Mundo_(Spain)	https://en.wikipedia.org/wiki/El_Mundo_(Spain)
 PASS	get the wikipedia page for usa	https://en.wikipedia.org/wiki/United_States	https://en.wikipedia.org/wiki/United_States
 PASS	get the wikipedia page for apnews	https://en.wikipedia.org/wiki/Associated_Press	https://en.wikipedia.org/wiki/Associated_Press
@@ -1344,12 +1306,11 @@ PASS	get the wikipedia page for tripadvisor	https://en.wikipedia.org/wiki/Tripad
 PASS	get the wikipedia page for letras	https://es.wikipedia.org/wiki/Letra	https://es.wikipedia.org/wiki/Letra
 FAIL	get the wikipedia page for wetter	https://de.wikipedia.org/wiki/Wetter	https://en.wikipedia.org/wiki/Wetter
 PASS	get the wikipedia page for concepto	https://es.wikipedia.org/wiki/Concepto	https://es.wikipedia.org/wiki/Concepto
-PASS	get the wikipedia page for basketball-reference	https://en.wikipedia.org/wiki/Sports_Reference	https://en.wikipedia.org/wiki/Sports_Reference
 PASS	get the wikipedia page for southernliving	https://en.wikipedia.org/wiki/Southern_Living	https://en.wikipedia.org/wiki/Southern_Living
 PASS	get the wikipedia page for yandex	https://en.wikipedia.org/wiki/Yandex	https://en.wikipedia.org/wiki/Yandex
 PASS	get the wikipedia page for ouest-france	https://en.wikipedia.org/wiki/Ouest-France	https://en.wikipedia.org/wiki/Ouest-France
-PASS	get the wikipedia page for loveandlemons	https://en.wikipedia.org/wiki/Love_and_Lemons	https://en.wikipedia.org/wiki/Love_and_Lemons
-FAIL	get the wikipedia page for craigslist	https://en.wikipedia.org/wiki/Craigslist	get the wikipedia page for craigslist
+FAIL	get the wikipedia page for loveandlemons	https://en.wikipedia.org/wiki/Love_and_Lemons	
+PASS	get the wikipedia page for craigslist	https://en.wikipedia.org/wiki/Craigslist	https://en.wikipedia.org/wiki/Craigslist
 PASS	get the wikipedia page for housing	https://en.wikipedia.org/wiki/Housing	https://en.wikipedia.org/wiki/Housing
 PASS	get the wikipedia page for spanishdict	https://en.wikipedia.org/wiki/SpanishDict	https://en.wikipedia.org/wiki/SpanishDict
 PASS	get the wikipedia page for sahibinden	https://en.wikipedia.org/wiki/Sahibinden.com	https://en.wikipedia.org/wiki/Sahibinden.com
@@ -1375,7 +1336,6 @@ PASS	get the wikipedia page for google	https://en.wikipedia.org/wiki/Google	http
 PASS	get the wikipedia page for ntv	https://en.wikipedia.org/wiki/NTV	https://en.wikipedia.org/wiki/NTV
 PASS	get the wikipedia page for macys	https://en.wikipedia.org/wiki/Macy%27s	https://en.wikipedia.org/wiki/Macy%27s
 PASS	get the wikipedia page for justwatch	https://en.wikipedia.org/wiki/JustWatch	https://en.wikipedia.org/wiki/JustWatch
-PASS	get the wikipedia page for uidai	https://en.wikipedia.org/wiki/Aadhaar	https://en.wikipedia.org/wiki/Aadhaar
 PASS	get the wikipedia page for kbb	https://en.wikipedia.org/wiki/Kelley_Blue_Book	https://en.wikipedia.org/wiki/Kelley_Blue_Book
 PASS	get the wikipedia page for treccani	https://en.wikipedia.org/wiki/Treccani	https://en.wikipedia.org/wiki/Treccani
 PASS	get the wikipedia page for history	https://en.wikipedia.org/wiki/History	https://en.wikipedia.org/wiki/History
@@ -1403,9 +1363,9 @@ PASS	get the wikipedia page for smallpdf	https://en.wikipedia.org/wiki/Smallpdf.
 PASS	get the wikipedia page for recipetineats	https://en.wikipedia.org/wiki/Nagi_Maehashi	https://en.wikipedia.org/wiki/Nagi_Maehashi
 PASS	get the wikipedia page for bankrate	https://en.wikipedia.org/wiki/Bankrate	https://en.wikipedia.org/wiki/Bankrate
 PASS	get the wikipedia page for xbox	https://en.wikipedia.org/wiki/Xbox	https://en.wikipedia.org/wiki/Xbox
-PASS	get the wikipedia page for variety	https://en.wikipedia.org/wiki/Variety_(magazine)	https://en.wikipedia.org/wiki/Variety_(magazine)
+PASS	get the wikipedia page for variety magazine	https://en.wikipedia.org/wiki/Variety_(magazine)	https://en.wikipedia.org/wiki/Variety_(magazine)
 PASS	get the wikipedia page for sportingnews	https://en.wikipedia.org/wiki/The_Sporting_News	https://en.wikipedia.org/wiki/The_Sporting_News
-PASS	get the wikipedia page for dickssportinggoods	https://en.wikipedia.org/wiki/Dick%27s_Sporting_Goods	https://en.wikipedia.org/wiki/Dick%27s_Sporting_Goods
+FAIL	get the wikipedia page for dickssportinggoods	https://en.wikipedia.org/wiki/Dick%27s_Sporting_Goods	get the wikipedia page for dickssportinggoods
 PASS	get the wikipedia page for usda	https://en.wikipedia.org/wiki/United_States_Department_of_Agriculture	https://en.wikipedia.org/wiki/United_States_Department_of_Agriculture
 PASS	get the wikipedia page for twitch	https://en.wikipedia.org/wiki/Twitch_(service)	https://en.wikipedia.org/wiki/Twitch_(service)
 PASS	get the wikipedia page for un	https://en.wikipedia.org/wiki/United_Nations	https://en.wikipedia.org/wiki/United_Nations
@@ -1416,7 +1376,7 @@ PASS	get the wikipedia page for dominos	https://en.wikipedia.org/wiki/Domino%27s
 PASS	get the wikipedia page for meta	https://en.wikipedia.org/wiki/Meta_Platforms	https://en.wikipedia.org/wiki/Meta_Platforms
 PASS	get the wikipedia page for researchgate	https://en.wikipedia.org/wiki/ResearchGate	https://en.wikipedia.org/wiki/ResearchGate
 PASS	get the wikipedia page for youm7	https://en.wikipedia.org/wiki/Youm7	https://en.wikipedia.org/wiki/Youm7
-PASS	get the wikipedia page for si	https://en.wikipedia.org/wiki/International_System_of_Units	https://en.wikipedia.org/wiki/International_System_of_Units
+FAIL	get the wikipedia page for si	https://en.wikipedia.org/wiki/International_System_of_Units	get the wikipedia page for si
 PASS	get the wikipedia page for lachainemeteo	https://en.wikipedia.org/wiki/La_Cha%C3%AEne_M%C3%A9t%C3%A9o	https://en.wikipedia.org/wiki/La_Cha%C3%AEne_M%C3%A9t%C3%A9o
 PASS	get the wikipedia page for npr	https://en.wikipedia.org/wiki/NPR	https://en.wikipedia.org/wiki/NPR
 PASS	get the wikipedia page for elle	https://en.wikipedia.org/wiki/Elle_(magazine)	https://en.wikipedia.org/wiki/Elle_(magazine)
@@ -1437,7 +1397,7 @@ PASS	get the wikipedia page for railyatri	https://en.wikipedia.org/wiki/RailRada
 PASS	get the wikipedia page for aliexpress	https://en.wikipedia.org/wiki/AliExpress	https://en.wikipedia.org/wiki/AliExpress
 PASS	get the wikipedia page for vnexpress	https://en.wikipedia.org/wiki/VnExpress	https://en.wikipedia.org/wiki/VnExpress
 PASS	get the wikipedia page for kakaku	https://en.wikipedia.org/wiki/Kakaku.com	https://en.wikipedia.org/wiki/Kakaku.com
-FAIL	get the wikipedia page for espn india	https://en.wikipedia.org/wiki/Sony_ESPN	https://en.wikipedia.org/?title=ESPN_India&redirect=no
+FAIL	get the wikipedia page for espn india	https://en.wikipedia.org/wiki/Sony_ESPN	https://en.wikipedia.org/?title=ESPN_(Indian_TV_channel)&redirect=no
 PASS	get the wikipedia page for verywellmind	https://en.wikipedia.org/wiki/Verywell	https://en.wikipedia.org/wiki/Verywell
 PASS	get the wikipedia page for urdupoint	https://en.wikipedia.org/wiki/UrduPoint	https://en.wikipedia.org/wiki/UrduPoint
 PASS	get the wikipedia page for seriouseats	https://en.wikipedia.org/wiki/Serious_Eats	https://en.wikipedia.org/wiki/Serious_Eats
@@ -1448,15 +1408,15 @@ PASS	get the wikipedia page for mappy	https://en.wikipedia.org/wiki/Mappy	https:
 PASS	get the wikipedia page for eater	https://en.wikipedia.org/wiki/Eater_(website)	https://en.wikipedia.org/wiki/Eater_(website)
 PASS	get the wikipedia page for almaany	https://en.wikipedia.org/wiki/Almaany	https://en.wikipedia.org/wiki/Almaany
 PASS	get the wikipedia page for medscape	https://en.wikipedia.org/wiki/Medscape	https://en.wikipedia.org/wiki/Medscape
-PASS	get the wikipedia page for aljazeera	https://en.wikipedia.org/wiki/Al_Jazeera_Media_Network	https://en.wikipedia.org/wiki/Al_Jazeera_Media_Network
+FAIL	get the wikipedia page for aljazeera	https://en.wikipedia.org/wiki/Al_Jazeera_Media_Network	get the wikipedia page for aljazeera
 PASS	get the wikipedia page for texas	https://en.wikipedia.org/wiki/Texas	https://en.wikipedia.org/wiki/Texas
 PASS	get the wikipedia page for meesho	https://en.wikipedia.org/wiki/Meesho	https://en.wikipedia.org/wiki/Meesho
 PASS	get the wikipedia page for doubtnut	https://en.wikipedia.org/wiki/Doubtnut	https://en.wikipedia.org/wiki/Doubtnut
 PASS	get the wikipedia page for letras	https://es.wikipedia.org/wiki/Letra	https://es.wikipedia.org/wiki/Letra
 PASS	get the wikipedia page for healthdirect	https://en.wikipedia.org/wiki/Healthdirect_Australia	https://en.wikipedia.org/wiki/Healthdirect_Australia
 PASS	get the wikipedia page for symbolab	https://en.wikipedia.org/wiki/Symbolab	https://en.wikipedia.org/wiki/Symbolab
-FAIL	get the wikipedia page for businesstoday	https://en.wikipedia.org/wiki/Business_Today	https://en.wikipedia.org/wiki/Business_Today_(Student_Magazine)
-PASS	get the wikipedia page for famousbirthdays	https://en.wikipedia.org/wiki/Famous_Birthdays	https://en.wikipedia.org/wiki/Famous_Birthdays
+REDIRECT	get the wikipedia page for businesstoday	https://en.wikipedia.org/wiki/Business_Today	https://en.wikipedia.org/wiki/Business_Today_(Student_Magazine)
+FAIL	get the wikipedia page for famousbirthdays	https://en.wikipedia.org/wiki/Famous_Birthdays	get the wikipedia page for famousbirthdays
 PASS	get the wikipedia page for kooora	https://ar.wikipedia.org/wiki/%D9%83%D9%88%D9%88%D9%88%D8%B1%D8%A9	https://ar.wikipedia.org/wiki/%D9%83%D9%88%D9%88%D9%88%D8%B1%D8%A9
 PASS	get the wikipedia page for iggroup	https://en.wikipedia.org/wiki/IG_Group	https://en.wikipedia.org/wiki/IG_Group
 PASS	get the wikipedia page for adorocinema	https://pt.wikipedia.org/wiki/AdoroCinema	https://pt.wikipedia.org/wiki/AdoroCinema
@@ -1466,7 +1426,6 @@ PASS	get the wikipedia page for ibm	https://en.wikipedia.org/wiki/IBM	https://en
 PASS	get the wikipedia page for bing	https://en.wikipedia.org/wiki/Microsoft_Bing	https://en.wikipedia.org/wiki/Microsoft_Bing
 PASS	get the wikipedia page for jansatta	https://hi.wikipedia.org/wiki/%E0%A4%9C%E0%A4%A8%E0%A4%B8%E0%A4%A4%E0%A5%8D%E0%A4%A4%E0%A4%BE	https://hi.wikipedia.org/wiki/%E0%A4%9C%E0%A4%A8%E0%A4%B8%E0%A4%A4%E0%A5%8D%E0%A4%A4%E0%A4%BE
 PASS	get the wikipedia page for mashable	https://en.wikipedia.org/wiki/Mashable	https://en.wikipedia.org/wiki/Mashable
-FAIL	get the wikipedia page for fast	https://en.wikipedia.org/wiki/Fast_%26_Furious	https://en.wikipedia.org/wiki/Fast
 PASS	get the wikipedia page for apple	https://en.wikipedia.org/wiki/Apple	https://en.wikipedia.org/wiki/Apple
 PASS	get the wikipedia page for figaro	https://en.wikipedia.org/wiki/Figaro	https://en.wikipedia.org/wiki/Figaro
 PASS	get the wikipedia page for atptour	https://en.wikipedia.org/wiki/ATP_Tour	https://en.wikipedia.org/wiki/ATP_Tour
@@ -1476,18 +1435,18 @@ PASS	get the wikipedia page for worldometers	https://en.wikipedia.org/wiki/World
 PASS	get the wikipedia page for compensador	https://en.wikipedia.org/wiki/Compensator	https://en.wikipedia.org/wiki/Compensator
 PASS	get the wikipedia page for oneindia	https://en.wikipedia.org/wiki/Oneindia	https://en.wikipedia.org/wiki/Oneindia
 PASS	get the wikipedia page for crunchyroll	https://en.wikipedia.org/wiki/Crunchyroll	https://en.wikipedia.org/wiki/Crunchyroll
-FAIL	get the wikipedia page for icicidirect	https://en.wikipedia.org/wiki/ICICI_Bank#Subsidiaries	https://wiki2.org/en/ICICIdirect
+PASS	get the wikipedia page for icicidirect	https://en.wikipedia.org/wiki/ICICI_Bank#Subsidiaries	https://en.wikipedia.org/wiki/ICICI_Bank#Subsidiaries
 PASS	get the wikipedia page for youtubekids	https://en.wikipedia.org/wiki/YouTube_Kids	https://en.wikipedia.org/wiki/YouTube_Kids
 PASS	get the wikipedia page for alamy	https://en.wikipedia.org/wiki/Alamy	https://en.wikipedia.org/wiki/Alamy
-FAIL	get the wikipedia page for tn	https://en.wikipedia.org/wiki/TN	https://en.wikipedia.org/wiki/Tennessee
-PASS	get the wikipedia page for si	https://en.wikipedia.org/wiki/International_System_of_Units	https://en.wikipedia.org/wiki/International_System_of_Units
+PASS	get the wikipedia page for tn	https://en.wikipedia.org/wiki/TN	https://en.wikipedia.org/wiki/TN
+FAIL	get the wikipedia page for si	https://en.wikipedia.org/wiki/International_System_of_Units	get the wikipedia page for si
 PASS	get the wikipedia page for urbandictionary	https://en.wikipedia.org/wiki/Urban_Dictionary	https://en.wikipedia.org/wiki/Urban_Dictionary
-FAIL	get the wikipedia page for bbb	https://en.wikipedia.org/wiki/BBB	https://en.wikipedia.org/wiki/Better_Business_Bureau
-PASS	get the wikipedia page for translate	https://en.wikipedia.org/wiki/Wikipedia:Translation	https://en.wikipedia.org/wiki/Wikipedia:Translation
+PASS	get the wikipedia page for bbb	https://en.wikipedia.org/wiki/BBB	https://en.wikipedia.org/wiki/BBB
+FAIL	get the wikipedia page for translate	https://en.wikipedia.org/wiki/Wikipedia:Translation	https://en.wikipedia.org/wiki/Wikipedia:Translate_us
 PASS	get the wikipedia page for tenor	https://en.wikipedia.org/wiki/Tenor	https://en.wikipedia.org/wiki/Tenor
 PASS	get the wikipedia page for thefreedictionary	https://en.wikipedia.org/wiki/The_free_dictionary	https://en.wikipedia.org/wiki/The_free_dictionary
 PASS	get the wikipedia page for starbucks	https://en.wikipedia.org/wiki/Starbucks	https://en.wikipedia.org/wiki/Starbucks
-FAIL	get the wikipedia page for xskt	https://en.wikipedia.org/wiki/XSKT_Can_Tho_F.C.	https://vi.wikipedia.org/wiki/X%E1%BB%95_s%E1%BB%91_ki%E1%BA%BFn_thi%E1%BA%BFt_mi%E1%BB%81n_B%E1%BA%AFc
+PASS	get the wikipedia page for xskt	https://en.wikipedia.org/wiki/XSKT_Can_Tho_F.C.	https://en.wikipedia.org/wiki/XSKT_Can_Tho_F.C.
 PASS	get the wikipedia page for sabah	https://en.wikipedia.org/wiki/Sabah	https://en.wikipedia.org/wiki/Sabah
 PASS	get the wikipedia page for nypost	https://en.wikipedia.org/wiki/New_York_Post	https://en.wikipedia.org/wiki/New_York_Post
 PASS	get the wikipedia page for ultimate-guitar	https://en.wikipedia.org/wiki/Ultimate_Guitar	https://en.wikipedia.org/wiki/Ultimate_Guitar
@@ -1519,9 +1478,8 @@ PASS	get the wikipedia page for thegioididong	https://vi.wikipedia.org/wiki/Theg
 PASS	get the wikipedia page for mozilla	https://en.wikipedia.org/wiki/Mozilla	https://en.wikipedia.org/wiki/Mozilla
 PASS	get the wikipedia page for soccerway	https://en.wikipedia.org/wiki/Soccerway	https://en.wikipedia.org/wiki/Soccerway
 PASS	get the wikipedia page for nsw	https://en.wikipedia.org/wiki/New_South_Wales	https://en.wikipedia.org/wiki/New_South_Wales
-PASS	get the wikipedia page for gamerant	get the wikipedia page for gamerant	get the wikipedia page for gamerant
 PASS	get the wikipedia page for google	https://en.wikipedia.org/wiki/Google	https://en.wikipedia.org/wiki/Google
-FAIL	get the wikipedia page for lanacion	https://en.wikipedia.org/wiki/La_Naci%C3%B3n	get the wikipedia page for lanacion
+PASS	get the wikipedia page for lanacion	https://en.wikipedia.org/wiki/La_Naci%C3%B3n	https://en.wikipedia.org/wiki/La_Naci%C3%B3n
 PASS	get the wikipedia page for interia	https://en.wikipedia.org/wiki/Interia	https://en.wikipedia.org/wiki/Interia
 PASS	get the wikipedia page for shopify	https://en.wikipedia.org/wiki/Shopify	https://en.wikipedia.org/wiki/Shopify
 PASS	get the wikipedia page for trueid	https://id.wikipedia.org/wiki/TrueID	https://id.wikipedia.org/wiki/TrueID
@@ -1530,7 +1488,6 @@ PASS	get the wikipedia page for stackoverflow	https://en.wikipedia.org/wiki/Stac
 PASS	get the wikipedia page for rea	https://en.wikipedia.org/wiki/Rea	https://en.wikipedia.org/wiki/Rea
 PASS	get the wikipedia page for tvinsider	https://en.wikipedia.org/?title=TV_Insider&redirect=no	https://en.wikipedia.org/?title=TV_Insider&redirect=no
 PASS	get the wikipedia page for telangana	https://en.wikipedia.org/wiki/Telangana	https://en.wikipedia.org/wiki/Telangana
-PASS	get the wikipedia page for bikedekho	https://en.wikipedia.org/wiki/CarDekho_Group	https://en.wikipedia.org/wiki/CarDekho_Group
 PASS	get the wikipedia page for wongnai	https://th.wikipedia.org/wiki/%E0%B8%A7%E0%B8%87%E0%B9%83%E0%B8%99	https://th.wikipedia.org/wiki/%E0%B8%A7%E0%B8%87%E0%B9%83%E0%B8%99
 PASS	get the wikipedia page for naukri	https://en.wikipedia.org/wiki/Naukri.com	https://en.wikipedia.org/wiki/Naukri.com
 PASS	get the wikipedia page for t-mobile	https://en.wikipedia.org/wiki/T-Mobile_US	https://en.wikipedia.org/wiki/T-Mobile_US
@@ -1539,7 +1496,7 @@ PASS	get the wikipedia page for google	https://en.wikipedia.org/wiki/Google	http
 PASS	get the wikipedia page for amazon	https://en.wikipedia.org/wiki/Amazon_(company)	https://en.wikipedia.org/wiki/Amazon_(company)
 PASS	get the wikipedia page for japanpost	https://en.wikipedia.org/wiki/Japan_Post	https://en.wikipedia.org/wiki/Japan_Post
 PASS	get the wikipedia page for fedex	https://en.wikipedia.org/wiki/FedEx	https://en.wikipedia.org/wiki/FedEx
-PASS	get the wikipedia page for enterprise	https://en.wikipedia.org/wiki/Enterprise	https://en.wikipedia.org/wiki/Enterprise
+REDIRECT	get the wikipedia page for enterprise	https://en.wikipedia.org/wiki/Enterprise	https://en.wikipedia.org/wiki/Enterprise_Rent-A-Car
 PASS	get the wikipedia page for line	https://en.wikipedia.org/wiki/Line	https://en.wikipedia.org/wiki/Line
 PASS	get the wikipedia page for haberturk	https://en.wikipedia.org/wiki/Habert%C3%BCrk	https://en.wikipedia.org/wiki/Habert%C3%BCrk
 PASS	get the wikipedia page for beinsports	https://en.wikipedia.org/wiki/BeIN_Sports	https://en.wikipedia.org/wiki/BeIN_Sports
@@ -1551,14 +1508,14 @@ PASS	get the wikipedia page for statmuse	https://en.wikipedia.org/wiki/StatMuse	
 PASS	get the wikipedia page for walmart	https://en.wikipedia.org/wiki/Walmart	https://en.wikipedia.org/wiki/Walmart
 PASS	get the wikipedia page for mymovies	https://en.wikipedia.org/wiki/Mymovies.it	https://en.wikipedia.org/wiki/Mymovies.it
 PASS	get the wikipedia page for health	https://en.wikipedia.org/wiki/Health	https://en.wikipedia.org/wiki/Health
-FAIL	get the wikipedia page for timesnownews	https://en.wikipedia.org/wiki/Times_Now	get the wikipedia page for timesnownews
+PASS	get the wikipedia page for timesnownews	https://en.wikipedia.org/wiki/Times_Now	https://en.wikipedia.org/wiki/Times_Now
 PASS	get the wikipedia page for indianrail	https://en.wikipedia.org/wiki/Indian_Railways	https://en.wikipedia.org/wiki/Indian_Railways
 PASS	get the wikipedia page for almasryalyoum	https://en.wikipedia.org/wiki/Al-Masry_Al-Youm	https://en.wikipedia.org/wiki/Al-Masry_Al-Youm
 PASS	get the wikipedia page for mawdoo3	https://en.wikipedia.org/wiki/Mawdoo3	https://en.wikipedia.org/wiki/Mawdoo3
 PASS	get the wikipedia page for bihar	https://en.wikipedia.org/wiki/Bihar	https://en.wikipedia.org/wiki/Bihar
 PASS	get the wikipedia page for trulia	https://en.wikipedia.org/wiki/Trulia	https://en.wikipedia.org/wiki/Trulia
-FAIL	get the wikipedia page for mi	https://en.wikipedia.org/wiki/MI	https://en.wikipedia.org/wiki/Michigan
-PASS	get the wikipedia page for onet	https://en.wikipedia.org/wiki/Occupational_Information_Network	https://en.wikipedia.org/wiki/Occupational_Information_Network
+PASS	get the wikipedia page for mi	https://en.wikipedia.org/wiki/MI	https://en.wikipedia.org/wiki/MI
+FAIL	get the wikipedia page for onet	https://en.wikipedia.org/wiki/Occupational_Information_Network	https://en.wikipedia.org/wiki/Onet.pl
 PASS	get the wikipedia page for google	https://en.wikipedia.org/wiki/Google	https://en.wikipedia.org/wiki/Google
 PASS	get the wikipedia page for kapanlagi	https://id.wikipedia.org/wiki/KapanLagi.com	https://id.wikipedia.org/wiki/KapanLagi.com
 PASS	get the wikipedia page for caixa	https://en.wikipedia.org/wiki/Caixa_Econ%C3%B4mica_Federal	https://en.wikipedia.org/wiki/Caixa_Econ%C3%B4mica_Federal
@@ -1566,7 +1523,6 @@ PASS	get the wikipedia page for weather	https://en.wikipedia.org/wiki/Weather	ht
 PASS	get the wikipedia page for techradar	https://en.wikipedia.org/wiki/TechRadar	https://en.wikipedia.org/wiki/TechRadar
 PASS	get the wikipedia page for kenhub	https://fr.wikipedia.org/wiki/Kenhub	https://fr.wikipedia.org/wiki/Kenhub
 PASS	get the wikipedia page for tudogostoso	https://pt.wikipedia.org/wiki/TudoGostoso	https://pt.wikipedia.org/wiki/TudoGostoso
-FAIL	get the wikipedia page for game8	https://en.wikipedia.org/wiki/List_of_video_game_websites	
 PASS	get the wikipedia page for thairath	https://en.wikipedia.org/wiki/Thairath	https://en.wikipedia.org/wiki/Thairath
 PASS	get the wikipedia page for shutterfly	https://en.wikipedia.org/wiki/Shutterfly	https://en.wikipedia.org/wiki/Shutterfly
 PASS	get the wikipedia page for indiapost	https://en.wikipedia.org/wiki/India_Post	https://en.wikipedia.org/wiki/India_Post
@@ -1585,9 +1541,9 @@ PASS	get the wikipedia page for theworlds50best	https://en.wikipedia.org/wiki/Th
 PASS	get the wikipedia page for duckduckgo	https://en.wikipedia.org/wiki/DuckDuckGo	https://en.wikipedia.org/wiki/DuckDuckGo
 PASS	get the wikipedia page for sikayetvar	https://tr.wikipedia.org/wiki/%C5%9Eikayetvar	https://tr.wikipedia.org/wiki/%C5%9Eikayetvar
 PASS	get the wikipedia page for latimes	https://en.wikipedia.org/wiki/Los_Angeles_Times	https://en.wikipedia.org/wiki/Los_Angeles_Times
-PASS	get the wikipedia page for united	https://en.wikipedia.org/wiki/United	https://en.wikipedia.org/wiki/United
+REDIRECT	get the wikipedia page for united	https://en.wikipedia.org/wiki/United	https://en.wikipedia.org/wiki/United_Airlines
 PASS	get the wikipedia page for alltrails	https://en.wikipedia.org/wiki/AllTrails	https://en.wikipedia.org/wiki/AllTrails
-PASS	get the wikipedia page for allure	https://en.wikipedia.org/wiki/Allure_(magazine)	https://en.wikipedia.org/wiki/Allure_(magazine)
+FAIL	get the wikipedia page for allure	https://en.wikipedia.org/wiki/Allure_(magazine)	https://en.wikipedia.org/wiki/Allure
 PASS	get the wikipedia page for buzzfeed	https://en.wikipedia.org/wiki/BuzzFeed	https://en.wikipedia.org/wiki/BuzzFeed
 PASS	get the wikipedia page for 24h	https://en.wikipedia.org/wiki/24-hour_clock	https://en.wikipedia.org/wiki/24-hour_clock
 PASS	get the wikipedia page for theknot	https://en.wikipedia.org/wiki/The_Knot_Worldwide	https://en.wikipedia.org/wiki/The_Knot_Worldwide
@@ -1615,10 +1571,10 @@ PASS	get the wikipedia page for lego	https://en.wikipedia.org/wiki/Lego	https://
 PASS	get the wikipedia page for laliga	https://en.wikipedia.org/wiki/La_Liga	https://en.wikipedia.org/wiki/La_Liga
 PASS	get the wikipedia page for thepioneerwoman	https://en.wikipedia.org/wiki/Ree_Drummond	https://en.wikipedia.org/wiki/Ree_Drummond
 PASS	get the wikipedia page for mundodeportivo	https://en.wikipedia.org/wiki/Mundo_Deportivo	https://en.wikipedia.org/wiki/Mundo_Deportivo
-FAIL	get the wikipedia page for kicker	https://en.wikipedia.org/wiki/Kicker	https://en.wikipedia.org/wiki/Kicker_%28magazine%29
+REDIRECT	get the wikipedia page for kicker	https://en.wikipedia.org/wiki/Kicker	https://en.wikipedia.org/wiki/Kicker_%28magazine%29
 PASS	get the wikipedia page for hyatt	https://en.wikipedia.org/wiki/Hyatt	https://en.wikipedia.org/wiki/Hyatt
-FAIL	get the wikipedia page for mp	https://en.wikipedia.org/wiki/MP	https://en.wikipedia.org/wiki/Member_of_parliament
-PASS	get the wikipedia page for hp	https://en.wikipedia.org/wiki/Hewlett-Packard	https://en.wikipedia.org/wiki/Hewlett-Packard
+PASS	get the wikipedia page for mp	https://en.wikipedia.org/wiki/MP	https://en.wikipedia.org/wiki/MP
+FAIL	get the wikipedia page for hp	https://en.wikipedia.org/wiki/Hewlett-Packard	https://en.wikipedia.org/wiki/HP_Inc.
 PASS	get the wikipedia page for nationalgeographic	https://en.wikipedia.org/wiki/National_Geographic	https://en.wikipedia.org/wiki/National_Geographic
 PASS	get the wikipedia page for exame	https://en.wikipedia.org/wiki/Exame	https://en.wikipedia.org/wiki/Exame
 PASS	get the wikipedia page for wellsfargo	https://en.wikipedia.org/wiki/Wells_Fargo	https://en.wikipedia.org/wiki/Wells_Fargo
@@ -1632,7 +1588,7 @@ PASS	get the wikipedia page for kikkoman	https://en.wikipedia.org/wiki/Kikkoman	
 PASS	get the wikipedia page for bild	https://en.wikipedia.org/wiki/Bild	https://en.wikipedia.org/wiki/Bild
 PASS	get the wikipedia page for drogaraia	https://en.wikipedia.org/wiki/RD_S.A.	https://en.wikipedia.org/wiki/RD_S.A.
 PASS	get the wikipedia page for prtimes	https://en.wikipedia.org/wiki/PR_Times	https://en.wikipedia.org/wiki/PR_Times
-PASS	get the wikipedia page for autozone	https://en.wikipedia.org/wiki/AutoZone	https://en.wikipedia.org/wiki/AutoZone
+FAIL	get the wikipedia page for autozone	https://en.wikipedia.org/wiki/AutoZone	get the wikipedia page for autozone
 PASS	get the wikipedia page for choicehotels	https://en.wikipedia.org/wiki/Choice_Hotels	https://en.wikipedia.org/wiki/Choice_Hotels
 PASS	get the wikipedia page for olx	https://en.wikipedia.org/wiki/OLX	https://en.wikipedia.org/wiki/OLX
 PASS	get the wikipedia page for retty	https://ja.wikipedia.org/wiki/Retty	https://ja.wikipedia.org/wiki/Retty
@@ -1650,33 +1606,33 @@ PASS	get the wikipedia page for tasteofhome	https://en.wikipedia.org/wiki/Taste_
 PASS	get the wikipedia page for nu	https://en.wikipedia.org/wiki/Nu_(letter)	https://en.wikipedia.org/wiki/Nu_(letter)
 PASS	get the wikipedia page for coinmarketcap	https://en.wikipedia.org/wiki/Coinmarketcap	https://en.wikipedia.org/wiki/Coinmarketcap
 PASS	get the wikipedia page for ebay	https://en.wikipedia.org/wiki/EBay	https://en.wikipedia.org/wiki/EBay
-PASS	get the wikipedia page for eltiempo	https://en.wikipedia.org/wiki/El_Tiempo_(Colombia)	https://en.wikipedia.org/wiki/El_Tiempo_(Colombia)
+FAIL	get the wikipedia page for eltiempo	https://en.wikipedia.org/wiki/El_Tiempo_(Colombia)	get the wikipedia page for eltiempo
 PASS	get the wikipedia page for shopee	https://en.wikipedia.org/wiki/Shopee	https://en.wikipedia.org/wiki/Shopee
 PASS	get the wikipedia page for retailmenot	https://en.wikipedia.org/wiki/RetailMeNot	https://en.wikipedia.org/wiki/RetailMeNot
 PASS	get the wikipedia page for coursera	https://en.wikipedia.org/wiki/Coursera	https://en.wikipedia.org/wiki/Coursera
-PASS	get the wikipedia page for samsclub	https://en.wikipedia.org/wiki/Sam%27s_Club	https://en.wikipedia.org/wiki/Sam%27s_Club
+FAIL	get the wikipedia page for samsclub	https://en.wikipedia.org/wiki/Sam%27s_Club	get the wikipedia page for samsclub
 PASS	get the wikipedia page for sephora	https://en.wikipedia.org/wiki/Sephora	https://en.wikipedia.org/wiki/Sephora
 PASS	get the wikipedia page for lemonde	https://en.wikipedia.org/wiki/Le_Monde	https://en.wikipedia.org/wiki/Le_Monde
 PASS	get the wikipedia page for bleacherreport	https://en.wikipedia.org/wiki/Bleacher_Report	https://en.wikipedia.org/wiki/Bleacher_Report
-PASS	get the wikipedia page for leroymerlin	https://en.wikipedia.org/wiki/Leroy_Merlin	https://en.wikipedia.org/wiki/Leroy_Merlin
+FAIL	get the wikipedia page for leroymerlin	https://en.wikipedia.org/wiki/Leroy_Merlin	get the wikipedia page for leroymerlin
 PASS	get the wikipedia page for tirto	https://en.wikipedia.org/wiki/Tirto_Adhi_Soerjo	https://en.wikipedia.org/wiki/Tirto_Adhi_Soerjo
 PASS	get the wikipedia page for cntraveler	https://en.wikipedia.org/wiki/Cond%C3%A9_Nast_Traveler	https://en.wikipedia.org/wiki/Cond%C3%A9_Nast_Traveler
 PASS	get the wikipedia page for columbia	https://en.wikipedia.org/wiki/Columbia	https://en.wikipedia.org/wiki/Columbia
-PASS	get the wikipedia page for loc	https://en.wikipedia.org/wiki/LOC	https://en.wikipedia.org/wiki/LOC
+FAIL	get the wikipedia page for loc	https://en.wikipedia.org/wiki/LOC	https://en.wikipedia.org/wiki/Library_of_Congress
 FAIL	get the wikipedia page for archive	https://en.wikipedia.org/wiki/Archive	https://en.wikipedia.org/wiki/Internet_Archive
 PASS	get the wikipedia page for letterboxd	https://en.wikipedia.org/wiki/Letterboxd	https://en.wikipedia.org/wiki/Letterboxd
 PASS	get the wikipedia page for fda	https://en.wikipedia.org/wiki/Food_and_Drug_Administration	https://en.wikipedia.org/wiki/Food_and_Drug_Administration
 PASS	get the wikipedia page for corporatefinanceinstitute	https://en.wikipedia.org/wiki/Corporate_Finance_Institute	https://en.wikipedia.org/wiki/Corporate_Finance_Institute
-PASS	get the wikipedia page for epicgames	https://en.wikipedia.org/wiki/Epic_Games	https://en.wikipedia.org/wiki/Epic_Games
+FAIL	get the wikipedia page for epicgames	https://en.wikipedia.org/wiki/Epic_Games	get the wikipedia page for epicgames
 PASS	get the wikipedia page for mubi	https://en.wikipedia.org/wiki/Mubi_(streaming_service)	https://en.wikipedia.org/wiki/Mubi_(streaming_service)
-PASS	get the wikipedia page for uta-net	https://ja.wikipedia.org/wiki/%E6%AD%8C%E3%83%8D%E3%83%83%E3%83%88	https://ja.wikipedia.org/wiki/%E6%AD%8C%E3%83%8D%E3%83%83%E3%83%88
+FAIL	get the wikipedia page for uta-net	https://ja.wikipedia.org/wiki/%E6%AD%8C%E3%83%8D%E3%83%83%E3%83%88	
 PASS	get the wikipedia page for icicibank	https://en.wikipedia.org/wiki/ICICI_Bank	https://en.wikipedia.org/wiki/ICICI_Bank
 PASS	get the wikipedia page for ebsco	https://en.wikipedia.org/wiki/EBSCO_Information_Services	https://en.wikipedia.org/wiki/EBSCO_Information_Services
 PASS	get the wikipedia page for webdunia	https://hi.wikipedia.org/wiki/%E0%A4%B5%E0%A5%87%E0%A4%AC%E0%A4%A6%E0%A5%81%E0%A4%A8%E0%A4%BF%E0%A4%AF%E0%A4%BE	https://hi.wikipedia.org/wiki/%E0%A4%B5%E0%A5%87%E0%A4%AC%E0%A4%A6%E0%A5%81%E0%A4%A8%E0%A4%BF%E0%A4%AF%E0%A4%BE
 PASS	get the wikipedia page for lonelyplanet	https://en.wikipedia.org/wiki/Lonely_Planet	https://en.wikipedia.org/wiki/Lonely_Planet
 PASS	get the wikipedia page for cbr	https://en.wikipedia.org/wiki/Comic_Book_Resources	https://en.wikipedia.org/wiki/Comic_Book_Resources
 PASS	get the wikipedia page for tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor	https://en.wikipedia.org/wiki/Tripadvisor
-FAIL	get the wikipedia page for asahi	https://en.wikipedia.org/wiki/Asahi	https://en.wikipedia.org/wiki/Asahi_Breweries
+PASS	get the wikipedia page for asahi	https://en.wikipedia.org/wiki/Asahi	https://en.wikipedia.org/wiki/Asahi
 PASS	get the wikipedia page for walmart	https://en.wikipedia.org/wiki/Walmart	https://en.wikipedia.org/wiki/Walmart
 PASS	get the wikipedia page for uniqlo	https://en.wikipedia.org/wiki/Uniqlo	https://en.wikipedia.org/wiki/Uniqlo
 PASS	get the wikipedia page for rightmove	https://en.wikipedia.org/wiki/Rightmove	https://en.wikipedia.org/wiki/Rightmove
@@ -1690,12 +1646,12 @@ FAIL	get the wikipedia page for collider	https://en.wikipedia.org/wiki/Collider	
 PASS	get the wikipedia page for casasbahia	https://en.wikipedia.org/wiki/Casas_Bahia	https://en.wikipedia.org/wiki/Casas_Bahia
 PASS	get the wikipedia page for abril	https://en.wikipedia.org/wiki/Abril	https://en.wikipedia.org/wiki/Abril
 PASS	get the wikipedia page for glassdoor	https://en.wikipedia.org/wiki/Glassdoor	https://en.wikipedia.org/wiki/Glassdoor
-FAIL	get the wikipedia page for unesco	https://en.wikipedia.org/wiki/Unesco	https://en.wikipedia.org/wiki/UNESCO
+PASS	get the wikipedia page for unesco	https://en.wikipedia.org/wiki/Unesco	https://en.wikipedia.org/wiki/Unesco
 PASS	get the wikipedia page for kohls	https://en.wikipedia.org/wiki/Kohl%27s	https://en.wikipedia.org/wiki/Kohl%27s
 PASS	get the wikipedia page for expedia	https://en.wikipedia.org/wiki/Expedia	https://en.wikipedia.org/wiki/Expedia
 PASS	get the wikipedia page for sindonews	https://id.wikipedia.org/wiki/Sindonews	https://id.wikipedia.org/wiki/Sindonews
 PASS	get the wikipedia page for espn	https://en.wikipedia.org/wiki/ESPN	https://en.wikipedia.org/wiki/ESPN
-FAIL	get the wikipedia page for infopedia	https://pt.wikipedia.org/wiki/Infop%C3%A9dia	
+PASS	get the wikipedia page for infopedia	https://pt.wikipedia.org/wiki/Infop%C3%A9dia	https://pt.wikipedia.org/wiki/Infop%C3%A9dia
 PASS	get the wikipedia page for financialexpress	https://en.wikipedia.org/wiki/The_Financial_Express_(India)	https://en.wikipedia.org/wiki/The_Financial_Express_(India)
 PASS	get the wikipedia page for ssa	https://en.wikipedia.org/wiki/Social_Security_Administration	https://en.wikipedia.org/wiki/Social_Security_Administration
 PASS	get the wikipedia page for kroger	https://en.wikipedia.org/wiki/Kroger	https://en.wikipedia.org/wiki/Kroger
@@ -1723,7 +1679,6 @@ PASS	get the wikipedia page for toyota	https://en.wikipedia.org/wiki/Toyota	http
 PASS	get the wikipedia page for geology	https://en.wikipedia.org/wiki/Geology	https://en.wikipedia.org/wiki/Geology
 PASS	get the wikipedia page for google	https://en.wikipedia.org/wiki/Google	https://en.wikipedia.org/wiki/Google
 PASS	get the wikipedia page for ixigo	https://en.wikipedia.org/wiki/Ixigo	https://en.wikipedia.org/wiki/Ixigo
-FAIL	get the wikipedia page for steamcommunity	https://en.wikipedia.org/wiki/Steam_(service)	https://en.wikipedia.org/wiki/Steam_Community
 PASS	get the wikipedia page for newsnow	https://en.wikipedia.org/wiki/NewsNow	https://en.wikipedia.org/wiki/NewsNow
 PASS	get the wikipedia page for deloitte	https://en.wikipedia.org/wiki/Deloitte	https://en.wikipedia.org/wiki/Deloitte
 PASS	get the wikipedia page for food	https://en.wikipedia.org/wiki/Food	https://en.wikipedia.org/wiki/Food
@@ -1736,7 +1691,6 @@ PASS	get the wikipedia page for purdue	https://en.wikipedia.org/wiki/Purdue_Univ
 PASS	get the wikipedia page for diyanet	https://en.wikipedia.org/wiki/Presidency_of_Religious_Affairs	https://en.wikipedia.org/wiki/Presidency_of_Religious_Affairs
 PASS	get the wikipedia page for commonsensemedia	https://en.wikipedia.org/wiki/Common_Sense_Media	https://en.wikipedia.org/wiki/Common_Sense_Media
 PASS	get the wikipedia page for heart	https://en.wikipedia.org/wiki/Heart	https://en.wikipedia.org/wiki/Heart
-FAIL	get the wikipedia page for gnavi	https://handwiki.org/wiki/Software:GNAVI	https://en.wikibooks.org/wiki/Ada_Programming/Platform/Windows/GNAVI
 PASS	get the wikipedia page for sky	https://en.wikipedia.org/wiki/Sky	https://en.wikipedia.org/wiki/Sky
 PASS	get the wikipedia page for cbc	https://en.wikipedia.org/wiki/Canadian_Broadcasting_Corporation	https://en.wikipedia.org/wiki/Canadian_Broadcasting_Corporation
 PASS	get the wikipedia page for giallozafferano	https://it.wikipedia.org/wiki/GialloZafferano	https://it.wikipedia.org/wiki/GialloZafferano
@@ -1763,7 +1717,7 @@ PASS	get the wikipedia page for delish	https://en.wikipedia.org/?title=Delish&re
 PASS	get the wikipedia page for nbc	https://en.wikipedia.org/wiki/NBC	https://en.wikipedia.org/wiki/NBC
 PASS	get the wikipedia page for bcci	https://en.wikipedia.org/wiki/Board_of_Control_for_Cricket_in_India	https://en.wikipedia.org/wiki/Board_of_Control_for_Cricket_in_India
 PASS	get the wikipedia page for webteb	https://en.wikipedia.org/wiki/WebTeb	https://en.wikipedia.org/wiki/WebTeb
-PASS	get the wikipedia page for gap	https://en.wikipedia.org/wiki/Gap_Inc.	https://en.wikipedia.org/wiki/Gap_Inc.
+FAIL	get the wikipedia page for gap	https://en.wikipedia.org/wiki/Gap_Inc.	get the wikipedia page for gap
 PASS	get the wikipedia page for census	https://en.wikipedia.org/wiki/Census	https://en.wikipedia.org/wiki/Census
 PASS	get the wikipedia page for flickr	https://en.wikipedia.org/wiki/Flickr	https://en.wikipedia.org/wiki/Flickr
 PASS	get the wikipedia page for aldi	https://en.wikipedia.org/wiki/Aldi	https://en.wikipedia.org/wiki/Aldi
@@ -1776,7 +1730,6 @@ PASS	get the wikipedia page for pharmeasy	https://en.wikipedia.org/wiki/PharmEas
 FAIL	get the wikipedia page for ameli	https://en.wikipedia.org/wiki/Am%C3%A9lie	https://en.wikipedia.org/wiki/Ameli
 PASS	get the wikipedia page for biography	https://en.wikipedia.org/wiki/Biography	https://en.wikipedia.org/wiki/Biography
 PASS	get the wikipedia page for zdf	https://en.wikipedia.org/wiki/ZDF	https://en.wikipedia.org/wiki/ZDF
-PASS	get the wikipedia page for byrdie	https://en.wikipedia.org/?title=Byrdie&redirect=no	https://en.wikipedia.org/?title=Byrdie&redirect=no
 PASS	get the wikipedia page for simon	https://en.wikipedia.org/wiki/Simon	https://en.wikipedia.org/wiki/Simon
 PASS	get the wikipedia page for aptoide	https://en.wikipedia.org/wiki/Aptoide	https://en.wikipedia.org/wiki/Aptoide
 PASS	get the wikipedia page for mercari	https://en.wikipedia.org/wiki/Mercari	https://en.wikipedia.org/wiki/Mercari
@@ -1790,7 +1743,7 @@ PASS	get the wikipedia page for ulta	https://en.wikipedia.org/wiki/Ulta_Beauty	h
 PASS	get the wikipedia page for dennys	https://en.wikipedia.org/wiki/Denny%27s	https://en.wikipedia.org/wiki/Denny%27s
 PASS	get the wikipedia page for paisabazaar	https://en.wikipedia.org/wiki/Paisabazaar	https://en.wikipedia.org/wiki/Paisabazaar
 PASS	get the wikipedia page for lance	https://en.wikipedia.org/wiki/Lance	https://en.wikipedia.org/wiki/Lance
-PASS	get the wikipedia page for english-bangla	https://en.wikipedia.org/wiki/Bangladeshi_English	https://en.wikipedia.org/wiki/Bangladeshi_English
+FAIL	get the wikipedia page for english-bangla	https://en.wikipedia.org/wiki/Bangladeshi_English	https://en.wikipedia.org/wiki/Banglish
 PASS	get the wikipedia page for angelone	https://en.wikipedia.org/wiki/Angel_One_(company)	https://en.wikipedia.org/wiki/Angel_One_(company)
 PASS	get the wikipedia page for hubspot	https://en.wikipedia.org/wiki/HubSpot	https://en.wikipedia.org/wiki/HubSpot
 PASS	get the wikipedia page for tsn	https://en.wikipedia.org/wiki/The_Sports_Network	https://en.wikipedia.org/wiki/The_Sports_Network
@@ -1810,7 +1763,7 @@ PASS	get the wikipedia page for prabhatkhabar	https://en.wikipedia.org/wiki/Prab
 PASS	get the wikipedia page for olx	https://en.wikipedia.org/wiki/OLX	https://en.wikipedia.org/wiki/OLX
 PASS	get the wikipedia page for masterclass	https://en.wikipedia.org/wiki/MasterClass	https://en.wikipedia.org/wiki/MasterClass
 PASS	get the wikipedia page for premiumoutlets	https://en.wikipedia.org/wiki/Category:Premium_Outlets	https://en.wikipedia.org/wiki/Category:Premium_Outlets
-FAIL	get the wikipedia page for wp	https://en.wikipedia.org/wiki/Wp	https://en.wikipedia.org/wiki/WordPress
+PASS	get the wikipedia page for wp	https://en.wikipedia.org/wiki/Wp	https://en.wikipedia.org/wiki/Wp
 PASS	get the wikipedia page for umich	https://en.wikipedia.org/wiki/University_of_Michigan	https://en.wikipedia.org/wiki/University_of_Michigan
 PASS	get the wikipedia page for deadline	https://en.wikipedia.org/wiki/Deadline	https://en.wikipedia.org/wiki/Deadline
 PASS	get the wikipedia page for jma	https://en.wikipedia.org/wiki/Japan_Meteorological_Agency	https://en.wikipedia.org/wiki/Japan_Meteorological_Agency
@@ -1820,7 +1773,7 @@ PASS	get the wikipedia page for americanexpress	https://en.wikipedia.org/wiki/Am
 PASS	get the wikipedia page for marksandspencer	https://en.wikipedia.org/wiki/Marks_%26_Spencer	https://en.wikipedia.org/wiki/Marks_%26_Spencer
 PASS	get the wikipedia page for uscis	https://en.wikipedia.org/wiki/United_States_Citizenship_and_Immigration_Services	https://en.wikipedia.org/wiki/United_States_Citizenship_and_Immigration_Services
 PASS	get the wikipedia page for francetvinfo	https://en.wikipedia.org/wiki/France_Info_(TV_channel)	https://en.wikipedia.org/wiki/France_Info_(TV_channel)
-FAIL	get the wikipedia page for bls	https://en.wikipedia.org/wiki/Bureau_of_Labor_Statistics	https://en.wikipedia.org/wiki/Basic_Life_Support
+FAIL	get the wikipedia page for bls	https://en.wikipedia.org/wiki/Bureau_of_Labor_Statistics	https://en.wikipedia.org/wiki/BLS
 PASS	get the wikipedia page for shopee	https://en.wikipedia.org/wiki/Shopee	https://en.wikipedia.org/wiki/Shopee
 PASS	get the wikipedia page for capitalone	https://en.wikipedia.org/wiki/Capital_One	https://en.wikipedia.org/wiki/Capital_One
 PASS	get the wikipedia page for farfetch	https://en.wikipedia.org/wiki/Farfetch	https://en.wikipedia.org/wiki/Farfetch
