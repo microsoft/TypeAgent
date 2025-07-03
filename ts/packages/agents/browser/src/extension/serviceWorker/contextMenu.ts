@@ -51,7 +51,7 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Show website library",
+        title: "View Web Activity",
         id: "showWebsiteLibrary",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
