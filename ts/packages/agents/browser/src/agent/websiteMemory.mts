@@ -402,7 +402,11 @@ export async function importWebsiteData(
     try {
         context.actionIO.setDisplay("Importing website data...");
 
-        const { source, type, limit, days, folder } = action.parameters;
+        const { 
+            source, type, limit, days, folder,
+            extractContent, enableIntelligentAnalysis, enableActionDetection,
+            extractionMode, maxConcurrent, contentTimeout 
+        } = action.parameters;
         const defaultPaths = website.getDefaultBrowserPaths();
 
         let filePath: string;
@@ -436,14 +440,35 @@ export async function importWebsiteData(
         if (limit !== undefined) importOptions.limit = limit;
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
+        
+        // Add enhancement options
+        if (extractContent !== undefined) importOptions.extractContent = extractContent;
+        if (enableIntelligentAnalysis !== undefined) importOptions.enableIntelligentAnalysis = enableIntelligentAnalysis;
+        if (enableActionDetection !== undefined) importOptions.enableActionDetection = enableActionDetection;
+        if (extractionMode !== undefined) importOptions.extractionMode = extractionMode;
+        if (maxConcurrent !== undefined) importOptions.maxConcurrent = maxConcurrent;
+        if (contentTimeout !== undefined) importOptions.contentTimeout = contentTimeout;
 
-        const websites = await website.importWebsites(
-            source,
-            type,
-            filePath,
-            importOptions,
-            progressCallback,
-        );
+        let websites;
+        if (extractContent) {
+            // Use enhanced import with content extraction
+            websites = await website.importWebsitesWithContent(
+                source,
+                type,
+                filePath,
+                importOptions,
+                progressCallback,
+            );
+        } else {
+            // Use basic import for fast metadata-only import
+            websites = await website.importWebsites(
+                source,
+                type,
+                filePath,
+                importOptions,
+                progressCallback,
+            );
+        }
 
         if (!context.sessionContext.agentContext.websiteCollection) {
             context.sessionContext.agentContext.websiteCollection =

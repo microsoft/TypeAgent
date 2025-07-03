@@ -7,8 +7,12 @@ interface ImportOptions {
     limit?: number;
     days?: number;
     folder?: string;
-    includePageContent?: boolean;
-    includeActions?: boolean;
+    extractContent?: boolean;
+    enableIntelligentAnalysis?: boolean;
+    enableActionDetection?: boolean;
+    extractionMode?: "fast" | "balanced" | "deep";
+    maxConcurrent?: number;
+    contentTimeout?: number;
 }
 
 interface ImportHistoryItem {
@@ -44,6 +48,19 @@ interface SearchFilters {
     sourceType?: "bookmarks" | "history";
     domain?: string;
     minRelevance?: number;
+    knowledgeStatus?: "extracted" | "pending" | "none";
+    entityTypes?: string[];
+    minConfidence?: number;
+}
+
+interface KnowledgeStatus {
+    hasKnowledge: boolean;
+    extractionDate?: string;
+    entityCount?: number;
+    topicCount?: number;
+    suggestionCount?: number;
+    status: 'extracted' | 'pending' | 'error' | 'none';
+    confidence?: number;
 }
 
 interface Website {
@@ -55,6 +72,7 @@ interface Website {
     source: "bookmarks" | "history";
     score?: number;
     snippet?: string;
+    knowledge?: KnowledgeStatus;
 }
 
 interface SearchResult {
@@ -116,6 +134,7 @@ class WebsiteLibraryPanel {
     private indexExists: boolean = false;
     private indexCreating: boolean = false;
     private settingsModal: any = null;
+    private knowledgeStatusCache: Map<string, KnowledgeStatus> = new Map();
 
     async initialize() {
         console.log("Initializing Website Library Panel");
@@ -205,6 +224,9 @@ class WebsiteLibraryPanel {
         const relevanceFilter = document.getElementById(
             "relevanceFilter",
         ) as HTMLInputElement;
+        const confidenceFilter = document.getElementById(
+            "confidenceFilter",
+        ) as HTMLInputElement;
 
         // Search input handlers
         searchInput.addEventListener("input", (e) => {
@@ -222,11 +244,17 @@ class WebsiteLibraryPanel {
             this.performSearch();
         });
 
-
         // Relevance filter update
         relevanceFilter.addEventListener("input", (e) => {
             const value = (e.target as HTMLInputElement).value;
             document.getElementById("relevanceValue")!.textContent =
+                `${value}%`;
+        });
+
+        // Confidence filter update
+        confidenceFilter.addEventListener("input", (e) => {
+            const value = (e.target as HTMLInputElement).value;
+            document.getElementById("confidenceValue")!.textContent =
                 `${value}%`;
         });
 
@@ -237,6 +265,8 @@ class WebsiteLibraryPanel {
             "sourceFilter",
             "domainFilter",
             "relevanceFilter",
+            "knowledgeStatusFilter",
+            "confidenceFilter",
         ].forEach((id) => {
             const element = document.getElementById(id);
             if (element) {
@@ -480,15 +510,33 @@ class WebsiteLibraryPanel {
             options.folder = folderInput.value;
         }
 
-        const includeContentCheckbox = document.getElementById(
-            "includePageContent",
+        // Get enhancement options
+        const extractContentCheckbox = document.getElementById(
+            "extractContent",
         ) as HTMLInputElement;
-        options.includePageContent = includeContentCheckbox.checked;
+        options.extractContent = extractContentCheckbox.checked;
 
-        const includeActionsCheckbox = document.getElementById(
-            "includeActions",
+        const intelligentAnalysisCheckbox = document.getElementById(
+            "enableIntelligentAnalysis",
         ) as HTMLInputElement;
-        options.includeActions = includeActionsCheckbox.checked;
+        options.enableIntelligentAnalysis = intelligentAnalysisCheckbox.checked;
+
+        const actionDetectionCheckbox = document.getElementById(
+            "enableActionDetection",
+        ) as HTMLInputElement;
+        options.enableActionDetection = actionDetectionCheckbox.checked;
+
+        const extractionModeSelect = document.getElementById(
+            "extractionMode",
+        ) as HTMLSelectElement;
+        options.extractionMode = extractionModeSelect.value as "fast" | "balanced" | "deep";
+
+        // Set performance defaults
+        options.maxConcurrent = 5; // Limit concurrent requests
+        options.contentTimeout = 10000; // 10 second timeout per page
+        // Set performance defaults
+        options.maxConcurrent = 5; // Limit concurrent requests
+        options.contentTimeout = 10000; // 10 second timeout per page
 
         this.showImportProgress();
 
@@ -644,12 +692,20 @@ class WebsiteLibraryPanel {
         const folderInput = document.getElementById(
             "bookmarkFolder",
         ) as HTMLInputElement;
-        const includeContentCheckbox = document.getElementById(
-            "includePageContent",
+        
+        // Get enhancement option elements
+        const extractContentCheckbox = document.getElementById(
+            "extractContent",
         ) as HTMLInputElement;
-        const includeActionsCheckbox = document.getElementById(
-            "includeActions",
+        const intelligentAnalysisCheckbox = document.getElementById(
+            "enableIntelligentAnalysis",
         ) as HTMLInputElement;
+        const actionDetectionCheckbox = document.getElementById(
+            "enableActionDetection",
+        ) as HTMLInputElement;
+        const extractionModeSelect = document.getElementById(
+            "extractionMode",
+        ) as HTMLSelectElement;
 
         const options: ImportOptions = {
             source: this.selectedBrowser as "chrome" | "edge",
@@ -661,8 +717,12 @@ class WebsiteLibraryPanel {
             options.days = parseInt(daysInput.value);
         if (folderInput.value && this.selectedType === "bookmarks")
             options.folder = folderInput.value;
-        options.includePageContent = includeContentCheckbox.checked;
-        options.includeActions = includeActionsCheckbox.checked;
+            
+        // Add enhancement options
+        options.extractContent = extractContentCheckbox.checked;
+        options.enableIntelligentAnalysis = intelligentAnalysisCheckbox.checked;
+        options.enableActionDetection = actionDetectionCheckbox.checked;
+        options.extractionMode = extractionModeSelect.value as "fast" | "balanced" | "deep";
 
         return options;
     }
@@ -1038,18 +1098,65 @@ class WebsiteLibraryPanel {
 
         try {
             const filters = this.getActiveFilters();
+            
+            // Always use semantic search via queryWebsiteKnowledge
             const response = await chrome.runtime.sendMessage({
-                type: "searchWebsitesEnhanced",
+                type: "queryWebsiteKnowledge",
                 parameters: {
                     query: query,
-                    filters: filters,
-                    includeSummary: true,
-                    limit: 50,
+                    searchScope: "all_indexed",
+                    maxResults: 50,
+                    minRelevance: filters.minRelevance || 0,
+                    includeSuggestedQuestions: false,
+                    filters: filters
                 },
             });
 
             if (response.success) {
-                this.renderSearchResults(response.results);
+                // Transform semantic search result to SearchResult format
+                let searchResults: SearchResult;
+                
+                if (response.result) {
+                    searchResults = {
+                        websites: response.result.sources?.map((source: any) => ({
+                            url: source.url,
+                            title: source.title,
+                            domain: new URL(source.url).hostname,
+                            source: "bookmarks", // Default, will be updated by knowledge check
+                            score: source.relevanceScore,
+                            snippet: source.snippet || ""
+                        })) || [],
+                        summary: {
+                            text: response.result.answer || "",
+                            totalFound: response.result.sources?.length || 0,
+                            searchTime: 0, // Not provided in knowledge response
+                            sources: response.result.sources || [],
+                            entities: response.result.relatedEntities?.map((entity: any) => ({
+                                entity: entity.name,
+                                type: entity.type,
+                                count: 1
+                            })) || []
+                        },
+                        query: query,
+                        filters: filters
+                    };
+                } else {
+                    // Fallback empty result
+                    searchResults = {
+                        websites: [],
+                        summary: {
+                            text: "No results found.",
+                            totalFound: 0,
+                            searchTime: 0,
+                            sources: [],
+                            entities: []
+                        },
+                        query: query,
+                        filters: filters
+                    };
+                }
+                
+                await this.renderSearchResults(searchResults);
                 await this.saveSearchToHistory(query);
                 await this.loadRecentSearches();
             } else {
@@ -1131,6 +1238,13 @@ class WebsiteLibraryPanel {
             (document.getElementById("relevanceFilter") as HTMLInputElement)
                 .value,
         );
+        const knowledgeStatus = (
+            document.getElementById("knowledgeStatusFilter") as HTMLSelectElement
+        ).value;
+        const confidence = parseInt(
+            (document.getElementById("confidenceFilter") as HTMLInputElement)
+                .value,
+        );
 
         const filters: SearchFilters = {};
         if (dateFrom) filters.dateFrom = dateFrom;
@@ -1139,19 +1253,30 @@ class WebsiteLibraryPanel {
             filters.sourceType = sourceType as "bookmarks" | "history";
         if (domain) filters.domain = domain;
         if (relevance > 0) filters.minRelevance = relevance / 100;
+        if (knowledgeStatus) 
+            filters.knowledgeStatus = knowledgeStatus as "extracted" | "pending" | "none";
+        if (confidence > 0) filters.minConfidence = confidence / 100;
 
         return filters;
     }
 
-    private renderSearchResults(results: SearchResult) {
-        this.currentResults = results.websites;
+    private async renderSearchResults(results: SearchResult) {
+        // Enhance results with knowledge status
+        const enhancedWebsites = await this.checkKnowledgeStatus(results.websites);
+        
+        // Apply knowledge-based filtering on client side
+        const filteredWebsites = this.applyKnowledgeFilters(enhancedWebsites, results.filters);
+        
+        this.currentResults = filteredWebsites;
+        results.websites = filteredWebsites;
 
         // Show results card
         const resultsCard = document.getElementById("searchResultsCard")!;
         resultsCard.classList.remove("d-none");
         resultsCard.scrollIntoView({ behavior: "smooth" });
 
-        // Render summary
+        // Render summary (update count after filtering)
+        results.summary.totalFound = filteredWebsites.length;
         this.renderResultsSummary(results);
 
         // Render AI summary if available
@@ -1161,6 +1286,28 @@ class WebsiteLibraryPanel {
 
         // Render results based on current view mode
         this.rerenderResults();
+    }
+
+    private applyKnowledgeFilters(websites: Website[], filters: SearchFilters): Website[] {
+        return websites.filter(website => {
+            // Knowledge status filter
+            if (filters.knowledgeStatus) {
+                const status = website.knowledge?.status || 'none';
+                if (status !== filters.knowledgeStatus) {
+                    return false;
+                }
+            }
+            
+            // Knowledge confidence filter
+            if (filters.minConfidence && filters.minConfidence > 0) {
+                const confidence = website.knowledge?.confidence || 0;
+                if (confidence < filters.minConfidence) {
+                    return false;
+                }
+            }
+            
+            return true;
+        });
     }
 
     private renderResultsSummary(results: SearchResult) {
@@ -1246,9 +1393,11 @@ class WebsiteLibraryPanel {
                                 ${site.title || site.url}
                             </a>
                             ${site.score ? `<span class="result-score ms-2">${Math.round(site.score * 100)}%</span>` : ""}
+                            ${this.getKnowledgeStatusBadge(site.knowledge)}
                         </div>
                         <div class="result-domain text-muted small mb-1">${site.domain}</div>
                         ${site.snippet ? `<p class="small mb-1">${site.snippet}</p>` : ""}
+                        ${this.getKnowledgeDetails(site.knowledge)}
                         <div class="d-flex justify-content-between align-items-center">
                             <small class="text-muted">
                                 ${site.source === "bookmarks" ? "Bookmark" : "History"} 
@@ -1259,6 +1408,10 @@ class WebsiteLibraryPanel {
                                 <button class="btn btn-outline-primary btn-sm" onclick="window.open('${site.url}', '_blank')">
                                     <i class="bi bi-box-arrow-up-right"></i> Open
                                 </button>
+                                ${site.knowledge?.status === 'none' ? `
+                                <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
+                                    <i class="bi bi-lightbulb"></i> Extract
+                                </button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -1281,18 +1434,26 @@ class WebsiteLibraryPanel {
                                 <div class="d-flex align-items-center mb-2">
                                     <img src="https://www.google.com/s2/favicons?domain=${site.domain}" 
                                          class="result-favicon" alt="favicon">
-                                    <h6 class="card-title mb-0 text-truncate">${site.title || site.url}</h6>
+                                    <h6 class="card-title mb-0 text-truncate flex-grow-1">${site.title || site.url}</h6>
+                                    ${this.getKnowledgeStatusBadge(site.knowledge)}
                                 </div>
                                 <p class="card-text small text-muted">${site.domain}</p>
                                 ${site.snippet ? `<p class="card-text small">${site.snippet.substring(0, 120)}...</p>` : ""}
+                                ${this.getKnowledgeDetails(site.knowledge)}
                                 <div class="mt-auto">
-                                    <div class="d-flex justify-content-between align-items-center">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
                                         <small class="text-muted">${site.source}</small>
                                         ${site.score ? `<span class="result-score">${Math.round(site.score * 100)}%</span>` : ""}
                                     </div>
-                                    <button class="btn btn-primary btn-sm w-100 mt-2" onclick="window.open('${site.url}', '_blank')">
-                                        <i class="bi bi-box-arrow-up-right"></i> Open
-                                    </button>
+                                    <div class="btn-group w-100">
+                                        <button class="btn btn-primary btn-sm" onclick="window.open('${site.url}', '_blank')">
+                                            <i class="bi bi-box-arrow-up-right"></i> Open
+                                        </button>
+                                        ${site.knowledge?.status === 'none' ? `
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
+                                            <i class="bi bi-lightbulb"></i>
+                                        </button>` : ''}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1448,6 +1609,129 @@ class WebsiteLibraryPanel {
         searchInput.value = query;
         this.currentQuery = query;
         this.performSearch();
+    }
+
+    private async checkKnowledgeStatus(websites: Website[]): Promise<Website[]> {
+        const enhancedWebsites: Website[] = [];
+        
+        for (const website of websites) {
+            const enhanced = { ...website };
+            
+            // Check cache first
+            if (this.knowledgeStatusCache.has(website.url)) {
+                enhanced.knowledge = this.knowledgeStatusCache.get(website.url);
+            } else {
+                // Query knowledge status from backend
+                try {
+                    const response = await chrome.runtime.sendMessage({
+                        type: "checkPageIndexStatus",
+                        parameters: { url: website.url }
+                    });
+                    
+                    if (response.success && response.result) {
+                        const status: KnowledgeStatus = {
+                            hasKnowledge: response.result.isIndexed,
+                            status: response.result.isIndexed ? 'extracted' : 'none',
+                            extractionDate: response.result.lastExtracted,
+                            entityCount: response.result.entityCount,
+                            topicCount: response.result.topicCount,
+                            confidence: response.result.confidence
+                        };
+                        enhanced.knowledge = status;
+                        this.knowledgeStatusCache.set(website.url, status);
+                    } else {
+                        enhanced.knowledge = { hasKnowledge: false, status: 'none' };
+                    }
+                } catch (error) {
+                    console.error("Error checking knowledge status for", website.url, error);
+                    enhanced.knowledge = { hasKnowledge: false, status: 'none' };
+                }
+            }
+            
+            enhancedWebsites.push(enhanced);
+        }
+        
+        return enhancedWebsites;
+    }
+
+    private async extractKnowledgeForWebsite(url: string, title: string): Promise<void> {
+        try {
+            // Update status to pending
+            const pendingStatus: KnowledgeStatus = { hasKnowledge: false, status: 'pending' };
+            this.knowledgeStatusCache.set(url, pendingStatus);
+            this.rerenderResults(); // Update UI to show pending state
+            
+            const response = await chrome.runtime.sendMessage({
+                type: "extractKnowledgeFromPage",
+                parameters: {
+                    url: url,
+                    title: title,
+                    extractEntities: true,
+                    extractRelationships: true,
+                    suggestQuestions: true,
+                    quality: "balanced"
+                }
+            });
+            
+            if (response.success) {
+                const status: KnowledgeStatus = {
+                    hasKnowledge: true,
+                    status: 'extracted',
+                    extractionDate: new Date().toISOString(),
+                    entityCount: response.result?.entities?.length || 0,
+                    topicCount: response.result?.keyTopics?.length || 0,
+                    suggestionCount: response.result?.suggestedQuestions?.length || 0
+                };
+                this.knowledgeStatusCache.set(url, status);
+                this.showNotification(`Knowledge extracted successfully for ${title}`, "success");
+            } else {
+                const status: KnowledgeStatus = { hasKnowledge: false, status: 'error' };
+                this.knowledgeStatusCache.set(url, status);
+                this.showNotification(`Failed to extract knowledge: ${response.error}`, "error");
+            }
+            
+            this.rerenderResults(); // Update UI with final status
+        } catch (error) {
+            console.error("Error extracting knowledge:", error);
+            const status: KnowledgeStatus = { hasKnowledge: false, status: 'error' };
+            this.knowledgeStatusCache.set(url, status);
+            this.showNotification("Knowledge extraction failed due to connection error", "error");
+            this.rerenderResults();
+        }
+    }
+
+    private getKnowledgeStatusBadge(knowledge?: KnowledgeStatus): string {
+        if (!knowledge) return '';
+        
+        switch (knowledge.status) {
+            case 'extracted':
+                return `<span class="badge bg-success ms-2" title="Knowledge extracted on ${knowledge.extractionDate ? new Date(knowledge.extractionDate).toLocaleDateString() : 'Unknown'}">
+                    <i class="bi bi-check-circle"></i> Extracted
+                </span>`;
+            case 'pending':
+                return `<span class="badge bg-warning ms-2" title="Knowledge extraction in progress">
+                    <i class="bi bi-clock"></i> Extracting...
+                </span>`;
+            case 'error':
+                return `<span class="badge bg-danger ms-2" title="Knowledge extraction failed">
+                    <i class="bi bi-x-circle"></i> Error
+                </span>`;
+            default:
+                return `<span class="badge bg-secondary ms-2" title="No knowledge extracted">
+                    <i class="bi bi-circle"></i> None
+                </span>`;
+        }
+    }
+
+    private getKnowledgeDetails(knowledge?: KnowledgeStatus): string {
+        if (!knowledge || !knowledge.hasKnowledge) return '';
+        
+        const details: string[] = [];
+        if (knowledge.entityCount) details.push(`${knowledge.entityCount} entities`);
+        if (knowledge.topicCount) details.push(`${knowledge.topicCount} topics`);
+        if (knowledge.suggestionCount) details.push(`${knowledge.suggestionCount} questions`);
+        
+        return details.length > 0 ? `<small class="text-muted d-block">${details.join(' • ')}</small>` : '';
     }
 
     private async loadSuggestedSearches() {

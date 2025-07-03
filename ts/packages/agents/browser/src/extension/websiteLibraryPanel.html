@@ -477,15 +477,18 @@
                     type="text"
                     id="searchInput"
                     class="form-control"
-                    placeholder="Search websites, bookmarks, and pages..."
+                    placeholder="Search websites, bookmarks, and pages using AI..."
                   />
                   <button
                     id="searchButton"
                     class="btn btn-primary"
                     type="button"
                   >
-                    <i class="bi bi-search"></i>
+                    <i class="bi bi-robot"></i> Search
                   </button>
+                </div>
+                <div class="small text-muted mt-2">
+                  <i class="bi bi-robot text-primary"></i> AI-powered semantic search enabled
                 </div>
                 <div
                   id="searchSuggestions"
@@ -557,6 +560,39 @@
                         <input
                           type="range"
                           id="relevanceFilter"
+                          class="form-range"
+                          min="0"
+                          max="100"
+                          step="10"
+                          value="0"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- Knowledge Filters -->
+                    <div class="row mt-3">
+                      <div class="col-md-6">
+                        <!-- Knowledge Status Filter -->
+                        <label class="form-label">Knowledge Status</label>
+                        <select
+                          id="knowledgeStatusFilter"
+                          class="form-select form-select-sm"
+                        >
+                          <option value="">All Pages</option>
+                          <option value="extracted">Knowledge Extracted</option>
+                          <option value="none">No Knowledge</option>
+                          <option value="pending">Extraction Pending</option>
+                        </select>
+                      </div>
+                      <div class="col-md-6">
+                        <!-- Knowledge Confidence -->
+                        <label class="form-label"
+                          >Min Knowledge Confidence:
+                          <span id="confidenceValue">0%</span></label
+                        >
+                        <input
+                          type="range"
+                          id="confidenceFilter"
                           class="form-range"
                           min="0"
                           max="100"
@@ -1023,28 +1059,59 @@
                           </div>
 
                           <div class="mt-3">
-                            <div class="form-check">
+                            <h6 class="mb-3">Enhancement Options</h6>
+                            
+                            <div class="form-check mb-2">
                               <input
                                 class="form-check-input"
                                 type="checkbox"
-                                id="includePageContent"
+                                id="extractContent"
+                                checked
                               />
-                              <label
-                                class="form-check-label"
-                                for="includePageContent"
-                              >
-                                Include page content analysis
+                              <label class="form-check-label" for="extractContent">
+                                <i class="bi bi-download"></i> Extract page content
                               </label>
+                              <small class="text-muted d-block ms-4">
+                                Fetch actual page content for semantic search
+                              </small>
                             </div>
-                            <div class="form-check">
+                            
+                            <div class="form-check mb-2">
                               <input
                                 class="form-check-input"
                                 type="checkbox"
-                                id="includeActions"
+                                id="enableIntelligentAnalysis"
+                                checked
                               />
-                              <label class="form-check-label" for="includeActions">
-                                Include page actions (if available)
+                              <label class="form-check-label" for="enableIntelligentAnalysis">
+                                <i class="bi bi-robot"></i> AI knowledge extraction
                               </label>
+                              <small class="text-muted d-block ms-4">
+                                Extract entities, topics, and insights using AI
+                              </small>
+                            </div>
+                            
+                            <div class="form-check mb-3">
+                              <input
+                                class="form-check-input"
+                                type="checkbox"
+                                id="enableActionDetection"
+                              />
+                              <label class="form-check-label" for="enableActionDetection">
+                                <i class="bi bi-lightning"></i> Action detection
+                              </label>
+                              <small class="text-muted d-block ms-4">
+                                Identify actionable elements (buy, download, etc.)
+                              </small>
+                            </div>
+                            
+                            <div class="mb-3">
+                              <label for="extractionMode" class="form-label">Extraction Quality</label>
+                              <select id="extractionMode" class="form-select form-select-sm">
+                                <option value="fast">Fast - Basic extraction</option>
+                                <option value="balanced" selected>Balanced - Good quality</option>
+                                <option value="deep">Deep - Maximum detail</option>
+                              </select>
                             </div>
                           </div>
                         </div>
