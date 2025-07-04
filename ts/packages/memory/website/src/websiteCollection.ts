@@ -47,7 +47,6 @@ export class WebsiteCollection
     public semanticRefIndex: ConversationIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
 
-    // Data frames for typed website meta data
     public dataFrames: dataFrame.DataFrameCollection;
     public visitFrequency: dataFrame.IDataFrame;
     public websiteCategories: dataFrame.IDataFrame;

@@ -49,6 +49,12 @@ export function initializeContextMenu(): void {
         id: "extractKnowledgeFromPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
+
+    chrome.contextMenus.create({
+        title: "View Web Activity",
+        id: "showWebsiteLibrary",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
 }
 
 /**
@@ -126,6 +132,18 @@ export async function handleContextMenuClick(
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
                 path: "knowledgePanel.html",
+                enabled: true,
+            });
+
+            break;
+        }
+
+        case "showWebsiteLibrary": {
+            await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "websiteLibraryPanel.html",
                 enabled: true,
             });
 

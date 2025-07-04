@@ -1,9 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// This script starts an indexing service for websites
-// TODO: add support for "monitoring" the indexed browser data for changes
-
 import fs from "node:fs";
 import { ChatModel, TextEmbeddingModel } from "aiclient";
 import path from "node:path";
@@ -19,20 +16,17 @@ const debug = registerDebug("typeagent:indexingService");
 // The type of data being indexed
 export type IndexSource = "website" | "image" | "email";
 
-// The meta data about the index
-// TODO: add token stats
 export type IndexData = {
-    source: IndexSource; // the data source of the index
-    name: string; // the name of the index
-    location: string; // the location that has been indexed
-    size: number; // the # of items in the index
-    path: string; // the path to the index
-    state: "new" | "indexing" | "finished" | "stopped" | "idle" | "error"; // the state of the indexing service for this index
-    progress: number; // the # of items processed for indexing (knowledge extraction)
-    sizeOnDisk: number; // the amount of space on disk this index is consuming
-    // Website-specific properties
-    sourceType?: "bookmarks" | "history"; // Type of website data
-    browserType?: "chrome" | "edge"; // Browser type
+    source: IndexSource;
+    name: string;
+    location: string;
+    size: number;
+    path: string;
+    state: "new" | "indexing" | "finished" | "stopped" | "idle" | "error";
+    progress: number;
+    sizeOnDisk: number;
+    sourceType?: "bookmarks" | "history";
+    browserType?: "chrome" | "edge";
 };
 
 // The different models being used for the index

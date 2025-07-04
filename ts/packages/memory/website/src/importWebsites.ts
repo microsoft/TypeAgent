@@ -127,6 +127,15 @@ function extractDomain(url: string): string {
     }
 }
 
+function isValidHttpUrl(url: string): boolean {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.protocol === "http:" || urlObj.protocol === "https:";
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Import bookmarks from Chrome
  */
@@ -205,6 +214,11 @@ function extractBookmarks(
     if (limit && websites.length >= limit) return;
 
     if (bookmark.type === "url" && bookmark.url) {
+        // Filter out non-HTTP/HTTPS URLs
+        if (!isValidHttpUrl(bookmark.url)) {
+            return;
+        }
+
         const bookmarkDate = bookmark.date_added
             ? chromeTimeToDate(bookmark.date_added)
             : undefined;
@@ -330,18 +344,12 @@ export async function importChromeHistory(
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
 
-                if (
-                    !row.url ||
-                    row.url.startsWith("chrome://") ||
-                    row.url.startsWith("chrome-extension://")
-                ) {
-                    continue; // Skip Chrome internal URLs
+                if (!row.url || !isValidHttpUrl(row.url)) {
+                    continue; // Skip non-HTTP/HTTPS URLs
                 }
 
                 const domain = extractDomain(row.url);
                 const visitDate = chromeTimeToISOString(row.last_visit_time);
-                // Note: Using fallback pageType determination here.
-                // LLM-based classification happens later during content enhancement
                 const pageType = determinePageType(row.url, row.title);
 
                 const visitInfo: WebsiteVisitInfo = {
@@ -514,7 +522,8 @@ async function enhanceWithContent(
         analyzer = new ContentAnalyzer(options.model);
     }
 
-    const maxConcurrent = options.maxConcurrent || 3;
+    // TEMPORARY: Force batch size to 1 for debugging timeout issues
+    const maxConcurrent = 1; // options.maxConcurrent || 3;
     const enhanced: Website[] = [];
 
     // Process in batches to avoid overwhelming networks

@@ -35,6 +35,7 @@ import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 
 import {
     CommandHandler,
@@ -47,6 +48,7 @@ import registerDebug from "debug";
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
+import * as website from "website-memory";
 import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 
 import {
@@ -60,6 +62,7 @@ import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteData,
+    importWebsiteDataFromSession,
     searchWebsites,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -69,7 +72,6 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
@@ -166,11 +168,57 @@ async function updateBrowserContext(
                 );
             } else {
                 debug(
-                    "Unable to load website index, please create one using the @index command or import website data.",
+                    "No existing website index found, creating new index for data persistence",
                 );
+
                 // Create empty collection as fallback
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
+
+                try {
+                    const sessionDir = await getSessionFolderPath(context);
+
+                    if (sessionDir) {
+                        // Create index path following IndexManager pattern: sessionDir/indexes/website-index
+                        const indexPath = path.join(
+                            sessionDir,
+                            "indexes",
+                            "website-index",
+                        );
+                        fs.mkdirSync(indexPath, { recursive: true });
+
+                        // Create proper IndexData object
+                        context.agentContext.index = {
+                            source: "website",
+                            name: "website-index",
+                            location: "browser-agent",
+                            size: 0,
+                            path: indexPath,
+                            state: "new",
+                            progress: 0,
+                            sizeOnDisk: 0,
+                        };
+
+                        debug(
+                            `Created website index with sessionStorage-based path: ${indexPath}`,
+                        );
+                    } else {
+                        debug(
+                            "Warning: Could not determine session directory path",
+                        );
+                    }
+                } catch (error) {
+                    debug(
+                        `Error during sessionStorage path discovery: ${error}`,
+                    );
+                }
+
+                // If index creation failed, log that data will be in-memory only
+                if (!context.agentContext.index) {
+                    debug(
+                        "Website collection created without persistent index - data will be in-memory only",
+                    );
+                }
             }
         }
 
@@ -310,7 +358,6 @@ async function updateBrowserContext(
                             break;
                         }
 
-                        // NEW: Knowledge extraction actions
                         case "extractKnowledgeFromPage":
                         case "indexWebPageContent":
                         case "queryWebKnowledge":
@@ -328,6 +375,24 @@ async function updateBrowserContext(
                                 JSON.stringify({
                                     id: data.id,
                                     result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "importWebsiteData":
+                        case "searchWebsites":
+                        case "getWebsiteStats": {
+                            const websiteResult = await handleWebsiteAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: websiteResult,
                                 }),
                             );
                             break;
@@ -354,6 +419,39 @@ async function updateBrowserContext(
             context.agentContext.viewProcess.kill();
         }
     }
+}
+
+async function getSessionFolderPath(
+    context: SessionContext<BrowserActionContext>,
+) {
+    let sessionDir: string | undefined;
+
+    const existingFiles = await context.sessionStorage?.list("", {
+        fullPath: true,
+    });
+
+    if (existingFiles && existingFiles.length > 0) {
+        // Get parent directory from first file path
+        sessionDir = path.dirname(existingFiles[0]);
+        debug(`Discovered session directory from existing file: ${sessionDir}`);
+    } else {
+        // No existing files, create a temporary file to discover the path
+        const tempFileName = `temp-path-discovery-${Date.now()}.txt`;
+        await context.sessionStorage?.write(tempFileName, "");
+
+        // Now list files to get the full path
+        const tempFiles = await context.sessionStorage?.list("", {
+            fullPath: true,
+        });
+        if (tempFiles && tempFiles.length > 0) {
+            sessionDir = path.dirname(tempFiles[0]);
+            debug(`Discovered session directory from temp file: ${sessionDir}`);
+
+            // Clean up the temporary file
+            await context.sessionStorage?.delete(tempFileName);
+        }
+    }
+    return sessionDir;
 }
 
 async function resolveEntity(
@@ -910,6 +1008,79 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
         context.actionIO.setDisplay(result.displayContent);
 
         // REVIEW: command doesn't clear the activity context
+    }
+}
+
+async function handleWebsiteAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    switch (actionName) {
+        case "importWebsiteData":
+            return await importWebsiteDataFromSession(parameters, context);
+
+        case "searchWebsites":
+            // Convert to ActionContext format for existing function
+            const searchAction = {
+                schemaName: "browser" as const,
+                actionName: "searchWebsites" as const,
+                parameters: parameters,
+            };
+            const mockActionContext: ActionContext<BrowserActionContext> = {
+                sessionContext: context,
+                actionIO: {
+                    setDisplay: () => {},
+                    appendDisplay: () => {},
+                    clearDisplay: () => {},
+                    setError: () => {},
+                } as any,
+                streamingContext: undefined,
+                activityContext: undefined,
+                queueToggleTransientAgent: async () => {},
+            };
+            const searchResult = await searchWebsites(
+                mockActionContext,
+                searchAction,
+            );
+            return {
+                success: !searchResult.error,
+                result: searchResult.literalText || "Search completed",
+                error: searchResult.error,
+            };
+
+        case "getWebsiteStats":
+            // Convert to ActionContext format for existing function
+            const statsAction = {
+                schemaName: "browser" as const,
+                actionName: "getWebsiteStats" as const,
+                parameters: parameters,
+            };
+            const mockStatsActionContext: ActionContext<BrowserActionContext> =
+                {
+                    sessionContext: context,
+                    actionIO: {
+                        setDisplay: () => {},
+                        appendDisplay: () => {},
+                        clearDisplay: () => {},
+                        setError: () => {},
+                    } as any,
+                    streamingContext: undefined,
+                    activityContext: undefined,
+                    queueToggleTransientAgent: async () => {},
+                };
+            const statsResult = await getWebsiteStats(
+                mockStatsActionContext,
+                statsAction,
+            );
+            return {
+                success: !statsResult.error,
+                result: statsResult.literalText || "Stats retrieved",
+                error: statsResult.error,
+            };
+
+        default:
+            throw new Error(`Unknown website action: ${actionName}`);
     }
 }
 
