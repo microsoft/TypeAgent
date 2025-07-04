@@ -10,7 +10,7 @@ interface ImportOptions {
     extractContent?: boolean;
     enableIntelligentAnalysis?: boolean;
     enableActionDetection?: boolean;
-    extractionMode?: "fast" | "balanced" | "deep";
+    extractionMode?: "basic" |"content"| "actions" | "full";
     maxConcurrent?: number;
     contentTimeout?: number;
 }
@@ -477,10 +477,15 @@ class WebsiteLibraryPanel {
         ) as HTMLInputElement;
         options.enableActionDetection = actionDetectionCheckbox.checked;
 
-        const extractionModeSelect = document.getElementById(
-            "extractionMode",
-        ) as HTMLSelectElement;
-        options.extractionMode = extractionModeSelect.value as "fast" | "balanced" | "deep";
+        options.extractionMode ="basic";
+        if(options.enableIntelligentAnalysis){
+            if(options.enableActionDetection){
+        options.extractionMode ="full";
+        }else{
+            options.extractionMode ="content";
+        }
+        
+        }
 
         // Set performance defaults - increased timeout for debugging
         options.maxConcurrent = 5; // Limit concurrent requests
@@ -640,7 +645,16 @@ class WebsiteLibraryPanel {
         options.extractContent = extractContentCheckbox.checked;
         options.enableIntelligentAnalysis = intelligentAnalysisCheckbox.checked;
         options.enableActionDetection = actionDetectionCheckbox.checked;
-        options.extractionMode = extractionModeSelect.value as "fast" | "balanced" | "deep";
+
+        options.extractionMode ="basic";
+        if(options.enableIntelligentAnalysis){
+            if(options.enableActionDetection){
+        options.extractionMode ="full";
+        }else{
+            options.extractionMode ="content";
+        }
+        
+        }
 
         return options;
     }
