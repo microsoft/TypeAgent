@@ -127,6 +127,15 @@ function extractDomain(url: string): string {
     }
 }
 
+function isValidHttpUrl(url: string): boolean {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Import bookmarks from Chrome
  */
@@ -205,6 +214,11 @@ function extractBookmarks(
     if (limit && websites.length >= limit) return;
 
     if (bookmark.type === "url" && bookmark.url) {
+        // Filter out non-HTTP/HTTPS URLs
+        if (!isValidHttpUrl(bookmark.url)) {
+            return;
+        }
+
         const bookmarkDate = bookmark.date_added
             ? chromeTimeToDate(bookmark.date_added)
             : undefined;
@@ -332,10 +346,9 @@ export async function importChromeHistory(
 
                 if (
                     !row.url ||
-                    row.url.startsWith("chrome://") ||
-                    row.url.startsWith("chrome-extension://")
+                    !isValidHttpUrl(row.url)
                 ) {
-                    continue; // Skip Chrome internal URLs
+                    continue; // Skip non-HTTP/HTTPS URLs
                 }
 
                 const domain = extractDomain(row.url);

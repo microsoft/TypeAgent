@@ -837,7 +837,8 @@ export function importWebsiteVisit(
     pageContent?: string,
 ): Website {
     const meta = new WebsiteMeta(visitInfo);
-    return new Website(meta, pageContent || visitInfo.description || "");
+    const knowledge = meta.getKnowledge(); // Extract knowledge from metadata
+    return new Website(meta, pageContent || visitInfo.description || "", [], knowledge);
 }
 
 function websiteToTextChunks(
