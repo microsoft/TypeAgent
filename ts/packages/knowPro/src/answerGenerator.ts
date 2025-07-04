@@ -42,6 +42,7 @@ import {
     answerContextToString,
 } from "./answerContext.js";
 import { flattenResultsArray, Scored, trimStringLength } from "./common.js";
+import { createMultipleChoiceQuestion } from "./searchLib.js";
 
 export type AnswerTranslator =
     TypeChatJsonTranslator<answerSchema.AnswerResponse>;
@@ -349,6 +350,40 @@ export async function generateAnswerInChunks(
         }
         return structuredChunks;
     }
+}
+
+/**
+ * *Early Experimental*
+ * Generate answer from a set of multiple answer choices.
+ * @param conversation
+ * @param generator answer generator to use
+ * @param question question the user asked
+ * @param answerChoices Answer should be one of these
+ * @param searchResult searchResults to use for answering the question
+ * @param progress
+ * @param contextOptions
+ */
+export function generateMultipleChoiceAnswer(
+    conversation: IConversation,
+    generator: IAnswerGenerator,
+    question: string,
+    answerChoices: string[],
+    searchResults: ConversationSearchResult | ConversationSearchResult[],
+    progress?: asyncArray.ProcessProgress<
+        contextSchema.AnswerContext,
+        Result<answerSchema.AnswerResponse>
+    >,
+    contextOptions?: AnswerContextOptions,
+) {
+    question = createMultipleChoiceQuestion(question, answerChoices);
+    return generateAnswer(
+        conversation,
+        generator,
+        question,
+        searchResults,
+        progress,
+        contextOptions,
+    );
 }
 
 /**

@@ -180,35 +180,6 @@ async function runBrowserAction(action: any) {
             });
             break;
         }
-        case "getPageSchema": {
-            responseObject = await sendScriptAction(
-                {
-                    type: "get_page_schema",
-                },
-                1000,
-            );
-
-            break;
-        }
-        case "setPageSchema": {
-            sendScriptAction({
-                type: "set_page_schema",
-                action: action,
-            });
-            break;
-        }
-        case "clearPageSchema": {
-            sendScriptAction({
-                type: "clear_page_schema",
-            });
-            break;
-        }
-        case "closeWindow": {
-            window.close();
-            // todo: call method on IPC process to close the window/view
-
-            break;
-        }
 
         default:
             throw new Error(`Invalid action: ${actionName}`);

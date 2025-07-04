@@ -17,7 +17,7 @@ import * as cm from "conversation-memory";
 import path from "path";
 
 import { KnowproContext } from "./knowproMemory.js";
-import { ensureDir } from "typeagent";
+import { ensureDir, getFileName } from "typeagent";
 import chalk from "chalk";
 
 export type KnowproConversationContext = {
@@ -122,6 +122,7 @@ export async function createKnowproConversationCommands(
             options: {
                 name: arg("Conversation name", context.defaultName),
                 createNew: argBool("Create new", false),
+                filePath: arg("Index path"),
             },
         };
     }
@@ -129,11 +130,19 @@ export async function createKnowproConversationCommands(
     async function cmLoad(args: string[]) {
         const namedArgs = parseNamedArguments(args, loadCmDef());
 
+        let name = namedArgs.name;
+        let dirPath: string | undefined;
+        const filePath = namedArgs.filePath;
+        if (filePath) {
+            name = getFileName(filePath);
+            dirPath = path.dirname(filePath);
+        }
         const clock = new StopWatch();
         clock.start();
         context.conversationMemory = await loadOrCreateConversation(
-            namedArgs.name,
+            name,
             namedArgs.createNew,
+            dirPath,
         );
         clock.stop();
         context.printer.writeTiming(chalk.gray, clock);
@@ -176,10 +185,11 @@ export async function createKnowproConversationCommands(
     async function loadOrCreateConversation(
         name: string,
         createNew: boolean,
+        dirPath?: string,
     ): Promise<cm.ConversationMemory> {
         return cm.createConversationMemory(
             {
-                dirPath: context.basePath,
+                dirPath: dirPath ?? context.basePath,
                 baseFileName: name,
             },
             createNew,

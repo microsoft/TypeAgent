@@ -84,7 +84,9 @@ export function getAnswerRequestDef(
         "How many top K knowledge matches",
         knowledgeTopK,
     );
-    def.options.choices = arg("Answer choices, separated by ';'");
+    def.options.choices = arg(
+        "Multiple choice answer: answer choices, separated by ';'",
+    );
     def.options.combineAnswer = argBool(
         "Combine results of multiple search results into a single answer",
         false,

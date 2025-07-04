@@ -1,0 +1,417 @@
+/* Note Editor Modal Styles */
+
+.note-editor-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10002; /* Higher than toolbar and color picker */
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.note-editor-modal.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.note-editor-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.note-editor-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #2a2a2a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.note-editor-header {
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-title {
+  color: #e8eaed;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.close-button {
+  background: transparent;
+  border: none;
+  color: #9aa0a6;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.close-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8eaed;
+}
+
+.note-editor-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.selected-text-section,
+.selected-content-section,
+.note-content-section,
+.note-preview-section {
+  margin-bottom: 20px;
+}
+
+.section-label {
+  display: block;
+  color: #e8eaed;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.selected-text-quote {
+  background: rgba(138, 180, 248, 0.1);
+  border-left: 4px solid #8ab4f8;
+  border-radius: 0 4px 4px 0;
+  padding: 12px 16px;
+  margin: 0;
+  color: #c9d1d9;
+  font-style: italic;
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* New styles for enhanced content sections */
+.selected-content-container {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.selected-screenshot {
+  margin: 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.screenshot-preview {
+  width: 100%;
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
+  display: block;
+}
+
+.screenshot-info {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #9aa0a6;
+  font-size: 12px;
+  text-align: center;
+}
+
+.note-editor-textarea {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 12px;
+  color: #e8eaed;
+  font-size: 14px;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 120px;
+  transition: border-color 0.15s ease;
+}
+
+.note-editor-textarea:focus {
+  outline: none;
+  border-color: #8ab4f8;
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.2);
+}
+
+.note-editor-textarea::placeholder {
+  color: #5f6368;
+}
+
+.editor-help {
+  margin-top: 8px;
+}
+
+.editor-help details {
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
+.editor-help summary {
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.editor-help summary:hover {
+  color: #c9d1d9;
+}
+
+.markdown-help-content {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.markdown-help-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 11px;
+}
+
+.note-preview-content {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 12px;
+  color: #c9d1d9;
+  line-height: 1.6;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.note-preview-content h1,
+.note-preview-content h2,
+.note-preview-content h3 {
+  color: #e8eaed;
+  margin: 0 0 8px 0;
+}
+
+.note-preview-content h1 {
+  font-size: 20px;
+}
+.note-preview-content h2 {
+  font-size: 18px;
+}
+.note-preview-content h3 {
+  font-size: 16px;
+}
+
+.note-preview-content strong {
+  color: #e8eaed;
+  font-weight: 600;
+}
+
+.note-preview-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 13px;
+}
+
+.note-preview-content ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.note-preview-content li {
+  margin: 4px 0;
+}
+
+.note-preview-content a {
+  color: #8ab4f8;
+  text-decoration: none;
+}
+
+.note-preview-content a:hover {
+  text-decoration: underline;
+}
+
+.note-editor-footer {
+  background: rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-actions-left,
+.editor-actions-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.preview-toggle-button,
+.cancel-button,
+.save-button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e8eaed;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-toggle-button:hover,
+.cancel-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.save-button {
+  background: #1a73e8;
+  border-color: #1a73e8;
+  color: white;
+}
+
+.save-button:hover {
+  background: #1557b0;
+  border-color: #1557b0;
+}
+
+.save-button:active {
+  transform: translateY(1px);
+}
+
+.note-editor-error {
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 4px;
+  color: #f44336;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  animation: errorSlideIn 0.3s ease;
+}
+
+@keyframes errorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animation for modal appearance */
+.note-editor-modal.visible .note-editor-container {
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .note-editor-container {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .note-editor-header {
+    padding: 12px 16px;
+  }
+
+  .editor-title {
+    font-size: 16px;
+  }
+
+  .note-editor-content {
+    padding: 16px;
+  }
+
+  .note-editor-footer {
+    padding: 12px 16px;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .editor-actions-left,
+  .editor-actions-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .note-editor-textarea {
+    font-size: 16px; /* Prevent zoom on mobile */
+  }
+}
+
+@media (max-width: 480px) {
+  .note-editor-container {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    top: 0;
+    left: 0;
+    transform: none;
+  }
+
+  .selected-text-quote {
+    max-height: 80px;
+    font-size: 13px;
+  }
+
+  .note-editor-textarea {
+    min-height: 100px;
+  }
+}

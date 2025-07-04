@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { SSEManager, FeatureConfig } from "../../core/types.js";
 import { SSEManagerImpl } from "../../core/sseManager.js";
 import { PDFService } from "./pdfService.js";
+import { UrlDocumentMappingService } from "./urlDocumentMappingService.js";
 import {
     PDFSSEEvent,
     PDFAnnotation,
@@ -26,10 +27,19 @@ const __dirname = path.dirname(__filename);
  */
 export class PDFRoutes {
     private pdfService: PDFService;
+    private urlMappingService: UrlDocumentMappingService;
     private sseManager?: SSEManager;
 
     constructor() {
         this.pdfService = new PDFService();
+        this.urlMappingService = new UrlDocumentMappingService();
+    }
+
+    /**
+     * Initialize the PDF routes
+     */
+    async initialize(): Promise<void> {
+        await this.urlMappingService.initialize();
     }
 
     /**
@@ -44,6 +54,7 @@ export class PDFRoutes {
             setupRoutes: (app: Express) => pdfRoutes.setupRoutes(app),
             setupSSE: (sseManager: SSEManager) =>
                 pdfRoutes.setupSSE(sseManager),
+            initialize: () => pdfRoutes.initialize(),
         };
     }
 
@@ -98,6 +109,11 @@ export class PDFRoutes {
             "/api/pdf/:documentId/download",
             this.downloadDocument.bind(this),
         );
+
+        // URL to Document ID mapping
+        app.post("/api/pdf/url-to-id", this.getDocumentIdFromUrl.bind(this));
+        app.get("/api/pdf/mappings", this.getAllMappings.bind(this));
+        app.get("/api/pdf/mappings/stats", this.getMappingStats.bind(this));
 
         // SSE endpoint for real-time updates
         app.get(
@@ -463,6 +479,97 @@ export class PDFRoutes {
         } catch (error) {
             debug("Error getting presence:", error);
             res.status(500).json({ error: "Failed to get presence" });
+        }
+    }
+
+    /**
+     * Get or create document ID from URL
+     */
+    private async getDocumentIdFromUrl(
+        req: Request,
+        res: Response,
+    ): Promise<void> {
+        try {
+            const { url } = req.body;
+
+            if (!url) {
+                res.status(400).json({ error: "URL is required" });
+                return;
+            }
+
+            // Validate URL format
+            try {
+                new URL(url);
+            } catch (error) {
+                res.status(400).json({ error: "Invalid URL format" });
+                return;
+            }
+
+            const documentId =
+                await this.urlMappingService.getOrCreateDocumentId(url);
+            const mapping =
+                await this.urlMappingService.getDocumentById(documentId);
+
+            // Ensure the document is registered with the PDF service for SSE and other operations
+            if (!this.pdfService.getDocument(documentId)) {
+                // Extract filename from URL
+                const urlObj = new URL(url);
+                const filename =
+                    urlObj.pathname.split("/").pop() || "document.pdf";
+
+                // Create a document record
+                const document = {
+                    id: documentId,
+                    title: filename,
+                    filename: filename,
+                    size: 0, // Unknown until downloaded
+                    pageCount: 0, // Unknown until processed
+                    uploadDate: mapping?.createdAt || new Date().toISOString(),
+                    lastModified:
+                        mapping?.lastAccessedAt || new Date().toISOString(),
+                    mimeType: "application/pdf",
+                    path: url, // Store original URL as path
+                };
+
+                this.pdfService.addDocument(document);
+                debug(`Registered document from URL: ${documentId} -> ${url}`);
+            }
+
+            res.json({
+                documentId,
+                url: mapping?.url,
+                createdAt: mapping?.createdAt,
+                lastAccessedAt: mapping?.lastAccessedAt,
+            });
+        } catch (error) {
+            debug("Error getting document ID from URL:", error);
+            res.status(500).json({ error: "Failed to get document ID" });
+        }
+    }
+
+    /**
+     * Get all URL mappings
+     */
+    private async getAllMappings(req: Request, res: Response): Promise<void> {
+        try {
+            const mappings = await this.urlMappingService.getAllMappings();
+            res.json(mappings);
+        } catch (error) {
+            debug("Error getting mappings:", error);
+            res.status(500).json({ error: "Failed to get mappings" });
+        }
+    }
+
+    /**
+     * Get mapping statistics
+     */
+    private async getMappingStats(req: Request, res: Response): Promise<void> {
+        try {
+            const stats = await this.urlMappingService.getStats();
+            res.json(stats);
+        } catch (error) {
+            debug("Error getting mapping stats:", error);
+            res.status(500).json({ error: "Failed to get mapping stats" });
         }
     }
 }

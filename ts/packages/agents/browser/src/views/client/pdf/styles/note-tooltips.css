@@ -1,0 +1,179 @@
+/* Note Tooltip Styles */
+
+.note-tooltip {
+  position: fixed;
+  background: rgba(32, 32, 32, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 12px;
+  max-width: 320px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 10001;
+  color: #e8eaed;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  display: none;
+}
+
+.tooltip-blockquote {
+  margin-bottom: 12px;
+}
+
+.tooltip-blockquote blockquote {
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid #8ab4f8;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-style: italic;
+  color: #c9d1d9;
+}
+
+.tooltip-screenshot {
+  margin-bottom: 12px;
+}
+
+.tooltip-screenshot img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tooltip-note-content {
+  color: #e8eaed;
+}
+
+.tooltip-question-content {
+  color: #e8eaed;
+}
+
+.tooltip-note-content h1,
+.tooltip-note-content h2,
+.tooltip-note-content h3,
+.tooltip-question-content h1,
+.tooltip-question-content h2,
+.tooltip-question-content h3 {
+  color: #ffffff;
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tooltip-note-content h1 {
+  font-size: 16px;
+}
+.tooltip-note-content h2 {
+  font-size: 15px;
+}
+.tooltip-note-content h3 {
+  font-size: 14px;
+}
+
+.tooltip-note-content strong,
+.tooltip-question-content strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.tooltip-note-content em,
+.tooltip-question-content em {
+  color: #c9d1d9;
+  font-style: italic;
+}
+
+.tooltip-note-content code,
+.tooltip-question-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 12px;
+  color: #f8f8f2;
+}
+
+.tooltip-note-content ul,
+.tooltip-question-content ul {
+  margin: 4px 0;
+  padding-left: 16px;
+}
+
+.tooltip-note-content li,
+.tooltip-question-content li {
+  margin: 2px 0;
+}
+
+.tooltip-note-content a,
+.tooltip-question-content a {
+  color: #8ab4f8;
+  text-decoration: none;
+}
+
+.tooltip-note-content a:hover,
+.tooltip-question-content a:hover {
+  text-decoration: underline;
+}
+
+/* Animation for tooltip appearance */
+.note-tooltip[style*="display: block"] {
+  animation: tooltipFadeIn 0.2s ease-out;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .note-tooltip {
+    max-width: calc(100vw - 32px);
+    left: 16px !important;
+    right: 16px !important;
+    position: fixed;
+  }
+
+  .tooltip-screenshot img {
+    max-height: 200px;
+    object-fit: contain;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .note-tooltip {
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .tooltip-blockquote blockquote {
+    background: rgba(255, 255, 255, 0.1);
+    border-left-color: #ffffff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .note-tooltip[style*="display: block"] {
+    animation: none;
+  }
+
+  @keyframes tooltipFadeIn {
+    from,
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

@@ -65,11 +65,31 @@ declare global {
         // SidePanel API (new in Chrome 114)
         namespace sidePanel {
             const open: ChromeJestMock<
-                (options?: { tabId?: number }) => Promise<void>
+                (options?: {
+                    tabId?: number;
+                    windowId?: number;
+                }) => Promise<void>
             >;
+
+            const setOptions: ChromeJestMock<
+                (options: chrome.sidePanel.SidePanelOptions) => Promise<void>
+            >;
+
+            const getOptions: ChromeJestMock<
+                (options?: {
+                    tabId?: number;
+                }) => Promise<chrome.sidePanel.SidePanelOptions>
+            >;
+
             const setPanelBehavior: ChromeJestMock<
                 (options: chrome.sidePanel.PanelBehavior) => Promise<void>
             >;
+
+            interface SidePanelOptions {
+                tabId?: number;
+                path?: string;
+                enabled?: boolean;
+            }
 
             interface PanelBehavior {
                 openPanelOnActionClick?: boolean;
