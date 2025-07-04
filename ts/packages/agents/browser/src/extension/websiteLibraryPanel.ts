@@ -15,17 +15,6 @@ interface ImportOptions {
     contentTimeout?: number;
 }
 
-interface ImportHistoryItem {
-    id: string;
-    timestamp: number;
-    source: string;
-    type: string;
-    itemCount: number;
-    status: "success" | "error" | "importing";
-    options: ImportOptions;
-    error?: string;
-}
-
 interface LibraryStats {
     totalWebsites: number;
     totalBookmarks: number;
@@ -135,7 +124,6 @@ class WebsiteLibraryPanel {
         this.setupIndexManagement();
         await this.checkConnectionStatus();
         await this.loadLibraryStats();
-        await this.loadImportHistory();
         await this.loadRecentSearches();
         await this.loadSuggestedSearches();
         await this.checkIndexStatus();
@@ -182,12 +170,6 @@ class WebsiteLibraryPanel {
             .getElementById("clearLibrary")!
             .addEventListener("click", () => {
                 this.clearLibrary();
-            });
-
-        document
-            .getElementById("clearImportHistory")!
-            .addEventListener("click", () => {
-                this.clearImportHistory();
             });
 
         document
@@ -589,37 +571,12 @@ class WebsiteLibraryPanel {
     }
 
     private async completeImport(itemCount: number) {
-        const historyItem: ImportHistoryItem = {
-            id: this.currentImport!.id,
-            timestamp: this.currentImport!.startTime,
-            source: this.selectedBrowser,
-            type: this.selectedType,
-            itemCount: itemCount,
-            status: "success",
-            options: this.getImportOptions(),
-        };
-
-        await this.addToImportHistory(historyItem);
         this.hideImportProgress();
         await this.loadLibraryStats();
-        await this.loadImportHistory();
     }
 
     private async failImport(error: string) {
-        const historyItem: ImportHistoryItem = {
-            id: this.currentImport!.id,
-            timestamp: this.currentImport!.startTime,
-            source: this.selectedBrowser,
-            type: this.selectedType,
-            itemCount: 0,
-            status: "error",
-            options: this.getImportOptions(),
-            error: error,
-        };
-
-        await this.addToImportHistory(historyItem);
         this.hideImportProgress();
-        await this.loadImportHistory();
     }
 
     private getImportOptions(): ImportOptions {
@@ -711,100 +668,6 @@ class WebsiteLibraryPanel {
         }
     }
 
-    private async loadImportHistory() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "getImportHistory",
-            });
-
-            if (response.success) {
-                this.renderImportHistory(response.history);
-            } else {
-                console.error("Failed to load import history:", response.error);
-            }
-        } catch (error) {
-            console.error("Error loading import history:", error);
-            this.renderImportHistory([]);
-        }
-    }
-
-    private renderImportHistory(history: ImportHistoryItem[]) {
-        const container = document.getElementById("importHistoryContainer")!;
-
-        if (history.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <i class="bi bi-clock-history"></i>
-                    <p class="mb-0">No imports yet</p>
-                    <small class="text-muted">Your import history will appear here</small>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = history
-            .map(
-                (item) => `
-            <div class="import-history-item">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center mb-1">
-                            <i class="bi bi-${item.type === "bookmarks" ? "bookmark-star" : "clock-history"} me-2"></i>
-                            <span class="fw-semibold">${item.source} ${item.type}</span>
-                            <span class="import-status status-${item.status} ms-2">${item.status}</span>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <small class="text-muted">
-                                ${new Date(item.timestamp).toLocaleString()} • ${item.itemCount} items
-                            </small>
-                            <button class="btn btn-outline-danger btn-sm" onclick="libraryPanel.deleteImportHistoryItem('${item.id}')">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                        ${item.error ? `<small class="text-danger mt-1 d-block">Error: ${item.error}</small>` : ""}
-                    </div>
-                </div>
-            </div>
-        `,
-            )
-            .join("");
-    }
-
-    private async addToImportHistory(item: ImportHistoryItem) {
-        try {
-            await chrome.runtime.sendMessage({
-                type: "addImportHistoryItem",
-                item: item,
-            });
-        } catch (error) {
-            console.error("Error adding import history item:", error);
-        }
-    }
-
-    async deleteImportHistoryItem(id: string) {
-        if (
-            !confirm(
-                "Are you sure you want to delete this import history item?",
-            )
-        ) {
-            return;
-        }
-
-        try {
-            await chrome.runtime.sendMessage({
-                type: "deleteImportHistoryItem",
-                id: id,
-            });
-            await this.loadImportHistory();
-        } catch (error) {
-            console.error("Error deleting import history item:", error);
-            this.showNotification(
-                "Failed to delete import history item",
-                "error",
-            );
-        }
-    }
-
     private async refreshLibrary() {
         const button = document.getElementById(
             "refreshLibrary",
@@ -817,7 +680,6 @@ class WebsiteLibraryPanel {
 
         try {
             await this.loadLibraryStats();
-            await this.loadImportHistory();
             this.showNotification("Library refreshed successfully", "success");
         } catch (error) {
             console.error("Error refreshing library:", error);
@@ -887,7 +749,6 @@ class WebsiteLibraryPanel {
 
             if (response.success) {
                 await this.loadLibraryStats();
-                await this.loadImportHistory();
                 this.showNotification(
                     "Library cleared successfully",
                     "success",
@@ -901,23 +762,6 @@ class WebsiteLibraryPanel {
         } catch (error) {
             console.error("Error clearing library:", error);
             this.showNotification("Failed to clear library", "error");
-        }
-    }
-
-    private async clearImportHistory() {
-        if (!confirm("Are you sure you want to clear the import history?")) {
-            return;
-        }
-
-        try {
-            await chrome.runtime.sendMessage({
-                type: "clearImportHistory",
-            });
-            await this.loadImportHistory();
-            this.showNotification("Import history cleared", "success");
-        } catch (error) {
-            console.error("Error clearing import history:", error);
-            this.showNotification("Failed to clear import history", "error");
         }
     }
 

@@ -382,22 +382,6 @@ export async function handleMessage(
             return await handleGetWebsiteLibraryStats();
         }
 
-        case "getImportHistory": {
-            return await handleGetImportHistory();
-        }
-
-        case "addImportHistoryItem": {
-            return await handleAddImportHistoryItem(message.item);
-        }
-
-        case "deleteImportHistoryItem": {
-            return await handleDeleteImportHistoryItem(message.id);
-        }
-
-        case "clearImportHistory": {
-            return await handleClearImportHistory();
-        }
-
         case "exportWebsiteLibrary": {
             return await handleExportWebsiteLibrary();
         }
@@ -504,95 +488,6 @@ async function handleGetWebsiteLibraryStats() {
         };
     } catch (error) {
         console.error("Error getting website library stats:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleGetImportHistory() {
-    try {
-        const storage = await chrome.storage.local.get([
-            "websiteLibraryImportHistory",
-        ]);
-        const history = storage.websiteLibraryImportHistory || [];
-
-        return {
-            success: true,
-            history: history.sort(
-                (a: any, b: any) => b.timestamp - a.timestamp,
-            ),
-        };
-    } catch (error) {
-        console.error("Error getting import history:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleAddImportHistoryItem(item: any) {
-    try {
-        const storage = await chrome.storage.local.get([
-            "websiteLibraryImportHistory",
-        ]);
-        const history = storage.websiteLibraryImportHistory || [];
-
-        history.push(item);
-
-        // Keep only the last 50 import history items
-        if (history.length > 50) {
-            history.splice(0, history.length - 50);
-        }
-
-        await chrome.storage.local.set({
-            websiteLibraryImportHistory: history,
-        });
-
-        return { success: true };
-    } catch (error) {
-        console.error("Error adding import history item:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleDeleteImportHistoryItem(id: string) {
-    try {
-        const storage = await chrome.storage.local.get([
-            "websiteLibraryImportHistory",
-        ]);
-        const history = storage.websiteLibraryImportHistory || [];
-
-        const filteredHistory = history.filter((item: any) => item.id !== id);
-
-        await chrome.storage.local.set({
-            websiteLibraryImportHistory: filteredHistory,
-        });
-
-        return { success: true };
-    } catch (error) {
-        console.error("Error deleting import history item:", error);
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
-async function handleClearImportHistory() {
-    try {
-        await chrome.storage.local.set({
-            websiteLibraryImportHistory: [],
-        });
-
-        return { success: true };
-    } catch (error) {
-        console.error("Error clearing import history:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error",
