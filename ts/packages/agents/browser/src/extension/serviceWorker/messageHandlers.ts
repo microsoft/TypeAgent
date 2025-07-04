@@ -895,15 +895,24 @@ async function handleCheckIndexStatus() {
             parameters: {},
         });
 
-        return {
-            success: !result.error,
-            indexExists: result.result && result.result.totalPages >0,
-        };
-
+        // getKnowledgeIndexStats returns stats object directly when successful
+        if (result && result.totalPages !== undefined) {
+            return {
+                success: true,
+                exists: result.totalPages > 0,
+            };
+        } else {
+            return {
+                success: false,
+                exists: false,
+                error: result?.error || "Failed to get index stats",
+            };
+        }
     } catch (error) {
         console.error("Error checking index status:", error);
         return {
             success: false,
+            exists: false,
             error: error instanceof Error ? error.message : "Unknown error",
         };
     }

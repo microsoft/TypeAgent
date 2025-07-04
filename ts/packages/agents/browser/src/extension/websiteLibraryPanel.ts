@@ -506,10 +506,6 @@ class WebsiteLibraryPanel {
 
             if (response.success) {
                 await this.completeImport(response.itemCount);
-                this.showNotification(
-                    `Successfully imported ${response.itemCount} items`,
-                    "success",
-                );
             } else {
                 await this.failImport(response.error);
                 this.showNotification(
@@ -559,7 +555,7 @@ class WebsiteLibraryPanel {
 
         // Update the status message
         const statusMessage = document.getElementById("importStatusMessage")!;
-        statusMessage.textContent = "Starting import...";
+        statusMessage.textContent = `Importing ${this.selectedType} from ${this.selectedBrowser}...`;
     }
 
     private hideImportProgress() {
@@ -572,7 +568,32 @@ class WebsiteLibraryPanel {
 
     private async completeImport(itemCount: number) {
         this.hideImportProgress();
-        await this.loadLibraryStats();
+        
+        // Show success notification
+        this.showNotification(
+            `Successfully imported ${itemCount} items from ${this.selectedBrowser} ${this.selectedType}!`,
+            "success"
+        );
+        
+        // Update the UI with fresh data
+        await this.refreshUIAfterImport();
+    }
+
+    private async refreshUIAfterImport() {
+        try {
+            // Update library stats (for overview section)
+            await this.loadLibraryStats();
+            
+            // Update suggested searches (for discover tab)
+            await this.loadSuggestedSearches();
+            
+            // Update index status (for knowledge index management)
+            await this.checkIndexStatus();
+            
+            console.log("UI refreshed after successful import");
+        } catch (error) {
+            console.error("Error refreshing UI after import:", error);
+        }
     }
 
     private async failImport(error: string) {
