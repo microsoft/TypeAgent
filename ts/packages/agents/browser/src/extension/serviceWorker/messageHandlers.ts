@@ -221,9 +221,9 @@ export async function handleMessage(
                 const result = await sendActionToAgent({
                     actionName: "queryWebKnowledge",
                     parameters: {
-                        query: message.query,
-                        url: message.url,
-                        searchScope: message.searchScope || "current_page",
+                        query: message.parameters.query,
+                        url: message.parameters.url,
+                        searchScope: message.parameters.searchScope || "current_page",
                     },
                 });
 

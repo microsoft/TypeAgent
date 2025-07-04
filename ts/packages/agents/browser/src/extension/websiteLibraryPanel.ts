@@ -890,9 +890,8 @@ class WebsiteLibraryPanel {
         try {
             const filters = this.getActiveFilters();
             
-            // Always use semantic search via queryWebsiteKnowledge
             const response = await chrome.runtime.sendMessage({
-                type: "queryWebsiteKnowledge",
+                type: "queryKnowledge",
                 parameters: {
                     query: query,
                     searchScope: "all_indexed",
@@ -903,13 +902,14 @@ class WebsiteLibraryPanel {
                 },
             });
 
-            if (response.success) {
+            let searchResults: SearchResult;
+
+            if (response.answer || 
+                (response.sources && response.sources.length > 0)) {
+
                 // Transform semantic search result to SearchResult format
-                let searchResults: SearchResult;
-                
-                if (response.result) {
                     searchResults = {
-                        websites: response.result.sources?.map((source: any) => ({
+                        websites: response.sources?.map((source: any) => ({
                             url: source.url,
                             title: source.title,
                             domain: new URL(source.url).hostname,
@@ -918,11 +918,11 @@ class WebsiteLibraryPanel {
                             snippet: source.snippet || ""
                         })) || [],
                         summary: {
-                            text: response.result.answer || "",
-                            totalFound: response.result.sources?.length || 0,
+                            text: response.answer || "",
+                            totalFound: response.sources?.length || 0,
                             searchTime: 0, // Not provided in knowledge response
-                            sources: response.result.sources || [],
-                            entities: response.result.relatedEntities?.map((entity: any) => ({
+                            sources: response.sources || [],
+                            entities: response.relatedEntities?.map((entity: any) => ({
                                 entity: entity.name,
                                 type: entity.type,
                                 count: 1
@@ -950,12 +950,7 @@ class WebsiteLibraryPanel {
                 await this.renderSearchResults(searchResults);
                 await this.saveSearchToHistory(query);
                 await this.loadRecentSearches();
-            } else {
-                this.showNotification(
-                    `Search failed: ${response.error}`,
-                    "error",
-                );
-            }
+            
         } catch (error) {
             console.error("Search error:", error);
             this.showNotification(
