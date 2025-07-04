@@ -204,6 +204,12 @@ class WebsiteLibraryPanel {
             this.performSearch();
         });
 
+        // Clear search button
+        const clearSearchButton = document.getElementById("clearSearchButton")!;
+        clearSearchButton.addEventListener("click", () => {
+            this.clearSearch();
+        });
+
         // Relevance filter update
         relevanceFilter.addEventListener("input", (e) => {
             const value = (e.target as HTMLInputElement).value;
@@ -861,7 +867,13 @@ class WebsiteLibraryPanel {
             clearTimeout(this.searchDebounceTimer);
         }
 
-        if (query.length >= 2) {
+        if (query.length === 0) {
+            // Clear results when input is empty
+            this.clearSearchResults();
+            document
+                .getElementById("searchSuggestions")!
+                .classList.add("d-none");
+        } else if (query.length >= 2) {
             this.searchDebounceTimer = window.setTimeout(() => {
                 this.getSearchSuggestions(query);
             }, 300);
@@ -872,12 +884,84 @@ class WebsiteLibraryPanel {
         }
     }
 
+    private clearSearch() {
+        // Clear search input
+        const searchInput = document.getElementById("searchInput") as HTMLInputElement;
+        searchInput.value = "";
+        this.currentQuery = "";
+        
+        // Clear search results
+        this.clearSearchResults();
+        
+        // Hide search suggestions
+        document.getElementById("searchSuggestions")!.classList.add("d-none");
+        
+        console.log("Search cleared");
+    }
+
+    private clearSearchResults() {
+        // Clear results data
+        this.currentResults = [];
+        this.currentQuery = "";
+        
+        // Hide results card
+        const resultsCard = document.getElementById("searchResultsCard")!;
+        resultsCard.classList.add("d-none");
+        
+        // Clear results containers
+        const resultsContainer = document.getElementById("searchResultsContainer")!;
+        resultsContainer.innerHTML = "";
+        
+        const summaryContainer = document.getElementById("resultsSummary")!;
+        summaryContainer.innerHTML = "";
+        
+        const aiSummarySection = document.getElementById("aiSummarySection")!;
+        aiSummarySection.innerHTML = "";
+        aiSummarySection.classList.add("d-none");
+        
+        // Clear pagination
+        const paginationContainer = document.getElementById("resultsPagination")!;
+        paginationContainer.innerHTML = "";
+        
+        console.log("Search results cleared");
+    }
+
+    private showSearchLoading() {
+        const resultsCard = document.getElementById("searchResultsCard")!;
+        const resultsContainer = document.getElementById("searchResultsContainer")!;
+        
+        // Show results card with loading state
+        resultsCard.classList.remove("d-none");
+        
+        // Show loading spinner
+        resultsContainer.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Searching...</span>
+                </div>
+                <div class="text-muted">Searching your library...</div>
+            </div>
+        `;
+        
+        // Clear other sections
+        const summaryContainer = document.getElementById("resultsSummary")!;
+        summaryContainer.innerHTML = "";
+        
+        const aiSummarySection = document.getElementById("aiSummarySection")!;
+        aiSummarySection.classList.add("d-none");
+    }
+
     private async performSearch() {
         const query = this.currentQuery.trim();
         if (!query) {
             this.showNotification("Please enter a search query", "info");
             return;
         }
+
+        // Clear previous results and show loading
+        this.clearSearchResults();
+        this.currentQuery = query;
+        this.showSearchLoading();
 
         const searchButton = document.getElementById(
             "searchButton",
@@ -1054,6 +1138,10 @@ class WebsiteLibraryPanel {
         // Render AI summary if available
         if (results.summary.text) {
             this.renderAISummary(results.summary);
+        } else {
+            // Hide AI summary section if no summary available
+            const aiSummarySection = document.getElementById("aiSummarySection")!;
+            aiSummarySection.classList.add("d-none");
         }
 
         // Render results based on current view mode
