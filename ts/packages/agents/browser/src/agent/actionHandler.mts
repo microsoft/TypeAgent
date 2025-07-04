@@ -35,6 +35,7 @@ import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 
 import {
     CommandHandler,
@@ -48,7 +49,6 @@ import registerDebug from "debug";
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
 import * as website from "website-memory";
-import type { IndexSource } from "website-memory";
 import {
     handleKnowledgeAction,
 } from "./knowledge/knowledgeHandler.mjs";
@@ -177,23 +177,38 @@ async function updateBrowserContext(
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
                 
-                // Create new index data for persistence
-                // Use a default path in the current working directory as fallback
-                const indexPath = path.join("./data", "website-index");
+                try {
+                    const sessionDir = await getSessionFolderPath(context);
+                    
+                    if (sessionDir) {
+                        // Create index path following IndexManager pattern: sessionDir/indexes/website-index
+                        const indexPath = path.join(sessionDir, "indexes", "website-index");
+                        fs.mkdirSync(indexPath, { recursive: true });
+                        
+                        // Create proper IndexData object
+                        context.agentContext.index = {
+                            source: "website",
+                            name: "website-index",
+                            location: "browser-agent",
+                            size: 0,
+                            path: indexPath,
+                            state: "new",
+                            progress: 0,
+                            sizeOnDisk: 0,
+                        };
+                        
+                        debug(`Created website index with sessionStorage-based path: ${indexPath}`);
+                    } else {
+                        debug("Warning: Could not determine session directory path");
+                    }
+                } catch (error) {
+                    debug(`Error during sessionStorage path discovery: ${error}`);
+                }
                 
-                context.agentContext.index = {
-                    source: "website" as IndexSource,
-                    name: "website-index",
-                    location: "browser-agent", 
-                    size: 0,
-                    path: indexPath,
-                    state: "new" as const,
-                    progress: 0,
-                    sizeOnDisk: 0,
-                    // Optional properties - omit to avoid undefined assignment issues
-                };
-                
-                debug(`Initialized new website index at: ${indexPath}`);
+                // If index creation failed, log that data will be in-memory only
+                if (!context.agentContext.index) {
+                    debug("Website collection created without persistent index - data will be in-memory only");
+                }
             }
         }
 
@@ -395,6 +410,33 @@ async function updateBrowserContext(
             context.agentContext.viewProcess.kill();
         }
     }
+}
+
+async function getSessionFolderPath(context: SessionContext<BrowserActionContext>) {
+    let sessionDir: string | undefined;
+
+    const existingFiles = await context.sessionStorage?.list("", { fullPath: true });
+
+    if (existingFiles && existingFiles.length > 0) {
+        // Get parent directory from first file path
+        sessionDir = path.dirname(existingFiles[0]);
+        debug(`Discovered session directory from existing file: ${sessionDir}`);
+    } else {
+        // No existing files, create a temporary file to discover the path
+        const tempFileName = `temp-path-discovery-${Date.now()}.txt`;
+        await context.sessionStorage?.write(tempFileName, "");
+
+        // Now list files to get the full path
+        const tempFiles = await context.sessionStorage?.list("", { fullPath: true });
+        if (tempFiles && tempFiles.length > 0) {
+            sessionDir = path.dirname(tempFiles[0]);
+            debug(`Discovered session directory from temp file: ${sessionDir}`);
+
+            // Clean up the temporary file
+            await context.sessionStorage?.delete(tempFileName);
+        }
+    }
+    return sessionDir;
 }
 
 async function resolveEntity(
