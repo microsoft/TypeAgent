@@ -11,7 +11,7 @@
     "lib": ["DOM"],
     "exactOptionalPropertyTypes": false,
     "noImplicitAny": false,
-    "strictNullChecks": false,
+    "strictNullChecks": false
   },
   "include": ["./*"],
   "ts-node": {

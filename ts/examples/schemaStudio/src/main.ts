@@ -28,6 +28,10 @@ import { generateActionPhrases, loadActionSchema } from "schema-author";
 import { NodeType, SchemaParser } from "action-schema";
 import { createStudio } from "./studio.js";
 import { createTemplateCommand } from "./templateCommand.js";
+import {
+    createURLResolverCommands,
+    createURLValidateCommands,
+} from "./urlCommands.js";
 
 const envPath = new URL("../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -51,6 +55,8 @@ async function runStudio(): Promise<void> {
         temperature,
         dedupeFile: dedupeFile_,
         template: createTemplateCommand(studio),
+        urlResolver: createURLResolverCommands(studio),
+        urlValidate: createURLValidateCommands(studio),
     };
 
     studio.commands = commands;

@@ -13,7 +13,6 @@ import {
     ActionContext,
     ParsedCommandParams,
     ParameterDefinitions,
-    Entity,
     AppAction,
     ActionResultActivityContext,
 } from "@typeagent/agent-sdk";
@@ -30,7 +29,6 @@ import {
 import { MatchResult, PromptEntity } from "agent-cache";
 import { IncrementalJsonValueCallBack } from "common-utils";
 import { ProfileNames } from "../utils/profileNames.js";
-import { conversation } from "knowledge-processor";
 import { UnknownAction } from "../context/dispatcher/schema/dispatcherActionSchema.js";
 import {
     DispatcherActivityName,
@@ -50,6 +48,10 @@ import {
     toPendingActions,
 } from "./pendingActions.js";
 import { getActionContext } from "./actionContext.js";
+import {
+    addActionResultToMemory,
+    addResultToMemory,
+} from "../context/memory.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 
@@ -141,45 +143,26 @@ async function executeAction(
         true,
         actionIndex,
     );
-    let returnedResult: ActionResult | undefined;
+    let result: ActionResult;
     try {
-        returnedResult = await appAgent.executeAction(action, actionContext);
+        result =
+            (await appAgent.executeAction(action, actionContext)) ??
+            createActionResult(
+                `Action ${getFullActionName(executableAction)} completed.`,
+            );
     } catch (e: any) {
-        returnedResult = createActionResultFromError(e.message);
+        result = createActionResultFromError(e.message);
     }
     actionContext.profiler?.stop();
     actionContext.profiler = undefined;
 
-    let result: ActionResult;
-    if (returnedResult === undefined) {
-        result = createActionResult(
-            `Action ${getFullActionName(executableAction)} completed.`,
-        );
-    } else {
-        if (
-            returnedResult.error === undefined &&
-            returnedResult.literalText &&
-            systemContext.conversationManager
-        ) {
-            addToConversationMemory(
-                systemContext,
-                returnedResult.literalText,
-                returnedResult.entities,
-            );
-        }
-        result = returnedResult;
-    }
     if (debugActions.enabled) {
         debugActions(actionResultToString(result));
     }
 
+    // Display the action result.
     if (result.error !== undefined) {
         displayError(result.error, actionContext);
-        systemContext.chatHistory.addAssistantEntry(
-            `Action ${getFullActionName(executableAction)} failed: ${result.error}`,
-            systemContext.requestId,
-            schemaName,
-        );
     } else {
         if (result.displayContent !== undefined) {
             actionContext.actionIO.setDisplay(result.displayContent);
@@ -193,20 +176,6 @@ async function executeAction(
                 result.dynamicDisplayNextRefreshMs!,
             );
         }
-        const combinedEntities = [...result.entities];
-        if (result.resultEntity) {
-            combinedEntities.push(result.resultEntity);
-        }
-        systemContext.chatHistory.addAssistantEntry(
-            result.literalText
-                ? result.literalText
-                : `Action ${getFullActionName(executableAction)} completed.`,
-            systemContext.requestId,
-            schemaName,
-            combinedEntities,
-            result.additionalInstructions,
-            result.activityContext,
-        );
     }
 
     closeActionContext();
@@ -240,11 +209,7 @@ async function canExecute(
             `Unable to determine ${actions.length > 1 ? "one or more actions in" : "action for"} the request.`,
             ...unknownRequests.map((s) => `- ${s}`),
         ];
-        systemContext.chatHistory.addAssistantEntry(
-            lines.join("\n"),
-            systemContext.requestId,
-            DispatcherName,
-        );
+        addResultToMemory(systemContext, lines.join("\n"), DispatcherName);
 
         const config = systemContext.session.getConfig();
         if (!isSwitchEnabled(config)) {
@@ -284,12 +249,7 @@ async function canExecute(
 
     if (disabled.size > 0) {
         const message = `Not executed. Action disabled for ${Array.from(disabled.values()).join(", ")}`;
-        systemContext.chatHistory.addAssistantEntry(
-            message,
-            systemContext.requestId,
-            DispatcherName,
-        );
-
+        addResultToMemory(systemContext, message, DispatcherName);
         displayWarn(message, context);
         return false;
     }
@@ -371,11 +331,14 @@ export async function executeActions(
     if (!(await canExecute(actions, context))) {
         return;
     }
+
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
 
     while (actionQueue.length !== 0) {
-        const { executableAction, resultEntityResolver } = actionQueue.shift()!;
+        const pending = actionQueue.shift()!;
+        const executableAction = pending.executableAction;
+
         const action = executableAction.action;
         if (isPendingRequestAction(action)) {
             const translationResult = await translatePendingRequestAction(
@@ -383,9 +346,6 @@ export async function executeActions(
                 context,
                 actionIndex,
             );
-            if (!translationResult) {
-                throw new Error("Pending action translation error.");
-            }
 
             const requestAction = translationResult.requestAction;
             actionQueue.unshift(
@@ -399,12 +359,20 @@ export async function executeActions(
         }
         const appAgentName = getAppAgentName(action.schemaName);
         // resolve result entities.
+        const resultEntityResolver = pending.resultEntityResolver;
+        let resolvedEntities = pending.resolvedEntities;
         if (resultEntityResolver !== undefined) {
-            await resolveEntities(
+            const resultResolvedEntities = await resolveEntities(
                 systemContext.agents,
                 action,
                 resultEntityResolver,
             );
+            if (resultResolvedEntities !== undefined) {
+                if (resolvedEntities === undefined) {
+                    resolvedEntities = [];
+                }
+                resolvedEntities.push(...resultResolvedEntities);
+            }
         }
         const result = await executeAction(
             executableAction,
@@ -436,6 +404,15 @@ export async function executeActions(
                 },
             );
         }
+
+        // add the action result to memory.
+        addActionResultToMemory(
+            systemContext,
+            executableAction,
+            resolvedEntities,
+            action.schemaName,
+            result,
+        );
 
         if (result.activityContext !== undefined) {
             if (actionQueue.length > 0) {
@@ -652,27 +629,5 @@ export async function executeCommand(
         actionContext.profiler?.stop();
         actionContext.profiler = undefined;
         closeActionContext();
-    }
-}
-
-function addToConversationMemory(
-    systemContext: CommandHandlerContext,
-    message: string,
-    entities: Entity[],
-) {
-    if (systemContext.conversationManager) {
-        const newEntities = entities.filter(
-            (e) => !conversation.isMemorizedEntity(e.type),
-        );
-        if (newEntities.length > 0) {
-            systemContext.conversationManager.queueAddMessage(
-                {
-                    text: message,
-                    knowledge: newEntities,
-                    timestamp: new Date(),
-                },
-                false,
-            );
-        }
     }
 }

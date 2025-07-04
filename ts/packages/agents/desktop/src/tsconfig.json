@@ -3,7 +3,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "../dist",
-    "types": ["node"],
+    "types": ["node"]
   },
-  "include":["./**/*"],
+  "include": ["./**/*"]
 }

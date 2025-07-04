@@ -1,0 +1,215 @@
+/* Screenshot Selector Styles */
+.screenshot-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  cursor: crosshair;
+}
+
+.screenshot-selection-box {
+  position: absolute;
+  border: 2px dashed #007acc;
+  background: rgba(0, 122, 204, 0.1);
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+/* Screenshot Toolbar Styles - Matching Contextual Toolbar */
+.screenshot-toolbar {
+  position: fixed;
+  background: rgba(42, 42, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.screenshot-toolbar.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.screenshot-toolbar .toolbar-content {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+}
+
+.screenshot-toolbar .toolbar-action {
+  background: transparent;
+  color: #e8eaed;
+  border: none;
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.15s ease;
+  min-width: 32px;
+  min-height: 32px;
+  position: relative;
+}
+
+.screenshot-toolbar .toolbar-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.screenshot-toolbar .toolbar-action:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.screenshot-toolbar .toolbar-action i {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Vertical separator between toolbar actions */
+.screenshot-toolbar .toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Screenshot Preview in Dialogs */
+.selected-screenshot {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  background: #f9f9f9;
+  margin: 8px 0;
+}
+
+.screenshot-preview {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: block;
+  margin: 0 auto;
+}
+
+.screenshot-info {
+  text-align: center;
+  margin-top: 8px;
+  color: #666;
+}
+
+.screenshot-info small {
+  font-size: 12px;
+}
+
+/* Clipping Button in Toolbar */
+#clippingTool {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#clippingTool:active {
+  background: #e3f2fd;
+}
+
+#clippingTool i {
+  font-size: 16px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .screenshot-toolbar {
+    min-width: 240px;
+    padding: 6px;
+  }
+
+  .screenshot-toolbar .toolbar-action {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+
+  .screenshot-toolbar .action-label {
+    display: none;
+  }
+
+  .screenshot-preview {
+    max-height: 150px;
+  }
+}
+
+/* Animation for screenshot capture */
+.screenshot-capture-flash {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: white;
+  opacity: 0.8;
+  z-index: 10001;
+  pointer-events: none;
+  animation: screenshotFlash 0.2s ease-out;
+}
+
+@keyframes screenshotFlash {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Clipping Button Toolbar Integration */
+#clippingTool {
+  background: transparent;
+  color: #e8eaed;
+  border: none;
+  border-radius: 4px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+#clippingTool:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+#clippingTool:disabled {
+  color: #5f6368;
+  cursor: not-allowed;
+}
+
+#clippingTool:disabled:hover {
+  background: transparent;
+}
+
+#clippingTool i {
+  font-size: 16px;
+}

@@ -676,7 +676,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         // Create new EventSource
-        eventSource = new EventSource("/api/events");
+        eventSource = new EventSource("/api/plans/events");
 
         // Handle connection open
         eventSource.onopen = () => {

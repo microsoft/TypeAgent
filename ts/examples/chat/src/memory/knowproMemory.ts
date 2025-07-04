@@ -3,6 +3,7 @@
 
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
+import * as cm from "conversation-memory";
 import {
     arg,
     argBool,
@@ -22,7 +23,6 @@ import {
     argToDate,
     parseFreeAndNamedArguments,
     keyValuesFromNamedArgs,
-    TermParser,
 } from "../common.js";
 import { collections, dateTime, ensureDir } from "typeagent";
 import chalk from "chalk";
@@ -37,6 +37,7 @@ import { createKnowproDocMemoryCommands } from "./knowproDoc.js";
 import { createKnowproWebsiteCommands } from "./knowproWebsite.js";
 import { Result } from "typechat";
 import { conversation as knowLib } from "knowledge-processor";
+import { createKnowproKnowledgeCommands } from "./knowproKnowledge.js";
 
 export async function runKnowproMemory(): Promise<void> {
     const storePath = "/data/testChat";
@@ -88,7 +89,7 @@ export async function createKnowproCommands(
     const MessageCountLarge = 1000;
     const MessageCountMedium = 500;
 
-    const termParser = new TermParser();
+    const termParser = new cm.SearchTermParser();
 
     await ensureDir(context.basePath);
     /*
@@ -102,21 +103,23 @@ export async function createKnowproCommands(
     await createKnowproTestCommands(context, commands);
     await createKnowproDocMemoryCommands(context, commands);
     await createKnowproWebsiteCommands(context, commands);
+    await createKnowproKnowledgeCommands(context, commands);
     /*
      * CREATE GENERAL COMMANDS that are common to all memory types
      * These include: (a) search (b) answer generation (c) enumeration
      */
     commands.kpSearchTerms = searchTerms;
-    commands.kpSearchTermsLang = searchTermsLang;
     commands.kpSearch = search;
     commands.kpAnswer = answer;
     commands.kpSearchRag = searchRag;
     commands.kpAnswerRag = answerRag;
+    commands.kpAnswerTerms = answerTerms;
     commands.kpEntities = entities;
     commands.kpTopics = topics;
     commands.kpMessages = showMessages;
     commands.kpAbstractMessage = abstract;
-    commands.kpRelatedTerms = addRelatedTerm;
+    commands.kpAlias = addAlias;
+    commands.kpRelatedTerms = relatedTerms;
 
     /*----------------
      * COMMANDS
@@ -174,6 +177,7 @@ export async function createKnowproCommands(
                 exact: argBool("Exact match only. No related terms", false),
                 distinct: argBool("Show distinct results", true),
                 orderBy: arg("Order by: score | timestamp | ordinal"),
+                query: arg("Word-break this natural language query"),
             },
         };
         if (kType === undefined) {
@@ -194,6 +198,13 @@ export async function createKnowproCommands(
             return;
         }
         const commandDef = searchTermsDef();
+        // First, check if the caller optionally supplied a ==query parameter...
+        // If so, this word-breaks it. Else the parameters are just supplied as ordinary
+        // command line params
+        const [queryTerms, _] = getTermsFromQuery(args, commandDef);
+        if (queryTerms && queryTerms.length > 0) {
+            args = queryTerms;
+        }
         let [termArgs, namedArgs] = parseFreeAndNamedArguments(
             args,
             commandDef,
@@ -209,7 +220,9 @@ export async function createKnowproCommands(
                     termArgs,
                     namedArgs,
                     commandDef,
-                    namedArgs.andTerms,
+                    namedArgs.andTerms && namedArgs.andTerms === true
+                        ? "and"
+                        : "or",
                 ),
                 when: whenFilterFromNamedArgs(namedArgs, commandDef),
             };
@@ -243,27 +256,6 @@ export async function createKnowproCommands(
             context.printer.writeTiming(chalk.gray, timer);
         } else {
             context.printer.writeError("Conversation is not indexed");
-        }
-    }
-
-    function searchTermsLangDef(): CommandMetadata {
-        const def = searchTermsDef();
-        def.args ??= {};
-        def.args.query = arg("Get search terms from this query");
-        return def;
-    }
-    commands.kpSearchTermsLang.metadata = searchTermsLangDef();
-    async function searchTermsLang(args: string[]) {
-        const namedArgs = parseNamedArguments(args, searchTermsLangDef());
-        const rawTerms = termParser.getRawTerms(namedArgs.query);
-        if (rawTerms) {
-            context.printer.writeList(rawTerms, { type: "csv" });
-            delete namedArgs.query;
-            args = [...rawTerms];
-            args.push(...namedArgsToArgs(namedArgs));
-            await searchTerms(args);
-        } else {
-            context.printer.writeError("No search terms");
         }
     }
 
@@ -377,6 +369,65 @@ export async function createKnowproCommands(
             },
         );
         context.printer.writeLine();
+    }
+
+    function answerTermsDef(): CommandMetadata {
+        const def = answerDef();
+        def.description =
+            "Generate an answer, but use local word breaking to produce search results";
+        return def;
+    }
+    commands.kpAnswerTerms.metadata = answerTermsDef();
+    async function answerTerms(args: string[]): Promise<void> {
+        const conversation = ensureConversationLoaded();
+        if (!conversation) {
+            return;
+        }
+        const commandDef = answerTermsDef();
+        const [queryTerms, query] = getTermsFromQuery(args, commandDef);
+        if (queryTerms && queryTerms.length > 0) {
+            args = queryTerms;
+        }
+        delete commandDef.args!.query;
+        let [termArgs, namedArgs] = parseFreeAndNamedArguments(
+            args,
+            commandDef,
+        );
+        const selectExpr: kp.SearchSelectExpr = {
+            searchTermGroup: createSearchGroup(
+                termArgs,
+                namedArgs,
+                commandDef,
+                namedArgs.andTerms && namedArgs.andTerms === true
+                    ? "and"
+                    : "or",
+            ),
+            when: whenFilterFromNamedArgs(namedArgs, commandDef),
+        };
+        const matches = await kp.searchConversation(
+            conversation,
+            selectExpr.searchTermGroup,
+            selectExpr.when,
+            {
+                exactMatch: namedArgs.exact,
+            },
+        );
+        if (!matches) {
+            return;
+        }
+        const answer = await kp.generateAnswer(
+            conversation,
+            context.answerGenerator,
+            query,
+            matches,
+            undefined,
+            createAnswerOptions(namedArgs),
+        );
+        if (!answer.success) {
+            context.printer.writeError(answer.message);
+            return;
+        }
+        context.printer.writeAnswer(answer.data);
     }
 
     function searchRagDef(): CommandMetadata {
@@ -610,7 +661,7 @@ export async function createKnowproCommands(
         }
     }
 
-    function addRelatedTermDef(): CommandMetadata {
+    function addAliasDef(): CommandMetadata {
         return {
             description: "Add an alias",
             args: {
@@ -622,12 +673,12 @@ export async function createKnowproCommands(
             },
         };
     }
-    commands.kpRelatedTerms.metadata = addRelatedTermDef();
-    async function addRelatedTerm(args: string[]) {
+    commands.kpAlias.metadata = addAliasDef();
+    async function addAlias(args: string[]) {
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, addRelatedTermDef());
+        const namedArgs = parseNamedArguments(args, addAliasDef());
         const aliases =
             context.conversation!.secondaryIndexes?.termToRelatedTermsIndex
                 ?.aliases;
@@ -647,6 +698,36 @@ export async function createKnowproCommands(
         if (relatedTerms && relatedTerms.length > 0) {
             context.printer.writeList(relatedTerms.map((rt) => rt.text));
         }
+    }
+
+    function relatedTermsDef(): CommandMetadata {
+        return {
+            description: "Return related term matches from current index",
+            args: {
+                term: arg("Term to search for"),
+            },
+        };
+    }
+    commands.kpRelatedTerms.metadata = relatedTermsDef();
+    async function relatedTerms(args: string[]) {
+        if (!ensureConversationLoaded()) {
+            return;
+        }
+        const namedArgs = parseNamedArguments(args, relatedTermsDef());
+        const relatedTerms =
+            context.conversation!.secondaryIndexes?.termToRelatedTermsIndex
+                ?.fuzzyIndex;
+        if (!relatedTerms) {
+            context.printer.writeLine(
+                "No related terms available on this conversation",
+            );
+            return;
+        }
+        let searchTerm: kp.SearchTerm = { term: { text: namedArgs.term } };
+        searchTerm.relatedTerms = await relatedTerms.lookupTerm(
+            searchTerm.term.text,
+        );
+        context.printer.writeJson(searchTerm);
     }
 
     /*---------- 
@@ -691,12 +772,12 @@ export async function createKnowproCommands(
         termArgs: string[],
         namedArgs: NamedArgs,
         commandDef: CommandMetadata,
-        andTerms: boolean = false,
+        op: "and" | "or" | "or_max",
     ): kp.SearchTermGroup {
         const searchTerms = kp.createSearchTerms(termArgs);
         const propertyTerms = propertyTermsFromNamedArgs(namedArgs, commandDef);
         return {
-            booleanOp: andTerms ? "and" : "or",
+            booleanOp: op,
             terms: [...searchTerms, ...propertyTerms],
         };
     }
@@ -832,6 +913,36 @@ export async function createKnowproCommands(
                 );
             }
         }
+    }
+
+    function getTermsFromQuery(
+        args: string[],
+        commandDef: CommandMetadata,
+        printTerms = true,
+        deleteQuery = true,
+    ): [string[] | undefined, string] {
+        const namedArgs = parseNamedArguments(args, commandDef);
+        if (!namedArgs.query) {
+            return [undefined, ""];
+        }
+        const rawTerms = termParser.getTerms(namedArgs.query);
+        if (rawTerms) {
+            if (printTerms) {
+                context.printer.writeLine();
+                context.printer.writeListInColor(chalk.cyan, rawTerms, {
+                    type: "csv",
+                });
+                context.printer.writeLine();
+            }
+            const query = namedArgs.query;
+            if (deleteQuery) {
+                delete namedArgs.query;
+            }
+            args = [...rawTerms];
+            args.push(...namedArgsToArgs(namedArgs));
+            return [args, query];
+        }
+        return [undefined, ""];
     }
 }
 

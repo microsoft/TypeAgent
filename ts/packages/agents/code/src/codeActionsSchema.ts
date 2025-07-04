@@ -8,6 +8,17 @@ export type CodeActions =
     | NewFileAction
     | AddCodeSnippetAction;
 
+export type CodeActivity = LaunchVSCodeAction;
+
+// Launch or Start VSCode
+export type LaunchVSCodeAction = {
+    actionName: "launchVSCode";
+    parameters: {
+        mode: "last" | "folder" | "workspace";
+        path?: string; // Required if mode is "folder" or "workspace"
+    };
+};
+
 export type ColorTheme =
     | "Default Light+"
     | "Default Dark+"

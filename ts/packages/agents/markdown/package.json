@@ -46,7 +46,7 @@
     "lib0": "^0.2.52",
     "markdown-it": "^14.1.0",
     "markdown-it-texmath": "^1.0.0",
-    "mermaid": "^10.6.1",
+    "mermaid": "^11.7.0",
     "prosemirror-inputrules": "^1.2.0",
     "prosemirror-model": "^1.19.0",
     "prosemirror-state": "^1.4.2",
@@ -74,7 +74,7 @@
     "rimraf": "^6.0.1",
     "sanitize-filename": "^1.6.3",
     "typescript": "~5.4.5",
-    "vite": "^4.5.14"
+    "vite": "^6.3.4"
   },
   "fluidBuild": {
     "declarativeTasks": {

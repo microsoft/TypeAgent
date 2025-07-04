@@ -4,17 +4,89 @@
 import {
     createActionResultFromError,
     createActionResultFromHtmlDisplay,
+    createActionResultNoDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
-import { LookupAndAnswerAction } from "../context/dispatcher/schema/lookupActionSchema.js";
+import {
+    LookupAndAnswerAction,
+    TermFilter,
+} from "../context/dispatcher/schema/lookupActionSchema.js";
 import { ActionContext, ActionResult, Entity } from "@typeagent/agent-sdk";
 import { conversation } from "knowledge-processor";
 import { getLookupSettings, handleLookup } from "./internet.js";
 import registerDebug from "debug";
 import { getImageElement, getMimeType } from "common-utils";
+import { lookupAndAnswerFromMemory } from "../context/memory.js";
 
 const debug = registerDebug("typeagent:dispatcher:lookup");
 const debugError = registerDebug("typeagent:dispatcher:lookup:error");
+
+async function getAnswerFromConversationManager(
+    context: ActionContext<CommandHandlerContext>,
+    question: string,
+    conversationLookupFilters: TermFilter[],
+) {
+    const conversationManager =
+        context.sessionContext.agentContext.conversationManager;
+    if (conversationManager === undefined) {
+        throw new Error("Conversation manager is undefined!");
+    }
+    let searchResponse = await conversationManager.getSearchResponse(
+        question,
+        conversationLookupFilters,
+    );
+    if (searchResponse === undefined) {
+        throw new Error("Search response is undefined!");
+    }
+
+    if (debug.enabled) {
+        searchResponse.response?.hasHits()
+            ? debug(
+                  `Search response has ${searchResponse.response?.messages?.length} hits`,
+              )
+            : debug("No search hits");
+    }
+    const matches = await conversationManager.generateAnswerForSearchResponse(
+        question,
+        searchResponse,
+    );
+    if (matches && matches.response && matches.response.answer) {
+        console.log("CONVERSATION MEMORY MATCHES:");
+        conversation.log.logSearchResponse(matches.response);
+
+        const whyNoAnswer = matches.response.answer.whyNoAnswer;
+        if (whyNoAnswer) {
+            debugError(`No Answer: ${whyNoAnswer}`);
+            return createActionResultFromError(`Not Answered - ${whyNoAnswer}`);
+        } else {
+            debug(
+                "Answer: " +
+                    matches.response.answer.answer
+                        ?.replace("\n", "")
+                        .substring(0, 100) +
+                    "...",
+            );
+
+            const matchEntities: Entity[] = matchedEntities(matches.response);
+            const imageNames: (string | undefined)[] = matchEntities.map(
+                (e) => {
+                    if (e.type.includes("image")) {
+                        return e.name;
+                    }
+                },
+            );
+
+            return createActionResultFromHtmlDisplay(
+                `<div>${matches.response.answer.answer!}</div><div class='chat-smallImage'>${await rehydrateImages(context, imageNames)}</div>`,
+                matches.response.answer.answer!,
+                matchEntities,
+            );
+        }
+    }
+
+    debugError("bug bug");
+    return createActionResultFromError("I don't know anything about that.");
+}
 
 export async function lookupAndAnswer(
     lookupAction: LookupAndAnswerAction,
@@ -22,7 +94,7 @@ export async function lookupAndAnswer(
 ): Promise<ActionResult> {
     const source = lookupAction.parameters.lookup.source;
     switch (source) {
-        case "internet":
+        case "internet": {
             const { question, lookup, originalRequest } =
                 lookupAction.parameters;
 
@@ -36,73 +108,23 @@ export async function lookupAndAnswer(
             );
 
             return result;
-        case "conversation":
-            const conversationManager: conversation.ConversationManager = (
-                context.sessionContext as any
-            ).conversationManager;
-            if (conversationManager === undefined) {
-                throw new Error("Conversation manager is undefined!");
-            }
-            let searchResponse = await conversationManager.getSearchResponse(
-                lookupAction.parameters.question,
-                lookupAction.parameters.lookup.conversationLookupFilters,
-            );
-            if (searchResponse === undefined) {
-                throw new Error("Search response is undefined!");
-            }
-
-            if (debug.enabled) {
-                searchResponse.response?.hasHits()
-                    ? debug(
-                          `Search response has ${searchResponse.response?.messages?.length} hits`,
-                      )
-                    : debug("No search hits");
-            }
-            const matches =
-                await conversationManager.generateAnswerForSearchResponse(
+        }
+        case "conversation": {
+            const systemContext = context.sessionContext.agentContext;
+            if (systemContext.session.getConfig().execution.memory.legacy) {
+                return getAnswerFromConversationManager(
+                    context,
                     lookupAction.parameters.question,
-                    searchResponse,
+                    lookupAction.parameters.lookup.conversationLookupFilters,
                 );
-            if (matches && matches.response && matches.response.answer) {
-                console.log("CONVERSATION MEMORY MATCHES:");
-                conversation.log.logSearchResponse(matches.response);
-
-                const whyNoAnswer = matches.response.answer.whyNoAnswer;
-                if (whyNoAnswer) {
-                    debugError(`No Answer: ${whyNoAnswer}`);
-                    return createActionResultFromError(
-                        `Not Answered - ${whyNoAnswer}`,
-                    );
-                } else {
-                    debug(
-                        "Answer: " +
-                            matches.response.answer.answer
-                                ?.replace("\n", "")
-                                .substring(0, 100) +
-                            "...",
-                    );
-
-                    const matchEntities: Entity[] = matchedEntities(
-                        matches.response,
-                    );
-                    const imageNames: (string | undefined)[] =
-                        matchEntities.map((e) => {
-                            if (e.type.includes("image")) {
-                                return e.name;
-                            }
-                        });
-
-                    return createActionResultFromHtmlDisplay(
-                        `<div>${matches.response.answer.answer!}</div><div class='chat-smallImage'>${await rehydrateImages(context, imageNames)}</div>`,
-                        matches.response.answer.answer!,
-                        matchEntities,
-                    );
-                }
             }
-            debugError("bug bug");
-            return createActionResultFromError(
-                "I don't know anything about that.",
+            const literalText = await lookupAndAnswerFromMemory(
+                context,
+                lookupAction.parameters.question,
             );
+            // TODO: how about entities?
+            return createActionResultNoDisplay(literalText.join("\n"));
+        }
         default:
             throw new Error(`Unknown lookup source: ${source}`);
     }

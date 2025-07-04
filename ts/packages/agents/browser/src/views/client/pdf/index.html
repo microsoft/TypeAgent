@@ -1,0 +1,68 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <meta name="google" content="notranslate" />
+    <title>PDF Viewer - TypeAgent</title>
+
+    <!-- FontAwesome Icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <div class="toolbar">
+        <div class="toolbar-left"></div>
+
+        <div class="toolbar-center">
+          <div class="page-controls">
+            <button id="prevPage" title="Previous page">
+              <i class="fas fa-chevron-left"></i>
+            </button>
+            <input
+              type="number"
+              id="pageNum"
+              class="page-input"
+              value="1"
+              min="1"
+            />
+            <span class="page-separator">of</span>
+            <span id="pageCount" class="page-total">-</span>
+            <button id="nextPage" title="Next page">
+              <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar-right">
+          <button id="clippingTool" title="Take screenshot clipping">
+            <i class="fas fa-crop"></i>
+          </button>
+          <button id="zoomOut" title="Zoom out">
+            <i class="fas fa-minus"></i>
+          </button>
+          <span id="scale" class="zoom-level">100%</span>
+          <button id="zoomIn" title="Zoom in">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="viewer-container" id="viewerContainer">
+        <div class="loading">Loading PDF viewer...</div>
+      </div>
+    </div>
+
+    <!-- TypeAgent PDF Viewer Scripts -->
+    <script type="module" src="app.ts"></script>
+  </body>
+</html>

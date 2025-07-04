@@ -8,7 +8,7 @@
     "declarationMap": false,
     "moduleResolution": "bundler",
     "module": "ESNext",
-    "lib": ["DOM"],
+    "lib": ["DOM"]
   },
   "include": ["./*"],
   "ts-node": {

@@ -3,7 +3,7 @@
 
 import fs from "node:fs";
 import { LookupOptions, extractEntities } from "typeagent";
-import { ChatModel, bingWithGrounding, openai } from "aiclient";
+import { ChatModel, openai } from "aiclient";
 import {
     ActionContext,
     ActionResult,
@@ -28,6 +28,7 @@ import {
     RunStreamEvent,
     ThreadMessage,
 } from "@azure/ai-agents";
+import { bingWithGrounding } from "azure-ai-foundry";
 import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 
 function urlToHtml(url: string, title?: string | undefined): string {

@@ -67,13 +67,15 @@ export async function execSearchRequest(
     //
     // Run query
     //
-    const searchResults = await getLangSearchResult(
-        conversation,
-        context.queryTranslator,
-        langQuery,
-        options,
-        langFilter,
-        debugContext,
+    const searchResults = await async.getResultWithRetry(() =>
+        getLangSearchResult(
+            conversation,
+            context.queryTranslator,
+            langQuery,
+            options,
+            langFilter,
+            debugContext,
+        ),
     );
 
     return { searchResults, debugContext };
@@ -114,9 +116,10 @@ export async function execGetAnswerRequest(
     const searchResults = searchResponse.searchResults;
     const response: GetAnswerResponse = {
         searchResponse,
-        answerResponses: error("Not initialized"),
+        answerResponses: error("No search matches"),
     };
     if (!searchResults.success) {
+        response.answerResponses = error(searchResults.message);
         return response;
     }
     if (!kp.hasConversationResults(searchResults.data)) {
@@ -131,6 +134,7 @@ export async function execGetAnswerRequest(
         request,
         searchResults.data,
         progressCallback,
+        context.retryNoAnswer,
     );
     response.answerResponses = answerResponses;
     return response;

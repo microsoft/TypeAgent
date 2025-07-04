@@ -13,11 +13,14 @@ import DOMPurify from "dompurify";
 import { SettingsView } from "./settingsView";
 import MarkdownIt from "markdown-it";
 
-const ansi_up = new AnsiUp();
-ansi_up.use_classes = true;
+const ansiUpTextToHtml = new AnsiUp();
+ansiUpTextToHtml.use_classes = true;
+const ansiUpMarkdownToHtml = new AnsiUp();
+ansiUpMarkdownToHtml.use_classes = true;
+ansiUpMarkdownToHtml.escape_html = false;
 
 function textToHtml(text: string): string {
-    const value = ansi_up.ansi_to_html(text);
+    const value = ansiUpTextToHtml.ansi_to_html(text);
     const line = value.replace(/\n/gm, "<br>");
     return line;
 }
@@ -60,7 +63,10 @@ function processContent(
                 tokens[idx].attrSet("target", "_blank");
                 return defaultRender(tokens, idx, ...args);
             };
-            return inline ? md.renderInline(content) : md.render(content);
+
+            return ansiUpMarkdownToHtml.ansi_to_html(
+                inline ? md.renderInline(content) : md.render(content),
+            );
         case "text":
             return enableText2Html
                 ? textToHtml(content)

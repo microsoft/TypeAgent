@@ -35,6 +35,7 @@ import { TabTitleIndex, createTabTitleIndex } from "./tabTitleIndex.mjs";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import fs from "node:fs";
 
 import {
     CommandHandler,
@@ -47,6 +48,8 @@ import registerDebug from "debug";
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
+import * as website from "website-memory";
+import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -59,6 +62,7 @@ import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteData,
+    importWebsiteDataFromSession,
     searchWebsites,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -68,18 +72,11 @@ import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
-import { bingWithGrounding } from "aiclient";
-import { AIProjectClient } from "@azure/ai-projects";
-import { DefaultAzureCredential } from "@azure/identity";
-import {
-    Agent,
-    MessageContentUnion,
-    ThreadMessage,
-    ToolUtility,
-} from "@azure/ai-agents";
-import * as website from "website-memory";
 import { openai, TextEmbeddingModel } from "aiclient";
+import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
+import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
+import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -100,6 +97,7 @@ export type BrowserActionContext = {
     useExternalBrowserControl: boolean;
     webSocket?: WebSocket | undefined;
     webAgentChannels?: WebAgentChannels | undefined;
+    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
     crossWordState?: Crossword | undefined;
     browserConnector?: BrowserConnector | undefined;
     browserProcess?: ChildProcess | undefined;
@@ -170,11 +168,57 @@ async function updateBrowserContext(
                 );
             } else {
                 debug(
-                    "Unable to load website index, please create one using the @index command or import website data.",
+                    "No existing website index found, creating new index for data persistence",
                 );
+
                 // Create empty collection as fallback
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
+
+                try {
+                    const sessionDir = await getSessionFolderPath(context);
+
+                    if (sessionDir) {
+                        // Create index path following IndexManager pattern: sessionDir/indexes/website-index
+                        const indexPath = path.join(
+                            sessionDir,
+                            "indexes",
+                            "website-index",
+                        );
+                        fs.mkdirSync(indexPath, { recursive: true });
+
+                        // Create proper IndexData object
+                        context.agentContext.index = {
+                            source: "website",
+                            name: "website-index",
+                            location: "browser-agent",
+                            size: 0,
+                            path: indexPath,
+                            state: "new",
+                            progress: 0,
+                            sizeOnDisk: 0,
+                        };
+
+                        debug(
+                            `Created website index with sessionStorage-based path: ${indexPath}`,
+                        );
+                    } else {
+                        debug(
+                            "Warning: Could not determine session directory path",
+                        );
+                    }
+                } catch (error) {
+                    debug(
+                        `Error during sessionStorage path discovery: ${error}`,
+                    );
+                }
+
+                // If index creation failed, log that data will be in-memory only
+                if (!context.agentContext.index) {
+                    debug(
+                        "Website collection created without persistent index - data will be in-memory only",
+                    );
+                }
             }
         }
 
@@ -274,6 +318,10 @@ async function updateBrowserContext(
                             );
                             break;
                         }
+                        case "removeCrosswordPageCache": {
+                            await deleteCachedSchema(context, data.params.url);
+                            break;
+                        }
                         case "addTabIdToIndex":
                         case "deleteTabIdFromIndex":
                         case "getTabIdFromIndex":
@@ -307,6 +355,47 @@ async function updateBrowserContext(
                                     result: discoveryResult.data,
                                 }),
                             );
+                            break;
+                        }
+
+                        case "extractKnowledgeFromPage":
+                        case "indexWebPageContent":
+                        case "queryWebKnowledge":
+                        case "checkPageIndexStatus":
+                        case "getKnowledgeIndexStats":
+                        case "clearKnowledgeIndex":
+                        case "exportKnowledgeData": {
+                            const knowledgeResult = await handleKnowledgeAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "importWebsiteData":
+                        case "searchWebsites":
+                        case "getWebsiteStats": {
+                            const websiteResult = await handleWebsiteAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: websiteResult,
+                                }),
+                            );
+                            break;
                         }
                     }
                 }
@@ -330,6 +419,39 @@ async function updateBrowserContext(
             context.agentContext.viewProcess.kill();
         }
     }
+}
+
+async function getSessionFolderPath(
+    context: SessionContext<BrowserActionContext>,
+) {
+    let sessionDir: string | undefined;
+
+    const existingFiles = await context.sessionStorage?.list("", {
+        fullPath: true,
+    });
+
+    if (existingFiles && existingFiles.length > 0) {
+        // Get parent directory from first file path
+        sessionDir = path.dirname(existingFiles[0]);
+        debug(`Discovered session directory from existing file: ${sessionDir}`);
+    } else {
+        // No existing files, create a temporary file to discover the path
+        const tempFileName = `temp-path-discovery-${Date.now()}.txt`;
+        await context.sessionStorage?.write(tempFileName, "");
+
+        // Now list files to get the full path
+        const tempFiles = await context.sessionStorage?.list("", {
+            fullPath: true,
+        });
+        if (tempFiles && tempFiles.length > 0) {
+            sessionDir = path.dirname(tempFiles[0]);
+            debug(`Discovered session directory from temp file: ${sessionDir}`);
+
+            // Clean up the temporary file
+            await context.sessionStorage?.delete(tempFileName);
+        }
+    }
+    return sessionDir;
 }
 
 async function resolveEntity(
@@ -413,7 +535,10 @@ async function resolveWebPage(
             }
 
             // try to resolve URL using LLM + internet search
-            const url = await resolveURLWithSearch(site);
+            const url = await urlResolver.resolveURLWithSearch(
+                site,
+                bingWithGrounding.apiSettingsFromEnv(),
+            );
 
             if (url) {
                 return url;
@@ -421,139 +546,6 @@ async function resolveWebPage(
 
             // can't get a URL
             throw new Error(`Unable to find a URL for: '${site}'`);
-    }
-}
-
-let groundingConfig: bingWithGrounding.ApiSettings | undefined;
-async function resolveURLWithSearch(site: string): Promise<string | undefined> {
-    if (!groundingConfig) {
-        groundingConfig = bingWithGrounding.apiSettingsFromEnv();
-    }
-
-    let retVal: string = site;
-    const project = new AIProjectClient(
-        groundingConfig.endpoint!,
-        new DefaultAzureCredential(),
-    );
-
-    const agent = await ensureAgent(groundingConfig, project);
-
-    if (!agent) {
-        throw new Error(
-            "No agent found for Bing with Grounding. Please check your configuration.",
-        );
-    }
-
-    try {
-        const thread = await project.agents.threads.create();
-
-        // the question that needs answering
-        await project.agents.messages.create(thread.id, "user", site);
-
-        // Create run
-        const run = await project.agents.runs.createAndPoll(
-            thread.id,
-            agent.id,
-            {
-                pollingOptions: {
-                    intervalInMs: 500,
-                },
-                onResponse: (response): void => {
-                    debug(`Received response with status: ${response.status}`);
-                },
-            },
-        );
-
-        const msgs: ThreadMessage[] = [];
-        if (run.status === "completed") {
-            if (run.completedAt) {
-                // Retrieve messages
-                const messages = await project.agents.messages.list(thread.id, {
-                    order: "asc",
-                });
-
-                // accumulate assistant messages
-                for await (const m of messages) {
-                    if (m.role === "assistant") {
-                        // TODO: handle multi-modal content
-                        const content: MessageContentUnion | undefined =
-                            m.content.find(
-                                (c) => c.type === "text" && "text" in c,
-                            );
-                        if (content) {
-                            msgs.push(m);
-                            let txt: string = (content as any).text
-                                .value as string;
-                            txt = txt
-                                .replaceAll("```json", "")
-                                .replaceAll("```", "");
-                            const url = JSON.parse(txt) as urlResolutionAction;
-                            retVal = url.url;
-                        }
-                    }
-                }
-            }
-        }
-
-        // delete the thread we just created since we are currently one and done
-        project.agents.threads.delete(thread.id);
-    } catch (e) {
-        debug(`Error resolving URL with search: ${e}`);
-    }
-
-    // return assistant messages
-    return retVal;
-}
-
-/*
- * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
- */
-async function ensureAgent(
-    groundingConfig: bingWithGrounding.ApiSettings,
-    project: AIProjectClient,
-): Promise<Agent | undefined> {
-    try {
-        return await project.agents.getAgent(
-            groundingConfig.urlResolutionAgentId!,
-        );
-    } catch (e) {
-        return await createAgent(groundingConfig, project);
-    }
-}
-
-async function createAgent(
-    groundingConfig: bingWithGrounding.ApiSettings,
-    project: AIProjectClient,
-): Promise<Agent> {
-    try {
-        // connection id is in the format: /subscriptions/<SUBSCRIPTION ID>/resourceGroups/<RESOURCE GROUP>/providers/Microsoft.CognitiveServices/accounts/<AI FOUNDRY RESOURCE>/projects/typeagent-test-agent/connections/<CONNECTION NAME>>
-        const bingTool = ToolUtility.createBingGroundingTool([
-            {
-                connectionId: groundingConfig.connectionId!,
-            },
-        ]);
-
-        // try to create the agent
-        return await project.agents.createAgent("gpt-4o", {
-            name: "TypeAgent_URLResolverAgent",
-            description: "Auto created URL Resolution Agent",
-            instructions: `
-You are an agent that translates user requests in conjunction with search results to URLs.  If the page does not exist just return an empty URL. Do not make up URLs.
-
-Respond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:
-
-interface Response {
-    originalRequest: string;
-    url: string;
-    urlsEvaluated: string[];
-    explanation: string;
-    bingSearchQuery: string;
-}`,
-            tools: [bingTool.definition],
-        });
-    } catch (e) {
-        debug(`Error creating agent: ${e}`);
-        throw e;
     }
 }
 
@@ -638,75 +630,86 @@ async function executeBrowserAction(
 
     context: ActionContext<BrowserActionContext>,
 ) {
-    if (action.schemaName === "browser") {
-        switch (action.actionName) {
-            case "openWebPage":
-                return openWebPage(context, action);
-            case "closeWebPage":
-                return closeWebPage(context);
-            case "importWebsiteData":
-                return importWebsiteData(context, action);
-            case "searchWebsites":
-                return searchWebsites(context, action);
-            case "getWebsiteStats":
-                return getWebsiteStats(context, action);
-            case "goForward":
-                await getActionBrowserControl(context).goForward();
-                return;
-            case "goBack":
-                await getActionBrowserControl(context).goBack();
-                return;
-            case "reloadPage":
-                // REVIEW: do we need to clear page schema?
-                await getActionBrowserControl(context).reload();
-                return;
-            case "scrollUp":
-                await getActionBrowserControl(context).scrollUp();
-                return;
-            case "scrollDown":
-                await getActionBrowserControl(context).scrollDown();
-                return;
-            case "zoomIn":
-                await getActionBrowserControl(context).zoomIn();
-                return;
-            case "zoomOut":
-                await getActionBrowserControl(context).zoomOut();
-                return;
-            case "zoomReset":
-                await getActionBrowserControl(context).zoomReset();
-                return;
-            case "followLinkByText": {
-                const control = getActionBrowserControl(context);
-                const { keywords, openInNewTab } = action.parameters;
-                const url = await control.followLinkByText(
-                    keywords,
-                    openInNewTab,
-                );
-                if (!url) {
-                    throw new Error(`No link found for '${keywords}'`);
-                }
+    switch (action.schemaName) {
+        case "browser":
+            switch (action.actionName) {
+                case "openWebPage":
+                    return openWebPage(context, action);
+                case "closeWebPage":
+                    return closeWebPage(context);
+                case "importWebsiteData":
+                    return importWebsiteData(context, action);
+                case "searchWebsites":
+                    return searchWebsites(context, action);
+                case "getWebsiteStats":
+                    return getWebsiteStats(context, action);
+                case "goForward":
+                    await getActionBrowserControl(context).goForward();
+                    return;
+                case "goBack":
+                    await getActionBrowserControl(context).goBack();
+                    return;
+                case "reloadPage":
+                    // REVIEW: do we need to clear page schema?
+                    await getActionBrowserControl(context).reload();
+                    return;
+                case "scrollUp":
+                    await getActionBrowserControl(context).scrollUp();
+                    return;
+                case "scrollDown":
+                    await getActionBrowserControl(context).scrollDown();
+                    return;
+                case "zoomIn":
+                    await getActionBrowserControl(context).zoomIn();
+                    return;
+                case "zoomOut":
+                    await getActionBrowserControl(context).zoomOut();
+                    return;
+                case "zoomReset":
+                    await getActionBrowserControl(context).zoomReset();
+                    return;
+                case "followLinkByText": {
+                    const control = getActionBrowserControl(context);
+                    const { keywords, openInNewTab } = action.parameters;
+                    const url = await control.followLinkByText(
+                        keywords,
+                        openInNewTab,
+                    );
+                    if (!url) {
+                        throw new Error(`No link found for '${keywords}'`);
+                    }
 
-                return createActionResultFromMarkdownDisplay(
-                    `Navigated to link for [${keywords}](${url})`,
-                    `Navigated to link for '${keywords}'`,
-                );
-            }
-            case "followLinkByPosition":
-                const control = getActionBrowserControl(context);
-                const url = await control.followLinkByPosition(
-                    action.parameters.position,
-                    action.parameters.openInNewTab,
-                );
-                if (!url) {
-                    throw new Error(
-                        `No link found at position ${action.parameters.position}`,
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to link for [${keywords}](${url})`,
+                        `Navigated to link for '${keywords}'`,
                     );
                 }
-                return createActionResultFromMarkdownDisplay(
-                    `Navigated to [link](${url}) at position ${action.parameters.position}`,
-                    `Navigated to link at position ${action.parameters.position}`,
-                );
-        }
+                case "followLinkByPosition":
+                    const control = getActionBrowserControl(context);
+                    const url = await control.followLinkByPosition(
+                        action.parameters.position,
+                        action.parameters.openInNewTab,
+                    );
+                    if (!url) {
+                        throw new Error(
+                            `No link found at position ${action.parameters.position}`,
+                        );
+                    }
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to [link](${url}) at position ${action.parameters.position}`,
+                        `Navigated to link at position ${action.parameters.position}`,
+                    );
+            }
+            break;
+        case "browser.external":
+            switch (action.actionName) {
+                case "closeWindow": {
+                    const control = getActionBrowserControl(context);
+                    await control.closeWindow();
+                    return;
+                }
+            }
+            break;
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
@@ -856,7 +859,7 @@ export async function createViewServiceHost(port: number) {
             try {
                 const expressService = fileURLToPath(
                     new URL(
-                        path.join("..", "./views/server/server.js"),
+                        path.join("..", "./views/server/server.mjs"),
                         import.meta.url,
                     ),
                 );
@@ -1008,6 +1011,79 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
     }
 }
 
+async function handleWebsiteAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    switch (actionName) {
+        case "importWebsiteData":
+            return await importWebsiteDataFromSession(parameters, context);
+
+        case "searchWebsites":
+            // Convert to ActionContext format for existing function
+            const searchAction = {
+                schemaName: "browser" as const,
+                actionName: "searchWebsites" as const,
+                parameters: parameters,
+            };
+            const mockActionContext: ActionContext<BrowserActionContext> = {
+                sessionContext: context,
+                actionIO: {
+                    setDisplay: () => {},
+                    appendDisplay: () => {},
+                    clearDisplay: () => {},
+                    setError: () => {},
+                } as any,
+                streamingContext: undefined,
+                activityContext: undefined,
+                queueToggleTransientAgent: async () => {},
+            };
+            const searchResult = await searchWebsites(
+                mockActionContext,
+                searchAction,
+            );
+            return {
+                success: !searchResult.error,
+                result: searchResult.literalText || "Search completed",
+                error: searchResult.error,
+            };
+
+        case "getWebsiteStats":
+            // Convert to ActionContext format for existing function
+            const statsAction = {
+                schemaName: "browser" as const,
+                actionName: "getWebsiteStats" as const,
+                parameters: parameters,
+            };
+            const mockStatsActionContext: ActionContext<BrowserActionContext> =
+                {
+                    sessionContext: context,
+                    actionIO: {
+                        setDisplay: () => {},
+                        appendDisplay: () => {},
+                        clearDisplay: () => {},
+                        setError: () => {},
+                    } as any,
+                    streamingContext: undefined,
+                    activityContext: undefined,
+                    queueToggleTransientAgent: async () => {},
+                };
+            const statsResult = await getWebsiteStats(
+                mockStatsActionContext,
+                statsAction,
+            );
+            return {
+                success: !statsResult.error,
+                result: statsResult.literalText || "Stats retrieved",
+                error: statsResult.error,
+            };
+
+        default:
+            throw new Error(`Unknown website action: ${actionName}`);
+    }
+}
+
 export const handlers: CommandHandlerTable = {
     description: "Browser App Agent Commands",
     commands: {
@@ -1027,7 +1103,7 @@ export const handlers: CommandHandlerTable = {
                 close: new CloseBrowserHandler(),
             },
         },
-
+        crossword: getCrosswordCommandHandlerTable(),
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
         external: {
@@ -1047,6 +1123,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = true;
+                        await context.queueToggleTransientAgent(
+                            "browser.external",
+                            true,
+                        );
                         displaySuccess(
                             "Using external browser control.",
                             context,
@@ -1066,6 +1146,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = false;
+                        await context.queueToggleTransientAgent(
+                            "browser.external",
+                            false,
+                        );
                         displaySuccess("Use client browser control.", context);
                     },
                 },

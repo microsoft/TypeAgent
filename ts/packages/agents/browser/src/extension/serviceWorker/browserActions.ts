@@ -14,13 +14,7 @@ import {
     getTabHTMLFragments,
     getFilteredHTMLFragments,
 } from "./capture";
-import {
-    getPageSchema,
-    setPageSchema,
-    getStoredPageProperty,
-    setStoredPageProperty,
-} from "./storage";
-import { showBadgeHealthy } from "./ui";
+import { getStoredPageProperty, setStoredPageProperty } from "./storage";
 
 /**
  * Executes a browser action
@@ -238,24 +232,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
                 type: "run_ui_event",
                 action: action,
             });
-            break;
-        }
-        case "getPageSchema": {
-            const targetTab = await getActiveTab();
-            const key = action.parameters.url ?? targetTab?.url;
-            if (key) {
-                responseObject = await getPageSchema(key);
-                if (responseObject) {
-                    showBadgeHealthy();
-                }
-            }
-            break;
-        }
-        case "setPageSchema": {
-            const key = action.parameters.url;
-            if (key) {
-                await setPageSchema(key, action.parameters.schema);
-            }
             break;
         }
         case "getPageStoredProperty": {

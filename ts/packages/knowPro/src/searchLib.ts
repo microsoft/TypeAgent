@@ -196,13 +196,13 @@ export function createMultipleChoiceQuestion(
 ): string {
     let text = question;
     if (choices.length > 0) {
-        text = `Multiple choice question:\n${question}`;
-        text += "\nAnswer using the following choices *only*:\n";
+        text = `Multiple choice question:\n${question}\n`;
+        text += "Answer using *one or more* of the following choices *only*:\n";
         for (let i = 0; i < choices.length; ++i) {
             text += `- ${choices[i].trim()}\n`;
         }
         if (addNone) {
-            text += "- None of the above";
+            text += "- None of the above\n";
         }
     }
     return text;

@@ -4,9 +4,9 @@
     "composite": true,
     "incremental": true,
     "rootDir": ".",
-    "outDir": "../../dist/puppeteer", 
+    "outDir": "../../dist/puppeteer",
     "lib": ["DOM"],
-    "module":"ESNext",
+    "module": "ESNext",
     "moduleResolution": "node"
   },
   "include": ["./*"],

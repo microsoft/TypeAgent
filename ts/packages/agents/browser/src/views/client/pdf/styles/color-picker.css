@@ -1,0 +1,268 @@
+/* Color Picker Styles */
+
+.color-picker {
+  position: fixed;
+  z-index: 10001; /* Higher than contextual toolbar */
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.9);
+  transition: all 0.2s ease;
+  pointer-events: none;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.color-picker.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.color-picker-header {
+  background: rgba(42, 42, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.picker-title {
+  color: #e8eaed;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.color-grid {
+  background: rgba(42, 42, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.color-option {
+  background: transparent;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.color-option:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.color-option:active {
+  transform: translateY(0);
+}
+
+.color-preview {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.color-name {
+  font-size: 10px;
+  font-weight: 500;
+  text-align: center;
+  color: #e8eaed;
+  line-height: 1.2;
+}
+
+/* Specific color hover effects */
+.color-option[data-color-id="yellow"] {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 0, 0.1),
+    rgba(255, 255, 0, 0.05)
+  );
+}
+
+.color-option[data-color-id="yellow"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 0, 0.2),
+    rgba(255, 255, 0, 0.1)
+  );
+}
+
+.color-option[data-color-id="green"] {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 255, 0, 0.1),
+    rgba(0, 255, 0, 0.05)
+  );
+}
+
+.color-option[data-color-id="green"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 255, 0, 0.2),
+    rgba(0, 255, 0, 0.1)
+  );
+}
+
+.color-option[data-color-id="blue"] {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 128, 255, 0.1),
+    rgba(0, 128, 255, 0.05)
+  );
+}
+
+.color-option[data-color-id="blue"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 128, 255, 0.2),
+    rgba(0, 128, 255, 0.1)
+  );
+}
+
+.color-option[data-color-id="pink"] {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 105, 180, 0.1),
+    rgba(255, 105, 180, 0.05)
+  );
+}
+
+.color-option[data-color-id="pink"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 105, 180, 0.2),
+    rgba(255, 105, 180, 0.1)
+  );
+}
+
+.color-option[data-color-id="orange"] {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 165, 0, 0.1),
+    rgba(255, 165, 0, 0.05)
+  );
+}
+
+.color-option[data-color-id="orange"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 165, 0, 0.2),
+    rgba(255, 165, 0, 0.1)
+  );
+}
+
+.color-option[data-color-id="purple"] {
+  background: linear-gradient(
+    135deg,
+    rgba(147, 112, 219, 0.1),
+    rgba(147, 112, 219, 0.05)
+  );
+}
+
+.color-option[data-color-id="purple"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(147, 112, 219, 0.2),
+    rgba(147, 112, 219, 0.1)
+  );
+}
+
+.color-option[data-color-id="red"] {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 68, 68, 0.1),
+    rgba(255, 68, 68, 0.05)
+  );
+}
+
+.color-option[data-color-id="red"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 68, 68, 0.2),
+    rgba(255, 68, 68, 0.1)
+  );
+}
+
+.color-option[data-color-id="cyan"] {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 255, 255, 0.1),
+    rgba(0, 255, 255, 0.05)
+  );
+}
+
+.color-option[data-color-id="cyan"]:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 255, 255, 0.2),
+    rgba(0, 255, 255, 0.1)
+  );
+}
+
+/* Animation for picker appearance */
+@keyframes colorPickerSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.color-picker.visible {
+  animation: colorPickerSlideIn 0.2s ease-out;
+}
+
+/* Focus styles for accessibility */
+.color-option:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.5);
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .color-grid {
+    grid-template-columns: repeat(3, 1fr);
+    padding: 6px;
+    gap: 4px;
+  }
+
+  .color-option {
+    min-height: 45px;
+    padding: 4px;
+  }
+
+  .color-preview {
+    width: 18px;
+    height: 18px;
+  }
+
+  .color-name {
+    font-size: 9px;
+  }
+}
