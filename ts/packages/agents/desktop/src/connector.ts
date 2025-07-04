@@ -224,7 +224,10 @@ async function fetchInstalledApps(desktopProcess: child_process.ChildProcess) {
     let timeoutHandle: NodeJS.Timeout;
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
-        timeoutHandle = setTimeout(() => reject(undefined), 3000);
+        timeoutHandle = setTimeout(() => {
+            debugError("Timeout while fetching installed apps");
+            reject(undefined);
+        }, 60000);
     });
 
     const appsPromise = new Promise<string[] | undefined>((resolve, reject) => {
