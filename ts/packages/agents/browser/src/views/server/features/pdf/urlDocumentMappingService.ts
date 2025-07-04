@@ -7,7 +7,7 @@ import * as os from "os";
 import crypto from "crypto";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:views:server");
+const debug = registerDebug("typeagent:views:server:pdf:urlMap");
 
 export interface UrlDocumentMapping {
     id: string;

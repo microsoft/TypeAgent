@@ -49,14 +49,8 @@ import registerDebug from "debug";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
 import * as website from "website-memory";
 import {
-    extractKnowledgeFromPage,
-    indexWebPageContent,
-    queryWebKnowledge,
-    checkPageIndexStatus,
-    getKnowledgeIndexStats,
-    clearKnowledgeIndex,
-    exportKnowledgeData,
-} from "./knowledge/integration.mjs";
+    handleKnowledgeAction,
+} from "./knowledge/knowledgeHandler.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -69,6 +63,7 @@ import { BrowserActions, OpenWebPage } from "./actionsSchema.mjs";
 import {
     resolveURLWithHistory,
     importWebsiteData,
+    importWebsiteDataFromSession,
     searchWebsites,
     getWebsiteStats,
 } from "./websiteMemory.mjs";
@@ -318,99 +313,15 @@ async function updateBrowserContext(
                             break;
                         }
 
-                        // Knowledge extraction actions
-                        case "extractKnowledgeFromPage": {
-                            const knowledgeResult = await extractKnowledgeFromPage(
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: knowledgeResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "indexWebPageContent": {
-                            const knowledgeResult = await indexWebPageContent(
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: knowledgeResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "queryWebKnowledge": {
-                            const knowledgeResult = await queryWebKnowledge(
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: knowledgeResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "checkPageIndexStatus": {
-                            const knowledgeResult = await checkPageIndexStatus(
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: knowledgeResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "getKnowledgeIndexStats": {
-                            const knowledgeResult = await getKnowledgeIndexStats(
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: knowledgeResult,
-                                }),
-                            );
-                            break;
-                        }
-
-                        case "clearKnowledgeIndex": {
-                            const knowledgeResult = await clearKnowledgeIndex(
-                                data.params,
-                                context,
-                            );
-
-                            webSocket.send(
-                                JSON.stringify({
-                                    id: data.id,
-                                    result: knowledgeResult,
-                                }),
-                            );
-                            break;
-                        }
-
+                        case "extractKnowledgeFromPage":
+                        case "indexWebPageContent":
+                        case "queryWebKnowledge":
+                        case "checkPageIndexStatus":
+                        case "getKnowledgeIndexStats":
+                        case "clearKnowledgeIndex":
                         case "exportKnowledgeData": {
-                            const knowledgeResult = await exportKnowledgeData(
+                            const knowledgeResult = await handleKnowledgeAction(
+                                data.method,
                                 data.params,
                                 context,
                             );
@@ -423,6 +334,25 @@ async function updateBrowserContext(
                             );
                             break;
                         }
+
+                        case "importWebsiteData":
+                        case "searchWebsites":
+                        case "getWebsiteStats": {
+                            const websiteResult = await handleWebsiteAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: websiteResult,
+                                }),
+                            );
+                            break;
+                        }
+
                     }
                 }
             });
@@ -1001,6 +931,72 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
         context.actionIO.setDisplay(result.displayContent);
 
         // REVIEW: command doesn't clear the activity context
+    }
+}
+
+async function handleWebsiteAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    switch (actionName) {
+        case "importWebsiteData":
+            return await importWebsiteDataFromSession(parameters, context);
+
+        case "searchWebsites":
+            // Convert to ActionContext format for existing function
+            const searchAction = {
+                schemaName: "browser" as const,
+                actionName: "searchWebsites" as const,
+                parameters: parameters,
+            };
+            const mockActionContext: ActionContext<BrowserActionContext> = {
+                sessionContext: context,
+                actionIO: {
+                    setDisplay: () => {},
+                    appendDisplay: () => {},
+                    clearDisplay: () => {},
+                    setError: () => {},
+                } as any,
+                streamingContext: undefined,
+                activityContext: undefined,
+                queueToggleTransientAgent: async () => {},
+            };
+            const searchResult = await searchWebsites(mockActionContext, searchAction);
+            return {
+                success: !searchResult.error,
+                result: searchResult.literalText || "Search completed",
+                error: searchResult.error,
+            };
+
+        case "getWebsiteStats":
+            // Convert to ActionContext format for existing function
+            const statsAction = {
+                schemaName: "browser" as const,
+                actionName: "getWebsiteStats" as const,
+                parameters: parameters,
+            };
+            const mockStatsActionContext: ActionContext<BrowserActionContext> = {
+                sessionContext: context,
+                actionIO: {
+                    setDisplay: () => {},
+                    appendDisplay: () => {},
+                    clearDisplay: () => {},
+                    setError: () => {},
+                } as any,
+                streamingContext: undefined,
+                activityContext: undefined,
+                queueToggleTransientAgent: async () => {},
+            };
+            const statsResult = await getWebsiteStats(mockStatsActionContext, statsAction);
+            return {
+                success: !statsResult.error,
+                result: statsResult.literalText || "Stats retrieved",
+                error: statsResult.error,
+            };
+
+        default:
+            throw new Error(`Unknown website action: ${actionName}`);
     }
 }
 

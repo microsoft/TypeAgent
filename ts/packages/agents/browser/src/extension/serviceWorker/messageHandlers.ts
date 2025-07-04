@@ -484,7 +484,7 @@ async function handleImportWebsiteDataWithProgress(message: any) {
 async function handleGetWebsiteLibraryStats() {
     try {
         const result = await sendActionToAgent({
-            actionName: "getWebsiteStats",
+            actionName: "getKnowledgeIndexStats",
             parameters: {},
         });
 
@@ -614,7 +614,7 @@ async function handleExportWebsiteLibrary() {
         });
 
         const statsResult = await sendActionToAgent({
-            actionName: "getWebsiteStats",
+            actionName: "exportKnowledgeData",
             parameters: {},
         });
 
@@ -640,9 +640,10 @@ async function handleExportWebsiteLibrary() {
 
 async function handleClearWebsiteLibrary() {
     try {
-        // Note: This would require a new action in the browser agent
-        // For now, we'll clear the local storage and return success
-        await chrome.storage.local.remove(["websiteLibraryImportHistory"]);
+        await sendActionToAgent({
+            actionName: "clearKnowledgeIndex",
+            parameters: {},
+        });
 
         return { success: true };
     } catch (error) {
@@ -675,7 +676,7 @@ async function handleSearchWebsitesEnhanced(message: any) {
 
         // Perform the search using existing searchWebsites action
         const searchResult = await sendActionToAgent({
-            actionName: "searchWebsites",
+            actionName: "queryWebKnowledge",
             parameters: {
                 originalUserRequest: message.parameters.query,
                 query: message.parameters.query,
@@ -791,7 +792,7 @@ async function handleGetSuggestedSearches() {
     try {
         // Get website stats to generate suggestions
         const statsResult = await sendActionToAgent({
-            actionName: "getWebsiteStats",
+            actionName: "getKnowledgeIndexStats",
             parameters: {},
         });
 
@@ -994,26 +995,16 @@ async function shouldIndexPage(url: string): Promise<boolean> {
 // Index management handlers
 async function handleCheckIndexStatus() {
     try {
-        // This would check if a knowledge index exists
-        // For now, we'll simulate based on whether we have any website data
-        const statsResult = await sendActionToAgent({
-            actionName: "getWebsiteStats",
+        const result = await sendActionToAgent({
+            actionName: "getKnowledgeIndexStats",
             parameters: {},
         });
 
-        // If we have website data, assume index exists
-        const hasData =
-            statsResult.text &&
-            statsResult.text.includes("Total:") &&
-            parseInt(statsResult.text.match(/Total:\s*(\d+)/)?.[1] || "0") > 0;
-
         return {
-            success: true,
-            exists: hasData,
-            message: hasData
-                ? "Knowledge index is available"
-                : "No knowledge index found",
+            success: !result.error,
+            indexExists: result.result && result.result.totalPages >0,
         };
+
     } catch (error) {
         console.error("Error checking index status:", error);
         return {
@@ -1025,8 +1016,6 @@ async function handleCheckIndexStatus() {
 
 async function handleCreateKnowledgeIndex(message: any) {
     try {
-        // This would trigger index creation in the browser agent
-        // For now, we'll simulate the process
         const result = await sendActionToAgent({
             actionName: "indexWebsiteContent",
             parameters: {

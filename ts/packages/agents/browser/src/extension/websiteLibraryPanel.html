@@ -484,11 +484,8 @@
                     class="btn btn-primary"
                     type="button"
                   >
-                    <i class="bi bi-robot"></i> Search
+                    <i class="bi bi-search"></i>
                   </button>
-                </div>
-                <div class="small text-muted mt-2">
-                  <i class="bi bi-robot text-primary"></i> AI-powered semantic search enabled
                 </div>
                 <div
                   id="searchSuggestions"
@@ -1101,48 +1098,25 @@
                   <!-- Progress Display -->
                   <div id="importProgress" class="d-none">
                     <div class="progress-container">
-                      <div
-                        class="d-flex justify-content-between align-items-center mb-2"
-                      >
-                        <span class="fw-semibold">Importing Data...</span>
-                        <small id="progressStats" class="text-muted"
-                          >0 / 0 items</small
-                        >
-                      </div>
-
-                      <div class="progress mb-3">
-                        <div
-                          id="progressBar"
-                          class="progress-bar"
-                          role="progressbar"
-                          style="width: 0%"
-                          aria-valuenow="0"
-                          aria-valuemin="0"
-                          aria-valuemax="100"
-                        ></div>
-                      </div>
-
                       <div class="text-center">
-                        <small id="currentItem" class="text-muted"
-                          >Preparing import...</small
-                        >
+                        <div class="spinner-border text-primary mb-3" role="status">
+                          <span class="visually-hidden">Importing...</span>
+                        </div>
+                        <div>
+                          <span class="fw-semibold">Importing Data...</span>
+                        </div>
+                        <small id="importStatusMessage" class="text-muted d-block mt-2">
+                          Preparing import...
+                        </small>
                       </div>
 
-                      <div id="progressDetails" class="mt-3">
-                        <div class="row text-center">
-                          <div class="col">
-                            <div id="itemsProcessed" class="fw-semibold">0</div>
-                            <small class="text-muted">Processed</small>
-                          </div>
-                          <div class="col">
-                            <div id="estimatedTime" class="fw-semibold">--</div>
-                            <small class="text-muted">ETA</small>
-                          </div>
-                          <div class="col">
-                            <div id="importSpeed" class="fw-semibold">--</div>
-                            <small class="text-muted">Items/sec</small>
-                          </div>
-                        </div>
+                      <div class="mt-4 text-center">
+                        <button
+                          id="cancelImport"
+                          class="btn btn-outline-danger btn-sm"
+                        >
+                          <i class="bi bi-x-circle"></i> Cancel Import
+                        </button>
                       </div>
                     </div>
                   </div>

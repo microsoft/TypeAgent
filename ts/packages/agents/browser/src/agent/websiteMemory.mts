@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
+import { ActionContext, SessionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImportWebsiteData,
@@ -393,20 +393,23 @@ function searchFiltersToSearchTerms(filters: string[]): any[] {
 }
 
 /**
- * Import website data from browser history or bookmarks
+ * Import website data from browser history or bookmarks (SessionContext version for WebSocket calls)
  */
-export async function importWebsiteData(
-    context: ActionContext<BrowserActionContext>,
-    action: TypeAgentAction<ImportWebsiteData>,
+export async function importWebsiteDataFromSession(
+    parameters: ImportWebsiteData["parameters"],
+    context: SessionContext<BrowserActionContext>,
+    displayProgress?: (message: string) => void,
 ) {
     try {
-        context.actionIO.setDisplay("Importing website data...");
+        if (displayProgress) {
+            displayProgress("Importing website data...");
+        }
 
         const { 
             source, type, limit, days, folder,
             extractContent, enableIntelligentAnalysis, enableActionDetection,
             extractionMode, maxConcurrent, contentTimeout 
-        } = action.parameters;
+        } = parameters;
         const defaultPaths = website.getDefaultBrowserPaths();
 
         let filePath: string;
@@ -422,16 +425,18 @@ export async function importWebsiteData(
                     : defaultPaths.edge.history;
         }
 
+        // Enhanced progress callback that uses both debug logging and display callback
         const progressCallback = (
             current: number,
             total: number,
             item: string,
         ) => {
             if (current % 100 === 0) {
-                // Update every 100 items
-                context.actionIO.setDisplay(
-                    `Importing... ${current}/${total}: ${item.substring(0, 50)}...`,
-                );
+                const message = `Importing... ${current}/${total}: ${item.substring(0, 50)}...`;
+                debug(message);
+                if (displayProgress) {
+                    displayProgress(message);
+                }
             }
         };
 
@@ -470,26 +475,21 @@ export async function importWebsiteData(
             );
         }
 
-        if (!context.sessionContext.agentContext.websiteCollection) {
-            context.sessionContext.agentContext.websiteCollection =
-                new website.WebsiteCollection();
+        if (!context.agentContext.websiteCollection) {
+            context.agentContext.websiteCollection = new website.WebsiteCollection();
         }
 
-        context.sessionContext.agentContext.websiteCollection.addWebsites(
-            websites,
-        );
-        await context.sessionContext.agentContext.websiteCollection.buildIndex();
+        context.agentContext.websiteCollection.addWebsites(websites);
+        await context.agentContext.websiteCollection.buildIndex();
 
         // Persist the website collection to disk
         try {
-            if (context.sessionContext.agentContext.index?.path) {
-                await context.sessionContext.agentContext.websiteCollection.writeToFile(
-                    context.sessionContext.agentContext.index.path,
+            if (context.agentContext.index?.path) {
+                await context.agentContext.websiteCollection.writeToFile(
+                    context.agentContext.index.path,
                     "index",
                 );
-                debug(
-                    `Saved website collection to ${context.sessionContext.agentContext.index.path}`,
-                );
+                debug(`Saved website collection to ${context.agentContext.index.path}`);
             } else {
                 debug("No index path available, website data not persisted");
             }
@@ -497,10 +497,42 @@ export async function importWebsiteData(
             debug(`Failed to save website collection: ${error}`);
         }
 
-        const result = createActionResult(
-            `Successfully imported ${websites.length} ${type} from ${source}.`,
+        return {
+            success: true,
+            message: `Successfully imported ${websites.length} ${type} from ${source}.`,
+            itemCount: websites.length,
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            error: error.message,
+            message: `Failed to import website data: ${error.message}`,
+        };
+    }
+}
+
+/**
+ * Import website data from browser history or bookmarks (ActionContext version for regular actions)
+ */
+export async function importWebsiteData(
+    context: ActionContext<BrowserActionContext>,
+    action: TypeAgentAction<ImportWebsiteData>,
+) {
+    try {
+        context.actionIO.setDisplay("Importing website data...");
+
+        // Use the session-based function and pass actionIO.setDisplay for progress reporting
+        const result = await importWebsiteDataFromSession(
+            action.parameters,
+            context.sessionContext,
+            context.actionIO.setDisplay,
         );
-        return result;
+
+        if (result.success) {
+            return createActionResult(result.message);
+        } else {
+            return createActionResult(result.message, true);
+        }
     } catch (error: any) {
         return createActionResult(
             `Failed to import website data: ${error.message}`,

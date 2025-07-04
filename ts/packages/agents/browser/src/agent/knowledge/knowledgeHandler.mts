@@ -12,6 +12,59 @@ import {
     WebPageReference,
 } from "./schema/knowledgeExtraction.mjs";
 
+
+export interface WebPageDocument {
+    url: string;
+    title: string;
+    content: string;
+    htmlFragments: any[];
+    timestamp: string;
+    indexed: boolean;
+    knowledge?: KnowledgeExtractionResult;
+    metadata?: {
+        quality: string;
+        textOnly: boolean;
+        contentLength: number;
+        entityCount: number;
+    };
+}
+
+export async function handleKnowledgeAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    switch (actionName) {
+        case "extractKnowledgeFromPage":
+            return await extractKnowledgeFromPage(parameters, context);
+
+        case "indexWebPageContent":
+            return await indexWebPageContent(parameters, context);
+
+        case "queryWebKnowledge":
+            return await queryWebKnowledge(parameters, context);
+
+        case "checkPageIndexStatus":
+            return await checkPageIndexStatus(parameters, context);
+
+        case "getKnowledgeIndexStats":
+            return await getKnowledgeIndexStats(parameters, context);
+
+        case "clearKnowledgeIndex":
+            return await clearKnowledgeIndex(parameters, context);
+
+        case "exportKnowledgeData":
+            return await exportKnowledgeData(parameters, context);
+
+        case "importWebsiteData":
+            // return importWebsiteData(parameters, context);
+
+        default:
+            throw new Error(`Unknown knowledge action: ${actionName}`);
+    }
+}
+
+
 export async function extractKnowledgeFromPage(
     parameters: {
         url: string;
