@@ -131,18 +131,9 @@ class KnowledgePanel {
 
                 const pageInfo = document.getElementById("currentPageInfo")!;
                 const domain = new URL(this.currentUrl).hostname;
+                const status = await this.getPageIndexStatus();
 
-                pageInfo.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <img src="https://www.google.com/s2/favicons?domain=${domain}" 
-                             width="16" height="16" class="me-2" alt="favicon">
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold">${tab.title || "Untitled"}</div>
-                            <small class="text-muted">${domain}</small>
-                        </div>
-                        <div id="pageStatus" class="ms-2">${await this.getPageIndexStatus()}</div>
-                    </div>
-                `;
+                pageInfo.innerHTML = this.createPageInfo(tab.title || "Untitled", domain, status);
             }
         } catch (error) {
             console.error("Error loading page info:", error);
@@ -264,12 +255,7 @@ class KnowledgePanel {
 
         if (!query) return;
 
-        queryResults.innerHTML = `
-            <div class="d-flex align-items-center text-muted">
-                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
-                <span>Searching knowledge...</span>
-            </div>
-        `;
+        queryResults.innerHTML = this.createSearchLoadingState();
 
         try {
             const response = await chrome.runtime.sendMessage({
@@ -279,54 +265,25 @@ class KnowledgePanel {
                 searchScope: "current_page",
             });
 
-            queryResults.innerHTML = `
-                <div class="alert alert-info mb-0">
-                    <div class="d-flex align-items-start">
-                        <i class="bi bi-lightbulb me-2 mt-1"></i>
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold">Answer:</div>
-                            <p class="mb-2">${response.answer}</p>
-                            ${
-                                response.sources && response.sources.length > 0
-                                    ? `
-                                <hr class="my-2">
-                                <small class="text-muted">
-                                    <strong>Sources:</strong> ${response.sources.map((s: any) => s.title).join(", ")}
-                                </small>
-                            `
-                                    : ""
-                            }
-                        </div>
-                    </div>
-                </div>
-            `;
-
+            queryResults.innerHTML = this.createQueryAnswer(response.answer, response.sources);
             queryInput.value = "";
         } catch (error) {
             console.error("Error querying knowledge:", error);
-            queryResults.innerHTML = `
-                <div class="alert alert-danger mb-0">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    Error processing query. Please try again.
-                </div>
-            `;
+            queryResults.innerHTML = this.createAlert(
+                "danger", 
+                "bi bi-exclamation-triangle", 
+                "Error processing query. Please try again."
+            );
         }
     }
 
     private showKnowledgeLoading() {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
-        knowledgeSection.innerHTML = `
-            <div class="knowledge-card card">
-                <div class="card-body text-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="mt-3 mb-0">Extracting knowledge from page...</p>
-                    <small class="text-muted">This may take a few seconds</small>
-                </div>
-            </div>
-        `;
+        knowledgeSection.innerHTML = this.createLoadingState(
+            "Extracting knowledge from page...", 
+            "This may take a few seconds"
+        );
     }
 
     private showKnowledgeError(message: string) {
@@ -346,58 +303,9 @@ class KnowledgePanel {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = `
-            <!-- Entities Card -->
-            <div class="knowledge-card card">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <i class="bi bi-tags"></i> Entities
-                        <span id="entitiesCount" class="badge bg-secondary ms-2">0</span>
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div id="entitiesContainer">
-                        <div class="text-muted text-center">
-                            <i class="bi bi-info-circle"></i>
-                            No entities extracted yet
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Relationships Card -->
-            <div class="knowledge-card card">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <i class="bi bi-diagram-3"></i> Relationships
-                        <span id="relationshipsCount" class="badge bg-secondary ms-2">0</span>
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div id="relationshipsContainer">
-                        <div class="text-muted text-center">
-                            <i class="bi bi-info-circle"></i>
-                            No relationships found yet
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Key Topics Card -->
-            <div class="knowledge-card card">
-                <div class="card-header">
-                    <h6 class="mb-0">
-                        <i class="bi bi-bookmark"></i> Key Topics
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div id="topicsContainer">
-                        <div class="text-muted text-center">
-                            <i class="bi bi-info-circle"></i>
-                            No topics identified yet
-                        </div>
-                    </div>
-                </div>
-            </div>
+            ${this.renderEntitiesCard()}
+            ${this.renderRelationshipsCard()}
+            ${this.renderTopicsCard()}
         `;
 
         this.renderEntities(knowledge.entities);
@@ -705,32 +613,7 @@ class KnowledgePanel {
 
         const modeSelector = document.createElement("div");
         modeSelector.className = "btn-group btn-group-sm ms-2";
-        modeSelector.innerHTML = `
-            <button type="button" class="btn btn-outline-secondary dropdown-toggle" 
-                    data-bs-toggle="dropdown" aria-expanded="false" id="extractionModeButton">
-                <i class="bi bi-gear"></i> ${this.extractionSettings.mode}
-            </button>
-            <ul class="dropdown-menu" id="extractionModeMenu">
-                <li><h6 class="dropdown-header">Extraction Mode</h6></li>
-                <li><a class="dropdown-item" href="#" data-mode="basic">
-                    <i class="bi bi-speedometer"></i> Basic - Fast extraction
-                </a></li>
-                <li><a class="dropdown-item" href="#" data-mode="content">
-                    <i class="bi bi-file-text"></i> Content - Include page analysis
-                </a></li>
-                <li><a class="dropdown-item" href="#" data-mode="actions">
-                    <i class="bi bi-lightning"></i> Actions - Detect actionable elements
-                </a></li>
-                <li><a class="dropdown-item" href="#" data-mode="full">
-                    <i class="bi bi-cpu"></i> Full - Complete analysis
-                </a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><h6 class="dropdown-header">Options</h6></li>
-                <li><a class="dropdown-item" href="#" data-option="quality">
-                    <i class="bi bi-sliders"></i> Quality: ${this.extractionSettings.quality}
-                </a></li>
-            </ul>
-        `;
+        modeSelector.innerHTML = this.createExtractionModeDropdown();
 
         buttonGroup.appendChild(modeSelector);
 
@@ -930,6 +813,167 @@ class KnowledgePanel {
                 statusDiv.remove();
             }
         }, 3000);
+    }
+
+    // Template utility functions for knowledge panel
+    private createCard(title: string, content: string, icon: string, badge?: string): string {
+        const badgeHtml = badge ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>` : "";
+        return `
+            <div class="knowledge-card card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="${icon}"></i> ${title}
+                        ${badgeHtml}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    ${content}
+                </div>
+            </div>
+        `;
+    }
+
+    private createEmptyState(icon: string, message: string): string {
+        return `
+            <div class="text-muted text-center">
+                <i class="${icon}"></i>
+                ${message}
+            </div>
+        `;
+    }
+
+    private createContainer(id: string, defaultContent: string): string {
+        return `<div id="${id}">${defaultContent}</div>`;
+    }
+
+    // Knowledge card component methods
+    private renderEntitiesCard(): string {
+        const content = this.createContainer(
+            "entitiesContainer", 
+            this.createEmptyState("bi bi-info-circle", "No entities extracted yet")
+        );
+        return this.createCard("Entities", content, "bi bi-tags", "entitiesCount");
+    }
+
+    private renderRelationshipsCard(): string {
+        const content = this.createContainer(
+            "relationshipsContainer",
+            this.createEmptyState("bi bi-info-circle", "No relationships found yet")
+        );
+        return this.createCard("Relationships", content, "bi bi-diagram-3", "relationshipsCount");
+    }
+
+    private renderTopicsCard(): string {
+        const content = this.createContainer(
+            "topicsContainer",
+            this.createEmptyState("bi bi-info-circle", "No topics identified yet")
+        );
+        return this.createCard("Key Topics", content, "bi bi-bookmark");
+    }
+
+    // Alert and loading state utilities
+    private createAlert(type: "info" | "danger", icon: string, content: string): string {
+        return `
+            <div class="alert alert-${type} mb-0">
+                <div class="d-flex align-items-start">
+                    <i class="${icon} me-2 mt-1"></i>
+                    <div class="flex-grow-1">
+                        ${content}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private createLoadingState(message: string, subtext?: string): string {
+        const subtextHtml = subtext ? `<small class="text-muted">${subtext}</small>` : "";
+        return `
+            <div class="knowledge-card card">
+                <div class="card-body text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 mb-0">${message}</p>
+                    ${subtextHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    private createSearchLoadingState(): string {
+        return `
+            <div class="d-flex align-items-center text-muted">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                <span>Searching knowledge...</span>
+            </div>
+        `;
+    }
+
+    private createQueryAnswer(answer: string, sources: any[]): string {
+        const sourcesHtml = sources && sources.length > 0 ? `
+            <hr class="my-2">
+            <small class="text-muted">
+                <strong>Sources:</strong> ${sources.map((s: any) => s.title).join(", ")}
+            </small>
+        ` : "";
+
+        const content = `
+            <div class="fw-semibold">Answer:</div>
+            <p class="mb-2">${answer}</p>
+            ${sourcesHtml}
+        `;
+
+        return this.createAlert("info", "bi bi-lightbulb", content);
+    }
+
+    // Extraction mode dropdown components
+    private createDropdownHeader(text: string): string {
+        return `<li><h6 class="dropdown-header">${text}</h6></li>`;
+    }
+
+    private createDropdownItem(icon: string, text: string, dataAttr: string, value: string): string {
+        return `
+            <li><a class="dropdown-item" href="#" ${dataAttr}="${value}">
+                <i class="${icon}"></i> ${text}
+            </a></li>
+        `;
+    }
+
+    private createDropdownDivider(): string {
+        return `<li><hr class="dropdown-divider"></li>`;
+    }
+
+    private createExtractionModeDropdown(): string {
+        return `
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" 
+                    data-bs-toggle="dropdown" aria-expanded="false" id="extractionModeButton">
+                <i class="bi bi-gear"></i> ${this.extractionSettings.mode}
+            </button>
+            <ul class="dropdown-menu" id="extractionModeMenu">
+                ${this.createDropdownHeader("Extraction Mode")}
+                ${this.createDropdownItem("bi bi-speedometer", "Basic - Fast extraction", "data-mode", "basic")}
+                ${this.createDropdownItem("bi bi-file-text", "Content - Include page analysis", "data-mode", "content")}
+                ${this.createDropdownItem("bi bi-lightning", "Actions - Detect actionable elements", "data-mode", "actions")}
+                ${this.createDropdownItem("bi bi-cpu", "Full - Complete analysis", "data-mode", "full")}
+                ${this.createDropdownDivider()}
+                ${this.createDropdownHeader("Options")}
+                ${this.createDropdownItem("bi bi-sliders", `Quality: ${this.extractionSettings.quality}`, "data-option", "quality")}
+            </ul>
+        `;
+    }
+
+    private createPageInfo(title: string, domain: string, status: string): string {
+        return `
+            <div class="d-flex align-items-center">
+                <img src="https://www.google.com/s2/favicons?domain=${domain}" 
+                     width="16" height="16" class="me-2" alt="favicon">
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">${title || "Untitled"}</div>
+                    <small class="text-muted">${domain}</small>
+                </div>
+                <div id="pageStatus" class="ms-2">${status}</div>
+            </div>
+        `;
     }
 }
 
