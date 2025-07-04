@@ -807,10 +807,16 @@ class ActionDiscoveryPanel {
         toast.style.cssText =
             "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
 
-        toast.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
+        const messageSpan = document.createElement("span");
+        messageSpan.textContent = message;
+
+        const closeButton = document.createElement("button");
+        closeButton.type = "button";
+        closeButton.className = "btn-close";
+        closeButton.setAttribute("data-bs-dismiss", "alert");
+
+        toast.appendChild(messageSpan);
+        toast.appendChild(closeButton);
 
         document.body.appendChild(toast);
 

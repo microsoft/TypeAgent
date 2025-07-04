@@ -868,8 +868,8 @@ class WebsiteLibraryPanel {
 
         container.innerHTML = suggestions
             .map(
-                (suggestion) => `
-            <div class="suggestion-item" onclick="libraryPanel.selectSuggestion('${suggestion.replace(/'/g, "\\'")}')">
+                (suggestion, index) => `
+             <div class="suggestion-item" data-action="select-suggestion" data-suggestion-index="${index}">
                 ${suggestion}
             </div>
         `,
@@ -877,6 +877,7 @@ class WebsiteLibraryPanel {
             .join("");
 
         container.classList.remove("d-none");
+        this.attachSuggestionListeners(container, suggestions);
     }
 
     selectSuggestion(suggestion: string) {
@@ -1207,12 +1208,13 @@ class WebsiteLibraryPanel {
 
     private renderResultsSummary(results: SearchResult) {
         const summaryContainer = document.getElementById("resultsSummary")!;
+        const escapedQuery = this.escapeHTML(results.query);
 
         summaryContainer.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <strong>${results.summary.totalFound}</strong> results found for 
-                    <em>"${results.query}"</em>
+                    <em>"${escapedQuery}"</em>
                 </div>
                 <small class="text-muted">
                     Search completed in ${results.summary.searchTime}ms
@@ -1420,13 +1422,15 @@ class WebsiteLibraryPanel {
         container.innerHTML = this.recentSearches
             .slice(0, 5)
             .map(
-                (search) => `
-            <span class="recent-search-tag" onclick="libraryPanel.selectRecentSearch('${search.replace(/'/g, "\\'")}')">
+                (search, index) => `
+            <span class="recent-search-tag" data-action="select-recent-search" data-search-index="${index}">
                 ${search}
             </span>
         `,
             )
             .join("");
+
+        this.attachRecentSearchListeners(container);
     }
 
     selectRecentSearch(query: string) {
@@ -1647,7 +1651,7 @@ class WebsiteLibraryPanel {
             .slice(0, 3)
             .map(
                 (suggestion) => `
-            <div class="suggested-search-item" onclick="libraryPanel.selectSuggestedSearch('${suggestion.query.replace(/'/g, "\\'")}')">
+            <div class="suggested-search-item" data-action="select-suggested-search" data-query="${this.escapeDataAttribute(suggestion.query)}">
                 <div class="fw-semibold">${suggestion.query}</div>
                 <div class="small text-muted">${suggestion.description}</div>
                 <div class="small text-muted">${suggestion.estimatedResults} results</div>
@@ -1655,6 +1659,8 @@ class WebsiteLibraryPanel {
         `,
             )
             .join("");
+
+        this.attachSuggestedSearchListeners(container);
     }
 
     selectSuggestedSearch(query: string) {
