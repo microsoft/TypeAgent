@@ -512,7 +512,8 @@ async function enhanceWithContent(
         analyzer = new ContentAnalyzer(options.model);
     }
 
-    const maxConcurrent = options.maxConcurrent || 3;
+    // TEMPORARY: Force batch size to 1 for debugging timeout issues
+    const maxConcurrent = 1; // options.maxConcurrent || 3;
     const enhanced: Website[] = [];
 
     // Process in batches to avoid overwhelming networks

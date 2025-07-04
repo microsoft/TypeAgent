@@ -448,6 +448,13 @@ async function handleImportWebsiteDataWithProgress(message: any) {
                 limit: message.parameters.limit,
                 days: message.parameters.days,
                 folder: message.parameters.folder,
+                // Enhancement options
+                extractContent: message.parameters.extractContent,
+                enableIntelligentAnalysis: message.parameters.enableIntelligentAnalysis,
+                enableActionDetection: message.parameters.enableActionDetection,
+                extractionMode: message.parameters.extractionMode,
+                maxConcurrent: message.parameters.maxConcurrent,
+                contentTimeout: message.parameters.contentTimeout,
             },
         });
 

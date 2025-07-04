@@ -10,6 +10,7 @@ import {
 } from "./actionsSchema.mjs";
 import * as website from "website-memory";
 import * as kp from "knowpro";
+import { openai as ai } from "aiclient";
 import registerDebug from "debug";
 
 export interface BrowserActionContext {
@@ -393,7 +394,7 @@ function searchFiltersToSearchTerms(filters: string[]): any[] {
 }
 
 /**
- * Import website data from browser history or bookmarks (SessionContext version for WebSocket calls)
+ * Import website data from browser history or bookmarks
  */
 export async function importWebsiteDataFromSession(
     parameters: ImportWebsiteData["parameters"],
@@ -453,6 +454,24 @@ export async function importWebsiteDataFromSession(
         if (extractionMode !== undefined) importOptions.extractionMode = extractionMode;
         if (maxConcurrent !== undefined) importOptions.maxConcurrent = maxConcurrent;
         if (contentTimeout !== undefined) importOptions.contentTimeout = contentTimeout;
+
+        // Create chat model for intelligent analysis if enabled
+        if (enableIntelligentAnalysis) {
+            try {
+                const apiSettings = ai.azureApiSettingsFromEnv(
+                    ai.ModelType.Chat,
+                    undefined,
+                    undefined, // Use default model
+                );
+                importOptions.model = ai.createChatModel(apiSettings, undefined, undefined, [
+                    "website-analysis",
+                ]);
+                debug("Created chat model for intelligent analysis");
+            } catch (error) {
+                debug("Failed to create chat model for intelligent analysis:", error);
+                // Continue without intelligent analysis if model creation fails
+            }
+        }
 
         let websites;
         if (extractContent) {

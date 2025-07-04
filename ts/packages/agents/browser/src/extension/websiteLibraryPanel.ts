@@ -204,12 +204,6 @@ class WebsiteLibraryPanel {
             this.performSearch();
         });
 
-        // Clear search button
-        const clearSearchButton = document.getElementById("clearSearchButton")!;
-        clearSearchButton.addEventListener("click", () => {
-            this.clearSearch();
-        });
-
         // Relevance filter update
         relevanceFilter.addEventListener("input", (e) => {
             const value = (e.target as HTMLInputElement).value;
@@ -488,12 +482,12 @@ class WebsiteLibraryPanel {
         ) as HTMLSelectElement;
         options.extractionMode = extractionModeSelect.value as "fast" | "balanced" | "deep";
 
-        // Set performance defaults
+        // Set performance defaults - increased timeout for debugging
         options.maxConcurrent = 5; // Limit concurrent requests
-        options.contentTimeout = 10000; // 10 second timeout per page
-        // Set performance defaults
+        options.contentTimeout = 30000; // 30 second timeout per page (increased for debugging)
+        // Set performance defaults - increased timeout for debugging  
         options.maxConcurrent = 5; // Limit concurrent requests
-        options.contentTimeout = 10000; // 10 second timeout per page
+        options.contentTimeout = 30000; // 30 second timeout per page (increased for debugging)
 
         this.showImportProgress();
 
@@ -1144,8 +1138,20 @@ class WebsiteLibraryPanel {
             aiSummarySection.classList.add("d-none");
         }
 
-        // Render results based on current view mode
-        this.rerenderResults();
+        // Clear any loading state and render results based on current view mode
+        const resultsContainer = document.getElementById("searchResultsContainer")!;
+        if (this.currentResults.length === 0) {
+            // Show "no results" message instead of loading spinner
+            resultsContainer.innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-search" style="font-size: 3rem; color: #6c757d; opacity: 0.5;"></i>
+                    <h6 class="mt-3 text-muted">No results found</h6>
+                    <p class="text-muted">Try adjusting your search terms or filters</p>
+                </div>
+            `;
+        } else {
+            this.rerenderResults();
+        }
     }
 
     private renderResultsSummary(results: SearchResult) {
@@ -1193,7 +1199,10 @@ class WebsiteLibraryPanel {
     }
 
     private rerenderResults() {
-        if (this.currentResults.length === 0) return;
+        if (this.currentResults.length === 0) {
+            // Don't re-render if there are no results - this is handled in renderSearchResults
+            return;
+        }
 
         const container = document.getElementById("searchResultsContainer")!;
 

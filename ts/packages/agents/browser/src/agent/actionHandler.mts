@@ -48,6 +48,7 @@ import registerDebug from "debug";
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
 import * as website from "website-memory";
+import type { IndexSource } from "website-memory";
 import {
     handleKnowledgeAction,
 } from "./knowledge/knowledgeHandler.mjs";
@@ -169,11 +170,30 @@ async function updateBrowserContext(
                 );
             } else {
                 debug(
-                    "Unable to load website index, please create one using the @index command or import website data.",
+                    "No existing website index found, creating new index for data persistence",
                 );
+                
                 // Create empty collection as fallback
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
+                
+                // Create new index data for persistence
+                // Use a default path in the current working directory as fallback
+                const indexPath = path.join("./data", "website-index");
+                
+                context.agentContext.index = {
+                    source: "website" as IndexSource,
+                    name: "website-index",
+                    location: "browser-agent", 
+                    size: 0,
+                    path: indexPath,
+                    state: "new" as const,
+                    progress: 0,
+                    sizeOnDisk: 0,
+                    // Optional properties - omit to avoid undefined assignment issues
+                };
+                
+                debug(`Initialized new website index at: ${indexPath}`);
             }
         }
 
