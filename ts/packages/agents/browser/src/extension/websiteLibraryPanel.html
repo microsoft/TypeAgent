@@ -336,36 +336,6 @@
       .tab-content {
         min-height: 400px;
       }
-      /* Index Management Styling */
-      .index-management {
-        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-        border: 1px solid #ffc107;
-        border-radius: 0.375rem;
-        padding: 1rem;
-        margin-bottom: 1rem;
-      }
-      .index-status {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.5rem;
-      }
-      .index-indicator {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        display: inline-block;
-      }
-      .index-exists {
-        background-color: #28a745;
-      }
-      .index-missing {
-        background-color: #dc3545;
-      }
-      .index-creating {
-        background-color: #ffc107;
-        animation: pulse 1.5s infinite;
-      }
       /* Settings Modal Styling */
       .settings-modal .modal-dialog {
         max-width: 900px;
@@ -679,20 +649,6 @@
                   your web knowledge.
                 </p>
               </div>
-
-              <div id="libraryActions" class="mt-3 d-none">
-                <div class="btn-group btn-group-sm w-100">
-                  <button id="refreshLibrary" class="btn btn-outline-primary">
-                    <i class="bi bi-arrow-clockwise"></i> Refresh
-                  </button>
-                  <button id="exportLibrary" class="btn btn-outline-secondary">
-                    <i class="bi bi-download"></i> Export
-                  </button>
-                  <button id="clearLibrary" class="btn btn-outline-danger">
-                    <i class="bi bi-trash"></i> Clear All
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -831,55 +787,6 @@
               ></button>
             </div>
             <div class="modal-body">
-              <!-- Index Management Section -->
-              <div class="index-management">
-                <h6><i class="bi bi-database"></i> Knowledge Index Management</h6>
-                <div class="index-status">
-                  <span class="index-indicator" id="indexIndicator"></span>
-                  <span id="indexStatusText">Checking index status...</span>
-                </div>
-                <p class="mb-3 text-muted small">
-                  The knowledge index powers search and discovery features. Create
-                  an index to enable semantic search across your imported content.
-                </p>
-                <div class="index-actions">
-                  <button
-                    id="createIndexButton"
-                    class="btn btn-success btn-sm me-2"
-                    disabled
-                  >
-                    <i class="bi bi-plus-circle"></i> Create Index
-                  </button>
-                  <button
-                    id="refreshIndexButton"
-                    class="btn btn-outline-primary btn-sm me-2"
-                    disabled
-                  >
-                    <i class="bi bi-arrow-clockwise"></i> Refresh Index
-                  </button>
-                  <button
-                    id="deleteIndexButton"
-                    class="btn btn-outline-danger btn-sm"
-                    disabled
-                  >
-                    <i class="bi bi-trash"></i> Delete Index
-                  </button>
-                </div>
-                <div id="indexProgress" class="mt-3 d-none">
-                  <div class="progress">
-                    <div
-                      id="indexProgressBar"
-                      class="progress-bar"
-                      role="progressbar"
-                      style="width: 0%"
-                    ></div>
-                  </div>
-                  <small id="indexProgressText" class="text-muted mt-1 d-block"
-                    >Creating index...</small
-                  >
-                </div>
-              </div>
-
               <!-- Import Data Sources Card -->
               <div id="importDataCard" class="library-card card">
                 <div class="card-header">

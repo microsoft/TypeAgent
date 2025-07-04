@@ -108,9 +108,6 @@ class WebsiteLibraryPanel {
     private recentSearches: string[] = [];
     private currentQuery: string = "";
 
-    // Index management properties
-    private indexExists: boolean = false;
-    private indexCreating: boolean = false;
     private settingsModal: any = null;
     private knowledgeStatusCache: Map<string, KnowledgeStatus> = new Map();
 
@@ -121,12 +118,10 @@ class WebsiteLibraryPanel {
         this.setupSearchEventListeners();
         this.setupViewModeHandlers();
         this.setupTabEventListeners();
-        this.setupIndexManagement();
         await this.checkConnectionStatus();
         await this.loadLibraryStats();
         await this.loadRecentSearches();
         await this.loadSuggestedSearches();
-        await this.checkIndexStatus();
     }
 
     private setupEventListeners() {
@@ -152,24 +147,6 @@ class WebsiteLibraryPanel {
             .getElementById("cancelImport")!
             .addEventListener("click", () => {
                 this.cancelImport();
-            });
-
-        document
-            .getElementById("refreshLibrary")!
-            .addEventListener("click", () => {
-                this.refreshLibrary();
-            });
-
-        document
-            .getElementById("exportLibrary")!
-            .addEventListener("click", () => {
-                this.exportLibrary();
-            });
-
-        document
-            .getElementById("clearLibrary")!
-            .addEventListener("click", () => {
-                this.clearLibrary();
             });
 
         document
@@ -270,25 +247,6 @@ class WebsiteLibraryPanel {
         });
     }
 
-    private setupIndexManagement() {
-        const createIndexButton = document.getElementById("createIndexButton");
-        const refreshIndexButton =
-            document.getElementById("refreshIndexButton");
-        const deleteIndexButton = document.getElementById("deleteIndexButton");
-
-        createIndexButton?.addEventListener("click", () => {
-            this.createIndex();
-        });
-
-        refreshIndexButton?.addEventListener("click", () => {
-            this.refreshIndex();
-        });
-
-        deleteIndexButton?.addEventListener("click", () => {
-            this.deleteIndex();
-        });
-    }
-
     private onTabChanged(tabName: string) {
         console.log(`Switched to tab: ${tabName}`);
 
@@ -318,71 +276,6 @@ class WebsiteLibraryPanel {
         }
         
         this.settingsModal.show();
-        this.checkIndexStatus();
-    }
-
-    private async checkIndexStatus() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "checkIndexStatus",
-            });
-
-            if (response.success) {
-                this.indexExists = response.exists;
-                this.updateIndexStatus();
-            } else {
-                console.error("Failed to check index status:", response.error);
-                this.updateIndexStatus(false, "Error checking index status");
-            }
-        } catch (error) {
-            console.error("Error checking index status:", error);
-            this.updateIndexStatus(false, "Connection error");
-        }
-    }
-
-    private updateIndexStatus(exists?: boolean, errorMessage?: string) {
-        const indicator = document.getElementById("indexIndicator")!;
-        const statusText = document.getElementById("indexStatusText")!;
-        const createButton = document.getElementById(
-            "createIndexButton",
-        ) as HTMLButtonElement;
-        const refreshButton = document.getElementById(
-            "refreshIndexButton",
-        ) as HTMLButtonElement;
-        const deleteButton = document.getElementById(
-            "deleteIndexButton",
-        ) as HTMLButtonElement;
-
-        if (errorMessage) {
-            indicator.className = "index-indicator index-missing";
-            statusText.textContent = errorMessage;
-            createButton.disabled = true;
-            refreshButton.disabled = true;
-            deleteButton.disabled = true;
-            return;
-        }
-
-        const indexExists = exists !== undefined ? exists : this.indexExists;
-
-        if (this.indexCreating) {
-            indicator.className = "index-indicator index-creating";
-            statusText.textContent = "Creating index...";
-            createButton.disabled = true;
-            refreshButton.disabled = true;
-            deleteButton.disabled = true;
-        } else if (indexExists) {
-            indicator.className = "index-indicator index-exists";
-            statusText.textContent = "Knowledge index is active and ready";
-            createButton.disabled = true;
-            refreshButton.disabled = false;
-            deleteButton.disabled = false;
-        } else {
-            indicator.className = "index-indicator index-missing";
-            statusText.textContent = "No knowledge index found";
-            createButton.disabled = false;
-            refreshButton.disabled = true;
-            deleteButton.disabled = true;
-        }
     }
 
     private selectBrowser(browser: string) {
@@ -592,9 +485,6 @@ class WebsiteLibraryPanel {
             // Update suggested searches (for discover tab)
             await this.loadSuggestedSearches();
             
-            // Update index status (for knowledge index management)
-            await this.checkIndexStatus();
-            
             console.log("UI refreshed after successful import");
         } catch (error) {
             console.error("Error refreshing UI after import:", error);
@@ -696,107 +586,8 @@ class WebsiteLibraryPanel {
 
         if (stats.totalWebsites === 0) {
             emptyState.classList.remove("d-none");
-            libraryActions.classList.add("d-none");
         } else {
             emptyState.classList.add("d-none");
-            libraryActions.classList.remove("d-none");
-        }
-    }
-
-    private async refreshLibrary() {
-        const button = document.getElementById(
-            "refreshLibrary",
-        ) as HTMLButtonElement;
-        const originalContent = button.innerHTML;
-
-        button.innerHTML =
-            '<i class="bi bi-arrow-clockwise spin"></i> Refreshing...';
-        button.disabled = true;
-
-        try {
-            await this.loadLibraryStats();
-            this.showNotification("Library refreshed successfully", "success");
-        } catch (error) {
-            console.error("Error refreshing library:", error);
-            this.showNotification("Failed to refresh library", "error");
-        } finally {
-            button.innerHTML = originalContent;
-            button.disabled = false;
-        }
-    }
-
-    private async exportLibrary() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "exportWebsiteLibrary",
-            });
-
-            if (response.success) {
-                const blob = new Blob(
-                    [JSON.stringify(response.data, null, 2)],
-                    {
-                        type: "application/json",
-                    },
-                );
-                const url = URL.createObjectURL(blob);
-
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `website-library-${new Date().toISOString().split("T")[0]}.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                URL.revokeObjectURL(url);
-                this.showNotification(
-                    "Library exported successfully",
-                    "success",
-                );
-            } else {
-                this.showNotification(
-                    `Export failed: ${response.error}`,
-                    "error",
-                );
-            }
-        } catch (error) {
-            console.error("Error exporting library:", error);
-            this.showNotification("Failed to export library", "error");
-        }
-    }
-
-    private async clearLibrary() {
-        const confirmed = confirm(
-            "Are you sure you want to clear all library data? This action cannot be undone.",
-        );
-
-        if (!confirmed) return;
-
-        const secondConfirm = confirm(
-            "This will permanently delete all imported bookmarks and history data. Continue?",
-        );
-
-        if (!secondConfirm) return;
-
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "clearWebsiteLibrary",
-            });
-
-            if (response.success) {
-                await this.loadLibraryStats();
-                this.showNotification(
-                    "Library cleared successfully",
-                    "success",
-                );
-            } else {
-                this.showNotification(
-                    `Failed to clear library: ${response.error}`,
-                    "error",
-                );
-            }
-        } catch (error) {
-            console.error("Error clearing library:", error);
-            this.showNotification("Failed to clear library", "error");
         }
     }
 
@@ -1657,174 +1448,6 @@ class WebsiteLibraryPanel {
         searchInput.value = query;
         this.currentQuery = query;
         this.performSearch();
-    }
-
-    private async createIndex() {
-        if (this.indexCreating) return;
-
-        const confirmed = confirm(
-            "Creating a knowledge index will analyze all your imported content to enable semantic search. This may take a few minutes. Continue?",
-        );
-        if (!confirmed) return;
-
-        this.indexCreating = true;
-        this.updateIndexStatus();
-        this.showIndexProgress(true);
-
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "createKnowledgeIndex",
-                parameters: { showProgress: true },
-            });
-
-            if (response.success) {
-                this.indexExists = true;
-                this.indexCreating = false;
-                this.updateIndexStatus();
-                this.showIndexProgress(false);
-                this.showNotification(
-                    "Knowledge index created successfully! Semantic search is now available.",
-                    "success",
-                );
-            } else {
-                this.indexCreating = false;
-                this.updateIndexStatus();
-                this.showIndexProgress(false);
-                this.showNotification(
-                    `Failed to create index: ${response.message}`,
-                    "error",
-                );
-            }
-        } catch (error) {
-            console.error("Error creating index:", error);
-            this.indexCreating = false;
-            this.updateIndexStatus();
-            this.showIndexProgress(false);
-            this.showNotification(
-                "Failed to create index due to connection error",
-                "error",
-            );
-        }
-    }
-
-    private async refreshIndex() {
-        const confirmed = confirm(
-            "Refreshing the index will re-analyze all content with the latest algorithms. This may take a few minutes. Continue?",
-        );
-        if (!confirmed) return;
-
-        this.indexCreating = true;
-        this.updateIndexStatus();
-        this.showIndexProgress(true);
-
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "refreshKnowledgeIndex",
-                parameters: { showProgress: true },
-            });
-
-            if (response.success) {
-                this.indexCreating = false;
-                this.updateIndexStatus();
-                this.showIndexProgress(false);
-                this.showNotification(
-                    "Knowledge index refreshed successfully!",
-                    "success",
-                );
-            } else {
-                this.indexCreating = false;
-                this.updateIndexStatus();
-                this.showIndexProgress(false);
-                this.showNotification(
-                    `Failed to refresh index: ${response.message}`,
-                    "error",
-                );
-            }
-        } catch (error) {
-            console.error("Error refreshing index:", error);
-            this.indexCreating = false;
-            this.updateIndexStatus();
-            this.showIndexProgress(false);
-            this.showNotification(
-                "Failed to refresh index due to connection error",
-                "error",
-            );
-        }
-    }
-
-    private async deleteIndex() {
-        const confirmed = confirm(
-            "Are you sure you want to delete the knowledge index? This will disable semantic search features but preserve your imported data.",
-        );
-        if (!confirmed) return;
-
-        const doubleConfirmed = confirm(
-            "This action cannot be undone. You will need to recreate the index to restore semantic search. Continue?",
-        );
-        if (!doubleConfirmed) return;
-
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "deleteKnowledgeIndex",
-            });
-
-            if (response.success) {
-                this.indexExists = false;
-                this.updateIndexStatus();
-                this.showNotification(
-                    "Knowledge index deleted successfully",
-                    "success",
-                );
-            } else {
-                this.showNotification(
-                    `Failed to delete index: ${response.message}`,
-                    "error",
-                );
-            }
-        } catch (error) {
-            console.error("Error deleting index:", error);
-            this.showNotification(
-                "Failed to delete index due to connection error",
-                "error",
-            );
-        }
-    }
-
-    private showIndexProgress(show: boolean) {
-        const progressContainer = document.getElementById("indexProgress")!;
-        const progressBar = document.getElementById("indexProgressBar")!;
-        const progressText = document.getElementById("indexProgressText")!;
-
-        if (show) {
-            progressContainer.classList.remove("d-none");
-            progressBar.style.width = "0%";
-            progressText.textContent = "Creating index...";
-
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                progress += Math.random() * 10;
-                if (progress > 90) progress = 90;
-
-                progressBar.style.width = `${progress}%`;
-
-                if (progress < 30) {
-                    progressText.textContent = "Analyzing content structure...";
-                } else if (progress < 60) {
-                    progressText.textContent =
-                        "Extracting entities and topics...";
-                } else if (progress < 90) {
-                    progressText.textContent = "Building semantic index...";
-                }
-
-                if (!this.indexCreating) {
-                    clearInterval(progressInterval);
-                    progressBar.style.width = "100%";
-                    progressText.textContent = "Index creation complete!";
-                }
-            }, 500);
-        } else {
-            progressContainer.classList.add("d-none");
-        }
     }
 
     // Discover tab methods
