@@ -880,8 +880,8 @@ class WebsiteLibraryPanel {
 
         container.innerHTML = suggestions
             .map(
-                (suggestion) => `
-            <div class="suggestion-item" onclick="libraryPanel.selectSuggestion('${suggestion.replace(/'/g, "\\'")}')">
+                (suggestion, index) => `
+             <div class="suggestion-item" data-action="select-suggestion" data-suggestion-index="${index}">
                 ${suggestion}
             </div>
         `,
@@ -889,6 +889,7 @@ class WebsiteLibraryPanel {
             .join("");
 
         container.classList.remove("d-none");
+        this.attachSuggestionListeners(container, suggestions);
     }
 
     selectSuggestion(suggestion: string) {
@@ -927,6 +928,85 @@ class WebsiteLibraryPanel {
         if (relevance > 0) filters.minRelevance = relevance / 100;
 
         return filters;
+    }
+
+    private escapeHTML(input: string): string {
+        const div = document.createElement("div");
+        div.textContent = input;
+        return div.innerHTML;
+    }
+
+    private escapeDataAttribute(value: string): string {
+        return value.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+
+    private attachResultsEventListeners() {
+        const container = document.getElementById("searchResultsContainer")!;
+
+        // Remove existing listeners to prevent duplicates
+        container.removeEventListener("click", this.handleResultsClick);
+
+        // Add new listener
+        container.addEventListener("click", this.handleResultsClick.bind(this));
+    }
+
+    private handleResultsClick = (event: Event) => {
+        const target = event.target as HTMLElement;
+        const button = target.closest("[data-action]") as HTMLElement;
+
+        if (!button) return;
+
+        const action = button.dataset.action;
+        const url = button.dataset.url;
+        const title = button.dataset.title;
+
+        switch (action) {
+            case "open-url":
+                if (url) window.open(url, "_blank");
+                break;
+            case "extract-knowledge":
+                if (url && title) this.extractKnowledgeForWebsite(url, title);
+                break;
+        }
+    };
+
+    private attachSuggestionListeners(
+        container: HTMLElement,
+        suggestions: string[],
+    ) {
+        const items = container.querySelectorAll(
+            '[data-action="select-suggestion"]',
+        );
+        items.forEach((item, index) => {
+            item.addEventListener("click", () => {
+                this.selectSuggestion(suggestions[index]);
+            });
+        });
+    }
+
+    private attachRecentSearchListeners(container: HTMLElement) {
+        const items = container.querySelectorAll(
+            '[data-action="select-recent-search"]',
+        );
+        items.forEach((item, index) => {
+            item.addEventListener("click", () => {
+                if (index < this.recentSearches.length) {
+                    this.selectRecentSearch(this.recentSearches[index]);
+                }
+            });
+        });
+    }
+
+    private attachSuggestedSearchListeners(container: HTMLElement) {
+        const items = container.querySelectorAll(
+            '[data-action="select-suggested-search"]',
+        );
+        items.forEach((item) => {
+            item.addEventListener("click", () => {
+                const query = (item as HTMLElement).dataset.query;
+                if (query) this.selectSuggestedSearch(query);
+            });
+        });
     }
 
     private async renderSearchResults(results: SearchResult) {
@@ -976,12 +1056,13 @@ class WebsiteLibraryPanel {
 
     private renderResultsSummary(results: SearchResult) {
         const summaryContainer = document.getElementById("resultsSummary")!;
+        const escapedQuery = this.escapeHTML(results.query);
 
         summaryContainer.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <strong>${results.summary.totalFound}</strong> results found for 
-                    <em>"${results.query}"</em>
+                    <em>"${escapedQuery}"</em>
                 </div>
                 <small class="text-muted">
                     Search completed in ${results.summary.searchTime}ms
@@ -1044,6 +1125,9 @@ class WebsiteLibraryPanel {
                 );
                 break;
         }
+
+        // Attach event listeners after rendering
+        this.attachResultsEventListeners();
     }
 
     private renderListView(websites: Website[]): string {
@@ -1072,13 +1156,13 @@ class WebsiteLibraryPanel {
                                 ${site.lastVisited ? `• ${new Date(site.lastVisited).toLocaleDateString()}` : ""}
                             </small>
                             <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-primary btn-sm" onclick="window.open('${site.url}', '_blank')">
+                                <button class="btn btn-outline-primary btn-sm" data-action="open-url" data-url="${site.url}">
                                     <i class="bi bi-box-arrow-up-right"></i> Open
                                 </button>
                                 ${
                                     site.knowledge?.status === "none"
                                         ? `
-                                <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
+                                <button class="btn btn-outline-secondary btn-sm" data-action="extract-knowledge" data-url="${site.url}" data-title="${this.escapeDataAttribute(site.title || site.url)}">
                                     <i class="bi bi-lightbulb"></i> Extract
                                 </button>`
                                         : ""
@@ -1117,13 +1201,13 @@ class WebsiteLibraryPanel {
                                         ${site.score ? `<span class="result-score">${Math.round(site.score * 100)}%</span>` : ""}
                                     </div>
                                     <div class="btn-group w-100">
-                                        <button class="btn btn-primary btn-sm" onclick="window.open('${site.url}', '_blank')">
+                                        <button class="btn btn-primary btn-sm" data-action="open-url" data-url="${site.url}">
                                             <i class="bi bi-box-arrow-up-right"></i> Open
                                         </button>
                                         ${
                                             site.knowledge?.status === "none"
                                                 ? `
-                                        <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
+                                        <button class="btn btn-outline-secondary btn-sm" data-action="extract-knowledge" data-url="${site.url}" data-title="${this.escapeDataAttribute(site.title || site.url)}">
                                             <i class="bi bi-lightbulb"></i>
                                         </button>`
                                                 : ""
@@ -1268,13 +1352,15 @@ class WebsiteLibraryPanel {
         container.innerHTML = this.recentSearches
             .slice(0, 5)
             .map(
-                (search) => `
-            <span class="recent-search-tag" onclick="libraryPanel.selectRecentSearch('${search.replace(/'/g, "\\'")}')">
+                (search, index) => `
+            <span class="recent-search-tag" data-action="select-recent-search" data-search-index="${index}">
                 ${search}
             </span>
         `,
             )
             .join("");
+
+        this.attachRecentSearchListeners(container);
     }
 
     selectRecentSearch(query: string) {
@@ -1495,7 +1581,7 @@ class WebsiteLibraryPanel {
             .slice(0, 3)
             .map(
                 (suggestion) => `
-            <div class="suggested-search-item" onclick="libraryPanel.selectSuggestedSearch('${suggestion.query.replace(/'/g, "\\'")}')">
+            <div class="suggested-search-item" data-action="select-suggested-search" data-query="${this.escapeDataAttribute(suggestion.query)}">
                 <div class="fw-semibold">${suggestion.query}</div>
                 <div class="small text-muted">${suggestion.description}</div>
                 <div class="small text-muted">${suggestion.estimatedResults} results</div>
@@ -1503,6 +1589,8 @@ class WebsiteLibraryPanel {
         `,
             )
             .join("");
+
+        this.attachSuggestedSearchListeners(container);
     }
 
     selectSuggestedSearch(query: string) {

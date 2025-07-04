@@ -3,6 +3,7 @@
 
 import { SelectionInfo } from "../core/textSelectionManager";
 import { ScreenshotData } from "./ScreenshotSelector";
+import DOMPurify from "dompurify";
 
 /**
  * Note Editor Component
@@ -377,7 +378,8 @@ export class NoteEditor {
 
         const markdown = textArea.value;
         const html = this.markdownToHtml(markdown);
-        previewContent.innerHTML = html;
+        const sanitizedHtml = DOMPurify.sanitize(html);
+        previewContent.innerHTML = sanitizedHtml;
     }
 
     /**
