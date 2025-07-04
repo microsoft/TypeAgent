@@ -87,9 +87,7 @@ export class UrlDocumentMappingService {
         } catch (error) {
             if ((error as any).code === "ENOENT") {
                 // File doesn't exist, start with empty store
-                debug(
-                    "📄 No existing mappings file found, starting fresh",
-                );
+                debug("📄 No existing mappings file found, starting fresh");
             } else {
                 console.error("Error loading mappings:", error);
                 throw error;
@@ -153,9 +151,7 @@ export class UrlDocumentMappingService {
 
         await this.saveMappings();
 
-        debug(
-            `📄 Created new document mapping: ${newId} -> ${normalizedUrl}`,
-        );
+        debug(`📄 Created new document mapping: ${newId} -> ${normalizedUrl}`);
         return newId;
     }
 

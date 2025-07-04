@@ -132,18 +132,17 @@ class KnowledgePanel {
                 const pageInfo = document.getElementById("currentPageInfo")!;
                 const domain = new URL(this.currentUrl).hostname;
 
-                pageInfo.innerHTML = 
-                    '<div class="d-flex align-items-center">' +
-                    '<img src="https://www.google.com/s2/favicons?domain=' + domain + '" ' +
-                    'width="16" height="16" class="me-2" alt="favicon">' +
-                    '<div class="flex-grow-1">' +
-                    '<div class="fw-semibold">' + (tab.title || "Untitled") + '</div>' +
-                    '<small class="text-muted">' + domain + '</small>' +
-                    '</div>' +
-                    '<div id="pageStatus" class="ms-2">' +
-                    (await this.getPageIndexStatus()) +
-                    '</div>' +
-                    '</div>';
+                pageInfo.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <img src="https://www.google.com/s2/favicons?domain=${domain}" 
+                             width="16" height="16" class="me-2" alt="favicon">
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">${tab.title || "Untitled"}</div>
+                            <small class="text-muted">${domain}</small>
+                        </div>
+                        <div id="pageStatus" class="ms-2">${await this.getPageIndexStatus()}</div>
+                    </div>
+                `;
             }
         } catch (error) {
             console.error("Error loading page info:", error);
@@ -217,7 +216,7 @@ class KnowledgePanel {
             }
 
             this.showTemporaryStatus(
-                "Knowledge extracted successfully using " + this.extractionSettings.mode + " mode!",
+                `Knowledge extracted successfully using ${this.extractionSettings.mode} mode!`,
                 "success",
             );
         } catch (error) {
@@ -514,7 +513,7 @@ class KnowledgePanel {
 
         // NEW: Categorize questions for better organization
         const categorizedQuestions = this.categorizeQuestions(questions);
-        
+
         let questionsHtml = `<div class="mb-2"><small class="text-muted">
             <i class="bi bi-lightbulb"></i> Click a question to ask, or type your own below:
         </small></div>`;
@@ -558,7 +557,11 @@ class KnowledgePanel {
         container.querySelectorAll(".question-item").forEach((item, index) => {
             item.addEventListener("click", () => {
                 const questionText = item.getAttribute("data-question")!;
-                (document.getElementById("knowledgeQuery") as HTMLInputElement).value = questionText;
+                (
+                    document.getElementById(
+                        "knowledgeQuery",
+                    ) as HTMLInputElement
+                ).value = questionText;
                 this.submitQuery();
             });
         });
@@ -570,19 +573,36 @@ class KnowledgePanel {
             temporal: [] as string[],
             pattern: [] as string[],
             action: [] as string[],
-            other: [] as string[]
+            other: [] as string[],
         };
 
-        questions.forEach(question => {
+        questions.forEach((question) => {
             const lowerQ = question.toLowerCase();
-            
-            if (lowerQ.includes("when") || lowerQ.includes("first") || lowerQ.includes("time")) {
+
+            if (
+                lowerQ.includes("when") ||
+                lowerQ.includes("first") ||
+                lowerQ.includes("time")
+            ) {
                 categories.temporal.push(question);
-            } else if (lowerQ.includes("what is") || lowerQ.includes("tell me") || lowerQ.includes("summarize") || lowerQ.includes("about")) {
+            } else if (
+                lowerQ.includes("what is") ||
+                lowerQ.includes("tell me") ||
+                lowerQ.includes("summarize") ||
+                lowerQ.includes("about")
+            ) {
                 categories.content.push(question);
-            } else if (lowerQ.includes("other") || lowerQ.includes("similar") || lowerQ.includes("else")) {
+            } else if (
+                lowerQ.includes("other") ||
+                lowerQ.includes("similar") ||
+                lowerQ.includes("else")
+            ) {
                 categories.pattern.push(question);
-            } else if (lowerQ.includes("action") || lowerQ.includes("can i") || lowerQ.includes("do")) {
+            } else if (
+                lowerQ.includes("action") ||
+                lowerQ.includes("can i") ||
+                lowerQ.includes("do")
+            ) {
                 categories.action.push(question);
             } else {
                 categories.other.push(question);
@@ -598,15 +618,21 @@ class KnowledgePanel {
             temporal: "bi-clock",
             pattern: "bi-search",
             action: "bi-lightning",
-            other: "bi-question-circle"
+            other: "bi-question-circle",
         };
 
-        return questions.map(question => 
-            '<div class="question-item list-group-item list-group-item-action p-2 mb-1 rounded" ' +
-            'data-question="' + question.replace(/"/g, '&quot;') + '" data-category="' + category + '">' +
-            '<i class="' + icons[category as keyof typeof icons] + ' me-2 text-muted"></i>' + question +
-            '</div>'
-        ).join("");
+        return questions
+            .map(
+                (question) => `
+                    <div class="question-item list-group-item list-group-item-action p-2 mb-1 rounded" 
+                         data-question="${question.replace(/"/g, "&quot;")}" 
+                         data-category="${category}">
+                        <i class="${icons[category as keyof typeof icons]} me-2 text-muted"></i>
+                        ${question}
+                    </div>
+                `,
+            )
+            .join("");
     }
 
     private async loadIndexStats() {
@@ -643,31 +669,31 @@ class KnowledgePanel {
     private updatePageSourceDisplay() {
         const pageInfo = document.getElementById("currentPageInfo")!;
         const existingContent = pageInfo.innerHTML;
-        
+
         if (this.pageSourceInfo) {
             const sourceIndicators = [];
-            
+
             if (this.pageSourceInfo.isBookmarked) {
                 sourceIndicators.push(
-                    '<span class="badge bg-primary me-1" title="This page is bookmarked">' +
-                    '<i class="bi bi-bookmark-star"></i> Bookmarked' +
-                    '</span>'
+                    `<span class="badge bg-primary me-1" title="This page is bookmarked">
+                        <i class="bi bi-bookmark-star"></i> Bookmarked
+                    </span>`,
                 );
             }
-            
+
             if (this.pageSourceInfo.isInHistory) {
-                const visitText = this.pageSourceInfo.visitCount 
+                const visitText = this.pageSourceInfo.visitCount
                     ? this.pageSourceInfo.visitCount + " visits"
                     : "In History";
                 sourceIndicators.push(
-                    '<span class="badge bg-info me-1" title="This page is in your browser history">' +
-                    '<i class="bi bi-clock-history"></i> ' + visitText +
-                    '</span>'
+                    `<span class="badge bg-info me-1" title="This page is in your browser history">
+                        <i class="bi bi-clock-history"></i> ${visitText}
+                    </span>`,
                 );
             }
-            
+
             if (sourceIndicators.length > 0) {
-                const sourceDiv = '<div class="mt-2">' + sourceIndicators.join('') + '</div>';
+                const sourceDiv = `<div class="mt-2">${sourceIndicators.join("")}</div>`;
                 pageInfo.innerHTML = existingContent + sourceDiv;
             }
         }
@@ -676,60 +702,63 @@ class KnowledgePanel {
     private setupExtractionModeControls() {
         const extractButton = document.getElementById("extractKnowledge")!;
         const buttonGroup = extractButton.parentElement!;
-        
+
         const modeSelector = document.createElement("div");
         modeSelector.className = "btn-group btn-group-sm ms-2";
-        modeSelector.innerHTML = 
-            '<button type="button" class="btn btn-outline-secondary dropdown-toggle" ' +
-            'data-bs-toggle="dropdown" aria-expanded="false" id="extractionModeButton">' +
-            '<i class="bi bi-gear"></i> ' + this.extractionSettings.mode +
-            '</button>' +
-            '<ul class="dropdown-menu" id="extractionModeMenu">' +
-            '<li><h6 class="dropdown-header">Extraction Mode</h6></li>' +
-            '<li><a class="dropdown-item" href="#" data-mode="basic">' +
-            '<i class="bi bi-speedometer"></i> Basic - Fast extraction' +
-            '</a></li>' +
-            '<li><a class="dropdown-item" href="#" data-mode="content">' +
-            '<i class="bi bi-file-text"></i> Content - Include page analysis' +
-            '</a></li>' +
-            '<li><a class="dropdown-item" href="#" data-mode="actions">' +
-            '<i class="bi bi-lightning"></i> Actions - Detect actionable elements' +
-            '</a></li>' +
-            '<li><a class="dropdown-item" href="#" data-mode="full">' +
-            '<i class="bi bi-cpu"></i> Full - Complete analysis' +
-            '</a></li>' +
-            '<li><hr class="dropdown-divider"></li>' +
-            '<li><h6 class="dropdown-header">Options</h6></li>' +
-            '<li><a class="dropdown-item" href="#" data-option="quality">' +
-            '<i class="bi bi-sliders"></i> Quality: ' + this.extractionSettings.quality +
-            '</a></li>' +
-            '</ul>';
-        
+        modeSelector.innerHTML = `
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" 
+                    data-bs-toggle="dropdown" aria-expanded="false" id="extractionModeButton">
+                <i class="bi bi-gear"></i> ${this.extractionSettings.mode}
+            </button>
+            <ul class="dropdown-menu" id="extractionModeMenu">
+                <li><h6 class="dropdown-header">Extraction Mode</h6></li>
+                <li><a class="dropdown-item" href="#" data-mode="basic">
+                    <i class="bi bi-speedometer"></i> Basic - Fast extraction
+                </a></li>
+                <li><a class="dropdown-item" href="#" data-mode="content">
+                    <i class="bi bi-file-text"></i> Content - Include page analysis
+                </a></li>
+                <li><a class="dropdown-item" href="#" data-mode="actions">
+                    <i class="bi bi-lightning"></i> Actions - Detect actionable elements
+                </a></li>
+                <li><a class="dropdown-item" href="#" data-mode="full">
+                    <i class="bi bi-cpu"></i> Full - Complete analysis
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><h6 class="dropdown-header">Options</h6></li>
+                <li><a class="dropdown-item" href="#" data-option="quality">
+                    <i class="bi bi-sliders"></i> Quality: ${this.extractionSettings.quality}
+                </a></li>
+            </ul>
+        `;
+
         buttonGroup.appendChild(modeSelector);
-        
-        document.getElementById("extractionModeMenu")!.addEventListener("click", (e) => {
-            e.preventDefault();
-            const target = e.target as HTMLElement;
-            const item = target.closest(".dropdown-item") as HTMLElement;
-            
-            if (item) {
-                const mode = item.getAttribute("data-mode");
-                const option = item.getAttribute("data-option");
-                
-                if (mode) {
-                    this.extractionSettings.mode = mode as any;
-                    this.updateExtractionModeDisplay();
-                    this.saveExtractionSettings();
-                } else if (option === "quality") {
-                    this.toggleQualitySetting();
+
+        document
+            .getElementById("extractionModeMenu")!
+            .addEventListener("click", (e) => {
+                e.preventDefault();
+                const target = e.target as HTMLElement;
+                const item = target.closest(".dropdown-item") as HTMLElement;
+
+                if (item) {
+                    const mode = item.getAttribute("data-mode");
+                    const option = item.getAttribute("data-option");
+
+                    if (mode) {
+                        this.extractionSettings.mode = mode as any;
+                        this.updateExtractionModeDisplay();
+                        this.saveExtractionSettings();
+                    } else if (option === "quality") {
+                        this.toggleQualitySetting();
+                    }
                 }
-            }
-        });
+            });
     }
 
     private updateExtractionModeDisplay() {
         const button = document.getElementById("extractionModeButton")!;
-        button.innerHTML = '<i class="bi bi-gear"></i> ' + this.extractionSettings.mode;
+        button.innerHTML = `<i class="bi bi-gear"></i> ${this.extractionSettings.mode}`;
     }
 
     private toggleQualitySetting() {
@@ -737,18 +766,23 @@ class KnowledgePanel {
         const currentIndex = qualities.indexOf(this.extractionSettings.quality);
         const nextIndex = (currentIndex + 1) % qualities.length;
         this.extractionSettings.quality = qualities[nextIndex] as any;
-        
+
         const qualityItem = document.querySelector('[data-option="quality"]')!;
-        qualityItem.innerHTML = '<i class="bi bi-sliders"></i> Quality: ' + this.extractionSettings.quality;
-        
+        qualityItem.innerHTML = `<i class="bi bi-sliders"></i> Quality: ${this.extractionSettings.quality}`;
+
         this.saveExtractionSettings();
     }
 
     private async loadExtractionSettings() {
         try {
-            const settings = await chrome.storage.sync.get(["extractionSettings"]);
+            const settings = await chrome.storage.sync.get([
+                "extractionSettings",
+            ]);
             if (settings.extractionSettings) {
-                this.extractionSettings = { ...this.extractionSettings, ...settings.extractionSettings };
+                this.extractionSettings = {
+                    ...this.extractionSettings,
+                    ...settings.extractionSettings,
+                };
                 this.updateExtractionModeDisplay();
             }
         } catch (error) {
@@ -758,7 +792,9 @@ class KnowledgePanel {
 
     private async saveExtractionSettings() {
         try {
-            await chrome.storage.sync.set({ extractionSettings: this.extractionSettings });
+            await chrome.storage.sync.set({
+                extractionSettings: this.extractionSettings,
+            });
         } catch (error) {
             console.error("Error saving extraction settings:", error);
         }
@@ -767,25 +803,25 @@ class KnowledgePanel {
     // NEW: Show extraction information
     private showExtractionInfo() {
         if (!this.knowledgeData) return;
-        
+
         const infoDiv = document.createElement("div");
         infoDiv.className = "alert alert-info mt-2";
-        
-        let content = '<small>' +
-            '<i class="bi bi-info-circle"></i>' +
-            'Extracted using <strong>' + this.extractionSettings.mode + '</strong> mode ' +
-            '(' + this.extractionSettings.quality + ' quality)';
-        
+
+        let content = `<small>
+            <i class="bi bi-info-circle"></i>
+            Extracted using <strong>${this.extractionSettings.mode}</strong> mode 
+            (${this.extractionSettings.quality} quality)`;
+
         if (this.pageSourceInfo?.isBookmarked) {
-            content += ' • Available in bookmarks';
+            content += " • Available in bookmarks";
         }
         if (this.pageSourceInfo?.isInHistory) {
-            content += ' • Available in history';
+            content += " • Available in history";
         }
-        
-        content += '</small>';
+
+        content += "</small>";
         infoDiv.innerHTML = content;
-        
+
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         const firstCard = knowledgeSection.querySelector(".knowledge-card");
         if (firstCard) {
@@ -813,14 +849,16 @@ class KnowledgePanel {
 
         if (this.isConnected) {
             indicator.className = "status-indicator status-connected";
-            statusElement.innerHTML = 
-                '<span class="status-indicator status-connected"></span>' +
-                'Connected to TypeAgent';
+            statusElement.innerHTML = `
+                <span class="status-indicator status-connected"></span>
+                Connected to TypeAgent
+            `;
         } else {
             indicator.className = "status-indicator status-disconnected";
-            statusElement.innerHTML = 
-                '<span class="status-indicator status-disconnected"></span>' +
-                'Disconnected from TypeAgent';
+            statusElement.innerHTML = `
+                <span class="status-indicator status-disconnected"></span>
+                Disconnected from TypeAgent
+            `;
         }
     }
     private async onTabChange() {
@@ -876,12 +914,14 @@ class KnowledgePanel {
                   : "bi-info-circle";
 
         const statusDiv = document.createElement("div");
-        statusDiv.className = "alert " + alertClass + " alert-dismissible fade show position-fixed";
+        statusDiv.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
         statusDiv.style.cssText =
             "top: 1rem; right: 1rem; z-index: 1050; min-width: 250px;";
-        statusDiv.innerHTML = 
-            '<i class="' + iconClass + ' me-2"></i>' + message +
-            '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+        statusDiv.innerHTML = `
+            <i class="${iconClass} me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
 
         document.body.appendChild(statusDiv);
 

@@ -10,7 +10,7 @@ interface ImportOptions {
     extractContent?: boolean;
     enableIntelligentAnalysis?: boolean;
     enableActionDetection?: boolean;
-    extractionMode?: "basic" |"content"| "actions" | "full";
+    extractionMode?: "basic" | "content" | "actions" | "full";
     maxConcurrent?: number;
     contentTimeout?: number;
 }
@@ -37,7 +37,7 @@ interface KnowledgeStatus {
     entityCount?: number;
     topicCount?: number;
     suggestionCount?: number;
-    status: 'extracted' | 'pending' | 'error' | 'none';
+    status: "extracted" | "pending" | "error" | "none";
     confidence?: number;
 }
 
@@ -258,23 +258,26 @@ class WebsiteLibraryPanel {
 
     showSettings() {
         if (!this.settingsModal) {
-            const settingsModalElement = document.getElementById("settingsModal")!;
-            this.settingsModal = new (window as any).bootstrap.Modal(settingsModalElement);
-            
+            const settingsModalElement =
+                document.getElementById("settingsModal")!;
+            this.settingsModal = new (window as any).bootstrap.Modal(
+                settingsModalElement,
+            );
+
             // Add event listeners for proper cleanup
-            settingsModalElement.addEventListener('hidden.bs.modal', () => {
+            settingsModalElement.addEventListener("hidden.bs.modal", () => {
                 // Remove any lingering backdrop
-                const backdrop = document.querySelector('.modal-backdrop');
+                const backdrop = document.querySelector(".modal-backdrop");
                 if (backdrop) {
                     backdrop.remove();
                 }
                 // Ensure body classes are cleaned up
-                document.body.classList.remove('modal-open');
-                document.body.style.removeProperty('overflow');
-                document.body.style.removeProperty('padding-right');
+                document.body.classList.remove("modal-open");
+                document.body.style.removeProperty("overflow");
+                document.body.style.removeProperty("padding-right");
             });
         }
-        
+
         this.settingsModal.show();
     }
 
@@ -370,20 +373,19 @@ class WebsiteLibraryPanel {
         ) as HTMLInputElement;
         options.enableActionDetection = actionDetectionCheckbox.checked;
 
-        options.extractionMode ="basic";
-        if(options.enableIntelligentAnalysis){
-            if(options.enableActionDetection){
-        options.extractionMode ="full";
-        }else{
-            options.extractionMode ="content";
-        }
-        
+        options.extractionMode = "basic";
+        if (options.enableIntelligentAnalysis) {
+            if (options.enableActionDetection) {
+                options.extractionMode = "full";
+            } else {
+                options.extractionMode = "content";
+            }
         }
 
         // Set performance defaults - increased timeout for debugging
         options.maxConcurrent = 5; // Limit concurrent requests
         options.contentTimeout = 30000; // 30 second timeout per page (increased for debugging)
-        // Set performance defaults - increased timeout for debugging  
+        // Set performance defaults - increased timeout for debugging
         options.maxConcurrent = 5; // Limit concurrent requests
         options.contentTimeout = 30000; // 30 second timeout per page (increased for debugging)
 
@@ -466,13 +468,13 @@ class WebsiteLibraryPanel {
 
     private async completeImport(itemCount: number) {
         this.hideImportProgress();
-        
+
         // Show success notification
         this.showNotification(
             `Successfully imported ${itemCount} items from ${this.selectedBrowser} ${this.selectedType}!`,
-            "success"
+            "success",
         );
-        
+
         // Update the UI with fresh data
         await this.refreshUIAfterImport();
     }
@@ -481,10 +483,10 @@ class WebsiteLibraryPanel {
         try {
             // Update library stats (for overview section)
             await this.loadLibraryStats();
-            
+
             // Update suggested searches (for discover tab)
             await this.loadSuggestedSearches();
-            
+
             console.log("UI refreshed after successful import");
         } catch (error) {
             console.error("Error refreshing UI after import:", error);
@@ -505,7 +507,7 @@ class WebsiteLibraryPanel {
         const folderInput = document.getElementById(
             "bookmarkFolder",
         ) as HTMLInputElement;
-        
+
         // Get enhancement option elements
         const extractContentCheckbox = document.getElementById(
             "extractContent",
@@ -530,20 +532,19 @@ class WebsiteLibraryPanel {
             options.days = parseInt(daysInput.value);
         if (folderInput.value && this.selectedType === "bookmarks")
             options.folder = folderInput.value;
-            
+
         // Add enhancement options
         options.extractContent = extractContentCheckbox.checked;
         options.enableIntelligentAnalysis = intelligentAnalysisCheckbox.checked;
         options.enableActionDetection = actionDetectionCheckbox.checked;
 
-        options.extractionMode ="basic";
-        if(options.enableIntelligentAnalysis){
-            if(options.enableActionDetection){
-        options.extractionMode ="full";
-        }else{
-            options.extractionMode ="content";
-        }
-        
+        options.extractionMode = "basic";
+        if (options.enableIntelligentAnalysis) {
+            if (options.enableActionDetection) {
+                options.extractionMode = "full";
+            } else {
+                options.extractionMode = "content";
+            }
         }
 
         return options;
@@ -685,16 +686,18 @@ class WebsiteLibraryPanel {
 
     private clearSearch() {
         // Clear search input
-        const searchInput = document.getElementById("searchInput") as HTMLInputElement;
+        const searchInput = document.getElementById(
+            "searchInput",
+        ) as HTMLInputElement;
         searchInput.value = "";
         this.currentQuery = "";
-        
+
         // Clear search results
         this.clearSearchResults();
-        
+
         // Hide search suggestions
         document.getElementById("searchSuggestions")!.classList.add("d-none");
-        
+
         console.log("Search cleared");
     }
 
@@ -702,36 +705,41 @@ class WebsiteLibraryPanel {
         // Clear results data
         this.currentResults = [];
         this.currentQuery = "";
-        
+
         // Hide results card
         const resultsCard = document.getElementById("searchResultsCard")!;
         resultsCard.classList.add("d-none");
-        
+
         // Clear results containers
-        const resultsContainer = document.getElementById("searchResultsContainer")!;
+        const resultsContainer = document.getElementById(
+            "searchResultsContainer",
+        )!;
         resultsContainer.innerHTML = "";
-        
+
         const summaryContainer = document.getElementById("resultsSummary")!;
         summaryContainer.innerHTML = "";
-        
+
         const aiSummarySection = document.getElementById("aiSummarySection")!;
         aiSummarySection.innerHTML = "";
         aiSummarySection.classList.add("d-none");
-        
+
         // Clear pagination
-        const paginationContainer = document.getElementById("resultsPagination")!;
+        const paginationContainer =
+            document.getElementById("resultsPagination")!;
         paginationContainer.innerHTML = "";
-        
+
         console.log("Search results cleared");
     }
 
     private showSearchLoading() {
         const resultsCard = document.getElementById("searchResultsCard")!;
-        const resultsContainer = document.getElementById("searchResultsContainer")!;
-        
+        const resultsContainer = document.getElementById(
+            "searchResultsContainer",
+        )!;
+
         // Show results card with loading state
         resultsCard.classList.remove("d-none");
-        
+
         // Show loading spinner
         resultsContainer.innerHTML = `
             <div class="text-center py-5">
@@ -741,11 +749,11 @@ class WebsiteLibraryPanel {
                 <div class="text-muted">Searching your library...</div>
             </div>
         `;
-        
+
         // Clear other sections
         const summaryContainer = document.getElementById("resultsSummary")!;
         summaryContainer.innerHTML = "";
-        
+
         const aiSummarySection = document.getElementById("aiSummarySection")!;
         aiSummarySection.classList.add("d-none");
     }
@@ -772,7 +780,7 @@ class WebsiteLibraryPanel {
 
         try {
             const filters = this.getActiveFilters();
-            
+
             const response = await chrome.runtime.sendMessage({
                 type: "queryKnowledge",
                 parameters: {
@@ -781,59 +789,61 @@ class WebsiteLibraryPanel {
                     maxResults: 50,
                     minRelevance: filters.minRelevance || 0,
                     includeSuggestedQuestions: false,
-                    filters: filters
+                    filters: filters,
                 },
             });
 
             let searchResults: SearchResult;
 
-            if (response.answer || 
-                (response.sources && response.sources.length > 0)) {
-
+            if (
+                response.answer ||
+                (response.sources && response.sources.length > 0)
+            ) {
                 // Transform semantic search result to SearchResult format
-                    searchResults = {
-                        websites: response.sources?.map((source: any) => ({
+                searchResults = {
+                    websites:
+                        response.sources?.map((source: any) => ({
                             url: source.url,
                             title: source.title,
                             domain: new URL(source.url).hostname,
                             source: "bookmarks", // Default, will be updated by knowledge check
                             score: source.relevanceScore,
-                            snippet: source.snippet || ""
+                            snippet: source.snippet || "",
                         })) || [],
-                        summary: {
-                            text: response.answer || "",
-                            totalFound: response.sources?.length || 0,
-                            searchTime: 0, // Not provided in knowledge response
-                            sources: response.sources || [],
-                            entities: response.relatedEntities?.map((entity: any) => ({
+                    summary: {
+                        text: response.answer || "",
+                        totalFound: response.sources?.length || 0,
+                        searchTime: 0, // Not provided in knowledge response
+                        sources: response.sources || [],
+                        entities:
+                            response.relatedEntities?.map((entity: any) => ({
                                 entity: entity.name,
                                 type: entity.type,
-                                count: 1
-                            })) || []
-                        },
-                        query: query,
-                        filters: filters
-                    };
-                } else {
-                    // Fallback empty result
-                    searchResults = {
-                        websites: [],
-                        summary: {
-                            text: "No results found.",
-                            totalFound: 0,
-                            searchTime: 0,
-                            sources: [],
-                            entities: []
-                        },
-                        query: query,
-                        filters: filters
-                    };
-                }
-                
-                await this.renderSearchResults(searchResults);
-                await this.saveSearchToHistory(query);
-                await this.loadRecentSearches();
-            
+                                count: 1,
+                            })) || [],
+                    },
+                    query: query,
+                    filters: filters,
+                };
+            } else {
+                // Fallback empty result
+                searchResults = {
+                    websites: [],
+                    summary: {
+                        text: "No results found.",
+                        totalFound: 0,
+                        searchTime: 0,
+                        sources: [],
+                        entities: [],
+                    },
+                    query: query,
+                    filters: filters,
+                };
+            }
+
+            await this.renderSearchResults(searchResults);
+            await this.saveSearchToHistory(query);
+            await this.loadRecentSearches();
         } catch (error) {
             console.error("Search error:", error);
             this.showNotification(
@@ -921,8 +931,10 @@ class WebsiteLibraryPanel {
 
     private async renderSearchResults(results: SearchResult) {
         // Enhance results with knowledge status
-        const enhancedWebsites = await this.checkKnowledgeStatus(results.websites);
-        
+        const enhancedWebsites = await this.checkKnowledgeStatus(
+            results.websites,
+        );
+
         this.currentResults = enhancedWebsites;
         results.websites = enhancedWebsites;
 
@@ -939,12 +951,15 @@ class WebsiteLibraryPanel {
             this.renderAISummary(results.summary);
         } else {
             // Hide AI summary section if no summary available
-            const aiSummarySection = document.getElementById("aiSummarySection")!;
+            const aiSummarySection =
+                document.getElementById("aiSummarySection")!;
             aiSummarySection.classList.add("d-none");
         }
 
         // Clear any loading state and render results based on current view mode
-        const resultsContainer = document.getElementById("searchResultsContainer")!;
+        const resultsContainer = document.getElementById(
+            "searchResultsContainer",
+        )!;
         if (this.currentResults.length === 0) {
             // Show "no results" message instead of loading spinner
             resultsContainer.innerHTML = `
@@ -1060,10 +1075,14 @@ class WebsiteLibraryPanel {
                                 <button class="btn btn-outline-primary btn-sm" onclick="window.open('${site.url}', '_blank')">
                                     <i class="bi bi-box-arrow-up-right"></i> Open
                                 </button>
-                                ${site.knowledge?.status === 'none' ? `
+                                ${
+                                    site.knowledge?.status === "none"
+                                        ? `
                                 <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
                                     <i class="bi bi-lightbulb"></i> Extract
-                                </button>` : ''}
+                                </button>`
+                                        : ""
+                                }
                             </div>
                         </div>
                     </div>
@@ -1101,10 +1120,14 @@ class WebsiteLibraryPanel {
                                         <button class="btn btn-primary btn-sm" onclick="window.open('${site.url}', '_blank')">
                                             <i class="bi bi-box-arrow-up-right"></i> Open
                                         </button>
-                                        ${site.knowledge?.status === 'none' ? `
+                                        ${
+                                            site.knowledge?.status === "none"
+                                                ? `
                                         <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
                                             <i class="bi bi-lightbulb"></i>
-                                        </button>` : ''}
+                                        </button>`
+                                                : ""
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -1263,12 +1286,14 @@ class WebsiteLibraryPanel {
         this.performSearch();
     }
 
-    private async checkKnowledgeStatus(websites: Website[]): Promise<Website[]> {
+    private async checkKnowledgeStatus(
+        websites: Website[],
+    ): Promise<Website[]> {
         const enhancedWebsites: Website[] = [];
-        
+
         for (const website of websites) {
             const enhanced = { ...website };
-            
+
             // Check cache first
             if (this.knowledgeStatusCache.has(website.url)) {
                 enhanced.knowledge = this.knowledgeStatusCache.get(website.url);
@@ -1277,42 +1302,60 @@ class WebsiteLibraryPanel {
                 try {
                     const response = await chrome.runtime.sendMessage({
                         type: "checkPageIndexStatus",
-                        parameters: { url: website.url }
+                        parameters: { url: website.url },
                     });
-                    
+
                     if (response.success && response.result) {
                         const status: KnowledgeStatus = {
                             hasKnowledge: response.result.isIndexed,
-                            status: response.result.isIndexed ? 'extracted' : 'none',
+                            status: response.result.isIndexed
+                                ? "extracted"
+                                : "none",
                             extractionDate: response.result.lastExtracted,
                             entityCount: response.result.entityCount,
                             topicCount: response.result.topicCount,
-                            confidence: response.result.confidence
+                            confidence: response.result.confidence,
                         };
                         enhanced.knowledge = status;
                         this.knowledgeStatusCache.set(website.url, status);
                     } else {
-                        enhanced.knowledge = { hasKnowledge: false, status: 'none' };
+                        enhanced.knowledge = {
+                            hasKnowledge: false,
+                            status: "none",
+                        };
                     }
                 } catch (error) {
-                    console.error("Error checking knowledge status for", website.url, error);
-                    enhanced.knowledge = { hasKnowledge: false, status: 'none' };
+                    console.error(
+                        "Error checking knowledge status for",
+                        website.url,
+                        error,
+                    );
+                    enhanced.knowledge = {
+                        hasKnowledge: false,
+                        status: "none",
+                    };
                 }
             }
-            
+
             enhancedWebsites.push(enhanced);
         }
-        
+
         return enhancedWebsites;
     }
 
-    private async extractKnowledgeForWebsite(url: string, title: string): Promise<void> {
+    private async extractKnowledgeForWebsite(
+        url: string,
+        title: string,
+    ): Promise<void> {
         try {
             // Update status to pending
-            const pendingStatus: KnowledgeStatus = { hasKnowledge: false, status: 'pending' };
+            const pendingStatus: KnowledgeStatus = {
+                hasKnowledge: false,
+                status: "pending",
+            };
             this.knowledgeStatusCache.set(url, pendingStatus);
             this.rerenderResults(); // Update UI to show pending state
-            
+
             const response = await chrome.runtime.sendMessage({
                 type: "extractKnowledgeFromPage",
                 parameters: {
@@ -1321,50 +1364,66 @@ class WebsiteLibraryPanel {
                     extractEntities: true,
                     extractRelationships: true,
                     suggestQuestions: true,
-                    quality: "balanced"
-                }
+                    quality: "balanced",
+                },
             });
-            
+
             if (response.success) {
                 const status: KnowledgeStatus = {
                     hasKnowledge: true,
-                    status: 'extracted',
+                    status: "extracted",
                     extractionDate: new Date().toISOString(),
                     entityCount: response.result?.entities?.length || 0,
                     topicCount: response.result?.keyTopics?.length || 0,
-                    suggestionCount: response.result?.suggestedQuestions?.length || 0
+                    suggestionCount:
+                        response.result?.suggestedQuestions?.length || 0,
                 };
                 this.knowledgeStatusCache.set(url, status);
-                this.showNotification(`Knowledge extracted successfully for ${title}`, "success");
+                this.showNotification(
+                    `Knowledge extracted successfully for ${title}`,
+                    "success",
+                );
             } else {
-                const status: KnowledgeStatus = { hasKnowledge: false, status: 'error' };
+                const status: KnowledgeStatus = {
+                    hasKnowledge: false,
+                    status: "error",
+                };
                 this.knowledgeStatusCache.set(url, status);
-                this.showNotification(`Failed to extract knowledge: ${response.error}`, "error");
+                this.showNotification(
+                    `Failed to extract knowledge: ${response.error}`,
+                    "error",
+                );
             }
-            
+
             this.rerenderResults(); // Update UI with final status
         } catch (error) {
             console.error("Error extracting knowledge:", error);
-            const status: KnowledgeStatus = { hasKnowledge: false, status: 'error' };
+            const status: KnowledgeStatus = {
+                hasKnowledge: false,
+                status: "error",
+            };
             this.knowledgeStatusCache.set(url, status);
-            this.showNotification("Knowledge extraction failed due to connection error", "error");
+            this.showNotification(
+                "Knowledge extraction failed due to connection error",
+                "error",
+            );
             this.rerenderResults();
         }
     }
 
     private getKnowledgeStatusBadge(knowledge?: KnowledgeStatus): string {
-        if (!knowledge) return '';
-        
+        if (!knowledge) return "";
+
         switch (knowledge.status) {
-            case 'extracted':
-                return `<span class="badge bg-success ms-2" title="Knowledge extracted on ${knowledge.extractionDate ? new Date(knowledge.extractionDate).toLocaleDateString() : 'Unknown'}">
+            case "extracted":
+                return `<span class="badge bg-success ms-2" title="Knowledge extracted on ${knowledge.extractionDate ? new Date(knowledge.extractionDate).toLocaleDateString() : "Unknown"}">
                     <i class="bi bi-check-circle"></i> Extracted
                 </span>`;
-            case 'pending':
+            case "pending":
                 return `<span class="badge bg-warning ms-2" title="Knowledge extraction in progress">
                     <i class="bi bi-clock"></i> Extracting...
                 </span>`;
-            case 'error':
+            case "error":
                 return `<span class="badge bg-danger ms-2" title="Knowledge extraction failed">
                     <i class="bi bi-x-circle"></i> Error
                 </span>`;
@@ -1376,14 +1435,19 @@ class WebsiteLibraryPanel {
     }
 
     private getKnowledgeDetails(knowledge?: KnowledgeStatus): string {
-        if (!knowledge || !knowledge.hasKnowledge) return '';
-        
+        if (!knowledge || !knowledge.hasKnowledge) return "";
+
         const details: string[] = [];
-        if (knowledge.entityCount) details.push(`${knowledge.entityCount} entities`);
-        if (knowledge.topicCount) details.push(`${knowledge.topicCount} topics`);
-        if (knowledge.suggestionCount) details.push(`${knowledge.suggestionCount} questions`);
-        
-        return details.length > 0 ? `<small class="text-muted d-block">${details.join(' • ')}</small>` : '';
+        if (knowledge.entityCount)
+            details.push(`${knowledge.entityCount} entities`);
+        if (knowledge.topicCount)
+            details.push(`${knowledge.topicCount} topics`);
+        if (knowledge.suggestionCount)
+            details.push(`${knowledge.suggestionCount} questions`);
+
+        return details.length > 0
+            ? `<small class="text-muted d-block">${details.join(" • ")}</small>`
+            : "";
     }
 
     private async loadSuggestedSearches() {

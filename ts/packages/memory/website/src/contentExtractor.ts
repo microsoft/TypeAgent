@@ -167,17 +167,18 @@ export class ContentExtractor {
     }
 
     private async fetchPage(url: string): Promise<string> {
-        console.log(`[ContentExtractor] Starting fetch for: ${url} (timeout: ${this.defaultTimeout}ms)`);
-        const fetchStart = Date.now();
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(
-            () => {
-                console.log(`[ContentExtractor] Timeout triggered for: ${url} after ${this.defaultTimeout}ms`);
-                controller.abort();
-            },
-            this.defaultTimeout,
+        console.log(
+            `[ContentExtractor] Starting fetch for: ${url} (timeout: ${this.defaultTimeout}ms)`,
         );
+        const fetchStart = Date.now();
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            console.log(
+                `[ContentExtractor] Timeout triggered for: ${url} after ${this.defaultTimeout}ms`,
+            );
+            controller.abort();
+        }, this.defaultTimeout);
 
         try {
             console.log(`[ContentExtractor] Sending HTTP request to: ${url}`);
@@ -194,7 +195,9 @@ export class ContentExtractor {
             });
 
             const responseTime = Date.now() - fetchStart;
-            console.log(`[ContentExtractor] Got response for ${url} in ${responseTime}ms (status: ${response.status})`);
+            console.log(
+                `[ContentExtractor] Got response for ${url} in ${responseTime}ms (status: ${response.status})`,
+            );
 
             if (!response.ok) {
                 throw new Error(
@@ -210,12 +213,17 @@ export class ContentExtractor {
             console.log(`[ContentExtractor] Reading response body for: ${url}`);
             const text = await response.text();
             const totalTime = Date.now() - fetchStart;
-            console.log(`[ContentExtractor] Successfully fetched ${text.length} chars from ${url} in ${totalTime}ms`);
-            
+            console.log(
+                `[ContentExtractor] Successfully fetched ${text.length} chars from ${url} in ${totalTime}ms`,
+            );
+
             return text;
         } catch (error) {
             const totalTime = Date.now() - fetchStart;
-            console.error(`[ContentExtractor] Fetch failed for ${url} after ${totalTime}ms:`, error);
+            console.error(
+                `[ContentExtractor] Fetch failed for ${url} after ${totalTime}ms:`,
+                error,
+            );
             throw error;
         } finally {
             clearTimeout(timeoutId);

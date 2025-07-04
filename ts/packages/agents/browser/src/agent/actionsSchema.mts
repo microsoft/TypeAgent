@@ -142,7 +142,7 @@ export type ImportWebsiteData = {
         extractContent?: boolean;
         enableIntelligentAnalysis?: boolean;
         enableActionDetection?: boolean;
-        extractionMode?: "basic" |"content"| "actions" | "full";
+        extractionMode?: "basic" | "content" | "actions" | "full";
         maxConcurrent?: number;
         contentTimeout?: number;
     };

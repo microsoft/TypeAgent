@@ -49,9 +49,7 @@ import registerDebug from "debug";
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
 import * as website from "website-memory";
-import {
-    handleKnowledgeAction,
-} from "./knowledge/knowledgeHandler.mjs";
+import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -172,19 +170,23 @@ async function updateBrowserContext(
                 debug(
                     "No existing website index found, creating new index for data persistence",
                 );
-                
+
                 // Create empty collection as fallback
                 context.agentContext.websiteCollection =
                     new website.WebsiteCollection();
-                
+
                 try {
                     const sessionDir = await getSessionFolderPath(context);
-                    
+
                     if (sessionDir) {
                         // Create index path following IndexManager pattern: sessionDir/indexes/website-index
-                        const indexPath = path.join(sessionDir, "indexes", "website-index");
+                        const indexPath = path.join(
+                            sessionDir,
+                            "indexes",
+                            "website-index",
+                        );
                         fs.mkdirSync(indexPath, { recursive: true });
-                        
+
                         // Create proper IndexData object
                         context.agentContext.index = {
                             source: "website",
@@ -196,18 +198,26 @@ async function updateBrowserContext(
                             progress: 0,
                             sizeOnDisk: 0,
                         };
-                        
-                        debug(`Created website index with sessionStorage-based path: ${indexPath}`);
+
+                        debug(
+                            `Created website index with sessionStorage-based path: ${indexPath}`,
+                        );
                     } else {
-                        debug("Warning: Could not determine session directory path");
+                        debug(
+                            "Warning: Could not determine session directory path",
+                        );
                     }
                 } catch (error) {
-                    debug(`Error during sessionStorage path discovery: ${error}`);
+                    debug(
+                        `Error during sessionStorage path discovery: ${error}`,
+                    );
                 }
-                
+
                 // If index creation failed, log that data will be in-memory only
                 if (!context.agentContext.index) {
-                    debug("Website collection created without persistent index - data will be in-memory only");
+                    debug(
+                        "Website collection created without persistent index - data will be in-memory only",
+                    );
                 }
             }
         }
@@ -387,7 +397,6 @@ async function updateBrowserContext(
                             );
                             break;
                         }
-
                     }
                 }
             });
@@ -412,10 +421,14 @@ async function updateBrowserContext(
     }
 }
 
-async function getSessionFolderPath(context: SessionContext<BrowserActionContext>) {
+async function getSessionFolderPath(
+    context: SessionContext<BrowserActionContext>,
+) {
     let sessionDir: string | undefined;
 
-    const existingFiles = await context.sessionStorage?.list("", { fullPath: true });
+    const existingFiles = await context.sessionStorage?.list("", {
+        fullPath: true,
+    });
 
     if (existingFiles && existingFiles.length > 0) {
         // Get parent directory from first file path
@@ -427,7 +440,9 @@ async function getSessionFolderPath(context: SessionContext<BrowserActionContext
         await context.sessionStorage?.write(tempFileName, "");
 
         // Now list files to get the full path
-        const tempFiles = await context.sessionStorage?.list("", { fullPath: true });
+        const tempFiles = await context.sessionStorage?.list("", {
+            fullPath: true,
+        });
         if (tempFiles && tempFiles.length > 0) {
             sessionDir = path.dirname(tempFiles[0]);
             debug(`Discovered session directory from temp file: ${sessionDir}`);
@@ -1024,7 +1039,10 @@ async function handleWebsiteAction(
                 activityContext: undefined,
                 queueToggleTransientAgent: async () => {},
             };
-            const searchResult = await searchWebsites(mockActionContext, searchAction);
+            const searchResult = await searchWebsites(
+                mockActionContext,
+                searchAction,
+            );
             return {
                 success: !searchResult.error,
                 result: searchResult.literalText || "Search completed",
@@ -1038,19 +1056,23 @@ async function handleWebsiteAction(
                 actionName: "getWebsiteStats" as const,
                 parameters: parameters,
             };
-            const mockStatsActionContext: ActionContext<BrowserActionContext> = {
-                sessionContext: context,
-                actionIO: {
-                    setDisplay: () => {},
-                    appendDisplay: () => {},
-                    clearDisplay: () => {},
-                    setError: () => {},
-                } as any,
-                streamingContext: undefined,
-                activityContext: undefined,
-                queueToggleTransientAgent: async () => {},
-            };
-            const statsResult = await getWebsiteStats(mockStatsActionContext, statsAction);
+            const mockStatsActionContext: ActionContext<BrowserActionContext> =
+                {
+                    sessionContext: context,
+                    actionIO: {
+                        setDisplay: () => {},
+                        appendDisplay: () => {},
+                        clearDisplay: () => {},
+                        setError: () => {},
+                    } as any,
+                    streamingContext: undefined,
+                    activityContext: undefined,
+                    queueToggleTransientAgent: async () => {},
+                };
+            const statsResult = await getWebsiteStats(
+                mockStatsActionContext,
+                statsAction,
+            );
             return {
                 success: !statsResult.error,
                 result: statsResult.literalText || "Stats retrieved",

@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ActionContext, SessionContext, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    ActionContext,
+    SessionContext,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
     ImportWebsiteData,
@@ -406,10 +410,18 @@ export async function importWebsiteDataFromSession(
             displayProgress("Importing website data...");
         }
 
-        const { 
-            source, type, limit, days, folder,
-            extractContent, enableIntelligentAnalysis, enableActionDetection,
-            extractionMode, maxConcurrent, contentTimeout 
+        const {
+            source,
+            type,
+            limit,
+            days,
+            folder,
+            extractContent,
+            enableIntelligentAnalysis,
+            enableActionDetection,
+            extractionMode,
+            maxConcurrent,
+            contentTimeout,
         } = parameters;
         const defaultPaths = website.getDefaultBrowserPaths();
 
@@ -446,14 +458,20 @@ export async function importWebsiteDataFromSession(
         if (limit !== undefined) importOptions.limit = limit;
         if (days !== undefined) importOptions.days = days;
         if (folder !== undefined) importOptions.folder = folder;
-        
+
         // Add enhancement options
-        if (extractContent !== undefined) importOptions.extractContent = extractContent;
-        if (enableIntelligentAnalysis !== undefined) importOptions.enableIntelligentAnalysis = enableIntelligentAnalysis;
-        if (enableActionDetection !== undefined) importOptions.enableActionDetection = enableActionDetection;
-        if (extractionMode !== undefined) importOptions.extractionMode = extractionMode;
-        if (maxConcurrent !== undefined) importOptions.maxConcurrent = maxConcurrent;
-        if (contentTimeout !== undefined) importOptions.contentTimeout = contentTimeout;
+        if (extractContent !== undefined)
+            importOptions.extractContent = extractContent;
+        if (enableIntelligentAnalysis !== undefined)
+            importOptions.enableIntelligentAnalysis = enableIntelligentAnalysis;
+        if (enableActionDetection !== undefined)
+            importOptions.enableActionDetection = enableActionDetection;
+        if (extractionMode !== undefined)
+            importOptions.extractionMode = extractionMode;
+        if (maxConcurrent !== undefined)
+            importOptions.maxConcurrent = maxConcurrent;
+        if (contentTimeout !== undefined)
+            importOptions.contentTimeout = contentTimeout;
 
         // Create chat model for intelligent analysis if enabled
         if (enableIntelligentAnalysis) {
@@ -463,12 +481,18 @@ export async function importWebsiteDataFromSession(
                     undefined,
                     undefined, // Use default model
                 );
-                importOptions.model = ai.createChatModel(apiSettings, undefined, undefined, [
-                    "website-analysis",
-                ]);
+                importOptions.model = ai.createChatModel(
+                    apiSettings,
+                    undefined,
+                    undefined,
+                    ["website-analysis"],
+                );
                 debug("Created chat model for intelligent analysis");
             } catch (error) {
-                debug("Failed to create chat model for intelligent analysis:", error);
+                debug(
+                    "Failed to create chat model for intelligent analysis:",
+                    error,
+                );
                 // Continue without intelligent analysis if model creation fails
             }
         }
@@ -495,7 +519,8 @@ export async function importWebsiteDataFromSession(
         }
 
         if (!context.agentContext.websiteCollection) {
-            context.agentContext.websiteCollection = new website.WebsiteCollection();
+            context.agentContext.websiteCollection =
+                new website.WebsiteCollection();
         }
 
         context.agentContext.websiteCollection.addWebsites(websites);
@@ -508,7 +533,9 @@ export async function importWebsiteDataFromSession(
                     context.agentContext.index.path,
                     "index",
                 );
-                debug(`Saved website collection to ${context.agentContext.index.path}`);
+                debug(
+                    `Saved website collection to ${context.agentContext.index.path}`,
+                );
             } else {
                 debug("No index path available, website data not persisted");
             }

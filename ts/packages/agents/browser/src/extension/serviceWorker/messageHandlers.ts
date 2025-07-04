@@ -223,7 +223,8 @@ export async function handleMessage(
                     parameters: {
                         query: message.parameters.query,
                         url: message.parameters.url,
-                        searchScope: message.parameters.searchScope || "current_page",
+                        searchScope:
+                            message.parameters.searchScope || "current_page",
                     },
                 });
 
@@ -450,7 +451,8 @@ async function handleImportWebsiteDataWithProgress(message: any) {
                 folder: message.parameters.folder,
                 // Enhancement options
                 extractContent: message.parameters.extractContent,
-                enableIntelligentAnalysis: message.parameters.enableIntelligentAnalysis,
+                enableIntelligentAnalysis:
+                    message.parameters.enableIntelligentAnalysis,
                 enableActionDetection: message.parameters.enableActionDetection,
                 extractionMode: message.parameters.extractionMode,
                 maxConcurrent: message.parameters.maxConcurrent,
@@ -478,7 +480,7 @@ async function handleGetWebsiteLibraryStats() {
             actionName: "getWebsiteStats",
             parameters: {
                 groupBy: "source",
-                limit: 50
+                limit: 50,
             },
         });
 
@@ -490,7 +492,9 @@ async function handleGetWebsiteLibraryStats() {
         }
 
         // Parse the stats from the result text
-        const stats = parseWebsiteStatsFromText(result.literalText || result.text|| result.result || "");
+        const stats = parseWebsiteStatsFromText(
+            result.literalText || result.text || result.result || "",
+        );
 
         return {
             success: true,
@@ -700,12 +704,15 @@ async function handleGetSuggestedSearches() {
             actionName: "getWebsiteStats",
             parameters: {
                 groupBy: "domain",
-                limit: 20
+                limit: 20,
             },
         });
 
         const suggestions = generateSuggestionsFromStats(
-            statsResult.literalText || statsResult.text || statsResult.result || "",
+            statsResult.literalText ||
+                statsResult.text ||
+                statsResult.result ||
+                "",
         );
 
         return {

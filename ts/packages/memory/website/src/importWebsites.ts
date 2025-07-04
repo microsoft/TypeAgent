@@ -130,7 +130,7 @@ function extractDomain(url: string): string {
 function isValidHttpUrl(url: string): boolean {
     try {
         const urlObj = new URL(url);
-        return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+        return urlObj.protocol === "http:" || urlObj.protocol === "https:";
     } catch {
         return false;
     }
@@ -344,10 +344,7 @@ export async function importChromeHistory(
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
 
-                if (
-                    !row.url ||
-                    !isValidHttpUrl(row.url)
-                ) {
+                if (!row.url || !isValidHttpUrl(row.url)) {
                     continue; // Skip non-HTTP/HTTPS URLs
                 }
 

@@ -12,7 +12,6 @@ import {
     WebPageReference,
 } from "./schema/knowledgeExtraction.mjs";
 
-
 export interface WebPageDocument {
     url: string;
     title: string;
@@ -56,14 +55,10 @@ export async function handleKnowledgeAction(
         case "exportKnowledgeData":
             return await exportKnowledgeData(parameters, context);
 
-        case "importWebsiteData":
-            // return importWebsiteData(parameters, context);
-
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
     }
 }
-
 
 export async function extractKnowledgeFromPage(
     parameters: {
@@ -103,27 +98,39 @@ export async function extractKnowledgeFromPage(
 
         const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
         const knowledge = websiteObj.getKnowledge();
-        
+
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
-            suggestedQuestions.push(...await generateSuggestedQuestions(knowledge, textContent, parameters.title));
+            suggestedQuestions.push(
+                ...(await generateSuggestedQuestions(
+                    knowledge,
+                    textContent,
+                    parameters.title,
+                )),
+            );
         }
 
-        const entities: Entity[] = knowledge?.entities?.map(entity => ({
-            name: entity.name,
-            type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
-            description: entity.facets?.find(f => f.name === "description")?.value as string,
-            confidence: 0.8,
-        })) || [];
+        const entities: Entity[] =
+            knowledge?.entities?.map((entity) => ({
+                name: entity.name,
+                type: Array.isArray(entity.type)
+                    ? entity.type.join(", ")
+                    : entity.type,
+                description: entity.facets?.find(
+                    (f) => f.name === "description",
+                )?.value as string,
+                confidence: 0.8,
+            })) || [];
 
         const keyTopics: string[] = knowledge?.topics || [];
 
-        const relationships: Relationship[] = knowledge?.actions?.map(action => ({
-            from: action.subjectEntityName || "unknown",
-            relationship: action.verbs?.join(", ") || "related to",
-            to: action.objectEntityName || "unknown",
-            confidence: 0.7,
-        })) || [];
+        const relationships: Relationship[] =
+            knowledge?.actions?.map((action) => ({
+                from: action.subjectEntityName || "unknown",
+                relationship: action.verbs?.join(", ") || "related to",
+                to: action.objectEntityName || "unknown",
+                confidence: 0.7,
+            })) || [];
 
         const summary = `Knowledge extracted from ${parameters.title}: ${entities.length} entities, ${keyTopics.length} topics, ${relationships.length} relationships found.`;
 
@@ -174,12 +181,15 @@ export async function indexWebPageContent(
             visitDate: parameters.timestamp,
         };
 
-        visitInfo.pageType = website.determinePageType(parameters.url, parameters.title);
+        visitInfo.pageType = website.determinePageType(
+            parameters.url,
+            parameters.title,
+        );
         const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
 
         if (context.agentContext.websiteCollection) {
             context.agentContext.websiteCollection.addWebsites([websiteObj]);
-            
+
             if (parameters.extractKnowledge) {
                 await context.agentContext.websiteCollection.buildIndex();
             }
@@ -217,7 +227,7 @@ export async function queryWebKnowledge(
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection || websiteCollection.messages.length === 0) {
             return {
                 answer: "No website data available. Please import website data first using the library panel.",
@@ -241,14 +251,22 @@ export async function queryWebKnowledge(
             };
         }
 
-        const answer = await generateAnswerFromResults(parameters.query, searchResults);
+        const answer = await generateAnswerFromResults(
+            parameters.query,
+            searchResults,
+        );
 
-        const sources: WebPageReference[] = searchResults.slice(0, 5).map((website: any) => ({
-            url: website.metadata.url,
-            title: website.metadata.title || website.metadata.url,
-            relevanceScore: 0.8,
-            lastIndexed: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
-        }));
+        const sources: WebPageReference[] = searchResults
+            .slice(0, 5)
+            .map((website: any) => ({
+                url: website.metadata.url,
+                title: website.metadata.title || website.metadata.url,
+                relevanceScore: 0.8,
+                lastIndexed:
+                    website.metadata.visitDate ||
+                    website.metadata.bookmarkDate ||
+                    new Date().toISOString(),
+            }));
 
         const relatedEntities: Entity[] = [];
         for (const site of searchResults.slice(0, 3)) {
@@ -257,7 +275,9 @@ export async function queryWebKnowledge(
                 for (const entity of knowledge.entities.slice(0, 3)) {
                     relatedEntities.push({
                         name: entity.name,
-                        type: Array.isArray(entity.type) ? entity.type.join(", ") : entity.type,
+                        type: Array.isArray(entity.type)
+                            ? entity.type.join(", ")
+                            : entity.type,
                         confidence: 0.7,
                     });
                 }
@@ -289,19 +309,24 @@ export async function checkPageIndexStatus(
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return { isIndexed: false, lastIndexed: null, entityCount: 0 };
         }
 
         const websites = websiteCollection.messages.getAll();
-        const foundWebsite = websites.find((site: any) => site.metadata.url === parameters.url);
+        const foundWebsite = websites.find(
+            (site: any) => site.metadata.url === parameters.url,
+        );
 
         if (foundWebsite) {
             const knowledge = foundWebsite.getKnowledge();
             return {
                 isIndexed: true,
-                lastIndexed: foundWebsite.metadata.visitDate || foundWebsite.metadata.bookmarkDate || null,
+                lastIndexed:
+                    foundWebsite.metadata.visitDate ||
+                    foundWebsite.metadata.bookmarkDate ||
+                    null,
                 entityCount: knowledge?.entities?.length || 0,
             };
         } else {
@@ -325,7 +350,7 @@ export async function getKnowledgeIndexStats(
 }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return {
                 totalPages: 0,
@@ -348,14 +373,18 @@ export async function getKnowledgeIndexStats(
                 totalRelationships += knowledge.actions?.length || 0;
             }
 
-            const siteDate = site.metadata.visitDate || site.metadata.bookmarkDate;
+            const siteDate =
+                site.metadata.visitDate || site.metadata.bookmarkDate;
             if (siteDate && (!lastIndexed || siteDate > lastIndexed)) {
                 lastIndexed = siteDate;
             }
         }
 
-        const totalContent = websites.reduce((sum: number, site: any) => 
-            sum + (site.textChunks?.join("").length || 0), 0);
+        const totalContent = websites.reduce(
+            (sum: number, site: any) =>
+                sum + (site.textChunks?.join("").length || 0),
+            0,
+        );
         const indexSize = `${Math.round(totalContent / 1024)} KB`;
 
         return {
@@ -383,7 +412,7 @@ export async function clearKnowledgeIndex(
 ): Promise<{ success: boolean; message: string }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return {
                 success: false,
@@ -392,7 +421,8 @@ export async function clearKnowledgeIndex(
         }
 
         const itemsCleared = websiteCollection.messages.length;
-        context.agentContext.websiteCollection = new website.WebsiteCollection();
+        context.agentContext.websiteCollection =
+            new website.WebsiteCollection();
 
         return {
             success: true,
@@ -413,7 +443,7 @@ export async function exportKnowledgeData(
 ): Promise<{ data: any; exportDate: string }> {
     try {
         const websiteCollection = context.agentContext.websiteCollection;
-        
+
         if (!websiteCollection) {
             return {
                 data: { error: "No website collection found to export" },
@@ -422,7 +452,7 @@ export async function exportKnowledgeData(
         }
 
         const websites = websiteCollection.messages.getAll();
-        
+
         const exportData: any = {
             metadata: {
                 exportDate: new Date().toISOString(),
@@ -434,7 +464,8 @@ export async function exportKnowledgeData(
                 return {
                     url: site.metadata.url,
                     title: site.metadata.title,
-                    timestamp: site.metadata.visitDate || site.metadata.bookmarkDate,
+                    timestamp:
+                        site.metadata.visitDate || site.metadata.bookmarkDate,
                     contentLength: site.textChunks?.join("").length || 0,
                     entityCount: knowledge?.entities?.length || 0,
                     relationshipCount: knowledge?.actions?.length || 0,
@@ -443,8 +474,12 @@ export async function exportKnowledgeData(
                     source: site.metadata.websiteSource,
                 };
             }),
-            entities: websites.flatMap((site: any) => site.getKnowledge()?.entities || []),
-            relationships: websites.flatMap((site: any) => site.getKnowledge()?.actions || []),
+            entities: websites.flatMap(
+                (site: any) => site.getKnowledge()?.entities || [],
+            ),
+            relationships: websites.flatMap(
+                (site: any) => site.getKnowledge()?.actions || [],
+            ),
         };
 
         return {
@@ -466,23 +501,23 @@ async function generateSuggestedQuestions(
     title: string,
 ): Promise<string[]> {
     const questions: string[] = [];
-    
+
     if (knowledge.entities && knowledge.entities.length > 0) {
         const mainEntity = knowledge.entities[0];
         questions.push(`What is ${mainEntity.name}?`);
         questions.push(`Tell me more about ${mainEntity.name}`);
     }
-    
+
     if (knowledge.topics && knowledge.topics.length > 0) {
         const mainTopic = knowledge.topics[0];
         questions.push(`What else do I have about ${mainTopic}?`);
     }
-    
+
     questions.push(`When did I first encounter this information?`);
     questions.push(`What other similar pages have I visited?`);
     questions.push(`Summarize the key points from this page`);
     questions.push(`What actions can I take based on this information?`);
-    
+
     return questions.slice(0, 6);
 }
 
@@ -496,14 +531,18 @@ async function generateAnswerFromResults(
 
     const topResult = results[0];
     const resultCount = results.length;
-    
-    const context = results.slice(0, 3).map(site => {
-        const knowledge = site.getKnowledge();
-        const topics = knowledge?.topics?.slice(0, 3).join(", ") || "";
-        return `${site.metadata.title}: ${topics}`;
-    }).join("; ");
 
-    const answer = `Based on your browsing history, I found ${resultCount} relevant result${resultCount > 1 ? 's' : ''} for "${query}". ` +
+    const context = results
+        .slice(0, 3)
+        .map((site) => {
+            const knowledge = site.getKnowledge();
+            const topics = knowledge?.topics?.slice(0, 3).join(", ") || "";
+            return `${site.metadata.title}: ${topics}`;
+        })
+        .join("; ");
+
+    const answer =
+        `Based on your browsing history, I found ${resultCount} relevant result${resultCount > 1 ? "s" : ""} for "${query}". ` +
         `The most relevant appears to be "${topResult.metadata.title}" (${topResult.metadata.url}). ` +
         (context ? `Related topics include: ${context}. ` : "") +
         `You can explore these results for more detailed information.`;
