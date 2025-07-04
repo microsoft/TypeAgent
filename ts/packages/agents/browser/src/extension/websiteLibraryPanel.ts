@@ -34,14 +34,6 @@ interface LibraryStats {
     lastImport?: number;
 }
 
-interface ImportProgressData {
-    current: number;
-    total: number;
-    item: string;
-    estimatedTimeRemaining?: number;
-    itemsPerSecond?: number;
-}
-
 interface SearchFilters {
     dateFrom?: string;
     dateTo?: string;
@@ -203,14 +195,6 @@ class WebsiteLibraryPanel {
             .addEventListener("click", () => {
                 this.showSettings();
             });
-
-        chrome.runtime.onMessage.addListener(
-            (message, sender, sendResponse) => {
-                if (message.type === "importProgress") {
-                    this.updateImportProgress(message.data);
-                }
-            },
-        );
     }
 
     private setupSearchEventListeners() {
@@ -590,6 +574,10 @@ class WebsiteLibraryPanel {
             <span class="status-indicator status-importing"></span>
             Importing data...
         `;
+
+        // Update the status message
+        const statusMessage = document.getElementById("importStatusMessage")!;
+        statusMessage.textContent = "Starting import...";
     }
 
     private hideImportProgress() {
@@ -598,39 +586,6 @@ class WebsiteLibraryPanel {
 
         this.currentImport = null;
         this.updateConnectionStatus();
-    }
-
-    private updateImportProgress(data: ImportProgressData) {
-        if (!this.currentImport || this.currentImport.cancelled) {
-            return;
-        }
-
-        const progressBar = document.getElementById("progressBar")!;
-        const progressStats = document.getElementById("progressStats")!;
-        const currentItem = document.getElementById("currentItem")!;
-        const itemsProcessed = document.getElementById("itemsProcessed")!;
-        const estimatedTime = document.getElementById("estimatedTime")!;
-        const importSpeed = document.getElementById("importSpeed")!;
-
-        const percentage =
-            data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
-
-        progressBar.style.width = `${percentage}%`;
-        progressBar.setAttribute("aria-valuenow", percentage.toString());
-
-        progressStats.textContent = `${data.current} / ${data.total} items`;
-        currentItem.textContent = `Processing: ${data.item.substring(0, 60)}${data.item.length > 60 ? "..." : ""}`;
-        itemsProcessed.textContent = data.current.toString();
-
-        if (data.estimatedTimeRemaining) {
-            estimatedTime.textContent = this.formatTime(
-                data.estimatedTimeRemaining,
-            );
-        }
-
-        if (data.itemsPerSecond) {
-            importSpeed.textContent = data.itemsPerSecond.toFixed(1);
-        }
     }
 
     private async completeImport(itemCount: number) {
@@ -1001,20 +956,6 @@ class WebsiteLibraryPanel {
 
     private generateImportId(): string {
         return `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    private formatTime(seconds: number): string {
-        if (seconds < 60) {
-            return `${Math.round(seconds)}s`;
-        } else if (seconds < 3600) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.round(seconds % 60);
-            return `${minutes}m ${remainingSeconds}s`;
-        } else {
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.round((seconds % 3600) / 60);
-            return `${hours}h ${minutes}m`;
-        }
     }
 
     private showNotification(
