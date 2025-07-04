@@ -468,8 +468,11 @@ async function handleImportWebsiteDataWithProgress(message: any) {
 async function handleGetWebsiteLibraryStats() {
     try {
         const result = await sendActionToAgent({
-            actionName: "getKnowledgeIndexStats",
-            parameters: {},
+            actionName: "getWebsiteStats",
+            parameters: {
+                groupBy: "source",
+                limit: 50
+            },
         });
 
         if (result.error) {
@@ -480,7 +483,7 @@ async function handleGetWebsiteLibraryStats() {
         }
 
         // Parse the stats from the result text
-        const stats = parseWebsiteStatsFromText(result.text || "");
+        const stats = parseWebsiteStatsFromText(result.literalText || result.text|| result.result || "");
 
         return {
             success: true,
@@ -687,12 +690,15 @@ async function handleGetSuggestedSearches() {
     try {
         // Get website stats to generate suggestions
         const statsResult = await sendActionToAgent({
-            actionName: "getKnowledgeIndexStats",
-            parameters: {},
+            actionName: "getWebsiteStats",
+            parameters: {
+                groupBy: "domain",
+                limit: 20
+            },
         });
 
         const suggestions = generateSuggestionsFromStats(
-            statsResult.text || "",
+            statsResult.literalText || statsResult.text || statsResult.result || "",
         );
 
         return {
