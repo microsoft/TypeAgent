@@ -881,7 +881,7 @@ class WebsiteLibraryPanel {
         container.innerHTML = suggestions
             .map(
                 (suggestion) => `
-            <div class="suggestion-item" onclick="libraryPanel.selectSuggestion('${suggestion.replace(/'/g, "\\'")}')">
+             <div class="suggestion-item" onclick="libraryPanel.selectSuggestion('${suggestion.replace(/'/g, "\\'")}')">
                 ${suggestion}
             </div>
         `,
@@ -927,6 +927,12 @@ class WebsiteLibraryPanel {
         if (relevance > 0) filters.minRelevance = relevance / 100;
 
         return filters;
+    }
+
+    private escapeHTML(input: string): string {
+        const div = document.createElement("div");
+        div.textContent = input;
+        return div.innerHTML;
     }
 
     private async renderSearchResults(results: SearchResult) {
@@ -976,12 +982,13 @@ class WebsiteLibraryPanel {
 
     private renderResultsSummary(results: SearchResult) {
         const summaryContainer = document.getElementById("resultsSummary")!;
+        const escapedQuery = this.escapeHTML(results.query);
 
         summaryContainer.innerHTML = `
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <strong>${results.summary.totalFound}</strong> results found for 
-                    <em>"${results.query}"</em>
+                    <em>"${escapedQuery}"</em>
                 </div>
                 <small class="text-muted">
                     Search completed in ${results.summary.searchTime}ms
@@ -1078,7 +1085,7 @@ class WebsiteLibraryPanel {
                                 ${
                                     site.knowledge?.status === "none"
                                         ? `
-                                <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
+                                <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/['\\]/g, (match) => (match === "'" ? "\\'" : "\\\\"))}')">
                                     <i class="bi bi-lightbulb"></i> Extract
                                 </button>`
                                         : ""
@@ -1123,7 +1130,7 @@ class WebsiteLibraryPanel {
                                         ${
                                             site.knowledge?.status === "none"
                                                 ? `
-                                        <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/'/g, "\\'")}')">
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="libraryPanel.extractKnowledgeForWebsite('${site.url}', '${(site.title || site.url).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')">
                                             <i class="bi bi-lightbulb"></i>
                                         </button>`
                                                 : ""
@@ -1269,7 +1276,7 @@ class WebsiteLibraryPanel {
             .slice(0, 5)
             .map(
                 (search) => `
-            <span class="recent-search-tag" onclick="libraryPanel.selectRecentSearch('${search.replace(/'/g, "\\'")}')">
+            <span class="recent-search-tag" onclick="libraryPanel.selectRecentSearch('${search.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')">
                 ${search}
             </span>
         `,
@@ -1495,7 +1502,7 @@ class WebsiteLibraryPanel {
             .slice(0, 3)
             .map(
                 (suggestion) => `
-            <div class="suggested-search-item" onclick="libraryPanel.selectSuggestedSearch('${suggestion.query.replace(/'/g, "\\'")}')">
+            <div class="suggested-search-item" onclick="libraryPanel.selectSuggestedSearch('${suggestion.query.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')">
                 <div class="fw-semibold">${suggestion.query}</div>
                 <div class="small text-muted">${suggestion.description}</div>
                 <div class="small text-muted">${suggestion.estimatedResults} results</div>
