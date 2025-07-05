@@ -277,6 +277,88 @@ export class FileManager {
     }
 
     /**
+     * Save domain configuration
+     */
+    async saveDomainConfig(domain: string, config: any): Promise<void> {
+        const configPath = this.getDomainConfigPath(domain);
+        const domainDir = `domains/${this.sanitizeFilename(domain)}`;
+        
+        // Ensure domain directory exists
+        await this.createDirectory(domainDir);
+        
+        // Save configuration
+        await this.writeJson(configPath, config);
+    }
+
+    /**
+     * Load domain configuration
+     */
+    async loadDomainConfig(domain: string): Promise<any | null> {
+        const configPath = this.getDomainConfigPath(domain);
+        return await this.readJson(configPath);
+    }
+
+    /**
+     * Get all configured domains
+     */
+    async getAllDomains(): Promise<string[]> {
+        try {
+            const domainsDir = `domains`;
+            const domainDirs = await this.listFiles(domainsDir);
+            
+            // Filter out .keep files and extract domain names
+            const domains: string[] = [];
+            for (const dir of domainDirs) {
+                if (!dir.includes('.keep')) {
+                    // Check if config file exists
+                    const configPath = `${domainsDir}/${dir}/config.json`;
+                    const exists = await this.exists(configPath);
+                    if (exists) {
+                        domains.push(dir);
+                    }
+                }
+            }
+            
+            return domains;
+        } catch (error) {
+            console.error("Failed to get all domains:", error);
+            return [];
+        }
+    }
+
+    /**
+     * Delete domain configuration and all related files
+     */
+    async deleteDomainConfig(domain: string): Promise<void> {
+        const sanitizedDomain = this.sanitizeFilename(domain);
+        const domainDir = `domains/${sanitizedDomain}`;
+        
+        try {
+            // List all files in domain directory
+            const files = await this.listFiles(domainDir);
+            
+            // Delete all files
+            for (const file of files) {
+                await this.delete(`${domainDir}/${file}`);
+            }
+            
+            // Delete the directory marker
+            await this.delete(`${domainDir}/.keep`);
+        } catch (error) {
+            console.error(`Failed to delete domain config for ${domain}:`, error);
+            throw new Error(`Failed to delete domain configuration: ${domain}`);
+        }
+    }
+
+    /**
+     * Check if domain has configuration
+     */
+    async hasDomainConfig(domain: string): Promise<boolean> {
+        const configPath = this.getDomainConfigPath(domain);
+        return await this.exists(configPath);
+    }
+
+    /**
      * Backup storage to a compressed format
      */
     async createBackup(): Promise<string> {

@@ -3,33 +3,43 @@
 
 import { FileManager } from "./fileManager.mjs";
 import { ActionValidator, ActionIndexManager } from "./validator.mjs";
+import { PatternResolver } from "./patternResolver.mjs";
+import { DomainManager } from "./domainManager.mjs";
 import { 
     StoredAction, 
     ActionIndex,
     StoreStatistics,
     SaveResult,
-    ValidationResult
+    ValidationResult,
+    DomainConfig,
+    UrlPatternDefinition,
+    UrlPattern
 } from "./types.mjs";
 
 /**
- * ActionsStore - Phase 1 implementation with basic CRUD operations
+ * ActionsStore - Core storage system with URL pattern matching
  * 
  * This is the core storage system for actions, providing:
  * - File-based storage using agent sessionStorage
  * - Action validation and sanitization
  * - Fast lookup through indexing
- * - Basic CRUD operations
+ * - URL pattern matching and domain configuration
+ * - CRUD operations for actions and domain configs
  */
 export class ActionsStore {
     private fileManager: FileManager;
     private validator: ActionValidator;
     private indexManager: ActionIndexManager;
+    private patternResolver: PatternResolver;
+    private domainManager: DomainManager;
     private initialized: boolean = false;
 
     constructor(sessionStorage: any) {
         this.fileManager = new FileManager(sessionStorage);
         this.validator = new ActionValidator();
         this.indexManager = new ActionIndexManager();
+        this.patternResolver = new PatternResolver();
+        this.domainManager = new DomainManager(this.fileManager);
     }
 
     /**
@@ -257,34 +267,23 @@ export class ActionsStore {
     }
 
     /**
-     * Get actions for a specific URL (Phase 1: basic implementation)
-     * Phase 2 will add pattern matching
+     * Get actions for a specific URL using pattern matching
      */
     async getActionsForUrl(url: string): Promise<StoredAction[]> {
         this.ensureInitialized();
 
         try {
-            const parsedUrl = new URL(url);
-            const domain = parsedUrl.hostname;
+            // Use pattern resolver for enhanced URL matching
+            const resolvedActions = await this.patternResolver.resolveActionsForUrl(
+                url,
+                (id: string) => this.getAction(id),
+                () => this.getAllUrlPatterns(),
+                (domain: string) => this.indexManager.getActionsForDomain(domain),
+                () => this.indexManager.getActionsByScope('global')
+            );
 
-            // Get actions for this domain and global actions
-            const domainEntries = this.indexManager.getActionsForDomain(domain);
-            const actions: StoredAction[] = [];
-
-            for (const entry of domainEntries) {
-                const action = await this.getAction(entry.id);
-                if (action) {
-                    actions.push(action);
-                }
-            }
-
-            // Sort by priority (higher priority first) and usage count
-            return actions.sort((a, b) => {
-                if (a.scope.priority !== b.scope.priority) {
-                    return b.scope.priority - a.scope.priority;
-                }
-                return b.metadata.usageCount - a.metadata.usageCount;
-            });
+            // Extract just the actions from resolved results
+            return resolvedActions.map(resolved => resolved.action);
 
         } catch (error) {
             console.error(`Failed to get actions for URL ${url}:`, error);
@@ -444,6 +443,124 @@ export class ActionsStore {
             console.error("Failed to create backup:", error);
             throw new Error("Backup creation failed");
         }
+    }
+
+    // Domain Configuration Methods
+
+    /**
+     * Get domain configuration
+     */
+    async getDomainConfig(domain: string): Promise<DomainConfig | null> {
+        this.ensureInitialized();
+        return await this.domainManager.getDomainConfig(domain);
+    }
+
+    /**
+     * Save domain configuration
+     */
+    async saveDomainConfig(config: DomainConfig): Promise<SaveResult> {
+        this.ensureInitialized();
+        return await this.domainManager.saveDomainConfig(config);
+    }
+
+    /**
+     * Delete domain configuration
+     */
+    async deleteDomainConfig(domain: string): Promise<SaveResult> {
+        this.ensureInitialized();
+        return await this.domainManager.deleteDomainConfig(domain);
+    }
+
+    /**
+     * Add URL pattern to domain
+     */
+    async addDomainPattern(domain: string, pattern: UrlPatternDefinition): Promise<SaveResult> {
+        this.ensureInitialized();
+        return await this.domainManager.addUrlPattern(domain, pattern);
+    }
+
+    /**
+     * Remove URL pattern from domain
+     */
+    async removeDomainPattern(domain: string, patternName: string): Promise<SaveResult> {
+        this.ensureInitialized();
+        return await this.domainManager.removeUrlPattern(domain, patternName);
+    }
+
+    /**
+     * Get URL patterns for domain
+     */
+    async getUrlPatterns(domain: string): Promise<UrlPatternDefinition[]> {
+        this.ensureInitialized();
+        return await this.domainManager.getUrlPatterns(domain);
+    }
+
+    /**
+     * Get actions for a specific pattern
+     */
+    async getActionsForPattern(domain: string, pattern: string): Promise<StoredAction[]> {
+        this.ensureInitialized();
+
+        try {
+            // For now, return actions that match the domain
+            // This could be enhanced to match specific patterns
+            return await this.getActionsForDomain(domain);
+        } catch (error) {
+            console.error(`Failed to get actions for pattern ${pattern} in domain ${domain}:`, error);
+            return [];
+        }
+    }
+
+    /**
+     * Get all URL patterns from all domains
+     */
+    async getAllUrlPatterns(): Promise<UrlPattern[]> {
+        this.ensureInitialized();
+
+        try {
+            const allDomains = await this.domainManager.getAllDomains();
+            const allPatterns: UrlPattern[] = [];
+
+            for (const domain of allDomains) {
+                const domainPatterns = await this.domainManager.getUrlPatterns(domain);
+                const urlPatterns = domainPatterns.map((dp: UrlPatternDefinition) => ({
+                    pattern: dp.pattern,
+                    type: dp.type,
+                    priority: dp.priority,
+                    description: dp.description
+                } as UrlPattern));
+                allPatterns.push(...urlPatterns);
+            }
+
+            return allPatterns;
+        } catch (error) {
+            console.error("Failed to get all URL patterns:", error);
+            return [];
+        }
+    }
+
+    /**
+     * Initialize domain with default configuration
+     */
+    async initializeDomain(domain: string): Promise<DomainConfig> {
+        this.ensureInitialized();
+        return await this.domainManager.initializeDomain(domain);
+    }
+
+    /**
+     * Analyze website and suggest domain configuration
+     */
+    async analyzeWebsite(url: string): Promise<any> {
+        this.ensureInitialized();
+        return await this.domainManager.analyzeWebsite(url);
+    }
+
+    /**
+     * Get all configured domains
+     */
+    async getAllDomains(): Promise<string[]> {
+        this.ensureInitialized();
+        return await this.domainManager.getAllDomains();
     }
 
     /**

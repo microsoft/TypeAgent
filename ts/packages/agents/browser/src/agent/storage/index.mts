@@ -20,6 +20,11 @@ export { FileManager } from "./fileManager.mjs";
 export { ActionValidator, ActionIndexManager } from "./validator.mjs";
 export { StorageCompatibilityAdapter } from "./compatibilityAdapter.mjs";
 
+// Pattern matching and domain management
+export { UrlMatcher } from "./urlMatcher.mjs";
+export { PatternResolver } from "./patternResolver.mjs";
+export { DomainManager } from "./domainManager.mjs";
+
 // Type definitions
 export * from "./types.mjs";
 

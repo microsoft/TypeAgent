@@ -59,8 +59,7 @@ export class StorageCompatibilityAdapter {
      */
     async setStoredPageProperty(url: string, key: string, value: any): Promise<void> {
         try {
-            // For Phase 1, we'll handle the properties individually
-            // Phase 2+ will consolidate these into proper action updates
+            // Handle the properties individually based on their type
             
             switch (key) {
                 case "detectedActions":

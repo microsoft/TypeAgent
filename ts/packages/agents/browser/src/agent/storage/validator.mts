@@ -517,7 +517,7 @@ export class ActionIndexManager {
             actionsByCategory,
             actionsByAuthor,
             totalDomains: domains.size,
-            totalPatterns: 0, // Will be implemented in Phase 2
+            totalPatterns: 0, // Updated by domain manager when needed
             usage: {
                 totalUsage,
                 averageUsage,

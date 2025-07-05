@@ -215,6 +215,8 @@ export interface DomainMetadata {
   version?: string;                     // Site version if detectable
   lastAnalyzed: string;                 // Last analysis timestamp
   analysisData?: any;                   // Raw analysis data
+  createdAt: string;                    // Domain config creation timestamp
+  updatedAt: string;                    // Last update timestamp
 }
 
 export type SiteType = 
