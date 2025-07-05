@@ -3,7 +3,6 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "../actionHandler.mjs";
-import * as kp from "knowpro";
 import * as website from "website-memory";
 
 export interface RelationshipResult {
@@ -130,86 +129,38 @@ export class RelationshipDiscovery {
         const relationships: CrossPageRelationship[] = [];
 
         try {
-            // Use DataFrames to query visit frequency for same domain (if available)
-            if (websiteCollection.visitFrequency && 'query' in websiteCollection.visitFrequency) {
-                const domainQuery = `
-                    SELECT sourceRef, visitCount, lastVisitDate, domain
-                    FROM visitFrequency 
-                    WHERE domain = ? AND sourceRef != ?
-                    ORDER BY visitCount DESC, lastVisitDate DESC
-                    LIMIT ?
-                `;
+            // Simple domain matching using website collection
+            const websites = websiteCollection.messages.getAll();
+            for (const website of websites.slice(0, maxResults * 2)) {
+                const websiteUrl = website.metadata.url;
+                const websiteDomain = this.extractDomain(websiteUrl);
                 
-                const domainData = await (websiteCollection.visitFrequency as any).query(
-                    domainQuery, 
-                    [currentDomain, currentUrl, maxResults]
-                );
+                if (websiteDomain === currentDomain && websiteUrl !== currentUrl) {
+                    relatedPages.push({
+                        url: websiteUrl,
+                        title: website.metadata.title || websiteUrl,
+                        similarity: this.calculateDomainSimilarity(currentUrl, websiteUrl),
+                        relationshipType: "same-domain",
+                        sharedElements: [currentDomain],
+                        visitInfo: {
+                            visitCount: 1,
+                            lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
+                            source: this.mapWebsiteSource(website.metadata.websiteSource)
+                        }
+                    });
 
-                for (const row of domainData) {
-                    // Get the actual website object for this sourceRef
-                    const websites = websiteCollection.messages.getAll();
-                    const website = websites.find((site: any) => 
-                        site.metadata.url === row.sourceRef || 
-                        site.metadata.sourceRef === row.sourceRef
-                    );
-
-                    if (website) {
-                        relatedPages.push({
-                            url: website.metadata.url,
-                            title: website.metadata.title || website.metadata.url,
-                            similarity: this.calculateDomainSimilarity(currentUrl, website.metadata.url),
-                            relationshipType: "same-domain",
-                            sharedElements: [currentDomain],
-                            visitInfo: {
-                                visitCount: row.visitCount || 1,
-                                lastVisited: row.lastVisitDate || website.metadata.visitDate,
-                                source: this.mapWebsiteSource(website.metadata.websiteSource)
-                            }
-                        });
-
-                        relationships.push({
-                            sourceUrl: currentUrl,
-                            targetUrl: website.metadata.url,
-                            relationshipType: "same-domain",
-                            strength: 0.8,
-                            sharedEntities: [],
-                            sharedTopics: [],
-                            description: `Both pages are from ${currentDomain}`
-                        });
-                    }
+                    relationships.push({
+                        sourceUrl: currentUrl,
+                        targetUrl: websiteUrl,
+                        relationshipType: "same-domain",
+                        strength: 0.8,
+                        sharedEntities: [],
+                        sharedTopics: [],
+                        description: `Both pages are from ${currentDomain}`
+                    });
                 }
-            } else {
-                // Fallback: simple domain matching without DataFrames
-                const websites = websiteCollection.messages.getAll();
-                for (const website of websites.slice(0, maxResults)) {
-                    const websiteUrl = website.metadata.url;
-                    const websiteDomain = this.extractDomain(websiteUrl);
-                    
-                    if (websiteDomain === currentDomain && websiteUrl !== currentUrl) {
-                        relatedPages.push({
-                            url: websiteUrl,
-                            title: website.metadata.title || websiteUrl,
-                            similarity: this.calculateDomainSimilarity(currentUrl, websiteUrl),
-                            relationshipType: "same-domain",
-                            sharedElements: [currentDomain],
-                            visitInfo: {
-                                visitCount: 1,
-                                lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
-                                source: this.mapWebsiteSource(website.metadata.websiteSource)
-                            }
-                        });
-
-                        relationships.push({
-                            sourceUrl: currentUrl,
-                            targetUrl: websiteUrl,
-                            relationshipType: "same-domain",
-                            strength: 0.8,
-                            sharedEntities: [],
-                            sharedTopics: [],
-                            description: `Both pages are from ${currentDomain}`
-                        });
-                    }
-                }
+                
+                if (relatedPages.length >= maxResults) break;
             }
         } catch (error) {
             console.warn("Error querying domain relationships:", error);
@@ -236,77 +187,44 @@ export class RelationshipDiscovery {
         const relationships: CrossPageRelationship[] = [];
 
         try {
-            // Use KnowPro to find semantically similar content
-            for (const topic of topics.slice(0, 3)) { // Limit to top 3 topics
-                const searchResults = await kp.searchConversationKnowledge(
-                    websiteCollection,
-                    {
-                        booleanOp: "and",
-                        terms: [{ term: { text: topic } }],
-                    },
-                    {},
-                    {
-                        exactMatch: false
-                    }
-                );
-
-                if (searchResults && searchResults.size > 0) {
-                    const processedMessages = new Set<number>();
-                    let resultsFound = 0;
-                    
-                    searchResults.forEach((match: any) => {
-                        if (resultsFound >= Math.ceil(maxResults / topics.length)) return;
+            // Use simple topic matching for now
+            const websites = websiteCollection.messages.getAll();
+            for (const website of websites) {
+                if (website.metadata.url !== currentUrl) {
+                    const knowledge = website.getKnowledge();
+                    if (knowledge && knowledge.topics) {
+                        const sharedTopics = this.findSharedTopics(topics, knowledge.topics || []);
                         
-                        match.semanticRefMatches?.forEach((refMatch: any) => {
-                            if (resultsFound >= Math.ceil(maxResults / topics.length)) return;
-                            if (refMatch.score >= 0.3) {
-                                const semanticRef = websiteCollection.semanticRefs?.get(refMatch.semanticRefOrdinal);
-                                if (semanticRef) {
-                                    const messageOrdinal = semanticRef.range.start.messageOrdinal;
-                                    if (messageOrdinal !== undefined && !processedMessages.has(messageOrdinal)) {
-                                        processedMessages.add(messageOrdinal);
-                                        
-                                        const website = websiteCollection.messages.get(messageOrdinal);
-                                        if (website && website.metadata && website.metadata.url !== currentUrl) {
-                                            const knowledge = website.getKnowledge();
-                                            if (knowledge && knowledge.topics) {
-                                                const sharedTopics = this.findSharedTopics(topics, knowledge.topics || []);
-                                            
-                                            if (sharedTopics.length > 0) {
-                                                const similarity = this.calculateTopicSimilarity(topics, knowledge.topics || []);
-                                                
-                                                relatedPages.push({
-                                                    url: website.metadata.url,
-                                                    title: website.metadata.title || website.metadata.url,
-                                                    similarity,
-                                                    relationshipType: "topic-match",
-                                                    sharedElements: sharedTopics,
-                                                    visitInfo: {
-                                                        visitCount: 1,
-                                                        lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
-                                                        source: this.mapWebsiteSource(website.metadata.websiteSource)
-                                                    }
-                                                });
-
-                                                relationships.push({
-                                                    sourceUrl: currentUrl,
-                                                    targetUrl: website.metadata.url,
-                                                    relationshipType: "topic-similarity",
-                                                    strength: similarity,
-                                                    sharedEntities: [],
-                                                    sharedTopics,
-                                                    description: `Shared topics: ${sharedTopics.join(", ")}`
-                                                });
-                                                
-                                                resultsFound++;
-                                            }
-                                        }
-                                    }
+                        if (sharedTopics.length > 0) {
+                            const similarity = this.calculateTopicSimilarity(topics, knowledge.topics || []);
+                            
+                            relatedPages.push({
+                                url: website.metadata.url,
+                                title: website.metadata.title || website.metadata.url,
+                                similarity,
+                                relationshipType: "topic-match",
+                                sharedElements: sharedTopics,
+                                visitInfo: {
+                                    visitCount: 1,
+                                    lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
+                                    source: this.mapWebsiteSource(website.metadata.websiteSource)
                                 }
-                            }
-                        });
-                    });
+                            });
+
+                            relationships.push({
+                                sourceUrl: currentUrl,
+                                targetUrl: website.metadata.url,
+                                relationshipType: "topic-similarity",
+                                strength: similarity,
+                                sharedEntities: [],
+                                sharedTopics,
+                                description: `Shared topics: ${sharedTopics.join(", ")}`
+                            });
+                        }
+                    }
                 }
+                
+                if (relatedPages.length >= maxResults) break;
             }
         } catch (error) {
             console.warn("Error finding topic relationships:", error);
@@ -337,82 +255,47 @@ export class RelationshipDiscovery {
         const relationships: CrossPageRelationship[] = [];
 
         try {
-            // Search for pages containing similar entities
-            const entityNames = entities.map(e => e.name).slice(0, 5); // Top 5 entities
-            
-            for (const entityName of entityNames) {
-                const searchResults = await kp.searchConversationKnowledge(
-                    websiteCollection,
-                    {
-                        booleanOp: "and",
-                        terms: [{ term: { text: entityName } }],
-                    },
-                    {},
-                    {
-                        exactMatch: false
-                    }
-                );
-
-                if (searchResults && searchResults.size > 0) {
-                    const processedMessages = new Set<number>();
-                    let resultsFound = 0;
-                    
-                    searchResults.forEach((match: any) => {
-                        if (resultsFound >= Math.ceil(maxResults / entityNames.length)) return;
+            // Simple entity matching
+            const websites = websiteCollection.messages.getAll();
+            for (const website of websites) {
+                if (website.metadata.url !== currentUrl) {
+                    const knowledge = website.getKnowledge();
+                    if (knowledge && knowledge.entities) {
+                        const sharedEntities = this.findSharedEntities(
+                            entities,
+                            knowledge.entities || []
+                        );
                         
-                        match.semanticRefMatches?.forEach((refMatch: any) => {
-                            if (resultsFound >= Math.ceil(maxResults / entityNames.length)) return;
-                            if (refMatch.score >= 0.3) {
-                                const semanticRef = websiteCollection.semanticRefs?.get(refMatch.semanticRefOrdinal);
-                                if (semanticRef) {
-                                    const messageOrdinal = semanticRef.range.start.messageOrdinal;
-                                    if (messageOrdinal !== undefined && !processedMessages.has(messageOrdinal)) {
-                                        processedMessages.add(messageOrdinal);
-                                        
-                                        const website = websiteCollection.messages.get(messageOrdinal);
-                                        if (website && website.metadata && website.metadata.url !== currentUrl) {
-                                            const knowledge = website.getKnowledge();
-                                            if (knowledge && knowledge.entities) {
-                                                const sharedEntities = this.findSharedEntities(
-                                                entities,
-                                                knowledge.entities || []
-                                            );
-                                            
-                                            if (sharedEntities.length > 0) {
-                                                const similarity = this.calculateEntitySimilarity(entities, knowledge.entities || []);
-                                                
-                                                relatedPages.push({
-                                                    url: website.metadata.url,
-                                                    title: website.metadata.title || website.metadata.url,
-                                                    similarity,
-                                                    relationshipType: "entity-overlap",
-                                                    sharedElements: sharedEntities,
-                                                    visitInfo: {
-                                                        visitCount: 1,
-                                                        lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
-                                                        source: this.mapWebsiteSource(website.metadata.websiteSource)
-                                                    }
-                                                });
-
-                                                relationships.push({
-                                                    sourceUrl: currentUrl,
-                                                    targetUrl: website.metadata.url,
-                                                    relationshipType: "entity-overlap",
-                                                    strength: similarity,
-                                                    sharedEntities,
-                                                    sharedTopics: [],
-                                                    description: `Shared entities: ${sharedEntities.join(", ")}`
-                                                });
-                                                
-                                                resultsFound++;
-                                            }
-                                        }
-                                    }
+                        if (sharedEntities.length > 0) {
+                            const similarity = this.calculateEntitySimilarity(entities, knowledge.entities || []);
+                            
+                            relatedPages.push({
+                                url: website.metadata.url,
+                                title: website.metadata.title || website.metadata.url,
+                                similarity,
+                                relationshipType: "entity-overlap",
+                                sharedElements: sharedEntities,
+                                visitInfo: {
+                                    visitCount: 1,
+                                    lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
+                                    source: this.mapWebsiteSource(website.metadata.websiteSource)
                                 }
-                            }
-                        });
-                    });
+                            });
+
+                            relationships.push({
+                                sourceUrl: currentUrl,
+                                targetUrl: website.metadata.url,
+                                relationshipType: "entity-overlap",
+                                strength: similarity,
+                                sharedEntities,
+                                sharedTopics: [],
+                                description: `Shared entities: ${sharedEntities.join(", ")}`
+                            });
+                        }
+                    }
                 }
+                
+                if (relatedPages.length >= maxResults) break;
             }
         } catch (error) {
             console.warn("Error finding entity relationships:", error);
@@ -441,76 +324,42 @@ export class RelationshipDiscovery {
         const relationships: CrossPageRelationship[] = [];
 
         try {
-            // Search for other pages with code content
-            const technicalTerms = ["code", "API", "function", "class", "method", "tutorial", "documentation"];
-            
-            const searchResults = await kp.searchConversationKnowledge(
-                websiteCollection,
-                {
-                    booleanOp: "or",
-                    terms: technicalTerms.map(term => ({ term: { text: term } })),
-                },
-                {},
-                {
-                    exactMatch: false
-                }
-            );
-
-            if (searchResults && searchResults.size > 0) {
-                const processedMessages = new Set<number>();
-                let resultsFound = 0;
-                
-                searchResults.forEach((match: any) => {
-                    if (resultsFound >= maxResults * 2) return; // Get more to filter
+            // Simple technical content matching
+            const websites = websiteCollection.messages.getAll();
+            for (const website of websites) {
+                if (website.metadata.url !== currentUrl) {
+                    const knowledge = website.getKnowledge();
                     
-                    match.semanticRefMatches?.forEach((refMatch: any) => {
-                        if (resultsFound >= maxResults * 2) return;
-                        if (refMatch.score >= 0.3) {
-                            const semanticRef = websiteCollection.semanticRefs?.get(refMatch.semanticRefOrdinal);
-                            if (semanticRef) {
-                                const messageOrdinal = semanticRef.range.start.messageOrdinal;
-                                if (messageOrdinal !== undefined && !processedMessages.has(messageOrdinal)) {
-                                    processedMessages.add(messageOrdinal);
-                                    
-                                    const website = websiteCollection.messages.get(messageOrdinal);
-                                    if (website && website.metadata && website.metadata.url !== currentUrl) {
-                                        const knowledge = website.getKnowledge();
-                                        
-                                        // Check if this page likely has technical content
-                                        const hasTechnicalContent = this.assessTechnicalContent(knowledge, website);
-                                        
-                                        if (hasTechnicalContent.score > 0.3) {
-                                            relatedPages.push({
-                                                url: website.metadata.url,
-                                                title: website.metadata.title || website.metadata.url,
-                                                similarity: hasTechnicalContent.score,
-                                                relationshipType: "technical-similarity",
-                                                sharedElements: hasTechnicalContent.indicators,
-                                                visitInfo: {
-                                                    visitCount: 1,
-                                                    lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
-                                                    source: this.mapWebsiteSource(website.metadata.websiteSource)
-                                                }
-                                            });
-
-                                            relationships.push({
-                                                sourceUrl: currentUrl,
-                                                targetUrl: website.metadata.url,
-                                                relationshipType: "technical-similarity",
-                                                strength: hasTechnicalContent.score,
-                                                sharedEntities: [],
-                                                sharedTopics: [],
-                                                description: `Both contain technical content: ${hasTechnicalContent.indicators.join(", ")}`
-                                            });
-                                            
-                                            resultsFound++;
-                                        }
-                                    }
-                                }
+                    // Check if this page likely has technical content
+                    const hasTechnicalContent = this.assessTechnicalContent(knowledge, website);
+                    
+                    if (hasTechnicalContent.score > 0.3) {
+                        relatedPages.push({
+                            url: website.metadata.url,
+                            title: website.metadata.title || website.metadata.url,
+                            similarity: hasTechnicalContent.score,
+                            relationshipType: "technical-similarity",
+                            sharedElements: hasTechnicalContent.indicators,
+                            visitInfo: {
+                                visitCount: 1,
+                                lastVisited: website.metadata.visitDate || website.metadata.bookmarkDate || new Date().toISOString(),
+                                source: this.mapWebsiteSource(website.metadata.websiteSource)
                             }
-                        }
-                    });
-                });
+                        });
+
+                        relationships.push({
+                            sourceUrl: currentUrl,
+                            targetUrl: website.metadata.url,
+                            relationshipType: "technical-similarity",
+                            strength: hasTechnicalContent.score,
+                            sharedEntities: [],
+                            sharedTopics: [],
+                            description: `Both contain technical content: ${hasTechnicalContent.indicators.join(", ")}`
+                        });
+                    }
+                }
+                
+                if (relatedPages.length >= maxResults) break;
             }
         } catch (error) {
             console.warn("Error finding technical relationships:", error);
@@ -539,51 +388,37 @@ export class RelationshipDiscovery {
         const relationships: CrossPageRelationship[] = [];
 
         try {
-            // Find pages visited recently or in sequence
-            if (websiteCollection.visitFrequency && 'query' in websiteCollection.visitFrequency) {
-                const now = new Date();
-                const recentThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
+            // Simple recent date filtering
+            const websites = websiteCollection.messages.getAll();
+            const now = new Date();
+            const recentThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            
+            for (const website of websites) {
+                const websiteUrl = website.metadata.url;
+                const visitDate = website.metadata.visitDate || website.metadata.bookmarkDate;
                 
-                const recentQuery = `
-                    SELECT sourceRef, visitCount, lastVisitDate, domain
-                    FROM visitFrequency 
-                    WHERE lastVisitDate > ? AND sourceRef != ?
-                    ORDER BY lastVisitDate DESC
-                    LIMIT ?
-                `;
-                
-                const recentData = await (websiteCollection.visitFrequency as any).query(
-                    recentQuery, 
-                    [recentThreshold.toISOString(), currentUrl, maxResults]
-                );
-
-                for (const row of recentData) {
-                    const websites = websiteCollection.messages.getAll();
-                    const website = websites.find((site: any) => 
-                        site.metadata.url === row.sourceRef || 
-                        site.metadata.sourceRef === row.sourceRef
-                    );
-
-                    if (website) {
-                        const daysDiff = this.calculateDaysDifference(row.lastVisitDate, now.toISOString());
-                        const temporalScore = Math.max(0, 1 - (daysDiff / 7)); // Decay over 7 days
+                if (websiteUrl !== currentUrl && visitDate) {
+                    const websiteDate = new Date(visitDate);
+                    if (websiteDate > recentThreshold) {
+                        const daysDiff = this.calculateDaysDifference(visitDate, now.toISOString());
+                        const temporalScore = Math.max(0, 1 - (daysDiff / 7));
                         
                         relatedPages.push({
-                            url: website.metadata.url,
-                            title: website.metadata.title || website.metadata.url,
+                            url: websiteUrl,
+                            title: website.metadata.title || websiteUrl,
                             similarity: temporalScore,
                             relationshipType: "temporal-sequence",
                             sharedElements: [`Visited ${daysDiff} days ago`],
                             visitInfo: {
-                                visitCount: row.visitCount || 1,
-                                lastVisited: row.lastVisitDate,
+                                visitCount: 1,
+                                lastVisited: visitDate,
                                 source: this.mapWebsiteSource(website.metadata.websiteSource)
                             }
                         });
 
                         relationships.push({
                             sourceUrl: currentUrl,
-                            targetUrl: website.metadata.url,
+                            targetUrl: websiteUrl,
                             relationshipType: "temporal-proximity",
                             strength: temporalScore,
                             sharedEntities: [],
@@ -592,47 +427,8 @@ export class RelationshipDiscovery {
                         });
                     }
                 }
-            } else {
-                // Fallback: simple recent date filtering without DataFrames
-                const websites = websiteCollection.messages.getAll();
-                const now = new Date();
-                const recentThreshold = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
                 
-                for (const website of websites.slice(0, maxResults)) {
-                    const websiteUrl = website.metadata.url;
-                    const visitDate = website.metadata.visitDate || website.metadata.bookmarkDate;
-                    
-                    if (websiteUrl !== currentUrl && visitDate) {
-                        const websiteDate = new Date(visitDate);
-                        if (websiteDate > recentThreshold) {
-                            const daysDiff = this.calculateDaysDifference(visitDate, now.toISOString());
-                            const temporalScore = Math.max(0, 1 - (daysDiff / 7));
-                            
-                            relatedPages.push({
-                                url: websiteUrl,
-                                title: website.metadata.title || websiteUrl,
-                                similarity: temporalScore,
-                                relationshipType: "temporal-sequence",
-                                sharedElements: [`Visited ${daysDiff} days ago`],
-                                visitInfo: {
-                                    visitCount: 1,
-                                    lastVisited: visitDate,
-                                    source: this.mapWebsiteSource(website.metadata.websiteSource)
-                                }
-                            });
-
-                            relationships.push({
-                                sourceUrl: currentUrl,
-                                targetUrl: websiteUrl,
-                                relationshipType: "temporal-proximity",
-                                strength: temporalScore,
-                                sharedEntities: [],
-                                sharedTopics: [],
-                                description: `Recently visited (${daysDiff} days ago)`
-                            });
-                        }
-                    }
-                }
+                if (relatedPages.length >= maxResults) break;
             }
         } catch (error) {
             console.warn("Error finding temporal relationships:", error);
@@ -697,7 +493,7 @@ export class RelationshipDiscovery {
         let score = 0;
 
         // Check for technical terms in topics
-        const technicalTopics = (knowledge.topics || []).filter((topic: string) =>
+        const technicalTopics = (knowledge?.topics || []).filter((topic: string) =>
             /code|api|function|class|method|programming|software|development/i.test(topic)
         );
         if (technicalTopics.length > 0) {
@@ -706,7 +502,7 @@ export class RelationshipDiscovery {
         }
 
         // Check for technical entities
-        const technicalEntities = (knowledge.entities || []).filter((entity: any) =>
+        const technicalEntities = (knowledge?.entities || []).filter((entity: any) =>
             /api|function|class|method|library|framework/i.test(entity.type)
         );
         if (technicalEntities.length > 0) {
