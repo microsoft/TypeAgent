@@ -5,6 +5,9 @@ import { FileManager } from "./fileManager.mjs";
 import { ActionValidator, ActionIndexManager } from "./validator.mjs";
 import { PatternResolver } from "./patternResolver.mjs";
 import { DomainManager } from "./domainManager.mjs";
+import { ActionSearchEngine } from "./searchEngine.mjs";
+import { AnalyticsManager } from "./analyticsManager.mjs";
+import { ImportExportManager } from "./importExportManager.mjs";
 import { 
     StoredAction, 
     ActionIndex,
@@ -13,17 +16,20 @@ import {
     ValidationResult,
     DomainConfig,
     UrlPatternDefinition,
-    UrlPattern
+    UrlPattern,
 } from "./types.mjs";
 
 /**
- * ActionsStore - Core storage system with URL pattern matching
+ * ActionsStore - Advanced storage system with pattern matching, search, and analytics
  * 
- * This is the core storage system for actions, providing:
+ * This is the comprehensive storage system for actions, providing:
  * - File-based storage using agent sessionStorage
  * - Action validation and sanitization
  * - Fast lookup through indexing
  * - URL pattern matching and domain configuration
+ * - Advanced search and filtering capabilities
+ * - Usage analytics and performance tracking
+ * - Import/export and backup functionality
  * - CRUD operations for actions and domain configs
  */
 export class ActionsStore {
@@ -32,6 +38,9 @@ export class ActionsStore {
     private indexManager: ActionIndexManager;
     private patternResolver: PatternResolver;
     private domainManager: DomainManager;
+    private searchEngine: ActionSearchEngine;
+    private analyticsManager: AnalyticsManager;
+    private importExportManager: ImportExportManager;
     private initialized: boolean = false;
 
     constructor(sessionStorage: any) {
@@ -40,10 +49,17 @@ export class ActionsStore {
         this.indexManager = new ActionIndexManager();
         this.patternResolver = new PatternResolver();
         this.domainManager = new DomainManager(this.fileManager);
+        this.searchEngine = new ActionSearchEngine();
+        this.analyticsManager = new AnalyticsManager(this.fileManager);
+        this.importExportManager = new ImportExportManager(this.fileManager, this.validator);
+
+
+        console.log(this.searchEngine)
+        console.log(this.importExportManager)
     }
 
     /**
-     * Initialize the ActionsStore
+     * Initialize the ActionsStore with all components
      */
     async initialize(): Promise<void> {
         if (this.initialized) {
@@ -57,8 +73,11 @@ export class ActionsStore {
             // Load existing action index
             await this.loadActionIndex();
 
+            // Initialize analytics manager
+            await this.analyticsManager.initialize();
+
             this.initialized = true;
-            console.log("ActionsStore initialized successfully");
+            console.log("ActionsStore initialized successfully with enhanced features");
         } catch (error) {
             console.error("Failed to initialize ActionsStore:", error);
             throw new Error("ActionsStore initialization failed");
@@ -546,22 +565,42 @@ export class ActionsStore {
         this.ensureInitialized();
         return await this.domainManager.initializeDomain(domain);
     }
-
-    /**
-     * Analyze website and suggest domain configuration
-     */
-    async analyzeWebsite(url: string): Promise<any> {
-        this.ensureInitialized();
-        return await this.domainManager.analyzeWebsite(url);
+/*
+    private generateOptimizationRecommendations(actions: StoredAction[]): string[] {
+        const recommendations: string[] = [];
+        
+        // Check for unused actions
+        const unusedActions = actions.filter(a => a.metadata.usageCount === 0);
+        if (unusedActions.length > 10) {
+            recommendations.push(`Consider reviewing ${unusedActions.length} unused actions for cleanup`);
+        }
+        
+        // Check for duplicate names
+        const nameMap = new Map<string, number>();
+        for (const action of actions) {
+            nameMap.set(action.name, (nameMap.get(action.name) || 0) + 1);
+        }
+        const duplicateNames = Array.from(nameMap.entries()).filter(([, count]) => count > 1);
+        if (duplicateNames.length > 0) {
+            recommendations.push(`${duplicateNames.length} actions have duplicate names and could be consolidated`);
+        }
+        
+        // Check for untagged actions
+        const untaggedActions = actions.filter(a => a.tags.length === 0);
+        if (untaggedActions.length > actions.length * 0.3) {
+            recommendations.push(`${untaggedActions.length} actions have no tags - consider adding tags for better organization`);
+        }
+        
+        return recommendations;
     }
 
-    /**
-     * Get all configured domains
-     */
-    async getAllDomains(): Promise<string[]> {
-        this.ensureInitialized();
-        return await this.domainManager.getAllDomains();
+    private getDaysSince(dateString: string): number {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - date.getTime());
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     }
+        */
 
     /**
      * Load action index from storage

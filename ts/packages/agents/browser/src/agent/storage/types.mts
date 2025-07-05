@@ -309,3 +309,242 @@ export interface LoadResult<T> {
   data?: T;
   error?: string;
 }
+// Phase 3 Enhanced Types - Search, Analytics, Import/Export
+
+// Search Types
+export interface ActionSearchQuery {
+  text?: string;
+  filters?: ActionFilter;
+  limit?: number;
+  offset?: number;
+  sortBy?: 'relevance' | 'name' | 'usage' | 'created' | 'updated';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface ActionSearchResult {
+  actions: StoredAction[];
+  total: number;
+  hasMore: boolean;
+  searchStats: {
+    searchTime: number;
+    cacheHit: boolean;
+  };
+}
+
+export interface SearchSuggestion {
+  text: string;
+  type: 'action' | 'tag' | 'domain' | 'category';
+  score: number;
+  context?: string;
+}
+
+// Analytics Types
+export interface UsageContext {
+  success: boolean;
+  executionTime?: number;
+  userAgent?: string;
+  url?: string;
+  domain?: string;
+  sessionId?: string;
+}
+
+export interface ActionUsageStats {
+  actionId: string;
+  totalUsage: number;
+  lastUsed: string;
+  usageHistory: Array<{
+    timestamp: string;
+    success: boolean;
+    executionTime?: number;
+    userAgent?: string;
+    url?: string;
+  }>;
+  averageSuccessRate: number;
+  averageExecutionTime: number;
+  popularTimes: Record<number, number>;
+  errorCount: number;
+}
+
+export interface UsageStatistics {
+  totalUsage: number;
+  totalActions: number;
+  averageUsage: number;
+  mostUsedActions: Array<{
+    actionId: string;
+    usageCount: number;
+    lastUsed: string;
+    successRate: number;
+  }>;
+  usageTrends: Array<{
+    date: string;
+    usage: number;
+  }>;
+  performanceMetrics: PerformanceMetrics;
+  domainBreakdown: Array<{
+    domain: string;
+    usage: number;
+    percentage: number;
+  }>;
+  timeRange: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface DomainAnalytics {
+  domain: string;
+  totalUsage: number;
+  uniqueActions: number;
+  averageSuccessRate: number;
+  popularActions: Array<{
+    actionId: string;
+    name: string;
+    usage: number;
+  }>;
+  usageTrends: Array<{
+    date: string;
+    usage: number;
+    successRate: number;
+    averageExecutionTime: number;
+  }>;
+  lastActivity: string;
+}
+
+export interface PerformanceMetrics {
+  timestamp: string;
+  averageSearchTime: number;
+  averageActionExecutionTime: number;
+  cacheHitRate: number;
+  errorRate: number;
+  memoryUsage: number;
+  indexSize: number;
+}
+
+// Enhanced Statistics Types
+export interface EnhancedStoreStatistics extends StoreStatistics {
+  searchStats: {
+    totalSearches: number;
+    averageSearchTime: number;
+    popularQueries: PopularSearch[];
+    searchSuccessRate: number;
+  };
+  tagStats: {
+    totalTags: number;
+    averageTagsPerAction: number;
+    popularTags: TagStatistics[];
+  };
+  performanceStats: PerformanceMetrics;
+  trendsAndInsights: {
+    growthRate: number;
+    usageGrowth: number;
+    topGrowingDomains: string[];
+    recommendedOptimizations: string[];
+  };
+}
+
+// Time Range Types  
+export interface TimeRange {
+  start?: string;
+  end?: string;
+  preset?: 'today' | 'week' | 'month' | 'quarter' | 'year';
+}
+
+// Additional types for Import/Export and filtering
+export interface ActionFilter {
+  categories?: ActionCategory[];
+  authors?: ActionAuthor[];
+  domains?: string[];
+  scopes?: ActionScope['type'][];
+  tags?: string[];
+  minUsage?: number;
+  maxUsage?: number;
+  createdAfter?: string;
+  createdBefore?: string;
+  lastUsedAfter?: string;
+  lastUsedBefore?: string;
+}
+
+export interface ExportResult {
+  success: boolean;
+  data?: string;
+  filename?: string;
+  format: ExportFormat;
+  actionCount: number;
+  exportTime: number;
+  size: number;
+  error?: string;
+}
+
+export interface ImportResult {
+  success: boolean;
+  totalActions: number;
+  imported: number;
+  skipped: number;
+  errors: number;
+  importTime: number;
+  errorDetails: Array<{
+    actionId: string;
+    error: string;
+  }>;
+  error?: string;
+}
+
+export interface ImportPreview {
+  totalActions: number;
+  validActions: number;
+  invalidActions: number;
+  conflicts: number;
+  preview: StoredAction[];
+  validationErrors: Array<{
+    actionId: string;
+    actionName: string;
+    errors: string[];
+  }>;
+  conflictingActions: Array<{
+    id: string;
+    name: string;
+    existingName: string;
+  }>;
+  error?: string;
+}
+
+export interface BackupResult {
+  success: boolean;
+  backupId?: string;
+  filename?: string;
+  data?: string;
+  size: number;
+  actionCount: number;
+  domainCount: number;
+  backupTime: number;
+  error?: string;
+}
+
+export interface RestoreResult {
+  success: boolean;
+  backupId?: string;
+  actionsRestored: number;
+  domainsRestored: number;
+  actionsSkipped: number;
+  domainsSkipped: number;
+  errors: string[];
+  restoreTime: number;
+  error?: string;
+}
+
+export type ExportFormat = 'json' | 'csv';
+
+export interface PopularSearch {
+  query: string;
+  searchCount: number;
+  lastSearched: string;
+  averageResults: number;
+  successRate: number;
+}
+
+export interface TagStatistics {
+  tag: string;
+  count: number;
+  lastUsed?: string;
+  trending: boolean;
+}

@@ -25,6 +25,11 @@ export { UrlMatcher } from "./urlMatcher.mjs";
 export { PatternResolver } from "./patternResolver.mjs";
 export { DomainManager } from "./domainManager.mjs";
 
+// Enhanced features (Phase 3)
+export { ActionSearchEngine } from "./searchEngine.mjs";
+export { AnalyticsManager } from "./analyticsManager.mjs";
+export { ImportExportManager } from "./importExportManager.mjs";
+
 // Type definitions
 export * from "./types.mjs";
 

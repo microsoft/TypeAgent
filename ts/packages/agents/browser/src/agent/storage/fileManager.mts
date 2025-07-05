@@ -57,6 +57,20 @@ export class FileManager {
     }
 
     /**
+     * Write text data to a file
+     */
+    async writeText(filePath: string, data: string): Promise<void> {
+        const fullPath = this.getFullPath(filePath);
+        
+        try {
+            await this.sessionStorage.write(fullPath, data);
+        } catch (error) {
+            console.error(`Failed to write text to ${fullPath}:`, error);
+            throw new Error(`Failed to write file: ${filePath}`);
+        }
+    }
+
+    /**
      * Read JSON data from a file
      */
     async readJson<T>(filePath: string): Promise<T | null> {
