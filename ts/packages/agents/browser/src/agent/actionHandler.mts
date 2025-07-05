@@ -426,31 +426,19 @@ async function getSessionFolderPath(
 ) {
     let sessionDir: string | undefined;
 
+    if (!(await context.sessionStorage?.exists("settings.json"))) {
+            await context.sessionStorage?.write("settings.json", "");
+        }
+
     const existingFiles = await context.sessionStorage?.list("", {
         fullPath: true,
     });
 
     if (existingFiles && existingFiles.length > 0) {
-        // Get parent directory from first file path
         sessionDir = path.dirname(existingFiles[0]);
         debug(`Discovered session directory from existing file: ${sessionDir}`);
-    } else {
-        // No existing files, create a temporary file to discover the path
-        const tempFileName = `temp-path-discovery-${Date.now()}.txt`;
-        await context.sessionStorage?.write(tempFileName, "");
-
-        // Now list files to get the full path
-        const tempFiles = await context.sessionStorage?.list("", {
-            fullPath: true,
-        });
-        if (tempFiles && tempFiles.length > 0) {
-            sessionDir = path.dirname(tempFiles[0]);
-            debug(`Discovered session directory from temp file: ${sessionDir}`);
-
-            // Clean up the temporary file
-            await context.sessionStorage?.delete(tempFileName);
-        }
     }
+    
     return sessionDir;
 }
 
