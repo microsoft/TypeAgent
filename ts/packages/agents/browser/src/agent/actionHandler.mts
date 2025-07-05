@@ -230,7 +230,7 @@ async function updateBrowserContext(
 
         if (!context.agentContext.viewProcess) {
             context.agentContext.viewProcess = await createViewServiceHost(
-                context.agentContext.localHostPort,
+                context
             );
         }
 
@@ -844,8 +844,10 @@ async function handleTabIndexActions(
     return undefined;
 }
 
-export async function createViewServiceHost(port: number) {
+export async function createViewServiceHost(context: SessionContext<BrowserActionContext>) {
     let timeoutHandle: NodeJS.Timeout;
+    const port  = context.agentContext.localHostPort;
+    const sessionDir = await getSessionFolderPath(context);
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
         timeoutHandle = setTimeout(
@@ -863,8 +865,20 @@ export async function createViewServiceHost(port: number) {
                         import.meta.url,
                     ),
                 );
+        
+                const folderPath = path.join(
+                    sessionDir!,
+                    "files",
+                );
 
-                const childProcess = fork(expressService, [port.toString()]);
+                fs.mkdirSync(folderPath, { recursive: true });
+
+                const childProcess = fork(expressService, [port.toString()], {
+                    env: {
+                        ...process.env,
+                        TYPEAGENT_BROWSER_FILES: folderPath,
+                    },
+                });
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {
