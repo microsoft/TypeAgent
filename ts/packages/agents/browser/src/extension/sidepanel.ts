@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { setStoredPageProperty, getStoredPageProperty } from "./storage";
+import { setStoredPageProperty, getStoredPageProperty, getActionsForUrl } from "./storage";
 
 let recording = false;
 let recordedActions: any[] = [];
@@ -623,14 +623,12 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
-            const storedActions = new Map(
-                Object.entries(
-                    (await getStoredPageProperty(launchUrl!, "userActions")) ??
-                        {},
-                ),
-            );
+            // Get user-authored actions from the new ActionsStore
+            const actions = await getActionsForUrl(launchUrl!, {
+                includeGlobal: false,
+                author: "user"
+            });
 
-            const actions = Array.from(storedActions.values());
             countBadge.textContent = actions.length.toString();
 
             if (actions.length > 0) {
@@ -683,20 +681,27 @@ class ActionDiscoveryPanel {
         });
 
         deleteButton?.addEventListener("click", () => {
-            this.deleteAction(action.name);
+            // Use action ID for new storage system, fallback to name for compatibility
+            const actionId = action.id || action.name;
+            this.deleteAction(actionId);
         });
 
         userActionsContainer.appendChild(actionElement);
 
-        if (action.steps) {
+        // Handle both old and new StoredAction formats
+        const steps = action.context?.recordedSteps || action.steps;
+        const screenshots = action.context?.screenshots || action.screenshot;
+        const htmlFragments = action.context?.htmlFragments || action.html;
+        
+        if (steps) {
             const stepsContent = actionElement.querySelector(
                 `#stepsContent${index}`,
             ) as HTMLElement;
             this.renderTimelineSteps(
-                action.steps,
+                steps,
                 stepsContent,
-                action.screenshot,
-                action.html,
+                screenshots,
+                htmlFragments,
                 action.name,
             );
         }
@@ -761,40 +766,30 @@ class ActionDiscoveryPanel {
         return filteredStep;
     }
 
-    private async deleteAction(actionName: string) {
+    private async deleteAction(actionId: string) {
         if (
             !confirm(
-                `Are you sure you want to delete the action "${actionName}"?`,
+                `Are you sure you want to delete this action?`,
             )
         ) {
             return;
         }
 
         try {
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "userActions",
-            );
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "authoredActionDefinitions",
-            );
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "authoredActionsJson",
-            );
-            await this.removeEntryFromStoredPageProperties(
-                actionName,
-                "authoredIntentJson",
-            );
-
-            await this.updateUserActionsUI();
-            await this.registerTempSchema();
-
-            this.showNotification(`Action "${actionName}" deleted`, "success");
+            // TODO: Implement delete action API in the new storage system
+            // For now, show a message that this feature is coming soon
+            alert("Action deletion will be available in a future update. The new storage system needs a delete API endpoint.");
+            
+            // When implemented, this should be:
+            // await chrome.runtime.sendMessage({
+            //     type: "deleteAction",
+            //     actionId: actionId
+            // });
+            
+            // await this.updateUserActionsUI();
         } catch (error) {
             console.error("Error deleting action:", error);
-            this.showNotification("Failed to delete action", "error");
+            alert("Failed to delete action. Please try again.");
         }
     }
 
@@ -1033,6 +1028,10 @@ class ActionDiscoveryPanel {
     }
 
     private createUserActionDetails(action: any, index: number): string {
+        // Adapt to new StoredAction format
+        const intentSchema = action.definition?.intentSchema || action.intentSchema || "No intent schema available";
+        const actionSteps = action.definition?.actionSteps || action.actionsJson || {};
+        
         const tabs = [
             { id: `steps${index}`, label: "Steps", active: true },
             { id: `intent${index}`, label: "Intent" },
@@ -1047,11 +1046,11 @@ class ActionDiscoveryPanel {
             },
             {
                 id: `intent${index}`,
-                content: `<pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>`,
+                content: `<pre><code class="language-typescript">${intentSchema}</code></pre>`,
             },
             {
                 id: `actions${index}`,
-                content: `<pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>`,
+                content: `<pre><code class="language-json">${JSON.stringify(actionSteps, null, 2)}</code></pre>`,
             },
         ];
 
