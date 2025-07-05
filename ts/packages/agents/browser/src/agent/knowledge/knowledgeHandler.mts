@@ -107,7 +107,7 @@ export async function extractKnowledgeFromPage(
     }
 
     try {
-        // Step 1: Use website-memory ContentExtractor for enhanced content analysis
+        // Use website-memory ContentExtractor for enhanced content analysis
         let enhancedContent: any = null;
         
         const extractionMode = parameters.extractionSettings?.mode || "content";
@@ -128,7 +128,7 @@ export async function extractKnowledgeFromPage(
             }
         }
 
-        // Step 2: Create enhanced website object
+        // Create enhanced website object
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
             title: parameters.title,
@@ -146,7 +146,7 @@ export async function extractKnowledgeFromPage(
         );
         const knowledge = websiteObj.getKnowledge();
 
-        // Step 3: Generate smart suggested questions using enhanced content
+        // Generate smart suggested questions using enhanced content
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
             suggestedQuestions.push(
@@ -159,7 +159,7 @@ export async function extractKnowledgeFromPage(
             );
         }
 
-        // Step 4: Transform entities with enhanced information
+        // Transform entities with enhanced information
         const entities: Entity[] =
             knowledge?.entities?.map((entity) => ({
                 name: entity.name,
@@ -182,10 +182,10 @@ export async function extractKnowledgeFromPage(
                 confidence: 0.7,
             })) || [];
 
-        // Step 5: Create enhanced summary
+        // Create enhanced summary
         const summary = generateEnhancedSummary(knowledge, enhancedContent, parameters.title);
 
-        // Step 6: Build content metrics
+        // Build content metrics
         const contentMetrics = {
             readingTime: enhancedContent?.pageContent?.readingTime || Math.ceil(textContent.split(/\s+/).length / 225),
             wordCount: enhancedContent?.pageContent?.wordCount || textContent.split(/\s+/).length,
@@ -714,7 +714,7 @@ function extractDomainFromUrl(url: string): string {
     }
 }
 
-// Phase 3: Cross-page intelligence functions
+// Cross-page intelligence functions
 export async function discoverRelationships(
     parameters: {
         url: string;

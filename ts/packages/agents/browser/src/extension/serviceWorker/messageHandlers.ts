@@ -254,7 +254,7 @@ export async function handleMessage(
             }
         }
 
-        // Phase 3: Cross-page intelligence handlers
+        // Cross-page intelligence handlers
         case "discoverRelationships": {
             try {
                 const result = await sendActionToAgent({
