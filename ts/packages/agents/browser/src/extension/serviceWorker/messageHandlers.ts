@@ -39,19 +39,62 @@ export async function handleMessage(
             return "Service worker initialize called";
         }
         case "refreshSchema": {
-            const schemaResult = await sendActionToAgent({
+            // Discover new actions using enhanced flow
+            const discoveryResult = await sendActionToAgent({
                 actionName: "detectPageActions",
                 parameters: {
                     registerAgent: false,
                 },
             });
 
+            // Save discovered actions to ActionsStore if available
+            if (discoveryResult.schema?.length > 0) {
+                try {
+                    const currentTab = await getActiveTab();
+                    if (currentTab?.url) {
+                        await sendActionToAgent({
+                            actionName: "saveDiscoveredActions",
+                            parameters: {
+                                url: currentTab.url,
+                                actions: discoveryResult.schema,
+                                actionDefinitions: discoveryResult.typeDefinitions
+                            }
+                        });
+                        console.log("Discovered actions saved to ActionsStore");
+                    }
+                } catch (error) {
+                    console.warn("Failed to save discovered actions to ActionsStore:", error);
+                    // Continue with legacy flow - actions will still be returned for UI
+                }
+            }
+
             return {
-                schema: schemaResult.schema,
-                actionDefinitions: schemaResult.typeDefinitions,
+                schema: discoveryResult.schema,
+                actionDefinitions: discoveryResult.typeDefinitions,
             };
         }
         case "registerTempSchema": {
+            // First try to get actions from ActionsStore for enhanced schema registration
+            try {
+                const currentTab = await getActiveTab();
+                if (currentTab?.url) {
+                    const actionsResult = await sendActionToAgent({
+                        actionName: "getActionsForUrl",
+                        parameters: {
+                            url: currentTab.url,
+                            includeGlobal: true
+                        }
+                    });
+                    
+                    if (actionsResult.actions && actionsResult.actions.length > 0) {
+                        console.log(`Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`);
+                    }
+                }
+            } catch (error) {
+                console.warn("Failed to get actions from ActionsStore for schema registration:", error);
+            }
+
+            // Register the dynamic agent schema (this will use the hybrid approach in discovery handler)
             const schemaResult = await sendActionToAgent({
                 actionName: "registerPageDynamicAgent",
                 parameters: {
@@ -73,6 +116,35 @@ export async function handleMessage(
                     screenshots: message.screenshot,
                 },
             });
+
+            // Auto-save the authored action if creation was successful
+            if (schemaResult.intentJson && message.autoSave !== false) {
+                try {
+                    const currentTab = await getActiveTab();
+                    if (currentTab?.url) {
+                        await sendActionToAgent({
+                            actionName: "saveAuthoredAction",
+                            parameters: {
+                                url: currentTab.url,
+                                actionData: {
+                                    name: message.actionName,
+                                    description: message.actionDescription,
+                                    steps: message.steps ? JSON.parse(message.steps) : undefined,
+                                    screenshot: message.screenshot,
+                                    html: message.html?.map((h: any) => h.content),
+                                    intentSchema: schemaResult.intent,
+                                    actionsJson: schemaResult.actions,
+                                    intentJson: schemaResult.intentJson
+                                }
+                            }
+                        });
+                        console.log("Authored action auto-saved to ActionsStore");
+                    }
+                } catch (error) {
+                    console.warn("Failed to auto-save authored action:", error);
+                    // Continue - UI will still get the action data for manual saving
+                }
+            }
 
             return {
                 intent: schemaResult.intent,
@@ -540,6 +612,52 @@ export async function handleMessage(
 
         case "deleteKnowledgeIndex": {
             return await handleDeleteKnowledgeIndex();
+        }
+
+        case "recordActionUsage": {
+            // New handler for tracking action usage
+            try {
+                // This would be implemented when we add usage tracking to the discovery agent
+                console.log(`Recording usage for action: ${message.actionId}`);
+                return { success: true };
+            } catch (error) {
+                console.warn("Failed to record action usage:", error);
+                return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+            }
+        }
+
+        case "getActionStatistics": {
+            // New handler for getting action statistics
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionsForUrl",
+                    parameters: {
+                        url: message.url || (await getActiveTab())?.url,
+                        includeGlobal: true
+                    }
+                });
+                
+                return {
+                    success: true,
+                    totalActions: result.count || 0,
+                    actions: result.actions || []
+                };
+            } catch (error) {
+                console.warn("Failed to get action statistics:", error);
+                return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+            }
+        }
+
+        case "manualSaveAuthoredAction": {
+            // Handler for manually saving authored actions (distinct from auto-save)
+            const result = await sendActionToAgent({
+                actionName: "saveAuthoredAction", 
+                parameters: {
+                    url: message.url,
+                    actionData: message.actionData
+                }
+            });
+            return result;
         }
 
         default:

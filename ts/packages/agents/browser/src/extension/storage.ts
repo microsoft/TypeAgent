@@ -54,3 +54,88 @@ export async function deleteStoredPageProperty(
         console.error("Error deleting data:", error);
     }
 }
+
+/**
+ * Enhanced action storage functions that leverage the new ActionsStore
+ * when available through the service worker bridge
+ */
+
+/**
+ * Get actions for a URL using the enhanced storage system
+ */
+export async function getActionsForUrl(url: string, options: {
+    includeGlobal?: boolean;
+    author?: "discovered" | "user";
+} = {}): Promise<any[]> {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "getActionsForUrl",
+            url: url,
+            includeGlobal: options.includeGlobal ?? true,
+            author: options.author
+        });
+        
+        return response?.actions || [];
+    } catch (error) {
+        console.error("Failed to get actions for URL:", error);
+        return [];
+    }
+}
+
+/**
+ * Save an authored action using the enhanced storage system
+ */
+export async function saveAuthoredAction(url: string, actionData: any): Promise<boolean> {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "manualSaveAuthoredAction",
+            url: url,
+            actionData: actionData
+        });
+        
+        return response?.success || false;
+    } catch (error) {
+        console.error("Failed to save authored action:", error);
+        return false;
+    }
+}
+
+/**
+ * Record action usage for analytics
+ */
+export async function recordActionUsage(actionId: string): Promise<boolean> {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "recordActionUsage",
+            actionId: actionId
+        });
+        
+        return response?.success || false;
+    } catch (error) {
+        console.error("Failed to record action usage:", error);
+        return false;
+    }
+}
+
+/**
+ * Get action statistics for a URL
+ */
+export async function getActionStatistics(url?: string): Promise<{
+    totalActions: number;
+    actions: any[];
+}> {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "getActionStatistics",
+            url: url
+        });
+        
+        return {
+            totalActions: response?.totalActions || 0,
+            actions: response?.actions || []
+        };
+    } catch (error) {
+        console.error("Failed to get action statistics:", error);
+        return { totalActions: 0, actions: [] };
+    }
+}

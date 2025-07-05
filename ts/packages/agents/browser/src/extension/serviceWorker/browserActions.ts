@@ -249,6 +249,33 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             );
             break;
         }
+        case "getActionsForUrl": {
+            // Enhanced action retrieval with ActionsStore support
+            responseObject = await chrome.runtime.sendMessage({
+                type: "getActionsForUrl",
+                url: action.parameters.url,
+                includeGlobal: action.parameters.includeGlobal,
+                author: action.parameters.author
+            });
+            break;
+        }
+        case "saveAuthoredAction": {
+            // Save authored action to ActionsStore
+            responseObject = await chrome.runtime.sendMessage({
+                type: "manualSaveAuthoredAction",
+                url: action.parameters.url,
+                actionData: action.parameters.actionData
+            });
+            break;
+        }
+        case "recordActionUsage": {
+            // Record action usage for analytics
+            responseObject = await chrome.runtime.sendMessage({
+                type: "recordActionUsage",
+                actionId: action.parameters.actionId
+            });
+            break;
+        }
         default:
             throw new Error(`Unknown action: ${actionName}. `);
     }
