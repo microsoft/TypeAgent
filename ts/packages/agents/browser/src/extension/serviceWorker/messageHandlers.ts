@@ -189,7 +189,12 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            quality: message.quality || "balanced",
+                            quality: message.extractionSettings?.quality || "balanced",
+                            extractionSettings: {
+                                mode: message.extractionSettings?.mode || "full",
+                                enableIntelligentAnalysis: message.extractionSettings?.enableIntelligentAnalysis !== false,
+                                enableActionDetection: message.extractionSettings?.enableActionDetection !== false,
+                            }
                         },
                     });
 
@@ -206,6 +211,16 @@ export async function handleMessage(
                             suggestedQuestions:
                                 knowledgeResult.suggestedQuestions || [],
                             summary: knowledgeResult.summary || "",
+                            // Enhanced content data
+                            detectedActions: knowledgeResult.detectedActions || [],
+                            actionSummary: knowledgeResult.actionSummary,
+                            contentMetrics: knowledgeResult.contentMetrics || {
+                                readingTime: 0,
+                                wordCount: 0,
+                                hasCode: false,
+                                interactivity: "static",
+                                pageType: "other"
+                            }
                         },
                     };
                 } catch (error) {

@@ -9,6 +9,32 @@ export interface KnowledgeExtractionResult {
     summary: string;
 }
 
+export interface EnhancedKnowledgeExtractionResult extends KnowledgeExtractionResult {
+    detectedActions?: DetectedAction[];
+    actionSummary?: ActionSummary;
+    contentMetrics: {
+        readingTime: number;
+        wordCount: number;
+        hasCode: boolean;
+        interactivity: string;
+        pageType: string;
+    };
+}
+
+export interface DetectedAction {
+    type: string;
+    element: string;
+    text?: string;
+    confidence: number;
+}
+
+export interface ActionSummary {
+    totalActions: number;
+    actionTypes: string[];
+    highConfidenceActions: number;
+    actionDistribution: { [key: string]: number };
+}
+
 export interface Entity {
     name: string;
     type: string;

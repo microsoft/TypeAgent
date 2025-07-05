@@ -7,6 +7,7 @@ import { findRequestedWebsites } from "../websiteMemory.mjs";
 import * as website from "website-memory";
 import {
     KnowledgeExtractionResult,
+    EnhancedKnowledgeExtractionResult,
     Entity,
     Relationship,
     WebPageReference,
@@ -69,9 +70,16 @@ export async function extractKnowledgeFromPage(
         extractRelationships: boolean;
         suggestQuestions: boolean;
         quality?: "fast" | "balanced" | "deep";
+        extractionSettings?: {
+            mode: "basic" | "content" | "actions" | "full";
+            enableIntelligentAnalysis: boolean;
+            enableActionDetection: boolean;
+        };
     },
     context: SessionContext<BrowserActionContext>,
-): Promise<KnowledgeExtractionResult> {
+): Promise<EnhancedKnowledgeExtractionResult> {
+    // Convert htmlFragments to HTML content for ContentExtractor
+    const htmlContent = reconstructHtmlFromFragments(parameters.htmlFragments);
     const textContent = parameters.htmlFragments
         .map((fragment) => fragment.text || "")
         .join("\n\n")
@@ -84,32 +92,70 @@ export async function extractKnowledgeFromPage(
             keyTopics: [],
             suggestedQuestions: [],
             summary: "Insufficient content to extract knowledge.",
+            contentMetrics: {
+                readingTime: 0,
+                wordCount: 0,
+                hasCode: false,
+                interactivity: "static",
+                pageType: "other"
+            }
         };
     }
 
     try {
+        // Step 1: Use website-memory ContentExtractor for enhanced content analysis
+        let enhancedContent: any = null;
+        
+        const extractionMode = parameters.extractionSettings?.mode || "content";
+        
+        if (extractionMode !== "basic") {
+            try {
+                // Use ContentExtractor for rich content analysis
+                const { ContentExtractor } = website;
+                const contentExtractor = new ContentExtractor({
+                    timeout: 15000,
+                    enableActionDetection: parameters.extractionSettings?.enableActionDetection !== false,
+                    maxContentLength: 15000
+                });
+                
+                enhancedContent = await contentExtractor.extractFromHtml(htmlContent, extractionMode);
+            } catch (extractorError) {
+                console.warn("Enhanced content extraction failed, falling back to basic:", extractorError);
+            }
+        }
+
+        // Step 2: Create enhanced website object
         const visitInfo: website.WebsiteVisitInfo = {
             url: parameters.url,
             title: parameters.title,
             source: "history",
             visitDate: new Date().toISOString(),
-            description: textContent.substring(0, 500),
+            description: enhancedContent?.pageContent?.mainContent?.substring(0, 500) || textContent.substring(0, 500),
         };
 
-        const websiteObj = website.importWebsiteVisit(visitInfo, textContent);
+        // Set page type using website-memory's built-in detection
+        visitInfo.pageType = website.determinePageType(parameters.url, parameters.title);
+
+        const websiteObj = website.importWebsiteVisit(
+            visitInfo, 
+            enhancedContent?.pageContent?.mainContent || textContent
+        );
         const knowledge = websiteObj.getKnowledge();
 
+        // Step 3: Generate smart suggested questions using enhanced content
         const suggestedQuestions: string[] = [];
         if (parameters.suggestQuestions && knowledge) {
             suggestedQuestions.push(
-                ...(await generateSuggestedQuestions(
+                ...(await generateSmartSuggestedQuestions(
                     knowledge,
-                    textContent,
-                    parameters.title,
+                    enhancedContent,
+                    parameters.url,
+                    context
                 )),
             );
         }
 
+        // Step 4: Transform entities with enhanced information
         const entities: Entity[] =
             knowledge?.entities?.map((entity) => ({
                 name: entity.name,
@@ -132,7 +178,17 @@ export async function extractKnowledgeFromPage(
                 confidence: 0.7,
             })) || [];
 
-        const summary = `Knowledge extracted from ${parameters.title}: ${entities.length} entities, ${keyTopics.length} topics, ${relationships.length} relationships found.`;
+        // Step 5: Create enhanced summary
+        const summary = generateEnhancedSummary(knowledge, enhancedContent, parameters.title);
+
+        // Step 6: Build content metrics
+        const contentMetrics = {
+            readingTime: enhancedContent?.pageContent?.readingTime || Math.ceil(textContent.split(/\s+/).length / 225),
+            wordCount: enhancedContent?.pageContent?.wordCount || textContent.split(/\s+/).length,
+            hasCode: (enhancedContent?.pageContent?.codeBlocks?.length || 0) > 0,
+            interactivity: enhancedContent?.actionSummary?.actionTypes?.join(", ") || "static",
+            pageType: visitInfo.pageType || "other"
+        };
 
         return {
             entities,
@@ -140,6 +196,14 @@ export async function extractKnowledgeFromPage(
             keyTopics,
             suggestedQuestions,
             summary,
+            detectedActions: enhancedContent?.detectedActions || [],
+            actionSummary: enhancedContent?.actionSummary || {
+                totalActions: 0,
+                actionTypes: [],
+                highConfidenceActions: 0,
+                actionDistribution: {}
+            },
+            contentMetrics
         };
     } catch (error) {
         console.error("Error during knowledge extraction:", error);
@@ -149,6 +213,13 @@ export async function extractKnowledgeFromPage(
             keyTopics: [],
             suggestedQuestions: [],
             summary: "Error occurred during knowledge extraction.",
+            contentMetrics: {
+                readingTime: 0,
+                wordCount: 0,
+                hasCode: false,
+                interactivity: "static",
+                pageType: "other"
+            }
         };
     }
 }
@@ -495,32 +566,6 @@ export async function exportKnowledgeData(
     }
 }
 
-async function generateSuggestedQuestions(
-    knowledge: any,
-    content: string,
-    title: string,
-): Promise<string[]> {
-    const questions: string[] = [];
-
-    if (knowledge.entities && knowledge.entities.length > 0) {
-        const mainEntity = knowledge.entities[0];
-        questions.push(`What is ${mainEntity.name}?`);
-        questions.push(`Tell me more about ${mainEntity.name}`);
-    }
-
-    if (knowledge.topics && knowledge.topics.length > 0) {
-        const mainTopic = knowledge.topics[0];
-        questions.push(`What else do I have about ${mainTopic}?`);
-    }
-
-    questions.push(`When did I first encounter this information?`);
-    questions.push(`What other similar pages have I visited?`);
-    questions.push(`Summarize the key points from this page`);
-    questions.push(`What actions can I take based on this information?`);
-
-    return questions.slice(0, 6);
-}
-
 async function generateAnswerFromResults(
     query: string,
     results: any[],
@@ -548,4 +593,119 @@ async function generateAnswerFromResults(
         `You can explore these results for more detailed information.`;
 
     return answer;
+}
+
+
+// Helper function to reconstruct HTML from fragments
+function reconstructHtmlFromFragments(htmlFragments: any[]): string {
+    return htmlFragments
+        .map((fragment) => {
+            if (fragment.html) return fragment.html;
+            if (fragment.text) return fragment.text;
+            return "";
+        })
+        .join("\n");
+}
+
+// Enhanced suggested questions using content analysis and DataFrames
+async function generateSmartSuggestedQuestions(
+    knowledge: any,
+    enhancedContent: any,
+    url: string,
+    context: SessionContext<BrowserActionContext>
+): Promise<string[]> {
+    const questions: string[] = [];
+    const domain = extractDomainFromUrl(url);
+    
+    // Content-specific questions based on enhanced content
+    if (enhancedContent?.pageContent) {
+        const hasCode = enhancedContent.pageContent.codeBlocks && enhancedContent.pageContent.codeBlocks.length > 0;
+        
+        if (hasCode) {
+            questions.push("Show me other code examples I've saved");
+            questions.push("Find similar programming content");
+        }
+        
+        if (enhancedContent.pageContent.readingTime > 10) {
+            questions.push("What are the key points from this long article?");
+        }
+    }
+    
+    // Use DataFrames for context-aware questions
+    const websiteCollection = context.agentContext.websiteCollection;
+    if (websiteCollection && websiteCollection.visitFrequency) {
+        try {
+            // Domain visit history - simplified approach for now
+            console.log("Checking domain visit data for enhanced questions");
+            
+            if (domain) {
+                questions.push(`When did I first visit ${domain}?`);
+                questions.push(`What's my learning journey on ${domain}?`);
+            }
+        } catch (error) {
+            console.warn("Error querying domain data:", error);
+        }
+    }
+    
+    // Topic-based cross-references
+    if (knowledge.topics && knowledge.topics.length > 0) {
+        for (const topic of knowledge.topics.slice(0, 2)) {
+            questions.push(`What other ${topic} resources do I have?`);
+        }
+    }
+    
+    // Learning progression questions
+    questions.push("What should I learn next in this area?");
+    questions.push("Are there any knowledge gaps I should fill?");
+    
+    // Temporal questions
+    questions.push("When did I first encounter this information?");
+    questions.push("What have I learned recently in this domain?");
+    
+    return questions.slice(0, 8); // Limit to most relevant questions
+}
+
+// Generate enhanced summary with content analysis
+function generateEnhancedSummary(
+    knowledge: any,
+    enhancedContent: any,
+    title: string
+): string {
+    const entityCount = knowledge?.entities?.length || 0;
+    const topicCount = knowledge?.topics?.length || 0;
+    const relationshipCount = knowledge?.actions?.length || 0;
+    
+    let summary = `Knowledge extracted from ${title}: ${entityCount} entities, ${topicCount} topics, ${relationshipCount} relationships found.`;
+    
+    if (enhancedContent?.pageContent) {
+        const details = [];
+        
+        if (enhancedContent.pageContent.readingTime) {
+            details.push(`${enhancedContent.pageContent.readingTime} min read`);
+        }
+        
+        if (enhancedContent.pageContent.codeBlocks && enhancedContent.pageContent.codeBlocks.length > 0) {
+            details.push(`${enhancedContent.pageContent.codeBlocks.length} code examples`);
+        }
+        
+        if (enhancedContent.detectedActions && enhancedContent.detectedActions.length > 0) {
+            details.push(`${enhancedContent.detectedActions.length} interactive elements`);
+        }
+        
+        if (details.length > 0) {
+            summary += ` Page analysis: ${details.join(", ")}.`;
+        }
+    }
+    
+    return summary;
+}
+
+// Extract domain from URL
+function extractDomainFromUrl(url: string): string {
+    try {
+        const urlObj = new URL(url);
+        return urlObj.hostname;
+    } catch {
+        return url;
+    }
 }

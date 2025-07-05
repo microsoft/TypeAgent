@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 export * from "./actionExtractor.js";
+export * from "./contentAnalyzer.js";
 export * from "./contentExtractor.js";
 export * from "./importWebsites.js";
 export * from "./indexingService.js";

@@ -7,6 +7,30 @@ interface KnowledgeData {
     keyTopics: string[];
     suggestedQuestions: string[];
     summary: string;
+    // Enhanced content data
+    detectedActions?: DetectedAction[];
+    actionSummary?: ActionSummary;
+    contentMetrics?: {
+        readingTime: number;
+        wordCount: number;
+        hasCode: boolean;
+        interactivity: string;
+        pageType: string;
+    };
+}
+
+interface DetectedAction {
+    type: string;
+    element: string;
+    text?: string;
+    confidence: number;
+}
+
+interface ActionSummary {
+    totalActions: number;
+    actionTypes: string[];
+    highConfidenceActions: number;
+    actionDistribution: { [key: string]: number };
 }
 
 interface Entity {
@@ -303,14 +327,22 @@ class KnowledgePanel {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = `
+            ${knowledge.contentMetrics ? this.renderContentMetricsCard() : ""}
             ${this.renderEntitiesCard()}
             ${this.renderRelationshipsCard()}
             ${this.renderTopicsCard()}
+            ${knowledge.detectedActions && knowledge.detectedActions.length > 0 ? this.renderActionsCard() : ""}
         `;
 
+        if (knowledge.contentMetrics) {
+            this.renderContentMetrics(knowledge.contentMetrics);
+        }
         this.renderEntities(knowledge.entities);
         this.renderRelationships(knowledge.relationships);
         this.renderKeyTopics(knowledge.keyTopics);
+        if (knowledge.detectedActions && knowledge.detectedActions.length > 0) {
+            this.renderDetectedActions(knowledge.detectedActions, knowledge.actionSummary);
+        }
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
 
         const questionsSection = document.getElementById("questionsSection")!;
@@ -974,6 +1006,164 @@ class KnowledgePanel {
                 <div id="pageStatus" class="ms-2">${status}</div>
             </div>
         `;
+    }
+
+    // Content Metrics Card component
+    private renderContentMetricsCard(): string {
+        const content = this.createContainer(
+            "contentMetricsContainer", 
+            this.createEmptyState("bi bi-info-circle", "No content metrics available")
+        );
+        return this.createCard("Content Metrics", content, "bi bi-bar-chart");
+    }
+
+    // Detected Actions Card component  
+    private renderActionsCard(): string {
+        const content = this.createContainer(
+            "detectedActionsContainer",
+            this.createEmptyState("bi bi-info-circle", "No actions detected")
+        );
+        return this.createCard("Detected Actions", content, "bi bi-lightning", "actionsCount");
+    }
+
+    // Render content metrics data
+    private renderContentMetrics(metrics: any) {
+        const container = document.getElementById("contentMetricsContainer")!;
+        
+        container.innerHTML = `
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <small class="text-muted">Reading Time:</small><br>
+                    <span class="fw-semibold">${metrics.readingTime} min</span>
+                </div>
+                <div class="col-md-6">
+                    <small class="text-muted">Word Count:</small><br>
+                    <span class="fw-semibold">${metrics.wordCount}</span>
+                </div>
+            </div>
+            
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <small class="text-muted">Page Type:</small><br>
+                    <span class="badge bg-primary">${metrics.pageType}</span>
+                </div>
+                <div class="col-md-6">
+                    <small class="text-muted">Has Code:</small><br>
+                    ${metrics.hasCode ? '<i class="bi bi-code-slash text-success" title="Has Code"></i> Yes' : '<i class="bi bi-x text-muted" title="No Code"></i> No'}
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-12">
+                    <small class="text-muted">Interactivity:</small><br>
+                    <span class="badge bg-info">${metrics.interactivity}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    // Render detected actions
+    private renderDetectedActions(actions: DetectedAction[], summary?: ActionSummary) {
+        const container = document.getElementById("detectedActionsContainer")!;
+        const countBadge = document.getElementById("actionsCount");
+
+        if (countBadge) {
+            countBadge.textContent = actions.length.toString();
+        }
+
+        if (actions.length === 0) {
+            container.innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="bi bi-info-circle"></i>
+                    No actions detected on this page
+                </div>
+            `;
+            return;
+        }
+
+        let summaryHtml = "";
+        if (summary) {
+            summaryHtml = `
+                <div class="mb-3 p-2 bg-light rounded">
+                    <small class="text-muted">Summary:</small><br>
+                    <span class="fw-semibold">${summary.totalActions} total actions</span>
+                    ${summary.actionTypes.length > 0 ? `<br><small>Types: ${summary.actionTypes.join(", ")}</small>` : ''}
+                </div>
+            `;
+        }
+
+        const actionsHtml = actions
+            .slice(0, 10)
+            .map(action => `
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                    <div>
+                        <span class="fw-semibold">${action.type}</span>
+                        <span class="badge bg-secondary ms-2">${action.element}</span>
+                        ${action.text ? `<br><small class="text-muted">${action.text}</small>` : ''}
+                    </div>
+                    <div>
+                        <div class="progress" style="width: 50px; height: 4px;">
+                            <div class="progress-bar bg-success" style="width: ${action.confidence * 100}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `)
+            .join("");
+
+        container.innerHTML = summaryHtml + actionsHtml;
+    }
+
+    // Enhanced question categorization
+    private categorizeQuestionsEnhanced(questions: string[]) {
+        const categories = {
+            learning: [] as string[],
+            discovery: [] as string[],
+            temporal: [] as string[],
+            technical: [] as string[],
+            other: [] as string[],
+        };
+
+        questions.forEach((question) => {
+            const lowerQ = question.toLowerCase();
+
+            if (
+                lowerQ.includes("learn") ||
+                lowerQ.includes("prerequisite") ||
+                lowerQ.includes("should i") ||
+                lowerQ.includes("knowledge gap")
+            ) {
+                categories.learning.push(question);
+            } else if (
+                lowerQ.includes("other") ||
+                lowerQ.includes("similar") ||
+                lowerQ.includes("else") ||
+                lowerQ.includes("show me") ||
+                lowerQ.includes("find")
+            ) {
+                categories.discovery.push(question);
+            } else if (
+                lowerQ.includes("code") ||
+                lowerQ.includes("api") ||
+                lowerQ.includes("tutorial") ||
+                lowerQ.includes("example") ||
+                lowerQ.includes("advanced") ||
+                lowerQ.includes("documentation")
+            ) {
+                categories.technical.push(question);
+            } else if (
+                lowerQ.includes("when") ||
+                lowerQ.includes("first") ||
+                lowerQ.includes("recently") ||
+                lowerQ.includes("journey") ||
+                lowerQ.includes("time")
+            ) {
+                categories.temporal.push(question);
+            } else {
+                categories.other.push(question);
+            }
+        });
+
+        return categories;
     }
 }
 
