@@ -764,7 +764,7 @@ export async function discoverRelationships(
     }
 }
 
-// === TASK 2: ENHANCED QUERY PROCESSING ===
+// === ENHANCED QUERY PROCESSING ===
 
 export async function queryWebKnowledgeEnhanced(
     parameters: EnhancedQueryRequest,

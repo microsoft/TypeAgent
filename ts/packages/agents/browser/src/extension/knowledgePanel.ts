@@ -119,7 +119,7 @@ class KnowledgePanel {
         this.setupExtractionModeControls();
         await this.loadExtractionSettings();
         
-        // Setup advanced query controls (Task 2)
+        // Setup advanced query controls
         this.setupAdvancedQueryControls();
     }
 
@@ -1591,7 +1591,7 @@ class KnowledgePanel {
         return 'cursor';
     }
 
-    // Render related content discovery using Phase 3 functionality
+    // Render related content discovery using relationship discovery functionality
     private async renderRelatedContent(knowledge: KnowledgeData) {
         const container = document.getElementById("relatedContentContainer")!;
         const countBadge = document.getElementById("relatedContentCount");
@@ -1605,7 +1605,7 @@ class KnowledgePanel {
         `;
 
         try {
-            // Use Phase 3 relationship discovery
+            // Use relationship discovery system
             const response = await chrome.runtime.sendMessage({
                 type: "discoverRelationships",
                 url: this.currentUrl,
@@ -1624,7 +1624,7 @@ class KnowledgePanel {
                 `;
             }
 
-                // Add Phase 3 specific interactions
+                // Add relationship discovery specific interactions
         } catch (error) {
             console.warn("Relationship discovery failed:", error);
             container.innerHTML = `
@@ -1636,8 +1636,8 @@ class KnowledgePanel {
         }
     }
 
-    // Phase 2 fallback method
-    private renderPhase2RelatedContent(knowledge: KnowledgeData, container: HTMLElement, countBadge: HTMLElement | null) {
+    // Fallback method for basic related content
+    private renderFallbackRelatedContent(knowledge: KnowledgeData, container: HTMLElement, countBadge: HTMLElement | null) {
         const relatedContent = this.generateRelatedContent(knowledge);
 
         if (countBadge) {
@@ -1790,8 +1790,8 @@ class KnowledgePanel {
         return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
     }
 
-    // Phase 3: Enhanced relationship rendering using real data
-    private renderPhase3RelatedContentSections(relationshipResults: any[]): string {
+    // Enhanced relationship rendering using relationship discovery data
+    private renderEnhancedRelatedContentSections(relationshipResults: any[]): string {
         let html = '';
 
         relationshipResults.forEach(result => {
@@ -1809,7 +1809,7 @@ class KnowledgePanel {
                         </h6>
                         <div class="related-items">
                             ${result.relatedPages.slice(0, 5).map((page: any) => 
-                                this.renderPhase3RelatedPageItem(page, typeInfo.color)
+                                this.renderRelatedPageItem(page, typeInfo.color)
                             ).join('')}
                         </div>
                     </div>
@@ -1820,12 +1820,12 @@ class KnowledgePanel {
         return html;
     }
 
-    private renderPhase3RelatedPageItem(page: any, color: string): string {
+    private renderRelatedPageItem(page: any, color: string): string {
         const similarityWidth = Math.round(page.similarity * 100);
         const visitInfo = page.visitInfo || {};
         
         return `
-            <div class="phase3-related-item p-3 mb-2 border rounded bg-white" 
+            <div class="related-item p-3 mb-2 border rounded bg-white" 
                  data-url="${page.url}" 
                  data-type="${page.relationshipType}">
                 <div class="d-flex align-items-start justify-content-between">
@@ -1877,7 +1877,7 @@ class KnowledgePanel {
         return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
     }
 
-    private setupPhase3RelatedContentInteractions() {
+    private setupEnhancedRelatedContentInteractions() {
         document.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
             
@@ -1894,8 +1894,8 @@ class KnowledgePanel {
             }
             
             // Handle related item clicks for analysis
-            if (target.closest(".phase3-related-item")) {
-                const item = target.closest(".phase3-related-item") as HTMLElement;
+            if (target.closest(".related-item")) {
+                const item = target.closest(".related-item") as HTMLElement;
                 const url = item.getAttribute("data-url");
                 const type = item.getAttribute("data-type");
                 
