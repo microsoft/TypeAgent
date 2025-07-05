@@ -251,7 +251,7 @@ class KnowledgePanel {
 
             this.knowledgeData = response.knowledge;
             if (this.knowledgeData) {
-                this.renderKnowledgeResults(this.knowledgeData);
+                await this.renderKnowledgeResults(this.knowledgeData);
                 await this.cacheKnowledge(this.knowledgeData);
                 this.showExtractionInfo();
             }
@@ -349,7 +349,7 @@ class KnowledgePanel {
         `;
     }
 
-    private renderKnowledgeResults(knowledge: KnowledgeData) {
+    private async renderKnowledgeResults(knowledge: KnowledgeData) {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = `
@@ -372,6 +372,9 @@ class KnowledgePanel {
             this.renderDetectedActions(knowledge.detectedActions, knowledge.actionSummary);
         }
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
+
+        // Auto-load cross-page intelligence
+        await this.loadRelatedContent(knowledge);
 
         const questionsSection = document.getElementById("questionsSection")!;
         questionsSection.className = "knowledge-card card";
@@ -809,6 +812,26 @@ class KnowledgePanel {
         document.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
             
+            // Handle visit page button clicks
+            if (target.closest(".visit-page")) {
+                e.preventDefault();
+                const button = target.closest(".visit-page") as HTMLElement;
+                const url = button.getAttribute("data-url");
+                
+                if (url) {
+                    // Add visual feedback
+                    button.classList.add("btn-primary");
+                    button.classList.remove("btn-outline-primary");
+                    setTimeout(() => {
+                        button.classList.remove("btn-primary");
+                        button.classList.add("btn-outline-primary");
+                    }, 300);
+                    
+                    // Open the page in a new tab
+                    chrome.tabs.create({ url: url, active: false });
+                }
+            }
+            
             // Handle explore related content button clicks
             if (target.closest(".explore-related")) {
                 e.preventDefault();
@@ -816,14 +839,26 @@ class KnowledgePanel {
                 const query = button.getAttribute("data-query");
                 
                 if (query) {
-                    (document.getElementById("knowledgeQuery") as HTMLInputElement).value = query;
-                    this.submitQuery();
+                    // Add visual feedback
+                    button.classList.add("btn-secondary");
+                    button.classList.remove("btn-outline-secondary");
+                    setTimeout(() => {
+                        button.classList.remove("btn-secondary");
+                        button.classList.add("btn-outline-secondary");
+                    }, 300);
+                    
+                    // Set query and submit
+                    const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+                    if (queryInput) {
+                        queryInput.value = query;
+                        this.submitQuery();
+                    }
                 }
             }
             
-            // Handle related content item clicks
-            if (target.closest(".related-content-item")) {
-                const item = target.closest(".related-content-item") as HTMLElement;
+            // Handle related content item clicks (for future navigation features)
+            if (target.closest(".related-page-item")) {
+                const item = target.closest(".related-page-item") as HTMLElement;
                 const url = item.getAttribute("data-url");
                 const type = item.getAttribute("data-type");
                 
@@ -834,10 +869,13 @@ class KnowledgePanel {
                 }, 300);
                 
                 // For now, create a query based on the relationship
-                if (url === '#') {
+                if (url && url === '#') {
                     const title = item.querySelector(".fw-semibold")?.textContent;
                     if (title) {
-                        (document.getElementById("knowledgeQuery") as HTMLInputElement).value = title;
+                        const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+                        if (queryInput) {
+                            queryInput.value = `content related to ${title}`;
+                        }
                     }
                 }
             }
@@ -1058,7 +1096,7 @@ class KnowledgePanel {
             if (cached[knowledgeKey]) {
                 this.knowledgeData = cached[knowledgeKey];
                 if (this.knowledgeData) {
-                    this.renderKnowledgeResults(this.knowledgeData);
+                    await this.renderKnowledgeResults(this.knowledgeData);
                 }
             } else {
                 const knowledgeSection =
@@ -1541,12 +1579,53 @@ class KnowledgePanel {
         return 'cursor';
     }
 
-    // Render related content discovery
-    private renderRelatedContent(knowledge: KnowledgeData) {
+    // Render related content discovery using Phase 3 functionality
+    private async renderRelatedContent(knowledge: KnowledgeData) {
         const container = document.getElementById("relatedContentContainer")!;
         const countBadge = document.getElementById("relatedContentCount");
 
-        // Generate related content suggestions based on current page knowledge
+        // Show loading state
+        container.innerHTML = `
+            <div class="text-center p-3">
+                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                <small class="text-muted">Discovering relationships...</small>
+            </div>
+        `;
+
+        try {
+            // Use Phase 3 relationship discovery
+            const response = await chrome.runtime.sendMessage({
+                type: "discoverRelationships",
+                url: this.currentUrl,
+                knowledge: knowledge,
+                maxResults: 10
+            });
+
+            if (response.success && response.relationships.length > 0) {
+                this.renderRelationshipResults(response.relationships);
+            } else {
+                container.innerHTML = `
+                    <div class="text-muted text-center">
+                        <i class="bi bi-info-circle"></i>
+                        No related content found
+                    </div>
+                `;
+            }
+
+                // Add Phase 3 specific interactions
+        } catch (error) {
+            console.warn("Relationship discovery failed:", error);
+            container.innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Unable to discover relationships
+                </div>
+            `;
+        }
+    }
+
+    // Phase 2 fallback method
+    private renderPhase2RelatedContent(knowledge: KnowledgeData, container: HTMLElement, countBadge: HTMLElement | null) {
         const relatedContent = this.generateRelatedContent(knowledge);
 
         if (countBadge) {
@@ -1567,7 +1646,7 @@ class KnowledgePanel {
             <div class="related-content-summary mb-3 p-2 bg-light rounded">
                 <small class="text-muted">
                     <i class="bi bi-graph-up me-1"></i>
-                    Found ${relatedContent.length} potential connections based on topics and content analysis
+                    Found ${relatedContent.length} potential connections based on content analysis
                 </small>
             </div>
             ${this.renderRelatedContentSections(relatedContent)}
@@ -1697,6 +1776,285 @@ class KnowledgePanel {
         };
         
         return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
+    }
+
+    // Phase 3: Enhanced relationship rendering using real data
+    private renderPhase3RelatedContentSections(relationshipResults: any[]): string {
+        let html = '';
+
+        relationshipResults.forEach(result => {
+            if (result.relatedPages.length > 0) {
+                const typeInfo = this.getAnalysisTypeInfo(result.analysisType);
+                
+                html += `
+                    <div class="related-section mb-3">
+                        <h6 class="text-${typeInfo.color} mb-2">
+                            <i class="${typeInfo.icon} me-2"></i>${typeInfo.label}
+                            <span class="badge bg-${typeInfo.color} ms-2">${result.relatedPages.length}</span>
+                            <span class="badge bg-light text-dark ms-1" title="Confidence">
+                                ${Math.round(result.confidence * 100)}%
+                            </span>
+                        </h6>
+                        <div class="related-items">
+                            ${result.relatedPages.slice(0, 5).map((page: any) => 
+                                this.renderPhase3RelatedPageItem(page, typeInfo.color)
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        return html;
+    }
+
+    private renderPhase3RelatedPageItem(page: any, color: string): string {
+        const similarityWidth = Math.round(page.similarity * 100);
+        const visitInfo = page.visitInfo || {};
+        
+        return `
+            <div class="phase3-related-item p-3 mb-2 border rounded bg-white" 
+                 data-url="${page.url}" 
+                 data-type="${page.relationshipType}">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold mb-1">${page.title}</div>
+                        <div class="mb-2">
+                            <span class="badge bg-${color} me-1">${page.relationshipType}</span>
+                            ${page.sharedElements && page.sharedElements.length > 0 ? 
+                                `<small class="text-muted">Shared: ${page.sharedElements.slice(0, 2).join(", ")}</small>` : ''
+                            }
+                        </div>
+                        <div class="d-flex align-items-center mb-2">
+                            <small class="text-muted me-2">Similarity:</small>
+                            <div class="progress me-2" style="width: 80px; height: 4px;">
+                                <div class="progress-bar bg-${color}" 
+                                     style="width: ${similarityWidth}%" 
+                                     title="Similarity: ${similarityWidth}%">
+                                </div>
+                            </div>
+                            <small class="text-muted">${similarityWidth}%</small>
+                        </div>
+                        ${visitInfo.visitCount ? `
+                            <small class="text-muted">
+                                <i class="bi bi-clock me-1"></i>
+                                Visited ${visitInfo.visitCount} time${visitInfo.visitCount > 1 ? 's' : ''}
+                                ${visitInfo.lastVisited ? ` • Last: ${this.formatDate(visitInfo.lastVisited)}` : ''}
+                            </small>
+                        ` : ''}
+                    </div>
+                    <button class="btn btn-sm btn-outline-${color} explore-page" 
+                            data-url="${page.url}" 
+                            title="Open this page">
+                        <i class="bi bi-arrow-up-right"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    private getAnalysisTypeInfo(type: string) {
+        const typeMap: { [key: string]: { icon: string, color: string, label: string } } = {
+            'domain': { icon: 'bi-globe', color: 'primary', label: 'Same Website' },
+            'topic': { icon: 'bi-tags', color: 'success', label: 'Similar Topics' },
+            'entity': { icon: 'bi-diagram-2', color: 'info', label: 'Shared Entities' },
+            'technical': { icon: 'bi-code-slash', color: 'warning', label: 'Technical Content' },
+            'temporal': { icon: 'bi-clock-history', color: 'secondary', label: 'Recent Activity' }
+        };
+        
+        return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
+    }
+
+    private setupPhase3RelatedContentInteractions() {
+        document.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            
+            // Handle explore page button clicks
+            if (target.closest(".explore-page")) {
+                e.preventDefault();
+                const button = target.closest(".explore-page") as HTMLElement;
+                const url = button.getAttribute("data-url");
+                
+                if (url) {
+                    // Open the page in a new tab
+                    chrome.tabs.create({ url });
+                }
+            }
+            
+            // Handle related item clicks for analysis
+            if (target.closest(".phase3-related-item")) {
+                const item = target.closest(".phase3-related-item") as HTMLElement;
+                const url = item.getAttribute("data-url");
+                const type = item.getAttribute("data-type");
+                
+                // Add visual feedback
+                item.classList.add("border-primary", "bg-light");
+                setTimeout(() => {
+                    item.classList.remove("border-primary", "bg-light");
+                }, 300);
+                
+                // Could trigger additional analysis or actions
+                console.log(`Analyzing relationship: ${type} to ${url}`);
+            }
+        });
+    }
+
+    // Load related content using relationship discovery
+    private async loadRelatedContent(knowledge: KnowledgeData) {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "discoverRelationships",
+                url: this.currentUrl,
+                knowledge: knowledge,
+                maxResults: 10
+            });
+
+            if (response.success && response.relationships.length > 0) {
+                this.renderRelatedContent(response.relationships);
+            }
+        } catch (error) {
+            console.warn("Relationship discovery failed:", error);
+        }
+    }
+
+    private renderRelationshipResults(relationships: any[]) {
+        const container = document.getElementById("relatedContentContainer")!;
+        const countBadge = document.getElementById("relatedContentCount");
+        
+        if (countBadge) {
+            countBadge.textContent = relationships.reduce((sum, rel) => sum + rel.relatedPages.length, 0).toString();
+        }
+
+        if (relationships.length === 0) {
+            container.innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="bi bi-info-circle"></i>
+                    No related content found
+                </div>
+            `;
+            return;
+        }
+
+        // Group relationships by type for better organization
+        const groupedRelationships = this.groupRelationshipsByType(relationships);
+
+        container.innerHTML = Object.entries(groupedRelationships)
+            .map(([type, typeRelationships]) => `
+                <div class="relationship-type-group mb-3">
+                    <h6 class="text-${this.getRelationshipTypeColor(type)} mb-2">
+                        <i class="${this.getRelationshipTypeIcon(type)} me-2"></i>
+                        ${this.getRelationshipTypeLabel(type)}
+                        <span class="badge bg-${this.getRelationshipTypeColor(type)} ms-2">
+                            ${typeRelationships.reduce((sum: number, rel: any) => sum + rel.relatedPages.length, 0)}
+                        </span>
+                    </h6>
+                    ${typeRelationships.map(relationship => 
+                        relationship.relatedPages.slice(0, 3).map((page: any) => `
+                            <div class="related-content-item p-2 mb-2 border rounded border-${this.getRelationshipTypeColor(type)} related-page-item" 
+                                 data-url="${page.url}" 
+                                 data-type="${page.relationshipType}"
+                                 style="cursor: pointer;">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-semibold mb-1">${page.title}</div>
+                                        <small class="text-muted mb-1 d-block">
+                                            ${page.sharedElements.join(", ")}
+                                        </small>
+                                        <div class="d-flex align-items-center">
+                                            <span class="badge bg-${this.getRelationshipTypeColor(type)} me-2">
+                                                ${Math.round(page.similarity * 100)}% similar
+                                            </span>
+                                            <small class="text-muted">
+                                                <i class="bi bi-clock me-1"></i>
+                                                Last visited: ${this.formatDate(page.visitInfo.lastVisited)}
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex flex-column">
+                                        <button class="btn btn-sm btn-outline-primary mb-1 visit-page" 
+                                                data-url="${page.url}" 
+                                                title="Visit this page">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary explore-related" 
+                                                data-query="similar to ${page.title}" 
+                                                title="Find similar content">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')
+                    ).join('')}
+                </div>
+            `).join('');
+
+        // Add interaction handlers
+        this.setupRelatedContentInteractions();
+    }
+
+    private groupRelationshipsByType(relationships: any[]): { [key: string]: any[] } {
+        const grouped: { [key: string]: any[] } = {};
+        
+        for (const relationship of relationships) {
+            const type = relationship.analysisType || 'other';
+            if (!grouped[type]) {
+                grouped[type] = [];
+            }
+            grouped[type].push(relationship);
+        }
+        
+        return grouped;
+    }
+
+    private getRelationshipTypeColor(type: string): string {
+        const colors = {
+            'domain': 'primary',
+            'topic': 'success',
+            'entity': 'info',
+            'technical': 'warning',
+            'temporal': 'secondary'
+        };
+        return colors[type as keyof typeof colors] || 'secondary';
+    }
+
+    private getRelationshipTypeIcon(type: string): string {
+        const icons = {
+            'domain': 'bi-globe',
+            'topic': 'bi-tags',
+            'entity': 'bi-diagram-3',
+            'technical': 'bi-code-slash',
+            'temporal': 'bi-clock-history'
+        };
+        return icons[type as keyof typeof icons] || 'bi-link';
+    }
+
+    private getRelationshipTypeLabel(type: string): string {
+        const labels = {
+            'domain': 'Same Domain',
+            'topic': 'Similar Topics',
+            'entity': 'Shared Entities',
+            'technical': 'Technical Content',
+            'temporal': 'Recently Visited'
+        };
+        return labels[type as keyof typeof labels] || 'Related';
+    }
+
+    private formatDate(dateString: string): string {
+        try {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
+            if (diffDays < 7) return `${diffDays} days ago`;
+            if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+            return date.toLocaleDateString();
+        } catch {
+            return 'recently';
+        }
     }
 
     // Extract domain from URL

@@ -254,6 +254,61 @@ export async function handleMessage(
             }
         }
 
+        // Phase 3: Cross-page intelligence handlers
+        case "discoverRelationships": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "discoverRelationships",
+                    parameters: {
+                        url: message.url,
+                        knowledge: message.knowledge,
+                        maxResults: message.maxResults || 10
+                    }
+                });
+
+                return {
+                    success: result.success || false,
+                    relationships: result.relationships || [],
+                    totalFound: result.totalFound || 0
+                };
+            } catch (error) {
+                console.error("Error discovering relationships:", error);
+                return { 
+                    success: false, 
+                    relationships: [], 
+                    totalFound: 0,
+                    error: "Failed to discover relationships" 
+                };
+            }
+        }
+
+        case "analyzeKnowledgeGaps": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "analyzeKnowledgeGaps",
+                    parameters: {
+                        url: message.url,
+                        knowledge: message.knowledge,
+                        relatedContent: message.relatedContent || []
+                    }
+                });
+
+                return {
+                    success: result.success || false,
+                    gaps: result.gaps || [],
+                    totalGaps: result.totalGaps || 0
+                };
+            } catch (error) {
+                console.error("Error analyzing knowledge gaps:", error);
+                return { 
+                    success: false, 
+                    gaps: [], 
+                    totalGaps: 0,
+                    error: "Failed to analyze knowledge gaps" 
+                };
+            }
+        }
+
         case "indexPageContentDirect": {
             const targetTab = await getActiveTab();
             if (targetTab) {

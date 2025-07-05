@@ -12,6 +12,7 @@ import {
     Relationship,
     WebPageReference,
 } from "./schema/knowledgeExtraction.mjs";
+import { RelationshipDiscovery, RelationshipResult } from "./relationshipDiscovery.js";
 
 export interface WebPageDocument {
     url: string;
@@ -55,6 +56,9 @@ export async function handleKnowledgeAction(
 
         case "exportKnowledgeData":
             return await exportKnowledgeData(parameters, context);
+
+        case "discoverRelationships":
+            return await discoverRelationships(parameters, context);
 
         default:
             throw new Error(`Unknown knowledge action: ${actionName}`);
@@ -707,5 +711,42 @@ function extractDomainFromUrl(url: string): string {
         return urlObj.hostname;
     } catch {
         return url;
+    }
+}
+
+// Phase 3: Cross-page intelligence functions
+export async function discoverRelationships(
+    parameters: {
+        url: string;
+        knowledge: any;
+        maxResults?: number;
+    },
+    context: SessionContext<BrowserActionContext>,
+): Promise<{
+    success: boolean;
+    relationships: RelationshipResult[];
+    totalFound: number;
+}> {
+    try {
+        const relationshipDiscovery = new RelationshipDiscovery(context);
+        
+        const relationships = await relationshipDiscovery.discoverRelationships(
+            parameters.url,
+            parameters.knowledge,
+            parameters.maxResults || 10
+        );
+
+        return {
+            success: true,
+            relationships,
+            totalFound: relationships.reduce((sum, result) => sum + result.relatedPages.length, 0)
+        };
+    } catch (error) {
+        console.error("Error discovering relationships:", error);
+        return {
+            success: false,
+            relationships: [],
+            totalFound: 0
+        };
     }
 }
