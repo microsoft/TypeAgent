@@ -229,9 +229,8 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.viewProcess) {
-            context.agentContext.viewProcess = await createViewServiceHost(
-                context
-            );
+            context.agentContext.viewProcess =
+                await createViewServiceHost(context);
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -427,8 +426,8 @@ async function getSessionFolderPath(
     let sessionDir: string | undefined;
 
     if (!(await context.sessionStorage?.exists("settings.json"))) {
-            await context.sessionStorage?.write("settings.json", "");
-        }
+        await context.sessionStorage?.write("settings.json", "");
+    }
 
     const existingFiles = await context.sessionStorage?.list("", {
         fullPath: true,
@@ -438,7 +437,7 @@ async function getSessionFolderPath(
         sessionDir = path.dirname(existingFiles[0]);
         debug(`Discovered session directory from existing file: ${sessionDir}`);
     }
-    
+
     return sessionDir;
 }
 
@@ -832,9 +831,11 @@ async function handleTabIndexActions(
     return undefined;
 }
 
-export async function createViewServiceHost(context: SessionContext<BrowserActionContext>) {
+export async function createViewServiceHost(
+    context: SessionContext<BrowserActionContext>,
+) {
     let timeoutHandle: NodeJS.Timeout;
-    const port  = context.agentContext.localHostPort;
+    const port = context.agentContext.localHostPort;
     const sessionDir = await getSessionFolderPath(context);
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
@@ -853,11 +854,8 @@ export async function createViewServiceHost(context: SessionContext<BrowserActio
                         import.meta.url,
                     ),
                 );
-        
-                const folderPath = path.join(
-                    sessionDir!,
-                    "files",
-                );
+
+                const folderPath = path.join(sessionDir!, "files");
 
                 fs.mkdirSync(folderPath, { recursive: true });
 

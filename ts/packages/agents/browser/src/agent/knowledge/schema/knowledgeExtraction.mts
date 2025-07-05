@@ -9,7 +9,8 @@ export interface KnowledgeExtractionResult {
     summary: string;
 }
 
-export interface EnhancedKnowledgeExtractionResult extends KnowledgeExtractionResult {
+export interface EnhancedKnowledgeExtractionResult
+    extends KnowledgeExtractionResult {
     detectedActions?: DetectedAction[];
     actionSummary?: ActionSummary;
     contentMetrics: {
@@ -61,7 +62,7 @@ export interface EnhancedQueryRequest {
     searchScope: "current_page" | "all_indexed" | "domain" | "topic";
     filters?: {
         contentType?: string;
-        technicalLevel?: string; 
+        technicalLevel?: string;
         domain?: string;
         timeRange?: "week" | "month" | "quarter" | "year";
         hasCode?: boolean;
@@ -77,18 +78,24 @@ export interface EnhancedQueryResponse extends KnowledgeQueryResponse {
         filtersApplied: string[];
         suggestions: QuerySuggestion[];
         processingTime: number;
-        temporalQuery?: {
-            timeframe: string;
-            queryType: string;
-            extractedTimeTerms: string[];
-        } | undefined;
+        temporalQuery?:
+            | {
+                  timeframe: string;
+                  queryType: string;
+                  extractedTimeTerms: string[];
+              }
+            | undefined;
     };
     relationships?: any[];
     temporalPatterns?: TemporalPattern[];
 }
 
 export interface TemporalPattern {
-    type: "learning_sequence" | "topic_progression" | "domain_exploration" | "content_evolution";
+    type:
+        | "learning_sequence"
+        | "topic_progression"
+        | "domain_exploration"
+        | "content_evolution";
     timespan: string;
     items: TemporalPatternItem[];
     confidence: number;

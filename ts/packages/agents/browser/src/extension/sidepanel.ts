@@ -870,42 +870,58 @@ class ActionDiscoveryPanel {
                 </div>
                 ${this.createButton(
                     '<i class="bi bi-eye"></i>',
-                    'btn btn-sm btn-outline-primary',
-                    { 'title': 'View details' }
+                    "btn btn-sm btn-outline-primary",
+                    { title: "View details" },
                 )}
             </div>
         `;
     }
 
     // Template utility functions for sidepanel
-    private createButton(text: string, classes: string, attributes: Record<string, string> = {}): string {
+    private createButton(
+        text: string,
+        classes: string,
+        attributes: Record<string, string> = {},
+    ): string {
         const attrs = Object.entries(attributes)
             .map(([key, value]) => `${key}="${value}"`)
             .join(" ");
         return `<button class="${classes}" ${attrs}>${text}</button>`;
     }
 
-    private createTabNav(tabs: Array<{id: string, label: string, active?: boolean}>): string {
+    private createTabNav(
+        tabs: Array<{ id: string; label: string; active?: boolean }>,
+    ): string {
         return `
             <ul class="nav nav-tabs nav-tabs-sm mb-3">
-                ${tabs.map(tab => `
+                ${tabs
+                    .map(
+                        (tab) => `
                     <li class="nav-item">
-                        <a class="nav-link ${tab.active ? 'active' : ''}" 
+                        <a class="nav-link ${tab.active ? "active" : ""}" 
                            data-bs-toggle="tab" href="#${tab.id}">${tab.label}</a>
                     </li>
-                `).join("")}
+                `,
+                    )
+                    .join("")}
             </ul>
         `;
     }
 
-    private createTabContent(panes: Array<{id: string, content: string, active?: boolean}>): string {
+    private createTabContent(
+        panes: Array<{ id: string; content: string; active?: boolean }>,
+    ): string {
         return `
             <div class="tab-content">
-                ${panes.map(pane => `
-                    <div class="tab-pane fade ${pane.active ? 'show active' : ''}" id="${pane.id}">
+                ${panes
+                    .map(
+                        (pane) => `
+                    <div class="tab-pane fade ${pane.active ? "show active" : ""}" id="${pane.id}">
                         ${pane.content}
                     </div>
-                `).join("")}
+                `,
+                    )
+                    .join("")}
             </div>
         `;
     }
@@ -928,8 +944,8 @@ class ActionDiscoveryPanel {
                     </div>
                     ${this.createButton(
                         '<i class="bi bi-chevron-down"></i>',
-                        'btn btn-outline-secondary btn-sm toggle-details-btn',
-                        { 'data-index': index.toString() }
+                        "btn btn-outline-secondary btn-sm toggle-details-btn",
+                        { "data-index": index.toString() },
                     )}
                 </div>
                 <div class="collapse mt-2" id="stepDetails${index}">
@@ -941,17 +957,21 @@ class ActionDiscoveryPanel {
 
     private createScreenshotGallery(screenshotData: string[]): string {
         if (!screenshotData || screenshotData.length === 0) return "";
-        
+
         return `
             <div class="mt-3">
                 <h6>Screenshots</h6>
                 <div class="screenshot-gallery">
-                    ${screenshotData.map((screenshot, index) => `
+                    ${screenshotData
+                        .map(
+                            (screenshot, index) => `
                         <img src="${screenshot}" alt="Step ${index + 1}" 
                              class="img-thumbnail me-2 mb-2 screenshot-img" 
                              style="max-width: 200px; cursor: pointer;" 
                              data-src="${screenshot}">
-                    `).join("")}
+                    `,
+                        )
+                        .join("")}
                 </div>
             </div>
         `;
@@ -959,18 +979,18 @@ class ActionDiscoveryPanel {
 
     private createActionControls(actionName: string): string {
         if (!actionName) return "";
-        
+
         return `
             <div class="mt-3 text-end">
                 ${this.createButton(
                     '<i class="bi bi-download"></i> Export',
-                    'btn btn-outline-primary btn-sm me-2 export-action-btn',
-                    { 'data-action': actionName }
+                    "btn btn-outline-primary btn-sm me-2 export-action-btn",
+                    { "data-action": actionName },
                 )}
                 ${this.createButton(
                     '<i class="bi bi-trash"></i> Delete',
-                    'btn btn-outline-danger btn-sm delete-action-btn',
-                    { 'data-action': actionName }
+                    "btn btn-outline-danger btn-sm delete-action-btn",
+                    { "data-action": actionName },
                 )}
             </div>
         `;
@@ -999,13 +1019,13 @@ class ActionDiscoveryPanel {
                 <div class="btn-group-vertical btn-group-sm">
                     ${this.createButton(
                         '<i class="bi bi-eye"></i>',
-                        'btn btn-outline-primary btn-sm',
-                        { 'title': 'View details', 'data-action': 'view' }
+                        "btn btn-outline-primary btn-sm",
+                        { title: "View details", "data-action": "view" },
                     )}
                     ${this.createButton(
                         '<i class="bi bi-trash"></i>',
-                        'btn btn-outline-danger btn-sm',
-                        { 'title': 'Delete action', 'data-action': 'delete' }
+                        "btn btn-outline-danger btn-sm",
+                        { title: "Delete action", "data-action": "delete" },
                     )}
                 </div>
             </div>
@@ -1016,23 +1036,23 @@ class ActionDiscoveryPanel {
         const tabs = [
             { id: `steps${index}`, label: "Steps", active: true },
             { id: `intent${index}`, label: "Intent" },
-            { id: `actions${index}`, label: "Actions" }
+            { id: `actions${index}`, label: "Actions" },
         ];
 
         const panes = [
-            { 
-                id: `steps${index}`, 
-                content: `<div id="stepsContent${index}"></div>`, 
-                active: true 
+            {
+                id: `steps${index}`,
+                content: `<div id="stepsContent${index}"></div>`,
+                active: true,
             },
-            { 
-                id: `intent${index}`, 
-                content: `<pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>` 
+            {
+                id: `intent${index}`,
+                content: `<pre><code class="language-typescript">${action.intentSchema || "No intent schema available"}</code></pre>`,
             },
-            { 
-                id: `actions${index}`, 
-                content: `<pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>` 
-            }
+            {
+                id: `actions${index}`,
+                content: `<pre><code class="language-json">${JSON.stringify(action.actionsJson || {}, null, 2)}</code></pre>`,
+            },
         ];
 
         return `

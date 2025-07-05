@@ -118,7 +118,7 @@ class KnowledgePanel {
         await this.loadCachedKnowledge();
         this.setupExtractionModeControls();
         await this.loadExtractionSettings();
-        
+
         // Setup advanced query controls
         this.setupAdvancedQueryControls();
     }
@@ -186,7 +186,11 @@ class KnowledgePanel {
                 const domain = new URL(this.currentUrl).hostname;
                 const status = await this.getPageIndexStatus();
 
-                pageInfo.innerHTML = this.createPageInfo(tab.title || "Untitled", domain, status);
+                pageInfo.innerHTML = this.createPageInfo(
+                    tab.title || "Untitled",
+                    domain,
+                    status,
+                );
             }
         } catch (error) {
             console.error("Error loading page info:", error);
@@ -300,15 +304,20 @@ class KnowledgePanel {
     }
 
     private async submitQuery() {
-        const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+        const queryInput = document.getElementById(
+            "knowledgeQuery",
+        ) as HTMLInputElement;
         const queryResults = document.getElementById("queryResults")!;
         const query = queryInput.value.trim();
 
         if (!query) return;
 
         // Check if advanced filters are enabled
-        const advancedControls = document.getElementById("advancedQueryControls");
-        const useAdvanced = advancedControls && advancedControls.style.display !== 'none';
+        const advancedControls = document.getElementById(
+            "advancedQueryControls",
+        );
+        const useAdvanced =
+            advancedControls && advancedControls.style.display !== "none";
 
         if (useAdvanced) {
             await this.submitEnhancedQuery(query);
@@ -323,17 +332,20 @@ class KnowledgePanel {
                         query: query,
                         url: this.currentUrl,
                         searchScope: "current_page",
-                    }
+                    },
                 });
 
-                queryResults.innerHTML = this.createQueryAnswer(response.answer, response.sources);
+                queryResults.innerHTML = this.createQueryAnswer(
+                    response.answer,
+                    response.sources,
+                );
                 queryInput.value = "";
             } catch (error) {
                 console.error("Error querying knowledge:", error);
                 queryResults.innerHTML = this.createAlert(
-                    "danger", 
-                    "bi bi-exclamation-triangle", 
-                    "Error processing query. Please try again."
+                    "danger",
+                    "bi bi-exclamation-triangle",
+                    "Error processing query. Please try again.",
                 );
             }
         }
@@ -343,8 +355,8 @@ class KnowledgePanel {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = this.createLoadingState(
-            "Extracting knowledge from page...", 
-            "This may take a few seconds"
+            "Extracting knowledge from page...",
+            "This may take a few seconds",
         );
     }
 
@@ -381,7 +393,10 @@ class KnowledgePanel {
         this.renderRelationships(knowledge.relationships);
         this.renderKeyTopics(knowledge.keyTopics);
         if (knowledge.detectedActions && knowledge.detectedActions.length > 0) {
-            this.renderDetectedActions(knowledge.detectedActions, knowledge.actionSummary);
+            this.renderDetectedActions(
+                knowledge.detectedActions,
+                knowledge.actionSummary,
+            );
         }
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
 
@@ -508,27 +523,31 @@ class KnowledgePanel {
         `;
 
         // Render each category with enhanced styling
-        categories.forEach(category => {
-            const highPriorityQuestions = category.questions.filter(q => q.priority === 'high');
-            const recommendedCount = category.questions.filter(q => q.recommended).length;
-            
+        categories.forEach((category) => {
+            const highPriorityQuestions = category.questions.filter(
+                (q) => q.priority === "high",
+            );
+            const recommendedCount = category.questions.filter(
+                (q) => q.recommended,
+            ).length;
+
             questionsHtml += `
-                <div class="question-category-card mb-3" data-category="${category.name.toLowerCase().replace(' ', '-')}">
+                <div class="question-category-card mb-3" data-category="${category.name.toLowerCase().replace(" ", "-")}">
                     <div class="category-header d-flex align-items-center justify-content-between mb-2">
                         <h6 class="mb-0 text-${category.color}">
                             <i class="${category.icon} me-2"></i>
                             ${category.name}
                             <span class="badge bg-${category.color} ms-2">${category.count}</span>
-                            ${recommendedCount > 0 ? `<span class="badge bg-warning ms-1" title="Recommended questions">★ ${recommendedCount}</span>` : ''}
+                            ${recommendedCount > 0 ? `<span class="badge bg-warning ms-1" title="Recommended questions">★ ${recommendedCount}</span>` : ""}
                         </h6>
                         <button class="btn btn-sm btn-outline-${category.color} category-toggle" 
                                 data-bs-toggle="collapse" 
-                                data-bs-target="#category-${category.name.toLowerCase().replace(' ', '-')}"
+                                data-bs-target="#category-${category.name.toLowerCase().replace(" ", "-")}"
                                 aria-expanded="true">
                             <i class="bi bi-chevron-down"></i>
                         </button>
                     </div>
-                    <div class="collapse show" id="category-${category.name.toLowerCase().replace(' ', '-')}">
+                    <div class="collapse show" id="category-${category.name.toLowerCase().replace(" ", "-")}">
                         ${this.renderEnhancedQuestionList(category.questions, category.color)}
                     </div>
                 </div>
@@ -542,13 +561,15 @@ class KnowledgePanel {
     }
 
     private categorizeQuestions(questions: string[]): QuestionCategory[] {
-        const categorizedQuestions: CategorizedQuestion[] = questions.map(question => {
-            return this.categorizeAndScoreQuestion(question);
-        });
+        const categorizedQuestions: CategorizedQuestion[] = questions.map(
+            (question) => {
+                return this.categorizeAndScoreQuestion(question);
+            },
+        );
 
         // Group questions by category
         const categoryMap = new Map<string, CategorizedQuestion[]>();
-        categorizedQuestions.forEach(question => {
+        categorizedQuestions.forEach((question) => {
             if (!categoryMap.has(question.category)) {
                 categoryMap.set(question.category, []);
             }
@@ -558,71 +579,109 @@ class KnowledgePanel {
         // Create category objects with enhanced metadata
         const categories: QuestionCategory[] = [];
 
-        if (categoryMap.has('learning')) {
+        if (categoryMap.has("learning")) {
             categories.push({
-                name: 'Learning Path',
-                icon: 'bi-mortarboard',
-                color: 'success',
-                questions: categoryMap.get('learning')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                name: "Learning Path",
+                icon: "bi-mortarboard",
+                color: "success",
+                questions: categoryMap
+                    .get("learning")!
+                    .sort(
+                        (a, b) =>
+                            this.getQuestionScore(b) - this.getQuestionScore(a),
+                    ),
                 priority: 1,
-                count: categoryMap.get('learning')!.length
+                count: categoryMap.get("learning")!.length,
             });
         }
 
-        if (categoryMap.has('technical')) {
+        if (categoryMap.has("technical")) {
             categories.push({
-                name: 'Technical Deep Dive',
-                icon: 'bi-code-slash',
-                color: 'primary',
-                questions: categoryMap.get('technical')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                name: "Technical Deep Dive",
+                icon: "bi-code-slash",
+                color: "primary",
+                questions: categoryMap
+                    .get("technical")!
+                    .sort(
+                        (a, b) =>
+                            this.getQuestionScore(b) - this.getQuestionScore(a),
+                    ),
                 priority: 2,
-                count: categoryMap.get('technical')!.length
+                count: categoryMap.get("technical")!.length,
             });
         }
 
-        if (categoryMap.has('discovery')) {
+        if (categoryMap.has("discovery")) {
             categories.push({
-                name: 'Discovery',
-                icon: 'bi-compass',
-                color: 'info',
-                questions: categoryMap.get('discovery')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                name: "Discovery",
+                icon: "bi-compass",
+                color: "info",
+                questions: categoryMap
+                    .get("discovery")!
+                    .sort(
+                        (a, b) =>
+                            this.getQuestionScore(b) - this.getQuestionScore(a),
+                    ),
                 priority: 3,
-                count: categoryMap.get('discovery')!.length
+                count: categoryMap.get("discovery")!.length,
             });
         }
 
-        if (categoryMap.has('content')) {
+        if (categoryMap.has("content")) {
             categories.push({
-                name: 'About Content',
-                icon: 'bi-file-text',
-                color: 'secondary',
-                questions: categoryMap.get('content')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                name: "About Content",
+                icon: "bi-file-text",
+                color: "secondary",
+                questions: categoryMap
+                    .get("content")!
+                    .sort(
+                        (a, b) =>
+                            this.getQuestionScore(b) - this.getQuestionScore(a),
+                    ),
                 priority: 4,
-                count: categoryMap.get('content')!.length
+                count: categoryMap.get("content")!.length,
             });
         }
 
-        if (categoryMap.has('temporal')) {
+        if (categoryMap.has("temporal")) {
             categories.push({
-                name: 'Timeline',
-                icon: 'bi-clock-history',
-                color: 'warning',
-                questions: categoryMap.get('temporal')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                name: "Timeline",
+                icon: "bi-clock-history",
+                color: "warning",
+                questions: categoryMap
+                    .get("temporal")!
+                    .sort(
+                        (a, b) =>
+                            this.getQuestionScore(b) - this.getQuestionScore(a),
+                    ),
                 priority: 5,
-                count: categoryMap.get('temporal')!.length
+                count: categoryMap.get("temporal")!.length,
             });
         }
 
         // Add any other categories that didn't fit the main ones
         for (const [categoryName, questions] of categoryMap.entries()) {
-            if (!['learning', 'technical', 'discovery', 'content', 'temporal'].includes(categoryName)) {
+            if (
+                ![
+                    "learning",
+                    "technical",
+                    "discovery",
+                    "content",
+                    "temporal",
+                ].includes(categoryName)
+            ) {
                 categories.push({
-                    name: categoryName.charAt(0).toUpperCase() + categoryName.slice(1),
-                    icon: 'bi-question-circle',
-                    color: 'light',
-                    questions: questions.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                    name:
+                        categoryName.charAt(0).toUpperCase() +
+                        categoryName.slice(1),
+                    icon: "bi-question-circle",
+                    color: "light",
+                    questions: questions.sort(
+                        (a, b) =>
+                            this.getQuestionScore(b) - this.getQuestionScore(a),
+                    ),
                     priority: 6,
-                    count: questions.length
+                    count: questions.length,
                 });
             }
         }
@@ -632,72 +691,84 @@ class KnowledgePanel {
 
     private categorizeAndScoreQuestion(question: string): CategorizedQuestion {
         const lowerQ = question.toLowerCase();
-        let category = 'other';
-        let priority: 'high' | 'medium' | 'low' = 'medium';
+        let category = "other";
+        let priority: "high" | "medium" | "low" = "medium";
         let confidence = 0.7;
         let recommended = false;
 
         // Learning-related questions (highest priority)
-        if (lowerQ.includes('learn') || 
-            lowerQ.includes('prerequisite') || 
-            lowerQ.includes('should i') ||
-            lowerQ.includes('knowledge gap') ||
-            lowerQ.includes('next in this area') ||
-            lowerQ.includes('learning path') ||
-            lowerQ.includes('beginner') ||
-            lowerQ.includes('advanced')) {
-            category = 'learning';
-            priority = 'high';
+        if (
+            lowerQ.includes("learn") ||
+            lowerQ.includes("prerequisite") ||
+            lowerQ.includes("should i") ||
+            lowerQ.includes("knowledge gap") ||
+            lowerQ.includes("next in this area") ||
+            lowerQ.includes("learning path") ||
+            lowerQ.includes("beginner") ||
+            lowerQ.includes("advanced")
+        ) {
+            category = "learning";
+            priority = "high";
             confidence = 0.9;
             recommended = true;
         }
         // Technical questions
-        else if (lowerQ.includes('code') ||
-                 lowerQ.includes('api') ||
-                 lowerQ.includes('tutorial') ||
-                 lowerQ.includes('example') ||
-                 lowerQ.includes('documentation') ||
-                 lowerQ.includes('implementation') ||
-                 lowerQ.includes('library') ||
-                 lowerQ.includes('framework')) {
-            category = 'technical';
-            priority = 'high';
+        else if (
+            lowerQ.includes("code") ||
+            lowerQ.includes("api") ||
+            lowerQ.includes("tutorial") ||
+            lowerQ.includes("example") ||
+            lowerQ.includes("documentation") ||
+            lowerQ.includes("implementation") ||
+            lowerQ.includes("library") ||
+            lowerQ.includes("framework")
+        ) {
+            category = "technical";
+            priority = "high";
             confidence = 0.85;
-            recommended = lowerQ.includes('example') || lowerQ.includes('tutorial');
+            recommended =
+                lowerQ.includes("example") || lowerQ.includes("tutorial");
         }
         // Discovery questions
-        else if (lowerQ.includes('other') ||
-                 lowerQ.includes('similar') ||
-                 lowerQ.includes('else') ||
-                 lowerQ.includes('show me') ||
-                 lowerQ.includes('find') ||
-                 lowerQ.includes('resources') ||
-                 lowerQ.includes('related')) {
-            category = 'discovery';
-            priority = 'medium';
+        else if (
+            lowerQ.includes("other") ||
+            lowerQ.includes("similar") ||
+            lowerQ.includes("else") ||
+            lowerQ.includes("show me") ||
+            lowerQ.includes("find") ||
+            lowerQ.includes("resources") ||
+            lowerQ.includes("related")
+        ) {
+            category = "discovery";
+            priority = "medium";
             confidence = 0.8;
-            recommended = lowerQ.includes('related') || lowerQ.includes('similar');
+            recommended =
+                lowerQ.includes("related") || lowerQ.includes("similar");
         }
         // Content-specific questions
-        else if (lowerQ.includes('what is') ||
-                 lowerQ.includes('tell me') ||
-                 lowerQ.includes('summarize') ||
-                 lowerQ.includes('about') ||
-                 lowerQ.includes('explain') ||
-                 lowerQ.includes('key points')) {
-            category = 'content';
-            priority = 'medium';
+        else if (
+            lowerQ.includes("what is") ||
+            lowerQ.includes("tell me") ||
+            lowerQ.includes("summarize") ||
+            lowerQ.includes("about") ||
+            lowerQ.includes("explain") ||
+            lowerQ.includes("key points")
+        ) {
+            category = "content";
+            priority = "medium";
             confidence = 0.75;
         }
         // Temporal questions
-        else if (lowerQ.includes('when') ||
-                 lowerQ.includes('first') ||
-                 lowerQ.includes('recently') ||
-                 lowerQ.includes('journey') ||
-                 lowerQ.includes('time') ||
-                 lowerQ.includes('history')) {
-            category = 'temporal';
-            priority = 'low';
+        else if (
+            lowerQ.includes("when") ||
+            lowerQ.includes("first") ||
+            lowerQ.includes("recently") ||
+            lowerQ.includes("journey") ||
+            lowerQ.includes("time") ||
+            lowerQ.includes("history")
+        ) {
+            category = "temporal";
+            priority = "low";
             confidence = 0.8;
         }
 
@@ -707,27 +778,31 @@ class KnowledgePanel {
             priority,
             source: category as any,
             confidence,
-            recommended
+            recommended,
         };
     }
 
     private getQuestionScore(question: CategorizedQuestion): number {
         let score = question.confidence;
-        
+
         if (question.recommended) score += 0.3;
-        if (question.priority === 'high') score += 0.2;
-        else if (question.priority === 'medium') score += 0.1;
-        
+        if (question.priority === "high") score += 0.2;
+        else if (question.priority === "medium") score += 0.1;
+
         return score;
     }
 
-    private renderEnhancedQuestionList(questions: CategorizedQuestion[], color: string): string {
+    private renderEnhancedQuestionList(
+        questions: CategorizedQuestion[],
+        color: string,
+    ): string {
         return questions
             .map((question, index) => {
                 const priorityIcon = this.getPriorityIcon(question.priority);
                 const confidenceWidth = Math.round(question.confidence * 100);
-                const recommendedBadge = question.recommended ? 
-                    `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>` : '';
+                const recommendedBadge = question.recommended
+                    ? `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>`
+                    : "";
 
                 return `
                     <div class="enhanced-question-item list-group-item list-group-item-action p-3 mb-2 rounded border" 
@@ -762,49 +837,59 @@ class KnowledgePanel {
             .join("");
     }
 
-    private getPriorityIcon(priority: 'high' | 'medium' | 'low'): string {
+    private getPriorityIcon(priority: "high" | "medium" | "low"): string {
         switch (priority) {
-            case 'high': return 'bi-star-fill';
-            case 'medium': return 'bi-star-half';
-            case 'low': return 'bi-star';
-            default: return 'bi-circle';
+            case "high":
+                return "bi-star-fill";
+            case "medium":
+                return "bi-star-half";
+            case "low":
+                return "bi-star";
+            default:
+                return "bi-circle";
         }
     }
 
     private setupQuestionInteractions(container: HTMLElement) {
         // Enhanced question click handling
-        container.querySelectorAll(".enhanced-question-item").forEach((item) => {
-            item.addEventListener("click", () => {
-                const questionText = item.getAttribute("data-question")!;
-                const priority = item.getAttribute("data-priority")!;
-                
-                // Add visual feedback
-                item.classList.add("border-primary", "bg-light");
-                setTimeout(() => {
-                    item.classList.remove("border-primary", "bg-light");
-                }, 300);
+        container
+            .querySelectorAll(".enhanced-question-item")
+            .forEach((item) => {
+                item.addEventListener("click", () => {
+                    const questionText = item.getAttribute("data-question")!;
+                    const priority = item.getAttribute("data-priority")!;
 
-                // Set query and submit
-                (document.getElementById("knowledgeQuery") as HTMLInputElement).value = questionText;
-                this.submitQuery();
-            });
+                    // Add visual feedback
+                    item.classList.add("border-primary", "bg-light");
+                    setTimeout(() => {
+                        item.classList.remove("border-primary", "bg-light");
+                    }, 300);
 
-            // Add hover effects
-            item.addEventListener("mouseenter", () => {
-                item.classList.add("shadow-sm");
-            });
+                    // Set query and submit
+                    (
+                        document.getElementById(
+                            "knowledgeQuery",
+                        ) as HTMLInputElement
+                    ).value = questionText;
+                    this.submitQuery();
+                });
 
-            item.addEventListener("mouseleave", () => {
-                item.classList.remove("shadow-sm");
+                // Add hover effects
+                item.addEventListener("mouseenter", () => {
+                    item.classList.add("shadow-sm");
+                });
+
+                item.addEventListener("mouseleave", () => {
+                    item.classList.remove("shadow-sm");
+                });
             });
-        });
 
         // Category toggle functionality
         container.querySelectorAll(".category-toggle").forEach((toggle) => {
             toggle.addEventListener("click", (e) => {
                 e.preventDefault();
                 const icon = toggle.querySelector("i")!;
-                
+
                 // Toggle chevron direction
                 if (icon.classList.contains("bi-chevron-down")) {
                     icon.classList.remove("bi-chevron-down");
@@ -823,13 +908,13 @@ class KnowledgePanel {
     private setupRelatedContentInteractions() {
         document.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
-            
+
             // Handle visit page button clicks
             if (target.closest(".visit-page")) {
                 e.preventDefault();
                 const button = target.closest(".visit-page") as HTMLElement;
                 const url = button.getAttribute("data-url");
-                
+
                 if (url) {
                     // Add visual feedback
                     button.classList.add("btn-primary");
@@ -838,18 +923,20 @@ class KnowledgePanel {
                         button.classList.remove("btn-primary");
                         button.classList.add("btn-outline-primary");
                     }, 300);
-                    
+
                     // Open the page in a new tab
                     chrome.tabs.create({ url: url, active: false });
                 }
             }
-            
+
             // Handle explore related content button clicks
             if (target.closest(".explore-related")) {
                 e.preventDefault();
-                const button = target.closest(".explore-related") as HTMLElement;
+                const button = target.closest(
+                    ".explore-related",
+                ) as HTMLElement;
                 const query = button.getAttribute("data-query");
-                
+
                 if (query) {
                     // Add visual feedback
                     button.classList.add("btn-secondary");
@@ -858,33 +945,40 @@ class KnowledgePanel {
                         button.classList.remove("btn-secondary");
                         button.classList.add("btn-outline-secondary");
                     }, 300);
-                    
+
                     // Set query and submit
-                    const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+                    const queryInput = document.getElementById(
+                        "knowledgeQuery",
+                    ) as HTMLInputElement;
                     if (queryInput) {
                         queryInput.value = query;
                         this.submitQuery();
                     }
                 }
             }
-            
+
             // Handle related content item clicks (for future navigation features)
             if (target.closest(".related-page-item")) {
-                const item = target.closest(".related-page-item") as HTMLElement;
+                const item = target.closest(
+                    ".related-page-item",
+                ) as HTMLElement;
                 const url = item.getAttribute("data-url");
                 const type = item.getAttribute("data-type");
-                
+
                 // Add visual feedback
                 item.classList.add("border-primary", "bg-light");
                 setTimeout(() => {
                     item.classList.remove("border-primary", "bg-light");
                 }, 300);
-                
+
                 // For now, create a query based on the relationship
-                if (url && url === '#') {
-                    const title = item.querySelector(".fw-semibold")?.textContent;
+                if (url && url === "#") {
+                    const title =
+                        item.querySelector(".fw-semibold")?.textContent;
                     if (title) {
-                        const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+                        const queryInput = document.getElementById(
+                            "knowledgeQuery",
+                        ) as HTMLInputElement;
                         if (queryInput) {
                             queryInput.value = `content related to ${title}`;
                         }
@@ -1167,8 +1261,15 @@ class KnowledgePanel {
     }
 
     // Template utility functions for knowledge panel
-    private createCard(title: string, content: string, icon: string, badge?: string): string {
-        const badgeHtml = badge ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>` : "";
+    private createCard(
+        title: string,
+        content: string,
+        icon: string,
+        badge?: string,
+    ): string {
+        const badgeHtml = badge
+            ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>`
+            : "";
         return `
             <div class="knowledge-card card">
                 <div class="card-header">
@@ -1200,30 +1301,53 @@ class KnowledgePanel {
     // Knowledge card component methods
     private renderEntitiesCard(): string {
         const content = this.createContainer(
-            "entitiesContainer", 
-            this.createEmptyState("bi bi-info-circle", "No entities extracted yet")
+            "entitiesContainer",
+            this.createEmptyState(
+                "bi bi-info-circle",
+                "No entities extracted yet",
+            ),
         );
-        return this.createCard("Entities", content, "bi bi-tags", "entitiesCount");
+        return this.createCard(
+            "Entities",
+            content,
+            "bi bi-tags",
+            "entitiesCount",
+        );
     }
 
     private renderRelationshipsCard(): string {
         const content = this.createContainer(
             "relationshipsContainer",
-            this.createEmptyState("bi bi-info-circle", "No relationships found yet")
+            this.createEmptyState(
+                "bi bi-info-circle",
+                "No relationships found yet",
+            ),
         );
-        return this.createCard("Relationships", content, "bi bi-diagram-3", "relationshipsCount");
+        return this.createCard(
+            "Relationships",
+            content,
+            "bi bi-diagram-3",
+            "relationshipsCount",
+        );
     }
 
     private renderTopicsCard(): string {
         const content = this.createContainer(
             "topicsContainer",
-            this.createEmptyState("bi bi-info-circle", "No topics identified yet")
+            this.createEmptyState(
+                "bi bi-info-circle",
+                "No topics identified yet",
+            ),
         );
         return this.createCard("Key Topics", content, "bi bi-bookmark");
     }
 
     // Alert and loading state utilities
-    private createAlert(type: "info" | "danger", icon: string, content: string): string {
+    private createAlert(
+        type: "info" | "danger",
+        icon: string,
+        content: string,
+    ): string {
         return `
             <div class="alert alert-${type} mb-0">
                 <div class="d-flex align-items-start">
@@ -1237,7 +1361,9 @@ class KnowledgePanel {
     }
 
     private createLoadingState(message: string, subtext?: string): string {
-        const subtextHtml = subtext ? `<small class="text-muted">${subtext}</small>` : "";
+        const subtextHtml = subtext
+            ? `<small class="text-muted">${subtext}</small>`
+            : "";
         return `
             <div class="knowledge-card card">
                 <div class="card-body text-center">
@@ -1261,12 +1387,15 @@ class KnowledgePanel {
     }
 
     private createQueryAnswer(answer: string, sources: any[]): string {
-        const sourcesHtml = sources && sources.length > 0 ? `
+        const sourcesHtml =
+            sources && sources.length > 0
+                ? `
             <hr class="my-2">
             <small class="text-muted">
                 <strong>Sources:</strong> ${sources.map((s: any) => s.title).join(", ")}
             </small>
-        ` : "";
+        `
+                : "";
 
         const content = `
             <div class="fw-semibold">Answer:</div>
@@ -1282,7 +1411,12 @@ class KnowledgePanel {
         return `<li><h6 class="dropdown-header">${text}</h6></li>`;
     }
 
-    private createDropdownItem(icon: string, text: string, dataAttr: string, value: string): string {
+    private createDropdownItem(
+        icon: string,
+        text: string,
+        dataAttr: string,
+        value: string,
+    ): string {
         return `
             <li><a class="dropdown-item" href="#" ${dataAttr}="${value}">
                 <i class="${icon}"></i> ${text}
@@ -1313,7 +1447,11 @@ class KnowledgePanel {
         `;
     }
 
-    private createPageInfo(title: string, domain: string, status: string): string {
+    private createPageInfo(
+        title: string,
+        domain: string,
+        status: string,
+    ): string {
         return `
             <div class="d-flex align-items-center">
                 <img src="https://www.google.com/s2/favicons?domain=${domain}" 
@@ -1330,38 +1468,63 @@ class KnowledgePanel {
     // Content Metrics Card component with enhanced visualization
     private renderContentMetricsCard(): string {
         const content = this.createContainer(
-            "contentMetricsContainer", 
-            this.createEmptyState("bi bi-info-circle", "No content metrics available")
+            "contentMetricsContainer",
+            this.createEmptyState(
+                "bi bi-info-circle",
+                "No content metrics available",
+            ),
         );
-        return this.createCard("Content Analysis", content, "bi bi-bar-chart-line");
+        return this.createCard(
+            "Content Analysis",
+            content,
+            "bi bi-bar-chart-line",
+        );
     }
 
     // Related Content Card component
     private renderRelatedContentCard(): string {
         const content = this.createContainer(
             "relatedContentContainer",
-            this.createEmptyState("bi bi-info-circle", "No related content found")
+            this.createEmptyState(
+                "bi bi-info-circle",
+                "No related content found",
+            ),
         );
-        return this.createCard("Related Content", content, "bi bi-link-45deg", "relatedContentCount");
+        return this.createCard(
+            "Related Content",
+            content,
+            "bi bi-link-45deg",
+            "relatedContentCount",
+        );
     }
     private renderActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
-            this.createEmptyState("bi bi-info-circle", "No actions detected")
+            this.createEmptyState("bi bi-info-circle", "No actions detected"),
         );
-        return this.createCard("Detected Actions", content, "bi bi-lightning", "actionsCount");
+        return this.createCard(
+            "Detected Actions",
+            content,
+            "bi bi-lightning",
+            "actionsCount",
+        );
     }
 
     // Render enhanced content metrics with visual indicators
     private renderContentMetrics(metrics: any) {
         const container = document.getElementById("contentMetricsContainer")!;
-        
+
         // Calculate derived metrics
-        const readingTimeCategory = this.getReadingTimeCategory(metrics.readingTime);
+        const readingTimeCategory = this.getReadingTimeCategory(
+            metrics.readingTime,
+        );
         const wordCountCategory = this.getWordCountCategory(metrics.wordCount);
         const pageTypeInfo = this.getPageTypeInfo(metrics.pageType);
-        const codeIntensity = this.getCodeIntensity(metrics.hasCode, metrics.wordCount);
-        
+        const codeIntensity = this.getCodeIntensity(
+            metrics.hasCode,
+            metrics.wordCount,
+        );
+
         container.innerHTML = `
             <!-- Reading Time Section -->
             <div class="metric-section mb-4">
@@ -1450,8 +1613,8 @@ class KnowledgePanel {
                     <div class="row text-center">
                         <div class="col-6">
                             <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-${metrics.hasCode ? 'success' : 'muted'}">
-                                    <i class="bi bi-${metrics.hasCode ? 'check-circle-fill' : 'x-circle'}"></i>
+                                <div class="h5 mb-0 text-${metrics.hasCode ? "success" : "muted"}">
+                                    <i class="bi bi-${metrics.hasCode ? "check-circle-fill" : "x-circle"}"></i>
                                 </div>
                                 <small class="text-muted">Code Present</small>
                             </div>
@@ -1459,7 +1622,7 @@ class KnowledgePanel {
                         <div class="col-6">
                             <div class="metric-card p-2 bg-light rounded">
                                 <div class="h5 mb-0 text-secondary">
-                                    ${metrics.interactivity !== 'static' ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
+                                    ${metrics.interactivity !== "static" ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
                                 </div>
                                 <small class="text-muted">${this.getInteractivityLevel(metrics.interactivity)}</small>
                             </div>
@@ -1471,7 +1634,10 @@ class KnowledgePanel {
     }
 
     // Render detected actions
-    private renderDetectedActions(actions: DetectedAction[], summary?: ActionSummary) {
+    private renderDetectedActions(
+        actions: DetectedAction[],
+        summary?: ActionSummary,
+    ) {
         const container = document.getElementById("detectedActionsContainer")!;
         const countBadge = document.getElementById("actionsCount");
 
@@ -1495,19 +1661,20 @@ class KnowledgePanel {
                 <div class="mb-3 p-2 bg-light rounded">
                     <small class="text-muted">Summary:</small><br>
                     <span class="fw-semibold">${summary.totalActions} total actions</span>
-                    ${summary.actionTypes.length > 0 ? `<br><small>Types: ${summary.actionTypes.join(", ")}</small>` : ''}
+                    ${summary.actionTypes.length > 0 ? `<br><small>Types: ${summary.actionTypes.join(", ")}</small>` : ""}
                 </div>
             `;
         }
 
         const actionsHtml = actions
             .slice(0, 10)
-            .map(action => `
+            .map(
+                (action) => `
                 <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
                     <div>
                         <span class="fw-semibold">${action.type}</span>
                         <span class="badge bg-secondary ms-2">${action.element}</span>
-                        ${action.text ? `<br><small class="text-muted">${action.text}</small>` : ''}
+                        ${action.text ? `<br><small class="text-muted">${action.text}</small>` : ""}
                     </div>
                     <div>
                         <div class="progress" style="width: 50px; height: 4px;">
@@ -1515,7 +1682,8 @@ class KnowledgePanel {
                         </div>
                     </div>
                 </div>
-            `)
+            `,
+            )
             .join("");
 
         container.innerHTML = summaryHtml + actionsHtml;
@@ -1524,71 +1692,168 @@ class KnowledgePanel {
     // Helper methods for enhanced content metrics
     private getReadingTimeCategory(readingTime: number) {
         if (readingTime <= 2) {
-            return { color: 'success', label: 'Quick Read', description: 'Fast consumption content' };
+            return {
+                color: "success",
+                label: "Quick Read",
+                description: "Fast consumption content",
+            };
         } else if (readingTime <= 5) {
-            return { color: 'info', label: 'Short Read', description: 'Brief but informative' };
+            return {
+                color: "info",
+                label: "Short Read",
+                description: "Brief but informative",
+            };
         } else if (readingTime <= 15) {
-            return { color: 'warning', label: 'Medium Read', description: 'Substantial content' };
+            return {
+                color: "warning",
+                label: "Medium Read",
+                description: "Substantial content",
+            };
         } else {
-            return { color: 'danger', label: 'Long Read', description: 'In-depth material' };
+            return {
+                color: "danger",
+                label: "Long Read",
+                description: "In-depth material",
+            };
         }
     }
 
     private getWordCountCategory(wordCount: number) {
         if (wordCount <= 300) {
-            return { color: 'success', label: 'Brief', description: 'Concise and focused content' };
+            return {
+                color: "success",
+                label: "Brief",
+                description: "Concise and focused content",
+            };
         } else if (wordCount <= 1000) {
-            return { color: 'info', label: 'Standard', description: 'Typical article length' };
+            return {
+                color: "info",
+                label: "Standard",
+                description: "Typical article length",
+            };
         } else if (wordCount <= 3000) {
-            return { color: 'warning', label: 'Detailed', description: 'Comprehensive coverage' };
+            return {
+                color: "warning",
+                label: "Detailed",
+                description: "Comprehensive coverage",
+            };
         } else {
-            return { color: 'danger', label: 'Extensive', description: 'In-depth exploration' };
+            return {
+                color: "danger",
+                label: "Extensive",
+                description: "In-depth exploration",
+            };
         }
     }
 
     private getPageTypeInfo(pageType: string) {
-        const typeMap: { [key: string]: { icon: string, color: string, label: string, description: string } } = {
-            'tutorial': { icon: 'bi-book', color: 'primary', label: 'Tutorial', description: 'Step-by-step learning content' },
-            'documentation': { icon: 'bi-file-earmark-text', color: 'info', label: 'Documentation', description: 'Reference material' },
-            'blog': { icon: 'bi-journal-text', color: 'success', label: 'Blog Post', description: 'Opinion and insights' },
-            'news': { icon: 'bi-newspaper', color: 'warning', label: 'News', description: 'Current events' },
-            'product': { icon: 'bi-box', color: 'danger', label: 'Product', description: 'Commercial content' },
-            'forum': { icon: 'bi-chat-dots', color: 'secondary', label: 'Discussion', description: 'Community content' },
-            'other': { icon: 'bi-file-text', color: 'light', label: 'General', description: 'Mixed content type' }
+        const typeMap: {
+            [key: string]: {
+                icon: string;
+                color: string;
+                label: string;
+                description: string;
+            };
+        } = {
+            tutorial: {
+                icon: "bi-book",
+                color: "primary",
+                label: "Tutorial",
+                description: "Step-by-step learning content",
+            },
+            documentation: {
+                icon: "bi-file-earmark-text",
+                color: "info",
+                label: "Documentation",
+                description: "Reference material",
+            },
+            blog: {
+                icon: "bi-journal-text",
+                color: "success",
+                label: "Blog Post",
+                description: "Opinion and insights",
+            },
+            news: {
+                icon: "bi-newspaper",
+                color: "warning",
+                label: "News",
+                description: "Current events",
+            },
+            product: {
+                icon: "bi-box",
+                color: "danger",
+                label: "Product",
+                description: "Commercial content",
+            },
+            forum: {
+                icon: "bi-chat-dots",
+                color: "secondary",
+                label: "Discussion",
+                description: "Community content",
+            },
+            other: {
+                icon: "bi-file-text",
+                color: "light",
+                label: "General",
+                description: "Mixed content type",
+            },
         };
-        
-        return typeMap[pageType] || typeMap['other'];
+
+        return typeMap[pageType] || typeMap["other"];
     }
 
     private getCodeIntensity(hasCode: boolean, wordCount: number) {
         if (!hasCode) {
-            return { color: 'light', label: 'Non-Technical', percentage: 0, description: 'No code content detected' };
+            return {
+                color: "light",
+                label: "Non-Technical",
+                percentage: 0,
+                description: "No code content detected",
+            };
         }
-        
+
         // Estimate technical intensity based on word count and code presence
-        const intensity = Math.min(Math.round((1000 / Math.max(wordCount, 100)) * 100), 100);
-        
+        const intensity = Math.min(
+            Math.round((1000 / Math.max(wordCount, 100)) * 100),
+            100,
+        );
+
         if (intensity >= 50) {
-            return { color: 'danger', label: 'Code-Heavy', percentage: intensity, description: 'Significant programming content' };
+            return {
+                color: "danger",
+                label: "Code-Heavy",
+                percentage: intensity,
+                description: "Significant programming content",
+            };
         } else if (intensity >= 25) {
-            return { color: 'warning', label: 'Technical', percentage: intensity, description: 'Mixed technical content' };
+            return {
+                color: "warning",
+                label: "Technical",
+                percentage: intensity,
+                description: "Mixed technical content",
+            };
         } else {
-            return { color: 'info', label: 'Light Code', percentage: intensity, description: 'Some code examples' };
+            return {
+                color: "info",
+                label: "Light Code",
+                percentage: intensity,
+                description: "Some code examples",
+            };
         }
     }
 
     private getInteractivityLevel(interactivity: string): string {
-        if (interactivity === 'static' || !interactivity) return 'Static';
-        if (interactivity.includes('form')) return 'Interactive';
-        if (interactivity.includes('button')) return 'Clickable';
-        return 'Dynamic';
+        if (interactivity === "static" || !interactivity) return "Static";
+        if (interactivity.includes("form")) return "Interactive";
+        if (interactivity.includes("button")) return "Clickable";
+        return "Dynamic";
     }
 
     private getInteractivityIcon(interactivity: string): string {
-        if (interactivity === 'static' || !interactivity) return 'file-text';
-        if (interactivity.includes('form')) return 'ui-checks';
-        if (interactivity.includes('button')) return 'hand-index';
-        return 'cursor';
+        if (interactivity === "static" || !interactivity) return "file-text";
+        if (interactivity.includes("form")) return "ui-checks";
+        if (interactivity.includes("button")) return "hand-index";
+        return "cursor";
     }
 
     // Render related content discovery using relationship discovery functionality
@@ -1610,7 +1875,7 @@ class KnowledgePanel {
                 type: "discoverRelationships",
                 url: this.currentUrl,
                 knowledge: knowledge,
-                maxResults: 10
+                maxResults: 10,
             });
 
             if (response.success && response.relationships.length > 0) {
@@ -1624,7 +1889,7 @@ class KnowledgePanel {
                 `;
             }
 
-                // Add relationship discovery specific interactions
+            // Add relationship discovery specific interactions
         } catch (error) {
             console.warn("Relationship discovery failed:", error);
             container.innerHTML = `
@@ -1637,7 +1902,11 @@ class KnowledgePanel {
     }
 
     // Fallback method for basic related content
-    private renderFallbackRelatedContent(knowledge: KnowledgeData, container: HTMLElement, countBadge: HTMLElement | null) {
+    private renderFallbackRelatedContent(
+        knowledge: KnowledgeData,
+        container: HTMLElement,
+        countBadge: HTMLElement | null,
+    ) {
         const relatedContent = this.generateRelatedContent(knowledge);
 
         if (countBadge) {
@@ -1665,7 +1934,9 @@ class KnowledgePanel {
         `;
     }
 
-    private generateRelatedContent(knowledge: KnowledgeData): RelatedContentItem[] {
+    private generateRelatedContent(
+        knowledge: KnowledgeData,
+    ): RelatedContentItem[] {
         const relatedContent: RelatedContentItem[] = [];
         const currentDomain = this.extractDomainFromUrl(this.currentUrl);
 
@@ -1675,20 +1946,20 @@ class KnowledgePanel {
                 url: `https://${currentDomain}`,
                 title: `Other pages from ${currentDomain}`,
                 similarity: 0.8,
-                relationshipType: 'same-domain',
-                excerpt: `Explore more content from this website domain`
+                relationshipType: "same-domain",
+                excerpt: `Explore more content from this website domain`,
             });
         }
 
         // Generate topic-based suggestions from knowledge
         if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
-            knowledge.keyTopics.slice(0, 3).forEach(topic => {
+            knowledge.keyTopics.slice(0, 3).forEach((topic) => {
                 relatedContent.push({
-                    url: '#',
+                    url: "#",
                     title: `More content about "${topic}"`,
                     similarity: 0.7,
-                    relationshipType: 'topic-match',
-                    excerpt: `Find other pages that discuss ${topic} in your knowledge base`
+                    relationshipType: "topic-match",
+                    excerpt: `Find other pages that discuss ${topic} in your knowledge base`,
                 });
             });
         }
@@ -1696,11 +1967,11 @@ class KnowledgePanel {
         // Generate code-related suggestions if code is detected
         if (knowledge.contentMetrics?.hasCode) {
             relatedContent.push({
-                url: '#',
-                title: 'Similar programming content',
+                url: "#",
+                title: "Similar programming content",
                 similarity: 0.6,
-                relationshipType: 'code-related',
-                excerpt: 'Other pages with code examples and technical content'
+                relationshipType: "code-related",
+                excerpt: "Other pages with code examples and technical content",
             });
         }
 
@@ -1708,32 +1979,37 @@ class KnowledgePanel {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const topEntity = knowledge.entities[0];
             relatedContent.push({
-                url: '#',
+                url: "#",
                 title: `More about "${topEntity.name}"`,
                 similarity: 0.65,
-                relationshipType: 'topic-match',
-                excerpt: `Find additional information about ${topEntity.name} in your saved content`
+                relationshipType: "topic-match",
+                excerpt: `Find additional information about ${topEntity.name} in your saved content`,
             });
         }
 
         return relatedContent.slice(0, 6); // Limit to 6 suggestions
     }
 
-    private renderRelatedContentSections(relatedContent: RelatedContentItem[]): string {
+    private renderRelatedContentSections(
+        relatedContent: RelatedContentItem[],
+    ): string {
         // Group by relationship type
-        const grouped = relatedContent.reduce((acc, item) => {
-            if (!acc[item.relationshipType]) {
-                acc[item.relationshipType] = [];
-            }
-            acc[item.relationshipType].push(item);
-            return acc;
-        }, {} as { [key: string]: RelatedContentItem[] });
+        const grouped = relatedContent.reduce(
+            (acc, item) => {
+                if (!acc[item.relationshipType]) {
+                    acc[item.relationshipType] = [];
+                }
+                acc[item.relationshipType].push(item);
+                return acc;
+            },
+            {} as { [key: string]: RelatedContentItem[] },
+        );
 
-        let html = '';
+        let html = "";
 
         Object.entries(grouped).forEach(([type, items]) => {
             const typeInfo = this.getRelationshipTypeInfo(type);
-            
+
             html += `
                 <div class="related-section mb-3">
                     <h6 class="text-${typeInfo.color} mb-2">
@@ -1741,7 +2017,7 @@ class KnowledgePanel {
                         <span class="badge bg-${typeInfo.color} ms-2">${items.length}</span>
                     </h6>
                     <div class="related-items">
-                        ${items.map(item => this.renderRelatedContentItem(item, typeInfo.color)).join('')}
+                        ${items.map((item) => this.renderRelatedContentItem(item, typeInfo.color)).join("")}
                     </div>
                 </div>
             `;
@@ -1750,9 +2026,12 @@ class KnowledgePanel {
         return html;
     }
 
-    private renderRelatedContentItem(item: RelatedContentItem, color: string): string {
+    private renderRelatedContentItem(
+        item: RelatedContentItem,
+        color: string,
+    ): string {
         const similarityWidth = Math.round(item.similarity * 100);
-        
+
         return `
             <div class="related-content-item p-2 mb-2 border rounded bg-white" 
                  data-url="${item.url}" data-type="${item.relationshipType}">
@@ -1781,23 +2060,45 @@ class KnowledgePanel {
     }
 
     private getRelationshipTypeInfo(type: string) {
-        const typeMap: { [key: string]: { icon: string, color: string, label: string } } = {
-            'same-domain': { icon: 'bi-globe', color: 'primary', label: 'Same Website' },
-            'topic-match': { icon: 'bi-tags', color: 'success', label: 'Related Topics' },
-            'code-related': { icon: 'bi-code-slash', color: 'warning', label: 'Code Content' }
+        const typeMap: {
+            [key: string]: { icon: string; color: string; label: string };
+        } = {
+            "same-domain": {
+                icon: "bi-globe",
+                color: "primary",
+                label: "Same Website",
+            },
+            "topic-match": {
+                icon: "bi-tags",
+                color: "success",
+                label: "Related Topics",
+            },
+            "code-related": {
+                icon: "bi-code-slash",
+                color: "warning",
+                label: "Code Content",
+            },
         };
-        
-        return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
+
+        return (
+            typeMap[type] || {
+                icon: "bi-link",
+                color: "secondary",
+                label: "Related",
+            }
+        );
     }
 
     // Enhanced relationship rendering using relationship discovery data
-    private renderEnhancedRelatedContentSections(relationshipResults: any[]): string {
-        let html = '';
+    private renderEnhancedRelatedContentSections(
+        relationshipResults: any[],
+    ): string {
+        let html = "";
 
-        relationshipResults.forEach(result => {
+        relationshipResults.forEach((result) => {
             if (result.relatedPages.length > 0) {
                 const typeInfo = this.getAnalysisTypeInfo(result.analysisType);
-                
+
                 html += `
                     <div class="related-section mb-3">
                         <h6 class="text-${typeInfo.color} mb-2">
@@ -1808,9 +2109,15 @@ class KnowledgePanel {
                             </span>
                         </h6>
                         <div class="related-items">
-                            ${result.relatedPages.slice(0, 5).map((page: any) => 
-                                this.renderRelatedPageItem(page, typeInfo.color)
-                            ).join('')}
+                            ${result.relatedPages
+                                .slice(0, 5)
+                                .map((page: any) =>
+                                    this.renderRelatedPageItem(
+                                        page,
+                                        typeInfo.color,
+                                    ),
+                                )
+                                .join("")}
                         </div>
                     </div>
                 `;
@@ -1823,7 +2130,7 @@ class KnowledgePanel {
     private renderRelatedPageItem(page: any, color: string): string {
         const similarityWidth = Math.round(page.similarity * 100);
         const visitInfo = page.visitInfo || {};
-        
+
         return `
             <div class="related-item p-3 mb-2 border rounded bg-white" 
                  data-url="${page.url}" 
@@ -1833,8 +2140,11 @@ class KnowledgePanel {
                         <div class="fw-semibold mb-1">${page.title}</div>
                         <div class="mb-2">
                             <span class="badge bg-${color} me-1">${page.relationshipType}</span>
-                            ${page.sharedElements && page.sharedElements.length > 0 ? 
-                                `<small class="text-muted">Shared: ${page.sharedElements.slice(0, 2).join(", ")}</small>` : ''
+                            ${
+                                page.sharedElements &&
+                                page.sharedElements.length > 0
+                                    ? `<small class="text-muted">Shared: ${page.sharedElements.slice(0, 2).join(", ")}</small>`
+                                    : ""
                             }
                         </div>
                         <div class="d-flex align-items-center mb-2">
@@ -1847,13 +2157,17 @@ class KnowledgePanel {
                             </div>
                             <small class="text-muted">${similarityWidth}%</small>
                         </div>
-                        ${visitInfo.visitCount ? `
+                        ${
+                            visitInfo.visitCount
+                                ? `
                             <small class="text-muted">
                                 <i class="bi bi-clock me-1"></i>
-                                Visited ${visitInfo.visitCount} time${visitInfo.visitCount > 1 ? 's' : ''}
-                                ${visitInfo.lastVisited ? ` • Last: ${this.formatDate(visitInfo.lastVisited)}` : ''}
+                                Visited ${visitInfo.visitCount} time${visitInfo.visitCount > 1 ? "s" : ""}
+                                ${visitInfo.lastVisited ? ` • Last: ${this.formatDate(visitInfo.lastVisited)}` : ""}
                             </small>
-                        ` : ''}
+                        `
+                                : ""
+                        }
                     </div>
                     <button class="btn btn-sm btn-outline-${color} explore-page" 
                             data-url="${page.url}" 
@@ -1866,45 +2180,73 @@ class KnowledgePanel {
     }
 
     private getAnalysisTypeInfo(type: string) {
-        const typeMap: { [key: string]: { icon: string, color: string, label: string } } = {
-            'domain': { icon: 'bi-globe', color: 'primary', label: 'Same Website' },
-            'topic': { icon: 'bi-tags', color: 'success', label: 'Similar Topics' },
-            'entity': { icon: 'bi-diagram-2', color: 'info', label: 'Shared Entities' },
-            'technical': { icon: 'bi-code-slash', color: 'warning', label: 'Technical Content' },
-            'temporal': { icon: 'bi-clock-history', color: 'secondary', label: 'Recent Activity' }
+        const typeMap: {
+            [key: string]: { icon: string; color: string; label: string };
+        } = {
+            domain: {
+                icon: "bi-globe",
+                color: "primary",
+                label: "Same Website",
+            },
+            topic: {
+                icon: "bi-tags",
+                color: "success",
+                label: "Similar Topics",
+            },
+            entity: {
+                icon: "bi-diagram-2",
+                color: "info",
+                label: "Shared Entities",
+            },
+            technical: {
+                icon: "bi-code-slash",
+                color: "warning",
+                label: "Technical Content",
+            },
+            temporal: {
+                icon: "bi-clock-history",
+                color: "secondary",
+                label: "Recent Activity",
+            },
         };
-        
-        return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
+
+        return (
+            typeMap[type] || {
+                icon: "bi-link",
+                color: "secondary",
+                label: "Related",
+            }
+        );
     }
 
     private setupEnhancedRelatedContentInteractions() {
         document.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
-            
+
             // Handle explore page button clicks
             if (target.closest(".explore-page")) {
                 e.preventDefault();
                 const button = target.closest(".explore-page") as HTMLElement;
                 const url = button.getAttribute("data-url");
-                
+
                 if (url) {
                     // Open the page in a new tab
                     chrome.tabs.create({ url });
                 }
             }
-            
+
             // Handle related item clicks for analysis
             if (target.closest(".related-item")) {
                 const item = target.closest(".related-item") as HTMLElement;
                 const url = item.getAttribute("data-url");
                 const type = item.getAttribute("data-type");
-                
+
                 // Add visual feedback
                 item.classList.add("border-primary", "bg-light");
                 setTimeout(() => {
                     item.classList.remove("border-primary", "bg-light");
                 }, 300);
-                
+
                 // Could trigger additional analysis or actions
                 console.log(`Analyzing relationship: ${type} to ${url}`);
             }
@@ -1918,7 +2260,7 @@ class KnowledgePanel {
                 type: "discoverRelationships",
                 url: this.currentUrl,
                 knowledge: knowledge,
-                maxResults: 10
+                maxResults: 10,
             });
 
             if (response.success && response.relationships.length > 0) {
@@ -1936,11 +2278,14 @@ class KnowledgePanel {
         try {
             const response = await chrome.runtime.sendMessage({
                 type: "generateTemporalSuggestions",
-                maxSuggestions: 6
+                maxSuggestions: 6,
             });
 
             if (response.success && response.suggestions.length > 0) {
-                this.addTemporalSuggestions(response.suggestions, response.contextInfo);
+                this.addTemporalSuggestions(
+                    response.suggestions,
+                    response.contextInfo,
+                );
             }
         } catch (error) {
             console.warn("Error loading temporal suggestions:", error);
@@ -1949,12 +2294,14 @@ class KnowledgePanel {
 
     private addTemporalSuggestions(suggestions: string[], contextInfo: any) {
         // Add temporal suggestions to the existing categorized questions
-        const questionsContainer = document.getElementById("suggestedQuestions");
+        const questionsContainer =
+            document.getElementById("suggestedQuestions");
         if (!questionsContainer) return;
 
         // Find or create temporal category
-        let temporalCategory = questionsContainer.querySelector('#category-temporal');
-        
+        let temporalCategory =
+            questionsContainer.querySelector("#category-temporal");
+
         if (!temporalCategory) {
             // Create new temporal category
             const temporalCategoryHtml = `
@@ -1980,10 +2327,13 @@ class KnowledgePanel {
                     </div>
                 </div>
             `;
-            
+
             // Insert after existing categories
-            questionsContainer.insertAdjacentHTML('beforeend', temporalCategoryHtml);
-            
+            questionsContainer.insertAdjacentHTML(
+                "beforeend",
+                temporalCategoryHtml,
+            );
+
             // Setup interaction handlers for new questions
             this.setupQuestionInteractions(questionsContainer);
         }
@@ -1993,14 +2343,15 @@ class KnowledgePanel {
         return suggestions
             .map((question, index) => {
                 const isRecommended = index < 2; // First 2 are recommended
-                const recommendedBadge = isRecommended ? 
-                    `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>` : '';
+                const recommendedBadge = isRecommended
+                    ? `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>`
+                    : "";
 
                 return `
                     <div class="enhanced-question-item list-group-item list-group-item-action p-3 mb-2 rounded border" 
                          data-question="${question.replace(/"/g, "&quot;")}" 
                          data-category="temporal"
-                         data-priority="${isRecommended ? 'high' : 'medium'}">
+                         data-priority="${isRecommended ? "high" : "medium"}">
                         <div class="d-flex align-items-start justify-content-between">
                             <div class="flex-grow-1">
                                 <div class="d-flex align-items-center mb-1">
@@ -2032,9 +2383,11 @@ class KnowledgePanel {
     private renderRelationshipResults(relationships: any[]) {
         const container = document.getElementById("relatedContentContainer")!;
         const countBadge = document.getElementById("relatedContentCount");
-        
+
         if (countBadge) {
-            countBadge.textContent = relationships.reduce((sum, rel) => sum + rel.relatedPages.length, 0).toString();
+            countBadge.textContent = relationships
+                .reduce((sum, rel) => sum + rel.relatedPages.length, 0)
+                .toString();
         }
 
         if (relationships.length === 0) {
@@ -2048,10 +2401,12 @@ class KnowledgePanel {
         }
 
         // Group relationships by type for better organization
-        const groupedRelationships = this.groupRelationshipsByType(relationships);
+        const groupedRelationships =
+            this.groupRelationshipsByType(relationships);
 
         container.innerHTML = Object.entries(groupedRelationships)
-            .map(([type, typeRelationships]) => `
+            .map(
+                ([type, typeRelationships]) => `
                 <div class="relationship-type-group mb-3">
                     <h6 class="text-${this.getRelationshipTypeColor(type)} mb-2">
                         <i class="${this.getRelationshipTypeIcon(type)} me-2"></i>
@@ -2060,8 +2415,12 @@ class KnowledgePanel {
                             ${typeRelationships.reduce((sum: number, rel: any) => sum + rel.relatedPages.length, 0)}
                         </span>
                     </h6>
-                    ${typeRelationships.map(relationship => 
-                        relationship.relatedPages.slice(0, 3).map((page: any) => `
+                    ${typeRelationships
+                        .map((relationship) =>
+                            relationship.relatedPages
+                                .slice(0, 3)
+                                .map(
+                                    (page: any) => `
                             <div class="related-content-item p-2 mb-2 border rounded border-${this.getRelationshipTypeColor(type)} related-page-item" 
                                  data-url="${page.url}" 
                                  data-type="${page.relationshipType}"
@@ -2096,60 +2455,67 @@ class KnowledgePanel {
                                     </div>
                                 </div>
                             </div>
-                        `).join('')
-                    ).join('')}
+                        `,
+                                )
+                                .join(""),
+                        )
+                        .join("")}
                 </div>
-            `).join('');
+            `,
+            )
+            .join("");
 
         // Add interaction handlers
         this.setupRelatedContentInteractions();
     }
 
-    private groupRelationshipsByType(relationships: any[]): { [key: string]: any[] } {
+    private groupRelationshipsByType(relationships: any[]): {
+        [key: string]: any[];
+    } {
         const grouped: { [key: string]: any[] } = {};
-        
+
         for (const relationship of relationships) {
-            const type = relationship.analysisType || 'other';
+            const type = relationship.analysisType || "other";
             if (!grouped[type]) {
                 grouped[type] = [];
             }
             grouped[type].push(relationship);
         }
-        
+
         return grouped;
     }
 
     private getRelationshipTypeColor(type: string): string {
         const colors = {
-            'domain': 'primary',
-            'topic': 'success',
-            'entity': 'info',
-            'technical': 'warning',
-            'temporal': 'secondary'
+            domain: "primary",
+            topic: "success",
+            entity: "info",
+            technical: "warning",
+            temporal: "secondary",
         };
-        return colors[type as keyof typeof colors] || 'secondary';
+        return colors[type as keyof typeof colors] || "secondary";
     }
 
     private getRelationshipTypeIcon(type: string): string {
         const icons = {
-            'domain': 'bi-globe',
-            'topic': 'bi-tags',
-            'entity': 'bi-diagram-3',
-            'technical': 'bi-code-slash',
-            'temporal': 'bi-clock-history'
+            domain: "bi-globe",
+            topic: "bi-tags",
+            entity: "bi-diagram-3",
+            technical: "bi-code-slash",
+            temporal: "bi-clock-history",
         };
-        return icons[type as keyof typeof icons] || 'bi-link';
+        return icons[type as keyof typeof icons] || "bi-link";
     }
 
     private getRelationshipTypeLabel(type: string): string {
         const labels = {
-            'domain': 'Same Domain',
-            'topic': 'Similar Topics',
-            'entity': 'Shared Entities',
-            'technical': 'Technical Content',
-            'temporal': 'Recently Visited'
+            domain: "Same Domain",
+            topic: "Similar Topics",
+            entity: "Shared Entities",
+            technical: "Technical Content",
+            temporal: "Recently Visited",
         };
-        return labels[type as keyof typeof labels] || 'Related';
+        return labels[type as keyof typeof labels] || "Related";
     }
 
     private formatDate(dateString: string): string {
@@ -2158,14 +2524,14 @@ class KnowledgePanel {
             const now = new Date();
             const diffMs = now.getTime() - date.getTime();
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            
-            if (diffDays === 0) return 'Today';
-            if (diffDays === 1) return 'Yesterday';
+
+            if (diffDays === 0) return "Today";
+            if (diffDays === 1) return "Yesterday";
             if (diffDays < 7) return `${diffDays} days ago`;
             if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
             return date.toLocaleDateString();
         } catch {
-            return 'recently';
+            return "recently";
         }
     }
 
@@ -2263,57 +2629,84 @@ class KnowledgePanel {
             toggleButton.id = "toggleAdvancedQuery";
             toggleButton.innerHTML = '<i class="bi bi-gear"></i>';
             toggleButton.title = "Advanced Search Options";
-            
+
             queryInput.parentNode.appendChild(toggleButton);
-            
+
             // Insert advanced controls after query input container
             const controlsHtml = this.renderAdvancedQueryControls();
-            (queryInput.parentNode as Element).insertAdjacentHTML('afterend', controlsHtml);
-            
+            (queryInput.parentNode as Element).insertAdjacentHTML(
+                "afterend",
+                controlsHtml,
+            );
+
             // Setup event listeners
-            toggleButton.addEventListener('click', () => {
-                const controls = document.getElementById("advancedQueryControls");
+            toggleButton.addEventListener("click", () => {
+                const controls = document.getElementById(
+                    "advancedQueryControls",
+                );
                 if (controls) {
-                    const isVisible = controls.style.display !== 'none';
-                    controls.style.display = isVisible ? 'none' : 'block';
-                    toggleButton.innerHTML = isVisible ? '<i class="bi bi-gear"></i>' : '<i class="bi bi-gear-fill"></i>';
+                    const isVisible = controls.style.display !== "none";
+                    controls.style.display = isVisible ? "none" : "block";
+                    toggleButton.innerHTML = isVisible
+                        ? '<i class="bi bi-gear"></i>'
+                        : '<i class="bi bi-gear-fill"></i>';
                 }
             });
-            
+
             // Clear filters button
-            document.getElementById("clearFilters")?.addEventListener('click', () => {
-                this.clearAllFilters();
-            });
+            document
+                .getElementById("clearFilters")
+                ?.addEventListener("click", () => {
+                    this.clearAllFilters();
+                });
         }
     }
 
     private clearAllFilters(): void {
-        (document.getElementById("contentTypeFilter") as HTMLSelectElement).value = "";
-        (document.getElementById("timeRangeFilter") as HTMLSelectElement).value = "";
-        (document.getElementById("domainFilter") as HTMLInputElement).value = "";
-        (document.getElementById("technicalLevelFilter") as HTMLSelectElement).value = "";
-        (document.getElementById("hasCodeFilter") as HTMLInputElement).checked = false;
+        (
+            document.getElementById("contentTypeFilter") as HTMLSelectElement
+        ).value = "";
+        (
+            document.getElementById("timeRangeFilter") as HTMLSelectElement
+        ).value = "";
+        (document.getElementById("domainFilter") as HTMLInputElement).value =
+            "";
+        (
+            document.getElementById("technicalLevelFilter") as HTMLSelectElement
+        ).value = "";
+        (document.getElementById("hasCodeFilter") as HTMLInputElement).checked =
+            false;
     }
 
     private async submitEnhancedQuery(query: string): Promise<void> {
         const queryResults = document.getElementById("queryResults")!;
-        
+
         // Collect advanced filter values
         const filters: any = {};
-        
-        const contentType = (document.getElementById("contentTypeFilter") as HTMLSelectElement)?.value;
+
+        const contentType = (
+            document.getElementById("contentTypeFilter") as HTMLSelectElement
+        )?.value;
         if (contentType) filters.contentType = contentType;
-        
-        const timeRange = (document.getElementById("timeRangeFilter") as HTMLSelectElement)?.value;
+
+        const timeRange = (
+            document.getElementById("timeRangeFilter") as HTMLSelectElement
+        )?.value;
         if (timeRange) filters.timeRange = timeRange;
-        
-        const domain = (document.getElementById("domainFilter") as HTMLInputElement)?.value;
+
+        const domain = (
+            document.getElementById("domainFilter") as HTMLInputElement
+        )?.value;
         if (domain) filters.domain = domain;
-        
-        const technicalLevel = (document.getElementById("technicalLevelFilter") as HTMLSelectElement)?.value;
+
+        const technicalLevel = (
+            document.getElementById("technicalLevelFilter") as HTMLSelectElement
+        )?.value;
         if (technicalLevel) filters.technicalLevel = technicalLevel;
-        
-        const hasCode = (document.getElementById("hasCodeFilter") as HTMLInputElement)?.checked;
+
+        const hasCode = (
+            document.getElementById("hasCodeFilter") as HTMLInputElement
+        )?.checked;
         if (hasCode) filters.hasCode = true;
 
         queryResults.innerHTML = this.createEnhancedSearchLoadingState();
@@ -2325,22 +2718,21 @@ class KnowledgePanel {
                 url: this.currentUrl,
                 searchScope: "all_indexed",
                 filters: Object.keys(filters).length > 0 ? filters : undefined,
-                maxResults: 10
+                maxResults: 10,
             });
 
             this.renderEnhancedQueryResults(response);
-            
+
             // Show applied filters
             if (response.metadata?.filtersApplied?.length > 0) {
                 this.showAppliedFilters(response.metadata.filtersApplied);
             }
-
         } catch (error) {
             console.error("Error querying enhanced knowledge:", error);
             queryResults.innerHTML = this.createAlert(
-                "danger", 
-                "bi bi-exclamation-triangle", 
-                "Failed to search knowledge base. Please try again."
+                "danger",
+                "bi bi-exclamation-triangle",
+                "Failed to search knowledge base. Please try again.",
             );
         }
     }
@@ -2358,7 +2750,7 @@ class KnowledgePanel {
 
     private renderEnhancedQueryResults(response: any): void {
         const queryResults = document.getElementById("queryResults")!;
-        
+
         let html = `
             <div class="enhanced-query-results">
                 <div class="query-answer mb-3">
@@ -2369,8 +2761,11 @@ class KnowledgePanel {
                                 ${response.metadata.totalFound} found in ${response.metadata.processingTime}ms
                             </small>
                             <span class="badge bg-primary">${response.metadata.searchScope}</span>
-                            ${response.metadata.temporalQuery ? 
-                                `<span class="badge bg-success ms-1">⏰ ${response.metadata.temporalQuery.timeframe}</span>` : ''}
+                            ${
+                                response.metadata.temporalQuery
+                                    ? `<span class="badge bg-success ms-1">⏰ ${response.metadata.temporalQuery.timeframe}</span>`
+                                    : ""
+                            }
                         </div>
                     </div>
                     <div class="answer-text">${response.answer}</div>
@@ -2391,7 +2786,7 @@ class KnowledgePanel {
                             <strong>Focus:</strong> ${response.metadata.temporalQuery.queryType} content
                         </small>
                         <small class="text-muted">
-                            <strong>Detected terms:</strong> ${response.metadata.temporalQuery.extractedTimeTerms.join(', ')}
+                            <strong>Detected terms:</strong> ${response.metadata.temporalQuery.extractedTimeTerms.join(", ")}
                         </small>
                     </div>
                 </div>
@@ -2404,13 +2799,19 @@ class KnowledgePanel {
         }
 
         // Show applied filters
-        if (response.metadata.filtersApplied && response.metadata.filtersApplied.length > 0) {
+        if (
+            response.metadata.filtersApplied &&
+            response.metadata.filtersApplied.length > 0
+        ) {
             html += `
                 <div class="applied-filters mb-3">
                     <small class="text-muted me-2">Active filters:</small>
-                    ${response.metadata.filtersApplied.map((filter: string) => 
-                        `<span class="badge bg-info me-1">${filter}</span>`
-                    ).join('')}
+                    ${response.metadata.filtersApplied
+                        .map(
+                            (filter: string) =>
+                                `<span class="badge bg-info me-1">${filter}</span>`,
+                        )
+                        .join("")}
                 </div>
             `;
         }
@@ -2421,7 +2822,9 @@ class KnowledgePanel {
                 <div class="query-sources mb-3">
                     <h6 class="mb-2">Sources</h6>
                     <div class="sources-list">
-                        ${response.sources.map((source: any) => `
+                        ${response.sources
+                            .map(
+                                (source: any) => `
                             <div class="source-item p-2 mb-2 border rounded">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div class="flex-grow-1">
@@ -2440,7 +2843,9 @@ class KnowledgePanel {
                                     </button>
                                 </div>
                             </div>
-                        `).join('')}
+                        `,
+                            )
+                            .join("")}
                     </div>
                 </div>
             `;
@@ -2451,10 +2856,12 @@ class KnowledgePanel {
     }
 
     private showAppliedFilters(filters: string[]): void {
-        const filtersHtml = filters.map(filter => 
-            `<span class="badge bg-info me-1">${filter}</span>`
-        ).join('');
-        
+        const filtersHtml = filters
+            .map(
+                (filter) => `<span class="badge bg-info me-1">${filter}</span>`,
+            )
+            .join("");
+
         const container = document.getElementById("appliedFilters");
         if (container) {
             container.innerHTML = `<small class="text-muted">Filters: ${filtersHtml}</small>`;
@@ -2474,7 +2881,7 @@ class KnowledgePanel {
         patterns.forEach((pattern, index) => {
             const typeIcon = this.getPatternTypeIcon(pattern.type);
             const confidencePercentage = Math.round(pattern.confidence * 100);
-            
+
             html += `
                 <div class="pattern-card border rounded p-3 mb-2">
                     <div class="d-flex justify-content-between align-items-start mb-2">
@@ -2498,11 +2905,16 @@ class KnowledgePanel {
                     
                     <p class="mb-2 text-muted small">${pattern.description}</p>
                     
-                    ${pattern.items && pattern.items.length > 0 ? `
+                    ${
+                        pattern.items && pattern.items.length > 0
+                            ? `
                         <div class="pattern-items">
                             <small class="text-muted fw-semibold">Related Pages:</small>
                             <div class="mt-1">
-                                ${pattern.items.slice(0, 3).map((item: any) => `
+                                ${pattern.items
+                                    .slice(0, 3)
+                                    .map(
+                                        (item: any) => `
                                     <div class="d-flex align-items-center mb-1">
                                         <span class="badge bg-secondary me-2">${item.contentType}</span>
                                         <small class="text-truncate flex-grow-1" title="${item.title}">
@@ -2510,12 +2922,19 @@ class KnowledgePanel {
                                         </small>
                                         <small class="text-muted ms-2">${this.formatDate(item.visitDate)}</small>
                                     </div>
-                                `).join('')}
-                                ${pattern.items.length > 3 ? 
-                                    `<small class="text-muted">...and ${pattern.items.length - 3} more</small>` : ''}
+                                `,
+                                    )
+                                    .join("")}
+                                ${
+                                    pattern.items.length > 3
+                                        ? `<small class="text-muted">...and ${pattern.items.length - 3} more</small>`
+                                        : ""
+                                }
                             </div>
                         </div>
-                    ` : ''}
+                    `
+                            : ""
+                    }
                 </div>
             `;
         });
@@ -2525,23 +2944,26 @@ class KnowledgePanel {
     }
 
     private getPatternTypeIcon(type: string): string {
-        const icons: {[key: string]: string} = {
-            'learning_sequence': 'bi-arrow-up-right',
-            'topic_progression': 'bi-graph-up',
-            'domain_exploration': 'bi-compass',
-            'content_evolution': 'bi-arrow-clockwise'
+        const icons: { [key: string]: string } = {
+            learning_sequence: "bi-arrow-up-right",
+            topic_progression: "bi-graph-up",
+            domain_exploration: "bi-compass",
+            content_evolution: "bi-arrow-clockwise",
         };
-        return icons[type] || 'bi-circle';
+        return icons[type] || "bi-circle";
     }
 
     private formatPatternType(type: string): string {
-        const labels: {[key: string]: string} = {
-            'learning_sequence': 'Learning Sequence',
-            'topic_progression': 'Topic Progression', 
-            'domain_exploration': 'Domain Exploration',
-            'content_evolution': 'Content Evolution'
+        const labels: { [key: string]: string } = {
+            learning_sequence: "Learning Sequence",
+            topic_progression: "Topic Progression",
+            domain_exploration: "Domain Exploration",
+            content_evolution: "Content Evolution",
         };
-        return labels[type] || type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        return (
+            labels[type] ||
+            type.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
+        );
     }
 }
 

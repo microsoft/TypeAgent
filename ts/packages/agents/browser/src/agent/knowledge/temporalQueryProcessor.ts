@@ -15,7 +15,11 @@ export interface TemporalQuery {
 }
 
 export interface TemporalPattern {
-    type: "learning_sequence" | "topic_progression" | "domain_exploration" | "content_evolution";
+    type:
+        | "learning_sequence"
+        | "topic_progression"
+        | "domain_exploration"
+        | "content_evolution";
     timespan: string;
     items: TemporalPatternItem[];
     confidence: number;
@@ -50,35 +54,64 @@ export class TemporalQueryProcessor {
         let endDate: Date | undefined;
 
         // Parse timeframe indicators
-        if (this.containsTerms(lowerQuery, ["last week", "this week", "past week", "week ago"])) {
+        if (
+            this.containsTerms(lowerQuery, [
+                "last week",
+                "this week",
+                "past week",
+                "week ago",
+            ])
+        ) {
             timeframe = "week";
             extractedTimeTerms.push("week");
             const weekAgo = new Date();
             weekAgo.setDate(weekAgo.getDate() - 7);
             startDate = weekAgo;
             endDate = new Date();
-        } else if (this.containsTerms(lowerQuery, ["last month", "this month", "past month", "month ago"])) {
+        } else if (
+            this.containsTerms(lowerQuery, [
+                "last month",
+                "this month",
+                "past month",
+                "month ago",
+            ])
+        ) {
             timeframe = "month";
             extractedTimeTerms.push("month");
             const monthAgo = new Date();
             monthAgo.setMonth(monthAgo.getMonth() - 1);
             startDate = monthAgo;
             endDate = new Date();
-        } else if (this.containsTerms(lowerQuery, ["last quarter", "past 3 months", "quarter ago"])) {
+        } else if (
+            this.containsTerms(lowerQuery, [
+                "last quarter",
+                "past 3 months",
+                "quarter ago",
+            ])
+        ) {
             timeframe = "quarter";
             extractedTimeTerms.push("quarter");
             const quarterAgo = new Date();
             quarterAgo.setMonth(quarterAgo.getMonth() - 3);
             startDate = quarterAgo;
             endDate = new Date();
-        } else if (this.containsTerms(lowerQuery, ["last year", "this year", "past year", "year ago"])) {
+        } else if (
+            this.containsTerms(lowerQuery, [
+                "last year",
+                "this year",
+                "past year",
+                "year ago",
+            ])
+        ) {
             timeframe = "year";
             extractedTimeTerms.push("year");
             const yearAgo = new Date();
             yearAgo.setFullYear(yearAgo.getFullYear() - 1);
             startDate = yearAgo;
             endDate = new Date();
-        } else if (this.containsTerms(lowerQuery, ["recent", "recently", "lately"])) {
+        } else if (
+            this.containsTerms(lowerQuery, ["recent", "recently", "lately"])
+        ) {
             timeframe = "month";
             extractedTimeTerms.push("recent");
             const recentThreshold = new Date();
@@ -88,13 +121,42 @@ export class TemporalQueryProcessor {
         }
 
         // Parse query type indicators
-        if (this.containsTerms(lowerQuery, ["learned", "learning", "studied", "education"])) {
+        if (
+            this.containsTerms(lowerQuery, [
+                "learned",
+                "learning",
+                "studied",
+                "education",
+            ])
+        ) {
             queryType = "learned";
-        } else if (this.containsTerms(lowerQuery, ["visited", "browsed", "viewed", "looked at"])) {
+        } else if (
+            this.containsTerms(lowerQuery, [
+                "visited",
+                "browsed",
+                "viewed",
+                "looked at",
+            ])
+        ) {
             queryType = "visited";
-        } else if (this.containsTerms(lowerQuery, ["discovered", "found", "explored", "new"])) {
+        } else if (
+            this.containsTerms(lowerQuery, [
+                "discovered",
+                "found",
+                "explored",
+                "new",
+            ])
+        ) {
             queryType = "discovered";
-        } else if (this.containsTerms(lowerQuery, ["progression", "journey", "path", "evolution", "timeline"])) {
+        } else if (
+            this.containsTerms(lowerQuery, [
+                "progression",
+                "journey",
+                "path",
+                "evolution",
+                "timeline",
+            ])
+        ) {
             queryType = "progression";
         }
 
@@ -104,7 +166,7 @@ export class TemporalQueryProcessor {
             endDate,
             queryType,
             originalQuery: query,
-            extractedTimeTerms
+            extractedTimeTerms,
         };
     }
 
@@ -117,7 +179,7 @@ export class TemporalQueryProcessor {
         try {
             // Group results by time periods
             const timeGroups = this.groupResultsByTime(results);
-            
+
             // Detect learning sequences
             const learningSequences = this.detectLearningSequences(timeGroups);
             patterns.push(...learningSequences);
@@ -129,7 +191,6 @@ export class TemporalQueryProcessor {
             // Detect domain exploration patterns
             const domainPatterns = this.detectDomainExploration(timeGroups);
             patterns.push(...domainPatterns);
-
         } catch (error) {
             console.warn("Error analyzing temporal patterns:", error);
         }
@@ -140,12 +201,14 @@ export class TemporalQueryProcessor {
     /**
      * Generate temporal suggestions based on user history
      */
-    async generateTemporalSuggestions(websiteCollection: website.WebsiteCollection): Promise<string[]> {
+    async generateTemporalSuggestions(
+        websiteCollection: website.WebsiteCollection,
+    ): Promise<string[]> {
         const suggestions: string[] = [];
 
         try {
             const websites = websiteCollection.messages.getAll();
-            
+
             // Analyze recent activity
             const recentSites = this.getRecentSites(websites, 7); // Last week
             const recentDomains = this.extractUniqueDomains(recentSites);
@@ -153,7 +216,7 @@ export class TemporalQueryProcessor {
 
             // Generate domain-based temporal suggestions
             if (recentDomains.length > 0) {
-                recentDomains.slice(0, 2).forEach(domain => {
+                recentDomains.slice(0, 2).forEach((domain) => {
                     suggestions.push(`What did I learn on ${domain} recently?`);
                     suggestions.push(`Show me my ${domain} browsing timeline`);
                 });
@@ -161,8 +224,10 @@ export class TemporalQueryProcessor {
 
             // Generate topic-based temporal suggestions
             if (recentTopics.length > 0) {
-                recentTopics.slice(0, 2).forEach(topic => {
-                    suggestions.push(`How has my understanding of ${topic} evolved?`);
+                recentTopics.slice(0, 2).forEach((topic) => {
+                    suggestions.push(
+                        `How has my understanding of ${topic} evolved?`,
+                    );
                     suggestions.push(`Show me recent ${topic} content`);
                 });
             }
@@ -172,7 +237,6 @@ export class TemporalQueryProcessor {
             suggestions.push("Show me this month's discoveries");
             suggestions.push("What topics did I explore last week?");
             suggestions.push("Display my recent learning progression");
-
         } catch (error) {
             console.warn("Error generating temporal suggestions:", error);
         }
@@ -185,29 +249,34 @@ export class TemporalQueryProcessor {
      */
     async applyTemporalFiltering(
         temporalQuery: TemporalQuery,
-        websiteCollection: website.WebsiteCollection
+        websiteCollection: website.WebsiteCollection,
     ): Promise<string[]> {
         const filteredUrls: string[] = [];
 
         try {
             const websites = websiteCollection.messages.getAll();
-            
+
             for (const website of websites) {
-                const visitDate = website.metadata.visitDate || website.metadata.bookmarkDate;
+                const visitDate =
+                    website.metadata.visitDate || website.metadata.bookmarkDate;
                 if (!visitDate) continue;
 
                 const siteDate = new Date(visitDate);
-                
+
                 // Apply date range filtering
-                if (temporalQuery.startDate && siteDate < temporalQuery.startDate) continue;
-                if (temporalQuery.endDate && siteDate > temporalQuery.endDate) continue;
+                if (
+                    temporalQuery.startDate &&
+                    siteDate < temporalQuery.startDate
+                )
+                    continue;
+                if (temporalQuery.endDate && siteDate > temporalQuery.endDate)
+                    continue;
 
                 // Apply query type filtering
                 if (this.matchesQueryType(website, temporalQuery.queryType)) {
                     filteredUrls.push(website.metadata.url);
                 }
             }
-
         } catch (error) {
             console.warn("Error applying temporal filtering:", error);
             // Use context for error reporting in the future
@@ -222,19 +291,20 @@ export class TemporalQueryProcessor {
 
     // Helper methods
     private containsTerms(text: string, terms: string[]): boolean {
-        return terms.some(term => text.includes(term));
+        return terms.some((term) => text.includes(term));
     }
 
     private groupResultsByTime(results: any[]): Map<string, any[]> {
         const groups = new Map<string, any[]>();
-        
+
         for (const result of results) {
-            const visitDate = result.metadata.visitDate || result.metadata.bookmarkDate;
+            const visitDate =
+                result.metadata.visitDate || result.metadata.bookmarkDate;
             if (!visitDate) continue;
 
             const date = new Date(visitDate);
             const weekKey = this.getWeekKey(date);
-            
+
             if (!groups.has(weekKey)) {
                 groups.set(weekKey, []);
             }
@@ -246,29 +316,42 @@ export class TemporalQueryProcessor {
 
     private getWeekKey(date: Date): string {
         const startOfYear = new Date(date.getFullYear(), 0, 1);
-        const weekNumber = Math.ceil((((date.getTime() - startOfYear.getTime()) / 86400000) + startOfYear.getDay() + 1) / 7);
+        const weekNumber = Math.ceil(
+            ((date.getTime() - startOfYear.getTime()) / 86400000 +
+                startOfYear.getDay() +
+                1) /
+                7,
+        );
         return `${date.getFullYear()}-W${weekNumber}`;
     }
 
-    private detectLearningSequences(timeGroups: Map<string, any[]>): TemporalPattern[] {
+    private detectLearningSequences(
+        timeGroups: Map<string, any[]>,
+    ): TemporalPattern[] {
         const patterns: TemporalPattern[] = [];
 
         // Look for sequences where content becomes progressively more advanced
         const sortedWeeks = Array.from(timeGroups.keys()).sort();
-        
+
         for (let i = 0; i < sortedWeeks.length - 1; i++) {
             const currentWeek = timeGroups.get(sortedWeeks[i])!;
             const nextWeek = timeGroups.get(sortedWeeks[i + 1])!;
-            
-            const progressionScore = this.calculateProgressionScore(currentWeek, nextWeek);
-            
+
+            const progressionScore = this.calculateProgressionScore(
+                currentWeek,
+                nextWeek,
+            );
+
             if (progressionScore > 0.6) {
                 patterns.push({
                     type: "learning_sequence",
                     timespan: `${sortedWeeks[i]} to ${sortedWeeks[i + 1]}`,
-                    items: [...currentWeek, ...nextWeek].map(this.convertToPatternItem),
+                    items: [...currentWeek, ...nextWeek].map(
+                        this.convertToPatternItem,
+                    ),
                     confidence: progressionScore,
-                    description: "Detected learning progression in content complexity"
+                    description:
+                        "Detected learning progression in content complexity",
                 });
             }
         }
@@ -276,12 +359,14 @@ export class TemporalQueryProcessor {
         return patterns;
     }
 
-    private detectTopicProgression(timeGroups: Map<string, any[]>): TemporalPattern[] {
+    private detectTopicProgression(
+        timeGroups: Map<string, any[]>,
+    ): TemporalPattern[] {
         const patterns: TemporalPattern[] = [];
 
         // Look for evolution within the same topic over time
         const topicTimelines = new Map<string, any[]>();
-        
+
         for (const [week, sites] of timeGroups) {
             for (const site of sites) {
                 const knowledge = site.getKnowledge();
@@ -299,9 +384,14 @@ export class TemporalQueryProcessor {
         // Analyze topics with multiple entries over time
         for (const [topic, timeline] of topicTimelines) {
             if (timeline.length >= 3) {
-                const sortedTimeline = timeline.sort((a, b) => 
-                    new Date(a.metadata.visitDate || a.metadata.bookmarkDate).getTime() - 
-                    new Date(b.metadata.visitDate || b.metadata.bookmarkDate).getTime()
+                const sortedTimeline = timeline.sort(
+                    (a, b) =>
+                        new Date(
+                            a.metadata.visitDate || a.metadata.bookmarkDate,
+                        ).getTime() -
+                        new Date(
+                            b.metadata.visitDate || b.metadata.bookmarkDate,
+                        ).getTime(),
                 );
 
                 patterns.push({
@@ -309,7 +399,7 @@ export class TemporalQueryProcessor {
                     timespan: `${sortedTimeline[0].week} to ${sortedTimeline[sortedTimeline.length - 1].week}`,
                     items: sortedTimeline.map(this.convertToPatternItem),
                     confidence: Math.min(0.9, timeline.length * 0.15),
-                    description: `Learning progression in ${topic}`
+                    description: `Learning progression in ${topic}`,
                 });
             }
         }
@@ -317,12 +407,14 @@ export class TemporalQueryProcessor {
         return patterns;
     }
 
-    private detectDomainExploration(timeGroups: Map<string, any[]>): TemporalPattern[] {
+    private detectDomainExploration(
+        timeGroups: Map<string, any[]>,
+    ): TemporalPattern[] {
         const patterns: TemporalPattern[] = [];
 
         // Look for exploration patterns within domains
         const domainTimelines = new Map<string, any[]>();
-        
+
         for (const [week, sites] of timeGroups) {
             for (const site of sites) {
                 const domain = this.extractDomain(site.metadata.url);
@@ -336,14 +428,14 @@ export class TemporalQueryProcessor {
         // Analyze domains with sustained exploration
         for (const [domain, timeline] of domainTimelines) {
             if (timeline.length >= 2) {
-                const uniqueWeeks = new Set(timeline.map(item => item.week));
+                const uniqueWeeks = new Set(timeline.map((item) => item.week));
                 if (uniqueWeeks.size >= 2) {
                     patterns.push({
                         type: "domain_exploration",
                         timespan: Array.from(uniqueWeeks).sort().join(" to "),
                         items: timeline.map(this.convertToPatternItem),
                         confidence: Math.min(0.8, uniqueWeeks.size * 0.2),
-                        description: `Sustained exploration of ${domain}`
+                        description: `Sustained exploration of ${domain}`,
                     });
                 }
             }
@@ -352,11 +444,14 @@ export class TemporalQueryProcessor {
         return patterns;
     }
 
-    private calculateProgressionScore(currentWeek: any[], nextWeek: any[]): number {
+    private calculateProgressionScore(
+        currentWeek: any[],
+        nextWeek: any[],
+    ): number {
         // Simple heuristic: look for increase in technical content or complexity
         const currentComplexity = this.calculateAverageComplexity(currentWeek);
         const nextComplexity = this.calculateAverageComplexity(nextWeek);
-        
+
         if (nextComplexity > currentComplexity) {
             return Math.min(0.9, (nextComplexity - currentComplexity) * 2);
         }
@@ -372,17 +467,28 @@ export class TemporalQueryProcessor {
             let complexity = 0.5; // Default complexity
 
             // Factors that increase complexity
-            if (knowledge?.topics?.some((topic: string) => 
-                /advanced|expert|complex|deep|architecture|internals/i.test(topic))) {
+            if (
+                knowledge?.topics?.some((topic: string) =>
+                    /advanced|expert|complex|deep|architecture|internals/i.test(
+                        topic,
+                    ),
+                )
+            ) {
                 complexity += 0.3;
             }
 
-            if (site.metadata.url.includes('docs') || site.metadata.url.includes('documentation')) {
+            if (
+                site.metadata.url.includes("docs") ||
+                site.metadata.url.includes("documentation")
+            ) {
                 complexity += 0.2;
             }
 
-            if (knowledge?.entities?.some((entity: any) => 
-                /api|framework|architecture|algorithm/i.test(entity.type))) {
+            if (
+                knowledge?.entities?.some((entity: any) =>
+                    /api|framework|architecture|algorithm/i.test(entity.type),
+                )
+            ) {
                 complexity += 0.2;
             }
 
@@ -401,7 +507,7 @@ export class TemporalQueryProcessor {
             visitDate: site.metadata.visitDate || site.metadata.bookmarkDate,
             contentType: site.metadata.pageType || "unknown",
             topics: knowledge?.topics || [],
-            domain: this.extractDomain(site.metadata.url)
+            domain: this.extractDomain(site.metadata.url),
         };
     }
 
@@ -418,7 +524,8 @@ export class TemporalQueryProcessor {
         threshold.setDate(threshold.getDate() - days);
 
         return websites.filter((site: any) => {
-            const visitDate = site.metadata.visitDate || site.metadata.bookmarkDate;
+            const visitDate =
+                site.metadata.visitDate || site.metadata.bookmarkDate;
             if (!visitDate) return false;
             return new Date(visitDate) > threshold;
         });
@@ -445,28 +552,44 @@ export class TemporalQueryProcessor {
         return Array.from(topics);
     }
 
-    private matchesQueryType(website: any, queryType: TemporalQuery["queryType"]): boolean {
+    private matchesQueryType(
+        website: any,
+        queryType: TemporalQuery["queryType"],
+    ): boolean {
         const knowledge = website.getKnowledge();
-        
+
         switch (queryType) {
             case "learned":
                 // Educational or tutorial content
-                return website.metadata.pageType === "tutorial" ||
-                       website.metadata.pageType === "documentation" ||
-                       (knowledge?.topics?.some((topic: string) => 
-                           /learn|tutorial|guide|course|education/i.test(topic)) || false);
-                           
+                return (
+                    website.metadata.pageType === "tutorial" ||
+                    website.metadata.pageType === "documentation" ||
+                    knowledge?.topics?.some((topic: string) =>
+                        /learn|tutorial|guide|course|education/i.test(topic),
+                    ) ||
+                    false
+                );
+
             case "discovered":
                 // New or exploratory content
-                return website.metadata.websiteSource === "history" ||
-                       (knowledge?.topics?.some((topic: string) => 
-                           /new|discover|explore|introduction/i.test(topic)) || false);
-                           
+                return (
+                    website.metadata.websiteSource === "history" ||
+                    knowledge?.topics?.some((topic: string) =>
+                        /new|discover|explore|introduction/i.test(topic),
+                    ) ||
+                    false
+                );
+
             case "progression":
                 // Content indicating skill building
-                return knowledge?.topics?.some((topic: string) => 
-                           /advanced|intermediate|beginner|level|progression/i.test(topic)) || false;
-                           
+                return (
+                    knowledge?.topics?.some((topic: string) =>
+                        /advanced|intermediate|beginner|level|progression/i.test(
+                            topic,
+                        ),
+                    ) || false
+                );
+
             case "visited":
             default:
                 return true; // All content counts as "visited"

@@ -189,12 +189,19 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            quality: message.extractionSettings?.quality || "balanced",
+                            quality:
+                                message.extractionSettings?.quality ||
+                                "balanced",
                             extractionSettings: {
-                                mode: message.extractionSettings?.mode || "full",
-                                enableIntelligentAnalysis: message.extractionSettings?.enableIntelligentAnalysis !== false,
-                                enableActionDetection: message.extractionSettings?.enableActionDetection !== false,
-                            }
+                                mode:
+                                    message.extractionSettings?.mode || "full",
+                                enableIntelligentAnalysis:
+                                    message.extractionSettings
+                                        ?.enableIntelligentAnalysis !== false,
+                                enableActionDetection:
+                                    message.extractionSettings
+                                        ?.enableActionDetection !== false,
+                            },
                         },
                     });
 
@@ -212,15 +219,16 @@ export async function handleMessage(
                                 knowledgeResult.suggestedQuestions || [],
                             summary: knowledgeResult.summary || "",
                             // Enhanced content data
-                            detectedActions: knowledgeResult.detectedActions || [],
+                            detectedActions:
+                                knowledgeResult.detectedActions || [],
                             actionSummary: knowledgeResult.actionSummary,
                             contentMetrics: knowledgeResult.contentMetrics || {
                                 readingTime: 0,
                                 wordCount: 0,
                                 hasCode: false,
                                 interactivity: "static",
-                                pageType: "other"
-                            }
+                                pageType: "other",
+                            },
                         },
                     };
                 } catch (error) {
@@ -279,8 +287,8 @@ export async function handleMessage(
                         searchScope: "all_indexed",
                         filtersApplied: [],
                         suggestions: [],
-                        processingTime: 0
-                    }
+                        processingTime: 0,
+                    },
                 };
             }
         }
@@ -293,22 +301,22 @@ export async function handleMessage(
                     parameters: {
                         url: message.url,
                         knowledge: message.knowledge,
-                        maxResults: message.maxResults || 10
-                    }
+                        maxResults: message.maxResults || 10,
+                    },
                 });
 
                 return {
                     success: result.success || false,
                     relationships: result.relationships || [],
-                    totalFound: result.totalFound || 0
+                    totalFound: result.totalFound || 0,
                 };
             } catch (error) {
                 console.error("Error discovering relationships:", error);
-                return { 
-                    success: false, 
-                    relationships: [], 
+                return {
+                    success: false,
+                    relationships: [],
                     totalFound: 0,
-                    error: "Failed to discover relationships" 
+                    error: "Failed to discover relationships",
                 };
             }
         }
@@ -320,22 +328,22 @@ export async function handleMessage(
                     parameters: {
                         url: message.url,
                         knowledge: message.knowledge,
-                        relatedContent: message.relatedContent || []
-                    }
+                        relatedContent: message.relatedContent || [],
+                    },
                 });
 
                 return {
                     success: result.success || false,
                     gaps: result.gaps || [],
-                    totalGaps: result.totalGaps || 0
+                    totalGaps: result.totalGaps || 0,
                 };
             } catch (error) {
                 console.error("Error analyzing knowledge gaps:", error);
-                return { 
-                    success: false, 
-                    gaps: [], 
+                return {
+                    success: false,
+                    gaps: [],
                     totalGaps: 0,
-                    error: "Failed to analyze knowledge gaps" 
+                    error: "Failed to analyze knowledge gaps",
                 };
             }
         }

@@ -448,7 +448,10 @@ class WebsiteLibraryPanel {
         document.getElementById("importProgress")!.classList.remove("d-none");
 
         const connectionStatus = document.getElementById("connectionStatus")!;
-        connectionStatus.innerHTML = this.createStatusIndicator("importing", "Importing data...");
+        connectionStatus.innerHTML = this.createStatusIndicator(
+            "importing",
+            "Importing data...",
+        );
 
         // Update the status message
         const statusMessage = document.getElementById("importStatusMessage")!;
@@ -607,9 +610,15 @@ class WebsiteLibraryPanel {
         const statusElement = document.getElementById("connectionStatus")!;
 
         if (this.isConnected) {
-            statusElement.innerHTML = this.createStatusIndicator("connected", "Connected to TypeAgent");
+            statusElement.innerHTML = this.createStatusIndicator(
+                "connected",
+                "Connected to TypeAgent",
+            );
         } else {
-            statusElement.innerHTML = this.createStatusIndicator("disconnected", "Disconnected from TypeAgent");
+            statusElement.innerHTML = this.createStatusIndicator(
+                "disconnected",
+                "Disconnected from TypeAgent",
+            );
         }
     }
 
@@ -923,14 +932,26 @@ class WebsiteLibraryPanel {
         return `<span class="status-indicator status-${type}"></span>${text}`;
     }
 
-    private createButton(text: string, action: string, data: Record<string, string>, classes = "btn btn-outline-primary btn-sm"): string {
+    private createButton(
+        text: string,
+        action: string,
+        data: Record<string, string>,
+        classes = "btn btn-outline-primary btn-sm",
+    ): string {
         const dataAttrs = Object.entries(data)
-            .map(([key, value]) => `data-${key}="${this.escapeDataAttribute(value)}"`)
+            .map(
+                ([key, value]) =>
+                    `data-${key}="${this.escapeDataAttribute(value)}"`,
+            )
             .join(" ");
         return `<button class="${classes}" data-action="${action}" ${dataAttrs}>${text}</button>`;
     }
 
-    private createFaviconLink(url: string, title: string, domain: string): string {
+    private createFaviconLink(
+        url: string,
+        title: string,
+        domain: string,
+    ): string {
         return `
             <img src="https://www.google.com/s2/favicons?domain=${domain}" 
                  class="result-favicon" alt="favicon">
@@ -941,23 +962,21 @@ class WebsiteLibraryPanel {
     }
 
     private formatSourceInfo(site: Website): string {
-        const parts = [
-            site.source === "bookmarks" ? "Bookmark" : "History"
-        ];
-        
+        const parts = [site.source === "bookmarks" ? "Bookmark" : "History"];
+
         if (site.visitCount) {
             parts.push(`${site.visitCount} visits`);
         }
-        
+
         if (site.lastVisited) {
             parts.push(new Date(site.lastVisited).toLocaleDateString());
         }
-        
+
         return parts.join(" • ");
     }
 
     private escapeDataAttribute(value: string): string {
-        return value.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return value.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     // Component-based rendering methods for list items
@@ -976,9 +995,10 @@ class WebsiteLibraryPanel {
     }
 
     private renderSiteHeader(site: Website): string {
-        const scoreDisplay = site.score ? 
-            `<span class="result-score ms-2">${Math.round(site.score * 100)}%</span>` : "";
-        
+        const scoreDisplay = site.score
+            ? `<span class="result-score ms-2">${Math.round(site.score * 100)}%</span>`
+            : "";
+
         return `
             <div class="d-flex align-items-center mb-1">
                 ${this.createFaviconLink(site.url, site.title || site.url, site.domain)}
@@ -989,9 +1009,10 @@ class WebsiteLibraryPanel {
     }
 
     private renderSiteDetails(site: Website): string {
-        const snippetDisplay = site.snippet ? 
-            `<p class="small mb-1">${site.snippet}</p>` : "";
-        
+        const snippetDisplay = site.snippet
+            ? `<p class="small mb-1">${site.snippet}</p>`
+            : "";
+
         return `
             <div class="result-domain text-muted small mb-1">${site.domain}</div>
             ${snippetDisplay}
@@ -1011,17 +1032,19 @@ class WebsiteLibraryPanel {
     private renderSiteActions(site: Website): string {
         const openButton = this.createButton(
             '<i class="bi bi-box-arrow-up-right"></i> Open',
-            'open-url',
-            { url: site.url }
+            "open-url",
+            { url: site.url },
         );
 
-        const extractButton = site.knowledge?.status === "none" ? 
-            this.createButton(
-                '<i class="bi bi-lightbulb"></i> Extract',
-                'extract-knowledge',
-                { url: site.url, title: site.title || site.url },
-                'btn btn-outline-secondary btn-sm'
-            ) : "";
+        const extractButton =
+            site.knowledge?.status === "none"
+                ? this.createButton(
+                      '<i class="bi bi-lightbulb"></i> Extract',
+                      "extract-knowledge",
+                      { url: site.url, title: site.title || site.url },
+                      "btn btn-outline-secondary btn-sm",
+                  )
+                : "";
 
         return `
             <div class="btn-group btn-group-sm">
@@ -1057,9 +1080,10 @@ class WebsiteLibraryPanel {
     }
 
     private renderCardContent(site: Website): string {
-        const snippetDisplay = site.snippet ? 
-            `<p class="card-text small">${site.snippet.substring(0, 120)}...</p>` : "";
-        
+        const snippetDisplay = site.snippet
+            ? `<p class="card-text small">${site.snippet.substring(0, 120)}...</p>`
+            : "";
+
         return `
             <p class="card-text small text-muted">${site.domain}</p>
             ${snippetDisplay}
@@ -1068,23 +1092,26 @@ class WebsiteLibraryPanel {
     }
 
     private renderCardFooter(site: Website): string {
-        const scoreDisplay = site.score ? 
-            `<span class="result-score">${Math.round(site.score * 100)}%</span>` : "";
+        const scoreDisplay = site.score
+            ? `<span class="result-score">${Math.round(site.score * 100)}%</span>`
+            : "";
 
         const openButton = this.createButton(
             '<i class="bi bi-box-arrow-up-right"></i> Open',
-            'open-url',
+            "open-url",
             { url: site.url },
-            'btn btn-primary btn-sm'
+            "btn btn-primary btn-sm",
         );
 
-        const extractButton = site.knowledge?.status === "none" ? 
-            this.createButton(
-                '<i class="bi bi-lightbulb"></i>',
-                'extract-knowledge',
-                { url: site.url, title: site.title || site.url },
-                'btn btn-outline-secondary btn-sm'
-            ) : "";
+        const extractButton =
+            site.knowledge?.status === "none"
+                ? this.createButton(
+                      '<i class="bi bi-lightbulb"></i>',
+                      "extract-knowledge",
+                      { url: site.url, title: site.title || site.url },
+                      "btn btn-outline-secondary btn-sm",
+                  )
+                : "";
 
         return `
             <div class="mt-auto">
@@ -1103,47 +1130,54 @@ class WebsiteLibraryPanel {
     // Event listener attachment methods
     private attachResultsEventListeners() {
         const container = document.getElementById("searchResultsContainer")!;
-        
+
         // Remove existing listeners to prevent duplicates
-        container.removeEventListener('click', this.handleResultsClick);
-        
+        container.removeEventListener("click", this.handleResultsClick);
+
         // Add new listener
-        container.addEventListener('click', this.handleResultsClick.bind(this));
+        container.addEventListener("click", this.handleResultsClick.bind(this));
     }
 
     private handleResultsClick = (event: Event) => {
         const target = event.target as HTMLElement;
-        const button = target.closest('[data-action]') as HTMLElement;
-        
+        const button = target.closest("[data-action]") as HTMLElement;
+
         if (!button) return;
-        
+
         const action = button.dataset.action;
         const url = button.dataset.url;
         const title = button.dataset.title;
-        
+
         switch (action) {
-            case 'open-url':
-                if (url) window.open(url, '_blank');
+            case "open-url":
+                if (url) window.open(url, "_blank");
                 break;
-            case 'extract-knowledge':
+            case "extract-knowledge":
                 if (url && title) this.extractKnowledgeForWebsite(url, title);
                 break;
         }
-    }
+    };
 
-    private attachSuggestionListeners(container: HTMLElement, suggestions: string[]) {
-        const items = container.querySelectorAll('[data-action="select-suggestion"]');
+    private attachSuggestionListeners(
+        container: HTMLElement,
+        suggestions: string[],
+    ) {
+        const items = container.querySelectorAll(
+            '[data-action="select-suggestion"]',
+        );
         items.forEach((item, index) => {
-            item.addEventListener('click', () => {
+            item.addEventListener("click", () => {
                 this.selectSuggestion(suggestions[index]);
             });
         });
     }
 
     private attachRecentSearchListeners(container: HTMLElement) {
-        const items = container.querySelectorAll('[data-action="select-recent-search"]');
+        const items = container.querySelectorAll(
+            '[data-action="select-recent-search"]',
+        );
         items.forEach((item, index) => {
-            item.addEventListener('click', () => {
+            item.addEventListener("click", () => {
                 if (index < this.recentSearches.length) {
                     this.selectRecentSearch(this.recentSearches[index]);
                 }
@@ -1152,9 +1186,11 @@ class WebsiteLibraryPanel {
     }
 
     private attachSuggestedSearchListeners(container: HTMLElement) {
-        const items = container.querySelectorAll('[data-action="select-suggested-search"]');
-        items.forEach(item => {
-            item.addEventListener('click', () => {
+        const items = container.querySelectorAll(
+            '[data-action="select-suggested-search"]',
+        );
+        items.forEach((item) => {
+            item.addEventListener("click", () => {
                 const query = (item as HTMLElement).dataset.query;
                 if (query) this.selectSuggestedSearch(query);
             });
@@ -1289,13 +1325,13 @@ class WebsiteLibraryPanel {
     }
 
     private renderListView(websites: Website[]): string {
-        return websites.map(site => this.renderListItem(site)).join("");
+        return websites.map((site) => this.renderListItem(site)).join("");
     }
 
     private renderCardView(websites: Website[]): string {
         return `
             <div class="row">
-                ${websites.map(site => this.renderCardItem(site)).join("")}
+                ${websites.map((site) => this.renderCardItem(site)).join("")}
             </div>
         `;
     }

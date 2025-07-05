@@ -524,10 +524,7 @@ async function enhanceWithContent(
 
                 if (contentData.success) {
                     // Create enhanced website with content
-                    return createEnhancedWebsite(
-                        website,
-                        contentData,
-                    );
+                    return createEnhancedWebsite(website, contentData);
                 } else {
                     console.warn(
                         `Content extraction failed for ${website.metadata.url}: ${contentData.error}`,
