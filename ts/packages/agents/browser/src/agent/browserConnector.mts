@@ -244,4 +244,70 @@ export class BrowserConnector {
         const timeoutPromise = new Promise((f) => setTimeout(f, timeout));
         return timeoutPromise;
     }
+
+    /**
+     * Initialize the new ActionsStore system
+     */
+    async initializeActionsStore(sessionStorage: any): Promise<void> {
+        const action = {
+            actionName: "initializeActionsStore",
+            parameters: { sessionStorage }
+        };
+        return this.sendActionToBrowser(action, "browser");
+    }
+
+    /**
+     * Save action using new storage system
+     */
+    async saveActionToStore(action: any): Promise<any> {
+        const storeAction = {
+            actionName: "saveActionToStore",
+            parameters: { action }
+        };
+        return this.sendActionToBrowser(storeAction, "browser");
+    }
+
+    /**
+     * Get action from new storage system
+     */
+    async getActionFromStore(actionId: string): Promise<any> {
+        const action = {
+            actionName: "getActionFromStore",
+            parameters: { actionId }
+        };
+        return this.sendActionToBrowser(action, "browser");
+    }
+
+    /**
+     * Get actions for URL from new storage system
+     */
+    async getActionsForUrl(url: string): Promise<any[]> {
+        const action = {
+            actionName: "getActionsForUrl",
+            parameters: { url }
+        };
+        return this.sendActionToBrowser(action, "browser");
+    }
+
+    /**
+     * Record action usage in new storage system
+     */
+    async recordActionUsage(actionId: string): Promise<void> {
+        const action = {
+            actionName: "recordActionUsage",
+            parameters: { actionId }
+        };
+        return this.sendActionToBrowser(action, "browser");
+    }
+
+    /**
+     * Get storage statistics from new system
+     */
+    async getStorageStatistics(): Promise<any> {
+        const action = {
+            actionName: "getStorageStatistics",
+            parameters: {}
+        };
+        return this.sendActionToBrowser(action, "browser");
+    }
 }

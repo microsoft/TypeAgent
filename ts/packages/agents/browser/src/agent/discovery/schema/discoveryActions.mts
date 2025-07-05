@@ -55,6 +55,41 @@ export type GetIntentFromRecording = {
     };
 };
 
+export type GetActionsForUrl = {
+    actionName: "getActionsForUrl";
+    parameters: {
+        url: string;
+        includeGlobal?: boolean;
+        author?: "discovered" | "user";
+    };
+};
+
+export type SaveDiscoveredActions = {
+    actionName: "saveDiscoveredActions";
+    parameters: {
+        url: string;
+        actions: any[];
+        actionDefinitions?: Record<string, any>;
+    };
+};
+
+export type SaveAuthoredAction = {
+    actionName: "saveAuthoredAction";
+    parameters: {
+        url: string;
+        actionData: {
+            name: string;
+            description: string;
+            steps?: any[];
+            screenshot?: string[];
+            html?: string[];
+            intentSchema?: string;
+            actionsJson?: any;
+            intentJson?: any;
+        };
+    };
+};
+
 export type SchemaDiscoveryActions =
     | FindPageComponents
     | DetectPageActions
@@ -63,4 +98,7 @@ export type SchemaDiscoveryActions =
     | RegisterPageDynamicAgent
     | SummarizePage
     | StartAuthoringSession
-    | GetIntentFromRecording;
+    | GetIntentFromRecording
+    | GetActionsForUrl
+    | SaveDiscoveredActions
+    | SaveAuthoredAction;

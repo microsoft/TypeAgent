@@ -1,27 +1,83 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Legacy storage functions for backward compatibility
+// These will delegate to the new ActionsStore system when available
+
+import { createActionsStoreWithAdapter } from "../agent/storage/index.mjs";
+import { StorageCompatibilityAdapter } from "../agent/storage/compatibilityAdapter.mjs";
+
+// Global adapter instance (will be initialized when available)
+let globalAdapter: StorageCompatibilityAdapter | null = null;
+
+/**
+ * Initialize the new storage system (called from service worker)
+ */
+export async function initializeNewStorage(sessionStorage: any): Promise<void> {
+    try {
+        const { adapter } = await createActionsStoreWithAdapter(sessionStorage);
+        globalAdapter = adapter;
+        console.log("New ActionsStore system initialized");
+    } catch (error) {
+        console.error("Failed to initialize new storage system:", error);
+        // Fall back to old storage system
+    }
+}
+
+/**
+ * Sets a stored property for a specific page
+ * @param url The URL of the page
+ * @param key The property key
+ * @param value The property value
+ */
 export async function setStoredPageProperty(
     url: string,
     key: string,
     value: any,
 ): Promise<void> {
+    // Try new storage system first
+    if (globalAdapter) {
+        try {
+            await globalAdapter.setStoredPageProperty(url, key, value);
+            return;
+        } catch (error) {
+            console.error("New storage system failed, falling back to legacy:", error);
+        }
+    }
+
+    // Fall back to legacy Chrome storage
     try {
         const result = await chrome.storage.local.get([url]);
         const urlData = result[url] || {};
         urlData[key] = value;
 
         await chrome.storage.local.set({ [url]: urlData });
-        console.log(`Saved property '${key}' for ${url}`);
+        console.log(`Saved property '${key}' for ${url} (legacy storage)`);
     } catch (error) {
         console.error("Error saving data:", error);
     }
 }
 
+/**
+ * Gets a stored property for a specific page
+ * @param url The URL of the page
+ * @param key The property key
+ * @returns The stored property value or null
+ */
 export async function getStoredPageProperty(
     url: string,
     key: string,
 ): Promise<any | null> {
+    // Try new storage system first
+    if (globalAdapter) {
+        try {
+            return await globalAdapter.getStoredPageProperty(url, key);
+        } catch (error) {
+            console.error("New storage system failed, falling back to legacy:", error);
+        }
+    }
+
+    // Fall back to legacy Chrome storage
     try {
         const result = await chrome.storage.local.get([url]);
         return result[url]?.[key] ?? null;
@@ -31,10 +87,18 @@ export async function getStoredPageProperty(
     }
 }
 
+/**
+ * Deletes a stored property for a specific page
+ * @param url The URL of the page
+ * @param key The property key
+ */
 export async function deleteStoredPageProperty(
     url: string,
     key: string,
 ): Promise<void> {
+    // For now, only handle legacy storage
+    // Phase 2+ will add proper deletion to new storage system
+    
     try {
         const result = await chrome.storage.local.get([url]);
         const urlData = result[url] || {};
@@ -138,4 +202,18 @@ export async function getActionStatistics(url?: string): Promise<{
         console.error("Failed to get action statistics:", error);
         return { totalActions: 0, actions: [] };
     }
+}
+
+/**
+ * Check if new storage system is available
+ */
+export function isNewStorageAvailable(): boolean {
+    return globalAdapter !== null;
+}
+
+/**
+ * Get the new storage adapter (for direct access if needed)
+ */
+export function getStorageAdapter(): StorageCompatibilityAdapter | null {
+    return globalAdapter;
 }

@@ -23,9 +23,13 @@ import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
 import {
     GetIntentFromRecording,
     SchemaDiscoveryActions,
+    GetActionsForUrl,
+    SaveDiscoveredActions,
+    SaveAuthoredAction,
 } from "./schema/discoveryActions.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
+import { ActionCategory } from "../storage/types.mjs";
 
 export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
@@ -67,6 +71,15 @@ export async function handleSchemaDiscoveryAction(
             break;
         case "startAuthoringSession":
             actionData = await handleRegisterAuthoringAgent(action);
+            break;
+        case "getActionsForUrl":
+            actionData = await handleGetActionsForUrl(action);
+            break;
+        case "saveDiscoveredActions":
+            actionData = await handleSaveDiscoveredActions(action);
+            break;
+        case "saveAuthoredAction":
+            actionData = await handleSaveAuthoredAction(action);
             break;
     }
 
@@ -201,22 +214,47 @@ export async function handleSchemaDiscoveryAction(
 
     async function handleRegisterSiteSchema(action: any) {
         const url = await getBrowserControl(agentContext).getPageUrl();
-        const detectedActions = new Map(
-            Object.entries(
-                (await browser.getCurrentPageStoredProperty(
-                    url!,
-                    "detectedActionDefinitions",
-                )) ?? {},
-            ),
-        );
-        const authoredActions = new Map(
-            Object.entries(
-                (await browser.getCurrentPageStoredProperty(
-                    url!,
-                    "authoredActionDefinitions",
-                )) ?? {},
-            ),
-        );
+        
+        // Use ActionsStore if available, otherwise fall back to legacy storage
+        let detectedActions: Map<string, any>;
+        let authoredActions: Map<string, any>;
+        
+        if (agentContext.actionsStore) {
+            // NEW: Direct ActionsStore access
+            console.log("Using ActionsStore for schema registration");
+            const urlActions = await agentContext.actionsStore.getActionsForUrl(url!);
+            
+            detectedActions = new Map();
+            authoredActions = new Map();
+            
+            for (const storedAction of urlActions) {
+                if (storedAction.author === "discovered" && storedAction.definition.intentSchema) {
+                    detectedActions.set(storedAction.name, storedAction.definition.intentSchema);
+                } else if (storedAction.author === "user" && storedAction.definition.intentSchema) {
+                    authoredActions.set(storedAction.name, storedAction.definition.intentSchema);
+                }
+            }
+        } else {
+            // LEGACY: Browser connector access
+            console.log("Falling back to legacy storage for schema registration");
+            detectedActions = new Map(
+                Object.entries(
+                    (await browser.getCurrentPageStoredProperty(
+                        url!,
+                        "detectedActionDefinitions",
+                    )) ?? {},
+                ),
+            );
+            authoredActions = new Map(
+                Object.entries(
+                    (await browser.getCurrentPageStoredProperty(
+                        url!,
+                        "authoredActionDefinitions",
+                    )) ?? {},
+                ),
+            );
+        }
+        
         const typeDefinitions: ActionSchemaTypeDefinition[] = [
             ...detectedActions.values(),
             ...authoredActions.values(),
@@ -535,6 +573,195 @@ export async function handleSchemaDiscoveryAction(
             intentTypeDefinition: typeDefinition,
             actions: stepsResponse.data,
         };
+    }
+
+    // NEW: ActionsStore integration handlers
+    async function handleGetActionsForUrl(action: GetActionsForUrl) {
+        if (!agentContext.actionsStore) {
+            throw new Error("ActionsStore not available");
+        }
+
+        const { url, includeGlobal = true, author } = action.parameters;
+        
+        try {
+            let actions = await agentContext.actionsStore.getActionsForUrl(url);
+            
+            // Filter by author if specified
+            if (author) {
+                actions = actions.filter(a => a.author === author);
+            }
+            
+            // Add global actions if requested
+            if (includeGlobal && !author) {
+                const globalActions = await agentContext.actionsStore.getGlobalActions();
+                actions.push(...globalActions);
+            }
+
+            console.log(`Retrieved ${actions.length} actions for URL: ${url}`);
+            return {
+                actions: actions,
+                count: actions.length
+            };
+        } catch (error) {
+            console.error("Failed to get actions for URL:", error);
+            return {
+                actions: [],
+                count: 0,
+                error: error instanceof Error ? error.message : "Unknown error"
+            };
+        }
+    }
+
+    async function handleSaveDiscoveredActions(action: SaveDiscoveredActions) {
+        if (!agentContext.actionsStore) {
+            throw new Error("ActionsStore not available");
+        }
+
+        const { url, actions, actionDefinitions } = action.parameters;
+        
+        try {
+            const domain = new URL(url).hostname;
+            let savedCount = 0;
+
+            for (const actionData of actions) {
+                if (!actionData.actionName) continue;
+
+                const storedAction = agentContext.actionsStore.createDefaultAction({
+                    name: actionData.actionName,
+                    description: `Auto-discovered: ${actionData.actionName}`,
+                    category: "utility",
+                    author: "discovered",
+                    scope: {
+                        type: "domain",
+                        domain: domain,
+                        priority: 60
+                    },
+                    definition: {
+                        detectedSchema: actionData,
+                        intentSchema: actionDefinitions?.[actionData.actionName]
+                    }
+                });
+
+                const result = await agentContext.actionsStore.saveAction(storedAction);
+                if (result.success) {
+                    savedCount++;
+                } else {
+                    console.error(`Failed to save discovered action ${actionData.actionName}:`, result.error);
+                }
+            }
+
+            console.log(`Saved ${savedCount} discovered actions for ${domain}`);
+            return {
+                saved: savedCount,
+                total: actions.length
+            };
+        } catch (error) {
+            console.error("Failed to save discovered actions:", error);
+            return {
+                saved: 0,
+                total: actions.length,
+                error: error instanceof Error ? error.message : "Unknown error"
+            };
+        }
+    }
+
+    async function handleSaveAuthoredAction(action: SaveAuthoredAction) {
+        if (!agentContext.actionsStore) {
+            throw new Error("ActionsStore not available");
+        }
+
+        const { url, actionData } = action.parameters;
+        
+        try {
+            const domain = new URL(url).hostname;
+
+            const storedAction = agentContext.actionsStore.createDefaultAction({
+                name: actionData.name,
+                description: actionData.description || `User action: ${actionData.name}`,
+                category: inferCategoryFromAction(actionData) as ActionCategory,
+                author: "user",
+                scope: {
+                    type: "page",
+                    domain: domain,
+                    priority: 80
+                },
+                urlPatterns: [{
+                    pattern: url,
+                    type: "exact",
+                    priority: 100,
+                    description: `Exact match for ${url}`
+                }],
+                definition: {
+                    ...(actionData.intentSchema && { intentSchema: actionData.intentSchema }),
+                    ...(actionData.actionsJson && { actionSteps: actionData.actionsJson }),
+                    ...(actionData.intentJson && { intentJson: actionData.intentJson })
+                },
+                context: {
+                    ...(actionData.steps && { recordedSteps: actionData.steps }),
+                    ...(actionData.screenshot && { screenshots: actionData.screenshot }),
+                    ...(actionData.html && { htmlFragments: actionData.html })
+                }
+            });
+
+            const result = await agentContext.actionsStore.saveAction(storedAction);
+            
+            if (result.success) {
+                console.log(`Saved authored action: ${actionData.name}`);
+                return {
+                    success: true,
+                    actionId: result.actionId
+                };
+            } else {
+                console.error(`Failed to save authored action ${actionData.name}:`, result.error);
+                return {
+                    success: false,
+                    error: result.error
+                };
+            }
+        } catch (error) {
+            console.error("Failed to save authored action:", error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : "Unknown error"
+            };
+        }
+    }
+
+    // Helper function to infer action category
+    function inferCategoryFromAction(actionData: any): ActionCategory {
+        const name = actionData.name?.toLowerCase() || '';
+        const description = actionData.description?.toLowerCase() || '';
+        const steps = actionData.steps || [];
+
+        // Check for form-related actions
+        if (name.includes('form') || name.includes('submit') || name.includes('input') ||
+            description.includes('form') || description.includes('submit') ||
+            steps.some((step: any) => step.type === 'type' || step.type === 'submit')) {
+            return 'form';
+        }
+
+        // Check for navigation actions
+        if (name.includes('navigate') || name.includes('link') || name.includes('click') ||
+            description.includes('navigate') || description.includes('link') ||
+            steps.some((step: any) => step.type === 'click' && step.target?.includes('a'))) {
+            return 'navigation';
+        }
+
+        // Check for commerce actions
+        if (name.includes('buy') || name.includes('cart') || name.includes('checkout') ||
+            name.includes('purchase') || description.includes('buy') ||
+            description.includes('cart') || description.includes('checkout')) {
+            return 'commerce';
+        }
+
+        // Check for search actions
+        if (name.includes('search') || name.includes('find') || name.includes('filter') ||
+            description.includes('search') || description.includes('find')) {
+            return 'search';
+        }
+
+        // Default to utility
+        return 'utility';
     }
 
     return {

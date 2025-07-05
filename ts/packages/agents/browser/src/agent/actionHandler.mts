@@ -77,6 +77,7 @@ import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
+import { ActionsStore } from "./storage/index.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -108,6 +109,7 @@ export type BrowserActionContext = {
     index: website.IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
+    actionsStore?: ActionsStore | undefined;  // Add ActionsStore instance
 };
 
 export interface urlResolutionAction {
@@ -129,11 +131,13 @@ async function initializeBrowserContext(
     if (localHostPort === undefined) {
         throw new Error("Local view port not assigned.");
     }
+    
     return {
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         index: undefined,
         localHostPort,
+        actionsStore: undefined, // Will be initialized in updateBrowserContext
     };
 }
 
@@ -150,6 +154,19 @@ async function updateBrowserContext(
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
+        }
+
+        // Initialize ActionsStore
+        if (!context.agentContext.actionsStore && context.sessionStorage) {
+            try {
+                const { ActionsStore } = await import("./storage/index.mjs");
+                context.agentContext.actionsStore = new ActionsStore(context.sessionStorage);
+                await context.agentContext.actionsStore.initialize();
+                debug("ActionsStore initialized successfully");
+            } catch (error) {
+                debug("Failed to initialize ActionsStore:", error);
+                // Continue without ActionsStore - will fall back to legacy storage
+            }
         }
 
         // Load the website index from disk
@@ -338,7 +355,10 @@ async function updateBrowserContext(
 
                         case "detectPageActions":
                         case "registerPageDynamicAgent":
-                        case "getIntentFromRecording": {
+                        case "getIntentFromRecording":
+                        case "getActionsForUrl":
+                        case "saveDiscoveredActions":
+                        case "saveAuthoredAction": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {
@@ -392,6 +412,23 @@ async function updateBrowserContext(
                                 JSON.stringify({
                                     id: data.id,
                                     result: websiteResult,
+                                }),
+                            );
+                            break;
+                        }
+
+                        case "recordActionUsage":
+                        case "getActionStatistics": {
+                            const actionsResult = await handleActionsStoreAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: actionsResult,
                                 }),
                             );
                             break;
@@ -1081,6 +1118,86 @@ async function handleWebsiteAction(
 
         default:
             throw new Error(`Unknown website action: ${actionName}`);
+    }
+}
+
+async function handleActionsStoreAction(
+    actionName: string,
+    parameters: any,
+    context: SessionContext<BrowserActionContext>,
+): Promise<any> {
+    const actionsStore = context.agentContext.actionsStore;
+    
+    if (!actionsStore) {
+        return {
+            success: false,
+            error: "ActionsStore not available"
+        };
+    }
+
+    try {
+        switch (actionName) {
+            case "recordActionUsage": {
+                const { actionId } = parameters;
+                if (!actionId) {
+                    return {
+                        success: false,
+                        error: "Missing actionId parameter"
+                    };
+                }
+
+                await actionsStore.recordUsage(actionId);
+                console.log(`Recorded usage for action: ${actionId}`);
+                
+                return {
+                    success: true,
+                    actionId: actionId
+                };
+            }
+
+            case "getActionStatistics": {
+                const { url } = parameters;
+                let actions: any[] = [];
+                let totalActions = 0;
+
+                if (url) {
+                    // Get actions for specific URL
+                    actions = await actionsStore.getActionsForUrl(url);
+                    totalActions = actions.length;
+                } else {
+                    // Get all actions
+                    actions = await actionsStore.getAllActions();
+                    totalActions = actions.length;
+                }
+
+                console.log(`Retrieved statistics: ${totalActions} total actions`);
+                
+                return {
+                    success: true,
+                    totalActions: totalActions,
+                    actions: actions.map(action => ({
+                        id: action.id,
+                        name: action.name,
+                        author: action.author,
+                        category: action.category,
+                        usageCount: action.metadata.usageCount,
+                        lastUsed: action.metadata.lastUsed
+                    }))
+                };
+            }
+
+            default:
+                return {
+                    success: false,
+                    error: `Unknown ActionsStore action: ${actionName}`
+                };
+        }
+    } catch (error) {
+        console.error(`Failed to execute ActionsStore action ${actionName}:`, error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error"
+        };
     }
 }
 

@@ -153,6 +153,38 @@ export async function handleMessage(
                 intentTypeDefinition: schemaResult.intentTypeDefinition,
             };
         }
+        case "getActionsForUrl": {
+            const result = await sendActionToAgent({
+                actionName: "getActionsForUrl",
+                parameters: {
+                    url: message.url,
+                    includeGlobal: message.includeGlobal ?? true,
+                    author: message.author
+                }
+            });
+            return result;
+        }
+        case "saveDiscoveredActions": {
+            const result = await sendActionToAgent({
+                actionName: "saveDiscoveredActions",
+                parameters: {
+                    url: message.url,
+                    actions: message.actions,
+                    actionDefinitions: message.actionDefinitions
+                }
+            });
+            return result;
+        }
+        case "saveAuthoredAction": {
+            const result = await sendActionToAgent({
+                actionName: "saveAuthoredAction", 
+                parameters: {
+                    url: message.url,
+                    actionData: message.actionData
+                }
+            });
+            return result;
+        }
         case "startRecording": {
             const targetTab = await getActiveTab();
             if (targetTab?.id) {
