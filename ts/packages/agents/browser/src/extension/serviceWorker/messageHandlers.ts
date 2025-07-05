@@ -254,6 +254,37 @@ export async function handleMessage(
             }
         }
 
+        case "queryWebKnowledgeEnhanced": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "queryWebKnowledgeEnhanced",
+                    parameters: {
+                        query: message.query,
+                        url: message.url,
+                        searchScope: message.searchScope || "all_indexed",
+                        filters: message.filters,
+                        maxResults: message.maxResults || 10,
+                    },
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Enhanced query error:", error);
+                return {
+                    answer: "Error occurred during enhanced search.",
+                    sources: [],
+                    relatedEntities: [],
+                    metadata: {
+                        totalFound: 0,
+                        searchScope: "all_indexed",
+                        filtersApplied: [],
+                        suggestions: [],
+                        processingTime: 0
+                    }
+                };
+            }
+        }
+
         // Cross-page intelligence handlers
         case "discoverRelationships": {
             try {
