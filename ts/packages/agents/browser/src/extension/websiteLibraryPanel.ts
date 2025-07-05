@@ -448,10 +448,10 @@ class WebsiteLibraryPanel {
         document.getElementById("importProgress")!.classList.remove("d-none");
 
         const connectionStatus = document.getElementById("connectionStatus")!;
-        connectionStatus.innerHTML = `
-            <span class="status-indicator status-importing"></span>
-            Importing data...
-        `;
+        connectionStatus.innerHTML = this.createStatusIndicator(
+            "importing",
+            "Importing data...",
+        );
 
         // Update the status message
         const statusMessage = document.getElementById("importStatusMessage")!;
@@ -608,20 +608,17 @@ class WebsiteLibraryPanel {
 
     private updateConnectionStatus() {
         const statusElement = document.getElementById("connectionStatus")!;
-        const indicator = statusElement.querySelector(".status-indicator")!;
 
         if (this.isConnected) {
-            indicator.className = "status-indicator status-connected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-connected"></span>
-                Connected to TypeAgent
-            `;
+            statusElement.innerHTML = this.createStatusIndicator(
+                "connected",
+                "Connected to TypeAgent",
+            );
         } else {
-            indicator.className = "status-indicator status-disconnected";
-            statusElement.innerHTML = `
-                <span class="status-indicator status-disconnected"></span>
-                Disconnected from TypeAgent
-            `;
+            statusElement.innerHTML = this.createStatusIndicator(
+                "disconnected",
+                "Disconnected from TypeAgent",
+            );
         }
     }
 
@@ -930,16 +927,207 @@ class WebsiteLibraryPanel {
         return filters;
     }
 
-    private escapeHTML(input: string): string {
-        const div = document.createElement("div");
-        div.textContent = input;
-        return div.innerHTML;
+    // Template utility functions for common patterns
+    private createStatusIndicator(type: string, text: string): string {
+        return `<span class="status-indicator status-${type}"></span>${text}`;
+    }
+
+    private createButton(
+        text: string,
+        action: string,
+        data: Record<string, string>,
+        classes = "btn btn-outline-primary btn-sm",
+    ): string {
+        const dataAttrs = Object.entries(data)
+            .map(
+                ([key, value]) =>
+                    `data-${key}="${this.escapeDataAttribute(value)}"`,
+            )
+            .join(" ");
+        return `<button class="${classes}" data-action="${action}" ${dataAttrs}>${text}</button>`;
+    }
+
+    private createFaviconLink(
+        url: string,
+        title: string,
+        domain: string,
+    ): string {
+        return `
+            <img src="https://www.google.com/s2/favicons?domain=${domain}" 
+                 class="result-favicon" alt="favicon">
+            <a href="${url}" target="_blank" class="fw-semibold text-decoration-none">
+                ${title || url}
+            </a>
+        `;
+    }
+
+    private formatSourceInfo(site: Website): string {
+        const parts = [site.source === "bookmarks" ? "Bookmark" : "History"];
+
+        if (site.visitCount) {
+            parts.push(`${site.visitCount} visits`);
+        }
+
+        if (site.lastVisited) {
+            parts.push(new Date(site.lastVisited).toLocaleDateString());
+        }
+
+        return parts.join(" • ");
     }
 
     private escapeDataAttribute(value: string): string {
         return value.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
+    // Component-based rendering methods for list items
+    private renderListItem(site: Website): string {
+        return `
+            <div class="search-result-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        ${this.renderSiteHeader(site)}
+                        ${this.renderSiteDetails(site)}
+                        ${this.renderSiteMetadata(site)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private renderSiteHeader(site: Website): string {
+        const scoreDisplay = site.score
+            ? `<span class="result-score ms-2">${Math.round(site.score * 100)}%</span>`
+            : "";
+
+        return `
+            <div class="d-flex align-items-center mb-1">
+                ${this.createFaviconLink(site.url, site.title || site.url, site.domain)}
+                ${scoreDisplay}
+                ${this.getKnowledgeStatusBadge(site.knowledge)}
+            </div>
+        `;
+    }
+
+    private renderSiteDetails(site: Website): string {
+        const snippetDisplay = site.snippet
+            ? `<p class="small mb-1">${site.snippet}</p>`
+            : "";
+
+        return `
+            <div class="result-domain text-muted small mb-1">${site.domain}</div>
+            ${snippetDisplay}
+            ${this.getKnowledgeDetails(site.knowledge)}
+        `;
+    }
+
+    private renderSiteMetadata(site: Website): string {
+        return `
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">${this.formatSourceInfo(site)}</small>
+                ${this.renderSiteActions(site)}
+            </div>
+        `;
+    }
+
+    private renderSiteActions(site: Website): string {
+        const openButton = this.createButton(
+            '<i class="bi bi-box-arrow-up-right"></i> Open',
+            "open-url",
+            { url: site.url },
+        );
+
+        const extractButton =
+            site.knowledge?.status === "none"
+                ? this.createButton(
+                      '<i class="bi bi-lightbulb"></i> Extract',
+                      "extract-knowledge",
+                      { url: site.url, title: site.title || site.url },
+                      "btn btn-outline-secondary btn-sm",
+                  )
+                : "";
+
+        return `
+            <div class="btn-group btn-group-sm">
+                ${openButton}
+                ${extractButton}
+            </div>
+        `;
+    }
+
+    // Component methods for card view
+    private renderCardItem(site: Website): string {
+        return `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card result-card h-100">
+                    <div class="card-body">
+                        ${this.renderCardHeader(site)}
+                        ${this.renderCardContent(site)}
+                        ${this.renderCardFooter(site)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    private renderCardHeader(site: Website): string {
+        return `
+            <div class="d-flex align-items-center mb-2">
+                ${this.createFaviconLink(site.url, site.title || site.url, site.domain)}
+                <h6 class="card-title mb-0 text-truncate flex-grow-1">${site.title || site.url}</h6>
+                ${this.getKnowledgeStatusBadge(site.knowledge)}
+            </div>
+        `;
+    }
+
+    private renderCardContent(site: Website): string {
+        const snippetDisplay = site.snippet
+            ? `<p class="card-text small">${site.snippet.substring(0, 120)}...</p>`
+            : "";
+
+        return `
+            <p class="card-text small text-muted">${site.domain}</p>
+            ${snippetDisplay}
+            ${this.getKnowledgeDetails(site.knowledge)}
+        `;
+    }
+
+    private renderCardFooter(site: Website): string {
+        const scoreDisplay = site.score
+            ? `<span class="result-score">${Math.round(site.score * 100)}%</span>`
+            : "";
+
+        const openButton = this.createButton(
+            '<i class="bi bi-box-arrow-up-right"></i> Open',
+            "open-url",
+            { url: site.url },
+            "btn btn-primary btn-sm",
+        );
+
+        const extractButton =
+            site.knowledge?.status === "none"
+                ? this.createButton(
+                      '<i class="bi bi-lightbulb"></i>',
+                      "extract-knowledge",
+                      { url: site.url, title: site.title || site.url },
+                      "btn btn-outline-secondary btn-sm",
+                  )
+                : "";
+
+        return `
+            <div class="mt-auto">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted">${site.source}</small>
+                    ${scoreDisplay}
+                </div>
+                <div class="btn-group w-100">
+                    ${openButton}
+                    ${extractButton}
+                </div>
+            </div>
+        `;
+    }
+
+    // Event listener attachment methods
     private attachResultsEventListeners() {
         const container = document.getElementById("searchResultsContainer")!;
 
@@ -1054,6 +1242,12 @@ class WebsiteLibraryPanel {
         }
     }
 
+    private escapeHTML(input: string): string {
+        const div = document.createElement("div");
+        div.textContent = input;
+        return div.innerHTML;
+    }
+
     private renderResultsSummary(results: SearchResult) {
         const summaryContainer = document.getElementById("resultsSummary")!;
         const escapedQuery = this.escapeHTML(results.query);
@@ -1131,95 +1325,13 @@ class WebsiteLibraryPanel {
     }
 
     private renderListView(websites: Website[]): string {
-        return websites
-            .map(
-                (site) => `
-            <div class="search-result-item">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center mb-1">
-                            <img src="https://www.google.com/s2/favicons?domain=${site.domain}" 
-                                 class="result-favicon" alt="favicon">
-                            <a href="${site.url}" target="_blank" class="fw-semibold text-decoration-none">
-                                ${site.title || site.url}
-                            </a>
-                            ${site.score ? `<span class="result-score ms-2">${Math.round(site.score * 100)}%</span>` : ""}
-                            ${this.getKnowledgeStatusBadge(site.knowledge)}
-                        </div>
-                        <div class="result-domain text-muted small mb-1">${site.domain}</div>
-                        ${site.snippet ? `<p class="small mb-1">${site.snippet}</p>` : ""}
-                        ${this.getKnowledgeDetails(site.knowledge)}
-                        <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">
-                                ${site.source === "bookmarks" ? "Bookmark" : "History"} 
-                                ${site.visitCount ? `• ${site.visitCount} visits` : ""}
-                                ${site.lastVisited ? `• ${new Date(site.lastVisited).toLocaleDateString()}` : ""}
-                            </small>
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-outline-primary btn-sm" data-action="open-url" data-url="${site.url}">
-                                    <i class="bi bi-box-arrow-up-right"></i> Open
-                                </button>
-                                ${
-                                    site.knowledge?.status === "none"
-                                        ? `
-                                <button class="btn btn-outline-secondary btn-sm" data-action="extract-knowledge" data-url="${site.url}" data-title="${this.escapeDataAttribute(site.title || site.url)}">
-                                    <i class="bi bi-lightbulb"></i> Extract
-                                </button>`
-                                        : ""
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `,
-            )
-            .join("");
+        return websites.map((site) => this.renderListItem(site)).join("");
     }
 
     private renderCardView(websites: Website[]): string {
         return `
             <div class="row">
-                ${websites
-                    .map(
-                        (site) => `
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <div class="card result-card h-100">
-                            <div class="card-body">
-                                <div class="d-flex align-items-center mb-2">
-                                    <img src="https://www.google.com/s2/favicons?domain=${site.domain}" 
-                                         class="result-favicon" alt="favicon">
-                                    <h6 class="card-title mb-0 text-truncate flex-grow-1">${site.title || site.url}</h6>
-                                    ${this.getKnowledgeStatusBadge(site.knowledge)}
-                                </div>
-                                <p class="card-text small text-muted">${site.domain}</p>
-                                ${site.snippet ? `<p class="card-text small">${site.snippet.substring(0, 120)}...</p>` : ""}
-                                ${this.getKnowledgeDetails(site.knowledge)}
-                                <div class="mt-auto">
-                                    <div class="d-flex justify-content-between align-items-center mb-2">
-                                        <small class="text-muted">${site.source}</small>
-                                        ${site.score ? `<span class="result-score">${Math.round(site.score * 100)}%</span>` : ""}
-                                    </div>
-                                    <div class="btn-group w-100">
-                                        <button class="btn btn-primary btn-sm" data-action="open-url" data-url="${site.url}">
-                                            <i class="bi bi-box-arrow-up-right"></i> Open
-                                        </button>
-                                        ${
-                                            site.knowledge?.status === "none"
-                                                ? `
-                                        <button class="btn btn-outline-secondary btn-sm" data-action="extract-knowledge" data-url="${site.url}" data-title="${this.escapeDataAttribute(site.title || site.url)}">
-                                            <i class="bi bi-lightbulb"></i>
-                                        </button>`
-                                                : ""
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `,
-                    )
-                    .join("")}
+                ${websites.map((site) => this.renderCardItem(site)).join("")}
             </div>
         `;
     }

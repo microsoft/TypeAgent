@@ -118,9 +118,6 @@ class KnowledgePanel {
         await this.loadCachedKnowledge();
         this.setupExtractionModeControls();
         await this.loadExtractionSettings();
-
-        // Setup advanced query controls
-        this.setupAdvancedQueryControls();
     }
 
     private setupEventListeners() {
@@ -186,11 +183,7 @@ class KnowledgePanel {
                 const domain = new URL(this.currentUrl).hostname;
                 const status = await this.getPageIndexStatus();
 
-                pageInfo.innerHTML = this.createPageInfo(
-                    tab.title || "Untitled",
-                    domain,
-                    status,
-                );
+                pageInfo.innerHTML = this.createPageInfo(tab.title || "Untitled", domain, status);
             }
         } catch (error) {
             console.error("Error loading page info:", error);
@@ -312,42 +305,25 @@ class KnowledgePanel {
 
         if (!query) return;
 
-        // Check if advanced filters are enabled
-        const advancedControls = document.getElementById(
-            "advancedQueryControls",
-        );
-        const useAdvanced =
-            advancedControls && advancedControls.style.display !== "none";
+        queryResults.innerHTML = this.createSearchLoadingState();
 
-        if (useAdvanced) {
-            await this.submitEnhancedQuery(query);
-        } else {
-            // Use existing basic query logic
-            queryResults.innerHTML = this.createSearchLoadingState();
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "queryKnowledge",
+                query: query,
+                url: this.currentUrl,
+                searchScope: "current_page",
+            });
 
-            try {
-                const response = await chrome.runtime.sendMessage({
-                    type: "queryKnowledge",
-                    parameters: {
-                        query: query,
-                        url: this.currentUrl,
-                        searchScope: "current_page",
-                    },
-                });
-
-                queryResults.innerHTML = this.createQueryAnswer(
-                    response.answer,
-                    response.sources,
-                );
-                queryInput.value = "";
-            } catch (error) {
-                console.error("Error querying knowledge:", error);
-                queryResults.innerHTML = this.createAlert(
-                    "danger",
-                    "bi bi-exclamation-triangle",
-                    "Error processing query. Please try again.",
-                );
-            }
+            queryResults.innerHTML = this.createQueryAnswer(response.answer, response.sources);
+            queryInput.value = "";
+        } catch (error) {
+            console.error("Error querying knowledge:", error);
+            queryResults.innerHTML = this.createAlert(
+                "danger", 
+                "bi bi-exclamation-triangle", 
+                "Error processing query. Please try again."
+            );
         }
     }
 
@@ -355,8 +331,8 @@ class KnowledgePanel {
         const knowledgeSection = document.getElementById("knowledgeSection")!;
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = this.createLoadingState(
-            "Extracting knowledge from page...",
-            "This may take a few seconds",
+            "Extracting knowledge from page...", 
+            "This may take a few seconds"
         );
     }
 
@@ -393,10 +369,7 @@ class KnowledgePanel {
         this.renderRelationships(knowledge.relationships);
         this.renderKeyTopics(knowledge.keyTopics);
         if (knowledge.detectedActions && knowledge.detectedActions.length > 0) {
-            this.renderDetectedActions(
-                knowledge.detectedActions,
-                knowledge.actionSummary,
-            );
+            this.renderDetectedActions(knowledge.detectedActions, knowledge.actionSummary);
         }
         this.renderSuggestedQuestions(knowledge.suggestedQuestions);
 
@@ -523,31 +496,27 @@ class KnowledgePanel {
         `;
 
         // Render each category with enhanced styling
-        categories.forEach((category) => {
-            const highPriorityQuestions = category.questions.filter(
-                (q) => q.priority === "high",
-            );
-            const recommendedCount = category.questions.filter(
-                (q) => q.recommended,
-            ).length;
-
+        categories.forEach(category => {
+            const highPriorityQuestions = category.questions.filter(q => q.priority === 'high');
+            const recommendedCount = category.questions.filter(q => q.recommended).length;
+            
             questionsHtml += `
-                <div class="question-category-card mb-3" data-category="${category.name.toLowerCase().replace(" ", "-")}">
+                <div class="question-category-card mb-3" data-category="${category.name.toLowerCase().replace(' ', '-')}">
                     <div class="category-header d-flex align-items-center justify-content-between mb-2">
                         <h6 class="mb-0 text-${category.color}">
                             <i class="${category.icon} me-2"></i>
                             ${category.name}
                             <span class="badge bg-${category.color} ms-2">${category.count}</span>
-                            ${recommendedCount > 0 ? `<span class="badge bg-warning ms-1" title="Recommended questions">★ ${recommendedCount}</span>` : ""}
+                            ${recommendedCount > 0 ? `<span class="badge bg-warning ms-1" title="Recommended questions">★ ${recommendedCount}</span>` : ''}
                         </h6>
                         <button class="btn btn-sm btn-outline-${category.color} category-toggle" 
                                 data-bs-toggle="collapse" 
-                                data-bs-target="#category-${category.name.toLowerCase().replace(" ", "-")}"
+                                data-bs-target="#category-${category.name.toLowerCase().replace(' ', '-')}"
                                 aria-expanded="true">
                             <i class="bi bi-chevron-down"></i>
                         </button>
                     </div>
-                    <div class="collapse show" id="category-${category.name.toLowerCase().replace(" ", "-")}">
+                    <div class="collapse show" id="category-${category.name.toLowerCase().replace(' ', '-')}">
                         ${this.renderEnhancedQuestionList(category.questions, category.color)}
                     </div>
                 </div>
@@ -561,15 +530,13 @@ class KnowledgePanel {
     }
 
     private categorizeQuestions(questions: string[]): QuestionCategory[] {
-        const categorizedQuestions: CategorizedQuestion[] = questions.map(
-            (question) => {
-                return this.categorizeAndScoreQuestion(question);
-            },
-        );
+        const categorizedQuestions: CategorizedQuestion[] = questions.map(question => {
+            return this.categorizeAndScoreQuestion(question);
+        });
 
         // Group questions by category
         const categoryMap = new Map<string, CategorizedQuestion[]>();
-        categorizedQuestions.forEach((question) => {
+        categorizedQuestions.forEach(question => {
             if (!categoryMap.has(question.category)) {
                 categoryMap.set(question.category, []);
             }
@@ -579,109 +546,71 @@ class KnowledgePanel {
         // Create category objects with enhanced metadata
         const categories: QuestionCategory[] = [];
 
-        if (categoryMap.has("learning")) {
+        if (categoryMap.has('learning')) {
             categories.push({
-                name: "Learning Path",
-                icon: "bi-mortarboard",
-                color: "success",
-                questions: categoryMap
-                    .get("learning")!
-                    .sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
+                name: 'Learning Path',
+                icon: 'bi-mortarboard',
+                color: 'success',
+                questions: categoryMap.get('learning')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
                 priority: 1,
-                count: categoryMap.get("learning")!.length,
+                count: categoryMap.get('learning')!.length
             });
         }
 
-        if (categoryMap.has("technical")) {
+        if (categoryMap.has('technical')) {
             categories.push({
-                name: "Technical Deep Dive",
-                icon: "bi-code-slash",
-                color: "primary",
-                questions: categoryMap
-                    .get("technical")!
-                    .sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
+                name: 'Technical Deep Dive',
+                icon: 'bi-code-slash',
+                color: 'primary',
+                questions: categoryMap.get('technical')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
                 priority: 2,
-                count: categoryMap.get("technical")!.length,
+                count: categoryMap.get('technical')!.length
             });
         }
 
-        if (categoryMap.has("discovery")) {
+        if (categoryMap.has('discovery')) {
             categories.push({
-                name: "Discovery",
-                icon: "bi-compass",
-                color: "info",
-                questions: categoryMap
-                    .get("discovery")!
-                    .sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
+                name: 'Discovery',
+                icon: 'bi-compass',
+                color: 'info',
+                questions: categoryMap.get('discovery')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
                 priority: 3,
-                count: categoryMap.get("discovery")!.length,
+                count: categoryMap.get('discovery')!.length
             });
         }
 
-        if (categoryMap.has("content")) {
+        if (categoryMap.has('content')) {
             categories.push({
-                name: "About Content",
-                icon: "bi-file-text",
-                color: "secondary",
-                questions: categoryMap
-                    .get("content")!
-                    .sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
+                name: 'About Content',
+                icon: 'bi-file-text',
+                color: 'secondary',
+                questions: categoryMap.get('content')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
                 priority: 4,
-                count: categoryMap.get("content")!.length,
+                count: categoryMap.get('content')!.length
             });
         }
 
-        if (categoryMap.has("temporal")) {
+        if (categoryMap.has('temporal')) {
             categories.push({
-                name: "Timeline",
-                icon: "bi-clock-history",
-                color: "warning",
-                questions: categoryMap
-                    .get("temporal")!
-                    .sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
+                name: 'Timeline',
+                icon: 'bi-clock-history',
+                color: 'warning',
+                questions: categoryMap.get('temporal')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
                 priority: 5,
-                count: categoryMap.get("temporal")!.length,
+                count: categoryMap.get('temporal')!.length
             });
         }
 
         // Add any other categories that didn't fit the main ones
         for (const [categoryName, questions] of categoryMap.entries()) {
-            if (
-                ![
-                    "learning",
-                    "technical",
-                    "discovery",
-                    "content",
-                    "temporal",
-                ].includes(categoryName)
-            ) {
+            if (!['learning', 'technical', 'discovery', 'content', 'temporal'].includes(categoryName)) {
                 categories.push({
-                    name:
-                        categoryName.charAt(0).toUpperCase() +
-                        categoryName.slice(1),
-                    icon: "bi-question-circle",
-                    color: "light",
-                    questions: questions.sort(
-                        (a, b) =>
-                            this.getQuestionScore(b) - this.getQuestionScore(a),
-                    ),
+                    name: categoryName.charAt(0).toUpperCase() + categoryName.slice(1),
+                    icon: 'bi-question-circle',
+                    color: 'light',
+                    questions: questions.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
                     priority: 6,
-                    count: questions.length,
+                    count: questions.length
                 });
             }
         }
@@ -691,84 +620,72 @@ class KnowledgePanel {
 
     private categorizeAndScoreQuestion(question: string): CategorizedQuestion {
         const lowerQ = question.toLowerCase();
-        let category = "other";
-        let priority: "high" | "medium" | "low" = "medium";
+        let category = 'other';
+        let priority: 'high' | 'medium' | 'low' = 'medium';
         let confidence = 0.7;
         let recommended = false;
 
         // Learning-related questions (highest priority)
-        if (
-            lowerQ.includes("learn") ||
-            lowerQ.includes("prerequisite") ||
-            lowerQ.includes("should i") ||
-            lowerQ.includes("knowledge gap") ||
-            lowerQ.includes("next in this area") ||
-            lowerQ.includes("learning path") ||
-            lowerQ.includes("beginner") ||
-            lowerQ.includes("advanced")
-        ) {
-            category = "learning";
-            priority = "high";
+        if (lowerQ.includes('learn') || 
+            lowerQ.includes('prerequisite') || 
+            lowerQ.includes('should i') ||
+            lowerQ.includes('knowledge gap') ||
+            lowerQ.includes('next in this area') ||
+            lowerQ.includes('learning path') ||
+            lowerQ.includes('beginner') ||
+            lowerQ.includes('advanced')) {
+            category = 'learning';
+            priority = 'high';
             confidence = 0.9;
             recommended = true;
         }
         // Technical questions
-        else if (
-            lowerQ.includes("code") ||
-            lowerQ.includes("api") ||
-            lowerQ.includes("tutorial") ||
-            lowerQ.includes("example") ||
-            lowerQ.includes("documentation") ||
-            lowerQ.includes("implementation") ||
-            lowerQ.includes("library") ||
-            lowerQ.includes("framework")
-        ) {
-            category = "technical";
-            priority = "high";
+        else if (lowerQ.includes('code') ||
+                 lowerQ.includes('api') ||
+                 lowerQ.includes('tutorial') ||
+                 lowerQ.includes('example') ||
+                 lowerQ.includes('documentation') ||
+                 lowerQ.includes('implementation') ||
+                 lowerQ.includes('library') ||
+                 lowerQ.includes('framework')) {
+            category = 'technical';
+            priority = 'high';
             confidence = 0.85;
-            recommended =
-                lowerQ.includes("example") || lowerQ.includes("tutorial");
+            recommended = lowerQ.includes('example') || lowerQ.includes('tutorial');
         }
         // Discovery questions
-        else if (
-            lowerQ.includes("other") ||
-            lowerQ.includes("similar") ||
-            lowerQ.includes("else") ||
-            lowerQ.includes("show me") ||
-            lowerQ.includes("find") ||
-            lowerQ.includes("resources") ||
-            lowerQ.includes("related")
-        ) {
-            category = "discovery";
-            priority = "medium";
+        else if (lowerQ.includes('other') ||
+                 lowerQ.includes('similar') ||
+                 lowerQ.includes('else') ||
+                 lowerQ.includes('show me') ||
+                 lowerQ.includes('find') ||
+                 lowerQ.includes('resources') ||
+                 lowerQ.includes('related')) {
+            category = 'discovery';
+            priority = 'medium';
             confidence = 0.8;
-            recommended =
-                lowerQ.includes("related") || lowerQ.includes("similar");
+            recommended = lowerQ.includes('related') || lowerQ.includes('similar');
         }
         // Content-specific questions
-        else if (
-            lowerQ.includes("what is") ||
-            lowerQ.includes("tell me") ||
-            lowerQ.includes("summarize") ||
-            lowerQ.includes("about") ||
-            lowerQ.includes("explain") ||
-            lowerQ.includes("key points")
-        ) {
-            category = "content";
-            priority = "medium";
+        else if (lowerQ.includes('what is') ||
+                 lowerQ.includes('tell me') ||
+                 lowerQ.includes('summarize') ||
+                 lowerQ.includes('about') ||
+                 lowerQ.includes('explain') ||
+                 lowerQ.includes('key points')) {
+            category = 'content';
+            priority = 'medium';
             confidence = 0.75;
         }
         // Temporal questions
-        else if (
-            lowerQ.includes("when") ||
-            lowerQ.includes("first") ||
-            lowerQ.includes("recently") ||
-            lowerQ.includes("journey") ||
-            lowerQ.includes("time") ||
-            lowerQ.includes("history")
-        ) {
-            category = "temporal";
-            priority = "low";
+        else if (lowerQ.includes('when') ||
+                 lowerQ.includes('first') ||
+                 lowerQ.includes('recently') ||
+                 lowerQ.includes('journey') ||
+                 lowerQ.includes('time') ||
+                 lowerQ.includes('history')) {
+            category = 'temporal';
+            priority = 'low';
             confidence = 0.8;
         }
 
@@ -778,31 +695,27 @@ class KnowledgePanel {
             priority,
             source: category as any,
             confidence,
-            recommended,
+            recommended
         };
     }
 
     private getQuestionScore(question: CategorizedQuestion): number {
         let score = question.confidence;
-
+        
         if (question.recommended) score += 0.3;
-        if (question.priority === "high") score += 0.2;
-        else if (question.priority === "medium") score += 0.1;
-
+        if (question.priority === 'high') score += 0.2;
+        else if (question.priority === 'medium') score += 0.1;
+        
         return score;
     }
 
-    private renderEnhancedQuestionList(
-        questions: CategorizedQuestion[],
-        color: string,
-    ): string {
+    private renderEnhancedQuestionList(questions: CategorizedQuestion[], color: string): string {
         return questions
             .map((question, index) => {
                 const priorityIcon = this.getPriorityIcon(question.priority);
                 const confidenceWidth = Math.round(question.confidence * 100);
-                const recommendedBadge = question.recommended
-                    ? `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>`
-                    : "";
+                const recommendedBadge = question.recommended ? 
+                    `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>` : '';
 
                 return `
                     <div class="enhanced-question-item list-group-item list-group-item-action p-3 mb-2 rounded border" 
@@ -837,59 +750,49 @@ class KnowledgePanel {
             .join("");
     }
 
-    private getPriorityIcon(priority: "high" | "medium" | "low"): string {
+    private getPriorityIcon(priority: 'high' | 'medium' | 'low'): string {
         switch (priority) {
-            case "high":
-                return "bi-star-fill";
-            case "medium":
-                return "bi-star-half";
-            case "low":
-                return "bi-star";
-            default:
-                return "bi-circle";
+            case 'high': return 'bi-star-fill';
+            case 'medium': return 'bi-star-half';
+            case 'low': return 'bi-star';
+            default: return 'bi-circle';
         }
     }
 
     private setupQuestionInteractions(container: HTMLElement) {
         // Enhanced question click handling
-        container
-            .querySelectorAll(".enhanced-question-item")
-            .forEach((item) => {
-                item.addEventListener("click", () => {
-                    const questionText = item.getAttribute("data-question")!;
-                    const priority = item.getAttribute("data-priority")!;
+        container.querySelectorAll(".enhanced-question-item").forEach((item) => {
+            item.addEventListener("click", () => {
+                const questionText = item.getAttribute("data-question")!;
+                const priority = item.getAttribute("data-priority")!;
+                
+                // Add visual feedback
+                item.classList.add("border-primary", "bg-light");
+                setTimeout(() => {
+                    item.classList.remove("border-primary", "bg-light");
+                }, 300);
 
-                    // Add visual feedback
-                    item.classList.add("border-primary", "bg-light");
-                    setTimeout(() => {
-                        item.classList.remove("border-primary", "bg-light");
-                    }, 300);
-
-                    // Set query and submit
-                    (
-                        document.getElementById(
-                            "knowledgeQuery",
-                        ) as HTMLInputElement
-                    ).value = questionText;
-                    this.submitQuery();
-                });
-
-                // Add hover effects
-                item.addEventListener("mouseenter", () => {
-                    item.classList.add("shadow-sm");
-                });
-
-                item.addEventListener("mouseleave", () => {
-                    item.classList.remove("shadow-sm");
-                });
+                // Set query and submit
+                (document.getElementById("knowledgeQuery") as HTMLInputElement).value = questionText;
+                this.submitQuery();
             });
+
+            // Add hover effects
+            item.addEventListener("mouseenter", () => {
+                item.classList.add("shadow-sm");
+            });
+
+            item.addEventListener("mouseleave", () => {
+                item.classList.remove("shadow-sm");
+            });
+        });
 
         // Category toggle functionality
         container.querySelectorAll(".category-toggle").forEach((toggle) => {
             toggle.addEventListener("click", (e) => {
                 e.preventDefault();
                 const icon = toggle.querySelector("i")!;
-
+                
                 // Toggle chevron direction
                 if (icon.classList.contains("bi-chevron-down")) {
                     icon.classList.remove("bi-chevron-down");
@@ -908,13 +811,13 @@ class KnowledgePanel {
     private setupRelatedContentInteractions() {
         document.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
-
+            
             // Handle visit page button clicks
             if (target.closest(".visit-page")) {
                 e.preventDefault();
                 const button = target.closest(".visit-page") as HTMLElement;
                 const url = button.getAttribute("data-url");
-
+                
                 if (url) {
                     // Add visual feedback
                     button.classList.add("btn-primary");
@@ -923,20 +826,18 @@ class KnowledgePanel {
                         button.classList.remove("btn-primary");
                         button.classList.add("btn-outline-primary");
                     }, 300);
-
+                    
                     // Open the page in a new tab
                     chrome.tabs.create({ url: url, active: false });
                 }
             }
-
+            
             // Handle explore related content button clicks
             if (target.closest(".explore-related")) {
                 e.preventDefault();
-                const button = target.closest(
-                    ".explore-related",
-                ) as HTMLElement;
+                const button = target.closest(".explore-related") as HTMLElement;
                 const query = button.getAttribute("data-query");
-
+                
                 if (query) {
                     // Add visual feedback
                     button.classList.add("btn-secondary");
@@ -945,40 +846,33 @@ class KnowledgePanel {
                         button.classList.remove("btn-secondary");
                         button.classList.add("btn-outline-secondary");
                     }, 300);
-
+                    
                     // Set query and submit
-                    const queryInput = document.getElementById(
-                        "knowledgeQuery",
-                    ) as HTMLInputElement;
+                    const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
                     if (queryInput) {
                         queryInput.value = query;
                         this.submitQuery();
                     }
                 }
             }
-
+            
             // Handle related content item clicks (for future navigation features)
             if (target.closest(".related-page-item")) {
-                const item = target.closest(
-                    ".related-page-item",
-                ) as HTMLElement;
+                const item = target.closest(".related-page-item") as HTMLElement;
                 const url = item.getAttribute("data-url");
                 const type = item.getAttribute("data-type");
-
+                
                 // Add visual feedback
                 item.classList.add("border-primary", "bg-light");
                 setTimeout(() => {
                     item.classList.remove("border-primary", "bg-light");
                 }, 300);
-
+                
                 // For now, create a query based on the relationship
-                if (url && url === "#") {
-                    const title =
-                        item.querySelector(".fw-semibold")?.textContent;
+                if (url && url === '#') {
+                    const title = item.querySelector(".fw-semibold")?.textContent;
                     if (title) {
-                        const queryInput = document.getElementById(
-                            "knowledgeQuery",
-                        ) as HTMLInputElement;
+                        const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
                         if (queryInput) {
                             queryInput.value = `content related to ${title}`;
                         }
@@ -1261,15 +1155,8 @@ class KnowledgePanel {
     }
 
     // Template utility functions for knowledge panel
-    private createCard(
-        title: string,
-        content: string,
-        icon: string,
-        badge?: string,
-    ): string {
-        const badgeHtml = badge
-            ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>`
-            : "";
+    private createCard(title: string, content: string, icon: string, badge?: string): string {
+        const badgeHtml = badge ? `<span id="${badge}" class="badge bg-secondary ms-2">0</span>` : "";
         return `
             <div class="knowledge-card card">
                 <div class="card-header">
@@ -1301,53 +1188,30 @@ class KnowledgePanel {
     // Knowledge card component methods
     private renderEntitiesCard(): string {
         const content = this.createContainer(
-            "entitiesContainer",
-            this.createEmptyState(
-                "bi bi-info-circle",
-                "No entities extracted yet",
-            ),
+            "entitiesContainer", 
+            this.createEmptyState("bi bi-info-circle", "No entities extracted yet")
         );
-        return this.createCard(
-            "Entities",
-            content,
-            "bi bi-tags",
-            "entitiesCount",
-        );
+        return this.createCard("Entities", content, "bi bi-tags", "entitiesCount");
     }
 
     private renderRelationshipsCard(): string {
         const content = this.createContainer(
             "relationshipsContainer",
-            this.createEmptyState(
-                "bi bi-info-circle",
-                "No relationships found yet",
-            ),
+            this.createEmptyState("bi bi-info-circle", "No relationships found yet")
         );
-        return this.createCard(
-            "Relationships",
-            content,
-            "bi bi-diagram-3",
-            "relationshipsCount",
-        );
+        return this.createCard("Relationships", content, "bi bi-diagram-3", "relationshipsCount");
     }
 
     private renderTopicsCard(): string {
         const content = this.createContainer(
             "topicsContainer",
-            this.createEmptyState(
-                "bi bi-info-circle",
-                "No topics identified yet",
-            ),
+            this.createEmptyState("bi bi-info-circle", "No topics identified yet")
         );
         return this.createCard("Key Topics", content, "bi bi-bookmark");
     }
 
     // Alert and loading state utilities
-    private createAlert(
-        type: "info" | "danger",
-        icon: string,
-        content: string,
-    ): string {
+    private createAlert(type: "info" | "danger", icon: string, content: string): string {
         return `
             <div class="alert alert-${type} mb-0">
                 <div class="d-flex align-items-start">
@@ -1361,9 +1225,7 @@ class KnowledgePanel {
     }
 
     private createLoadingState(message: string, subtext?: string): string {
-        const subtextHtml = subtext
-            ? `<small class="text-muted">${subtext}</small>`
-            : "";
+        const subtextHtml = subtext ? `<small class="text-muted">${subtext}</small>` : "";
         return `
             <div class="knowledge-card card">
                 <div class="card-body text-center">
@@ -1387,15 +1249,12 @@ class KnowledgePanel {
     }
 
     private createQueryAnswer(answer: string, sources: any[]): string {
-        const sourcesHtml =
-            sources && sources.length > 0
-                ? `
+        const sourcesHtml = sources && sources.length > 0 ? `
             <hr class="my-2">
             <small class="text-muted">
                 <strong>Sources:</strong> ${sources.map((s: any) => s.title).join(", ")}
             </small>
-        `
-                : "";
+        ` : "";
 
         const content = `
             <div class="fw-semibold">Answer:</div>
@@ -1411,12 +1270,7 @@ class KnowledgePanel {
         return `<li><h6 class="dropdown-header">${text}</h6></li>`;
     }
 
-    private createDropdownItem(
-        icon: string,
-        text: string,
-        dataAttr: string,
-        value: string,
-    ): string {
+    private createDropdownItem(icon: string, text: string, dataAttr: string, value: string): string {
         return `
             <li><a class="dropdown-item" href="#" ${dataAttr}="${value}">
                 <i class="${icon}"></i> ${text}
@@ -1447,11 +1301,7 @@ class KnowledgePanel {
         `;
     }
 
-    private createPageInfo(
-        title: string,
-        domain: string,
-        status: string,
-    ): string {
+    private createPageInfo(title: string, domain: string, status: string): string {
         return `
             <div class="d-flex align-items-center">
                 <img src="https://www.google.com/s2/favicons?domain=${domain}" 
@@ -1468,63 +1318,38 @@ class KnowledgePanel {
     // Content Metrics Card component with enhanced visualization
     private renderContentMetricsCard(): string {
         const content = this.createContainer(
-            "contentMetricsContainer",
-            this.createEmptyState(
-                "bi bi-info-circle",
-                "No content metrics available",
-            ),
+            "contentMetricsContainer", 
+            this.createEmptyState("bi bi-info-circle", "No content metrics available")
         );
-        return this.createCard(
-            "Content Analysis",
-            content,
-            "bi bi-bar-chart-line",
-        );
+        return this.createCard("Content Analysis", content, "bi bi-bar-chart-line");
     }
 
     // Related Content Card component
     private renderRelatedContentCard(): string {
         const content = this.createContainer(
             "relatedContentContainer",
-            this.createEmptyState(
-                "bi bi-info-circle",
-                "No related content found",
-            ),
+            this.createEmptyState("bi bi-info-circle", "No related content found")
         );
-        return this.createCard(
-            "Related Content",
-            content,
-            "bi bi-link-45deg",
-            "relatedContentCount",
-        );
+        return this.createCard("Related Content", content, "bi bi-link-45deg", "relatedContentCount");
     }
     private renderActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
-            this.createEmptyState("bi bi-info-circle", "No actions detected"),
+            this.createEmptyState("bi bi-info-circle", "No actions detected")
         );
-        return this.createCard(
-            "Detected Actions",
-            content,
-            "bi bi-lightning",
-            "actionsCount",
-        );
+        return this.createCard("Detected Actions", content, "bi bi-lightning", "actionsCount");
     }
 
     // Render enhanced content metrics with visual indicators
     private renderContentMetrics(metrics: any) {
         const container = document.getElementById("contentMetricsContainer")!;
-
+        
         // Calculate derived metrics
-        const readingTimeCategory = this.getReadingTimeCategory(
-            metrics.readingTime,
-        );
+        const readingTimeCategory = this.getReadingTimeCategory(metrics.readingTime);
         const wordCountCategory = this.getWordCountCategory(metrics.wordCount);
         const pageTypeInfo = this.getPageTypeInfo(metrics.pageType);
-        const codeIntensity = this.getCodeIntensity(
-            metrics.hasCode,
-            metrics.wordCount,
-        );
-
+        const codeIntensity = this.getCodeIntensity(metrics.hasCode, metrics.wordCount);
+        
         container.innerHTML = `
             <!-- Reading Time Section -->
             <div class="metric-section mb-4">
@@ -1613,8 +1438,8 @@ class KnowledgePanel {
                     <div class="row text-center">
                         <div class="col-6">
                             <div class="metric-card p-2 bg-light rounded">
-                                <div class="h5 mb-0 text-${metrics.hasCode ? "success" : "muted"}">
-                                    <i class="bi bi-${metrics.hasCode ? "check-circle-fill" : "x-circle"}"></i>
+                                <div class="h5 mb-0 text-${metrics.hasCode ? 'success' : 'muted'}">
+                                    <i class="bi bi-${metrics.hasCode ? 'check-circle-fill' : 'x-circle'}"></i>
                                 </div>
                                 <small class="text-muted">Code Present</small>
                             </div>
@@ -1622,7 +1447,7 @@ class KnowledgePanel {
                         <div class="col-6">
                             <div class="metric-card p-2 bg-light rounded">
                                 <div class="h5 mb-0 text-secondary">
-                                    ${metrics.interactivity !== "static" ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
+                                    ${metrics.interactivity !== 'static' ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
                                 </div>
                                 <small class="text-muted">${this.getInteractivityLevel(metrics.interactivity)}</small>
                             </div>
@@ -1634,10 +1459,7 @@ class KnowledgePanel {
     }
 
     // Render detected actions
-    private renderDetectedActions(
-        actions: DetectedAction[],
-        summary?: ActionSummary,
-    ) {
+    private renderDetectedActions(actions: DetectedAction[], summary?: ActionSummary) {
         const container = document.getElementById("detectedActionsContainer")!;
         const countBadge = document.getElementById("actionsCount");
 
@@ -1661,20 +1483,19 @@ class KnowledgePanel {
                 <div class="mb-3 p-2 bg-light rounded">
                     <small class="text-muted">Summary:</small><br>
                     <span class="fw-semibold">${summary.totalActions} total actions</span>
-                    ${summary.actionTypes.length > 0 ? `<br><small>Types: ${summary.actionTypes.join(", ")}</small>` : ""}
+                    ${summary.actionTypes.length > 0 ? `<br><small>Types: ${summary.actionTypes.join(", ")}</small>` : ''}
                 </div>
             `;
         }
 
         const actionsHtml = actions
             .slice(0, 10)
-            .map(
-                (action) => `
+            .map(action => `
                 <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
                     <div>
                         <span class="fw-semibold">${action.type}</span>
                         <span class="badge bg-secondary ms-2">${action.element}</span>
-                        ${action.text ? `<br><small class="text-muted">${action.text}</small>` : ""}
+                        ${action.text ? `<br><small class="text-muted">${action.text}</small>` : ''}
                     </div>
                     <div>
                         <div class="progress" style="width: 50px; height: 4px;">
@@ -1682,8 +1503,7 @@ class KnowledgePanel {
                         </div>
                     </div>
                 </div>
-            `,
-            )
+            `)
             .join("");
 
         container.innerHTML = summaryHtml + actionsHtml;
@@ -1692,171 +1512,74 @@ class KnowledgePanel {
     // Helper methods for enhanced content metrics
     private getReadingTimeCategory(readingTime: number) {
         if (readingTime <= 2) {
-            return {
-                color: "success",
-                label: "Quick Read",
-                description: "Fast consumption content",
-            };
+            return { color: 'success', label: 'Quick Read', description: 'Fast consumption content' };
         } else if (readingTime <= 5) {
-            return {
-                color: "info",
-                label: "Short Read",
-                description: "Brief but informative",
-            };
+            return { color: 'info', label: 'Short Read', description: 'Brief but informative' };
         } else if (readingTime <= 15) {
-            return {
-                color: "warning",
-                label: "Medium Read",
-                description: "Substantial content",
-            };
+            return { color: 'warning', label: 'Medium Read', description: 'Substantial content' };
         } else {
-            return {
-                color: "danger",
-                label: "Long Read",
-                description: "In-depth material",
-            };
+            return { color: 'danger', label: 'Long Read', description: 'In-depth material' };
         }
     }
 
     private getWordCountCategory(wordCount: number) {
         if (wordCount <= 300) {
-            return {
-                color: "success",
-                label: "Brief",
-                description: "Concise and focused content",
-            };
+            return { color: 'success', label: 'Brief', description: 'Concise and focused content' };
         } else if (wordCount <= 1000) {
-            return {
-                color: "info",
-                label: "Standard",
-                description: "Typical article length",
-            };
+            return { color: 'info', label: 'Standard', description: 'Typical article length' };
         } else if (wordCount <= 3000) {
-            return {
-                color: "warning",
-                label: "Detailed",
-                description: "Comprehensive coverage",
-            };
+            return { color: 'warning', label: 'Detailed', description: 'Comprehensive coverage' };
         } else {
-            return {
-                color: "danger",
-                label: "Extensive",
-                description: "In-depth exploration",
-            };
+            return { color: 'danger', label: 'Extensive', description: 'In-depth exploration' };
         }
     }
 
     private getPageTypeInfo(pageType: string) {
-        const typeMap: {
-            [key: string]: {
-                icon: string;
-                color: string;
-                label: string;
-                description: string;
-            };
-        } = {
-            tutorial: {
-                icon: "bi-book",
-                color: "primary",
-                label: "Tutorial",
-                description: "Step-by-step learning content",
-            },
-            documentation: {
-                icon: "bi-file-earmark-text",
-                color: "info",
-                label: "Documentation",
-                description: "Reference material",
-            },
-            blog: {
-                icon: "bi-journal-text",
-                color: "success",
-                label: "Blog Post",
-                description: "Opinion and insights",
-            },
-            news: {
-                icon: "bi-newspaper",
-                color: "warning",
-                label: "News",
-                description: "Current events",
-            },
-            product: {
-                icon: "bi-box",
-                color: "danger",
-                label: "Product",
-                description: "Commercial content",
-            },
-            forum: {
-                icon: "bi-chat-dots",
-                color: "secondary",
-                label: "Discussion",
-                description: "Community content",
-            },
-            other: {
-                icon: "bi-file-text",
-                color: "light",
-                label: "General",
-                description: "Mixed content type",
-            },
+        const typeMap: { [key: string]: { icon: string, color: string, label: string, description: string } } = {
+            'tutorial': { icon: 'bi-book', color: 'primary', label: 'Tutorial', description: 'Step-by-step learning content' },
+            'documentation': { icon: 'bi-file-earmark-text', color: 'info', label: 'Documentation', description: 'Reference material' },
+            'blog': { icon: 'bi-journal-text', color: 'success', label: 'Blog Post', description: 'Opinion and insights' },
+            'news': { icon: 'bi-newspaper', color: 'warning', label: 'News', description: 'Current events' },
+            'product': { icon: 'bi-box', color: 'danger', label: 'Product', description: 'Commercial content' },
+            'forum': { icon: 'bi-chat-dots', color: 'secondary', label: 'Discussion', description: 'Community content' },
+            'other': { icon: 'bi-file-text', color: 'light', label: 'General', description: 'Mixed content type' }
         };
-
-        return typeMap[pageType] || typeMap["other"];
+        
+        return typeMap[pageType] || typeMap['other'];
     }
 
     private getCodeIntensity(hasCode: boolean, wordCount: number) {
         if (!hasCode) {
-            return {
-                color: "light",
-                label: "Non-Technical",
-                percentage: 0,
-                description: "No code content detected",
-            };
+            return { color: 'light', label: 'Non-Technical', percentage: 0, description: 'No code content detected' };
         }
-
+        
         // Estimate technical intensity based on word count and code presence
-        const intensity = Math.min(
-            Math.round((1000 / Math.max(wordCount, 100)) * 100),
-            100,
-        );
-
+        const intensity = Math.min(Math.round((1000 / Math.max(wordCount, 100)) * 100), 100);
+        
         if (intensity >= 50) {
-            return {
-                color: "danger",
-                label: "Code-Heavy",
-                percentage: intensity,
-                description: "Significant programming content",
-            };
+            return { color: 'danger', label: 'Code-Heavy', percentage: intensity, description: 'Significant programming content' };
         } else if (intensity >= 25) {
-            return {
-                color: "warning",
-                label: "Technical",
-                percentage: intensity,
-                description: "Mixed technical content",
-            };
+            return { color: 'warning', label: 'Technical', percentage: intensity, description: 'Mixed technical content' };
         } else {
-            return {
-                color: "info",
-                label: "Light Code",
-                percentage: intensity,
-                description: "Some code examples",
-            };
+            return { color: 'info', label: 'Light Code', percentage: intensity, description: 'Some code examples' };
         }
     }
 
     private getInteractivityLevel(interactivity: string): string {
-        if (interactivity === "static" || !interactivity) return "Static";
-        if (interactivity.includes("form")) return "Interactive";
-        if (interactivity.includes("button")) return "Clickable";
-        return "Dynamic";
+        if (interactivity === 'static' || !interactivity) return 'Static';
+        if (interactivity.includes('form')) return 'Interactive';
+        if (interactivity.includes('button')) return 'Clickable';
+        return 'Dynamic';
     }
 
     private getInteractivityIcon(interactivity: string): string {
-        if (interactivity === "static" || !interactivity) return "file-text";
-        if (interactivity.includes("form")) return "ui-checks";
-        if (interactivity.includes("button")) return "hand-index";
-        return "cursor";
+        if (interactivity === 'static' || !interactivity) return 'file-text';
+        if (interactivity.includes('form')) return 'ui-checks';
+        if (interactivity.includes('button')) return 'hand-index';
+        return 'cursor';
     }
 
-    // Render related content discovery using relationship discovery functionality
+    // Render related content discovery using Phase 3 functionality
     private async renderRelatedContent(knowledge: KnowledgeData) {
         const container = document.getElementById("relatedContentContainer")!;
         const countBadge = document.getElementById("relatedContentCount");
@@ -1870,12 +1593,12 @@ class KnowledgePanel {
         `;
 
         try {
-            // Use relationship discovery system
+            // Use Phase 3 relationship discovery
             const response = await chrome.runtime.sendMessage({
                 type: "discoverRelationships",
                 url: this.currentUrl,
                 knowledge: knowledge,
-                maxResults: 10,
+                maxResults: 10
             });
 
             if (response.success && response.relationships.length > 0) {
@@ -1889,7 +1612,7 @@ class KnowledgePanel {
                 `;
             }
 
-            // Add relationship discovery specific interactions
+                // Add Phase 3 specific interactions
         } catch (error) {
             console.warn("Relationship discovery failed:", error);
             container.innerHTML = `
@@ -1901,12 +1624,8 @@ class KnowledgePanel {
         }
     }
 
-    // Fallback method for basic related content
-    private renderFallbackRelatedContent(
-        knowledge: KnowledgeData,
-        container: HTMLElement,
-        countBadge: HTMLElement | null,
-    ) {
+    // Phase 2 fallback method
+    private renderPhase2RelatedContent(knowledge: KnowledgeData, container: HTMLElement, countBadge: HTMLElement | null) {
         const relatedContent = this.generateRelatedContent(knowledge);
 
         if (countBadge) {
@@ -1934,9 +1653,7 @@ class KnowledgePanel {
         `;
     }
 
-    private generateRelatedContent(
-        knowledge: KnowledgeData,
-    ): RelatedContentItem[] {
+    private generateRelatedContent(knowledge: KnowledgeData): RelatedContentItem[] {
         const relatedContent: RelatedContentItem[] = [];
         const currentDomain = this.extractDomainFromUrl(this.currentUrl);
 
@@ -1946,20 +1663,20 @@ class KnowledgePanel {
                 url: `https://${currentDomain}`,
                 title: `Other pages from ${currentDomain}`,
                 similarity: 0.8,
-                relationshipType: "same-domain",
-                excerpt: `Explore more content from this website domain`,
+                relationshipType: 'same-domain',
+                excerpt: `Explore more content from this website domain`
             });
         }
 
         // Generate topic-based suggestions from knowledge
         if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
-            knowledge.keyTopics.slice(0, 3).forEach((topic) => {
+            knowledge.keyTopics.slice(0, 3).forEach(topic => {
                 relatedContent.push({
-                    url: "#",
+                    url: '#',
                     title: `More content about "${topic}"`,
                     similarity: 0.7,
-                    relationshipType: "topic-match",
-                    excerpt: `Find other pages that discuss ${topic} in your knowledge base`,
+                    relationshipType: 'topic-match',
+                    excerpt: `Find other pages that discuss ${topic} in your knowledge base`
                 });
             });
         }
@@ -1967,11 +1684,11 @@ class KnowledgePanel {
         // Generate code-related suggestions if code is detected
         if (knowledge.contentMetrics?.hasCode) {
             relatedContent.push({
-                url: "#",
-                title: "Similar programming content",
+                url: '#',
+                title: 'Similar programming content',
                 similarity: 0.6,
-                relationshipType: "code-related",
-                excerpt: "Other pages with code examples and technical content",
+                relationshipType: 'code-related',
+                excerpt: 'Other pages with code examples and technical content'
             });
         }
 
@@ -1979,37 +1696,32 @@ class KnowledgePanel {
         if (knowledge.entities && knowledge.entities.length > 0) {
             const topEntity = knowledge.entities[0];
             relatedContent.push({
-                url: "#",
+                url: '#',
                 title: `More about "${topEntity.name}"`,
                 similarity: 0.65,
-                relationshipType: "topic-match",
-                excerpt: `Find additional information about ${topEntity.name} in your saved content`,
+                relationshipType: 'topic-match',
+                excerpt: `Find additional information about ${topEntity.name} in your saved content`
             });
         }
 
         return relatedContent.slice(0, 6); // Limit to 6 suggestions
     }
 
-    private renderRelatedContentSections(
-        relatedContent: RelatedContentItem[],
-    ): string {
+    private renderRelatedContentSections(relatedContent: RelatedContentItem[]): string {
         // Group by relationship type
-        const grouped = relatedContent.reduce(
-            (acc, item) => {
-                if (!acc[item.relationshipType]) {
-                    acc[item.relationshipType] = [];
-                }
-                acc[item.relationshipType].push(item);
-                return acc;
-            },
-            {} as { [key: string]: RelatedContentItem[] },
-        );
+        const grouped = relatedContent.reduce((acc, item) => {
+            if (!acc[item.relationshipType]) {
+                acc[item.relationshipType] = [];
+            }
+            acc[item.relationshipType].push(item);
+            return acc;
+        }, {} as { [key: string]: RelatedContentItem[] });
 
-        let html = "";
+        let html = '';
 
         Object.entries(grouped).forEach(([type, items]) => {
             const typeInfo = this.getRelationshipTypeInfo(type);
-
+            
             html += `
                 <div class="related-section mb-3">
                     <h6 class="text-${typeInfo.color} mb-2">
@@ -2017,7 +1729,7 @@ class KnowledgePanel {
                         <span class="badge bg-${typeInfo.color} ms-2">${items.length}</span>
                     </h6>
                     <div class="related-items">
-                        ${items.map((item) => this.renderRelatedContentItem(item, typeInfo.color)).join("")}
+                        ${items.map(item => this.renderRelatedContentItem(item, typeInfo.color)).join('')}
                     </div>
                 </div>
             `;
@@ -2026,12 +1738,9 @@ class KnowledgePanel {
         return html;
     }
 
-    private renderRelatedContentItem(
-        item: RelatedContentItem,
-        color: string,
-    ): string {
+    private renderRelatedContentItem(item: RelatedContentItem, color: string): string {
         const similarityWidth = Math.round(item.similarity * 100);
-
+        
         return `
             <div class="related-content-item p-2 mb-2 border rounded bg-white" 
                  data-url="${item.url}" data-type="${item.relationshipType}">
@@ -2060,45 +1769,23 @@ class KnowledgePanel {
     }
 
     private getRelationshipTypeInfo(type: string) {
-        const typeMap: {
-            [key: string]: { icon: string; color: string; label: string };
-        } = {
-            "same-domain": {
-                icon: "bi-globe",
-                color: "primary",
-                label: "Same Website",
-            },
-            "topic-match": {
-                icon: "bi-tags",
-                color: "success",
-                label: "Related Topics",
-            },
-            "code-related": {
-                icon: "bi-code-slash",
-                color: "warning",
-                label: "Code Content",
-            },
+        const typeMap: { [key: string]: { icon: string, color: string, label: string } } = {
+            'same-domain': { icon: 'bi-globe', color: 'primary', label: 'Same Website' },
+            'topic-match': { icon: 'bi-tags', color: 'success', label: 'Related Topics' },
+            'code-related': { icon: 'bi-code-slash', color: 'warning', label: 'Code Content' }
         };
-
-        return (
-            typeMap[type] || {
-                icon: "bi-link",
-                color: "secondary",
-                label: "Related",
-            }
-        );
+        
+        return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
     }
 
-    // Enhanced relationship rendering using relationship discovery data
-    private renderEnhancedRelatedContentSections(
-        relationshipResults: any[],
-    ): string {
-        let html = "";
+    // Phase 3: Enhanced relationship rendering using real data
+    private renderPhase3RelatedContentSections(relationshipResults: any[]): string {
+        let html = '';
 
-        relationshipResults.forEach((result) => {
+        relationshipResults.forEach(result => {
             if (result.relatedPages.length > 0) {
                 const typeInfo = this.getAnalysisTypeInfo(result.analysisType);
-
+                
                 html += `
                     <div class="related-section mb-3">
                         <h6 class="text-${typeInfo.color} mb-2">
@@ -2109,15 +1796,9 @@ class KnowledgePanel {
                             </span>
                         </h6>
                         <div class="related-items">
-                            ${result.relatedPages
-                                .slice(0, 5)
-                                .map((page: any) =>
-                                    this.renderRelatedPageItem(
-                                        page,
-                                        typeInfo.color,
-                                    ),
-                                )
-                                .join("")}
+                            ${result.relatedPages.slice(0, 5).map((page: any) => 
+                                this.renderPhase3RelatedPageItem(page, typeInfo.color)
+                            ).join('')}
                         </div>
                     </div>
                 `;
@@ -2127,12 +1808,12 @@ class KnowledgePanel {
         return html;
     }
 
-    private renderRelatedPageItem(page: any, color: string): string {
+    private renderPhase3RelatedPageItem(page: any, color: string): string {
         const similarityWidth = Math.round(page.similarity * 100);
         const visitInfo = page.visitInfo || {};
-
+        
         return `
-            <div class="related-item p-3 mb-2 border rounded bg-white" 
+            <div class="phase3-related-item p-3 mb-2 border rounded bg-white" 
                  data-url="${page.url}" 
                  data-type="${page.relationshipType}">
                 <div class="d-flex align-items-start justify-content-between">
@@ -2140,11 +1821,8 @@ class KnowledgePanel {
                         <div class="fw-semibold mb-1">${page.title}</div>
                         <div class="mb-2">
                             <span class="badge bg-${color} me-1">${page.relationshipType}</span>
-                            ${
-                                page.sharedElements &&
-                                page.sharedElements.length > 0
-                                    ? `<small class="text-muted">Shared: ${page.sharedElements.slice(0, 2).join(", ")}</small>`
-                                    : ""
+                            ${page.sharedElements && page.sharedElements.length > 0 ? 
+                                `<small class="text-muted">Shared: ${page.sharedElements.slice(0, 2).join(", ")}</small>` : ''
                             }
                         </div>
                         <div class="d-flex align-items-center mb-2">
@@ -2157,17 +1835,13 @@ class KnowledgePanel {
                             </div>
                             <small class="text-muted">${similarityWidth}%</small>
                         </div>
-                        ${
-                            visitInfo.visitCount
-                                ? `
+                        ${visitInfo.visitCount ? `
                             <small class="text-muted">
                                 <i class="bi bi-clock me-1"></i>
-                                Visited ${visitInfo.visitCount} time${visitInfo.visitCount > 1 ? "s" : ""}
-                                ${visitInfo.lastVisited ? ` • Last: ${this.formatDate(visitInfo.lastVisited)}` : ""}
+                                Visited ${visitInfo.visitCount} time${visitInfo.visitCount > 1 ? 's' : ''}
+                                ${visitInfo.lastVisited ? ` • Last: ${this.formatDate(visitInfo.lastVisited)}` : ''}
                             </small>
-                        `
-                                : ""
-                        }
+                        ` : ''}
                     </div>
                     <button class="btn btn-sm btn-outline-${color} explore-page" 
                             data-url="${page.url}" 
@@ -2180,73 +1854,45 @@ class KnowledgePanel {
     }
 
     private getAnalysisTypeInfo(type: string) {
-        const typeMap: {
-            [key: string]: { icon: string; color: string; label: string };
-        } = {
-            domain: {
-                icon: "bi-globe",
-                color: "primary",
-                label: "Same Website",
-            },
-            topic: {
-                icon: "bi-tags",
-                color: "success",
-                label: "Similar Topics",
-            },
-            entity: {
-                icon: "bi-diagram-2",
-                color: "info",
-                label: "Shared Entities",
-            },
-            technical: {
-                icon: "bi-code-slash",
-                color: "warning",
-                label: "Technical Content",
-            },
-            temporal: {
-                icon: "bi-clock-history",
-                color: "secondary",
-                label: "Recent Activity",
-            },
+        const typeMap: { [key: string]: { icon: string, color: string, label: string } } = {
+            'domain': { icon: 'bi-globe', color: 'primary', label: 'Same Website' },
+            'topic': { icon: 'bi-tags', color: 'success', label: 'Similar Topics' },
+            'entity': { icon: 'bi-diagram-2', color: 'info', label: 'Shared Entities' },
+            'technical': { icon: 'bi-code-slash', color: 'warning', label: 'Technical Content' },
+            'temporal': { icon: 'bi-clock-history', color: 'secondary', label: 'Recent Activity' }
         };
-
-        return (
-            typeMap[type] || {
-                icon: "bi-link",
-                color: "secondary",
-                label: "Related",
-            }
-        );
+        
+        return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
     }
 
-    private setupEnhancedRelatedContentInteractions() {
+    private setupPhase3RelatedContentInteractions() {
         document.addEventListener("click", (e) => {
             const target = e.target as HTMLElement;
-
+            
             // Handle explore page button clicks
             if (target.closest(".explore-page")) {
                 e.preventDefault();
                 const button = target.closest(".explore-page") as HTMLElement;
                 const url = button.getAttribute("data-url");
-
+                
                 if (url) {
                     // Open the page in a new tab
                     chrome.tabs.create({ url });
                 }
             }
-
+            
             // Handle related item clicks for analysis
-            if (target.closest(".related-item")) {
-                const item = target.closest(".related-item") as HTMLElement;
+            if (target.closest(".phase3-related-item")) {
+                const item = target.closest(".phase3-related-item") as HTMLElement;
                 const url = item.getAttribute("data-url");
                 const type = item.getAttribute("data-type");
-
+                
                 // Add visual feedback
                 item.classList.add("border-primary", "bg-light");
                 setTimeout(() => {
                     item.classList.remove("border-primary", "bg-light");
                 }, 300);
-
+                
                 // Could trigger additional analysis or actions
                 console.log(`Analyzing relationship: ${type} to ${url}`);
             }
@@ -2260,185 +1906,114 @@ class KnowledgePanel {
                 type: "discoverRelationships",
                 url: this.currentUrl,
                 knowledge: knowledge,
-                maxResults: 10,
+                maxResults: 10
             });
 
             if (response.success && response.relationships.length > 0) {
                 this.renderRelatedContent(response.relationships);
             }
-
-            // Also load temporal suggestions
-            await this.loadTemporalSuggestions();
         } catch (error) {
             console.warn("Relationship discovery failed:", error);
         }
     }
 
-    private async loadTemporalSuggestions() {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "generateTemporalSuggestions",
-                maxSuggestions: 6,
-            });
-
-            if (response.success && response.suggestions.length > 0) {
-                this.addTemporalSuggestions(
-                    response.suggestions,
-                    response.contextInfo,
-                );
-            }
-        } catch (error) {
-            console.warn("Error loading temporal suggestions:", error);
-        }
-    }
-
-    private addTemporalSuggestions(suggestions: string[], contextInfo: any) {
-        // Add temporal suggestions to the existing categorized questions
-        const questionsContainer =
-            document.getElementById("suggestedQuestions");
-        if (!questionsContainer) return;
-
-        // Find or create temporal category
-        let temporalCategory =
-            questionsContainer.querySelector("#category-temporal");
-
-        if (!temporalCategory) {
-            // Create new temporal category
-            const temporalCategoryHtml = `
-                <div class="question-category-card mb-3" data-category="temporal">
-                    <div class="category-header d-flex align-items-center justify-content-between mb-2">
-                        <h6 class="mb-0 text-warning">
-                            <i class="bi bi-clock-history me-2"></i>
-                            Timeline & History
-                            <span class="badge bg-warning ms-2">${suggestions.length}</span>
-                            <span class="badge bg-info ms-1" title="Recent activity">
-                                📊 ${contextInfo.uniqueDomains} domains, ${contextInfo.uniqueTopics} topics
+    private renderRelationshipResults(relationships: any[]) {
+        // Create relationship sections
+        const relationsHtml = relationships.map(relationship => `
+            <div class="relationship-type-section mb-4" data-type="${relationship.analysisType}">
+                <div class="relationship-header mb-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <i class="${this.getRelationshipTypeIcon(relationship.analysisType)} me-2 text-${this.getRelationshipTypeColor(relationship.analysisType)}"></i>
+                            <h6 class="mb-0">${this.getRelationshipTypeLabel(relationship.analysisType)}</h6>
+                            <span class="badge bg-${this.getRelationshipTypeColor(relationship.analysisType)} ms-2">
+                                ${relationship.relatedPages.length} pages
                             </span>
-                        </h6>
-                        <button class="btn btn-sm btn-outline-warning category-toggle" 
-                                data-bs-toggle="collapse" 
-                                data-bs-target="#category-temporal"
-                                aria-expanded="true">
-                            <i class="bi bi-chevron-down"></i>
-                        </button>
-                    </div>
-                    <div class="collapse show" id="category-temporal">
-                        ${this.renderTemporalQuestionList(suggestions)}
-                    </div>
-                </div>
-            `;
-
-            // Insert after existing categories
-            questionsContainer.insertAdjacentHTML(
-                "beforeend",
-                temporalCategoryHtml,
-            );
-
-            // Setup interaction handlers for new questions
-            this.setupQuestionInteractions(questionsContainer);
-        }
-    }
-
-    private renderTemporalQuestionList(suggestions: string[]): string {
-        return suggestions
-            .map((question, index) => {
-                const isRecommended = index < 2; // First 2 are recommended
-                const recommendedBadge = isRecommended
-                    ? `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>`
-                    : "";
-
-                return `
-                    <div class="enhanced-question-item list-group-item list-group-item-action p-3 mb-2 rounded border" 
-                         data-question="${question.replace(/"/g, "&quot;")}" 
-                         data-category="temporal"
-                         data-priority="${isRecommended ? "high" : "medium"}">
-                        <div class="d-flex align-items-start justify-content-between">
-                            <div class="flex-grow-1">
-                                <div class="d-flex align-items-center mb-1">
-                                    <i class="bi bi-clock-history me-2 text-warning"></i>
-                                    <span class="fw-semibold">${question}</span>
-                                    ${recommendedBadge}
-                                </div>
-                                <div class="d-flex align-items-center">
-                                    <small class="text-muted me-3">
-                                        <i class="bi bi-tag me-1"></i>temporal
-                                    </small>
-                                    <div class="progress me-2" style="width: 60px; height: 4px;">
-                                        <div class="progress-bar bg-warning" 
-                                             style="width: ${isRecommended ? 85 : 70}%" 
-                                             title="Relevance: ${isRecommended ? 85 : 70}%">
-                                        </div>
-                                    </div>
-                                    <small class="text-muted">${isRecommended ? 85 : 70}%</small>
-                                </div>
-                            </div>
-                            <i class="bi bi-arrow-right-circle text-warning ms-2" title="Ask this question"></i>
+                        </div>
+                        <div class="confidence-indicator">
+                            <small class="text-muted">
+                                ${Math.round(relationship.confidence * 100)}% confidence
+                            </small>
                         </div>
                     </div>
-                `;
-            })
-            .join("");
-    }
-
-    private renderRelationshipResults(relationships: any[]) {
-        const container = document.getElementById("relatedContentContainer")!;
-        const countBadge = document.getElementById("relatedContentCount");
-
-        if (countBadge) {
-            countBadge.textContent = relationships
-                .reduce((sum, rel) => sum + rel.relatedPages.length, 0)
-                .toString();
-        }
-
-        if (relationships.length === 0) {
-            container.innerHTML = `
-                <div class="text-muted text-center">
-                    <i class="bi bi-info-circle"></i>
-                    No related content found
+                    <div class="relationship-description mt-2">
+                        <small class="text-muted">${this.getRelationshipDescription(relationship.analysisType)}</small>
+                    </div>
                 </div>
-            `;
-            return;
-        }
-
-        // Group relationships by type for better organization
-        const groupedRelationships =
-            this.groupRelationshipsByType(relationships);
-
-        container.innerHTML = Object.entries(groupedRelationships)
-            .map(
-                ([type, typeRelationships]) => `
-                <div class="relationship-type-group mb-3">
-                    <h6 class="text-${this.getRelationshipTypeColor(type)} mb-2">
-                        <i class="${this.getRelationshipTypeIcon(type)} me-2"></i>
-                        ${this.getRelationshipTypeLabel(type)}
-                        <span class="badge bg-${this.getRelationshipTypeColor(type)} ms-2">
-                            ${typeRelationships.reduce((sum: number, rel: any) => sum + rel.relatedPages.length, 0)}
-                        </span>
-                    </h6>
-                    ${typeRelationships
-                        .map((relationship) =>
-                            relationship.relatedPages
-                                .slice(0, 3)
-                                .map(
-                                    (page: any) => `
-                            <div class="related-content-item p-2 mb-2 border rounded border-${this.getRelationshipTypeColor(type)} related-page-item" 
-                                 data-url="${page.url}" 
-                                 data-type="${page.relationshipType}"
-                                 style="cursor: pointer;">
+                
+                <div class="related-pages-grid">
+                    ${relationship.relatedPages.slice(0, 5).map((page: any) => `
+                        <div class="related-page-card card border-${this.getRelationshipTypeColor(relationship.analysisType)} mb-2" 
+                             data-url="${page.url}" 
+                             data-type="${page.relationshipType}">
+                            <div class="card-body p-3">
                                 <div class="d-flex align-items-start justify-content-between">
-                                    <div class="flex-grow-1">
-                                        <div class="fw-semibold mb-1">${page.title}</div>
-                                        <small class="text-muted mb-1 d-block">
-                                            ${page.sharedElements.join(", ")}
-                                        </small>
-                                        <div class="d-flex align-items-center">
-                                            <span class="badge bg-${this.getRelationshipTypeColor(type)} me-2">
-                                                ${Math.round(page.similarity * 100)}% similar
-                                            </span>
-                                            <small class="text-muted">
-                                                <i class="bi bi-clock me-1"></i>
-                                                Last visited: ${this.formatDate(page.visitInfo.lastVisited)}
-                                            </small>
+                                    <div class="flex-grow-1 me-2">
+                                        <div class="page-title fw-semibold mb-1" style="font-size: 0.9rem;">
+                                            ${page.title}
+                                        </div>
+                                        <div class="page-url text-muted mb-2" style="font-size: 0.8rem;">
+                                            ${this.truncateUrl(page.url)}
+                                        </div>
+                                        <div class="shared-elements mb-2">
+                                            ${page.sharedElements.map((element: string) => `
+                                                <span class="badge bg-light text-dark me-1" style="font-size: 0.7rem;">
+                                                    ${element}
+                                                </span>
+                                            `).join('')}
+                                        </div>
+                                        <div class="page-meta d-flex align-items-center">
+                                            <div class="similarity-score me-3">
+                                                <i class="bi bi-graph-up text-${this.getRelationshipTypeColor(relationship.analysisType)}"></i>
+                                                <small class="ms-1">${Math.round(page.similarity * 100)}% similar</small>
+                                            </div>
+                                            <div class="visit-info">
+                                                <i class="bi bi-clock text-muted"></i>
+                                                <small class="text-muted ms-1">${this.formatDate(page.visitInfo.lastVisited)}</small>
+                                            </div>
+                                            <div class="source-badge ms-2">
+                                                <span class="badge bg-secondary" style="font-size: 0.65rem;">
+                                                    ${page.visitInfo.source}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="page-actions d-flex flex-column">
+                                        <button class="btn btn-sm btn-outline-primary mb-1 visit-page" 
+                                                data-url="${page.url}"
+                                                title="Visit this page">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary find-similar" 
+                                                data-title="${page.title.replace(/"/g, '&quot;')}" 
+                                                title="Find similar content">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                    
+                    ${relationship.relatedPages.length > 5 ? `
+                        <div class="show-more-container text-center mt-2">
+                            <button class="btn btn-sm btn-outline-secondary show-more-pages" 
+                                    data-type="${relationship.analysisType}">
+                                Show ${relationship.relatedPages.length - 5} more pages
+                                <i class="bi bi-chevron-down ms-1"></i>
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `).join('');
+
+        // Combine all HTML
+        container.innerHTML = summaryHtml + tabsHtml + relationsHtml;
+
+        // Setup interaction handlers
+        this.setupRelationshipInteractions();
+    }
                                         </div>
                                     </div>
                                     <div class="d-flex flex-column">
@@ -2455,67 +2030,163 @@ class KnowledgePanel {
                                     </div>
                                 </div>
                             </div>
-                        `,
-                                )
-                                .join(""),
-                        )
-                        .join("")}
+                        `).join('')
+                    ).join('')}
                 </div>
-            `,
-            )
-            .join("");
+            `).join('');
 
         // Add interaction handlers
         this.setupRelatedContentInteractions();
     }
 
-    private groupRelationshipsByType(relationships: any[]): {
-        [key: string]: any[];
-    } {
+    private groupRelationshipsByType(relationships: any[]): { [key: string]: any[] } {
         const grouped: { [key: string]: any[] } = {};
-
+        
         for (const relationship of relationships) {
-            const type = relationship.analysisType || "other";
+            const type = relationship.analysisType || 'other';
             if (!grouped[type]) {
                 grouped[type] = [];
             }
             grouped[type].push(relationship);
         }
-
+        
         return grouped;
+    }
+
+    private setupRelationshipInteractions() {
+        const container = document.getElementById("relatedContentContainer")!;
+        
+        // Filter tab functionality
+        const filterRadios = container.querySelectorAll('input[name="relationshipFilter"]');
+        filterRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const target = e.target as HTMLInputElement;
+                this.filterRelationshipsByType(target.id.replace('filter-', ''));
+            });
+        });
+
+        // Visit page buttons
+        container.querySelectorAll('.visit-page').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const url = (e.currentTarget as HTMLElement).getAttribute('data-url');
+                if (url) {
+                    chrome.tabs.create({ url });
+                }
+            });
+        });
+
+        // Find similar buttons
+        container.querySelectorAll('.find-similar').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const title = (e.currentTarget as HTMLElement).getAttribute('data-title');
+                if (title) {
+                    const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+                    if (queryInput) {
+                        queryInput.value = `similar to "${title}"`;
+                        this.submitQuery();
+                    }
+                }
+            });
+        });
+
+        // Show more pages buttons
+        container.querySelectorAll('.show-more-pages').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const type = (e.currentTarget as HTMLElement).getAttribute('data-type');
+                this.showMorePagesForType(type);
+            });
+        });
+
+        // Page card click handlers
+        container.querySelectorAll('.related-page-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Only trigger if not clicking on action buttons
+                if (!(e.target as HTMLElement).closest('.page-actions')) {
+                    const url = (card as HTMLElement).getAttribute('data-url');
+                    if (url) {
+                        chrome.tabs.create({ url });
+                    }
+                }
+            });
+        });
+    }
+
+    private filterRelationshipsByType(type: string) {
+        const container = document.getElementById("relatedContentContainer")!;
+        const sections = container.querySelectorAll('.relationship-type-section');
+        
+        sections.forEach(section => {
+            const sectionElement = section as HTMLElement;
+            if (type === 'all' || sectionElement.getAttribute('data-type') === type) {
+                sectionElement.style.display = 'block';
+            } else {
+                sectionElement.style.display = 'none';
+            }
+        });
+    }
+
+    private showMorePagesForType(type: string | null) {
+        // This would expand to show all pages for the given type
+        // For now, just log the action
+        console.log(`Show more pages for type: ${type}`);
+        // TODO: Implement expansion logic
+    }
+
+    private truncateUrl(url: string): string {
+        try {
+            const urlObj = new URL(url);
+            const path = urlObj.pathname;
+            if (path.length > 40) {
+                return urlObj.hostname + path.substring(0, 37) + '...';
+            }
+            return urlObj.hostname + path;
+        } catch {
+            return url.length > 50 ? url.substring(0, 47) + '...' : url;
+        }
+    }
+
+    private getRelationshipDescription(analysisType: string): string {
+        const descriptions = {
+            'domain': 'Pages from the same website or domain',
+            'topic': 'Pages sharing similar topics or themes',
+            'entity': 'Pages mentioning similar entities or concepts', 
+            'technical': 'Pages with similar technical content or code',
+            'temporal': 'Pages visited recently or in sequence'
+        };
+        return descriptions[analysisType as keyof typeof descriptions] || 'Related pages';
     }
 
     private getRelationshipTypeColor(type: string): string {
         const colors = {
-            domain: "primary",
-            topic: "success",
-            entity: "info",
-            technical: "warning",
-            temporal: "secondary",
+            'domain': 'primary',
+            'topic': 'success',
+            'entity': 'info',
+            'technical': 'warning',
+            'temporal': 'secondary'
         };
-        return colors[type as keyof typeof colors] || "secondary";
+        return colors[type as keyof typeof colors] || 'secondary';
     }
 
     private getRelationshipTypeIcon(type: string): string {
         const icons = {
-            domain: "bi-globe",
-            topic: "bi-tags",
-            entity: "bi-diagram-3",
-            technical: "bi-code-slash",
-            temporal: "bi-clock-history",
+            'domain': 'bi-globe',
+            'topic': 'bi-tags',
+            'entity': 'bi-diagram-3',
+            'technical': 'bi-code-slash',
+            'temporal': 'bi-clock-history'
         };
-        return icons[type as keyof typeof icons] || "bi-link";
+        return icons[type as keyof typeof icons] || 'bi-link';
     }
 
     private getRelationshipTypeLabel(type: string): string {
         const labels = {
-            domain: "Same Domain",
-            topic: "Similar Topics",
-            entity: "Shared Entities",
-            technical: "Technical Content",
-            temporal: "Recently Visited",
+            'domain': 'Same Domain',
+            'topic': 'Similar Topics',
+            'entity': 'Shared Entities',
+            'technical': 'Technical Content',
+            'temporal': 'Recently Visited'
         };
-        return labels[type as keyof typeof labels] || "Related";
+        return labels[type as keyof typeof labels] || 'Related';
     }
 
     private formatDate(dateString: string): string {
@@ -2524,14 +2195,14 @@ class KnowledgePanel {
             const now = new Date();
             const diffMs = now.getTime() - date.getTime();
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-            if (diffDays === 0) return "Today";
-            if (diffDays === 1) return "Yesterday";
+            
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
             if (diffDays < 7) return `${diffDays} days ago`;
             if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
             return date.toLocaleDateString();
         } catch {
-            return "recently";
+            return 'recently';
         }
     }
 
@@ -2544,426 +2215,588 @@ class KnowledgePanel {
             return url;
         }
     }
+}
 
-    // === TASK 2: ADVANCED QUERY PROCESSING UI ===
-
-    private renderAdvancedQueryControls(): string {
-        return `
-            <div class="advanced-query-controls mb-3" id="advancedQueryControls" style="display: none;">
-                <div class="card border-light">
-                    <div class="card-header bg-light py-2">
-                        <h6 class="mb-0">
-                            <i class="bi bi-funnel me-2"></i>Advanced Filters
-                        </h6>
-                    </div>
-                    <div class="card-body p-3">
-                        <div class="row g-2">
-                            <div class="col-md-6">
-                                <label class="form-label">Content Type</label>
-                                <select class="form-select form-select-sm" id="contentTypeFilter">
-                                    <option value="">All Types</option>
-                                    <option value="tutorial">Tutorial</option>
-                                    <option value="documentation">Documentation</option>
-                                    <option value="article">Article</option>
-                                    <option value="reference">Reference</option>
-                                    <option value="blog">Blog Post</option>
-                                    <option value="news">News</option>
-                                    <option value="video">Video</option>
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Time Range</label>
-                                <select class="form-select form-select-sm" id="timeRangeFilter">
-                                    <option value="">All Time</option>
-                                    <option value="week">Last Week</option>
-                                    <option value="month">Last Month</option>
-                                    <option value="quarter">Last 3 Months</option>
-                                    <option value="year">Last Year</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="row g-2 mt-2">
-                            <div class="col-md-6">
-                                <label class="form-label">Domain</label>
-                                <input type="text" class="form-control form-control-sm" id="domainFilter" 
-                                       placeholder="e.g., github.com">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Technical Level</label>
-                                <select class="form-select form-select-sm" id="technicalLevelFilter">
-                                    <option value="">Any Level</option>
-                                    <option value="beginner">Beginner</option>
-                                    <option value="intermediate">Intermediate</option>
-                                    <option value="advanced">Advanced</option>
-                                    <option value="expert">Expert</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="row g-2 mt-2">
-                            <div class="col-md-6">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="hasCodeFilter">
-                                    <label class="form-check-label" for="hasCodeFilter">
-                                        Has Code/Technical Content
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" id="clearFilters">
-                                    <i class="bi bi-x-circle me-1"></i>Clear Filters
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+document.addEventListener("DOMContentLoaded", () => {
+    const panel = new KnowledgePanel();
+    panel.initialize();
+});
+    private renderContentMetrics(metrics: any) {
+        const container = document.getElementById("contentMetricsContainer")!;
+        
+        // Calculate derived metrics
+        const readingTimeCategory = this.getReadingTimeCategory(metrics.readingTime);
+        const wordCountCategory = this.getWordCountCategory(metrics.wordCount);
+        const pageTypeInfo = this.getPageTypeInfo(metrics.pageType);
+        const codeIntensity = this.getCodeIntensity(metrics.hasCode, metrics.wordCount);
+        
+        container.innerHTML = `
+            <!-- Reading Time Section -->
+            <div class="metric-section mb-4">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-primary">
+                        <i class="bi bi-clock me-2"></i>Reading Time
+                    </h6>
+                    <span class="badge bg-${readingTimeCategory.color}">${readingTimeCategory.label}</span>
                 </div>
-            </div>
-        `;
-    }
-
-    private setupAdvancedQueryControls(): void {
-        // Add advanced query toggle button
-        const queryInput = document.getElementById("knowledgeQuery");
-        if (queryInput && queryInput.parentNode) {
-            const toggleButton = document.createElement("button");
-            toggleButton.className = "btn btn-sm btn-outline-primary ms-2";
-            toggleButton.id = "toggleAdvancedQuery";
-            toggleButton.innerHTML = '<i class="bi bi-gear"></i>';
-            toggleButton.title = "Advanced Search Options";
-
-            queryInput.parentNode.appendChild(toggleButton);
-
-            // Insert advanced controls after query input container
-            const controlsHtml = this.renderAdvancedQueryControls();
-            (queryInput.parentNode as Element).insertAdjacentHTML(
-                "afterend",
-                controlsHtml,
-            );
-
-            // Setup event listeners
-            toggleButton.addEventListener("click", () => {
-                const controls = document.getElementById(
-                    "advancedQueryControls",
-                );
-                if (controls) {
-                    const isVisible = controls.style.display !== "none";
-                    controls.style.display = isVisible ? "none" : "block";
-                    toggleButton.innerHTML = isVisible
-                        ? '<i class="bi bi-gear"></i>'
-                        : '<i class="bi bi-gear-fill"></i>';
-                }
-            });
-
-            // Clear filters button
-            document
-                .getElementById("clearFilters")
-                ?.addEventListener("click", () => {
-                    this.clearAllFilters();
-                });
-        }
-    }
-
-    private clearAllFilters(): void {
-        (
-            document.getElementById("contentTypeFilter") as HTMLSelectElement
-        ).value = "";
-        (
-            document.getElementById("timeRangeFilter") as HTMLSelectElement
-        ).value = "";
-        (document.getElementById("domainFilter") as HTMLInputElement).value =
-            "";
-        (
-            document.getElementById("technicalLevelFilter") as HTMLSelectElement
-        ).value = "";
-        (document.getElementById("hasCodeFilter") as HTMLInputElement).checked =
-            false;
-    }
-
-    private async submitEnhancedQuery(query: string): Promise<void> {
-        const queryResults = document.getElementById("queryResults")!;
-
-        // Collect advanced filter values
-        const filters: any = {};
-
-        const contentType = (
-            document.getElementById("contentTypeFilter") as HTMLSelectElement
-        )?.value;
-        if (contentType) filters.contentType = contentType;
-
-        const timeRange = (
-            document.getElementById("timeRangeFilter") as HTMLSelectElement
-        )?.value;
-        if (timeRange) filters.timeRange = timeRange;
-
-        const domain = (
-            document.getElementById("domainFilter") as HTMLInputElement
-        )?.value;
-        if (domain) filters.domain = domain;
-
-        const technicalLevel = (
-            document.getElementById("technicalLevelFilter") as HTMLSelectElement
-        )?.value;
-        if (technicalLevel) filters.technicalLevel = technicalLevel;
-
-        const hasCode = (
-            document.getElementById("hasCodeFilter") as HTMLInputElement
-        )?.checked;
-        if (hasCode) filters.hasCode = true;
-
-        queryResults.innerHTML = this.createEnhancedSearchLoadingState();
-
-        try {
-            const response = await chrome.runtime.sendMessage({
-                type: "queryWebKnowledgeEnhanced",
-                query: query,
-                url: this.currentUrl,
-                searchScope: "all_indexed",
-                filters: Object.keys(filters).length > 0 ? filters : undefined,
-                maxResults: 10,
-            });
-
-            this.renderEnhancedQueryResults(response);
-
-            // Show applied filters
-            if (response.metadata?.filtersApplied?.length > 0) {
-                this.showAppliedFilters(response.metadata.filtersApplied);
-            }
-        } catch (error) {
-            console.error("Error querying enhanced knowledge:", error);
-            queryResults.innerHTML = this.createAlert(
-                "danger",
-                "bi bi-exclamation-triangle",
-                "Failed to search knowledge base. Please try again.",
-            );
-        }
-    }
-
-    private createEnhancedSearchLoadingState(): string {
-        return `
-            <div class="d-flex align-items-center">
-                <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <span class="text-muted">Searching with advanced filters...</span>
-            </div>
-        `;
-    }
-
-    private renderEnhancedQueryResults(response: any): void {
-        const queryResults = document.getElementById("queryResults")!;
-
-        let html = `
-            <div class="enhanced-query-results">
-                <div class="query-answer mb-3">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="mb-0">Search Results</h6>
-                        <div class="d-flex align-items-center">
-                            <small class="text-muted me-2">
-                                ${response.metadata.totalFound} found in ${response.metadata.processingTime}ms
-                            </small>
-                            <span class="badge bg-primary">${response.metadata.searchScope}</span>
-                            ${
-                                response.metadata.temporalQuery
-                                    ? `<span class="badge bg-success ms-1">⏰ ${response.metadata.temporalQuery.timeframe}</span>`
-                                    : ""
-                            }
-                        </div>
-                    </div>
-                    <div class="answer-text">${response.answer}</div>
-                </div>
-        `;
-
-        // Show temporal query context if present
-        if (response.metadata.temporalQuery) {
-            html += `
-                <div class="temporal-context mb-3">
+                <div class="metric-visual-container">
                     <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-clock-history text-success me-2"></i>
-                        <h6 class="mb-0">Temporal Query Context</h6>
-                    </div>
-                    <div class="p-2 bg-light rounded">
-                        <small class="text-muted d-block">
-                            <strong>Timeframe:</strong> ${response.metadata.temporalQuery.timeframe} • 
-                            <strong>Focus:</strong> ${response.metadata.temporalQuery.queryType} content
-                        </small>
-                        <small class="text-muted">
-                            <strong>Detected terms:</strong> ${response.metadata.temporalQuery.extractedTimeTerms.join(", ")}
-                        </small>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Show temporal patterns if present
-        if (response.temporalPatterns && response.temporalPatterns.length > 0) {
-            html += this.renderTemporalPatterns(response.temporalPatterns);
-        }
-
-        // Show applied filters
-        if (
-            response.metadata.filtersApplied &&
-            response.metadata.filtersApplied.length > 0
-        ) {
-            html += `
-                <div class="applied-filters mb-3">
-                    <small class="text-muted me-2">Active filters:</small>
-                    ${response.metadata.filtersApplied
-                        .map(
-                            (filter: string) =>
-                                `<span class="badge bg-info me-1">${filter}</span>`,
-                        )
-                        .join("")}
-                </div>
-            `;
-        }
-
-        // Show sources
-        if (response.sources && response.sources.length > 0) {
-            html += `
-                <div class="query-sources mb-3">
-                    <h6 class="mb-2">Sources</h6>
-                    <div class="sources-list">
-                        ${response.sources
-                            .map(
-                                (source: any) => `
-                            <div class="source-item p-2 mb-2 border rounded">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div class="flex-grow-1">
-                                        <div class="fw-semibold mb-1">
-                                            <a href="${source.url}" target="_blank" class="text-decoration-none">
-                                                ${source.title}
-                                            </a>
-                                        </div>
-                                        <small class="text-muted">
-                                            Relevance: ${Math.round(source.relevanceScore * 100)}% • 
-                                            Last indexed: ${this.formatDate(source.lastIndexed)}
-                                        </small>
-                                    </div>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="chrome.tabs.create({url: '${source.url}'})">
-                                        <i class="bi bi-box-arrow-up-right"></i>
-                                    </button>
+                        <div class="reading-time-display me-3">
+                            <span class="h4 mb-0 text-primary">${metrics.readingTime}</span>
+                            <small class="text-muted ms-1">min</small>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-${readingTimeCategory.color}" 
+                                     style="width: ${Math.min(metrics.readingTime * 10, 100)}%"
+                                     title="${metrics.readingTime} minutes">
                                 </div>
                             </div>
-                        `,
-                            )
-                            .join("")}
+                            <small class="text-muted">${readingTimeCategory.description}</small>
+                        </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Word Count Section -->
+            <div class="metric-section mb-4">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-info">
+                        <i class="bi bi-file-text me-2"></i>Content Volume
+                    </h6>
+                    <span class="badge bg-${wordCountCategory.color}">${wordCountCategory.label}</span>
+                </div>
+                <div class="metric-visual-container">
+                    <div class="row text-center mb-2">
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-info">${metrics.wordCount.toLocaleString()}</div>
+                                <small class="text-muted">Words</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-info">${Math.round(metrics.wordCount / Math.max(metrics.readingTime, 1))}</div>
+                                <small class="text-muted">WPM</small>
+                            </div>
+                        </div>
+                    </div>
+                    <small class="text-muted">${wordCountCategory.description}</small>
+                </div>
+            </div>
+
+            <!-- Page Type Section -->
+            <div class="metric-section mb-4">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-success">
+                        <i class="${pageTypeInfo.icon} me-2"></i>Page Type
+                    </h6>
+                    <span class="badge bg-${pageTypeInfo.color}">${pageTypeInfo.label}</span>
+                </div>
+                <div class="metric-visual-container">
+                    <div class="page-type-indicator p-3 bg-light rounded">
+                        <div class="d-flex align-items-center">
+                            <i class="${pageTypeInfo.icon} text-${pageTypeInfo.color} me-3" style="font-size: 1.5rem;"></i>
+                            <div>
+                                <div class="fw-semibold">${metrics.pageType}</div>
+                                <small class="text-muted">${pageTypeInfo.description}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Content Section -->
+            <div class="metric-section">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-warning">
+                        <i class="bi bi-code-slash me-2"></i>Technical Content
+                    </h6>
+                    <span class="badge bg-${codeIntensity.color}">${codeIntensity.label}</span>
+                </div>
+                <div class="metric-visual-container">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-${metrics.hasCode ? 'success' : 'muted'}">
+                                    <i class="bi bi-${metrics.hasCode ? 'check-circle-fill' : 'x-circle'}"></i>
+                                </div>
+                                <small class="text-muted">Code Present</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-secondary">
+                                    ${metrics.interactivity !== 'static' ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
+                                </div>
+                                <small class="text-muted">${this.getInteractivityLevel(metrics.interactivity)}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Render detected actions
+    private renderDetectedActions(actions: DetectedAction[], summary?: ActionSummary) {
+        const container = document.getElementById("detectedActionsContainer")!;
+        const countBadge = document.getElementById("actionsCount");
+
+        if (countBadge) {
+            countBadge.textContent = actions.length.toString();
+        }
+
+        if (actions.length === 0) {
+            container.innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="bi bi-info-circle"></i>
+                    No actions detected on this page
+                </div>
+            `;
+            return;
+        }
+
+        let summaryHtml = "";
+        if (summary) {
+            summaryHtml = `
+                <div class="mb-3 p-2 bg-light rounded">
+                    <small class="text-muted">Summary:</small><br>
+                    <span class="fw-semibold">${summary.totalActions} total actions</span>
+                    ${summary.actionTypes.length > 0 ? `<br><small>Types: ${summary.actionTypes.join(", ")}</small>` : ''}
                 </div>
             `;
         }
 
-        html += `</div>`;
-        queryResults.innerHTML = html;
-    }
-
-    private showAppliedFilters(filters: string[]): void {
-        const filtersHtml = filters
-            .map(
-                (filter) => `<span class="badge bg-info me-1">${filter}</span>`,
-            )
+        const actionsHtml = actions
+            .slice(0, 10)
+            .map(action => `
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                    <div>
+                        <span class="fw-semibold">${action.type}</span>
+                        <span class="badge bg-secondary ms-2">${action.element}</span>
+                        ${action.text ? `<br><small class="text-muted">${action.text}</small>` : ''}
+                    </div>
+                    <div>
+                        <div class="progress" style="width: 50px; height: 4px;">
+                            <div class="progress-bar bg-success" style="width: ${action.confidence * 100}%"></div>
+                        </div>
+                    </div>
+                </div>
+            `)
             .join("");
 
-        const container = document.getElementById("appliedFilters");
-        if (container) {
-            container.innerHTML = `<small class="text-muted">Filters: ${filtersHtml}</small>`;
+        container.innerHTML = summaryHtml + actionsHtml;
+    }
+
+    // Helper methods for enhanced content metrics
+    private getReadingTimeCategory(readingTime: number) {
+        if (readingTime <= 2) {
+            return { color: 'success', label: 'Quick Read', description: 'Fast consumption content' };
+        } else if (readingTime <= 5) {
+            return { color: 'info', label: 'Short Read', description: 'Brief but informative' };
+        } else if (readingTime <= 15) {
+            return { color: 'warning', label: 'Medium Read', description: 'Substantial content' };
+        } else {
+            return { color: 'danger', label: 'Long Read', description: 'In-depth material' };
         }
     }
 
-    private renderTemporalPatterns(patterns: any[]): string {
-        let html = `
-            <div class="temporal-patterns mb-3">
-                <div class="d-flex align-items-center mb-2">
-                    <i class="bi bi-graph-up-arrow text-primary me-2"></i>
-                    <h6 class="mb-0">Temporal Patterns</h6>
-                    <span class="badge bg-primary ms-2">${patterns.length}</span>
-                </div>
+    private getWordCountCategory(wordCount: number) {
+        if (wordCount <= 300) {
+            return { color: 'success', label: 'Brief', description: 'Concise and focused content' };
+        } else if (wordCount <= 1000) {
+            return { color: 'info', label: 'Standard', description: 'Typical article length' };
+        } else if (wordCount <= 3000) {
+            return { color: 'warning', label: 'Detailed', description: 'Comprehensive coverage' };
+        } else {
+            return { color: 'danger', label: 'Extensive', description: 'In-depth exploration' };
+        }
+    }
+
+    private getPageTypeInfo(pageType: string) {
+        const typeMap: { [key: string]: { icon: string, color: string, label: string, description: string } } = {
+            'tutorial': { icon: 'bi-book', color: 'primary', label: 'Tutorial', description: 'Step-by-step learning content' },
+            'documentation': { icon: 'bi-file-earmark-text', color: 'info', label: 'Documentation', description: 'Reference material' },
+            'blog': { icon: 'bi-journal-text', color: 'success', label: 'Blog Post', description: 'Opinion and insights' },
+            'news': { icon: 'bi-newspaper', color: 'warning', label: 'News', description: 'Current events' },
+            'product': { icon: 'bi-box', color: 'danger', label: 'Product', description: 'Commercial content' },
+            'forum': { icon: 'bi-chat-dots', color: 'secondary', label: 'Discussion', description: 'Community content' },
+            'other': { icon: 'bi-file-text', color: 'light', label: 'General', description: 'Mixed content type' }
+        };
+        
+        return typeMap[pageType] || typeMap['other'];
+    }
+
+    private getCodeIntensity(hasCode: boolean, wordCount: number) {
+        if (!hasCode) {
+            return { color: 'light', label: 'Non-Technical', percentage: 0, description: 'No code content detected' };
+        }
+        
+        // Estimate technical intensity based on word count and code presence
+        const intensity = Math.min(Math.round((1000 / Math.max(wordCount, 100)) * 100), 100);
+        
+        if (intensity >= 50) {
+            return { color: 'danger', label: 'Code-Heavy', percentage: intensity, description: 'Significant programming content' };
+        } else if (intensity >= 25) {
+            return { color: 'warning', label: 'Technical', percentage: intensity, description: 'Mixed technical content' };
+        } else {
+            return { color: 'info', label: 'Light Code', percentage: intensity, description: 'Some code examples' };
+        }
+    }
+
+    private getInteractivityLevel(interactivity: string): string {
+        if (interactivity === 'static' || !interactivity) return 'Static';
+        if (interactivity.includes('form')) return 'Interactive';
+        if (interactivity.includes('button')) return 'Clickable';
+        return 'Dynamic';
+    }
+
+    private getInteractivityIcon(interactivity: string): string {
+        if (interactivity === 'static' || !interactivity) return 'file-text';
+        if (interactivity.includes('form')) return 'ui-checks';
+        if (interactivity.includes('button')) return 'hand-index';
+        return 'cursor';
+    }
+
+    // Render related content discovery using Phase 3 functionality
+    private async renderRelatedContent(knowledge: KnowledgeData) {
+        const container = document.getElementById("relatedContentContainer")!;
+        const countBadge = document.getElementById("relatedContentCount");
+
+        // Show loading state
+        container.innerHTML = `
+            <div class="text-center p-3">
+                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                <small class="text-muted">Discovering relationships...</small>
+            </div>
         `;
 
-        patterns.forEach((pattern, index) => {
-            const typeIcon = this.getPatternTypeIcon(pattern.type);
-            const confidencePercentage = Math.round(pattern.confidence * 100);
+        try {
+            // Use Phase 3 relationship discovery
+            const response = await chrome.runtime.sendMessage({
+                type: "discoverRelationships",
+                url: this.currentUrl,
+                knowledge: knowledge,
+                maxResults: 10
+            });
 
-            html += `
-                <div class="pattern-card border rounded p-3 mb-2">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div class="d-flex align-items-center">
-                            <i class="${typeIcon} text-primary me-2"></i>
-                            <div>
-                                <div class="fw-semibold">${this.formatPatternType(pattern.type)}</div>
-                                <small class="text-muted">${pattern.timespan}</small>
-                            </div>
-                        </div>
-                        <div class="text-end">
-                            <div class="progress mb-1" style="width: 60px; height: 4px;">
-                                <div class="progress-bar bg-primary" 
-                                     style="width: ${confidencePercentage}%" 
-                                     title="Confidence: ${confidencePercentage}%">
-                                </div>
-                            </div>
-                            <small class="text-muted">${confidencePercentage}%</small>
-                        </div>
+            if (response.success && response.relationships.length > 0) {
+                this.renderRelationshipResults(response.relationships);
+            } else {
+                container.innerHTML = `
+                    <div class="text-muted text-center">
+                        <i class="bi bi-info-circle"></i>
+                        No related content found
                     </div>
-                    
-                    <p class="mb-2 text-muted small">${pattern.description}</p>
-                    
-                    ${
-                        pattern.items && pattern.items.length > 0
-                            ? `
-                        <div class="pattern-items">
-                            <small class="text-muted fw-semibold">Related Pages:</small>
-                            <div class="mt-1">
-                                ${pattern.items
-                                    .slice(0, 3)
-                                    .map(
-                                        (item: any) => `
-                                    <div class="d-flex align-items-center mb-1">
-                                        <span class="badge bg-secondary me-2">${item.contentType}</span>
-                                        <small class="text-truncate flex-grow-1" title="${item.title}">
-                                            ${item.title}
-                                        </small>
-                                        <small class="text-muted ms-2">${this.formatDate(item.visitDate)}</small>
-                                    </div>
-                                `,
-                                    )
-                                    .join("")}
-                                ${
-                                    pattern.items.length > 3
-                                        ? `<small class="text-muted">...and ${pattern.items.length - 3} more</small>`
-                                        : ""
-                                }
-                            </div>
-                        </div>
-                    `
-                            : ""
-                    }
+                `;
+            }
+
+                // Add Phase 3 specific interactions
+        } catch (error) {
+            console.warn("Relationship discovery failed:", error);
+            container.innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Unable to discover relationships
                 </div>
             `;
+        }
+    }
+
+    // Load related content using relationship discovery
+    private async loadRelatedContent(knowledge: KnowledgeData) {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "discoverRelationships",
+                url: this.currentUrl,
+                knowledge: knowledge,
+                maxResults: 10
+            });
+
+            if (response.success && response.relationships.length > 0) {
+                this.renderRelatedContent(response.relationships);
+            }
+        } catch (error) {
+            console.warn("Relationship discovery failed:", error);
+        }
+    }
+
+    private renderRelationshipResults(relationships: any[]) {
+        const container = document.getElementById("relatedContentContainer")!;
+        
+        // Create relationship sections
+        const relationsHtml = relationships.map(relationship => `
+            <div class="relationship-type-section mb-4" data-type="${relationship.analysisType}">
+                <div class="relationship-header mb-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <i class="${this.getRelationshipTypeIcon(relationship.analysisType)} me-2 text-${this.getRelationshipTypeColor(relationship.analysisType)}"></i>
+                            <h6 class="mb-0">${this.getRelationshipTypeLabel(relationship.analysisType)}</h6>
+                            <span class="badge bg-${this.getRelationshipTypeColor(relationship.analysisType)} ms-2">
+                                ${relationship.relatedPages.length} pages
+                            </span>
+                        </div>
+                        <div class="confidence-indicator">
+                            <small class="text-muted">
+                                ${Math.round(relationship.confidence * 100)}% confidence
+                            </small>
+                        </div>
+                    </div>
+                    <div class="relationship-description mt-2">
+                        <small class="text-muted">${this.getRelationshipDescription(relationship.analysisType)}</small>
+                    </div>
+                </div>
+                
+                <div class="related-pages-grid">
+                    ${relationship.relatedPages.slice(0, 5).map((page: any) => `
+                        <div class="related-page-card card border-${this.getRelationshipTypeColor(relationship.analysisType)} mb-2" 
+                             data-url="${page.url}" 
+                             data-type="${page.relationshipType}">
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-start justify-content-between">
+                                    <div class="flex-grow-1 me-2">
+                                        <div class="page-title fw-semibold mb-1" style="font-size: 0.9rem;">
+                                            ${page.title}
+                                        </div>
+                                        <div class="page-url text-muted mb-2" style="font-size: 0.8rem;">
+                                            ${this.truncateUrl(page.url)}
+                                        </div>
+                                        <div class="shared-elements mb-2">
+                                            ${page.sharedElements.map((element: string) => `
+                                                <span class="badge bg-light text-dark me-1" style="font-size: 0.7rem;">
+                                                    ${element}
+                                                </span>
+                                            `).join('')}
+                                        </div>
+                                        <div class="page-meta d-flex align-items-center">
+                                            <div class="similarity-score me-3">
+                                                <i class="bi bi-graph-up text-${this.getRelationshipTypeColor(relationship.analysisType)}"></i>
+                                                <small class="ms-1">${Math.round(page.similarity * 100)}% similar</small>
+                                            </div>
+                                            <div class="visit-info">
+                                                <i class="bi bi-clock text-muted"></i>
+                                                <small class="text-muted ms-1">${this.formatDate(page.visitInfo.lastVisited)}</small>
+                                            </div>
+                                            <div class="source-badge ms-2">
+                                                <span class="badge bg-secondary" style="font-size: 0.65rem;">
+                                                    ${page.visitInfo.source}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="page-actions d-flex flex-column">
+                                        <button class="btn btn-sm btn-outline-primary mb-1 visit-page" 
+                                                data-url="${page.url}"
+                                                title="Visit this page">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary find-similar" 
+                                                data-title="${page.title.replace(/"/g, '&quot;')}" 
+                                                title="Find similar content">
+                                            <i class="bi bi-search"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                    
+                    ${relationship.relatedPages.length > 5 ? `
+                        <div class="show-more-container text-center mt-2">
+                            <button class="btn btn-sm btn-outline-secondary show-more-pages" 
+                                    data-type="${relationship.analysisType}">
+                                Show ${relationship.relatedPages.length - 5} more pages
+                                <i class="bi bi-chevron-down ms-1"></i>
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `).join('');
+
+        // Set the content
+        container.innerHTML = relationsHtml;
+
+        // Setup interaction handlers
+        this.setupRelationshipInteractions();
+    }
+
+    private groupRelationshipsByType(relationships: any[]): { [key: string]: any[] } {
+        const grouped: { [key: string]: any[] } = {};
+        
+        for (const relationship of relationships) {
+            const type = relationship.analysisType || 'other';
+            if (!grouped[type]) {
+                grouped[type] = [];
+            }
+            grouped[type].push(relationship);
+        }
+        
+        return grouped;
+    }
+
+    private setupRelationshipInteractions() {
+        const container = document.getElementById("relatedContentContainer")!;
+        
+        // Filter tab functionality
+        const filterRadios = container.querySelectorAll('input[name="relationshipFilter"]');
+        filterRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const target = e.target as HTMLInputElement;
+                this.filterRelationshipsByType(target.id.replace('filter-', ''));
+            });
         });
 
-        html += `</div>`;
-        return html;
+        // Visit page buttons
+        container.querySelectorAll('.visit-page').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const url = (e.currentTarget as HTMLElement).getAttribute('data-url');
+                if (url) {
+                    chrome.tabs.create({ url });
+                }
+            });
+        });
+
+        // Find similar buttons
+        container.querySelectorAll('.find-similar').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const title = (e.currentTarget as HTMLElement).getAttribute('data-title');
+                if (title) {
+                    const queryInput = document.getElementById("knowledgeQuery") as HTMLInputElement;
+                    if (queryInput) {
+                        queryInput.value = `similar to "${title}"`;
+                        this.submitQuery();
+                    }
+                }
+            });
+        });
+
+        // Show more pages buttons
+        container.querySelectorAll('.show-more-pages').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const type = (e.currentTarget as HTMLElement).getAttribute('data-type');
+                this.showMorePagesForType(type);
+            });
+        });
+
+        // Page card click handlers
+        container.querySelectorAll('.related-page-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // Only trigger if not clicking on action buttons
+                if (!(e.target as HTMLElement).closest('.page-actions')) {
+                    const url = (card as HTMLElement).getAttribute('data-url');
+                    if (url) {
+                        chrome.tabs.create({ url });
+                    }
+                }
+            });
+        });
     }
 
-    private getPatternTypeIcon(type: string): string {
-        const icons: { [key: string]: string } = {
-            learning_sequence: "bi-arrow-up-right",
-            topic_progression: "bi-graph-up",
-            domain_exploration: "bi-compass",
-            content_evolution: "bi-arrow-clockwise",
-        };
-        return icons[type] || "bi-circle";
+    private filterRelationshipsByType(type: string) {
+        const container = document.getElementById("relatedContentContainer")!;
+        const sections = container.querySelectorAll('.relationship-type-section');
+        
+        sections.forEach(section => {
+            const sectionElement = section as HTMLElement;
+            if (type === 'all' || sectionElement.getAttribute('data-type') === type) {
+                sectionElement.style.display = 'block';
+            } else {
+                sectionElement.style.display = 'none';
+            }
+        });
     }
 
-    private formatPatternType(type: string): string {
-        const labels: { [key: string]: string } = {
-            learning_sequence: "Learning Sequence",
-            topic_progression: "Topic Progression",
-            domain_exploration: "Domain Exploration",
-            content_evolution: "Content Evolution",
+    private showMorePagesForType(type: string | null) {
+        // This would expand to show all pages for the given type
+        // For now, just log the action
+        console.log(`Show more pages for type: ${type}`);
+        // TODO: Implement expansion logic
+    }
+
+    private truncateUrl(url: string): string {
+        try {
+            const urlObj = new URL(url);
+            const path = urlObj.pathname;
+            if (path.length > 40) {
+                return urlObj.hostname + path.substring(0, 37) + '...';
+            }
+            return urlObj.hostname + path;
+        } catch {
+            return url.length > 50 ? url.substring(0, 47) + '...' : url;
+        }
+    }
+
+    private getRelationshipDescription(analysisType: string): string {
+        const descriptions = {
+            'domain': 'Pages from the same website or domain',
+            'topic': 'Pages sharing similar topics or themes',
+            'entity': 'Pages mentioning similar entities or concepts', 
+            'technical': 'Pages with similar technical content or code',
+            'temporal': 'Pages visited recently or in sequence'
         };
-        return (
-            labels[type] ||
-            type.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())
-        );
+        return descriptions[analysisType as keyof typeof descriptions] || 'Related pages';
+    }
+
+    private getRelationshipTypeColor(type: string): string {
+        const colors = {
+            'domain': 'primary',
+            'topic': 'success',
+            'entity': 'info',
+            'technical': 'warning',
+            'temporal': 'secondary'
+        };
+        return colors[type as keyof typeof colors] || 'secondary';
+    }
+
+    private getRelationshipTypeIcon(type: string): string {
+        const icons = {
+            'domain': 'bi-globe',
+            'topic': 'bi-tags',
+            'entity': 'bi-diagram-3',
+            'technical': 'bi-code-slash',
+            'temporal': 'bi-clock-history'
+        };
+        return icons[type as keyof typeof icons] || 'bi-link';
+    }
+
+    private getRelationshipTypeLabel(type: string): string {
+        const labels = {
+            'domain': 'Same Domain',
+            'topic': 'Similar Topics',
+            'entity': 'Shared Entities',
+            'technical': 'Technical Content',
+            'temporal': 'Recently Visited'
+        };
+        return labels[type as keyof typeof labels] || 'Related';
+    }
+
+    private formatDate(dateString: string): string {
+        try {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 0) return 'Today';
+            if (diffDays === 1) return 'Yesterday';
+            if (diffDays < 7) return `${diffDays} days ago`;
+            if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+            return date.toLocaleDateString();
+        } catch {
+            return 'recently';
+        }
+    }
+
+    // Extract domain from URL
+    private extractDomainFromUrl(url: string): string {
+        try {
+            const urlObj = new URL(url);
+            return urlObj.hostname;
+        } catch {
+            return url;
+        }
     }
 }
 

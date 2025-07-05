@@ -229,9 +229,8 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.viewProcess) {
-            context.agentContext.viewProcess = await createViewServiceHost(
-                context.agentContext.localHostPort,
-            );
+            context.agentContext.viewProcess =
+                await createViewServiceHost(context);
         }
 
         if (context.agentContext.webSocket?.readyState === WebSocket.OPEN) {
@@ -426,31 +425,19 @@ async function getSessionFolderPath(
 ) {
     let sessionDir: string | undefined;
 
+    if (!(await context.sessionStorage?.exists("settings.json"))) {
+        await context.sessionStorage?.write("settings.json", "");
+    }
+
     const existingFiles = await context.sessionStorage?.list("", {
         fullPath: true,
     });
 
     if (existingFiles && existingFiles.length > 0) {
-        // Get parent directory from first file path
         sessionDir = path.dirname(existingFiles[0]);
         debug(`Discovered session directory from existing file: ${sessionDir}`);
-    } else {
-        // No existing files, create a temporary file to discover the path
-        const tempFileName = `temp-path-discovery-${Date.now()}.txt`;
-        await context.sessionStorage?.write(tempFileName, "");
-
-        // Now list files to get the full path
-        const tempFiles = await context.sessionStorage?.list("", {
-            fullPath: true,
-        });
-        if (tempFiles && tempFiles.length > 0) {
-            sessionDir = path.dirname(tempFiles[0]);
-            debug(`Discovered session directory from temp file: ${sessionDir}`);
-
-            // Clean up the temporary file
-            await context.sessionStorage?.delete(tempFileName);
-        }
     }
+
     return sessionDir;
 }
 
@@ -844,8 +831,12 @@ async function handleTabIndexActions(
     return undefined;
 }
 
-export async function createViewServiceHost(port: number) {
+export async function createViewServiceHost(
+    context: SessionContext<BrowserActionContext>,
+) {
     let timeoutHandle: NodeJS.Timeout;
+    const port = context.agentContext.localHostPort;
+    const sessionDir = await getSessionFolderPath(context);
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
         timeoutHandle = setTimeout(
@@ -864,7 +855,16 @@ export async function createViewServiceHost(port: number) {
                     ),
                 );
 
-                const childProcess = fork(expressService, [port.toString()]);
+                const folderPath = path.join(sessionDir!, "files");
+
+                fs.mkdirSync(folderPath, { recursive: true });
+
+                const childProcess = fork(expressService, [port.toString()], {
+                    env: {
+                        ...process.env,
+                        TYPEAGENT_BROWSER_FILES: folderPath,
+                    },
+                });
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {

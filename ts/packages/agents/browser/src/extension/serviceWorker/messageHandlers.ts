@@ -189,7 +189,19 @@ export async function handleMessage(
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            quality: message.quality || "balanced",
+                            quality:
+                                message.extractionSettings?.quality ||
+                                "balanced",
+                            extractionSettings: {
+                                mode:
+                                    message.extractionSettings?.mode || "full",
+                                enableIntelligentAnalysis:
+                                    message.extractionSettings
+                                        ?.enableIntelligentAnalysis !== false,
+                                enableActionDetection:
+                                    message.extractionSettings
+                                        ?.enableActionDetection !== false,
+                            },
                         },
                     });
 
@@ -206,6 +218,17 @@ export async function handleMessage(
                             suggestedQuestions:
                                 knowledgeResult.suggestedQuestions || [],
                             summary: knowledgeResult.summary || "",
+                            // Enhanced content data
+                            detectedActions:
+                                knowledgeResult.detectedActions || [],
+                            actionSummary: knowledgeResult.actionSummary,
+                            contentMetrics: knowledgeResult.contentMetrics || {
+                                readingTime: 0,
+                                wordCount: 0,
+                                hasCode: false,
+                                interactivity: "static",
+                                pageType: "other",
+                            },
                         },
                     };
                 } catch (error) {
@@ -236,6 +259,92 @@ export async function handleMessage(
             } catch (error) {
                 console.error("Error querying knowledge:", error);
                 return { error: "Failed to query knowledge" };
+            }
+        }
+
+        case "queryWebKnowledgeEnhanced": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "queryWebKnowledgeEnhanced",
+                    parameters: {
+                        query: message.query,
+                        url: message.url,
+                        searchScope: message.searchScope || "all_indexed",
+                        filters: message.filters,
+                        maxResults: message.maxResults || 10,
+                    },
+                });
+
+                return result;
+            } catch (error) {
+                console.error("Enhanced query error:", error);
+                return {
+                    answer: "Error occurred during enhanced search.",
+                    sources: [],
+                    relatedEntities: [],
+                    metadata: {
+                        totalFound: 0,
+                        searchScope: "all_indexed",
+                        filtersApplied: [],
+                        suggestions: [],
+                        processingTime: 0,
+                    },
+                };
+            }
+        }
+
+        // Cross-page intelligence handlers
+        case "discoverRelationships": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "discoverRelationships",
+                    parameters: {
+                        url: message.url,
+                        knowledge: message.knowledge,
+                        maxResults: message.maxResults || 10,
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    relationships: result.relationships || [],
+                    totalFound: result.totalFound || 0,
+                };
+            } catch (error) {
+                console.error("Error discovering relationships:", error);
+                return {
+                    success: false,
+                    relationships: [],
+                    totalFound: 0,
+                    error: "Failed to discover relationships",
+                };
+            }
+        }
+
+        case "analyzeKnowledgeGaps": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "analyzeKnowledgeGaps",
+                    parameters: {
+                        url: message.url,
+                        knowledge: message.knowledge,
+                        relatedContent: message.relatedContent || [],
+                    },
+                });
+
+                return {
+                    success: result.success || false,
+                    gaps: result.gaps || [],
+                    totalGaps: result.totalGaps || 0,
+                };
+            } catch (error) {
+                console.error("Error analyzing knowledge gaps:", error);
+                return {
+                    success: false,
+                    gaps: [],
+                    totalGaps: 0,
+                    error: "Failed to analyze knowledge gaps",
+                };
             }
         }
 

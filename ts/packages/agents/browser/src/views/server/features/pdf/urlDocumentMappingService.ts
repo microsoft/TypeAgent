@@ -36,7 +36,7 @@ export class UrlDocumentMappingService {
     constructor() {
         // Get storage path from environment variable or use default
         this.storePath =
-            process.env.TYPEAGENT_BROWSER_VIEWSTORE ||
+            process.env.TYPEAGENT_BROWSER_FILES ||
             path.join(os.homedir(), ".typeagent", "browser", "viewstore");
         this.storeFile = path.join(this.storePath, "url-mappings.json");
     }
