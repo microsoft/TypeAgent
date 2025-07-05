@@ -55,12 +55,38 @@ interface ExtractionSettings {
     quality: "fast" | "balanced" | "deep";
 }
 
+interface QuestionCategory {
+    name: string;
+    icon: string;
+    color: string;
+    questions: CategorizedQuestion[];
+    priority: number;
+    count: number;
+}
+
+interface CategorizedQuestion {
+    text: string;
+    category: string;
+    priority: "high" | "medium" | "low";
+    source: "content" | "temporal" | "technical" | "discovery" | "learning";
+    confidence: number;
+    recommended: boolean;
+}
+
 interface PageSourceInfo {
     isBookmarked: boolean;
     isInHistory: boolean;
     visitCount?: number;
     lastVisited?: string;
     bookmarkFolder?: string;
+}
+
+interface RelatedContentItem {
+    url: string;
+    title: string;
+    similarity: number;
+    relationshipType: "same-domain" | "topic-match" | "code-related";
+    excerpt: string;
 }
 
 class KnowledgePanel {
@@ -328,6 +354,7 @@ class KnowledgePanel {
         knowledgeSection.className = "";
         knowledgeSection.innerHTML = `
             ${knowledge.contentMetrics ? this.renderContentMetricsCard() : ""}
+            ${this.renderRelatedContentCard()}
             ${this.renderEntitiesCard()}
             ${this.renderRelationshipsCard()}
             ${this.renderTopicsCard()}
@@ -337,6 +364,7 @@ class KnowledgePanel {
         if (knowledge.contentMetrics) {
             this.renderContentMetrics(knowledge.contentMetrics);
         }
+        this.renderRelatedContent(knowledge);
         this.renderEntities(knowledge.entities);
         this.renderRelationships(knowledge.relationships);
         this.renderKeyTopics(knowledge.keyTopics);
@@ -451,128 +479,369 @@ class KnowledgePanel {
             return;
         }
 
-        // NEW: Categorize questions for better organization
-        const categorizedQuestions = this.categorizeQuestions(questions);
+        // Use enhanced categorization
+        const categories = this.categorizeQuestions(questions);
 
-        let questionsHtml = `<div class="mb-2"><small class="text-muted">
-            <i class="bi bi-lightbulb"></i> Click a question to ask, or type your own below:
-        </small></div>`;
+        let questionsHtml = `
+            <div class="mb-3 p-2 bg-light rounded">
+                <small class="text-muted d-flex align-items-center">
+                    <i class="bi bi-lightbulb me-2"></i> 
+                    Smart suggestions based on content analysis
+                    <span class="badge bg-primary ms-auto">${questions.length} questions</span>
+                </small>
+            </div>
+        `;
 
-        if (categorizedQuestions.content.length > 0) {
-            questionsHtml += `<div class="mb-3">
-                <h6 class="text-muted mb-2"><i class="bi bi-file-text"></i> About Content</h6>
-                ${this.renderQuestionList(categorizedQuestions.content, "content")}
-            </div>`;
-        }
-
-        if (categorizedQuestions.temporal.length > 0) {
-            questionsHtml += `<div class="mb-3">
-                <h6 class="text-muted mb-2"><i class="bi bi-clock"></i> Timeline</h6>
-                ${this.renderQuestionList(categorizedQuestions.temporal, "temporal")}
-            </div>`;
-        }
-
-        if (categorizedQuestions.pattern.length > 0) {
-            questionsHtml += `<div class="mb-3">
-                <h6 class="text-muted mb-2"><i class="bi bi-search"></i> Discovery</h6>
-                ${this.renderQuestionList(categorizedQuestions.pattern, "pattern")}
-            </div>`;
-        }
-
-        if (categorizedQuestions.action.length > 0) {
-            questionsHtml += `<div class="mb-3">
-                <h6 class="text-muted mb-2"><i class="bi bi-lightning"></i> Actions</h6>
-                ${this.renderQuestionList(categorizedQuestions.action, "action")}
-            </div>`;
-        }
-
-        if (categorizedQuestions.other.length > 0) {
-            questionsHtml += `<div class="mb-3">
-                ${this.renderQuestionList(categorizedQuestions.other, "other")}
-            </div>`;
-        }
+        // Render each category with enhanced styling
+        categories.forEach(category => {
+            const highPriorityQuestions = category.questions.filter(q => q.priority === 'high');
+            const recommendedCount = category.questions.filter(q => q.recommended).length;
+            
+            questionsHtml += `
+                <div class="question-category-card mb-3" data-category="${category.name.toLowerCase().replace(' ', '-')}">
+                    <div class="category-header d-flex align-items-center justify-content-between mb-2">
+                        <h6 class="mb-0 text-${category.color}">
+                            <i class="${category.icon} me-2"></i>
+                            ${category.name}
+                            <span class="badge bg-${category.color} ms-2">${category.count}</span>
+                            ${recommendedCount > 0 ? `<span class="badge bg-warning ms-1" title="Recommended questions">★ ${recommendedCount}</span>` : ''}
+                        </h6>
+                        <button class="btn btn-sm btn-outline-${category.color} category-toggle" 
+                                data-bs-toggle="collapse" 
+                                data-bs-target="#category-${category.name.toLowerCase().replace(' ', '-')}"
+                                aria-expanded="true">
+                            <i class="bi bi-chevron-down"></i>
+                        </button>
+                    </div>
+                    <div class="collapse show" id="category-${category.name.toLowerCase().replace(' ', '-')}">
+                        ${this.renderEnhancedQuestionList(category.questions, category.color)}
+                    </div>
+                </div>
+            `;
+        });
 
         container.innerHTML = questionsHtml;
 
-        container.querySelectorAll(".question-item").forEach((item, index) => {
+        // Add enhanced click handlers
+        this.setupQuestionInteractions(container);
+    }
+
+    private categorizeQuestions(questions: string[]): QuestionCategory[] {
+        const categorizedQuestions: CategorizedQuestion[] = questions.map(question => {
+            return this.categorizeAndScoreQuestion(question);
+        });
+
+        // Group questions by category
+        const categoryMap = new Map<string, CategorizedQuestion[]>();
+        categorizedQuestions.forEach(question => {
+            if (!categoryMap.has(question.category)) {
+                categoryMap.set(question.category, []);
+            }
+            categoryMap.get(question.category)!.push(question);
+        });
+
+        // Create category objects with enhanced metadata
+        const categories: QuestionCategory[] = [];
+
+        if (categoryMap.has('learning')) {
+            categories.push({
+                name: 'Learning Path',
+                icon: 'bi-mortarboard',
+                color: 'success',
+                questions: categoryMap.get('learning')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                priority: 1,
+                count: categoryMap.get('learning')!.length
+            });
+        }
+
+        if (categoryMap.has('technical')) {
+            categories.push({
+                name: 'Technical Deep Dive',
+                icon: 'bi-code-slash',
+                color: 'primary',
+                questions: categoryMap.get('technical')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                priority: 2,
+                count: categoryMap.get('technical')!.length
+            });
+        }
+
+        if (categoryMap.has('discovery')) {
+            categories.push({
+                name: 'Discovery',
+                icon: 'bi-compass',
+                color: 'info',
+                questions: categoryMap.get('discovery')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                priority: 3,
+                count: categoryMap.get('discovery')!.length
+            });
+        }
+
+        if (categoryMap.has('content')) {
+            categories.push({
+                name: 'About Content',
+                icon: 'bi-file-text',
+                color: 'secondary',
+                questions: categoryMap.get('content')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                priority: 4,
+                count: categoryMap.get('content')!.length
+            });
+        }
+
+        if (categoryMap.has('temporal')) {
+            categories.push({
+                name: 'Timeline',
+                icon: 'bi-clock-history',
+                color: 'warning',
+                questions: categoryMap.get('temporal')!.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                priority: 5,
+                count: categoryMap.get('temporal')!.length
+            });
+        }
+
+        // Add any other categories that didn't fit the main ones
+        for (const [categoryName, questions] of categoryMap.entries()) {
+            if (!['learning', 'technical', 'discovery', 'content', 'temporal'].includes(categoryName)) {
+                categories.push({
+                    name: categoryName.charAt(0).toUpperCase() + categoryName.slice(1),
+                    icon: 'bi-question-circle',
+                    color: 'light',
+                    questions: questions.sort((a, b) => this.getQuestionScore(b) - this.getQuestionScore(a)),
+                    priority: 6,
+                    count: questions.length
+                });
+            }
+        }
+
+        return categories.sort((a, b) => a.priority - b.priority);
+    }
+
+    private categorizeAndScoreQuestion(question: string): CategorizedQuestion {
+        const lowerQ = question.toLowerCase();
+        let category = 'other';
+        let priority: 'high' | 'medium' | 'low' = 'medium';
+        let confidence = 0.7;
+        let recommended = false;
+
+        // Learning-related questions (highest priority)
+        if (lowerQ.includes('learn') || 
+            lowerQ.includes('prerequisite') || 
+            lowerQ.includes('should i') ||
+            lowerQ.includes('knowledge gap') ||
+            lowerQ.includes('next in this area') ||
+            lowerQ.includes('learning path') ||
+            lowerQ.includes('beginner') ||
+            lowerQ.includes('advanced')) {
+            category = 'learning';
+            priority = 'high';
+            confidence = 0.9;
+            recommended = true;
+        }
+        // Technical questions
+        else if (lowerQ.includes('code') ||
+                 lowerQ.includes('api') ||
+                 lowerQ.includes('tutorial') ||
+                 lowerQ.includes('example') ||
+                 lowerQ.includes('documentation') ||
+                 lowerQ.includes('implementation') ||
+                 lowerQ.includes('library') ||
+                 lowerQ.includes('framework')) {
+            category = 'technical';
+            priority = 'high';
+            confidence = 0.85;
+            recommended = lowerQ.includes('example') || lowerQ.includes('tutorial');
+        }
+        // Discovery questions
+        else if (lowerQ.includes('other') ||
+                 lowerQ.includes('similar') ||
+                 lowerQ.includes('else') ||
+                 lowerQ.includes('show me') ||
+                 lowerQ.includes('find') ||
+                 lowerQ.includes('resources') ||
+                 lowerQ.includes('related')) {
+            category = 'discovery';
+            priority = 'medium';
+            confidence = 0.8;
+            recommended = lowerQ.includes('related') || lowerQ.includes('similar');
+        }
+        // Content-specific questions
+        else if (lowerQ.includes('what is') ||
+                 lowerQ.includes('tell me') ||
+                 lowerQ.includes('summarize') ||
+                 lowerQ.includes('about') ||
+                 lowerQ.includes('explain') ||
+                 lowerQ.includes('key points')) {
+            category = 'content';
+            priority = 'medium';
+            confidence = 0.75;
+        }
+        // Temporal questions
+        else if (lowerQ.includes('when') ||
+                 lowerQ.includes('first') ||
+                 lowerQ.includes('recently') ||
+                 lowerQ.includes('journey') ||
+                 lowerQ.includes('time') ||
+                 lowerQ.includes('history')) {
+            category = 'temporal';
+            priority = 'low';
+            confidence = 0.8;
+        }
+
+        return {
+            text: question,
+            category,
+            priority,
+            source: category as any,
+            confidence,
+            recommended
+        };
+    }
+
+    private getQuestionScore(question: CategorizedQuestion): number {
+        let score = question.confidence;
+        
+        if (question.recommended) score += 0.3;
+        if (question.priority === 'high') score += 0.2;
+        else if (question.priority === 'medium') score += 0.1;
+        
+        return score;
+    }
+
+    private renderEnhancedQuestionList(questions: CategorizedQuestion[], color: string): string {
+        return questions
+            .map((question, index) => {
+                const priorityIcon = this.getPriorityIcon(question.priority);
+                const confidenceWidth = Math.round(question.confidence * 100);
+                const recommendedBadge = question.recommended ? 
+                    `<span class="badge bg-warning text-dark ms-2" title="Recommended">★</span>` : '';
+
+                return `
+                    <div class="enhanced-question-item list-group-item list-group-item-action p-3 mb-2 rounded border" 
+                         data-question="${question.text.replace(/"/g, "&quot;")}" 
+                         data-category="${question.category}"
+                         data-priority="${question.priority}">
+                        <div class="d-flex align-items-start justify-content-between">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="${priorityIcon} me-2 text-${color}"></i>
+                                    <span class="fw-semibold">${question.text}</span>
+                                    ${recommendedBadge}
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <small class="text-muted me-3">
+                                        <i class="bi bi-tag me-1"></i>${question.category}
+                                    </small>
+                                    <div class="progress me-2" style="width: 60px; height: 4px;">
+                                        <div class="progress-bar bg-${color}" 
+                                             style="width: ${confidenceWidth}%" 
+                                             title="Relevance: ${confidenceWidth}%">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">${confidenceWidth}%</small>
+                                </div>
+                            </div>
+                            <i class="bi bi-arrow-right-circle text-${color} ms-2" title="Ask this question"></i>
+                        </div>
+                    </div>
+                `;
+            })
+            .join("");
+    }
+
+    private getPriorityIcon(priority: 'high' | 'medium' | 'low'): string {
+        switch (priority) {
+            case 'high': return 'bi-star-fill';
+            case 'medium': return 'bi-star-half';
+            case 'low': return 'bi-star';
+            default: return 'bi-circle';
+        }
+    }
+
+    private setupQuestionInteractions(container: HTMLElement) {
+        // Enhanced question click handling
+        container.querySelectorAll(".enhanced-question-item").forEach((item) => {
             item.addEventListener("click", () => {
                 const questionText = item.getAttribute("data-question")!;
-                (
-                    document.getElementById(
-                        "knowledgeQuery",
-                    ) as HTMLInputElement
-                ).value = questionText;
+                const priority = item.getAttribute("data-priority")!;
+                
+                // Add visual feedback
+                item.classList.add("border-primary", "bg-light");
+                setTimeout(() => {
+                    item.classList.remove("border-primary", "bg-light");
+                }, 300);
+
+                // Set query and submit
+                (document.getElementById("knowledgeQuery") as HTMLInputElement).value = questionText;
                 this.submitQuery();
             });
+
+            // Add hover effects
+            item.addEventListener("mouseenter", () => {
+                item.classList.add("shadow-sm");
+            });
+
+            item.addEventListener("mouseleave", () => {
+                item.classList.remove("shadow-sm");
+            });
         });
+
+        // Category toggle functionality
+        container.querySelectorAll(".category-toggle").forEach((toggle) => {
+            toggle.addEventListener("click", (e) => {
+                e.preventDefault();
+                const icon = toggle.querySelector("i")!;
+                
+                // Toggle chevron direction
+                if (icon.classList.contains("bi-chevron-down")) {
+                    icon.classList.remove("bi-chevron-down");
+                    icon.classList.add("bi-chevron-up");
+                } else {
+                    icon.classList.remove("bi-chevron-up");
+                    icon.classList.add("bi-chevron-down");
+                }
+            });
+        });
+
+        // Related content interaction handlers
+        this.setupRelatedContentInteractions();
     }
 
-    private categorizeQuestions(questions: string[]) {
-        const categories = {
-            content: [] as string[],
-            temporal: [] as string[],
-            pattern: [] as string[],
-            action: [] as string[],
-            other: [] as string[],
-        };
-
-        questions.forEach((question) => {
-            const lowerQ = question.toLowerCase();
-
-            if (
-                lowerQ.includes("when") ||
-                lowerQ.includes("first") ||
-                lowerQ.includes("time")
-            ) {
-                categories.temporal.push(question);
-            } else if (
-                lowerQ.includes("what is") ||
-                lowerQ.includes("tell me") ||
-                lowerQ.includes("summarize") ||
-                lowerQ.includes("about")
-            ) {
-                categories.content.push(question);
-            } else if (
-                lowerQ.includes("other") ||
-                lowerQ.includes("similar") ||
-                lowerQ.includes("else")
-            ) {
-                categories.pattern.push(question);
-            } else if (
-                lowerQ.includes("action") ||
-                lowerQ.includes("can i") ||
-                lowerQ.includes("do")
-            ) {
-                categories.action.push(question);
-            } else {
-                categories.other.push(question);
+    private setupRelatedContentInteractions() {
+        document.addEventListener("click", (e) => {
+            const target = e.target as HTMLElement;
+            
+            // Handle explore related content button clicks
+            if (target.closest(".explore-related")) {
+                e.preventDefault();
+                const button = target.closest(".explore-related") as HTMLElement;
+                const query = button.getAttribute("data-query");
+                
+                if (query) {
+                    (document.getElementById("knowledgeQuery") as HTMLInputElement).value = query;
+                    this.submitQuery();
+                }
+            }
+            
+            // Handle related content item clicks
+            if (target.closest(".related-content-item")) {
+                const item = target.closest(".related-content-item") as HTMLElement;
+                const url = item.getAttribute("data-url");
+                const type = item.getAttribute("data-type");
+                
+                // Add visual feedback
+                item.classList.add("border-primary", "bg-light");
+                setTimeout(() => {
+                    item.classList.remove("border-primary", "bg-light");
+                }, 300);
+                
+                // For now, create a query based on the relationship
+                if (url === '#') {
+                    const title = item.querySelector(".fw-semibold")?.textContent;
+                    if (title) {
+                        (document.getElementById("knowledgeQuery") as HTMLInputElement).value = title;
+                    }
+                }
             }
         });
-
-        return categories;
-    }
-
-    private renderQuestionList(questions: string[], category: string): string {
-        const icons = {
-            content: "bi-file-text",
-            temporal: "bi-clock",
-            pattern: "bi-search",
-            action: "bi-lightning",
-            other: "bi-question-circle",
-        };
-
-        return questions
-            .map(
-                (question) => `
-                    <div class="question-item list-group-item list-group-item-action p-2 mb-1 rounded" 
-                         data-question="${question.replace(/"/g, "&quot;")}" 
-                         data-category="${category}">
-                        <i class="${icons[category as keyof typeof icons]} me-2 text-muted"></i>
-                        ${question}
-                    </div>
-                `,
-            )
-            .join("");
     }
 
     private async loadIndexStats() {
@@ -1008,16 +1277,23 @@ class KnowledgePanel {
         `;
     }
 
-    // Content Metrics Card component
+    // Content Metrics Card component with enhanced visualization
     private renderContentMetricsCard(): string {
         const content = this.createContainer(
             "contentMetricsContainer", 
             this.createEmptyState("bi bi-info-circle", "No content metrics available")
         );
-        return this.createCard("Content Metrics", content, "bi bi-bar-chart");
+        return this.createCard("Content Analysis", content, "bi bi-bar-chart-line");
     }
 
-    // Detected Actions Card component  
+    // Related Content Card component
+    private renderRelatedContentCard(): string {
+        const content = this.createContainer(
+            "relatedContentContainer",
+            this.createEmptyState("bi bi-info-circle", "No related content found")
+        );
+        return this.createCard("Related Content", content, "bi bi-link-45deg", "relatedContentCount");
+    }
     private renderActionsCard(): string {
         const content = this.createContainer(
             "detectedActionsContainer",
@@ -1026,37 +1302,119 @@ class KnowledgePanel {
         return this.createCard("Detected Actions", content, "bi bi-lightning", "actionsCount");
     }
 
-    // Render content metrics data
+    // Render enhanced content metrics with visual indicators
     private renderContentMetrics(metrics: any) {
         const container = document.getElementById("contentMetricsContainer")!;
         
+        // Calculate derived metrics
+        const readingTimeCategory = this.getReadingTimeCategory(metrics.readingTime);
+        const wordCountCategory = this.getWordCountCategory(metrics.wordCount);
+        const pageTypeInfo = this.getPageTypeInfo(metrics.pageType);
+        const codeIntensity = this.getCodeIntensity(metrics.hasCode, metrics.wordCount);
+        
         container.innerHTML = `
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <small class="text-muted">Reading Time:</small><br>
-                    <span class="fw-semibold">${metrics.readingTime} min</span>
+            <!-- Reading Time Section -->
+            <div class="metric-section mb-4">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-primary">
+                        <i class="bi bi-clock me-2"></i>Reading Time
+                    </h6>
+                    <span class="badge bg-${readingTimeCategory.color}">${readingTimeCategory.label}</span>
                 </div>
-                <div class="col-md-6">
-                    <small class="text-muted">Word Count:</small><br>
-                    <span class="fw-semibold">${metrics.wordCount}</span>
+                <div class="metric-visual-container">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="reading-time-display me-3">
+                            <span class="h4 mb-0 text-primary">${metrics.readingTime}</span>
+                            <small class="text-muted ms-1">min</small>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-${readingTimeCategory.color}" 
+                                     style="width: ${Math.min(metrics.readingTime * 10, 100)}%"
+                                     title="${metrics.readingTime} minutes">
+                                </div>
+                            </div>
+                            <small class="text-muted">${readingTimeCategory.description}</small>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <small class="text-muted">Page Type:</small><br>
-                    <span class="badge bg-primary">${metrics.pageType}</span>
+
+            <!-- Word Count Section -->
+            <div class="metric-section mb-4">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-info">
+                        <i class="bi bi-file-text me-2"></i>Content Volume
+                    </h6>
+                    <span class="badge bg-${wordCountCategory.color}">${wordCountCategory.label}</span>
                 </div>
-                <div class="col-md-6">
-                    <small class="text-muted">Has Code:</small><br>
-                    ${metrics.hasCode ? '<i class="bi bi-code-slash text-success" title="Has Code"></i> Yes' : '<i class="bi bi-x text-muted" title="No Code"></i> No'}
+                <div class="metric-visual-container">
+                    <div class="row text-center mb-2">
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-info">${metrics.wordCount.toLocaleString()}</div>
+                                <small class="text-muted">Words</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-info">${Math.round(metrics.wordCount / Math.max(metrics.readingTime, 1))}</div>
+                                <small class="text-muted">WPM</small>
+                            </div>
+                        </div>
+                    </div>
+                    <small class="text-muted">${wordCountCategory.description}</small>
                 </div>
             </div>
-            
-            <div class="row">
-                <div class="col-md-12">
-                    <small class="text-muted">Interactivity:</small><br>
-                    <span class="badge bg-info">${metrics.interactivity}</span>
+
+            <!-- Page Type Section -->
+            <div class="metric-section mb-4">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-success">
+                        <i class="${pageTypeInfo.icon} me-2"></i>Page Type
+                    </h6>
+                    <span class="badge bg-${pageTypeInfo.color}">${pageTypeInfo.label}</span>
+                </div>
+                <div class="metric-visual-container">
+                    <div class="page-type-indicator p-3 bg-light rounded">
+                        <div class="d-flex align-items-center">
+                            <i class="${pageTypeInfo.icon} text-${pageTypeInfo.color} me-3" style="font-size: 1.5rem;"></i>
+                            <div>
+                                <div class="fw-semibold">${metrics.pageType}</div>
+                                <small class="text-muted">${pageTypeInfo.description}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Content Section -->
+            <div class="metric-section">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 text-warning">
+                        <i class="bi bi-code-slash me-2"></i>Technical Content
+                    </h6>
+                    <span class="badge bg-${codeIntensity.color}">${codeIntensity.label}</span>
+                </div>
+                <div class="metric-visual-container">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-${metrics.hasCode ? 'success' : 'muted'}">
+                                    <i class="bi bi-${metrics.hasCode ? 'check-circle-fill' : 'x-circle'}"></i>
+                                </div>
+                                <small class="text-muted">Code Present</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card p-2 bg-light rounded">
+                                <div class="h5 mb-0 text-secondary">
+                                    ${metrics.interactivity !== 'static' ? '<i class="bi bi-lightning-fill"></i>' : '<i class="bi bi-file-text"></i>'}
+                                </div>
+                                <small class="text-muted">${this.getInteractivityLevel(metrics.interactivity)}</small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -1113,57 +1471,242 @@ class KnowledgePanel {
         container.innerHTML = summaryHtml + actionsHtml;
     }
 
-    // Enhanced question categorization
-    private categorizeQuestionsEnhanced(questions: string[]) {
-        const categories = {
-            learning: [] as string[],
-            discovery: [] as string[],
-            temporal: [] as string[],
-            technical: [] as string[],
-            other: [] as string[],
+    // Helper methods for enhanced content metrics
+    private getReadingTimeCategory(readingTime: number) {
+        if (readingTime <= 2) {
+            return { color: 'success', label: 'Quick Read', description: 'Fast consumption content' };
+        } else if (readingTime <= 5) {
+            return { color: 'info', label: 'Short Read', description: 'Brief but informative' };
+        } else if (readingTime <= 15) {
+            return { color: 'warning', label: 'Medium Read', description: 'Substantial content' };
+        } else {
+            return { color: 'danger', label: 'Long Read', description: 'In-depth material' };
+        }
+    }
+
+    private getWordCountCategory(wordCount: number) {
+        if (wordCount <= 300) {
+            return { color: 'success', label: 'Brief', description: 'Concise and focused content' };
+        } else if (wordCount <= 1000) {
+            return { color: 'info', label: 'Standard', description: 'Typical article length' };
+        } else if (wordCount <= 3000) {
+            return { color: 'warning', label: 'Detailed', description: 'Comprehensive coverage' };
+        } else {
+            return { color: 'danger', label: 'Extensive', description: 'In-depth exploration' };
+        }
+    }
+
+    private getPageTypeInfo(pageType: string) {
+        const typeMap: { [key: string]: { icon: string, color: string, label: string, description: string } } = {
+            'tutorial': { icon: 'bi-book', color: 'primary', label: 'Tutorial', description: 'Step-by-step learning content' },
+            'documentation': { icon: 'bi-file-earmark-text', color: 'info', label: 'Documentation', description: 'Reference material' },
+            'blog': { icon: 'bi-journal-text', color: 'success', label: 'Blog Post', description: 'Opinion and insights' },
+            'news': { icon: 'bi-newspaper', color: 'warning', label: 'News', description: 'Current events' },
+            'product': { icon: 'bi-box', color: 'danger', label: 'Product', description: 'Commercial content' },
+            'forum': { icon: 'bi-chat-dots', color: 'secondary', label: 'Discussion', description: 'Community content' },
+            'other': { icon: 'bi-file-text', color: 'light', label: 'General', description: 'Mixed content type' }
         };
+        
+        return typeMap[pageType] || typeMap['other'];
+    }
 
-        questions.forEach((question) => {
-            const lowerQ = question.toLowerCase();
+    private getCodeIntensity(hasCode: boolean, wordCount: number) {
+        if (!hasCode) {
+            return { color: 'light', label: 'Non-Technical', percentage: 0, description: 'No code content detected' };
+        }
+        
+        // Estimate technical intensity based on word count and code presence
+        const intensity = Math.min(Math.round((1000 / Math.max(wordCount, 100)) * 100), 100);
+        
+        if (intensity >= 50) {
+            return { color: 'danger', label: 'Code-Heavy', percentage: intensity, description: 'Significant programming content' };
+        } else if (intensity >= 25) {
+            return { color: 'warning', label: 'Technical', percentage: intensity, description: 'Mixed technical content' };
+        } else {
+            return { color: 'info', label: 'Light Code', percentage: intensity, description: 'Some code examples' };
+        }
+    }
 
-            if (
-                lowerQ.includes("learn") ||
-                lowerQ.includes("prerequisite") ||
-                lowerQ.includes("should i") ||
-                lowerQ.includes("knowledge gap")
-            ) {
-                categories.learning.push(question);
-            } else if (
-                lowerQ.includes("other") ||
-                lowerQ.includes("similar") ||
-                lowerQ.includes("else") ||
-                lowerQ.includes("show me") ||
-                lowerQ.includes("find")
-            ) {
-                categories.discovery.push(question);
-            } else if (
-                lowerQ.includes("code") ||
-                lowerQ.includes("api") ||
-                lowerQ.includes("tutorial") ||
-                lowerQ.includes("example") ||
-                lowerQ.includes("advanced") ||
-                lowerQ.includes("documentation")
-            ) {
-                categories.technical.push(question);
-            } else if (
-                lowerQ.includes("when") ||
-                lowerQ.includes("first") ||
-                lowerQ.includes("recently") ||
-                lowerQ.includes("journey") ||
-                lowerQ.includes("time")
-            ) {
-                categories.temporal.push(question);
-            } else {
-                categories.other.push(question);
+    private getInteractivityLevel(interactivity: string): string {
+        if (interactivity === 'static' || !interactivity) return 'Static';
+        if (interactivity.includes('form')) return 'Interactive';
+        if (interactivity.includes('button')) return 'Clickable';
+        return 'Dynamic';
+    }
+
+    private getInteractivityIcon(interactivity: string): string {
+        if (interactivity === 'static' || !interactivity) return 'file-text';
+        if (interactivity.includes('form')) return 'ui-checks';
+        if (interactivity.includes('button')) return 'hand-index';
+        return 'cursor';
+    }
+
+    // Render related content discovery
+    private renderRelatedContent(knowledge: KnowledgeData) {
+        const container = document.getElementById("relatedContentContainer")!;
+        const countBadge = document.getElementById("relatedContentCount");
+
+        // Generate related content suggestions based on current page knowledge
+        const relatedContent = this.generateRelatedContent(knowledge);
+
+        if (countBadge) {
+            countBadge.textContent = relatedContent.length.toString();
+        }
+
+        if (relatedContent.length === 0) {
+            container.innerHTML = `
+                <div class="text-muted text-center">
+                    <i class="bi bi-info-circle"></i>
+                    No related content discovered yet. Extract knowledge from more pages to see connections.
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="related-content-summary mb-3 p-2 bg-light rounded">
+                <small class="text-muted">
+                    <i class="bi bi-graph-up me-1"></i>
+                    Found ${relatedContent.length} potential connections based on topics and content analysis
+                </small>
+            </div>
+            ${this.renderRelatedContentSections(relatedContent)}
+        `;
+    }
+
+    private generateRelatedContent(knowledge: KnowledgeData): RelatedContentItem[] {
+        const relatedContent: RelatedContentItem[] = [];
+        const currentDomain = this.extractDomainFromUrl(this.currentUrl);
+
+        // Generate same-domain suggestions
+        if (currentDomain) {
+            relatedContent.push({
+                url: `https://${currentDomain}`,
+                title: `Other pages from ${currentDomain}`,
+                similarity: 0.8,
+                relationshipType: 'same-domain',
+                excerpt: `Explore more content from this website domain`
+            });
+        }
+
+        // Generate topic-based suggestions from knowledge
+        if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
+            knowledge.keyTopics.slice(0, 3).forEach(topic => {
+                relatedContent.push({
+                    url: '#',
+                    title: `More content about "${topic}"`,
+                    similarity: 0.7,
+                    relationshipType: 'topic-match',
+                    excerpt: `Find other pages that discuss ${topic} in your knowledge base`
+                });
+            });
+        }
+
+        // Generate code-related suggestions if code is detected
+        if (knowledge.contentMetrics?.hasCode) {
+            relatedContent.push({
+                url: '#',
+                title: 'Similar programming content',
+                similarity: 0.6,
+                relationshipType: 'code-related',
+                excerpt: 'Other pages with code examples and technical content'
+            });
+        }
+
+        // Generate entity-based suggestions
+        if (knowledge.entities && knowledge.entities.length > 0) {
+            const topEntity = knowledge.entities[0];
+            relatedContent.push({
+                url: '#',
+                title: `More about "${topEntity.name}"`,
+                similarity: 0.65,
+                relationshipType: 'topic-match',
+                excerpt: `Find additional information about ${topEntity.name} in your saved content`
+            });
+        }
+
+        return relatedContent.slice(0, 6); // Limit to 6 suggestions
+    }
+
+    private renderRelatedContentSections(relatedContent: RelatedContentItem[]): string {
+        // Group by relationship type
+        const grouped = relatedContent.reduce((acc, item) => {
+            if (!acc[item.relationshipType]) {
+                acc[item.relationshipType] = [];
             }
+            acc[item.relationshipType].push(item);
+            return acc;
+        }, {} as { [key: string]: RelatedContentItem[] });
+
+        let html = '';
+
+        Object.entries(grouped).forEach(([type, items]) => {
+            const typeInfo = this.getRelationshipTypeInfo(type);
+            
+            html += `
+                <div class="related-section mb-3">
+                    <h6 class="text-${typeInfo.color} mb-2">
+                        <i class="${typeInfo.icon} me-2"></i>${typeInfo.label}
+                        <span class="badge bg-${typeInfo.color} ms-2">${items.length}</span>
+                    </h6>
+                    <div class="related-items">
+                        ${items.map(item => this.renderRelatedContentItem(item, typeInfo.color)).join('')}
+                    </div>
+                </div>
+            `;
         });
 
-        return categories;
+        return html;
+    }
+
+    private renderRelatedContentItem(item: RelatedContentItem, color: string): string {
+        const similarityWidth = Math.round(item.similarity * 100);
+        
+        return `
+            <div class="related-content-item p-2 mb-2 border rounded bg-white" 
+                 data-url="${item.url}" data-type="${item.relationshipType}">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold mb-1">${item.title}</div>
+                        <small class="text-muted mb-2 d-block">${item.excerpt}</small>
+                        <div class="d-flex align-items-center">
+                            <small class="text-muted me-2">Relevance:</small>
+                            <div class="progress me-2" style="width: 80px; height: 4px;">
+                                <div class="progress-bar bg-${color}" 
+                                     style="width: ${similarityWidth}%" 
+                                     title="Relevance: ${similarityWidth}%">
+                                </div>
+                            </div>
+                            <small class="text-muted">${similarityWidth}%</small>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline-${color} explore-related" 
+                            data-query="${item.title}" title="Explore this connection">
+                        <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    private getRelationshipTypeInfo(type: string) {
+        const typeMap: { [key: string]: { icon: string, color: string, label: string } } = {
+            'same-domain': { icon: 'bi-globe', color: 'primary', label: 'Same Website' },
+            'topic-match': { icon: 'bi-tags', color: 'success', label: 'Related Topics' },
+            'code-related': { icon: 'bi-code-slash', color: 'warning', label: 'Code Content' }
+        };
+        
+        return typeMap[type] || { icon: 'bi-link', color: 'secondary', label: 'Related' };
+    }
+
+    // Extract domain from URL
+    private extractDomainFromUrl(url: string): string {
+        try {
+            const urlObj = new URL(url);
+            return urlObj.hostname;
+        } catch {
+            return url;
+        }
     }
 }
 
