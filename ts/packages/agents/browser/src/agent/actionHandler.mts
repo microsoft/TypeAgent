@@ -70,7 +70,7 @@ import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs"
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
 import * as website from "website-memory";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel, wikipedia } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
@@ -436,6 +436,12 @@ async function resolveWebPage(
                 return historyUrl;
             }
 
+            const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(site, wikipedia.apiSettingsFromEnv());
+            if (wikiPediaUrl) {
+                debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
+                return wikiPediaUrl;
+            }
+
             // try to resolve URL using LLM + internet search
             const url = await urlResolver.resolveURLWithSearch(
                 site,
@@ -443,6 +449,7 @@ async function resolveWebPage(
             );
 
             if (url) {
+                debug(`Resolved URL using Bing with Grounding: ${url}`);
                 return url;
             }
 
