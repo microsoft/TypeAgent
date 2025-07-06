@@ -464,6 +464,41 @@
                 ></div>
               </div>
 
+              <!-- Enhanced Search Mode Selection -->
+              <div class="mb-3">
+                <div class="d-flex align-items-center justify-content-between">
+                  <small class="text-muted fw-semibold">
+                    <i class="bi bi-cpu me-1"></i>Search Mode:
+                  </small>
+                  <div class="btn-group btn-group-sm" role="group" id="searchModeGroup">
+                    <input type="radio" class="btn-check" name="searchMode" id="autoMode" value="auto" checked>
+                    <label class="btn btn-outline-primary" for="autoMode" title="Intelligent mode selection">
+                      <i class="bi bi-magic"></i> Auto
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="searchMode" id="hybridMode" value="hybrid">
+                    <label class="btn btn-outline-primary" for="hybridMode" title="Hybrid semantic + keyword search">
+                      <i class="bi bi-layers"></i> Hybrid
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="searchMode" id="entityMode" value="entity">
+                    <label class="btn btn-outline-primary" for="entityMode" title="Entity-based search">
+                      <i class="bi bi-diagram-2"></i> Entity
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="searchMode" id="topicMode" value="topic">
+                    <label class="btn btn-outline-primary" for="topicMode" title="Topic-based search">
+                      <i class="bi bi-tags"></i> Topic
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="searchMode" id="semanticMode" value="semantic">
+                    <label class="btn btn-outline-primary" for="semanticMode" title="Traditional semantic search">
+                      <i class="bi bi-search"></i> Semantic
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <!-- Advanced Filters (Collapsible) -->
               <div class="mb-3">
                 <button
@@ -534,6 +569,41 @@
                           step="10"
                           value="0"
                         />
+                      </div>
+                    </div>
+
+                    <!-- Enhanced Knowledge Filters -->
+                    <div class="row mt-3">
+                      <div class="col-12">
+                        <label class="form-label">
+                          <i class="bi bi-lightbulb me-1"></i>Knowledge Status Filters
+                        </label>
+                        <div class="d-flex flex-wrap gap-3">
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="hasEntitiesFilter">
+                            <label class="form-check-label" for="hasEntitiesFilter">
+                              <i class="bi bi-diagram-2 me-1"></i>Has Entities
+                            </label>
+                          </div>
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="hasTopicsFilter">
+                            <label class="form-check-label" for="hasTopicsFilter">
+                              <i class="bi bi-tags me-1"></i>Has Topics
+                            </label>
+                          </div>
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="hasActionsFilter">
+                            <label class="form-check-label" for="hasActionsFilter">
+                              <i class="bi bi-lightning me-1"></i>Has Actions
+                            </label>
+                          </div>
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="knowledgeExtractedFilter">
+                            <label class="form-check-label" for="knowledgeExtractedFilter">
+                              <i class="bi bi-check-circle me-1"></i>Knowledge Extracted
+                            </label>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -639,6 +709,39 @@
                 <div class="stat-card">
                   <div class="stat-number" id="topDomains">0</div>
                   <div class="stat-label">Domains</div>
+                </div>
+              </div>
+
+              <!-- Enhanced Knowledge Insights -->
+              <div class="mt-4">
+                <h6 class="mb-3">
+                  <i class="bi bi-cpu me-2"></i>Knowledge Insights
+                </h6>
+                <div class="stats-grid">
+                  <div class="stat-card">
+                    <div class="stat-number text-success" id="knowledgeExtracted">0</div>
+                    <div class="stat-label">Knowledge Extracted</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-number text-primary" id="totalEntities">0</div>
+                    <div class="stat-label">Total Entities</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-number text-info" id="totalTopics">0</div>
+                    <div class="stat-label">Total Topics</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-number text-warning" id="totalActions">0</div>
+                    <div class="stat-label">Interactive Elements</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-number text-secondary" id="avgConfidence">0%</div>
+                    <div class="stat-label">Avg Confidence</div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-number text-dark" id="relationshipCount">0</div>
+                    <div class="stat-label">Relationships</div>
+                  </div>
                 </div>
               </div>
 

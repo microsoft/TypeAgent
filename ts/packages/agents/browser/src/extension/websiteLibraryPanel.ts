@@ -188,6 +188,33 @@ class WebsiteLibraryPanel {
                 `${value}%`;
         });
 
+        // Stage 3 search mode handlers
+        document.querySelectorAll('input[name="searchMode"]').forEach((radio) => {
+            radio.addEventListener("change", (e) => {
+                const target = e.target as HTMLInputElement;
+                if (target.checked) {
+                    this.handleSearchModeChange(target.value);
+                }
+            });
+        });
+
+        // Knowledge filter handlers
+        [
+            "hasEntitiesFilter",
+            "hasTopicsFilter", 
+            "hasActionsFilter",
+            "knowledgeExtractedFilter"
+        ].forEach((id) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.addEventListener("change", () => {
+                    if (this.currentQuery) {
+                        this.performSearch();
+                    }
+                });
+            }
+        });
+
         // Filter change handlers
         [
             "dateFrom",
@@ -558,6 +585,9 @@ class WebsiteLibraryPanel {
 
             if (response.success) {
                 this.renderLibraryStats(response.stats);
+                
+                // Load enhanced knowledge insights
+                await this.loadKnowledgeInsights();
             } else {
                 console.error("Failed to load library stats:", response.error);
             }
@@ -570,6 +600,55 @@ class WebsiteLibraryPanel {
                 topDomains: 0,
             });
         }
+    }
+
+    private async loadKnowledgeInsights() {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: "getKnowledgeInsights",
+            });
+
+            if (response.success) {
+                this.renderKnowledgeInsights(response.insights);
+            } else {
+                console.warn("Failed to load knowledge insights:", response.error);
+                // Set default values
+                this.renderKnowledgeInsights({
+                    knowledgeExtracted: 0,
+                    totalEntities: 0,
+                    totalTopics: 0,
+                    totalActions: 0,
+                    avgConfidence: 0,
+                    relationshipCount: 0
+                });
+            }
+        } catch (error) {
+            console.warn("Error loading knowledge insights:", error);
+            // Set default values
+            this.renderKnowledgeInsights({
+                knowledgeExtracted: 0,
+                totalEntities: 0,
+                totalTopics: 0,
+                totalActions: 0,
+                avgConfidence: 0,
+                relationshipCount: 0
+            });
+        }
+    }
+
+    private renderKnowledgeInsights(insights: any) {
+        document.getElementById("knowledgeExtracted")!.textContent = 
+            insights.knowledgeExtracted?.toString() || "0";
+        document.getElementById("totalEntities")!.textContent = 
+            insights.totalEntities?.toString() || "0";
+        document.getElementById("totalTopics")!.textContent = 
+            insights.totalTopics?.toString() || "0";
+        document.getElementById("totalActions")!.textContent = 
+            insights.totalActions?.toString() || "0";
+        document.getElementById("avgConfidence")!.textContent = 
+            `${Math.round(insights.avgConfidence * 100) || 0}%`;
+        document.getElementById("relationshipCount")!.textContent = 
+            insights.relationshipCount?.toString() || "0";
     }
 
     private renderLibraryStats(stats: LibraryStats) {
@@ -657,6 +736,36 @@ class WebsiteLibraryPanel {
     }
 
     // Search-related methods
+    // Enhanced search mode handling
+    private handleSearchModeChange(mode: string) {
+        console.log(`Search mode changed to: ${mode}`);
+        
+        // Update UI to show current mode
+        const modeLabels = {
+            auto: "Auto (Intelligent)",
+            hybrid: "Hybrid Search",
+            entity: "Entity Search", 
+            topic: "Topic Search",
+            semantic: "Semantic Search"
+        };
+        
+        // Show feedback about selected mode
+        this.showNotification(
+            `Search mode: ${modeLabels[mode as keyof typeof modeLabels] || mode}`,
+            "info"
+        );
+        
+        // Re-run search if we have a query
+        if (this.currentQuery) {
+            this.performSearch();
+        }
+    }
+
+    private getActiveSearchMode(): string {
+        const checkedMode = document.querySelector('input[name="searchMode"]:checked') as HTMLInputElement;
+        return checkedMode?.value || "auto";
+    }
+
     private handleSearchInput(query: string) {
         this.currentQuery = query;
 
@@ -776,48 +885,54 @@ class WebsiteLibraryPanel {
         searchButton.disabled = true;
 
         try {
+            const searchMode = this.getActiveSearchMode();
             const filters = this.getActiveFilters();
+            const knowledgeFilters = this.getKnowledgeFilters();
 
-            const response = await chrome.runtime.sendMessage({
-                type: "queryKnowledge",
-                parameters: {
-                    query: query,
-                    searchScope: "all_indexed",
-                    maxResults: 50,
-                    minRelevance: filters.minRelevance || 0,
-                    includeSuggestedQuestions: false,
-                    filters: filters,
-                },
-            });
+            let response;
+            
+            // Use enhanced search methods based on selected mode
+            switch (searchMode) {
+                case "hybrid":
+                    response = await this.performHybridSearch(query, filters, knowledgeFilters);
+                    break;
+                case "entity":
+                    response = await this.performEntitySearch(query, filters, knowledgeFilters);
+                    break;
+                case "topic":
+                    response = await this.performTopicSearch(query, filters, knowledgeFilters);
+                    break;
+                case "semantic":
+                    response = await this.performSemanticSearch(query, filters, knowledgeFilters);
+                    break;
+                case "auto":
+                default:
+                    response = await this.performAutoSearch(query, filters, knowledgeFilters);
+                    break;
+            }
 
             let searchResults: SearchResult;
-
-            if (
-                response.answer ||
-                (response.sources && response.sources.length > 0)
-            ) {
-                // Transform semantic search result to SearchResult format
+            if (response && (response.answer || (response.sources && response.sources.length > 0))) {
+                // Transform enhanced search result to SearchResult format
                 searchResults = {
-                    websites:
-                        response.sources?.map((source: any) => ({
-                            url: source.url,
-                            title: source.title,
-                            domain: new URL(source.url).hostname,
-                            source: "bookmarks", // Default, will be updated by knowledge check
-                            score: source.relevanceScore,
-                            snippet: source.snippet || "",
-                        })) || [],
+                    websites: response.sources?.map((source: any) => ({
+                        url: source.url,
+                        title: source.title,
+                        domain: new URL(source.url).hostname,
+                        source: "bookmarks", // Default, will be updated by knowledge check
+                        score: source.relevanceScore,
+                        snippet: source.snippet || "",
+                    })) || [],
                     summary: {
                         text: response.answer || "",
                         totalFound: response.sources?.length || 0,
-                        searchTime: 0, // Not provided in knowledge response
+                        searchTime: response.processingTime || 0,
                         sources: response.sources || [],
-                        entities:
-                            response.relatedEntities?.map((entity: any) => ({
-                                entity: entity.name,
-                                type: entity.type,
-                                count: 1,
-                            })) || [],
+                        entities: response.relatedEntities?.map((entity: any) => ({
+                            entity: entity.name,
+                            type: entity.type,
+                            count: 1,
+                        })) || [],
                     },
                     query: query,
                     filters: filters,
@@ -827,7 +942,7 @@ class WebsiteLibraryPanel {
                 searchResults = {
                     websites: [],
                     summary: {
-                        text: "No results found.",
+                        text: `No results found using ${searchMode} search.`,
                         totalFound: 0,
                         searchTime: 0,
                         sources: [],
@@ -842,7 +957,7 @@ class WebsiteLibraryPanel {
             await this.saveSearchToHistory(query);
             await this.loadRecentSearches();
         } catch (error) {
-            console.error("Search error:", error);
+            console.error("Enhanced search error:", error);
             this.showNotification(
                 "Search failed due to connection error",
                 "error",
@@ -897,6 +1012,109 @@ class WebsiteLibraryPanel {
         this.currentQuery = suggestion;
         document.getElementById("searchSuggestions")!.classList.add("d-none");
         this.performSearch();
+    }
+
+    // Enhanced Search Methods
+    private async performHybridSearch(query: string, filters: SearchFilters, knowledgeFilters: any) {
+        return await chrome.runtime.sendMessage({
+            type: "hybridSearch",
+            query: query,
+            filters: { ...filters, ...knowledgeFilters },
+            maxResults: 50
+        });
+    }
+
+    private async performEntitySearch(query: string, filters: SearchFilters, knowledgeFilters: any) {
+        // Extract potential entities from query
+        const entities = this.extractEntitiesFromQuery(query);
+        return await chrome.runtime.sendMessage({
+            type: "searchByEntities",
+            entities: entities,
+            filters: { ...filters, ...knowledgeFilters },
+            maxResults: 50
+        });
+    }
+
+    private async performTopicSearch(query: string, filters: SearchFilters, knowledgeFilters: any) {
+        // Extract topics from query
+        const topics = this.extractTopicsFromQuery(query);
+        return await chrome.runtime.sendMessage({
+            type: "searchByTopics", 
+            topics: topics,
+            filters: { ...filters, ...knowledgeFilters },
+            maxResults: 50
+        });
+    }
+
+    private async performSemanticSearch(query: string, filters: SearchFilters, knowledgeFilters: any) {
+        return await chrome.runtime.sendMessage({
+            type: "queryKnowledge",
+            parameters: {
+                query: query,
+                searchScope: "all_indexed",
+                maxResults: 50,
+                minRelevance: filters.minRelevance || 0,
+                includeSuggestedQuestions: false,
+                filters: { ...filters, ...knowledgeFilters },
+            },
+        });
+    }
+
+    private async performAutoSearch(query: string, filters: SearchFilters, knowledgeFilters: any) {
+        // Intelligent mode selection based on query characteristics
+        const isEntityQuery = /^[A-Z][a-zA-Z\s]*$/.test(query.trim()); // Starts with capital, looks like entity
+        const isTopicQuery = query.split(' ').length <= 3 && !query.includes('?'); // Short conceptual terms
+        const isComplexQuery = query.length > 50 || query.includes('?') || query.includes('how'); // Complex natural language
+
+        try {
+            if (isEntityQuery) {
+                console.log("Auto mode: Using entity search");
+                return await this.performEntitySearch(query, filters, knowledgeFilters);
+            } else if (isTopicQuery) {
+                console.log("Auto mode: Using topic search");
+                return await this.performTopicSearch(query, filters, knowledgeFilters);
+            } else if (isComplexQuery) {
+                console.log("Auto mode: Using hybrid search");
+                return await this.performHybridSearch(query, filters, knowledgeFilters);
+            } else {
+                console.log("Auto mode: Using semantic search");
+                return await this.performSemanticSearch(query, filters, knowledgeFilters);
+            }
+        } catch (error) {
+            console.warn("Auto search method failed, falling back to semantic:", error);
+            return await this.performSemanticSearch(query, filters, knowledgeFilters);
+        }
+    }
+
+    private extractEntitiesFromQuery(query: string): string[] {
+        // Simple entity extraction - split on common delimiters and filter
+        return query.split(/[,;]/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0)
+            .slice(0, 5); // Limit to 5 entities
+    }
+
+    private extractTopicsFromQuery(query: string): string[] {
+        // Simple topic extraction - split into meaningful terms
+        return query.toLowerCase()
+            .split(/\s+/)
+            .filter(word => word.length > 2 && !['the', 'and', 'or', 'but', 'for', 'with'].includes(word))
+            .slice(0, 3); // Limit to 3 topics
+    }
+
+    private getKnowledgeFilters() {
+        const hasEntities = (document.getElementById("hasEntitiesFilter") as HTMLInputElement)?.checked;
+        const hasTopics = (document.getElementById("hasTopicsFilter") as HTMLInputElement)?.checked;
+        const hasActions = (document.getElementById("hasActionsFilter") as HTMLInputElement)?.checked;
+        const knowledgeExtracted = (document.getElementById("knowledgeExtractedFilter") as HTMLInputElement)?.checked;
+
+        const filters: any = {};
+        if (hasEntities) filters.hasEntities = true;
+        if (hasTopics) filters.hasTopics = true;
+        if (hasActions) filters.hasActions = true;
+        if (knowledgeExtracted) filters.knowledgeExtracted = true;
+
+        return filters;
     }
 
     private getActiveFilters(): SearchFilters {
@@ -1642,6 +1860,11 @@ class WebsiteLibraryPanel {
             details.push(`${knowledge.topicCount} topics`);
         if (knowledge.suggestionCount)
             details.push(`${knowledge.suggestionCount} questions`);
+
+        return details.length > 0
+            ? `<small class="text-muted d-block">${details.join(" • ")}</small>`
+            : "";
+    });
 
         return details.length > 0
             ? `<small class="text-muted d-block">${details.join(" • ")}</small>`
