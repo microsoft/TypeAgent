@@ -10,6 +10,7 @@ import {
     ActionInfo,
 } from "./contentExtractor.js";
 import { DetectedAction, ActionSummary } from "./actionExtractor.js";
+import { websiteToTextChunksEnhanced } from "./chunkingUtils.js";
 
 export interface WebsiteVisitInfo {
     url: string;
@@ -662,11 +663,13 @@ export class Website implements kp.IMessage {
         this.timestamp = metadata.visitDate || metadata.bookmarkDate;
 
         if (isNew) {
-            pageContent = websiteToTextChunks(
+            const chunks = websiteToTextChunksEnhanced(
                 pageContent,
                 metadata.title,
                 metadata.url,
+                2000 // Default chunk size, can be made configurable
             );
+            pageContent = chunks;
         }
 
         if (Array.isArray(pageContent)) {
@@ -711,33 +714,4 @@ export function importWebsiteVisit(
     );
 }
 
-function websiteToTextChunks(
-    pageContent: string | string[],
-    title?: string,
-    url?: string,
-): string | string[] {
-    if (Array.isArray(pageContent)) {
-        pageContent[0] = joinTitleUrlAndContent(pageContent[0], title, url);
-        return pageContent;
-    } else {
-        return joinTitleUrlAndContent(pageContent, title, url);
-    }
-}
 
-function joinTitleUrlAndContent(
-    pageContent: string,
-    title?: string,
-    url?: string,
-): string {
-    let result = "";
-    if (title) {
-        result += `Title: ${title}\n`;
-    }
-    if (url) {
-        result += `URL: ${url}\n`;
-    }
-    if (result) {
-        result += "\n";
-    }
-    return result + pageContent;
-}
