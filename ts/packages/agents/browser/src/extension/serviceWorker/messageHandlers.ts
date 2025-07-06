@@ -710,6 +710,47 @@ export async function handleMessage(
                 };
             }
         }
+        case "getAllActions": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getAllActions",
+                    parameters: {}
+                });
+                
+                return { actions: result.actions || [] };
+            } catch (error) {
+                console.error("Error getting all actions:", error);
+                return { actions: [] };
+            }
+        }
+        case "getActionDomains": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "getActionDomains", 
+                    parameters: {}
+                });
+                
+                return { domains: result.domains || [] };
+            } catch (error) {
+                console.error("Error getting action domains:", error);
+                return { domains: [] };
+            }
+        }
+        case "deleteAction": {
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "deleteAction",
+                    parameters: {
+                        actionId: message.actionId
+                    }
+                });
+                
+                return { success: result.success, error: result.error };
+            } catch (error) {
+                console.error("Error deleting action:", error);
+                return { success: false, error: error instanceof Error ? error.message : String(error) };
+            }
+        }
 
         default:
             return null;

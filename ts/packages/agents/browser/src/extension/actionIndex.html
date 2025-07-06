@@ -1,0 +1,421 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Action Index Panel</title>
+    <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="vendor/prism/prism.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+    />
+    <style>
+      body {
+        font-size: 0.875rem;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+      }
+
+      .container-fluid {
+        padding: 0.75rem;
+      }
+
+      /* Header styling aligned with discovery panel */
+      .action-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        margin: -0.75rem -0.75rem 1rem -0.75rem;
+        border-radius: 0;
+      }
+
+      /* Search and filter section */
+      .search-filter-section {
+        background: white;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .search-bar {
+        margin-bottom: 1rem;
+      }
+
+      .filter-controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
+      }
+
+      /* Stats overview */
+      .stats-overview {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .stat-card {
+        background: white;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s ease;
+      }
+
+      .stat-card:hover {
+        transform: translateY(-2px);
+      }
+
+      .stat-number {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #667eea;
+        margin-bottom: 0.25rem;
+      }
+
+      .stat-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      /* Action cards */
+      .actions-container {
+        background: white;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .action-card {
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s ease;
+        background: white;
+      }
+
+      .action-card:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 8px rgba(102, 126, 234, 0.15);
+      }
+
+      .action-card-header {
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+
+      .action-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .action-name {
+        margin: 0 0 0.5rem 0;
+        font-weight: 600;
+        color: #212529;
+        font-size: 1rem;
+      }
+
+      .action-description {
+        margin: 0 0 0.75rem 0;
+        color: #6c757d;
+        font-size: 0.875rem;
+        line-height: 1.4;
+      }
+
+      .action-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .action-controls {
+        display: flex;
+        gap: 0.25rem;
+        flex-shrink: 0;
+        margin-left: 1rem;
+      }
+
+      .action-details {
+        border-top: 1px solid #e9ecef;
+        padding: 0;
+      }
+
+      .action-details.show {
+        padding: 1rem;
+      }
+
+      /* Badges */
+      .badge-author {
+        background-color: #e7f3ff;
+        color: #0066cc;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+      }
+
+      .badge-author.user {
+        background-color: #fff2e7;
+        color: #cc6600;
+      }
+
+      .badge-domain {
+        background-color: #f0f9ff;
+        color: #0080cc;
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+      }
+
+      /* Loading and empty states */
+      .loading-state,
+      .empty-state,
+      .error-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+      }
+
+      .loading-state i,
+      .empty-state i,
+      .error-state i {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+        display: block;
+      }
+
+      .error-state {
+        color: #dc3545;
+      }
+
+      .spinner-border-sm {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      /* Create action button */
+      .create-action-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: transform 0.2s ease;
+      }
+
+      .create-action-btn:hover {
+        color: white;
+        transform: translateY(-1px);
+      }
+
+      /* Filter clear button */
+      .filter-clear-btn {
+        background: none;
+        border: 1px solid #dee2e6;
+        color: #6c757d;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        transition: all 0.2s ease;
+      }
+
+      .filter-clear-btn:hover {
+        background: #f8f9fa;
+        border-color: #adb5bd;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 768px) {
+        .container-fluid {
+          padding: 0.5rem;
+        }
+
+        .action-header {
+          margin: -0.5rem -0.5rem 1rem -0.5rem;
+        }
+
+        .stats-overview {
+          grid-template-columns: 1fr;
+        }
+
+        .filter-controls {
+          grid-template-columns: 1fr;
+        }
+
+        .action-card-header {
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .action-controls {
+          margin-left: 0;
+          align-self: flex-start;
+        }
+      }
+
+      /* Code blocks */
+      pre {
+        background: #f8f8f8;
+        padding: 10px;
+        border-radius: 5px;
+        overflow: auto;
+        font-size: 0.8rem;
+        margin: 0;
+      }
+
+      :not(pre) > code[class*="language-"],
+      pre[class*="language-"] {
+        background: #f8f7f7;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <!-- Header Section -->
+      <div class="action-header rounded">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h4 class="mb-1">Action Index</h4>
+            <small>Manage your complete action library</small>
+          </div>
+          <a href="#" id="createActionBtn" class="create-action-btn">
+            <i class="bi bi-plus-circle"></i>
+            Create New Action
+          </a>
+        </div>
+      </div>
+
+      <!-- Search and Filter Section -->
+      <div class="search-filter-section">
+        <div class="search-bar">
+          <div class="input-group">
+            <span class="input-group-text">
+              <i class="bi bi-search"></i>
+            </span>
+            <input
+              type="text"
+              id="searchInput"
+              class="form-control"
+              placeholder="Search actions by name or description..."
+              autocomplete="off"
+            />
+            <button
+              class="btn btn-outline-secondary"
+              type="button"
+              id="clearSearchBtn"
+              title="Clear search"
+            >
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="filter-controls">
+          <select id="authorFilter" class="form-select">
+            <option value="all">All Authors</option>
+            <option value="user">User Created</option>
+            <option value="discovered">Auto Discovered</option>
+          </select>
+
+          <select id="domainFilter" class="form-select">
+            <option value="all">All Websites</option>
+          </select>
+
+          <select id="categoryFilter" class="form-select">
+            <option value="all">All Categories</option>
+          </select>
+
+          <button class="filter-clear-btn" id="clearFiltersBtn">
+            <i class="bi bi-funnel"></i> Clear Filters
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats Overview -->
+      <div class="stats-overview">
+        <div class="stat-card">
+          <span class="stat-number" id="totalActionsCount">0</span>
+          <span class="stat-label">Total Actions</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number" id="domainsCount">0</span>
+          <span class="stat-label">Websites</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number" id="userActionsCount">0</span>
+          <span class="stat-label">Custom Actions</span>
+        </div>
+      </div>
+
+      <!-- Actions Container -->
+      <div class="actions-container">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0">
+            <i class="bi bi-collection"></i> 
+            Actions Library
+            <span id="filteredActionsCount" class="badge bg-secondary ms-2">0</span>
+          </h6>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" id="refreshActionsBtn" title="Refresh actions">
+              <i class="bi bi-arrow-clockwise"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="actionsListContainer">
+          <!-- Actions will be populated here -->
+          <div class="loading-state">
+            <i class="bi bi-hourglass-split"></i>
+            <p class="mb-0">Loading your action library...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Details Modal -->
+    <div class="modal fade" id="actionDetailsModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="actionDetailsModalTitle">Action Details</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="actionDetailsModalBody">
+            <!-- Action details will be populated here -->
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="actionIndex.js"></script>
+    <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+    <script src="vendor/prism/prism.js"></script>
+    <script src="vendor/prism/prism-typescript.js"></script>
+    <script src="vendor/prism/prism-json.js"></script>
+  </body>
+</html>

@@ -160,4 +160,36 @@ export async function getActionStatistics(url?: string): Promise<{
     }
 }
 
+/**
+ * Get all actions across all URLs
+ */
+export async function getAllActions(): Promise<any[]> {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "getAllActions"
+        });
+        
+        return response?.actions || [];
+    } catch (error) {
+        console.error("Failed to get all actions:", error);
+        return [];
+    }
+}
+
+/**
+ * Get unique domains from actions
+ */
+export async function getActionDomains(): Promise<string[]> {
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: "getActionDomains"
+        });
+        
+        return response?.domains || [];
+    } catch (error) {
+        console.error("Failed to get action domains:", error);
+        return [];
+    }
+}
+
 

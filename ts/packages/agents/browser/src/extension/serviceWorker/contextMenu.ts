@@ -33,6 +33,12 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
+        title: "Manage Actions",
+        id: "manageActions",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
         id: "sidepanel-registerAgent",
         title: "Update Page Agent",
         contexts: ["all"],
@@ -114,6 +120,16 @@ export async function handleContextMenuClick(
             await chrome.sidePanel.setOptions({
                 tabId: tab.id!,
                 path: "sidepanel.html",
+                enabled: true,
+            });
+            break;
+        }
+        case "manageActions": {
+            await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "actionIndex.html",
                 enabled: true,
             });
             break;

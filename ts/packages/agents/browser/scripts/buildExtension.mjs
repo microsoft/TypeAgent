@@ -57,6 +57,7 @@ const sharedScripts = {
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
     options: "options.ts",
     sidepanel: "sidepanel.ts",
+    actionIndex: "actionIndex.ts",
     knowledgePanel: "knowledgePanel.ts",
     websiteLibraryPanel: "websiteLibraryPanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
@@ -140,6 +141,7 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
 copyFileSync(`${srcDir}/sidepanel.html`, `${chromeOutDir}/sidepanel.html`);
+copyFileSync(`${srcDir}/actionIndex.html`, `${chromeOutDir}/actionIndex.html`);
 copyFileSync(
     `${srcDir}/knowledgePanel.html`,
     `${chromeOutDir}/knowledgePanel.html`,
