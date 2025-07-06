@@ -126,7 +126,7 @@ describe("Stage 2 Enhanced Import", () => {
             expect(metrics.totalParts).toBeGreaterThan(0);
             expect(metrics.averagePartSize).toBeGreaterThan(0);
             expect(metrics.metadataPreservation).toBe(100); // All parts should have metadata
-            expect(metrics.processingTime).toBeGreaterThan(0);
+            expect(metrics.processingTime).toBeGreaterThanOrEqual(0); // Processing time can be 0 for fast operations
         });
     });
 

@@ -248,7 +248,7 @@ export function calculateWebsiteScore(
 }
 
 /**
- * Find websites matching search criteria using knowpro search utilities
+ * Find websites matching search criteria using enhanced search capabilities
  */
 export async function findRequestedWebsites(
     searchFilters: string[],
@@ -264,6 +264,55 @@ export async function findRequestedWebsites(
     }
 
     try {
+        // Try enhanced search capabilities first
+        if (searchFilters.length === 1 && !exactMatch) {
+            const query = searchFilters[0];
+            
+            // Try hybrid search for single term queries
+            try {
+                const hybridResults = await context.websiteCollection.hybridSearch(query);
+                if (hybridResults.length > 0) {
+                    debug(`Found ${hybridResults.length} results using hybrid search`);
+                    return hybridResults
+                        .filter(result => result.relevanceScore >= minScore)
+                        .map(result => result.website.toWebsite())
+                        .slice(0, 20);
+                }
+            } catch (hybridError) {
+                debug(`Hybrid search failed, falling back: ${hybridError}`);
+            }
+        }
+
+        // Try entity search for proper nouns and specific terms
+        if (searchFilters.some(filter => /^[A-Z]/.test(filter))) {
+            try {
+                const entityResults = await context.websiteCollection.searchByEntities(searchFilters);
+                if (entityResults.length > 0) {
+                    debug(`Found ${entityResults.length} results using entity search`);
+                    return entityResults
+                        .map(result => result.toWebsite())
+                        .slice(0, 20);
+                }
+            } catch (entityError) {
+                debug(`Entity search failed, falling back: ${entityError}`);
+            }
+        }
+
+        // Try topic search for conceptual terms
+        try {
+            const topicResults = await context.websiteCollection.searchByTopics(searchFilters);
+            if (topicResults.length > 0) {
+                debug(`Found ${topicResults.length} results using topic search`);
+                return topicResults
+                    .map(result => result.toWebsite())
+                    .slice(0, 20);
+            }
+        } catch (topicError) {
+            debug(`Topic search failed, falling back: ${topicError}`);
+        }
+
+        // Fallback to original semantic search for backward compatibility
+        debug(`Falling back to semantic search for filters: ${searchFilters.join(", ")}`);
         const matches = await kp.searchConversationKnowledge(
             context.websiteCollection,
             // search group
