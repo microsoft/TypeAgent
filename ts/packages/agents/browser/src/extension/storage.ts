@@ -76,12 +76,12 @@ export async function deleteStoredPageProperty(
 }
 
 /**
- * Enhanced action storage functions that leverage the new ActionsStore
- * when available through the service worker bridge
+ * Action storage functions that route operations to the ActionsStore
+ * via service worker messages
  */
 
 /**
- * Get actions for a URL using the enhanced storage system
+ * Get actions for a URL
  */
 export async function getActionsForUrl(url: string, options: {
     includeGlobal?: boolean;
@@ -103,7 +103,7 @@ export async function getActionsForUrl(url: string, options: {
 }
 
 /**
- * Save an authored action using the enhanced storage system
+ * Save an authored action
  */
 export async function saveAuthoredAction(url: string, actionData: any): Promise<boolean> {
     try {

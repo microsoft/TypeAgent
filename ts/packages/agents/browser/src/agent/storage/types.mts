@@ -309,7 +309,8 @@ export interface LoadResult<T> {
   data?: T;
   error?: string;
 }
-// Phase 3 Enhanced Types - Search, Analytics, Import/Export
+
+// Advanced Features - Search and Analytics
 
 // Search Types
 export interface ActionSearchQuery {
@@ -449,7 +450,7 @@ export interface TimeRange {
   preset?: 'today' | 'week' | 'month' | 'quarter' | 'year';
 }
 
-// Additional types for Import/Export and filtering
+// Additional types for filtering
 export interface ActionFilter {
   categories?: ActionCategory[];
   authors?: ActionAuthor[];
@@ -463,76 +464,6 @@ export interface ActionFilter {
   lastUsedAfter?: string;
   lastUsedBefore?: string;
 }
-
-export interface ExportResult {
-  success: boolean;
-  data?: string;
-  filename?: string;
-  format: ExportFormat;
-  actionCount: number;
-  exportTime: number;
-  size: number;
-  error?: string;
-}
-
-export interface ImportResult {
-  success: boolean;
-  totalActions: number;
-  imported: number;
-  skipped: number;
-  errors: number;
-  importTime: number;
-  errorDetails: Array<{
-    actionId: string;
-    error: string;
-  }>;
-  error?: string;
-}
-
-export interface ImportPreview {
-  totalActions: number;
-  validActions: number;
-  invalidActions: number;
-  conflicts: number;
-  preview: StoredAction[];
-  validationErrors: Array<{
-    actionId: string;
-    actionName: string;
-    errors: string[];
-  }>;
-  conflictingActions: Array<{
-    id: string;
-    name: string;
-    existingName: string;
-  }>;
-  error?: string;
-}
-
-export interface BackupResult {
-  success: boolean;
-  backupId?: string;
-  filename?: string;
-  data?: string;
-  size: number;
-  actionCount: number;
-  domainCount: number;
-  backupTime: number;
-  error?: string;
-}
-
-export interface RestoreResult {
-  success: boolean;
-  backupId?: string;
-  actionsRestored: number;
-  domainsRestored: number;
-  actionsSkipped: number;
-  domainsSkipped: number;
-  errors: string[];
-  restoreTime: number;
-  error?: string;
-}
-
-export type ExportFormat = 'json' | 'csv';
 
 export interface PopularSearch {
   query: string;

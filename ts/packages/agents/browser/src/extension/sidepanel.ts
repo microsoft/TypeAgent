@@ -187,20 +187,17 @@ class ActionDiscoveryPanel {
         refreshButton.disabled = true;
 
         try {
-            const currentSchema = await getStoredPageProperty(
-                launchUrl!,
-                "detectedActions",
-            );
-            const currentActionDefinitions = await getStoredPageProperty(
-                launchUrl!,
-                "detectedActionDefinitions",
-            );
+            // Get current discovered actions from ActionsStore
+            let currentActions: any[] = [];
+            if (!forceRefresh) {
+                currentActions = await getActionsForUrl(launchUrl!, {
+                    includeGlobal: false,
+                    author: "discovered"
+                });
+            }
 
-            if (
-                currentSchema === null ||
-                currentActionDefinitions === null ||
-                forceRefresh
-            ) {
+            if (currentActions.length === 0 || forceRefresh) {
+                // Trigger action discovery which will automatically save to ActionsStore
                 const response = await chrome.runtime.sendMessage({
                     type: "refreshSchema",
                 });
@@ -217,20 +214,16 @@ class ActionDiscoveryPanel {
                     return;
                 }
 
-                await setStoredPageProperty(
-                    launchUrl!,
-                    "detectedActions",
-                    response.schema,
-                );
-                await setStoredPageProperty(
-                    launchUrl!,
-                    "detectedActionDefinitions",
-                    response.actionDefinitions,
-                );
-
+                // Render the newly discovered actions
                 this.renderSchemaResults(response.schema);
             } else {
-                this.renderSchemaResults(currentSchema);
+                // Convert ActionsStore format to legacy schema format for display
+                const legacySchema = currentActions.map(action => ({
+                    actionName: action.name,
+                    description: action.description,
+                    parameters: action.definition?.detectedSchema?.parameters || {}
+                }));
+                this.renderSchemaResults(legacySchema);
             }
 
             await this.registerTempSchema();
@@ -462,27 +455,11 @@ class ActionDiscoveryPanel {
                 }
             }
 
-            const detectedActions = new Map(
-                Object.entries(
-                    (await getStoredPageProperty(
-                        launchUrl!,
-                        "detectedActionDefinitions",
-                    )) ?? {},
-                ),
-            );
-            const authoredActions = new Map(
-                Object.entries(
-                    (await getStoredPageProperty(
-                        launchUrl!,
-                        "authoredActionDefinitions",
-                    )) ?? {},
-                ),
-            );
-
-            const existingActionNames: string[] = [
-                ...detectedActions.keys(),
-                ...authoredActions.keys(),
-            ];
+            // Get existing action names from ActionsStore to avoid duplicates
+            const allActions = await getActionsForUrl(launchUrl!, {
+                includeGlobal: true
+            });
+            const existingActionNames: string[] = allActions.map(action => action.name);
 
             const response = await chrome.runtime.sendMessage({
                 type: "getIntentFromRecording",
@@ -500,10 +477,11 @@ class ActionDiscoveryPanel {
 
             const processedActionName = response.intentJson.actionName;
 
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "userActions",
-                {
+            // Save action to ActionsStore via agent
+            const saveResponse = await chrome.runtime.sendMessage({
+                type: "manualSaveAuthoredAction",
+                url: launchUrl!,
+                actionData: {
                     name: processedActionName,
                     description: stepsDescription,
                     steps,
@@ -511,26 +489,16 @@ class ActionDiscoveryPanel {
                     html,
                     intentSchema: response.intent,
                     actionsJson: response.actions,
-                },
-            );
+                    intentJson: response.intentJson
+                }
+            });
 
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "authoredActionDefinitions",
-                response.intentTypeDefinition,
-            );
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "authoredActionsJson",
-                response.actions,
-            );
-            await this.addEntryToStoredPageProperties(
-                processedActionName,
-                "authoredIntentJson",
-                response.intentJson,
-            );
+            if (saveResponse?.success) {
+                this.showNotification("Action saved successfully!", "success");
+            } else {
+                throw new Error(saveResponse?.error || "Failed to save action");
+            }
 
-            this.showNotification("Action saved successfully!", "success");
             this.toggleActionForm();
             await this.updateUserActionsUI();
             await this.registerTempSchema();
@@ -540,43 +508,6 @@ class ActionDiscoveryPanel {
         } finally {
             saveButton.innerHTML = originalContent;
             saveButton.disabled = false;
-        }
-    }
-
-    private async addEntryToStoredPageProperties(
-        actionName: string,
-        key: string,
-        value: any,
-    ) {
-        let currentActionJson = new Map(
-            Object.entries(
-                (await getStoredPageProperty(launchUrl!, key)) ?? {},
-            ),
-        );
-        currentActionJson.set(actionName, value);
-        await setStoredPageProperty(
-            launchUrl!,
-            key,
-            Object.fromEntries(currentActionJson),
-        );
-    }
-
-    private async removeEntryFromStoredPageProperties(
-        actionName: string,
-        key: string,
-    ) {
-        let currentActionJson = new Map(
-            Object.entries(
-                (await getStoredPageProperty(launchUrl!, key)) ?? {},
-            ),
-        );
-        if (currentActionJson.has(actionName)) {
-            currentActionJson.delete(actionName);
-            await setStoredPageProperty(
-                launchUrl!,
-                key,
-                Object.fromEntries(currentActionJson),
-            );
         }
     }
 
@@ -591,18 +522,20 @@ class ActionDiscoveryPanel {
 
         try {
             await chrome.runtime.sendMessage({ type: "clearRecordedActions" });
-            await setStoredPageProperty(launchUrl!, "userActions", null);
-            await setStoredPageProperty(
-                launchUrl!,
-                "authoredActionDefinitions",
-                null,
-            );
-            await setStoredPageProperty(
-                launchUrl!,
-                "authoredActionsJson",
-                null,
-            );
-            await setStoredPageProperty(launchUrl!, "authoredIntentJson", null);
+            
+            // Get all user actions and delete them individually
+            const userActions = await getActionsForUrl(launchUrl!, {
+                includeGlobal: false,
+                author: "user"
+            });
+            
+            // Delete each user action
+            for (const action of userActions) {
+                await chrome.runtime.sendMessage({
+                    type: "deleteAction",
+                    actionId: action.id
+                });
+            }
 
             await this.updateUserActionsUI();
             await this.registerTempSchema();
@@ -681,7 +614,7 @@ class ActionDiscoveryPanel {
         });
 
         deleteButton?.addEventListener("click", () => {
-            // Use action ID for new storage system, fallback to name for compatibility
+            // Use action ID, fallback to name for compatibility
             const actionId = action.id || action.name;
             this.deleteAction(actionId);
         });
@@ -776,17 +709,21 @@ class ActionDiscoveryPanel {
         }
 
         try {
-            // TODO: Implement delete action API in the new storage system
-            // For now, show a message that this feature is coming soon
-            alert("Action deletion will be available in a future update. The new storage system needs a delete API endpoint.");
+            const response = await chrome.runtime.sendMessage({
+                type: "deleteAction",
+                actionId: actionId
+            });
             
-            // When implemented, this should be:
-            // await chrome.runtime.sendMessage({
-            //     type: "deleteAction",
-            //     actionId: actionId
-            // });
-            
-            // await this.updateUserActionsUI();
+            if (response?.success) {
+                console.log(`Action deleted: ${actionId}`);
+                // Refresh the UI to show updated action list
+                await this.updateUserActionsUI();
+                // Show success message
+                alert("Action deleted successfully!");
+            } else {
+                console.error(`Failed to delete action:`, response?.error);
+                alert(`Failed to delete action: ${response?.error || "Unknown error"}`);
+            }
         } catch (error) {
             console.error("Error deleting action:", error);
             alert("Failed to delete action. Please try again.");

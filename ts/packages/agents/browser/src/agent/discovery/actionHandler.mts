@@ -26,6 +26,7 @@ import {
     GetActionsForUrl,
     SaveDiscoveredActions,
     SaveAuthoredAction,
+    DeleteAction,
 } from "./schema/discoveryActions.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
 import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
@@ -80,6 +81,9 @@ export async function handleSchemaDiscoveryAction(
             break;
         case "saveAuthoredAction":
             actionData = await handleSaveAuthoredAction(action);
+            break;
+        case "deleteAction":
+            actionData = await handleDeleteAction(action);
             break;
     }
 
@@ -720,6 +724,38 @@ export async function handleSchemaDiscoveryAction(
             }
         } catch (error) {
             console.error("Failed to save authored action:", error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : "Unknown error"
+            };
+        }
+    }
+
+    async function handleDeleteAction(action: DeleteAction) {
+        if (!agentContext.actionsStore) {
+            throw new Error("ActionsStore not available");
+        }
+
+        const { actionId } = action.parameters;
+        
+        try {
+            const result = await agentContext.actionsStore.deleteAction(actionId);
+            
+            if (result.success) {
+                console.log(`Deleted action: ${actionId}`);
+                return {
+                    success: true,
+                    actionId: actionId
+                };
+            } else {
+                console.error(`Failed to delete action ${actionId}:`, result.error);
+                return {
+                    success: false,
+                    error: result.error
+                };
+            }
+        } catch (error) {
+            console.error("Failed to delete action:", error);
             return {
                 success: false,
                 error: error instanceof Error ? error.message : "Unknown error"

@@ -7,7 +7,6 @@ import { PatternResolver } from "./patternResolver.mjs";
 import { DomainManager } from "./domainManager.mjs";
 import { ActionSearchEngine } from "./searchEngine.mjs";
 import { AnalyticsManager } from "./analyticsManager.mjs";
-import { ImportExportManager } from "./importExportManager.mjs";
 import { 
     StoredAction, 
     ActionIndex,
@@ -40,7 +39,6 @@ export class ActionsStore {
     private domainManager: DomainManager;
     private searchEngine: ActionSearchEngine;
     private analyticsManager: AnalyticsManager;
-    private importExportManager: ImportExportManager;
     private initialized: boolean = false;
 
     constructor(sessionStorage: any) {
@@ -51,11 +49,9 @@ export class ActionsStore {
         this.domainManager = new DomainManager(this.fileManager);
         this.searchEngine = new ActionSearchEngine();
         this.analyticsManager = new AnalyticsManager(this.fileManager);
-        this.importExportManager = new ImportExportManager(this.fileManager, this.validator);
 
 
         console.log(this.searchEngine)
-        console.log(this.importExportManager)
     }
 
     /**

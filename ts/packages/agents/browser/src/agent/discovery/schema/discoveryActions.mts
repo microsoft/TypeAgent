@@ -90,6 +90,13 @@ export type SaveAuthoredAction = {
     };
 };
 
+export type DeleteAction = {
+    actionName: "deleteAction";
+    parameters: {
+        actionId: string;
+    };
+};
+
 export type SchemaDiscoveryActions =
     | FindPageComponents
     | DetectPageActions
@@ -101,4 +108,5 @@ export type SchemaDiscoveryActions =
     | GetIntentFromRecording
     | GetActionsForUrl
     | SaveDiscoveredActions
-    | SaveAuthoredAction;
+    | SaveAuthoredAction
+    | DeleteAction;

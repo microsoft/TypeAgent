@@ -2,59 +2,40 @@
 // Licensed under the MIT License.
 
 /**
- * ActionsStore Phase 1 - Foundation
+ * ActionsStore - Complete storage infrastructure for browser actions
  * 
- * This module provides the core storage infrastructure for browser actions.
- * 
- * Phase 1 Features:
+ * This module provides comprehensive storage capabilities including:
  * - File-based storage using agent sessionStorage
- * - Basic CRUD operations for actions
+ * - Full CRUD operations for actions
  * - Action validation and sanitization  
  * - Fast lookup through indexing
- * - Compatibility layer for existing APIs
+ * - URL pattern matching and domain management
+ * - Search and analytics capabilities
  */
 
 // Core storage classes
 export { ActionsStore } from "./actionsStore.mjs";
 export { FileManager } from "./fileManager.mjs";
 export { ActionValidator, ActionIndexManager } from "./validator.mjs";
-export { StorageCompatibilityAdapter } from "./compatibilityAdapter.mjs";
 
 // Pattern matching and domain management
 export { UrlMatcher } from "./urlMatcher.mjs";
 export { PatternResolver } from "./patternResolver.mjs";
 export { DomainManager } from "./domainManager.mjs";
 
-// Enhanced features (Phase 3)
+// Advanced features
 export { ActionSearchEngine } from "./searchEngine.mjs";
 export { AnalyticsManager } from "./analyticsManager.mjs";
-export { ImportExportManager } from "./importExportManager.mjs";
 
 // Type definitions
 export * from "./types.mjs";
 
 // Convenience factory function
 import { ActionsStore } from "./actionsStore.mjs";
-import { StorageCompatibilityAdapter } from "./compatibilityAdapter.mjs";
 
 /**
  * Create a new ActionsStore instance
  */
 export function createActionsStore(sessionStorage: any): ActionsStore {
     return new ActionsStore(sessionStorage);
-}
-
-/**
- * Create a complete storage system with compatibility adapter
- */
-export async function createActionsStoreWithAdapter(sessionStorage: any): Promise<{
-    store: ActionsStore;
-    adapter: StorageCompatibilityAdapter;
-}> {
-    const store = new ActionsStore(sessionStorage);
-    await store.initialize();
-    
-    const adapter = new StorageCompatibilityAdapter(store);
-    
-    return { store, adapter };
 }

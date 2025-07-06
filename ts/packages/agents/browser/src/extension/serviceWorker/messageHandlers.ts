@@ -692,6 +692,25 @@ export async function handleMessage(
             return result;
         }
 
+        case "deleteAction": {
+            // Handler for deleting actions from the ActionsStore
+            try {
+                const result = await sendActionToAgent({
+                    actionName: "deleteAction",
+                    parameters: {
+                        actionId: message.actionId
+                    }
+                });
+                return result;
+            } catch (error) {
+                console.error("Failed to delete action:", error);
+                return { 
+                    success: false, 
+                    error: error instanceof Error ? error.message : "Unknown error" 
+                };
+            }
+        }
+
         default:
             return null;
     }
