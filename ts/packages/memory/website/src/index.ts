@@ -6,5 +6,7 @@ export * from "./contentExtractor.js";
 export * from "./importWebsites.js";
 export * from "./indexingService.js";
 export * from "./websiteCollection.js";
+export * from "./websiteDocPart.js";
+export * from "./websiteDocPartMeta.js";
 export * from "./tables.js";
 export * from "./websiteMeta.js";

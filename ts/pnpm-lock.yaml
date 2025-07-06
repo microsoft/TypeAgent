@@ -3018,6 +3018,9 @@ importers:
       common-utils:
         specifier: workspace:*
         version: link:../../commonUtils
+      conversation-memory:
+        specifier: workspace:*
+        version: link:../conversation
       debug:
         specifier: ^4.4.0
         version: 4.4.1(supports-color@8.1.1)

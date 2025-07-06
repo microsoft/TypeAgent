@@ -2,16 +2,8 @@
 // Licensed under the MIT License.
 
 import {
-    IConversation,
-    IMessage,
     SemanticRef,
-    ConversationIndex,
     IndexingResults,
-    ConversationSettings,
-    createConversationSettings,
-    addMessageKnowledgeToSemanticRefIndex,
-    buildSecondaryIndexes,
-    ConversationSecondaryIndexes,
     IndexingEventHandlers,
     IConversationDataWithIndexes,
     writeConversationDataToFile,
@@ -22,8 +14,7 @@ import {
     MessageCollection,
     SemanticRefCollection,
 } from "knowpro";
-import { createEmbeddingCache } from "knowledge-processor";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { DocMemory, DocMemorySettings, createTextMemorySettings } from "conversation-memory";
 import sqlite from "better-sqlite3";
 import * as ms from "memory-storage";
 import {
@@ -32,51 +23,67 @@ import {
     BookmarkFolderTable,
 } from "./tables.js";
 import { Website } from "./websiteMeta.js";
+import { WebsiteDocPart } from "./websiteDocPart.js";
 import path from "node:path";
 import fs from "node:fs";
 
 export interface WebsiteCollectionData
-    extends IConversationDataWithIndexes<Website> {}
+    extends IConversationDataWithIndexes<WebsiteDocPart> {}
 
 export class WebsiteCollection
-    implements IConversation, dataFrame.IConversationWithDataFrame
+    extends DocMemory
+    implements dataFrame.IConversationWithDataFrame
 {
-    public messages: MessageCollection<Website>;
-    public semanticRefs: SemanticRefCollection;
-    public settings: ConversationSettings;
-    public semanticRefIndex: ConversationIndex;
-    public secondaryIndexes: ConversationSecondaryIndexes;
+    public dataFrames!: dataFrame.DataFrameCollection;
+    public visitFrequency!: dataFrame.IDataFrame;
+    public websiteCategories!: dataFrame.IDataFrame;
+    public bookmarkFolders!: dataFrame.IDataFrame;
 
-    public dataFrames: dataFrame.DataFrameCollection;
-    public visitFrequency: dataFrame.IDataFrame;
-    public websiteCategories: dataFrame.IDataFrame;
-    public bookmarkFolders: dataFrame.IDataFrame;
+    private db: sqlite.Database | undefined = undefined;
+    private dbPath: string = "";
 
     constructor(
-        public nameTag: string = "",
-        messages: Website[] = [],
-        public tags: string[] = [],
+        nameTag: string = "",
+        websites: Website[] = [],
+        tags: string[] = [],
         semanticRefs: SemanticRef[] = [],
-        public dbPath: string = "",
-        private db: sqlite.Database | undefined = undefined,
+        dbPath: string = "",
+        db: sqlite.Database | undefined = undefined,
+        settings?: DocMemorySettings,
     ) {
-        this.messages = new MessageCollection<Website>(messages);
-        this.semanticRefs = new SemanticRefCollection(semanticRefs);
-        const [model, embeddingSize] = this.createEmbeddingModel();
-        this.settings = createConversationSettings(model, embeddingSize);
-        this.semanticRefIndex = new ConversationIndex();
-        this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
-
-        // create dataFrames (tables)
-        if (!dbPath) {
-            dbPath = ":memory:";
+        // Convert Website objects to WebsiteDocPart objects
+        const docParts = websites.map(website => WebsiteDocPart.fromWebsite(website));
+        
+        // Create settings if not provided
+        if (!settings) {
+            settings = createTextMemorySettings(64);
         }
-        this.db = ms.sqlite.createDatabase(dbPath, true);
+
+        super(nameTag, docParts, settings, tags);
+
+        this.dbPath = dbPath;
+        this.db = db;
+
+        // Initialize data frames
+        this.initializeDataFrames();
+
+        // Add semantic refs if provided
+        if (semanticRefs.length > 0) {
+            this.semanticRefs = new SemanticRefCollection(semanticRefs);
+        }
+    }
+
+    private initializeDataFrames(): void {
+        // Create dataFrames (tables)
+        if (!this.dbPath) {
+            this.dbPath = ":memory:";
+        }
+        this.db = ms.sqlite.createDatabase(this.dbPath, true);
         this.visitFrequency = new VisitFrequencyTable(this.db);
         this.websiteCategories = new WebsiteCategoryTable(this.db);
         this.bookmarkFolders = new BookmarkFolderTable(this.db);
 
-        // create dataFrames collection
+        // Create dataFrames collection
         this.dataFrames = new Map<string, dataFrame.IDataFrame>([
             [this.visitFrequency.name, this.visitFrequency],
             [this.websiteCategories.name, this.websiteCategories],
@@ -84,17 +91,49 @@ export class WebsiteCollection
         ]);
     }
 
-    get conversation(): IConversation<IMessage> {
-        return this;
-    }
-
-    public addMetadataToIndex() {
-        if (this.semanticRefIndex) {
-            addMessageKnowledgeToSemanticRefIndex(this, 0);
+    /**
+     * Add websites to the collection
+     */
+    public addWebsites(websites: Website[]): void {
+        for (const website of websites) {
+            const docPart = WebsiteDocPart.fromWebsite(website);
+            this.messages.append(docPart);
         }
     }
 
-    /*
+    /**
+     * Add a single website to the collection
+     */
+    public addWebsite(website: Website): void {
+        const docPart = WebsiteDocPart.fromWebsite(website);
+        this.messages.append(docPart);
+    }
+
+    /**
+     * Get websites in the legacy format for backward compatibility
+     */
+    public getWebsites(): Website[] {
+        return this.messages.getAll().map(docPart => 
+            (docPart as WebsiteDocPart).toWebsite()
+        );
+    }
+
+    /**
+     * Get WebsiteDocPart messages (new format)
+     */
+    public getWebsiteDocParts(): WebsiteDocPart[] {
+        return this.messages.getAll() as WebsiteDocPart[];
+    }
+
+    public addMetadataToIndex() {
+        // This functionality is now handled by the base DocMemory class
+        // But we maintain the method for API compatibility
+        if (this.semanticRefIndex) {
+            // The base class handles knowledge indexing automatically
+        }
+    }
+
+    /**
      * Enumerates the messages and adds them to the data frame.
      */
     public addMetadataToDataFrames() {
@@ -105,7 +144,8 @@ export class WebsiteCollection
             >();
 
             let index = 0;
-            for (const website of this.messages) {
+            for (const docPart of this.messages) {
+                const websitePart = docPart as WebsiteDocPart;
                 const sourceRef: dataFrame.RowSourceRef = {
                     range: {
                         start: {
@@ -116,12 +156,12 @@ export class WebsiteCollection
                 };
 
                 // Track visit frequency
-                if (website.metadata.domain) {
-                    const existing = domainVisits.get(website.metadata.domain);
-                    const visitCount = website.metadata.visitCount || 1;
+                if (websitePart.domain) {
+                    const existing = domainVisits.get(websitePart.domain);
+                    const visitCount = websitePart.visitCount || 1;
                     const lastVisit =
-                        website.metadata.visitDate ||
-                        website.metadata.bookmarkDate ||
+                        websitePart.visitDate ||
+                        websitePart.bookmarkDate ||
                         new Date().toISOString();
 
                     if (existing) {
@@ -130,7 +170,7 @@ export class WebsiteCollection
                             existing.lastVisit = lastVisit;
                         }
                     } else {
-                        domainVisits.set(website.metadata.domain, {
+                        domainVisits.set(websitePart.domain, {
                             count: visitCount,
                             lastVisit: lastVisit,
                         });
@@ -138,14 +178,13 @@ export class WebsiteCollection
                 }
 
                 // Add website categories
-                if (this.websiteCategories && website.metadata.pageType) {
+                if (this.websiteCategories && websitePart.pageType) {
                     const categoryRow: dataFrame.DataFrameRow = {
                         sourceRef,
                         record: {
-                            domain:
-                                website.metadata.domain || website.metadata.url,
-                            category: website.metadata.pageType,
-                            confidence: 0.8, // Default confidence
+                            domain: websitePart.domain || websitePart.url,
+                            category: websitePart.pageType,
+                            confidence: 0.8,
                         },
                     };
                     this.websiteCategories.addRows(categoryRow);
@@ -154,17 +193,17 @@ export class WebsiteCollection
                 // Add bookmark folder information
                 if (
                     this.bookmarkFolders &&
-                    website.metadata.websiteSource === "bookmark" &&
-                    website.metadata.folder
+                    websitePart.websiteSource === "bookmark" &&
+                    websitePart.folder
                 ) {
                     const folderRow: dataFrame.DataFrameRow = {
                         sourceRef,
                         record: {
-                            folderPath: website.metadata.folder,
-                            url: website.metadata.url,
-                            title: website.metadata.title || "",
+                            folderPath: websitePart.folder,
+                            url: websitePart.url,
+                            title: websitePart.title || "",
                             dateAdded:
-                                website.metadata.bookmarkDate ||
+                                websitePart.bookmarkDate ||
                                 new Date().toISOString(),
                         },
                     };
@@ -195,64 +234,49 @@ export class WebsiteCollection
         }
     }
 
-    public async buildIndex(
+    public override async buildIndex(
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        this.semanticRefIndex = new ConversationIndex();
-        if (this.semanticRefs === undefined) {
-            this.semanticRefs = new SemanticRefCollection();
-        }
-
+        // Call the base class buildIndex first
+        const result = await super.buildIndex(eventHandler);
+        
+        // Add our website-specific metadata processing
         this.addMetadataToIndex();
         this.addMetadataToDataFrames();
 
-        const indexingResult: IndexingResults = {
-            semanticRefs: {
-                completedUpto: { messageOrdinal: this.messages.length - 1 },
-            },
-        };
-
-        indexingResult.secondaryIndexResults = await buildSecondaryIndexes(
-            this,
-            this.settings,
-            eventHandler,
-        );
-
-        return indexingResult;
+        return result;
     }
 
-    public async serialize(): Promise<WebsiteCollectionData> {
-        const conversationData: WebsiteCollectionData = {
-            nameTag: this.nameTag,
-            messages: this.messages.getAll(),
-            tags: this.tags,
-            semanticRefs: this.semanticRefs.getAll(),
-            semanticIndexData: this.semanticRefIndex?.serialize(),
-            relatedTermsIndexData:
-                this.secondaryIndexes.termToRelatedTermsIndex.serialize(),
-        };
-        return conversationData;
+    public override async serialize(): Promise<WebsiteCollectionData> {
+        const baseData = await super.serialize();
+        return {
+            ...baseData,
+            // The base serialization already handles messages, semanticRefs, etc.
+        } as WebsiteCollectionData;
     }
 
     public async deserialize(data: WebsiteCollectionData): Promise<void> {
-        this.nameTag = data.nameTag;
-        const messages = data.messages.map((m) => {
-            const website = new Website(
-                m.metadata,
+        // Convert messages back to WebsiteDocPart instances
+        const websiteDocParts = data.messages.map((m) => {
+            // Reconstruct WebsiteMeta from the serialized message metadata
+            const websiteMeta = (m.metadata as any).websiteMeta || m.metadata;
+            return new WebsiteDocPart(
+                websiteMeta,
                 m.textChunks,
                 m.tags,
+                m.timestamp,
                 m.knowledge,
                 m.deletionInfo,
-                false, // isNew = false since we're deserializing
             );
-            website.timestamp = m.timestamp;
-            return website;
         });
-        this.messages = new MessageCollection<Website>(messages);
+
+        this.messages = new MessageCollection<WebsiteDocPart>(websiteDocParts);
         this.semanticRefs = new SemanticRefCollection(data.semanticRefs);
-        this.tags = data.tags;
+        this.tags = data.tags || [];
+        this.nameTag = data.nameTag || "";
+
         if (data.semanticIndexData) {
-            this.semanticRefIndex = new ConversationIndex(
+            this.semanticRefIndex = new (await import("knowpro")).ConversationIndex(
                 data.semanticIndexData,
             );
         }
@@ -261,13 +285,27 @@ export class WebsiteCollection
                 data.relatedTermsIndexData,
             );
         }
-        await buildTransientSecondaryIndexes(this, this.settings);
+        if (data.messageIndexData) {
+            const kp = await import("knowpro");
+            this.secondaryIndexes.messageIndex = new kp.MessageTextIndex(
+                this.settings.conversationSettings.messageTextIndexSettings,
+            );
+            this.secondaryIndexes.messageIndex.deserialize(
+                data.messageIndexData,
+            );
+        }
+
+        // Rebuild transient secondary indexes
+        await buildTransientSecondaryIndexes(
+            this,
+            this.settings.conversationSettings,
+        );
     }
 
-    /*
+    /**
      * Writes the index & dataframes to disk
      */
-    public async writeToFile(
+    public override async writeToFile(
         dirPath: string,
         baseFileName: string,
     ): Promise<void> {
@@ -295,11 +333,12 @@ export class WebsiteCollection
             const data = await readConversationDataFromFile(
                 dirPath,
                 baseFileName,
-                websiteCollection.settings.relatedTermIndexSettings
+                websiteCollection.settings.conversationSettings
+                    .relatedTermIndexSettings
                     .embeddingIndexSettings?.embeddingSize,
             );
             if (data) {
-                websiteCollection.deserialize(data);
+                await websiteCollection.deserialize(data);
             }
         } catch (error: any) {
             console.warn(`Website collection loading failed: ${error.message}`);
@@ -316,40 +355,16 @@ export class WebsiteCollection
         const data = await readConversationDataFromBuffer(
             jsonData,
             embeddingsBuffer,
-            websiteCollection.settings.relatedTermIndexSettings
+            websiteCollection.settings.conversationSettings
+                .relatedTermIndexSettings
                 .embeddingIndexSettings?.embeddingSize,
         );
 
         if (data) {
-            websiteCollection.deserialize(data);
+            await websiteCollection.deserialize(data);
         }
 
         return websiteCollection;
-    }
-
-    /**
-     * Our index already has embeddings for every term in the website collection
-     * Create an embedding model that can just leverage those embeddings
-     * @returns embedding model, size of embedding
-     */
-    private createEmbeddingModel(): [TextEmbeddingModel, number] {
-        return [
-            createEmbeddingCache(
-                openai.createEmbeddingModel(),
-                64,
-                () => this.secondaryIndexes.termToRelatedTermsIndex.fuzzyIndex,
-            ),
-            1536,
-        ];
-    }
-
-    /**
-     * Add websites to the collection
-     */
-    public addWebsites(websites: Website[]): void {
-        for (const website of websites) {
-            this.messages.append(website);
-        }
     }
 
     /**
