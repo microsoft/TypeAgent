@@ -102,7 +102,7 @@ export async function resolveURLWithHistory(
                                         messageOrdinal,
                                     );
                                 if (website && website.metadata) {
-                                    const metadata = website.metadata;
+                                    const metadata = website.metadata as website.WebsiteDocPartMeta;
                                     let totalScore = refMatch.score;
 
                                     // Apply additional scoring based on special patterns and recency
@@ -317,7 +317,7 @@ export async function findRequestedWebsites(
                                 const websiteData =
                                     context.websiteCollection!.messages.get(
                                         messageOrdinal,
-                                    );
+                                    ) as any;
                                 if (websiteData) {
                                     let totalScore = refMatch.score;
 
@@ -687,7 +687,7 @@ export async function getWebsiteStats(
         let totalCount = websites.length;
 
         for (const site of websites) {
-            const metadata = site.metadata;
+            const metadata = site.metadata as website.WebsiteDocPartMeta;
             let key: string;
 
             switch (groupBy) {
@@ -724,7 +724,7 @@ export async function getWebsiteStats(
         if (groupBy !== "source") {
             const sourceCounts = { bookmark: 0, history: 0, reading_list: 0 };
             for (const site of websites) {
-                sourceCounts[site.metadata.websiteSource]++;
+                sourceCounts[(site.metadata as website.WebsiteDocPartMeta).websiteSource]++;
             }
             resultText += `\nBy Source:\n`;
             for (const [source, count] of Object.entries(sourceCounts)) {

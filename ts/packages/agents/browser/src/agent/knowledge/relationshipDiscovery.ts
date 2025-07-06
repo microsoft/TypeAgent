@@ -368,7 +368,8 @@ export class RelationshipDiscovery {
             // Simple domain matching using website collection
             const websites = websiteCollection.messages.getAll();
             for (const website of websites.slice(0, maxResults * 2)) {
-                const websiteUrl = website.metadata.url;
+                const metadata = website.metadata as website.WebsiteDocPartMeta;
+                const websiteUrl = metadata.url;
                 const websiteDomain = this.extractDomain(websiteUrl);
 
                 if (
@@ -378,7 +379,7 @@ export class RelationshipDiscovery {
                     relatedPages.push(
                         this.createRelatedPage(
                             websiteUrl,
-                            website.metadata.title || websiteUrl,
+                            metadata.title || websiteUrl,
                             this.calculateDomainSimilarity(
                                 currentUrl,
                                 websiteUrl,
@@ -388,11 +389,11 @@ export class RelationshipDiscovery {
                             {
                                 visitCount: 1,
                                 lastVisited:
-                                    website.metadata.visitDate ||
-                                    website.metadata.bookmarkDate ||
+                                    metadata.visitDate ||
+                                    metadata.bookmarkDate ||
                                     new Date().toISOString(),
                                 source: this.mapWebsiteSource(
-                                    website.metadata.websiteSource,
+                                    metadata.websiteSource,
                                 ),
                             },
                         ),
@@ -441,7 +442,8 @@ export class RelationshipDiscovery {
             // Use simple topic matching for now
             const websites = websiteCollection.messages.getAll();
             for (const website of websites) {
-                if (website.metadata.url !== currentUrl) {
+                const metadata = website.metadata as website.WebsiteDocPartMeta;
+                if (metadata.url !== currentUrl) {
                     const knowledge = website.getKnowledge();
                     if (knowledge && knowledge.topics) {
                         const sharedTopics = this.findSharedTopics(
@@ -457,20 +459,19 @@ export class RelationshipDiscovery {
 
                             relatedPages.push(
                                 this.createRelatedPage(
-                                    website.metadata.url,
-                                    website.metadata.title ||
-                                        website.metadata.url,
+                                    metadata.url,
+                                    metadata.title || metadata.url,
                                     similarity,
                                     "topic-match",
                                     sharedTopics,
                                     {
                                         visitCount: 1,
                                         lastVisited:
-                                            website.metadata.visitDate ||
-                                            website.metadata.bookmarkDate ||
+                                            metadata.visitDate ||
+                                            metadata.bookmarkDate ||
                                             new Date().toISOString(),
                                         source: this.mapWebsiteSource(
-                                            website.metadata.websiteSource,
+                                            metadata.websiteSource,
                                         ),
                                     },
                                 ),
@@ -479,7 +480,7 @@ export class RelationshipDiscovery {
                             relationships.push(
                                 this.createCrossPageRelationship(
                                     currentUrl,
-                                    website.metadata.url,
+                                    metadata.url,
                                     "topic-similarity",
                                     similarity,
                                     [],
@@ -529,7 +530,8 @@ export class RelationshipDiscovery {
             // Simple entity matching
             const websites = websiteCollection.messages.getAll();
             for (const website of websites) {
-                if (website.metadata.url !== currentUrl) {
+                const metadata = website.metadata as website.WebsiteDocPartMeta;
+                if (metadata.url !== currentUrl) {
                     const knowledge = website.getKnowledge();
                     if (knowledge && knowledge.entities) {
                         const sharedEntities = this.findSharedEntities(
@@ -545,20 +547,19 @@ export class RelationshipDiscovery {
 
                             relatedPages.push(
                                 this.createRelatedPage(
-                                    website.metadata.url,
-                                    website.metadata.title ||
-                                        website.metadata.url,
+                                    metadata.url,
+                                    metadata.title || metadata.url,
                                     similarity,
                                     "entity-overlap",
                                     sharedEntities,
                                     {
                                         visitCount: 1,
                                         lastVisited:
-                                            website.metadata.visitDate ||
-                                            website.metadata.bookmarkDate ||
+                                            metadata.visitDate ||
+                                            metadata.bookmarkDate ||
                                             new Date().toISOString(),
                                         source: this.mapWebsiteSource(
-                                            website.metadata.websiteSource,
+                                            metadata.websiteSource,
                                         ),
                                     },
                                 ),
@@ -567,7 +568,7 @@ export class RelationshipDiscovery {
                             relationships.push(
                                 this.createCrossPageRelationship(
                                     currentUrl,
-                                    website.metadata.url,
+                                    metadata.url,
                                     "entity-overlap",
                                     similarity,
                                     sharedEntities,
@@ -615,7 +616,8 @@ export class RelationshipDiscovery {
             // Simple technical content matching
             const websites = websiteCollection.messages.getAll();
             for (const website of websites) {
-                if (website.metadata.url !== currentUrl) {
+                const metadata = website.metadata as website.WebsiteDocPartMeta;
+                if (metadata.url !== currentUrl) {
                     const knowledge = website.getKnowledge();
 
                     // Check if this page likely has technical content
@@ -627,19 +629,19 @@ export class RelationshipDiscovery {
                     if (hasTechnicalContent.score > 0.3) {
                         relatedPages.push(
                             this.createRelatedPage(
-                                website.metadata.url,
-                                website.metadata.title || website.metadata.url,
+                                metadata.url,
+                                metadata.title || metadata.url,
                                 hasTechnicalContent.score,
                                 "technical-similarity",
                                 hasTechnicalContent.indicators,
                                 {
                                     visitCount: 1,
                                     lastVisited:
-                                        website.metadata.visitDate ||
-                                        website.metadata.bookmarkDate ||
+                                        metadata.visitDate ||
+                                        metadata.bookmarkDate ||
                                         new Date().toISOString(),
                                     source: this.mapWebsiteSource(
-                                        website.metadata.websiteSource,
+                                        metadata.websiteSource,
                                     ),
                                 },
                             ),
@@ -648,7 +650,7 @@ export class RelationshipDiscovery {
                         relationships.push(
                             this.createCrossPageRelationship(
                                 currentUrl,
-                                website.metadata.url,
+                                metadata.url,
                                 "technical-similarity",
                                 hasTechnicalContent.score,
                                 [],
@@ -700,9 +702,9 @@ export class RelationshipDiscovery {
             );
 
             for (const website of websites) {
-                const websiteUrl = website.metadata.url;
-                const visitDate =
-                    website.metadata.visitDate || website.metadata.bookmarkDate;
+                const metadata = website.metadata as website.WebsiteDocPartMeta;
+                const websiteUrl = metadata.url;
+                const visitDate = metadata.visitDate || metadata.bookmarkDate;
 
                 if (websiteUrl !== currentUrl && visitDate) {
                     const websiteDate = new Date(visitDate);
@@ -716,7 +718,7 @@ export class RelationshipDiscovery {
                         relatedPages.push(
                             this.createRelatedPage(
                                 websiteUrl,
-                                website.metadata.title || websiteUrl,
+                                metadata.title || websiteUrl,
                                 temporalScore,
                                 "temporal-sequence",
                                 [`Visited ${daysDiff} days ago`],
@@ -724,7 +726,7 @@ export class RelationshipDiscovery {
                                     visitCount: 1,
                                     lastVisited: visitDate,
                                     source: this.mapWebsiteSource(
-                                        website.metadata.websiteSource,
+                                        metadata.websiteSource,
                                     ),
                                 },
                             ),

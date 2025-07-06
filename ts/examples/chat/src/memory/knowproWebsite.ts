@@ -607,7 +607,7 @@ export async function createKnowproWebsiteCommands(
             const message = websiteCollection.messages.get(i);
             if (!message) continue;
 
-            const metadata = message.metadata;
+            const metadata = message.metadata as website.WebsiteDocPartMeta;
 
             // Source tracking
             const source = metadata.websiteSource || "unknown";
@@ -638,7 +638,7 @@ export async function createKnowproWebsiteCommands(
 
                 // Extract topics from headings and keywords
                 if (metadata.pageContent.headings) {
-                    metadata.pageContent.headings.forEach((heading) => {
+                    metadata.pageContent.headings.forEach((heading: any) => {
                         const topics = extractTopicsFromText(heading);
                         topics.forEach((topic) => {
                             topicCounts.set(
@@ -652,7 +652,7 @@ export async function createKnowproWebsiteCommands(
 
             // Meta tags analysis for entities/keywords
             if (metadata.metaTags && metadata.metaTags.keywords) {
-                metadata.metaTags.keywords.forEach((keyword) => {
+                metadata.metaTags.keywords.forEach((keyword: any) => {
                     const entity = keyword.toLowerCase().trim();
                     if (entity.length > 2) {
                         entityCounts.set(
@@ -1563,9 +1563,10 @@ export async function createKnowproWebsiteCommands(
 
         for (let i = 0; i < websiteCollection.messages.length; i++) {
             const website = websiteCollection.messages.get(i);
-            if (!website?.metadata.detectedActions) continue;
+            const metadata = website?.metadata as website.WebsiteDocPartMeta;
+            if (!metadata.detectedActions) continue;
 
-            const relevantActions = website.metadata.detectedActions.filter(
+            const relevantActions = metadata.detectedActions.filter(
                 (action) => {
                     const meetsConfidence = action.confidence >= minConfidence;
                     const meetsType =
@@ -1577,9 +1578,9 @@ export async function createKnowproWebsiteCommands(
 
             if (relevantActions.length > 0) {
                 sitesWithActions.push({
-                    url: website.metadata.url,
-                    title: website.metadata.title,
-                    domain: website.metadata.domain,
+                    url: metadata.url,
+                    title: metadata.title,
+                    domain: metadata.domain,
                     actions: relevantActions,
                 });
             }
