@@ -756,7 +756,7 @@ class KnowledgePanel {
             category = "technical";
             priority = "high";
             confidence = 0.85;
-            recommended = lowerQ.includes("example") || lowerQ.includes("tutorial") || hasActions;
+            recommended = lowerQ.includes("example") || lowerQ.includes("tutorial") || (hasActions ?? false);
             
             // Boost for pages with detected actions
             if (hasActions) {
@@ -779,7 +779,7 @@ class KnowledgePanel {
             category = "discovery";
             priority = "medium";
             confidence = 0.8;
-            recommended = lowerQ.includes("related") || lowerQ.includes("similar") || hasEntities;
+            recommended = lowerQ.includes("related") || lowerQ.includes("similar") || (hasEntities ?? false);
             
             // Boost for pages with rich entity/topic context
             if (hasEntities && hasTopics) {

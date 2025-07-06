@@ -1864,11 +1864,6 @@ class WebsiteLibraryPanel {
         return details.length > 0
             ? `<small class="text-muted d-block">${details.join(" • ")}</small>`
             : "";
-    });
-
-        return details.length > 0
-            ? `<small class="text-muted d-block">${details.join(" • ")}</small>`
-            : "";
     }
 
     private async loadSuggestedSearches() {
