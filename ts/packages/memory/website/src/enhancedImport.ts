@@ -1,12 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DocPart, docPartsFromHtml, importWebPage } from "conversation-memory";
-import { Result, success, error } from "typechat";
+import { DocPart, docPartsFromHtml } from "conversation-memory";
 import { WebsiteDocPart } from "./websiteDocPart.js";
 import { WebsiteMeta, WebsiteVisitInfo } from "./websiteMeta.js";
 import { ContentExtractor, ExtractionMode } from "./contentExtractor.js";
 import { intelligentWebsiteChunking } from "./chunkingUtils.js";
+import type { ImportProgressCallback } from "./importWebsites.js";
 
 /**
  * Enhanced HTML import options that combine website and conversation capabilities
@@ -29,19 +29,6 @@ export const defaultEnhancedImportOptions: EnhancedImportOptions = {
     enableActionDetection: true,
     contentTimeout: 10000,
 };
-
-/**
- * Enhanced HTML import that combines website content extraction with conversation chunking
- */
-export function enhancedDocPartsFromHtml(
-    html: string,
-    url: string,
-    options: Partial<EnhancedImportOptions> = {}
-): Promise<WebsiteDocPart[]> {
-    const opts = { ...defaultEnhancedImportOptions, ...options };
-    
-    return processHtmlWithEnhancedCapabilities(html, url, opts);
-}
 
 /**
  * Enhanced website import that leverages both packages' strengths
@@ -72,66 +59,75 @@ export async function enhancedWebsiteImport(
 }
 
 /**
- * Enhanced web page import from URL
+ * Enhanced browser import that uses intelligent chunking and improved content processing
  */
-export async function importWebPageEnhanced(
-    url: string,
-    options: Partial<EnhancedImportOptions> = {}
-): Promise<Result<WebsiteDocPart[]>> {
-    const opts = { ...defaultEnhancedImportOptions, ...options };
+export async function importWebsitesEnhanced(
+    source: "chrome" | "edge",
+    type: "bookmarks" | "history",
+    filePath: string,
+    options?: Partial<EnhancedImportOptions & any>,
+    progressCallback?: ImportProgressCallback
+): Promise<WebsiteDocPart[]> {
+    // Import using existing browser import logic to get Website objects
+    const { importWebsites } = await import('./importWebsites.js');
+    const websites = await importWebsites(source, type, filePath, options, progressCallback);
     
-    try {
-        // Use conversation package's importWebPage for URL fetching
-        const docMemoryResult = await importWebPage(url, opts.maxCharsPerChunk);
+    // Convert Website objects to WebsiteDocPart using enhanced processing
+    const websiteDocParts: WebsiteDocPart[] = [];
+    const enhancedOptions = { ...defaultEnhancedImportOptions, ...options };
+    
+    for (let i = 0; i < websites.length; i++) {
+        const website = websites[i];
         
-        if (!docMemoryResult.success) {
-            return docMemoryResult;
+        try {
+            // Create WebsiteVisitInfo from existing Website
+            const visitInfo: WebsiteVisitInfo = {
+                url: website.metadata.url,
+                title: website.metadata.title || "Untitled",
+                source: website.metadata.websiteSource,
+            };
+            
+            // Add optional properties if they exist
+            if (website.metadata.domain) visitInfo.domain = website.metadata.domain;
+            if (website.metadata.visitDate) visitInfo.visitDate = website.metadata.visitDate;
+            if (website.metadata.bookmarkDate) visitInfo.bookmarkDate = website.metadata.bookmarkDate;
+            if (website.metadata.folder) visitInfo.folder = website.metadata.folder;
+            if (website.metadata.pageType) visitInfo.pageType = website.metadata.pageType;
+            if (website.metadata.keywords) visitInfo.keywords = website.metadata.keywords;
+            if (website.metadata.description) visitInfo.description = website.metadata.description;
+            if (website.metadata.favicon) visitInfo.favicon = website.metadata.favicon;
+            if (website.metadata.visitCount) visitInfo.visitCount = website.metadata.visitCount;
+            if (website.metadata.lastVisitTime) visitInfo.lastVisitTime = website.metadata.lastVisitTime;
+            if (website.metadata.typedCount) visitInfo.typedCount = website.metadata.typedCount;
+            if (website.metadata.pageContent) visitInfo.pageContent = website.metadata.pageContent;
+            if (website.metadata.metaTags) visitInfo.metaTags = website.metadata.metaTags;
+            if (website.metadata.structuredData) visitInfo.structuredData = website.metadata.structuredData;
+            if (website.metadata.extractedActions) visitInfo.extractedActions = website.metadata.extractedActions;
+            if (website.metadata.detectedActions) visitInfo.detectedActions = website.metadata.detectedActions;
+            if (website.metadata.actionSummary) visitInfo.actionSummary = website.metadata.actionSummary;
+            
+            // Get the main content from the website
+            const mainContent = website.textChunks.join('\n\n');
+            
+            // Use enhanced import processing
+            const docParts = await enhancedWebsiteImport(visitInfo, mainContent, enhancedOptions);
+            websiteDocParts.push(...docParts);
+            
+            // Update progress if callback provided
+            if (progressCallback) {
+                progressCallback(i + 1, websites.length, `Processing ${website.metadata.title || website.metadata.url}`);
+            }
+            
+        } catch (error) {
+            console.warn(`Enhanced processing failed for ${website.metadata.url}, using fallback:`, error);
+            
+            // Fallback: convert directly to WebsiteDocPart
+            const fallbackDocPart = WebsiteDocPart.fromWebsite(website);
+            websiteDocParts.push(fallbackDocPart);
         }
-        
-        // Extract HTML for enhanced processing
-        const contentExtractor = new ContentExtractor({
-            timeout: opts.contentTimeout,
-            enableActionDetection: opts.enableActionDetection,
-        });
-        
-        const extractedContent = await contentExtractor.extractFromUrl(url, opts.extractionMode);
-        
-        if (!extractedContent.success || !extractedContent.pageContent) {
-            // Fallback to basic conversion from DocMemory
-            const websiteDocParts = convertDocPartsToWebsiteDocParts(
-                docMemoryResult.data.messages.getAll() as DocPart[],
-                url
-            );
-            return success(websiteDocParts);
-        }
-        
-        // Create WebsiteVisitInfo from extracted content
-        const visitInfo: WebsiteVisitInfo = {
-            url,
-            title: extractedContent.pageContent?.title || "Untitled",
-            source: "history",
-        };
-        
-        // Add optional properties if they exist
-        if (extractedContent.pageContent) visitInfo.pageContent = extractedContent.pageContent;
-        if (extractedContent.metaTags) visitInfo.metaTags = extractedContent.metaTags;
-        if (extractedContent.structuredData) visitInfo.structuredData = extractedContent.structuredData;
-        if (extractedContent.actions) visitInfo.extractedActions = extractedContent.actions;
-        if (extractedContent.detectedActions) visitInfo.detectedActions = extractedContent.detectedActions;
-        if (extractedContent.actionSummary) visitInfo.actionSummary = extractedContent.actionSummary;
-        
-        // Process with enhanced capabilities
-        const websiteDocParts = await enhancedWebsiteImport(
-            visitInfo,
-            extractedContent.pageContent?.mainContent,
-            options
-        );
-        
-        return success(websiteDocParts);
-        
-    } catch (err) {
-        return error(`Enhanced web page import failed: ${err}`);
     }
+    
+    return websiteDocParts;
 }
 
 /**
