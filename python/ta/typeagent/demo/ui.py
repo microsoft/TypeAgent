@@ -55,11 +55,10 @@ def main() -> None:
     colorama.init(autoreset=True)
     load_dotenv()
     model = create_typechat_model()
-    with timelog("create typechat translator"):
-        query_translator = create_translator(model, SearchQuery)
-        answer_translator = create_translator(model, AnswerResponse)
+    query_translator = create_translator(model, SearchQuery)
+    answer_translator = create_translator(model, AnswerResponse)
 
-    print(colorama.Fore.YELLOW + query_translator.schema_str)  # For debugging purposes.
+    print(colorama.Fore.YELLOW + query_translator.schema_str.rstrip())
 
     lang_search_options = LanguageSearchOptions(
         exact_match=False,
