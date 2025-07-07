@@ -102,7 +102,8 @@ export async function resolveURLWithHistory(
                                         messageOrdinal,
                                     );
                                 if (website && website.metadata) {
-                                    const metadata = website.metadata as website.WebsiteDocPartMeta;
+                                    const metadata =
+                                        website.metadata as website.WebsiteDocPartMeta;
                                     let totalScore = refMatch.score;
 
                                     // Apply additional scoring based on special patterns and recency
@@ -267,15 +268,18 @@ export async function findRequestedWebsites(
         // Try enhanced search capabilities first
         if (searchFilters.length === 1 && !exactMatch) {
             const query = searchFilters[0];
-            
+
             // Try hybrid search for single term queries
             try {
-                const hybridResults = await context.websiteCollection.hybridSearch(query);
+                const hybridResults =
+                    await context.websiteCollection.hybridSearch(query);
                 if (hybridResults.length > 0) {
-                    debug(`Found ${hybridResults.length} results using hybrid search`);
+                    debug(
+                        `Found ${hybridResults.length} results using hybrid search`,
+                    );
                     return hybridResults
-                        .filter(result => result.relevanceScore >= minScore)
-                        .map(result => result.website.toWebsite())
+                        .filter((result) => result.relevanceScore >= minScore)
+                        .map((result) => result.website.toWebsite())
                         .slice(0, 20);
                 }
             } catch (hybridError) {
@@ -284,13 +288,18 @@ export async function findRequestedWebsites(
         }
 
         // Try entity search for proper nouns and specific terms
-        if (searchFilters.some(filter => /^[A-Z]/.test(filter))) {
+        if (searchFilters.some((filter) => /^[A-Z]/.test(filter))) {
             try {
-                const entityResults = await context.websiteCollection.searchByEntities(searchFilters);
+                const entityResults =
+                    await context.websiteCollection.searchByEntities(
+                        searchFilters,
+                    );
                 if (entityResults.length > 0) {
-                    debug(`Found ${entityResults.length} results using entity search`);
+                    debug(
+                        `Found ${entityResults.length} results using entity search`,
+                    );
                     return entityResults
-                        .map(result => result.toWebsite())
+                        .map((result) => result.toWebsite())
                         .slice(0, 20);
                 }
             } catch (entityError) {
@@ -300,11 +309,14 @@ export async function findRequestedWebsites(
 
         // Try topic search for conceptual terms
         try {
-            const topicResults = await context.websiteCollection.searchByTopics(searchFilters);
+            const topicResults =
+                await context.websiteCollection.searchByTopics(searchFilters);
             if (topicResults.length > 0) {
-                debug(`Found ${topicResults.length} results using topic search`);
+                debug(
+                    `Found ${topicResults.length} results using topic search`,
+                );
                 return topicResults
-                    .map(result => result.toWebsite())
+                    .map((result) => result.toWebsite())
                     .slice(0, 20);
             }
         } catch (topicError) {
@@ -312,7 +324,9 @@ export async function findRequestedWebsites(
         }
 
         // Fallback to original semantic search for backward compatibility
-        debug(`Falling back to semantic search for filters: ${searchFilters.join(", ")}`);
+        debug(
+            `Falling back to semantic search for filters: ${searchFilters.join(", ")}`,
+        );
         const matches = await kp.searchConversationKnowledge(
             context.websiteCollection,
             // search group
@@ -773,7 +787,9 @@ export async function getWebsiteStats(
         if (groupBy !== "source") {
             const sourceCounts = { bookmark: 0, history: 0, reading_list: 0 };
             for (const site of websites) {
-                sourceCounts[(site.metadata as website.WebsiteDocPartMeta).websiteSource]++;
+                sourceCounts[
+                    (site.metadata as website.WebsiteDocPartMeta).websiteSource
+                ]++;
             }
             resultText += `\nBy Source:\n`;
             for (const [source, count] of Object.entries(sourceCounts)) {

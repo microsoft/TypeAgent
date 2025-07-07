@@ -716,10 +716,18 @@ class KnowledgePanel {
         let recommended = false;
 
         // Enhanced categorization using knowledge context
-        const hasEntities = this.knowledgeData?.entities && this.knowledgeData.entities.length > 0;
-        const hasRelationships = this.knowledgeData?.relationships && this.knowledgeData.relationships.length > 0;
-        const hasActions = this.knowledgeData?.detectedActions && this.knowledgeData.detectedActions.length > 0;
-        const hasTopics = this.knowledgeData?.keyTopics && this.knowledgeData.keyTopics.length > 0;
+        const hasEntities =
+            this.knowledgeData?.entities &&
+            this.knowledgeData.entities.length > 0;
+        const hasRelationships =
+            this.knowledgeData?.relationships &&
+            this.knowledgeData.relationships.length > 0;
+        const hasActions =
+            this.knowledgeData?.detectedActions &&
+            this.knowledgeData.detectedActions.length > 0;
+        const hasTopics =
+            this.knowledgeData?.keyTopics &&
+            this.knowledgeData.keyTopics.length > 0;
 
         // Learning-related questions (highest priority for enhanced features)
         if (
@@ -736,7 +744,7 @@ class KnowledgePanel {
             priority = "high";
             confidence = 0.9;
             recommended = true;
-            
+
             // Boost confidence if we have rich knowledge context
             if (hasEntities && hasRelationships) confidence = 0.95;
         }
@@ -751,13 +759,19 @@ class KnowledgePanel {
             lowerQ.includes("library") ||
             lowerQ.includes("framework") ||
             lowerQ.includes("how to use") ||
-            (hasActions && (lowerQ.includes("interact") || lowerQ.includes("click") || lowerQ.includes("action")))
+            (hasActions &&
+                (lowerQ.includes("interact") ||
+                    lowerQ.includes("click") ||
+                    lowerQ.includes("action")))
         ) {
             category = "technical";
             priority = "high";
             confidence = 0.85;
-            recommended = lowerQ.includes("example") || lowerQ.includes("tutorial") || (hasActions ?? false);
-            
+            recommended =
+                lowerQ.includes("example") ||
+                lowerQ.includes("tutorial") ||
+                (hasActions ?? false);
+
             // Boost for pages with detected actions
             if (hasActions) {
                 confidence += 0.1;
@@ -779,8 +793,11 @@ class KnowledgePanel {
             category = "discovery";
             priority = "medium";
             confidence = 0.8;
-            recommended = lowerQ.includes("related") || lowerQ.includes("similar") || (hasEntities ?? false);
-            
+            recommended =
+                lowerQ.includes("related") ||
+                lowerQ.includes("similar") ||
+                (hasEntities ?? false);
+
             // Boost for pages with rich entity/topic context
             if (hasEntities && hasTopics) {
                 confidence += 0.15;
@@ -799,7 +816,7 @@ class KnowledgePanel {
             category = "content";
             priority = "medium";
             confidence = 0.75;
-            
+
             // Boost if we have structured knowledge
             if (hasRelationships) confidence += 0.1;
         }
@@ -818,7 +835,10 @@ class KnowledgePanel {
         }
         // Relationship questions (enhanced features specific)
         else if (
-            (hasRelationships && (lowerQ.includes("connect") || lowerQ.includes("relationship") || lowerQ.includes("between"))) ||
+            (hasRelationships &&
+                (lowerQ.includes("connect") ||
+                    lowerQ.includes("relationship") ||
+                    lowerQ.includes("between"))) ||
             (hasEntities && lowerQ.includes("how does"))
         ) {
             category = "relationship";
@@ -1191,8 +1211,10 @@ class KnowledgePanel {
         infoDiv.className = "alert alert-info mt-2";
 
         // Calculate knowledge quality metrics
-        const qualityMetrics = this.calculateKnowledgeQuality(this.knowledgeData);
-        
+        const qualityMetrics = this.calculateKnowledgeQuality(
+            this.knowledgeData,
+        );
+
         let content = `<small>
             <i class="bi bi-cpu me-1"></i>
             <strong>Enhanced Extraction</strong> using <strong>${this.extractionSettings.mode}</strong> mode 
@@ -1227,7 +1249,10 @@ class KnowledgePanel {
             </div>`;
 
         // Show enhanced capabilities if detected
-        if (this.knowledgeData.detectedActions && this.knowledgeData.detectedActions.length > 0) {
+        if (
+            this.knowledgeData.detectedActions &&
+            this.knowledgeData.detectedActions.length > 0
+        ) {
             content += `
                 <div class="mt-2 p-2 bg-light rounded">
                     <small class="text-success">
@@ -1972,18 +1997,24 @@ class KnowledgePanel {
 
             // 1. Entity-based relationship discovery
             if (knowledge.entities && knowledge.entities.length > 0) {
-                const entityResults = await this.discoverEntityRelationships(knowledge.entities);
+                const entityResults = await this.discoverEntityRelationships(
+                    knowledge.entities,
+                );
                 relatedContent.push(...entityResults);
             }
 
             // 2. Topic-based relationship discovery
             if (knowledge.keyTopics && knowledge.keyTopics.length > 0) {
-                const topicResults = await this.discoverTopicRelationships(knowledge.keyTopics);
+                const topicResults = await this.discoverTopicRelationships(
+                    knowledge.keyTopics,
+                );
                 relatedContent.push(...topicResults);
             }
 
             // 3. Hybrid search for content similarity
-            const hybridResults = await this.discoverHybridRelationships(knowledge.summary);
+            const hybridResults = await this.discoverHybridRelationships(
+                knowledge.summary,
+            );
             relatedContent.push(...hybridResults);
 
             // Update count badge
@@ -2639,15 +2670,17 @@ class KnowledgePanel {
     }
 
     // Enhanced search methods for relationship discovery
-    private async discoverEntityRelationships(entities: Entity[]): Promise<RelatedContentItem[]> {
+    private async discoverEntityRelationships(
+        entities: Entity[],
+    ): Promise<RelatedContentItem[]> {
         try {
-            const entityNames = entities.slice(0, 5).map(e => e.name); // Limit to top 5 entities
-            
+            const entityNames = entities.slice(0, 5).map((e) => e.name); // Limit to top 5 entities
+
             const response = await chrome.runtime.sendMessage({
                 type: "searchByEntities",
                 entities: entityNames,
                 url: this.currentUrl, // Exclude current page
-                maxResults: 5
+                maxResults: 5,
             });
 
             if (response.success && response.results) {
@@ -2656,7 +2689,7 @@ class KnowledgePanel {
                     title: result.title,
                     similarity: result.relevanceScore || 0.7,
                     relationshipType: "entity-match",
-                    excerpt: `Shares entities: ${result.sharedEntities?.join(", ") || entityNames.slice(0, 2).join(", ")}`
+                    excerpt: `Shares entities: ${result.sharedEntities?.join(", ") || entityNames.slice(0, 2).join(", ")}`,
                 }));
             }
         } catch (error) {
@@ -2665,15 +2698,17 @@ class KnowledgePanel {
         return [];
     }
 
-    private async discoverTopicRelationships(topics: string[]): Promise<RelatedContentItem[]> {
+    private async discoverTopicRelationships(
+        topics: string[],
+    ): Promise<RelatedContentItem[]> {
         try {
             const topTopics = topics.slice(0, 3); // Limit to top 3 topics
-            
+
             const response = await chrome.runtime.sendMessage({
-                type: "searchByTopics", 
+                type: "searchByTopics",
                 topics: topTopics,
                 url: this.currentUrl, // Exclude current page
-                maxResults: 5
+                maxResults: 5,
             });
 
             if (response.success && response.results) {
@@ -2682,7 +2717,7 @@ class KnowledgePanel {
                     title: result.title,
                     similarity: result.relevanceScore || 0.6,
                     relationshipType: "topic-match",
-                    excerpt: `Related topics: ${result.sharedTopics?.join(", ") || topTopics.slice(0, 2).join(", ")}`
+                    excerpt: `Related topics: ${result.sharedTopics?.join(", ") || topTopics.slice(0, 2).join(", ")}`,
                 }));
             }
         } catch (error) {
@@ -2691,18 +2726,20 @@ class KnowledgePanel {
         return [];
     }
 
-    private async discoverHybridRelationships(summary: string): Promise<RelatedContentItem[]> {
+    private async discoverHybridRelationships(
+        summary: string,
+    ): Promise<RelatedContentItem[]> {
         try {
             if (!summary || summary.length < 20) return [];
-            
+
             // Use first 200 characters of summary for hybrid search
             const searchQuery = summary.substring(0, 200);
-            
+
             const response = await chrome.runtime.sendMessage({
                 type: "hybridSearch",
                 query: searchQuery,
-                url: this.currentUrl, // Exclude current page  
-                maxResults: 3
+                url: this.currentUrl, // Exclude current page
+                maxResults: 3,
             });
 
             if (response.success && response.results) {
@@ -2711,7 +2748,7 @@ class KnowledgePanel {
                     title: result.title,
                     similarity: result.relevanceScore || 0.5,
                     relationshipType: "content-similarity",
-                    excerpt: `Similar content: ${result.snippet || "Related page content"}`
+                    excerpt: `Similar content: ${result.snippet || "Related page content"}`,
                 }));
             }
         } catch (error) {
@@ -2750,18 +2787,19 @@ class KnowledgePanel {
     // Calculate knowledge quality metrics for enhanced display
     private calculateKnowledgeQuality(knowledge: KnowledgeData) {
         const entityCount = knowledge.entities?.length || 0;
-        const relationshipCount = knowledge.relationships?.length || 0; 
+        const relationshipCount = knowledge.relationships?.length || 0;
         const topicCount = knowledge.keyTopics?.length || 0;
         const actionCount = knowledge.detectedActions?.length || 0;
-        
+
         // Calculate component scores
         const entityScore = Math.min(entityCount * 10, 40); // Max 40 points for entities
         const relationshipScore = Math.min(relationshipCount * 15, 30); // Max 30 points for relationships
         const topicScore = Math.min(topicCount * 8, 20); // Max 20 points for topics
         const actionScore = Math.min(actionCount * 2, 10); // Max 10 points for actions
-        
-        const totalScore = entityScore + relationshipScore + topicScore + actionScore;
-        
+
+        const totalScore =
+            entityScore + relationshipScore + topicScore + actionScore;
+
         // Determine quality level and color
         let label: string, color: string;
         if (totalScore >= 80) {
@@ -2777,27 +2815,47 @@ class KnowledgePanel {
             label = "Basic";
             color = "secondary";
         }
-        
+
         return {
             score: totalScore,
             label,
             color,
             entities: {
                 count: entityCount,
-                color: entityCount >= 5 ? "success" : entityCount >= 2 ? "primary" : "secondary"
+                color:
+                    entityCount >= 5
+                        ? "success"
+                        : entityCount >= 2
+                          ? "primary"
+                          : "secondary",
             },
             relationships: {
                 count: relationshipCount,
-                color: relationshipCount >= 3 ? "success" : relationshipCount >= 1 ? "primary" : "secondary"
+                color:
+                    relationshipCount >= 3
+                        ? "success"
+                        : relationshipCount >= 1
+                          ? "primary"
+                          : "secondary",
             },
             topics: {
                 count: topicCount,
-                color: topicCount >= 4 ? "success" : topicCount >= 2 ? "primary" : "secondary"
+                color:
+                    topicCount >= 4
+                        ? "success"
+                        : topicCount >= 2
+                          ? "primary"
+                          : "secondary",
             },
             actions: {
                 count: actionCount,
-                color: actionCount >= 5 ? "success" : actionCount >= 1 ? "primary" : "secondary"
-            }
+                color:
+                    actionCount >= 5
+                        ? "success"
+                        : actionCount >= 1
+                          ? "primary"
+                          : "secondary",
+            },
         };
     }
 

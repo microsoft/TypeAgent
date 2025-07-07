@@ -259,7 +259,10 @@ export async function createKnowproWebsiteCommands(
                 ),
 
                 // NEW: Knowledge extraction options
-                enableKnowledgeExtraction: argBool("Enable knowledge extraction", false),
+                enableKnowledgeExtraction: argBool(
+                    "Enable knowledge extraction",
+                    false,
+                ),
                 knowledgeMode: arg(
                     "Knowledge extraction mode: basic | enhanced | hybrid",
                     "hybrid",
@@ -348,7 +351,8 @@ export async function createKnowproWebsiteCommands(
                         enableActionDetection: namedArgs.enableActionDetection,
                         actionConfidence: namedArgs.actionConfidence,
                         // NEW: Knowledge extraction options
-                        enableKnowledgeExtraction: namedArgs.enableKnowledgeExtraction,
+                        enableKnowledgeExtraction:
+                            namedArgs.enableKnowledgeExtraction,
                         knowledgeMode: namedArgs.knowledgeMode as any,
                     },
                     (current, total, item) => {
@@ -901,20 +905,28 @@ export async function createKnowproWebsiteCommands(
             try {
                 const insights = websiteCollection.getKnowledgeInsights();
                 context.printer.writeLine(`\n🧠 Knowledge Insights:`);
-                context.printer.writeLine(`  Sites with knowledge: ${insights.sitesWithKnowledge}/${insights.totalSites} (${((insights.sitesWithKnowledge / insights.totalSites) * 100).toFixed(1)}%)`);
-                context.printer.writeLine(`  Average knowledge richness: ${insights.averageKnowledgeRichness.toFixed(1)}`);
-                
+                context.printer.writeLine(
+                    `  Sites with knowledge: ${insights.sitesWithKnowledge}/${insights.totalSites} (${((insights.sitesWithKnowledge / insights.totalSites) * 100).toFixed(1)}%)`,
+                );
+                context.printer.writeLine(
+                    `  Average knowledge richness: ${insights.averageKnowledgeRichness.toFixed(1)}`,
+                );
+
                 // Show top entities
                 if (insights.topEntities.size > 0) {
                     context.printer.writeLine(`\n🏷️  Top Knowledge Entities:`);
-                    const topEntities = Array.from(insights.topEntities.entries())
+                    const topEntities = Array.from(
+                        insights.topEntities.entries(),
+                    )
                         .sort((a, b) => b[1] - a[1])
                         .slice(0, limit);
                     topEntities.forEach(([entity, count], index) => {
-                        context.printer.writeLine(`  ${index + 1}. ${entity}: ${count} occurrences`);
+                        context.printer.writeLine(
+                            `  ${index + 1}. ${entity}: ${count} occurrences`,
+                        );
                     });
                 }
-                
+
                 // Show top topics
                 if (insights.topTopics.size > 0) {
                     context.printer.writeLine(`\n📚 Top Knowledge Topics:`);
@@ -922,22 +934,32 @@ export async function createKnowproWebsiteCommands(
                         .sort((a, b) => b[1] - a[1])
                         .slice(0, limit);
                     topTopics.forEach(([topic, count], index) => {
-                        context.printer.writeLine(`  ${index + 1}. ${topic}: ${count} mentions`);
+                        context.printer.writeLine(
+                            `  ${index + 1}. ${topic}: ${count} mentions`,
+                        );
                     });
                 }
-                
+
                 // Show action types from knowledge
                 if (insights.actionTypes.size > 0) {
-                    context.printer.writeLine(`\n🎯 Knowledge-Enhanced Action Types:`);
-                    const topActions = Array.from(insights.actionTypes.entries())
+                    context.printer.writeLine(
+                        `\n🎯 Knowledge-Enhanced Action Types:`,
+                    );
+                    const topActions = Array.from(
+                        insights.actionTypes.entries(),
+                    )
                         .sort((a, b) => b[1] - a[1])
                         .slice(0, 5);
                     topActions.forEach(([actionType, count]) => {
-                        context.printer.writeLine(`  ${actionType}: ${count} actions`);
+                        context.printer.writeLine(
+                            `  ${actionType}: ${count} actions`,
+                        );
                     });
                 }
             } catch (insightsError) {
-                context.printer.writeLine(`\n⚠️  Could not load knowledge insights: ${insightsError}`);
+                context.printer.writeLine(
+                    `\n⚠️  Could not load knowledge insights: ${insightsError}`,
+                );
             }
         }
     }
@@ -1232,7 +1254,10 @@ export async function createKnowproWebsiteCommands(
                     false,
                 ),
                 debug: argBool("Show debug information", false),
-                mode: arg("Search mode: auto | hybrid | entity | topic | semantic", "auto"),
+                mode: arg(
+                    "Search mode: auto | hybrid | entity | topic | semantic",
+                    "auto",
+                ),
                 showInsights: argBool("Show knowledge insights", false),
                 includeEntities: argBool("Include entity information", false),
             },
@@ -1259,7 +1284,9 @@ export async function createKnowproWebsiteCommands(
         const query = namedArgs.query;
         const searchMode = namedArgs.mode || "auto";
 
-        context.printer.writeLine(`🔍 Searching website memory: "${query}" (mode: ${searchMode})`);
+        context.printer.writeLine(
+            `🔍 Searching website memory: "${query}" (mode: ${searchMode})`,
+        );
         context.printer.writeLine("=".repeat(60));
 
         try {
@@ -1267,102 +1294,149 @@ export async function createKnowproWebsiteCommands(
             let usedMethod = "semantic";
 
             // Try enhanced search methods based on mode selection
-            if (searchMode === "hybrid" || (searchMode === "auto" && !query.includes(" "))) {
+            if (
+                searchMode === "hybrid" ||
+                (searchMode === "auto" && !query.includes(" "))
+            ) {
                 try {
-                    const hybridResults = await websiteCollection.hybridSearch(query);
+                    const hybridResults =
+                        await websiteCollection.hybridSearch(query);
                     if (hybridResults.length > 0) {
                         results = hybridResults.map((result, index) => ({
                             messageOrdinal: index, // Use index since WebsiteDocPart doesn't have messageOrdinal
                             score: result.relevanceScore,
-                            website: result.website
+                            website: result.website,
                         }));
                         usedMethod = "hybrid";
-                        context.printer.writeLine(`✅ Found ${results.length} results using hybrid search`);
+                        context.printer.writeLine(
+                            `✅ Found ${results.length} results using hybrid search`,
+                        );
                     }
                 } catch (error) {
-                    context.printer.writeLine(`⚠️  Hybrid search failed: ${error}, falling back...`);
+                    context.printer.writeLine(
+                        `⚠️  Hybrid search failed: ${error}, falling back...`,
+                    );
                 }
             }
 
-            if (results.length === 0 && (searchMode === "entity" || (searchMode === "auto" && /^[A-Z]/.test(query)))) {
+            if (
+                results.length === 0 &&
+                (searchMode === "entity" ||
+                    (searchMode === "auto" && /^[A-Z]/.test(query)))
+            ) {
                 try {
-                    const entityResults = await websiteCollection.searchByEntities([query]);
+                    const entityResults =
+                        await websiteCollection.searchByEntities([query]);
                     if (entityResults.length > 0) {
                         results = entityResults.map((result, index) => ({
                             messageOrdinal: index, // Use index since WebsiteDocPart doesn't have messageOrdinal
                             score: 0.8,
-                            website: result
+                            website: result,
                         }));
                         usedMethod = "entity";
-                        context.printer.writeLine(`✅ Found ${results.length} results using entity search`);
+                        context.printer.writeLine(
+                            `✅ Found ${results.length} results using entity search`,
+                        );
                     }
                 } catch (error) {
-                    context.printer.writeLine(`⚠️  Entity search failed: ${error}, falling back...`);
+                    context.printer.writeLine(
+                        `⚠️  Entity search failed: ${error}, falling back...`,
+                    );
                 }
             }
 
-            if (results.length === 0 && (searchMode === "topic" || searchMode === "auto")) {
+            if (
+                results.length === 0 &&
+                (searchMode === "topic" || searchMode === "auto")
+            ) {
                 try {
-                    const topicResults = await websiteCollection.searchByTopics([query]);
+                    const topicResults = await websiteCollection.searchByTopics(
+                        [query],
+                    );
                     if (topicResults.length > 0) {
                         results = topicResults.map((result, index) => ({
                             messageOrdinal: index, // Use index since WebsiteDocPart doesn't have messageOrdinal
                             score: 0.7,
-                            website: result
+                            website: result,
                         }));
                         usedMethod = "topic";
-                        context.printer.writeLine(`✅ Found ${results.length} results using topic search`);
+                        context.printer.writeLine(
+                            `✅ Found ${results.length} results using topic search`,
+                        );
                     }
                 } catch (error) {
-                    context.printer.writeLine(`⚠️  Topic search failed: ${error}, falling back...`);
+                    context.printer.writeLine(
+                        `⚠️  Topic search failed: ${error}, falling back...`,
+                    );
                 }
             }
 
             // Display enhanced search results if found
             if (results.length > 0) {
-                context.printer.writeLine(`\n📊 Search Method: ${usedMethod.toUpperCase()}`);
+                context.printer.writeLine(
+                    `\n📊 Search Method: ${usedMethod.toUpperCase()}`,
+                );
                 const limitedResults = results.slice(0, namedArgs.maxToDisplay);
-                
+
                 for (let i = 0; i < limitedResults.length; i++) {
                     const result = limitedResults[i];
-                    
-                    context.printer.writeInColor(chalk.green, `#${i + 1} / ${limitedResults.length}: <${result.messageOrdinal}> [${result.score.toFixed(3)}]`);
-                    
+
+                    context.printer.writeInColor(
+                        chalk.green,
+                        `#${i + 1} / ${limitedResults.length}: <${result.messageOrdinal}> [${result.score.toFixed(3)}]`,
+                    );
+
                     if (namedArgs.includeContent) {
                         context.printer.writeMessage(result.website);
                     } else {
                         writeMessageWithFilteredMetadata(result.website);
                     }
-                    
+
                     context.printer.writeLine();
                 }
 
                 // Show knowledge insights if requested
                 if (namedArgs.showInsights) {
                     try {
-                        const insights = websiteCollection.getKnowledgeInsights();
+                        const insights =
+                            websiteCollection.getKnowledgeInsights();
                         context.printer.writeLine(`\n📈 Knowledge Insights:`);
-                        context.printer.writeLine(`   Sites with knowledge: ${insights.sitesWithKnowledge}/${insights.totalSites}`);
-                        context.printer.writeLine(`   Average knowledge richness: ${insights.averageKnowledgeRichness.toFixed(1)}`);
-                        
+                        context.printer.writeLine(
+                            `   Sites with knowledge: ${insights.sitesWithKnowledge}/${insights.totalSites}`,
+                        );
+                        context.printer.writeLine(
+                            `   Average knowledge richness: ${insights.averageKnowledgeRichness.toFixed(1)}`,
+                        );
+
                         if (insights.topEntities.size > 0) {
-                            const topEntities = Array.from(insights.topEntities.entries())
+                            const topEntities = Array.from(
+                                insights.topEntities.entries(),
+                            )
                                 .sort((a, b) => b[1] - a[1])
                                 .slice(0, 5);
-                            context.printer.writeLine(`   Top entities: ${topEntities.map(([entity, count]) => `${entity} (${count})`).join(", ")}`);
+                            context.printer.writeLine(
+                                `   Top entities: ${topEntities.map(([entity, count]) => `${entity} (${count})`).join(", ")}`,
+                            );
                         }
                     } catch (insightsError) {
-                        context.printer.writeLine(`⚠️  Could not load knowledge insights: ${insightsError}`);
+                        context.printer.writeLine(
+                            `⚠️  Could not load knowledge insights: ${insightsError}`,
+                        );
                     }
                 }
                 return;
             }
 
             // Fallback to semantic search if no enhanced search results
-            context.printer.writeLine(`🔄 No enhanced search results found, using semantic search...`);
-            
+            context.printer.writeLine(
+                `🔄 No enhanced search results found, using semantic search...`,
+            );
+
             // Use existing semantic search implementation
-            const searchResponse = await kpTest.execSearchRequest(kpContext, namedArgs);
+            const searchResponse = await kpTest.execSearchRequest(
+                kpContext,
+                namedArgs,
+            );
             const searchResults = searchResponse.searchResults;
             const debugContext = searchResponse.debugContext;
 
@@ -1395,16 +1469,28 @@ export async function createKnowproWebsiteCommands(
                 }
 
                 context.printer.writeLine("####");
-                context.printer.writeInColor(chalk.cyan, searchQueryExpr.rawQuery!);
+                context.printer.writeInColor(
+                    chalk.cyan,
+                    searchQueryExpr.rawQuery!,
+                );
                 context.printer.writeLine("####");
 
                 if (namedArgs.includeContent) {
-                    writeWebsiteSearchResultWithContent(kpContext.conversation!, result, namedArgs.maxToDisplay, true);
+                    writeWebsiteSearchResultWithContent(
+                        kpContext.conversation!,
+                        result,
+                        namedArgs.maxToDisplay,
+                        true,
+                    );
                 } else {
-                    writeWebsiteSearchResultWithoutContent(kpContext.conversation!, result, namedArgs.maxToDisplay, true);
+                    writeWebsiteSearchResultWithoutContent(
+                        kpContext.conversation!,
+                        result,
+                        namedArgs.maxToDisplay,
+                        true,
+                    );
                 }
             }
-
         } catch (error) {
             context.printer.writeError(`Search failed: ${error}`);
         }
@@ -1841,36 +1927,49 @@ export async function createKnowproWebsiteCommands(
         if (!websiteCollection) return;
 
         const namedArgs = parseNamedArguments(args, websiteSearchEntitiesDef());
-        const entities = namedArgs.entities.split(",").map((e: string) => e.trim());
+        const entities = namedArgs.entities
+            .split(",")
+            .map((e: string) => e.trim());
 
         try {
             const results = await websiteCollection.searchByEntities(entities);
-            
+
             if (results.length === 0) {
-                context.printer.writeLine("No websites found with those entities.");
+                context.printer.writeLine(
+                    "No websites found with those entities.",
+                );
                 return;
             }
 
-            context.printer.writeLine(`Found ${results.length} websites matching entities: ${entities.join(", ")}`);
-            
+            context.printer.writeLine(
+                `Found ${results.length} websites matching entities: ${entities.join(", ")}`,
+            );
+
             const limit = Math.min(results.length, namedArgs.limit || 10);
             for (let i = 0; i < limit; i++) {
                 const result = results[i];
                 const metadata = result.metadata as website.WebsiteDocPartMeta;
-                context.printer.writeLine(`${i + 1}. ${metadata.title || metadata.url}`);
+                context.printer.writeLine(
+                    `${i + 1}. ${metadata.title || metadata.url}`,
+                );
                 context.printer.writeLine(`   URL: ${metadata.url}`);
                 context.printer.writeLine(`   Domain: ${metadata.domain}`);
-                
+
                 // Show matched entities
                 const knowledge = result.getKnowledge();
                 if (knowledge?.entities) {
-                    const matchedEntities = knowledge.entities.filter((entity: any) =>
-                        entities.some((searchEntity: string) => 
-                            entity.name.toLowerCase().includes(searchEntity.toLowerCase())
-                        )
+                    const matchedEntities = knowledge.entities.filter(
+                        (entity: any) =>
+                            entities.some((searchEntity: string) =>
+                                entity.name
+                                    .toLowerCase()
+                                    .includes(searchEntity.toLowerCase()),
+                            ),
                     );
                     if (matchedEntities.length > 0) {
-                        context.printer.writeLine(`   Matched entities: ${matchedEntities.map(e => e.name).join(", ")}`);
+                        context.printer.writeLine(
+                            `   Matched entities: ${matchedEntities.map((e) => e.name).join(", ")}`,
+                        );
                     }
                 }
                 context.printer.writeLine();
@@ -1901,32 +2000,43 @@ export async function createKnowproWebsiteCommands(
 
         try {
             const results = await websiteCollection.searchByTopics(topics);
-            
+
             if (results.length === 0) {
-                context.printer.writeLine("No websites found with those topics.");
+                context.printer.writeLine(
+                    "No websites found with those topics.",
+                );
                 return;
             }
 
-            context.printer.writeLine(`Found ${results.length} websites matching topics: ${topics.join(", ")}`);
-            
+            context.printer.writeLine(
+                `Found ${results.length} websites matching topics: ${topics.join(", ")}`,
+            );
+
             const limit = Math.min(results.length, namedArgs.limit || 10);
             for (let i = 0; i < limit; i++) {
                 const result = results[i];
                 const metadata = result.metadata as website.WebsiteDocPartMeta;
-                context.printer.writeLine(`${i + 1}. ${metadata.title || metadata.url}`);
+                context.printer.writeLine(
+                    `${i + 1}. ${metadata.title || metadata.url}`,
+                );
                 context.printer.writeLine(`   URL: ${metadata.url}`);
                 context.printer.writeLine(`   Domain: ${metadata.domain}`);
-                
+
                 // Show matched topics
                 const knowledge = result.getKnowledge();
                 if (knowledge?.topics) {
-                    const matchedTopics = knowledge.topics.filter((topic: string) =>
-                        topics.some((searchTopic: string) => 
-                            topic.toLowerCase().includes(searchTopic.toLowerCase())
-                        )
+                    const matchedTopics = knowledge.topics.filter(
+                        (topic: string) =>
+                            topics.some((searchTopic: string) =>
+                                topic
+                                    .toLowerCase()
+                                    .includes(searchTopic.toLowerCase()),
+                            ),
                     );
                     if (matchedTopics.length > 0) {
-                        context.printer.writeLine(`   Matched topics: ${matchedTopics.slice(0, 3).join(", ")}`);
+                        context.printer.writeLine(
+                            `   Matched topics: ${matchedTopics.slice(0, 3).join(", ")}`,
+                        );
                     }
                 }
                 context.printer.writeLine();
@@ -1938,7 +2048,8 @@ export async function createKnowproWebsiteCommands(
 
     function websiteHybridSearchDef(): CommandMetadata {
         return {
-            description: "Perform hybrid search across entities, topics, and content",
+            description:
+                "Perform hybrid search across entities, topics, and content",
             args: {
                 query: arg("Search query"),
             },
@@ -1956,29 +2067,46 @@ export async function createKnowproWebsiteCommands(
         const namedArgs = parseNamedArguments(args, websiteHybridSearchDef());
 
         try {
-            const results = await websiteCollection.hybridSearch(namedArgs.query);
-            
-            const filteredResults = results.filter(result => 
-                result.relevanceScore >= (namedArgs.minScore || 0.1)
+            const results = await websiteCollection.hybridSearch(
+                namedArgs.query,
+            );
+
+            const filteredResults = results.filter(
+                (result) =>
+                    result.relevanceScore >= (namedArgs.minScore || 0.1),
             );
 
             if (filteredResults.length === 0) {
-                context.printer.writeLine(`No websites found for query: "${namedArgs.query}"`);
+                context.printer.writeLine(
+                    `No websites found for query: "${namedArgs.query}"`,
+                );
                 return;
             }
 
-            context.printer.writeLine(`Found ${filteredResults.length} websites for: "${namedArgs.query}"`);
-            
-            const limit = Math.min(filteredResults.length, namedArgs.limit || 10);
+            context.printer.writeLine(
+                `Found ${filteredResults.length} websites for: "${namedArgs.query}"`,
+            );
+
+            const limit = Math.min(
+                filteredResults.length,
+                namedArgs.limit || 10,
+            );
             for (let i = 0; i < limit; i++) {
                 const result = filteredResults[i];
-                const metadata = result.website.metadata as website.WebsiteDocPartMeta;
-                context.printer.writeLine(`${i + 1}. [${result.relevanceScore.toFixed(2)}] ${metadata.title || metadata.url}`);
+                const metadata = result.website
+                    .metadata as website.WebsiteDocPartMeta;
+                context.printer.writeLine(
+                    `${i + 1}. [${result.relevanceScore.toFixed(2)}] ${metadata.title || metadata.url}`,
+                );
                 context.printer.writeLine(`   URL: ${metadata.url}`);
-                context.printer.writeLine(`   Matched: ${result.matchedElements.join(", ")}`);
-                
+                context.printer.writeLine(
+                    `   Matched: ${result.matchedElements.join(", ")}`,
+                );
+
                 if (result.knowledgeContext) {
-                    context.printer.writeLine(`   Knowledge: ${result.knowledgeContext.entityCount} entities, ${result.knowledgeContext.topicCount} topics`);
+                    context.printer.writeLine(
+                        `   Knowledge: ${result.knowledgeContext.entityCount} entities, ${result.knowledgeContext.topicCount} topics`,
+                    );
                 }
                 context.printer.writeLine();
             }
@@ -1996,23 +2124,35 @@ export async function createKnowproWebsiteCommands(
             },
         };
     }
-    commands.kpWebsiteKnowledgeInsights.metadata = websiteKnowledgeInsightsDef();
+    commands.kpWebsiteKnowledgeInsights.metadata =
+        websiteKnowledgeInsightsDef();
     async function websiteKnowledgeInsights(args: string[]) {
         const websiteCollection = ensureMemoryLoaded();
         if (!websiteCollection) return;
 
-        const namedArgs = parseNamedArguments(args, websiteKnowledgeInsightsDef());
+        const namedArgs = parseNamedArguments(
+            args,
+            websiteKnowledgeInsightsDef(),
+        );
 
         try {
-            const insights = websiteCollection.getKnowledgeInsights(namedArgs.timeframe);
-            
-            context.printer.writeLine(`🧠 Knowledge Insights (${insights.timeframe}):`);
+            const insights = websiteCollection.getKnowledgeInsights(
+                namedArgs.timeframe,
+            );
+
+            context.printer.writeLine(
+                `🧠 Knowledge Insights (${insights.timeframe}):`,
+            );
             context.printer.writeLine(`${"=".repeat(50)}`);
             context.printer.writeLine(`📊 Overview:`);
             context.printer.writeLine(`  Total sites: ${insights.totalSites}`);
-            context.printer.writeLine(`  Sites with knowledge: ${insights.sitesWithKnowledge} (${((insights.sitesWithKnowledge / insights.totalSites) * 100).toFixed(1)}%)`);
-            context.printer.writeLine(`  Average knowledge richness: ${insights.averageKnowledgeRichness.toFixed(1)}`);
-            
+            context.printer.writeLine(
+                `  Sites with knowledge: ${insights.sitesWithKnowledge} (${((insights.sitesWithKnowledge / insights.totalSites) * 100).toFixed(1)}%)`,
+            );
+            context.printer.writeLine(
+                `  Average knowledge richness: ${insights.averageKnowledgeRichness.toFixed(1)}`,
+            );
+
             // Top entities
             if (insights.topEntities.size > 0) {
                 context.printer.writeLine(`\n🏷️  Top Entities:`);
@@ -2020,10 +2160,12 @@ export async function createKnowproWebsiteCommands(
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 10);
                 topEntities.forEach(([entity, count], index) => {
-                    context.printer.writeLine(`  ${index + 1}. ${entity}: ${count} occurrences`);
+                    context.printer.writeLine(
+                        `  ${index + 1}. ${entity}: ${count} occurrences`,
+                    );
                 });
             }
-            
+
             // Top topics
             if (insights.topTopics.size > 0) {
                 context.printer.writeLine(`\n📚 Top Topics:`);
@@ -2031,10 +2173,12 @@ export async function createKnowproWebsiteCommands(
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 10);
                 topTopics.forEach(([topic, count], index) => {
-                    context.printer.writeLine(`  ${index + 1}. ${topic}: ${count} mentions`);
+                    context.printer.writeLine(
+                        `  ${index + 1}. ${topic}: ${count} mentions`,
+                    );
                 });
             }
-            
+
             // Action types
             if (insights.actionTypes.size > 0) {
                 context.printer.writeLine(`\n🎯 Action Types:`);
@@ -2042,25 +2186,33 @@ export async function createKnowproWebsiteCommands(
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, 5);
                 topActions.forEach(([actionType, count]) => {
-                    context.printer.writeLine(`  ${actionType}: ${count} actions`);
+                    context.printer.writeLine(
+                        `  ${actionType}: ${count} actions`,
+                    );
                 });
             }
 
             // Knowledge growth if requested
             if (namedArgs.showGrowth) {
-                const growthInsights = websiteCollection.getKnowledgeGrowthInsights();
+                const growthInsights =
+                    websiteCollection.getKnowledgeGrowthInsights();
                 context.printer.writeLine(`\n📈 Knowledge Growth:`);
-                
+
                 if (growthInsights.knowledgeRichnessTrend.length > 0) {
                     context.printer.writeLine(`  Recent knowledge trend:`);
-                    growthInsights.knowledgeRichnessTrend.slice(-5).forEach(trend => {
-                        context.printer.writeLine(`    ${trend.date}: ${trend.richness} total knowledge points`);
-                    });
+                    growthInsights.knowledgeRichnessTrend
+                        .slice(-5)
+                        .forEach((trend) => {
+                            context.printer.writeLine(
+                                `    ${trend.date}: ${trend.richness} total knowledge points`,
+                            );
+                        });
                 }
             }
-            
         } catch (error) {
-            context.printer.writeError(`Error getting knowledge insights: ${error}`);
+            context.printer.writeError(
+                `Error getting knowledge insights: ${error}`,
+            );
         }
     }
 
