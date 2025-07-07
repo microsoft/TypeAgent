@@ -448,4 +448,4 @@ android/samples/mobile/.idea/deploymentTargetSelector.xml
 .DS_Store
 
 # Everybody gets to maintain their own .github/instructions/ folder
-.github/instructions/
+/.github/instructions/
