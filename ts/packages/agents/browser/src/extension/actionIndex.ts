@@ -69,64 +69,96 @@ class ActionIndexApp {
 
     private setupEventListeners() {
         // Global search functionality
-        const globalSearchInput = document.getElementById("globalSearchInput") as HTMLInputElement;
+        const globalSearchInput = document.getElementById(
+            "globalSearchInput",
+        ) as HTMLInputElement;
         globalSearchInput.addEventListener("input", (e) => {
             const query = (e.target as HTMLInputElement).value;
             this.handleSearch(query);
         });
 
         // View mode controls
-        document.getElementById("viewModeGrid")!.addEventListener("click", () => {
-            this.setViewMode("grid");
-        });
+        document
+            .getElementById("viewModeGrid")!
+            .addEventListener("click", () => {
+                this.setViewMode("grid");
+            });
 
-        document.getElementById("viewModeList")!.addEventListener("click", () => {
-            this.setViewMode("list");
-        });
+        document
+            .getElementById("viewModeList")!
+            .addEventListener("click", () => {
+                this.setViewMode("list");
+            });
 
         // Filter controls
-        document.getElementById("authorFilter")!.addEventListener("change", (e) => {
-            this.state.filters.author = (e.target as HTMLSelectElement).value;
-            this.applyFilters();
-        });
+        document
+            .getElementById("authorFilter")!
+            .addEventListener("change", (e) => {
+                this.state.filters.author = (
+                    e.target as HTMLSelectElement
+                ).value;
+                this.applyFilters();
+            });
 
-        document.getElementById("domainFilter")!.addEventListener("change", (e) => {
-            this.state.filters.domain = (e.target as HTMLSelectElement).value;
-            this.applyFilters();
-        });
+        document
+            .getElementById("domainFilter")!
+            .addEventListener("change", (e) => {
+                this.state.filters.domain = (
+                    e.target as HTMLSelectElement
+                ).value;
+                this.applyFilters();
+            });
 
-        document.getElementById("categoryFilter")!.addEventListener("change", (e) => {
-            this.state.filters.category = (e.target as HTMLSelectElement).value;
-            this.applyFilters();
-        });
+        document
+            .getElementById("categoryFilter")!
+            .addEventListener("change", (e) => {
+                this.state.filters.category = (
+                    e.target as HTMLSelectElement
+                ).value;
+                this.applyFilters();
+            });
 
-        document.getElementById("usageFilter")!.addEventListener("change", (e) => {
-            this.state.filters.usage = (e.target as HTMLSelectElement).value;
-            this.applyFilters();
-        });
+        document
+            .getElementById("usageFilter")!
+            .addEventListener("change", (e) => {
+                this.state.filters.usage = (
+                    e.target as HTMLSelectElement
+                ).value;
+                this.applyFilters();
+            });
 
         // Clear filters
-        document.getElementById("clearFiltersBtn")!.addEventListener("click", () => {
-            this.clearFilters();
-        });
+        document
+            .getElementById("clearFiltersBtn")!
+            .addEventListener("click", () => {
+                this.clearFilters();
+            });
 
         // Bulk operations
-        document.getElementById("selectAllBtn")!.addEventListener("click", () => {
-            this.selectAllActions();
-        });
+        document
+            .getElementById("selectAllBtn")!
+            .addEventListener("click", () => {
+                this.selectAllActions();
+            });
 
-        document.getElementById("deselectAllBtn")!.addEventListener("click", () => {
-            this.deselectAllActions();
-        });
+        document
+            .getElementById("deselectAllBtn")!
+            .addEventListener("click", () => {
+                this.deselectAllActions();
+            });
 
-        document.getElementById("bulkDeleteBtn")!.addEventListener("click", () => {
-            this.bulkDeleteActions();
-        });
+        document
+            .getElementById("bulkDeleteBtn")!
+            .addEventListener("click", () => {
+                this.bulkDeleteActions();
+            });
 
         // Refresh actions
-        document.getElementById("refreshActionsBtn")!.addEventListener("click", () => {
-            this.loadAllActions();
-        });
+        document
+            .getElementById("refreshActionsBtn")!
+            .addEventListener("click", () => {
+                this.loadAllActions();
+            });
     }
 
     private handleSearch(query: string) {
@@ -179,7 +211,6 @@ class ActionIndexApp {
 
             // Apply current filters
             this.applyFilters();
-
         } catch (error) {
             console.error("Error loading actions:", error);
             this.state.error = "Failed to load actions. Please try again.";
@@ -219,7 +250,9 @@ class ActionIndexApp {
                 } catch {
                     // If URL parsing fails, try to extract domain from pattern
                     const pattern = action.scope?.pattern || action.urlPattern;
-                    const domainMatch = pattern.match(/(?:https?:\/\/)?([^\/\*]+)/);
+                    const domainMatch = pattern.match(
+                        /(?:https?:\/\/)?([^\/\*]+)/,
+                    );
                     if (domainMatch) {
                         domains.add(domainMatch[1]);
                     }
@@ -237,14 +270,19 @@ class ActionIndexApp {
         const userActionsEl = document.getElementById("userActionsCount");
         const domainsEl = document.getElementById("domainsCount");
 
-        if (totalActionsEl) totalActionsEl.textContent = this.state.totalActions.toString();
-        if (userActionsEl) userActionsEl.textContent = this.state.userActionsCount.toString();
-        if (domainsEl) domainsEl.textContent = this.state.totalDomains.toString();
+        if (totalActionsEl)
+            totalActionsEl.textContent = this.state.totalActions.toString();
+        if (userActionsEl)
+            userActionsEl.textContent = this.state.userActionsCount.toString();
+        if (domainsEl)
+            domainsEl.textContent = this.state.totalDomains.toString();
     }
 
     private populateFilterDropdowns() {
         // Populate domain filter
-        const domainFilter = document.getElementById("domainFilter") as HTMLSelectElement;
+        const domainFilter = document.getElementById(
+            "domainFilter",
+        ) as HTMLSelectElement;
         const domains = new Set<string>();
 
         this.state.allActions.forEach((action) => {
@@ -255,7 +293,9 @@ class ActionIndexApp {
                     domains.add(domain);
                 } catch {
                     const pattern = action.scope?.pattern || action.urlPattern;
-                    const domainMatch = pattern.match(/(?:https?:\/\/)?([^\/\*]+)/);
+                    const domainMatch = pattern.match(
+                        /(?:https?:\/\/)?([^\/\*]+)/,
+                    );
                     if (domainMatch) {
                         domains.add(domainMatch[1]);
                     }
@@ -269,15 +309,19 @@ class ActionIndexApp {
         }
 
         // Add domain options
-        Array.from(domains).sort().forEach((domain) => {
-            const option = document.createElement("option");
-            option.value = domain;
-            option.textContent = domain;
-            domainFilter.appendChild(option);
-        });
+        Array.from(domains)
+            .sort()
+            .forEach((domain) => {
+                const option = document.createElement("option");
+                option.value = domain;
+                option.textContent = domain;
+                domainFilter.appendChild(option);
+            });
 
         // Populate category filter
-        const categoryFilter = document.getElementById("categoryFilter") as HTMLSelectElement;
+        const categoryFilter = document.getElementById(
+            "categoryFilter",
+        ) as HTMLSelectElement;
         const categories = this.extractCategories();
 
         // Clear existing options except "All Categories"
@@ -298,7 +342,8 @@ class ActionIndexApp {
 
         this.state.allActions.forEach((action) => {
             // Basic categorization based on action names and descriptions
-            const text = `${action.name} ${action.description || ""}`.toLowerCase();
+            const text =
+                `${action.name} ${action.description || ""}`.toLowerCase();
 
             if (text.includes("search") || text.includes("find")) {
                 categories.add("Search");
@@ -346,15 +391,23 @@ class ActionIndexApp {
 
         // Apply search filter
         if (this.state.searchQuery) {
-            filtered = filtered.filter((action) =>
-                action.name.toLowerCase().includes(this.state.searchQuery) ||
-                (action.description && action.description.toLowerCase().includes(this.state.searchQuery))
+            filtered = filtered.filter(
+                (action) =>
+                    action.name
+                        .toLowerCase()
+                        .includes(this.state.searchQuery) ||
+                    (action.description &&
+                        action.description
+                            .toLowerCase()
+                            .includes(this.state.searchQuery)),
             );
         }
 
         // Apply author filter
         if (this.state.filters.author !== "all") {
-            filtered = filtered.filter((action) => action.author === this.state.filters.author);
+            filtered = filtered.filter(
+                (action) => action.author === this.state.filters.author,
+            );
         }
 
         // Apply domain filter
@@ -366,7 +419,8 @@ class ActionIndexApp {
                         const domain = new URL(url).hostname;
                         return domain === this.state.filters.domain;
                     } catch {
-                        const pattern = action.scope?.pattern || action.urlPattern;
+                        const pattern =
+                            action.scope?.pattern || action.urlPattern;
                         return pattern.includes(this.state.filters.domain);
                     }
                 }
@@ -386,7 +440,10 @@ class ActionIndexApp {
         if (this.state.filters.usage !== "all") {
             filtered = filtered.filter((action) => {
                 const stats = this.getActionUsageStats(action);
-                return this.matchesUsageFrequency(stats, this.state.filters.usage);
+                return this.matchesUsageFrequency(
+                    stats,
+                    this.state.filters.usage,
+                );
             });
         }
 
@@ -399,19 +456,48 @@ class ActionIndexApp {
         const text = `${action.name} ${action.description || ""}`.toLowerCase();
 
         if (text.includes("search") || text.includes("find")) return "Search";
-        if (text.includes("login") || text.includes("sign in") || text.includes("auth")) return "Authentication";
-        if (text.includes("form") || text.includes("submit") || text.includes("input")) return "Form Interaction";
-        if (text.includes("click") || text.includes("button") || text.includes("link")) return "Navigation";
-        if (text.includes("cart") || text.includes("buy") || text.includes("purchase")) return "E-commerce";
-        if (text.includes("download") || text.includes("upload") || text.includes("file")) return "File Operations";
+        if (
+            text.includes("login") ||
+            text.includes("sign in") ||
+            text.includes("auth")
+        )
+            return "Authentication";
+        if (
+            text.includes("form") ||
+            text.includes("submit") ||
+            text.includes("input")
+        )
+            return "Form Interaction";
+        if (
+            text.includes("click") ||
+            text.includes("button") ||
+            text.includes("link")
+        )
+            return "Navigation";
+        if (
+            text.includes("cart") ||
+            text.includes("buy") ||
+            text.includes("purchase")
+        )
+            return "E-commerce";
+        if (
+            text.includes("download") ||
+            text.includes("upload") ||
+            text.includes("file")
+        )
+            return "File Operations";
 
         return "Other";
     }
 
-    private getActionUsageStats(action: any): { count: number; lastUsed: Date | null } {
+    private getActionUsageStats(action: any): {
+        count: number;
+        lastUsed: Date | null;
+    } {
         // Try to get usage stats from analytics data
         const stats = this.state.actionStatistics.find(
-            (stat) => stat.actionId === action.id || stat.actionName === action.name,
+            (stat) =>
+                stat.actionId === action.id || stat.actionName === action.name,
         );
 
         return {
@@ -420,10 +506,17 @@ class ActionIndexApp {
         };
     }
 
-    private matchesUsageFrequency(stats: { count: number; lastUsed: Date | null }, frequency: string): boolean {
+    private matchesUsageFrequency(
+        stats: { count: number; lastUsed: Date | null },
+        frequency: string,
+    ): boolean {
         const { count, lastUsed } = stats;
         const now = new Date();
-        const daysSinceLastUse = lastUsed ? Math.floor((now.getTime() - lastUsed.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+        const daysSinceLastUse = lastUsed
+            ? Math.floor(
+                  (now.getTime() - lastUsed.getTime()) / (1000 * 60 * 60 * 24),
+              )
+            : 999;
 
         switch (frequency) {
             case "frequent":
@@ -448,20 +541,28 @@ class ActionIndexApp {
         };
 
         // Reset UI controls
-        (document.getElementById("authorFilter") as HTMLSelectElement).value = "all";
-        (document.getElementById("domainFilter") as HTMLSelectElement).value = "all";
-        (document.getElementById("categoryFilter") as HTMLSelectElement).value = "all";
-        (document.getElementById("usageFilter") as HTMLSelectElement).value = "all";
+        (document.getElementById("authorFilter") as HTMLSelectElement).value =
+            "all";
+        (document.getElementById("domainFilter") as HTMLSelectElement).value =
+            "all";
+        (document.getElementById("categoryFilter") as HTMLSelectElement).value =
+            "all";
+        (document.getElementById("usageFilter") as HTMLSelectElement).value =
+            "all";
 
         // Clear search
-        const searchInput = document.getElementById("globalSearchInput") as HTMLInputElement;
+        const searchInput = document.getElementById(
+            "globalSearchInput",
+        ) as HTMLInputElement;
         searchInput.value = "";
         this.state.searchQuery = "";
 
         this.applyFilters();
     }
     private selectAllActions() {
-        this.state.selectedActions = this.state.filteredActions.map((action) => action.id || action.name);
+        this.state.selectedActions = this.state.filteredActions.map(
+            (action) => action.id || action.name,
+        );
         this.updateBulkOperationsUI();
         this.updateActionSelectionUI();
     }
@@ -473,13 +574,16 @@ class ActionIndexApp {
     }
 
     private updateBulkOperationsUI() {
-        const bulkOpsContainer = document.getElementById("bulkOperationsContainer");
+        const bulkOpsContainer = document.getElementById(
+            "bulkOperationsContainer",
+        );
         const selectedCountEl = document.getElementById("selectedActionsCount");
 
         if (bulkOpsContainer && selectedCountEl) {
             if (this.state.selectedActions.length > 0) {
                 bulkOpsContainer.classList.add("active");
-                selectedCountEl.textContent = this.state.selectedActions.length.toString();
+                selectedCountEl.textContent =
+                    this.state.selectedActions.length.toString();
             } else {
                 bulkOpsContainer.classList.remove("active");
             }
@@ -493,7 +597,9 @@ class ActionIndexApp {
                 `[data-action-checkbox="${action.id || action.name}"]`,
             ) as HTMLInputElement;
             if (checkbox) {
-                checkbox.checked = this.state.selectedActions.includes(action.id || action.name);
+                checkbox.checked = this.state.selectedActions.includes(
+                    action.id || action.name,
+                );
             }
         });
     }
@@ -510,9 +616,12 @@ class ActionIndexApp {
 
         if (!confirmed) return;
 
-        const deleteButton = document.getElementById("bulkDeleteBtn") as HTMLButtonElement;
+        const deleteButton = document.getElementById(
+            "bulkDeleteBtn",
+        ) as HTMLButtonElement;
         const originalContent = deleteButton.innerHTML;
-        deleteButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Deleting...';
+        deleteButton.innerHTML =
+            '<i class="bi bi-hourglass-split"></i> Deleting...';
         deleteButton.disabled = true;
 
         try {
@@ -530,7 +639,10 @@ class ActionIndexApp {
                         successCount++;
                     } else {
                         errorCount++;
-                        console.error(`Failed to delete action ${actionId}:`, response?.error);
+                        console.error(
+                            `Failed to delete action ${actionId}:`,
+                            response?.error,
+                        );
                     }
                 } catch (error) {
                     errorCount++;
@@ -561,7 +673,8 @@ class ActionIndexApp {
     private updateFilteredCount() {
         const filteredCountEl = document.getElementById("filteredActionsCount");
         if (filteredCountEl) {
-            filteredCountEl.textContent = this.state.filteredActions.length.toString();
+            filteredCountEl.textContent =
+                this.state.filteredActions.length.toString();
         }
     }
 
@@ -595,7 +708,8 @@ class ActionIndexApp {
 
         // Create grid container
         const gridContainer = document.createElement("div");
-        gridContainer.className = this.state.viewMode === "grid" ? "actions-grid" : "actions-list";
+        gridContainer.className =
+            this.state.viewMode === "grid" ? "actions-grid" : "actions-list";
 
         // Render action cards
         this.state.filteredActions.forEach((action, index) => {
@@ -624,7 +738,9 @@ class ActionIndexApp {
         const domain = this.extractDomain(action);
         const category = this.getActionCategory(action);
         const stats = this.getActionUsageStats(action);
-        const isSelected = this.state.selectedActions.includes(action.id || action.name);
+        const isSelected = this.state.selectedActions.includes(
+            action.id || action.name,
+        );
 
         card.innerHTML = `
             <div class="action-card-header">
@@ -666,30 +782,50 @@ class ActionIndexApp {
         return card;
     }
 
-    private createUsageStats(stats: { count: number; lastUsed: Date | null }): string {
+    private createUsageStats(stats: {
+        count: number;
+        lastUsed: Date | null;
+    }): string {
         return `
             <div class="usage-stats">
-                ${stats.count > 0 ? `
+                ${
+                    stats.count > 0
+                        ? `
                     <div class="usage-stat">
                         <i class="bi bi-graph-up"></i>
                         <span>Used ${stats.count} times</span>
                     </div>
-                ` : ""}
-                ${stats.lastUsed ? `
+                `
+                        : ""
+                }
+                ${
+                    stats.lastUsed
+                        ? `
                     <div class="usage-stat">
                         <i class="bi bi-clock"></i>
                         <span>Last used ${this.formatRelativeDate(stats.lastUsed)}</span>
                     </div>
-                ` : ""}
+                `
+                        : ""
+                }
             </div>
         `;
     }
 
-    private attachCardEventListeners(card: HTMLElement, action: any, index: number) {
+    private attachCardEventListeners(
+        card: HTMLElement,
+        action: any,
+        index: number,
+    ) {
         // Checkbox selection
-        const checkbox = card.querySelector(".action-checkbox") as HTMLInputElement;
+        const checkbox = card.querySelector(
+            ".action-checkbox",
+        ) as HTMLInputElement;
         checkbox?.addEventListener("change", (e) => {
-            this.toggleActionSelection(action.id || action.name, (e.target as HTMLInputElement).checked);
+            this.toggleActionSelection(
+                action.id || action.name,
+                (e.target as HTMLInputElement).checked,
+            );
         });
 
         // Action buttons
@@ -721,7 +857,9 @@ class ActionIndexApp {
                 this.state.selectedActions.push(actionId);
             }
         } else {
-            this.state.selectedActions = this.state.selectedActions.filter((id) => id !== actionId);
+            this.state.selectedActions = this.state.selectedActions.filter(
+                (id) => id !== actionId,
+            );
         }
 
         this.updateBulkOperationsUI();
@@ -746,7 +884,11 @@ class ActionIndexApp {
     }
 
     private async deleteAction(actionId: string, actionName: string) {
-        if (!confirm(`Are you sure you want to delete the action "${actionName}"? This cannot be undone.`)) {
+        if (
+            !confirm(
+                `Are you sure you want to delete the action "${actionName}"? This cannot be undone.`,
+            )
+        ) {
             return;
         }
 
@@ -757,7 +899,10 @@ class ActionIndexApp {
             });
 
             if (response?.success) {
-                this.showNotification(`Action "${actionName}" deleted successfully!`, "success");
+                this.showNotification(
+                    `Action "${actionName}" deleted successfully!`,
+                    "success",
+                );
                 await this.loadAllActions(); // Refresh the list
             } else {
                 throw new Error(response?.error || "Failed to delete action");
@@ -866,10 +1011,14 @@ class ActionIndexApp {
         });
     }
 
-    private showNotification(message: string, type: "success" | "error" | "warning" | "info" = "info") {
+    private showNotification(
+        message: string,
+        type: "success" | "error" | "warning" | "info" = "info",
+    ) {
         const toast = document.createElement("div");
         toast.className = `alert alert-${type === "error" ? "danger" : type} alert-dismissible position-fixed`;
-        toast.style.cssText = "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
+        toast.style.cssText =
+            "top: 20px; right: 20px; z-index: 1050; min-width: 300px;";
 
         const messageSpan = document.createElement("span");
         messageSpan.textContent = message;

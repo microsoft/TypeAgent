@@ -33,7 +33,9 @@
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
         font-size: 14px;
         line-height: 1.5;
         color: var(--dark-color);
@@ -46,7 +48,7 @@
       /* Application Shell Layout */
       .app-shell {
         display: grid;
-        grid-template-areas: 
+        grid-template-areas:
           "topnav topnav"
           "sidebar main";
         grid-template-columns: var(--sidebar-width) 1fr;
@@ -501,8 +503,12 @@
       }
 
       @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
       }
 
       /* Responsive Design */
@@ -515,7 +521,7 @@
 
       @media (max-width: 992px) {
         .app-shell {
-          grid-template-areas: 
+          grid-template-areas:
             "topnav"
             "main";
           grid-template-columns: 1fr;
@@ -572,30 +578,50 @@
       }
 
       /* Utility Classes */
-      .text-primary { color: var(--primary-color) !important; }
-      .text-secondary { color: var(--secondary-color) !important; }
-      .text-success { color: var(--success-color) !important; }
-      .text-danger { color: var(--danger-color) !important; }
-      .text-warning { color: var(--warning-color) !important; }
-      .text-info { color: var(--info-color) !important; }
+      .text-primary {
+        color: var(--primary-color) !important;
+      }
+      .text-secondary {
+        color: var(--secondary-color) !important;
+      }
+      .text-success {
+        color: var(--success-color) !important;
+      }
+      .text-danger {
+        color: var(--danger-color) !important;
+      }
+      .text-warning {
+        color: var(--warning-color) !important;
+      }
+      .text-info {
+        color: var(--info-color) !important;
+      }
 
-      .d-none { display: none !important; }
-      .d-block { display: block !important; }
-      .d-flex { display: flex !important; }
-      .d-grid { display: grid !important; }
+      .d-none {
+        display: none !important;
+      }
+      .d-block {
+        display: block !important;
+      }
+      .d-flex {
+        display: flex !important;
+      }
+      .d-grid {
+        display: grid !important;
+      }
 
       .fade-in {
         animation: fadeIn 0.3s ease-out;
       }
 
       @keyframes fadeIn {
-        from { 
-          opacity: 0; 
-          transform: translateY(8px); 
+        from {
+          opacity: 0;
+          transform: translateY(8px);
         }
-        to { 
-          opacity: 1; 
-          transform: translateY(0); 
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
       }
     </style>
@@ -608,7 +634,7 @@
           <i class="bi bi-collection-fill"></i>
           Action Index
         </div>
-        
+
         <div class="search-container">
           <input
             type="text"
@@ -628,8 +654,12 @@
               <i class="bi bi-list"></i>
             </button>
           </div>
-          
-          <button id="refreshActionsBtn" class="btn btn-outline-secondary btn-sm" title="Refresh actions">
+
+          <button
+            id="refreshActionsBtn"
+            class="btn btn-outline-secondary btn-sm"
+            title="Refresh actions"
+          >
             <i class="bi bi-arrow-clockwise"></i>
           </button>
         </div>
@@ -659,7 +689,7 @@
         <!-- Filters -->
         <div class="filter-section">
           <h6>Filters</h6>
-          
+
           <div class="filter-group">
             <label for="authorFilter">Author</label>
             <select id="authorFilter" class="filter-select">
@@ -725,7 +755,11 @@
               <button id="deselectAllBtn" title="Deselect all actions">
                 <i class="bi bi-square"></i> Deselect All
               </button>
-              <button id="bulkDeleteBtn" class="btn-danger" title="Delete selected actions">
+              <button
+                id="bulkDeleteBtn"
+                class="btn-danger"
+                title="Delete selected actions"
+              >
                 <i class="bi bi-trash"></i> Delete Selected
               </button>
             </div>
@@ -749,14 +783,26 @@
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title" id="actionDetailsModalTitle">Action Details</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <h5 class="modal-title" id="actionDetailsModalTitle">
+              Action Details
+            </h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
           </div>
           <div class="modal-body" id="actionDetailsModalBody">
             <!-- Action details will be populated here -->
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Close
+            </button>
           </div>
         </div>
       </div>
