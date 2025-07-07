@@ -103,13 +103,13 @@ async def test_fuzzy_lookup(
     for key in sample_embeddings:
         await vector_base.add_key(key)
 
-    results = await vector_base.fuzzy_lookup("word1", max_hits=2)
+    results = await vector_base.fuzzy_lookup("word1", max_hits=2, min_score=0.0)
     assert len(results) == 2
     assert results[0].item == 0
     assert results[0].score > 0.9  # High similarity score for the same word
 
 
-def test_clear(vector_base: VectorBase, sample_embeddings: Samples, needs_auth):
+def test_clear(vector_base: VectorBase, sample_embeddings: Samples):
     """Test clearing the VectorBase."""
     for key, embedding in sample_embeddings.items():
         vector_base.add_embedding(key, embedding)
