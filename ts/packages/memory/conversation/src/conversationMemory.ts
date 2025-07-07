@@ -15,7 +15,7 @@ import {
     Message,
     MessageMetadata,
 } from "./memory.js";
-const debugLogger = registerDebug("conversation-memory.podcast");
+const debugLogger = registerDebug("conversation-memory.conversation");
 
 export class ConversationMessageMeta extends MessageMetadata {
     constructor(
@@ -202,7 +202,7 @@ export class ConversationMemory
 
     public queueAddMessage(
         message: ConversationMessage,
-        completionCallback: ConversationTaskCallback,
+        completionCallback?: ConversationTaskCallback,
     ): void {
         this.updatesTaskQueue.push({
             type: "addMessage",

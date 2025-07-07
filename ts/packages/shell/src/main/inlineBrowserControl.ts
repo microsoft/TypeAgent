@@ -29,9 +29,10 @@ export function createInlineBrowserControl(
             return shellWindow.openInlineBrowser(new URL(url));
         },
         async closeWebPage() {
-            shellWindow.closeInlineBrowser();
+            if (!shellWindow.closeInlineBrowser()) {
+                throw new Error("No inline browser is currently open.");
+            }
         },
-
         async goForward() {
             const navigateHistory =
                 shellWindow.inlineBrowser.webContents.navigationHistory;
@@ -114,6 +115,11 @@ export function createInlineBrowserControl(
                 await shellWindow.openInlineBrowser(new URL(url));
             }
             return url;
+        },
+        async closeWindow() {
+            throw new Error(
+                "Closing the inline browser window is not supported.",
+            );
         },
     };
 }

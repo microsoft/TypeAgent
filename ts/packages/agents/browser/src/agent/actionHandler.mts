@@ -47,6 +47,7 @@ import registerDebug from "debug";
 
 // import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import { handleInstacartAction } from "./instacart/planHandler.mjs";
+import { handleKnowledgeAction } from "./knowledge/knowledgeHandler.mjs";
 
 import {
     loadAllowDynamicAgentDomains,
@@ -69,9 +70,11 @@ import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs"
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import { BrowserControl } from "../common/browserControl.mjs";
 import * as website from "website-memory";
-import { openai, TextEmbeddingModel } from "aiclient";
+import { openai, TextEmbeddingModel, wikipedia } from "aiclient";
 import { urlResolver, bingWithGrounding } from "azure-ai-foundry";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
+import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
+import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -92,6 +95,7 @@ export type BrowserActionContext = {
     useExternalBrowserControl: boolean;
     webSocket?: WebSocket | undefined;
     webAgentChannels?: WebAgentChannels | undefined;
+    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
     crossWordState?: Crossword | undefined;
     browserConnector?: BrowserConnector | undefined;
     browserProcess?: ChildProcess | undefined;
@@ -266,6 +270,10 @@ async function updateBrowserContext(
                             );
                             break;
                         }
+                        case "removeCrosswordPageCache": {
+                            await deleteCachedSchema(context, data.params.url);
+                            break;
+                        }
                         case "addTabIdToIndex":
                         case "deleteTabIdFromIndex":
                         case "getTabIdFromIndex":
@@ -299,6 +307,30 @@ async function updateBrowserContext(
                                     result: discoveryResult.data,
                                 }),
                             );
+                            break;
+                        }
+
+                        // NEW: Knowledge extraction actions
+                        case "extractKnowledgeFromPage":
+                        case "indexWebPageContent":
+                        case "queryWebKnowledge":
+                        case "checkPageIndexStatus":
+                        case "getKnowledgeIndexStats":
+                        case "clearKnowledgeIndex":
+                        case "exportKnowledgeData": {
+                            const knowledgeResult = await handleKnowledgeAction(
+                                data.method,
+                                data.params,
+                                context,
+                            );
+
+                            webSocket.send(
+                                JSON.stringify({
+                                    id: data.id,
+                                    result: knowledgeResult,
+                                }),
+                            );
+                            break;
                         }
                     }
                 }
@@ -404,6 +436,12 @@ async function resolveWebPage(
                 return historyUrl;
             }
 
+            const wikiPediaUrl = await urlResolver.resolveURLWithWikipedia(site, wikipedia.apiSettingsFromEnv());
+            if (wikiPediaUrl) {
+                debug(`Resolved URL using Wikipedia: ${wikiPediaUrl}`);
+                return wikiPediaUrl;
+            }
+
             // try to resolve URL using LLM + internet search
             const url = await urlResolver.resolveURLWithSearch(
                 site,
@@ -411,6 +449,7 @@ async function resolveWebPage(
             );
 
             if (url) {
+                debug(`Resolved URL using Bing with Grounding: ${url}`);
                 return url;
             }
 
@@ -500,75 +539,86 @@ async function executeBrowserAction(
 
     context: ActionContext<BrowserActionContext>,
 ) {
-    if (action.schemaName === "browser") {
-        switch (action.actionName) {
-            case "openWebPage":
-                return openWebPage(context, action);
-            case "closeWebPage":
-                return closeWebPage(context);
-            case "importWebsiteData":
-                return importWebsiteData(context, action);
-            case "searchWebsites":
-                return searchWebsites(context, action);
-            case "getWebsiteStats":
-                return getWebsiteStats(context, action);
-            case "goForward":
-                await getActionBrowserControl(context).goForward();
-                return;
-            case "goBack":
-                await getActionBrowserControl(context).goBack();
-                return;
-            case "reloadPage":
-                // REVIEW: do we need to clear page schema?
-                await getActionBrowserControl(context).reload();
-                return;
-            case "scrollUp":
-                await getActionBrowserControl(context).scrollUp();
-                return;
-            case "scrollDown":
-                await getActionBrowserControl(context).scrollDown();
-                return;
-            case "zoomIn":
-                await getActionBrowserControl(context).zoomIn();
-                return;
-            case "zoomOut":
-                await getActionBrowserControl(context).zoomOut();
-                return;
-            case "zoomReset":
-                await getActionBrowserControl(context).zoomReset();
-                return;
-            case "followLinkByText": {
-                const control = getActionBrowserControl(context);
-                const { keywords, openInNewTab } = action.parameters;
-                const url = await control.followLinkByText(
-                    keywords,
-                    openInNewTab,
-                );
-                if (!url) {
-                    throw new Error(`No link found for '${keywords}'`);
-                }
+    switch (action.schemaName) {
+        case "browser":
+            switch (action.actionName) {
+                case "openWebPage":
+                    return openWebPage(context, action);
+                case "closeWebPage":
+                    return closeWebPage(context);
+                case "importWebsiteData":
+                    return importWebsiteData(context, action);
+                case "searchWebsites":
+                    return searchWebsites(context, action);
+                case "getWebsiteStats":
+                    return getWebsiteStats(context, action);
+                case "goForward":
+                    await getActionBrowserControl(context).goForward();
+                    return;
+                case "goBack":
+                    await getActionBrowserControl(context).goBack();
+                    return;
+                case "reloadPage":
+                    // REVIEW: do we need to clear page schema?
+                    await getActionBrowserControl(context).reload();
+                    return;
+                case "scrollUp":
+                    await getActionBrowserControl(context).scrollUp();
+                    return;
+                case "scrollDown":
+                    await getActionBrowserControl(context).scrollDown();
+                    return;
+                case "zoomIn":
+                    await getActionBrowserControl(context).zoomIn();
+                    return;
+                case "zoomOut":
+                    await getActionBrowserControl(context).zoomOut();
+                    return;
+                case "zoomReset":
+                    await getActionBrowserControl(context).zoomReset();
+                    return;
+                case "followLinkByText": {
+                    const control = getActionBrowserControl(context);
+                    const { keywords, openInNewTab } = action.parameters;
+                    const url = await control.followLinkByText(
+                        keywords,
+                        openInNewTab,
+                    );
+                    if (!url) {
+                        throw new Error(`No link found for '${keywords}'`);
+                    }
 
-                return createActionResultFromMarkdownDisplay(
-                    `Navigated to link for [${keywords}](${url})`,
-                    `Navigated to link for '${keywords}'`,
-                );
-            }
-            case "followLinkByPosition":
-                const control = getActionBrowserControl(context);
-                const url = await control.followLinkByPosition(
-                    action.parameters.position,
-                    action.parameters.openInNewTab,
-                );
-                if (!url) {
-                    throw new Error(
-                        `No link found at position ${action.parameters.position}`,
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to link for [${keywords}](${url})`,
+                        `Navigated to link for '${keywords}'`,
                     );
                 }
-                return createActionResultFromMarkdownDisplay(
-                    `Navigated to [link](${url}) at position ${action.parameters.position}`,
-                    `Navigated to link at position ${action.parameters.position}`,
-                );
-        }
+                case "followLinkByPosition":
+                    const control = getActionBrowserControl(context);
+                    const url = await control.followLinkByPosition(
+                        action.parameters.position,
+                        action.parameters.openInNewTab,
+                    );
+                    if (!url) {
+                        throw new Error(
+                            `No link found at position ${action.parameters.position}`,
+                        );
+                    }
+                    return createActionResultFromMarkdownDisplay(
+                        `Navigated to [link](${url}) at position ${action.parameters.position}`,
+                        `Navigated to link at position ${action.parameters.position}`,
+                    );
+            }
+            break;
+        case "browser.external":
+            switch (action.actionName) {
+                case "closeWindow": {
+                    const control = getActionBrowserControl(context);
+                    await control.closeWindow();
+                    return;
+                }
+            }
+            break;
     }
     const webSocketEndpoint = context.sessionContext.agentContext.webSocket;
     const connector = context.sessionContext.agentContext.browserConnector;
@@ -889,7 +939,7 @@ export const handlers: CommandHandlerTable = {
                 close: new CloseBrowserHandler(),
             },
         },
-
+        crossword: getCrosswordCommandHandlerTable(),
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
         external: {
@@ -909,6 +959,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = true;
+                        await context.queueToggleTransientAgent(
+                            "browser.external",
+                            true,
+                        );
                         displaySuccess(
                             "Using external browser control.",
                             context,
@@ -928,6 +982,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
                         agentContext.useExternalBrowserControl = false;
+                        await context.queueToggleTransientAgent(
+                            "browser.external",
+                            false,
+                        );
                         displaySuccess("Use client browser control.", context);
                     },
                 },

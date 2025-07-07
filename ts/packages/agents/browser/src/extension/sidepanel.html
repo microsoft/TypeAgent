@@ -6,7 +6,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Schema Inspector</title>
+    <title>Action Discovery Panel</title>
     <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="vendor/prism/prism.css" />
     <link
@@ -15,281 +15,420 @@
     />
     <style>
       body {
-        font-family: Arial, sans-serif;
-        padding: 10px;
+        font-size: 0.875rem;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
       }
+
+      .container-fluid {
+        padding: 0.75rem;
+      }
+
+      /* Header styling aligned with knowledge panel */
+      .action-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        margin: -0.75rem -0.75rem 1rem -0.75rem;
+        border-radius: 0;
+      }
+
+      .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+      }
+
+      .status-connected {
+        background-color: #28a745;
+      }
+
+      .status-recording {
+        background-color: #dc3545;
+        animation: pulse 1.5s infinite;
+      }
+
+      .status-idle {
+        background-color: #6c757d;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      /* Card styling aligned with knowledge panel */
+      .action-card {
+        border: none;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1rem;
+        border-radius: 0.5rem;
+      }
+
+      .action-card .card-header {
+        /* background-color: #fff;
+        border-bottom: 1px solid #e9ecef; */
+        font-weight: 600;
+      }
+
+      /* Action item styling */
+      .action-item {
+        /* border-left: 3px solid #667eea; */
+        background-color: #f8f9fa;
+        margin-bottom: 0.5rem;
+        padding: 0.75rem;
+        border-radius: 0.25rem;
+        transition: all 0.2s ease;
+      }
+
+      .action-item:hover {
+        background-color: #e9ecef;
+        transform: translateX(2px);
+      }
+
+      .action-badge {
+        font-size: 0.75rem;
+        margin-right: 0.25rem;
+      }
+
+      /* Recording state styling */
+      .recording-active {
+        border-left-color: #dc3545 !important;
+        background-color: #fff5f5 !important;
+      }
+
+      /* Button group improvements */
+      .action-controls {
+        gap: 0.5rem;
+      }
+
+      /* Form improvements */
+      .action-form {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 0.5rem;
+        padding: 1rem;
+      }
+
+      /* Auto-discovery toggle */
+      .auto-discovery-toggle {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+      }
+
+      /* Timeline improvements */
+      .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        padding-bottom: 1rem;
+        border-left: 2px solid #667eea;
+      }
+
+      .timeline-item::before {
+        content: "";
+        position: absolute;
+        left: -6px;
+        top: 0.5rem;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: #667eea;
+        border: 2px solid white;
+        box-shadow: 0 0 0 2px #667eea;
+      }
+
+      .timeline-item:last-child {
+        border-left-color: transparent;
+      }
+
+      /* Loading states */
+      .loading-shimmer {
+        background: linear-gradient(
+          90deg,
+          #f0f0f0 25%,
+          #e0e0e0 50%,
+          #f0f0f0 75%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+      }
+
+      @keyframes shimmer {
+        0% {
+          background-position: -200% 0;
+        }
+        100% {
+          background-position: 200% 0;
+        }
+      }
+
+      /* Stats styling */
+      .stats-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        text-align: center;
+      }
+
+      .stat-item {
+        padding: 0.75rem;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 0.375rem;
+      }
+
+      .stat-number {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #667eea;
+      }
+
+      .stat-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+      }
+
+      /* Code blocks */
       pre {
         background: #f8f8f8;
         padding: 10px;
         border-radius: 5px;
         overflow: auto;
-      }
-      .hidden {
-        display: none;
-      }
-      .timeline {
-        position: relative;
-        max-width: 500px;
-        margin: 20px auto;
-      }
-      .timeline-card {
-        margin-bottom: 15px;
-      }
-      .timestamp {
-        font-size: 12px;
-        color: #666;
-      }
-
-      .tab-container {
-        position: relative;
-      }
-
-      #processAction {
-        position: absolute;
-        right: 0px;
-        top: 5px;
-      }
-
-      .toggle-button {
-        width: 50px;
-      }
-      .list-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px 15px;
-      }
-
-      /* Timeline styling*/
-      .timeline {
-        border-left: 3px solid #727cf5;
-        border-bottom-right-radius: 4px;
-        border-top-right-radius: 4px;
-        background: rgba(114, 124, 245, 0.09);
-        margin: 0 auto;
-        letter-spacing: 0.2px;
-        position: relative;
-        line-height: 1.4em;
-        font-size: 1.03em;
-        padding: 50px;
-        list-style: none;
-        text-align: left;
-        max-width: 40%;
-      }
-
-      @media (max-width: 767px) {
-        .timeline {
-          max-width: 98%;
-          padding: 25px;
-        }
-      }
-
-      .timeline h1 {
-        font-weight: 300;
-        font-size: 1.4em;
-      }
-
-      .timeline h2,
-      .timeline h3 {
-        font-weight: 600;
-        font-size: 1rem;
-        margin-bottom: 10px;
-      }
-
-      .timeline .event {
-        border-bottom: 1px dashed #e8ebf1;
-        padding-bottom: 25px;
-        margin-bottom: 25px;
-        position: relative;
-      }
-
-      @media (max-width: 767px) {
-        .timeline .event {
-          padding-top: 30px;
-        }
-      }
-
-      .timeline .event:last-of-type {
-        padding-bottom: 0;
-        margin-bottom: 0;
-        border: none;
-      }
-
-      .timeline .event:before,
-      .timeline .event:after {
-        position: absolute;
-        display: block;
-        top: 0;
-      }
-
-      .timeline .event:before {
-        left: -207px;
-        content: attr(data-date);
-        text-align: right;
-        font-weight: 100;
-        font-size: 0.9em;
-        min-width: 120px;
-      }
-
-      @media (max-width: 767px) {
-        .timeline .event:before {
-          left: 0px;
-          text-align: left;
-        }
-      }
-
-      .timeline .event:after {
-        -webkit-box-shadow: 0 0 0 3px #727cf5;
-        box-shadow: 0 0 0 3px #727cf5;
-        left: -55.8px;
-        background: #fff;
-        border-radius: 50%;
-        height: 9px;
-        width: 9px;
-        content: "";
-        top: 5px;
-      }
-
-      @media (max-width: 767px) {
-        .timeline .event:after {
-          left: -31.8px;
-        }
-      }
-
-      .rtl .timeline {
-        border-left: 0;
-        text-align: right;
-        border-bottom-right-radius: 0;
-        border-top-right-radius: 0;
-        border-bottom-left-radius: 4px;
-        border-top-left-radius: 4px;
-        border-right: 3px solid #727cf5;
-      }
-
-      .rtl .timeline .event::before {
-        left: 0;
-        right: -170px;
-      }
-
-      .rtl .timeline .event::after {
-        left: 0;
-        right: -55.8px;
+        font-size: 0.8rem;
       }
 
       :not(pre) > code[class*="language-"],
       pre[class*="language-"] {
         background: #f8f7f7;
       }
+
+      /* Responsive adjustments */
+      @media (max-width: 768px) {
+        .container-fluid {
+          padding: 0.5rem;
+        }
+
+        .action-header {
+          margin: -0.5rem -0.5rem 1rem -0.5rem;
+        }
+
+        .stats-container {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
-  <body class="container">
-    <div class="mt-4"></div>
-    <div class="d-flex justify-content-between align-items-center mt-3">
-      <h3>Detected Actions</h3>
-      <button
-        id="refreshDetectedActions"
-        class="btn btn-outline-secondary btn-sm"
-      >
-        <i class="bi bi-arrow-clockwise"></i>
-      </button>
-    </div>
-    <div class="card">
-      <ul class="list-group list-group-flush" id="detectedSchemaItemsList"></ul>
-    </div>
-
-    <!-- User Defined Actions -->
-    <div id="userActionsContainer" class="mt-4">
-      <h3>User-Defined Actions</h3>
-      <!-- Timeline -->
-      <div id="userActionsListContainer" class="mt-3 accordion"></div>
-
-      <div id="screenshotContainer"></div>
-
-      <div class="d-flex gap-2 mt-3">
-        <button
-          id="addPageAction"
-          class="btn btn-sm btn-outline-primary"
-          title="Add Page Action"
-        >
-          <i class="bi bi-plus-circle"></i> Add
-        </button>
-        <button
-          id="clearRecordedActions"
-          class="btn btn-sm btn-outline-secondary"
-          title="Clear Actions"
-        >
-          <i class="bi bi-trash"></i> Clear
-        </button>
+  <body>
+    <div class="container-fluid p-3">
+      <!-- Header Section -->
+      <div class="action-header rounded">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h4 class="mb-1">Action Discovery</h4>
+            <small id="connectionStatus">
+              <span class="status-indicator status-connected"></span>
+              Ready to discover actions
+            </small>
+          </div>
+          <div class="auto-discovery-toggle">
+            <div class="form-check form-switch">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                id="autoDiscoveryToggle"
+              />
+              <label
+                class="form-check-label text-white"
+                for="autoDiscoveryToggle"
+              >
+                Auto-scan
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- Action Form -->
-    <div id="actionForm" class="hidden">
-      <div class="card">
+      <!-- Detected Actions Section -->
+      <div class="action-card card">
+        <div
+          class="card-header d-flex justify-content-between align-items-center"
+        >
+          <h6 class="mb-0">
+            <i class="bi bi-search"></i> Detected Actions
+            <span id="detectedActionsCount" class="badge bg-secondary ms-2"
+              >0</span
+            >
+          </h6>
+          <button
+            id="refreshDetectedActions"
+            class="btn btn-primary btn-sm"
+            title="Refresh detected actions"
+          >
+            <i class="bi bi-arrow-clockwise"></i> Scan
+          </button>
+        </div>
         <div class="card-body">
-          <div class="mb-3">
-            <label class="form-label">Name:</label>
-            <input type="text" id="actionName" class="form-control" required />
+          <div id="detectedActionsContainer">
+            <div id="detectedSchemaItemsList">
+              <div class="text-center text-muted">
+                <i class="bi bi-hourglass-split"></i>
+                <p class="mb-0">
+                  Click "Scan" to discover actions on this page
+                </p>
+              </div>
+            </div>
           </div>
-          <div class="mb-3">
-            <label class="form-label hidden">Description:</label>
-            <textarea
-              id="actionDescription"
-              class="form-control hidden"
-              rows="5"
-              placeholder="What does this action do?"
-            ></textarea>
+        </div>
+      </div>
+
+      <!-- User-Defined Actions Section -->
+      <div class="action-card card">
+        <div
+          class="card-header d-flex justify-content-between align-items-center"
+        >
+          <h6 class="mb-0">
+            <i class="bi bi-person-gear"></i> Custom Actions
+            <span id="customActionsCount" class="badge bg-secondary ms-2"
+              >0</span
+            >
+          </h6>
+          <div class="btn-group btn-group-sm">
+            <button
+              id="addPageAction"
+              class="btn btn-primary"
+              title="Add new custom action"
+            >
+              <i class="bi bi-plus-circle"></i> Add
+            </button>
+            <button
+              id="clearRecordedActions"
+              class="btn btn-outline-secondary"
+              title="Clear all custom actions"
+            >
+              <i class="bi bi-trash"></i>
+            </button>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Details:</label>
-            <textarea
-              id="actionStepsDescription"
-              class="form-control"
-              rows="5"
-              placeholder="Describe how you would complete this action on the website."
-            ></textarea>
-            <div
-              id="stepsTimelineContainer"
-              class="mt-3 accordion hidden"
-            ></div>
+        </div>
+        <div class="card-body">
+          <div id="userActionsContainer">
+            <div id="userActionsListContainer">
+              <div class="text-center text-muted">
+                <i class="bi bi-info-circle"></i>
+                <p class="mb-0">No custom actions defined yet</p>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
 
-          <div class="d-flex justify-content-around my-2">
-            <button
-              id="recordAction"
-              class="btn btn-sm btn-outline-primary"
-              title="Record Action"
-            >
-              <i class="bi bi-record-circle"></i> Record steps
-            </button>
-            <button
-              id="stopRecording"
-              class="btn btn-sm btn-primary hidden"
-              title="Stop Recording"
-            >
-              <i class="bi bi-stop-circle"></i> Stop recording
-            </button>
+      <!-- Action Form (Hidden by default) -->
+      <div id="actionForm" class="d-none">
+        <div class="action-card card">
+          <div class="card-header">
+            <h6 class="mb-0">
+              <i class="bi bi-gear"></i>
+              <span id="formTitle">Create New Action</span>
+            </h6>
+          </div>
+          <div class="card-body action-form">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Action Name</label>
+              <input
+                type="text"
+                id="actionName"
+                class="form-control"
+                placeholder="Enter a descriptive name for this action"
+                required
+              />
+            </div>
 
-            <button
-              id="saveAction"
-              class="btn btn-sm btn-outline-primary"
-              title="Save action"
-            >
-              <i class="bi bi-floppy"></i> Save
-            </button>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Action Description</label>
+              <textarea
+                id="actionStepsDescription"
+                class="form-control"
+                rows="4"
+                placeholder="Describe how to complete this action step by step..."
+              ></textarea>
+            </div>
 
-            <button
-              id="cancelAddingAction"
-              class="btn btn-sm btn-outline-secondary hidden"
-              title="Cancel"
-            >
-              <i class="bi bi-x-circle"></i>
-            </button>
+            <div id="recordingSection" class="mb-3">
+              <label class="form-label fw-semibold">Record Steps</label>
+              <div class="d-flex action-controls align-items-center">
+                <button
+                  id="recordAction"
+                  class="btn btn-outline-danger"
+                  title="Start recording action steps"
+                >
+                  <i class="bi bi-record-circle"></i> Start Recording
+                </button>
+                <button
+                  id="stopRecording"
+                  class="btn btn-danger d-none"
+                  title="Stop recording"
+                >
+                  <i class="bi bi-stop-circle"></i> Stop Recording
+                </button>
+                <div id="recordingStatus" class="ms-3 text-muted d-none">
+                  <span class="status-indicator status-recording"></span>
+                  Recording in progress...
+                </div>
+              </div>
+            </div>
+
+            <div id="stepsTimelineContainer" class="mb-3 d-none">
+              <label class="form-label fw-semibold">Recorded Steps</label>
+              <div id="stepsTimeline" class="border rounded p-3 bg-white">
+                <!-- Timeline items will be populated here -->
+              </div>
+            </div>
+
+            <div class="d-flex action-controls justify-content-end">
+              <button
+                id="cancelAddingAction"
+                class="btn btn-outline-secondary"
+                title="Cancel and close form"
+              >
+                <i class="bi bi-x-circle"></i> Cancel
+              </button>
+              <button
+                id="saveAction"
+                class="btn btn-primary"
+                title="Save this action"
+              >
+                <i class="bi bi-floppy"></i> Save Action
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screenshot Container (Hidden by default) -->
+      <div id="screenshotContainer" class="d-none">
+        <div class="action-card card">
+          <div class="card-header">
+            <h6 class="mb-0"><i class="bi bi-camera"></i> Page Screenshot</h6>
+          </div>
+          <div class="card-body">
+            <div id="screenshotContent" class="text-center">
+              <!-- Screenshot will be displayed here -->
+            </div>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Scripts -->
     <script src="sidepanel.js"></script>
     <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
     <script src="vendor/prism/prism.js"></script>

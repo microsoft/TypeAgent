@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { removePageSchema } from "./storage";
 import { sendActionToAgent } from "./websocket";
 import { getWebSocket } from "./websocket";
 
@@ -46,16 +45,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        id: "extractSchemaCurrentPage",
-        title: "Get schema.org metadata from this page",
-        contexts: ["page"],
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        id: "extractSchemaLinkedPages",
-        title: "Get schema.org metadata from linked pages",
-        contexts: ["page"],
+        title: "Extract knowledge from page",
+        id: "extractKnowledgeFromPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 }
@@ -95,13 +86,30 @@ export async function handleContextMenuClick(
         }
         case "clearCrosswordPageCache": {
             // remove cached schema for current tab
-            if (tab.url) {
-                await removePageSchema(tab.url);
+            // trigger translator
+            const webSocket = getWebSocket();
+            if (
+                tab.url &&
+                webSocket &&
+                webSocket.readyState === WebSocket.OPEN
+            ) {
+                webSocket.send(
+                    JSON.stringify({
+                        method: "removeCrosswordPageCache",
+                        params: { url: tab.url },
+                    }),
+                );
             }
             break;
         }
         case "discoverPageSchema": {
             await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "sidepanel.html",
+                enabled: true,
+            });
             break;
         }
         case "sidepanel-registerAgent": {
@@ -111,24 +119,16 @@ export async function handleContextMenuClick(
             });
             break;
         }
-        case "extractSchemaCurrentPage": {
-            await chrome.tabs.sendMessage(
-                tab.id!,
-                {
-                    type: "extractSchemaCurrentPage",
-                },
-                { frameId: 0 },
-            );
-            break;
-        }
-        case "extractSchemaLinkedPages": {
-            await chrome.tabs.sendMessage(
-                tab.id!,
-                {
-                    type: "extractSchemaLinkedPages",
-                },
-                { frameId: 0 },
-            );
+
+        case "extractKnowledgeFromPage": {
+            await chrome.sidePanel.open({ tabId: tab.id! });
+
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "knowledgePanel.html",
+                enabled: true,
+            });
+
             break;
         }
     }

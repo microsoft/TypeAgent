@@ -2,25 +2,30 @@
 // Licensed under the MIT License.
 
 import {
+    arg,
     argBool,
     argNum,
     CommandHandler,
     CommandMetadata,
     parseNamedArguments,
+    parseTypedArguments,
 } from "interactive-app";
 import { KnowproContext } from "./knowproMemory.js";
 import { argDestFile, argSourceFile } from "../common.js";
 import * as kp from "knowpro";
 import * as kpTest from "knowpro-test";
+import * as cm from "conversation-memory";
 import {
     changeFileExt,
     getAbsolutePath,
+    htmlToMd,
     readAllText,
     simplifyHtml,
     simplifyText,
 } from "typeagent";
 import chalk from "chalk";
 import { openai } from "aiclient";
+import * as fs from "fs";
 
 /**
  * Test related commands
@@ -37,16 +42,72 @@ export async function createKnowproTestCommands(
     commands.kpTestVerifyAnswerBatch = verifyAnswerBatch;
     commands.kpTestHtml = testHtml;
     commands.kpTestHtmlText = testHtmlText;
+    commands.kpTestHtmlMd = testHtmlMd;
+    commands.kpTestHtmlParts = testHtmlParts;
+    commands.kpTestChoices = testMultipleChoice;
 
     async function testHtml(args: string[]) {
         const html = await readAllText(args[0]);
         const simpleHtml = simplifyHtml(html);
         context.printer.writeLine(simpleHtml);
     }
+
     async function testHtmlText(args: string[]) {
         const html = await readAllText(args[0]);
         const text = simplifyText(html);
         context.printer.writeLine(text);
+    }
+
+    function testHtmlMdDef(): CommandMetadata {
+        return {
+            description: "Html to MD",
+            args: {
+                filePath: arg("File path"),
+            },
+            options: {
+                rootTag: arg("Root tag", "body"),
+            },
+        };
+    }
+    commands.kpTestHtmlMd.metadata = testHtmlMdDef();
+    async function testHtmlMd(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testHtmlMdDef());
+        const filePath = namedArgs.filePath;
+        if (!filePath) {
+            return;
+        }
+        let html = await readAllText(filePath);
+        let md = htmlToMd(html, namedArgs.rootTag);
+        context.printer.writeLine(md);
+
+        const destPath = changeFileExt(filePath, ".md");
+        fs.writeFileSync(destPath, md);
+    }
+
+    function testHtmlPartsDef(): CommandMetadata {
+        return {
+            description: "Html to to DocParts",
+            args: {
+                filePath: arg("File path"),
+            },
+            options: {
+                rootTag: arg("Root tag", "body"),
+            },
+        };
+    }
+    commands.kpTestHtmlParts.metadata = testHtmlPartsDef();
+    async function testHtmlParts(args: string[]) {
+        const namedArgs = parseNamedArguments(args, testHtmlPartsDef());
+        const filePath = namedArgs.filePath;
+        if (!filePath) {
+            return;
+        }
+        let html = await readAllText(filePath);
+        let parts = cm.docPartsFromHtmlEx(html, namedArgs.rootTag);
+        for (const part of parts) {
+            context.printer.writeLine("----------------");
+            context.printer.writeDocPart(part);
+        }
     }
 
     function searchBatchDef(): CommandMetadata {
@@ -66,25 +127,33 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, searchBatchDef());
-        const destPath =
-            namedArgs.destPath ??
-            changeFileExt(namedArgs.srcPath, ".json", "_results");
-        const results = await kpTest.runSearchBatch(
-            context,
-            namedArgs.srcPath,
-            destPath,
-            (srResult, index, total) => {
-                if (srResult.success) {
-                    context.printer.writeProgress(index + 1, total);
-                    context.printer.writeLine(srResult.data.searchText);
-                } else {
-                    context.printer.writeError(srResult.message);
-                }
-            },
-        );
-        if (!results.success) {
-            context.printer.writeError(results.message);
+        try {
+            beginTestBatch();
+
+            const namedArgs = parseNamedArguments(args, searchBatchDef());
+            const destPath =
+                namedArgs.destPath ??
+                changeFileExt(namedArgs.srcPath, ".json", "_results");
+            const results = await kpTest.runSearchBatch(
+                context,
+                namedArgs.srcPath,
+                destPath,
+                (srResult, index, total) => {
+                    if (srResult.success) {
+                        context.printer.writeProgress(index + 1, total);
+                        context.printer.writeLine(
+                            srResult.data.cmd ?? srResult.data.searchText,
+                        );
+                    } else {
+                        context.printer.writeError(srResult.message);
+                    }
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+            }
+        } finally {
+            endTestBatch();
         }
     }
 
@@ -106,29 +175,34 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
+        try {
+            beginTestBatch();
 
-        const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
-        const srcPath = namedArgs.srcPath;
-        let errorCount = 0;
-        const results = await kpTest.verifyLangSearchResultsBatch(
-            context,
-            srcPath,
-            (result, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                if (result.success) {
-                    if (!writeSearchScore(result.data, namedArgs.verbose)) {
-                        errorCount++;
+            const namedArgs = parseNamedArguments(args, verifySearchBatchDef());
+            const srcPath = namedArgs.srcPath;
+            let errorCount = 0;
+            const results = await kpTest.verifyLangSearchResultsBatch(
+                context,
+                srcPath,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        if (!writeSearchScore(result.data, namedArgs.verbose)) {
+                            errorCount++;
+                        }
+                    } else {
+                        context.printer.writeError(result.message);
                     }
-                } else {
-                    context.printer.writeError(result.message);
-                }
-            },
-        );
-        if (!results.success) {
-            context.printer.writeError(results.message);
-        }
-        if (errorCount > 0) {
-            context.printer.writeLine(`${errorCount} errors`);
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+            }
+            if (errorCount > 0) {
+                context.printer.writeLine(`${errorCount} errors`);
+            }
+        } finally {
+            endTestBatch();
         }
     }
 
@@ -148,27 +222,36 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, answerBatchDef());
-        const srcPath = namedArgs.srcPath;
-        const destPath =
-            namedArgs.destPath ?? changeFileExt(srcPath, ".json", "_results");
-        await kpTest.runAnswerBatch(
-            context,
-            namedArgs.srcPath,
-            destPath,
-            (result, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                if (result.success) {
-                    context.printer.writeLine(result.data.question);
-                    context.printer.writeInColor(
-                        chalk.greenBright,
-                        result.data.answer,
-                    );
-                } else {
-                    context.printer.writeError(result.message);
-                }
-            },
-        );
+        try {
+            beginTestBatch();
+
+            const namedArgs = parseNamedArguments(args, answerBatchDef());
+            const srcPath = namedArgs.srcPath;
+            const destPath =
+                namedArgs.destPath ??
+                changeFileExt(srcPath, ".json", "_results");
+            await kpTest.runAnswerBatch(
+                context,
+                namedArgs.srcPath,
+                destPath,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        context.printer.writeLine(
+                            result.data.cmd ?? result.data.question,
+                        );
+                        context.printer.writeInColor(
+                            chalk.greenBright,
+                            result.data.answer,
+                        );
+                    } else {
+                        context.printer.writeError(result.message);
+                    }
+                },
+            );
+        } finally {
+            endTestBatch();
+        }
     }
 
     function verifyAnswerBatchDef(): CommandMetadata {
@@ -191,30 +274,36 @@ export async function createKnowproTestCommands(
         if (!ensureConversationLoaded()) {
             return;
         }
-        const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
-        const minSimilarity = namedArgs.similarity;
-        const srcPath = namedArgs.srcPath;
+        try {
+            beginTestBatch();
 
-        const model = openai.createEmbeddingModel();
-        const results = await kpTest.verifyQuestionAnswerBatch(
-            context,
-            srcPath,
-            model,
-            (result, index, total) => {
-                context.printer.writeProgress(index + 1, total);
-                if (result.success) {
-                    writeAnswerScore(
-                        result.data,
-                        minSimilarity,
-                        namedArgs.verbose,
-                    );
-                } else {
-                    context.printer.writeError(result.message);
-                }
-            },
-        );
-        if (!results.success) {
-            context.printer.writeError(results.message);
+            const namedArgs = parseNamedArguments(args, verifyAnswerBatchDef());
+            const minSimilarity = namedArgs.similarity;
+            const srcPath = namedArgs.srcPath;
+
+            const model = openai.createEmbeddingModel();
+            const results = await kpTest.verifyQuestionAnswerBatch(
+                context,
+                srcPath,
+                model,
+                (result, index, total) => {
+                    context.printer.writeProgress(index + 1, total);
+                    if (result.success) {
+                        writeAnswerScore(
+                            result.data,
+                            minSimilarity,
+                            namedArgs.verbose,
+                        );
+                    } else {
+                        context.printer.writeError(result.message);
+                    }
+                },
+            );
+            if (!results.success) {
+                context.printer.writeError(results.message);
+            }
+        } finally {
+            endTestBatch();
         }
     }
 
@@ -246,6 +335,57 @@ export async function createKnowproTestCommands(
                 conversation.secondaryIndexes = undefined;
             }
             context.conversation = conversation;
+        }
+    }
+
+    async function testMultipleChoice(args: string[]) {
+        const namedArgs = parseNamedArguments(
+            args,
+            kpTest.getAnswerRequestDef(),
+        );
+        if (!namedArgs.choices) {
+            context.printer.writeError("No choices provided");
+            return;
+        }
+        const choices: string[] = namedArgs.choices?.split(";");
+        if (!choices || choices.length === 0) {
+            context.printer.writeError("No choices provided");
+            return;
+        }
+
+        const searchResponse = await kpTest.execSearchRequest(
+            context,
+            namedArgs,
+        );
+        const searchResults = searchResponse.searchResults;
+        if (!searchResults.success) {
+            context.printer.writeError(searchResults.message);
+            return;
+        }
+        const getAnswerRequest = parseTypedArguments<kpTest.GetAnswerRequest>(
+            args,
+            kpTest.getAnswerRequestDef(),
+        );
+        let response = await kp.generateMultipleChoiceAnswer(
+            context.conversation!,
+            context.answerGenerator,
+            getAnswerRequest.query,
+            choices,
+            searchResults.data,
+        );
+        if (!response.success) {
+            context.printer.writeError(response.message);
+            response = await kp.generateAnswer(
+                context.conversation!,
+                context.answerGenerator,
+                getAnswerRequest.query,
+                searchResults.data,
+            );
+            if (response.success) {
+                context.printer.writeAnswer(response.data);
+            }
+        } else {
+            context.printer.writeAnswer(response.data);
         }
     }
 
@@ -309,5 +449,11 @@ export async function createKnowproTestCommands(
         }
     }
 
+    function beginTestBatch() {
+        context.retryNoAnswer = true;
+    }
+    function endTestBatch() {
+        context.retryNoAnswer = false;
+    }
     return;
 }

@@ -12,6 +12,7 @@ import {
     ToolUtility,
 } from "@azure/ai-agents";
 import registerDebug from "debug";
+import { wikipedia } from "aiclient";
 
 const debug = registerDebug("typeagent:aiClient:urlResolver");
 
@@ -148,7 +149,7 @@ export async function resolveURLWithSearch(
     return retVal;
 }
 
-/*
+/**
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
 async function ensureResolverAgent(
@@ -188,7 +189,7 @@ interface Response {
     );
 }
 
-/*
+/**
  * Attempts to retrive the URL resolution agent from the AI project and creates it if necessary
  */
 async function ensureValidatorAgent(
@@ -385,4 +386,42 @@ export async function validateURL(
     }
 
     return undefined;
+}
+
+/**
+ * Attempts to resolve a website by looking at wikipedia entries and then determining the correct URL from it
+ */
+export async function resolveURLWithWikipedia(
+    site: string,
+    wikipediaConfig: wikipedia.WikipediaApiSettings,
+): Promise<string | undefined>{
+    // TODO: implement
+    console.log(`${site} ${wikipediaConfig}`);
+
+    // TODO: refresh token
+    const languageCode = Intl.DateTimeFormat().resolvedOptions().locale.split("-")[0];
+    const searchQuery = `${site}`;
+    const numberOfResults = 1;
+    const headers = {
+        'Authorization': `Bearer ${wikipediaConfig.accessToken}`,
+    };
+
+    const baseUrl = `${wikipediaConfig.endpoint}`;
+    const search_endpoint = '/search/page';
+    const url = `${baseUrl}${languageCode}${search_endpoint}`;
+    const parameters = new URLSearchParams({ q: searchQuery, limit: numberOfResults.toString() });
+
+    let retVal = undefined
+    await fetch(`${url}?${parameters}`, { headers })
+    .then(response => response.json())
+    .then(data => {
+        retVal = data;
+        console.log(data);
+    })
+    .catch(error => {
+        console.error('Error fetching data:', error);
+    });
+
+
+    return retVal;
 }

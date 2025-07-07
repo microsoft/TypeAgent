@@ -18,13 +18,17 @@ import {
     WebAgentDisconnectMessage,
 } from "./types";
 import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:serviceWorker");
+const debugError = registerDebug("typeagent:browser:serviceWorker:error");
+
 const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
 /**
  * Initializes the service worker
  */
 export async function initialize(): Promise<void> {
-    console.log("Browser Agent Service Worker initializing");
+    debug("Browser Agent Service Worker initializing");
 
     try {
         const connected = await ensureWebsocketConnected();
@@ -33,7 +37,7 @@ export async function initialize(): Promise<void> {
             showBadgeError();
         }
     } catch (error) {
-        console.error("Error during initialization:", error);
+        debugError("Error during initialization:", error);
         reconnectWebSocket();
         showBadgeError();
     }
@@ -311,7 +315,18 @@ async function sendActionToTabIndex(action: any): Promise<string | undefined> {
             );
 
             const handler = async (event: MessageEvent) => {
-                const text = await (event.data as Blob).text();
+                let text: string;
+                if (typeof event.data === "string") {
+                    text = event.data;
+                } else if (event.data instanceof Blob) {
+                    text = await event.data.text();
+                } else if (event.data instanceof ArrayBuffer) {
+                    text = new TextDecoder().decode(event.data);
+                } else {
+                    console.warn("Unknown message type:", typeof event.data);
+                    return;
+                }
+
                 const data = JSON.parse(text);
                 if (data.id == callId && data.result) {
                     webSocket.removeEventListener("message", handler);

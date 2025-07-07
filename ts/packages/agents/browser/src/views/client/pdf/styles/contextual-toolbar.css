@@ -1,0 +1,435 @@
+/* Contextual Toolbar Styles */
+
+.contextual-toolbar {
+  position: fixed;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.9);
+  transition: all 0.2s ease;
+  pointer-events: none;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  display: none;
+}
+
+.contextual-toolbar.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: scale(1);
+  pointer-events: auto;
+  display: block;
+}
+
+.toolbar-content {
+  background: rgba(42, 42, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 4px;
+}
+
+.toolbar-action {
+  background: transparent;
+  color: #e8eaed;
+  border: none;
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.15s ease;
+  min-width: 32px;
+  min-height: 32px;
+  position: relative;
+}
+
+.toolbar-action:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.toolbar-action:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.toolbar-action i {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Vertical separator between toolbar actions */
+.toolbar-separator {
+  width: 1px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* Highlight dropdown styles */
+.toolbar-action-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.highlight-action {
+  position: relative;
+  gap: 4px;
+}
+
+.highlight-action .dropdown-arrow {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.color-dropdown {
+  position: fixed;
+  background: rgba(42, 42, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px;
+  display: none;
+  flex-wrap: wrap;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10001;
+  width: 124px;
+}
+
+.color-option {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%; /* Make them perfect circles */
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.15s ease;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.color-option:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+  transform: scale(1.5); /* Scale up more since they're smaller */
+  border-width: 2px;
+}
+
+.color-option:active {
+  transform: scale(1.2);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .toolbar-content {
+    padding: 2px;
+  }
+
+  .toolbar-action {
+    padding: 6px;
+    min-width: 28px;
+    min-height: 28px;
+  }
+
+  .toolbar-action i {
+    font-size: 12px;
+  }
+
+  .toolbar-separator {
+    height: 20px;
+    margin: 0 2px;
+  }
+}
+
+/* Animation for toolbar appearance */
+@keyframes toolbarSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.contextual-toolbar.visible {
+  animation: toolbarSlideIn 0.2s ease-out;
+}
+
+/* Focus styles for accessibility */
+.toolbar-action:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.5);
+}
+
+/* Disabled state */
+.toolbar-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.toolbar-action:disabled:hover {
+  background: transparent;
+  color: #e8eaed;
+}
+color: #5f6368;
+
+.editor-help {
+  margin-top: 8px;
+}
+
+.editor-help details {
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
+.editor-help summary {
+  cursor: pointer;
+  padding: 4px 0;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.editor-help summary:hover {
+  color: #c9d1d9;
+}
+
+.markdown-help-content {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  line-height: 1.4;
+}
+
+.markdown-help-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 11px;
+}
+
+.note-preview-content {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 12px;
+  color: #c9d1d9;
+  line-height: 1.6;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.note-preview-content h1,
+.note-preview-content h2,
+.note-preview-content h3 {
+  color: #e8eaed;
+  margin: 0 0 8px 0;
+}
+
+.note-preview-content h1 {
+  font-size: 20px;
+}
+.note-preview-content h2 {
+  font-size: 18px;
+}
+.note-preview-content h3 {
+  font-size: 16px;
+}
+
+.note-preview-content strong {
+  color: #e8eaed;
+  font-weight: 600;
+}
+
+.note-preview-content code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  font-size: 13px;
+}
+
+.note-preview-content ul {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.note-preview-content li {
+  margin: 4px 0;
+}
+
+.note-preview-content a {
+  color: #8ab4f8;
+  text-decoration: none;
+}
+
+.note-preview-content a:hover {
+  text-decoration: underline;
+}
+
+.note-editor-footer {
+  background: rgba(255, 255, 255, 0.05);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-actions-left,
+.editor-actions-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.preview-toggle-button,
+.cancel-button,
+.save-button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e8eaed;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-toggle-button:hover,
+.cancel-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.save-button {
+  background: #1a73e8;
+  border-color: #1a73e8;
+  color: white;
+}
+
+.save-button:hover {
+  background: #1557b0;
+  border-color: #1557b0;
+}
+
+.save-button:active {
+  transform: translateY(1px);
+}
+
+.note-editor-error {
+  background: rgba(244, 67, 54, 0.1);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 4px;
+  color: #f44336;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  animation: errorSlideIn 0.3s ease;
+}
+
+@keyframes errorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animation for modal appearance */
+.note-editor-modal.visible .note-editor-container {
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .note-editor-container {
+    width: 95%;
+    max-height: 95vh;
+  }
+
+  .note-editor-header {
+    padding: 12px 16px;
+  }
+
+  .editor-title {
+    font-size: 16px;
+  }
+
+  .note-editor-content {
+    padding: 16px;
+  }
+
+  .note-editor-footer {
+    padding: 12px 16px;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .editor-actions-left,
+  .editor-actions-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .note-editor-textarea {
+    font-size: 16px; /* Prevent zoom on mobile */
+  }
+}
+
+@media (max-width: 480px) {
+  .note-editor-container {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    border-radius: 0;
+    top: 0;
+    left: 0;
+    transform: none;
+  }
+
+  .selected-text-quote {
+    max-height: 80px;
+    font-size: 13px;
+  }
+
+  .note-editor-textarea {
+    min-height: 100px;
+  }
+}

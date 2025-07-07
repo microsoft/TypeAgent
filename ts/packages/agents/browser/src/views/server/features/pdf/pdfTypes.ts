@@ -45,7 +45,7 @@ export interface PDFAnnotation {
     id: string;
     documentId: string;
     page: number;
-    type: "highlight" | "note" | "drawing" | "text" | "image";
+    type: "highlight" | "note" | "drawing" | "text" | "image" | "question";
     coordinates: {
         x: number;
         y: number;
@@ -56,6 +56,7 @@ export interface PDFAnnotation {
     color?: string;
     thickness?: number;
     opacity?: number;
+    storage?: "custom" | "pdfjs"; // Storage type for hybrid approach
     createdAt: string;
     updatedAt: string;
     userId?: string;

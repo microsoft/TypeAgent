@@ -25,7 +25,7 @@ export class SearchTermParser {
         // Should we also handle quotes etc?
         let terms = split(
             text,
-            /"([^"]+)"|([a-zA-Z0-9]+(?:[-][a-zA-Z0-9]+)*)/g,
+            /"([^"]+)"|'([^']+)'|([a-zA-Z0-9]+(?:[-][a-zA-Z0-9]+)*)/g,
             {
                 trim: true,
                 removeEmpty: true,

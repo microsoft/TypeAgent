@@ -66,6 +66,8 @@ global.chrome = {
     },
     sidePanel: {
         open: jest.fn(),
+        setOptions: jest.fn(),
+        getOptions: jest.fn(),
         setPanelBehavior: jest.fn(),
     },
     storage: {

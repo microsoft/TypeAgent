@@ -39,8 +39,10 @@ import {
     getHistoryContext,
     getTranslatorForSchema,
     translateRequest,
+    TranslationResult,
 } from "../../../translation/translateRequest.js";
 import { matchRequest } from "../../../translation/matchRequest.js";
+import { addRequestToMemory, addResultToMemory } from "../../memory.js";
 const debugExplain = registerDebug("typeagent:explain");
 
 async function canTranslateWithoutContext(
@@ -337,44 +339,44 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
+            // Make sure we clear any left over streaming context
+            systemContext.streamingActionContext?.closeActionContext();
+            systemContext.streamingActionContext = undefined;
+
+            // Translate to action
+
             const history = systemContext.session.getConfig().translation
                 .history.enabled
                 ? getHistoryContext(systemContext)
                 : undefined;
 
-            // prefetch entities here
-            systemContext.chatHistory.addUserEntry(
-                request,
-                systemContext.requestId,
-                cachedAttachments,
-            );
-
-            // Make sure we clear any left over streaming context
-            systemContext.streamingActionContext?.closeActionContext();
-            systemContext.streamingActionContext = undefined;
-
             const canUseCacheMatch =
                 (attachments === undefined || attachments.length === 0) &&
                 canBeCachedWithHistory(history);
-            const match = canUseCacheMatch
-                ? await matchRequest(request, context, history)
-                : undefined;
 
-            const translationResult =
-                match === undefined // undefined means not found
-                    ? await translateRequest(
-                          request,
-                          context,
-                          history,
-                          cachedAttachments,
-                          0,
-                      )
-                    : match; // result or null
+            addRequestToMemory(systemContext, request, cachedAttachments);
+            let translationResult: TranslationResult;
+            try {
+                const match = canUseCacheMatch
+                    ? await matchRequest(request, context, history)
+                    : undefined;
 
-            if (!translationResult) {
-                // undefined means not found or not translated
-                // null means cancelled because of replacement parse error.
-                return;
+                translationResult =
+                    match ??
+                    (await translateRequest(
+                        request,
+                        context,
+                        history,
+                        cachedAttachments,
+                        0,
+                    ));
+            } catch (e: any) {
+                addResultToMemory(
+                    systemContext,
+                    `Error translating request '${request}': ${e.message}`,
+                    DispatcherName,
+                );
+                throw e;
             }
 
             const { requestAction, fromUser, fromCache, tokenUsage } =
@@ -387,17 +389,7 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
-            if (
-                requestAction !== null &&
-                requestAction !== undefined &&
-                systemContext.conversationManager
-            ) {
-                systemContext.conversationManager.queueAddMessage({
-                    text: request,
-                    timestamp: new Date(),
-                });
-            }
-
+            // Execute the actions
             await executeActions(
                 requestAction.actions,
                 requestAction.history?.entities,

@@ -1,11 +1,39 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+export interface UrlDocumentMapping {
+    documentId: string;
+    url: string;
+    createdAt: string;
+    lastAccessedAt: string;
+}
+
 /**
  * PDF API Service for communicating with the TypeAgent PDF server
  */
 export class PDFApiService {
     private baseUrl = "/api/pdf";
+
+    /**
+     * Get or create document ID from URL
+     */
+    async getDocumentIdFromUrl(url: string): Promise<UrlDocumentMapping> {
+        const response = await fetch(`${this.baseUrl}/url-to-id`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ url }),
+        });
+
+        if (!response.ok) {
+            throw new Error(
+                `Failed to get document ID: ${response.statusText}`,
+            );
+        }
+
+        return response.json();
+    }
 
     /**
      * Get document metadata

@@ -4,6 +4,7 @@
 import { initializeEventHandlers } from "./eventHandlers";
 import { restoreRecordingState } from "./recording";
 import { interceptHistory } from "./spaNavigation";
+import "./autoIndexing"; // Initialize auto-indexing
 
 // Imports to help with bundling
 import "./domUtils";

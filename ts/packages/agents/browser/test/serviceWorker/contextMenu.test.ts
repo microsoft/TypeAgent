@@ -3,10 +3,6 @@
 
 /// <reference path="../types/jest-chrome-extensions.d.ts" />
 
-jest.mock("../../src/extension/serviceWorker/storage", () => ({
-    removePageSchema: jest.fn().mockImplementation(() => Promise.resolve()),
-}));
-
 jest.mock("../../src/extension/serviceWorker/websocket", () => ({
     sendActionToAgent: jest
         .fn()

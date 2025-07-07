@@ -46,14 +46,15 @@ export async function runSearchBatch(
             continue;
         }
         let response = await getSearchResults(context, args);
-        if (!response.success) {
+        if (response.success) {
+            response.data.cmd = cmd;
+        } else {
             response = queryError(cmd, response);
         }
         if (cb) {
             cb(response, i, batchLines.length);
         }
         if (response.success) {
-            response.data.cmd = cmd;
             results.push(response.data);
         } else if (stopOnError) {
             return response;

@@ -26,7 +26,7 @@ import {
     TextEmbeddingIndexSettings,
 } from "./fuzzyIndex.js";
 import { TextEmbeddingCache } from "knowledge-processor";
-import { CompiledTermGroup } from "./compileLib.js";
+import { CompiledSearchTerm, CompiledTermGroup } from "./compileLib.js";
 
 export class TermToRelatedTermsMap implements ITermToRelatedTerms {
     public map: collections.MultiMap<string, Term> = new collections.MultiMap();
@@ -240,7 +240,7 @@ export async function resolveRelatedTerms(
 }
 
 function dedupeRelatedTerms(
-    searchTerms: SearchTerm[],
+    searchTerms: CompiledSearchTerm[],
     ensureSingleOccurrence: boolean,
 ) {
     const allSearchTerms = new TermSet();
@@ -252,12 +252,20 @@ function dedupeRelatedTerms(
     searchTerms.forEach((st) => allSearchTerms.add(st.term));
     if (ensureSingleOccurrence) {
         allRelatedTerms = new TermSet();
-        searchTerms.forEach((st) =>
-            allRelatedTerms!.addOrUnion(st.relatedTerms),
-        );
+        searchTerms.forEach((st) => {
+            allRelatedTerms!.addOrUnion(st.relatedTerms);
+        });
     }
 
     for (const searchTerm of searchTerms) {
+        const required =
+            searchTerm.relatedTermsRequired !== undefined
+                ? searchTerm.relatedTermsRequired
+                : false;
+        if (required) {
+            continue;
+        }
+
         if (
             searchTerm.relatedTerms !== undefined &&
             searchTerm.relatedTerms.length > 0
