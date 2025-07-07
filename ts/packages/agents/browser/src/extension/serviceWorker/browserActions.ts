@@ -14,7 +14,6 @@ import {
     getTabHTMLFragments,
     getFilteredHTMLFragments,
 } from "./capture";
-import { getStoredPageProperty, setStoredPageProperty } from "./storage";
 
 /**
  * Executes a browser action
@@ -234,21 +233,6 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             });
             break;
         }
-        case "getPageStoredProperty": {
-            responseObject = await getStoredPageProperty(
-                action.parameters.url,
-                action.parameters.key,
-            );
-            break;
-        }
-        case "setPageStoredProperty": {
-            await setStoredPageProperty(
-                action.parameters.url,
-                action.parameters.key,
-                action.parameters.value,
-            );
-            break;
-        }
         case "getActionsForUrl": {
             // Enhanced action retrieval with ActionsStore support
             responseObject = await chrome.runtime.sendMessage({
@@ -259,15 +243,7 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             });
             break;
         }
-        case "saveAuthoredAction": {
-            // Save authored action to ActionsStore
-            responseObject = await chrome.runtime.sendMessage({
-                type: "manualSaveAuthoredAction",
-                url: action.parameters.url,
-                actionData: action.parameters.actionData
-            });
-            break;
-        }
+
         case "recordActionUsage": {
             // Record action usage for analytics
             responseObject = await chrome.runtime.sendMessage({

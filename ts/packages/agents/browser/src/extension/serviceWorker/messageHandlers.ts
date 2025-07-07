@@ -5,7 +5,6 @@ import { getActiveTab } from "./tabManager";
 import { getTabHTMLFragments, getTabAnnotatedScreenshot } from "./capture";
 import {
     getRecordedActions,
-    clearRecordedActions,
     saveRecordedActions,
 } from "./storage";
 import {
@@ -39,34 +38,13 @@ export async function handleMessage(
             return "Service worker initialize called";
         }
         case "refreshSchema": {
-            // Discover new actions using enhanced flow
+            // Discovery now auto-saves actions
             const discoveryResult = await sendActionToAgent({
                 actionName: "detectPageActions",
                 parameters: {
                     registerAgent: false,
                 },
             });
-
-            // Save discovered actions to ActionsStore if available
-            if (discoveryResult.schema?.length > 0) {
-                try {
-                    const currentTab = await getActiveTab();
-                    if (currentTab?.url) {
-                        await sendActionToAgent({
-                            actionName: "saveDiscoveredActions",
-                            parameters: {
-                                url: currentTab.url,
-                                actions: discoveryResult.schema,
-                                actionDefinitions: discoveryResult.typeDefinitions
-                            }
-                        });
-                        console.log("Discovered actions saved to ActionsStore");
-                    }
-                } catch (error) {
-                    console.warn("Failed to save discovered actions to ActionsStore:", error);
-                    // Continue with legacy flow - actions will still be returned for UI
-                }
-            }
 
             return {
                 schema: discoveryResult.schema,
@@ -105,6 +83,7 @@ export async function handleMessage(
             return { schema: schemaResult };
         }
         case "getIntentFromRecording": {
+            // Authoring now auto-saves actions
             const schemaResult = await sendActionToAgent({
                 actionName: "getIntentFromRecording",
                 parameters: {
@@ -117,40 +96,12 @@ export async function handleMessage(
                 },
             });
 
-            // Auto-save the authored action if creation was successful
-            if (schemaResult.intentJson && message.autoSave !== false) {
-                try {
-                    const currentTab = await getActiveTab();
-                    if (currentTab?.url) {
-                        await sendActionToAgent({
-                            actionName: "saveAuthoredAction",
-                            parameters: {
-                                url: currentTab.url,
-                                actionData: {
-                                    name: message.actionName,
-                                    description: message.actionDescription,
-                                    steps: message.steps ? JSON.parse(message.steps) : undefined,
-                                    screenshot: message.screenshot,
-                                    html: message.html?.map((h: any) => h.content),
-                                    intentSchema: schemaResult.intent,
-                                    actionsJson: schemaResult.actions,
-                                    intentJson: schemaResult.intentJson
-                                }
-                            }
-                        });
-                        console.log("Authored action auto-saved to ActionsStore");
-                    }
-                } catch (error) {
-                    console.warn("Failed to auto-save authored action:", error);
-                    // Continue - UI will still get the action data for manual saving
-                }
-            }
-
             return {
                 intent: schemaResult.intent,
                 intentJson: schemaResult.intentJson,
                 actions: schemaResult.actions,
                 intentTypeDefinition: schemaResult.intentTypeDefinition,
+                actionId: schemaResult.actionId, // For UI feedback
             };
         }
         case "getActionsForUrl": {
@@ -160,27 +111,6 @@ export async function handleMessage(
                     url: message.url,
                     includeGlobal: message.includeGlobal ?? true,
                     author: message.author
-                }
-            });
-            return result;
-        }
-        case "saveDiscoveredActions": {
-            const result = await sendActionToAgent({
-                actionName: "saveDiscoveredActions",
-                parameters: {
-                    url: message.url,
-                    actions: message.actions,
-                    actionDefinitions: message.actionDefinitions
-                }
-            });
-            return result;
-        }
-        case "saveAuthoredAction": {
-            const result = await sendActionToAgent({
-                actionName: "saveAuthoredAction", 
-                parameters: {
-                    url: message.url,
-                    actionData: message.actionData
                 }
             });
             return result;
@@ -250,14 +180,6 @@ export async function handleMessage(
         case "getRecordedActions": {
             const result = await getRecordedActions();
             return result;
-        }
-        case "clearRecordedActions": {
-            try {
-                await clearRecordedActions();
-            } catch (error) {
-                console.error("Error clearing storage data:", error);
-            }
-            return {};
         }
         case "downloadData": {
             const jsonString = JSON.stringify(message.data, null, 2);
@@ -678,18 +600,6 @@ export async function handleMessage(
                 console.warn("Failed to get action statistics:", error);
                 return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
             }
-        }
-
-        case "manualSaveAuthoredAction": {
-            // Handler for manually saving authored actions (distinct from auto-save)
-            const result = await sendActionToAgent({
-                actionName: "saveAuthoredAction", 
-                parameters: {
-                    url: message.url,
-                    actionData: message.actionData
-                }
-            });
-            return result;
         }
 
         case "deleteAction": {

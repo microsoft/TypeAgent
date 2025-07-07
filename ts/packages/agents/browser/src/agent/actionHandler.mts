@@ -357,8 +357,7 @@ async function updateBrowserContext(
                         case "registerPageDynamicAgent":
                         case "getIntentFromRecording":
                         case "getActionsForUrl":
-                        case "saveDiscoveredActions":
-                        case "saveAuthoredAction": {
+                        case "deleteAction": {
                             const discoveryResult =
                                 await handleSchemaDiscoveryAction(
                                     {

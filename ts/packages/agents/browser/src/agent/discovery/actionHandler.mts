@@ -24,8 +24,6 @@ import {
     GetIntentFromRecording,
     SchemaDiscoveryActions,
     GetActionsForUrl,
-    SaveDiscoveredActions,
-    SaveAuthoredAction,
     DeleteAction,
 } from "./schema/discoveryActions.mjs";
 import { UserIntent } from "./schema/recordedActions.mjs";
@@ -75,12 +73,6 @@ export async function handleSchemaDiscoveryAction(
             break;
         case "getActionsForUrl":
             actionData = await handleGetActionsForUrl(action);
-            break;
-        case "saveDiscoveredActions":
-            actionData = await handleSaveDiscoveredActions(action);
-            break;
-        case "saveAuthoredAction":
-            actionData = await handleSaveAuthoredAction(action);
             break;
         case "deleteAction":
             actionData = await handleDeleteAction(action);
@@ -170,6 +162,57 @@ export async function handleSchemaDiscoveryAction(
             }, 500);
         }
 
+        // AUTO-SAVE: Save discovered actions immediately
+        if (uniqueItems.size > 0) {
+            try {
+                const url = await getBrowserControl(agentContext).getPageUrl();
+                
+                // Direct save to ActionsStore (no longer using separate handler)
+                if (!agentContext.actionsStore) {
+                    throw new Error("ActionsStore not available");
+                }
+
+                const domain = new URL(url!).hostname;
+                let savedCount = 0;
+
+                for (const actionData of Array.from(uniqueItems.values()) as any) {
+                    if (!actionData.actionName) continue;
+
+                    const storedAction = agentContext.actionsStore.createDefaultAction({
+                        name: actionData.actionName,
+                        description: `Auto-discovered: ${actionData.actionName}`,
+                        category: "utility",
+                        author: "discovered",
+                        scope: {
+                            type: "domain",
+                            domain: domain,
+                            priority: 60
+                        },
+                        definition: {
+                            detectedSchema: actionData,
+                            ...(typeDefinitions?.[actionData.actionName] && { 
+                                intentSchema: typeof typeDefinitions[actionData.actionName] === 'string' 
+                                    ? typeDefinitions[actionData.actionName] as unknown as string
+                                    : JSON.stringify(typeDefinitions[actionData.actionName])
+                            })
+                        }
+                    });
+
+                    const result = await agentContext.actionsStore.saveAction(storedAction);
+                    if (result.success) {
+                        savedCount++;
+                    } else {
+                        console.error(`Failed to save discovered action ${actionData.actionName}:`, result.error);
+                    }
+                }
+
+                console.log(`Auto-saved ${savedCount} discovered actions for ${domain}`);
+            } catch (error) {
+                console.warn("Failed to auto-save discovered actions:", error);
+                // Continue without failing the discovery operation
+            }
+        }
+
         return {
             schema: Array.from(uniqueItems.values()),
             typeDefinitions: typeDefinitions,
@@ -219,44 +262,22 @@ export async function handleSchemaDiscoveryAction(
     async function handleRegisterSiteSchema(action: any) {
         const url = await getBrowserControl(agentContext).getPageUrl();
         
-        // Use ActionsStore if available, otherwise fall back to legacy storage
-        let detectedActions: Map<string, any>;
-        let authoredActions: Map<string, any>;
+        if (!agentContext.actionsStore) {
+            throw new Error("ActionsStore not available - please ensure TypeAgent server is running");
+        }
         
-        if (agentContext.actionsStore) {
-            // NEW: Direct ActionsStore access
-            console.log("Using ActionsStore for schema registration");
-            const urlActions = await agentContext.actionsStore.getActionsForUrl(url!);
-            
-            detectedActions = new Map();
-            authoredActions = new Map();
-            
-            for (const storedAction of urlActions) {
-                if (storedAction.author === "discovered" && storedAction.definition.intentSchema) {
-                    detectedActions.set(storedAction.name, storedAction.definition.intentSchema);
-                } else if (storedAction.author === "user" && storedAction.definition.intentSchema) {
-                    authoredActions.set(storedAction.name, storedAction.definition.intentSchema);
-                }
+        console.log("Using ActionsStore for schema registration");
+        const urlActions = await agentContext.actionsStore.getActionsForUrl(url!);
+        
+        const detectedActions = new Map<string, any>();
+        const authoredActions = new Map<string, any>();
+        
+        for (const storedAction of urlActions) {
+            if (storedAction.author === "discovered" && storedAction.definition.intentSchema) {
+                detectedActions.set(storedAction.name, storedAction.definition.intentSchema);
+            } else if (storedAction.author === "user" && storedAction.definition.intentSchema) {
+                authoredActions.set(storedAction.name, storedAction.definition.intentSchema);
             }
-        } else {
-            // LEGACY: Browser connector access
-            console.log("Falling back to legacy storage for schema registration");
-            detectedActions = new Map(
-                Object.entries(
-                    (await browser.getCurrentPageStoredProperty(
-                        url!,
-                        "detectedActionDefinitions",
-                    )) ?? {},
-                ),
-            );
-            authoredActions = new Map(
-                Object.entries(
-                    (await browser.getCurrentPageStoredProperty(
-                        url!,
-                        "authoredActionDefinitions",
-                    )) ?? {},
-                ),
-            );
         }
         
         const typeDefinitions: ActionSchemaTypeDefinition[] = [
@@ -571,11 +592,86 @@ export async function handleSchemaDiscoveryAction(
 
         console.timeEnd(timerName2);
 
+        // AUTO-SAVE: Save authored action immediately
+        let actionId = null;
+        if (intentResponse.success && stepsResponse.success) {
+            try {
+                const url = await getBrowserControl(agentContext).getPageUrl();
+                
+                // Direct save to ActionsStore (no longer using separate handler)
+                if (!agentContext.actionsStore) {
+                    throw new Error("ActionsStore not available");
+                }
+
+                const domain = new URL(url).hostname;
+
+                const storedAction = agentContext.actionsStore.createDefaultAction({
+                    name: action.parameters.recordedActionName,
+                    description: action.parameters.recordedActionDescription || `User action: ${action.parameters.recordedActionName}`,
+                    category: inferCategoryFromAction({
+                        name: action.parameters.recordedActionName,
+                        description: action.parameters.recordedActionDescription
+                    }) as ActionCategory,
+                    author: "user",
+                    scope: {
+                        type: "page",
+                        domain: domain,
+                        priority: 80
+                    },
+                    urlPatterns: [{
+                        pattern: url,
+                        type: "exact",
+                        priority: 100,
+                        description: `Exact match for ${url}`
+                    }],
+                    definition: {
+                        ...(actionSchema && { intentSchema: actionSchema }),
+                        ...(stepsResponse.data && Array.isArray(stepsResponse.data) && { 
+                            actionSteps: stepsResponse.data 
+                        }),
+                        ...(intentData.actionName && intentData.parameters && { 
+                            intentJson: {
+                                actionName: intentData.actionName,
+                                parameters: Array.isArray(intentData.parameters) 
+                                    ? intentData.parameters.map((param: any) => ({
+                                        shortName: param.shortName || param.name || 'unknown',
+                                        description: param.description || param.name || 'Parameter',
+                                        type: (param.type === 'string' || param.type === 'number' || param.type === 'boolean') ? param.type : 'string',
+                                        required: param.required ?? false,
+                                        defaultValue: param.defaultValue
+                                    }))
+                                    : intentData.parameters ? Object.entries(intentData.parameters).map(([key, value]) => ({
+                                        shortName: key,
+                                        description: `Parameter ${key}`,
+                                        type: (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') ? typeof value : 'string',
+                                        required: false,
+                                        defaultValue: value
+                                    })) : []
+                            }
+                        })
+                    }
+                });
+
+                const result = await agentContext.actionsStore.saveAction(storedAction);
+                
+                if (result.success) {
+                    actionId = result.actionId;
+                    console.log(`Auto-saved authored action: ${action.parameters.recordedActionName}`);
+                } else {
+                    console.warn(`Failed to auto-save authored action: ${result.error}`);
+                }
+            } catch (error) {
+                console.warn("Failed to auto-save authored action:", error);
+                // Continue without failing the intent creation
+            }
+        }
+
         return {
             intent: actionSchema,
             intentJson: intentResponse.data,
             intentTypeDefinition: typeDefinition,
             actions: stepsResponse.data,
+            actionId: actionId, // Include for UI feedback
         };
     }
 
@@ -611,121 +707,6 @@ export async function handleSchemaDiscoveryAction(
             return {
                 actions: [],
                 count: 0,
-                error: error instanceof Error ? error.message : "Unknown error"
-            };
-        }
-    }
-
-    async function handleSaveDiscoveredActions(action: SaveDiscoveredActions) {
-        if (!agentContext.actionsStore) {
-            throw new Error("ActionsStore not available");
-        }
-
-        const { url, actions, actionDefinitions } = action.parameters;
-        
-        try {
-            const domain = new URL(url).hostname;
-            let savedCount = 0;
-
-            for (const actionData of actions) {
-                if (!actionData.actionName) continue;
-
-                const storedAction = agentContext.actionsStore.createDefaultAction({
-                    name: actionData.actionName,
-                    description: `Auto-discovered: ${actionData.actionName}`,
-                    category: "utility",
-                    author: "discovered",
-                    scope: {
-                        type: "domain",
-                        domain: domain,
-                        priority: 60
-                    },
-                    definition: {
-                        detectedSchema: actionData,
-                        intentSchema: actionDefinitions?.[actionData.actionName]
-                    }
-                });
-
-                const result = await agentContext.actionsStore.saveAction(storedAction);
-                if (result.success) {
-                    savedCount++;
-                } else {
-                    console.error(`Failed to save discovered action ${actionData.actionName}:`, result.error);
-                }
-            }
-
-            console.log(`Saved ${savedCount} discovered actions for ${domain}`);
-            return {
-                saved: savedCount,
-                total: actions.length
-            };
-        } catch (error) {
-            console.error("Failed to save discovered actions:", error);
-            return {
-                saved: 0,
-                total: actions.length,
-                error: error instanceof Error ? error.message : "Unknown error"
-            };
-        }
-    }
-
-    async function handleSaveAuthoredAction(action: SaveAuthoredAction) {
-        if (!agentContext.actionsStore) {
-            throw new Error("ActionsStore not available");
-        }
-
-        const { url, actionData } = action.parameters;
-        
-        try {
-            const domain = new URL(url).hostname;
-
-            const storedAction = agentContext.actionsStore.createDefaultAction({
-                name: actionData.name,
-                description: actionData.description || `User action: ${actionData.name}`,
-                category: inferCategoryFromAction(actionData) as ActionCategory,
-                author: "user",
-                scope: {
-                    type: "page",
-                    domain: domain,
-                    priority: 80
-                },
-                urlPatterns: [{
-                    pattern: url,
-                    type: "exact",
-                    priority: 100,
-                    description: `Exact match for ${url}`
-                }],
-                definition: {
-                    ...(actionData.intentSchema && { intentSchema: actionData.intentSchema }),
-                    ...(actionData.actionsJson && { actionSteps: actionData.actionsJson }),
-                    ...(actionData.intentJson && { intentJson: actionData.intentJson })
-                },
-                context: {
-                    ...(actionData.steps && { recordedSteps: actionData.steps }),
-                    ...(actionData.screenshot && { screenshots: actionData.screenshot }),
-                    ...(actionData.html && { htmlFragments: actionData.html })
-                }
-            });
-
-            const result = await agentContext.actionsStore.saveAction(storedAction);
-            
-            if (result.success) {
-                console.log(`Saved authored action: ${actionData.name}`);
-                return {
-                    success: true,
-                    actionId: result.actionId
-                };
-            } else {
-                console.error(`Failed to save authored action ${actionData.name}:`, result.error);
-                return {
-                    success: false,
-                    error: result.error
-                };
-            }
-        } catch (error) {
-            console.error("Failed to save authored action:", error);
-            return {
-                success: false,
                 error: error instanceof Error ? error.message : "Unknown error"
             };
         }

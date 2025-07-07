@@ -70,17 +70,17 @@ export interface UrlPattern {
 }
 
 export interface ActionDefinition {
-  // From current detectedActionDefinitions / authoredActionDefinitions
-  intentSchema?: string;                // TypeScript type definition
+  // TypeScript type definition for action schema
+  intentSchema?: string;
   
-  // From current authoredIntentJson
-  intentJson?: UserIntent;              // Structured intent parameters
+  // Structured intent parameters  
+  intentJson?: UserIntent;
   
-  // From current authoredActionsJson / detected action steps
-  actionSteps?: ActionStep[];           // Execution steps
+  // Execution steps for the action
+  actionSteps?: ActionStep[];
   
-  // From current detectedActions
-  detectedSchema?: any;                 // Auto-discovered schema data
+  // Auto-discovered schema data
+  detectedSchema?: any;
 }
 
 export interface ActionContext {

@@ -17,6 +17,8 @@ import {
     UrlPatternDefinition,
     UrlPattern,
 } from "./types.mjs";
+import registerDebug from "debug";
+const debug = registerDebug("typeagent:browser:action:store");
 
 /**
  * ActionsStore - Advanced storage system with pattern matching, search, and analytics
@@ -51,7 +53,7 @@ export class ActionsStore {
         this.analyticsManager = new AnalyticsManager(this.fileManager);
 
 
-        console.log(this.searchEngine)
+        debug(this.searchEngine)
     }
 
     /**
@@ -73,8 +75,9 @@ export class ActionsStore {
             await this.analyticsManager.initialize();
 
             this.initialized = true;
-            console.log("ActionsStore initialized successfully with enhanced features");
+            debug("ActionsStore initialized successfully with enhanced features");
         } catch (error) {
+            debug("Failed to initialize ActionsStore:", error);
             console.error("Failed to initialize ActionsStore:", error);
             throw new Error("ActionsStore initialization failed");
         }
@@ -122,7 +125,7 @@ export class ActionsStore {
             this.indexManager.addAction(sanitizedAction, filePath);
             await this.saveActionIndex();
 
-            console.log(`Action saved: ${sanitizedAction.name} (${sanitizedAction.id})`);
+            debug(`Action saved: ${sanitizedAction.name} (${sanitizedAction.id})`);
 
             return {
                 success: true,
@@ -232,7 +235,7 @@ export class ActionsStore {
             this.indexManager.removeAction(id);
             await this.saveActionIndex();
 
-            console.log(`Action deleted: ${id}`);
+            debug(`Action deleted: ${id}`);
 
             return {
                 success: true,
@@ -608,9 +611,9 @@ export class ActionsStore {
             this.indexManager.loadIndex(indexData);
             
             if (indexData) {
-                console.log(`Loaded action index with ${Object.keys(indexData.actions).length} actions`);
+                debug(`Loaded action index with ${Object.keys(indexData.actions).length} actions`);
             } else {
-                console.log("No existing action index found, starting fresh");
+                debug("No existing action index found, starting fresh");
             }
         } catch (error) {
             console.error("Failed to load action index:", error);

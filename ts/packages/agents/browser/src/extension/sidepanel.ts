@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { setStoredPageProperty, getStoredPageProperty, getActionsForUrl } from "./storage";
+import { getActionsForUrl } from "./storage";
 
 let recording = false;
 let recordedActions: any[] = [];
@@ -181,9 +181,9 @@ class ActionDiscoveryPanel {
         ) as HTMLButtonElement;
         const originalHtml = refreshButton.innerHTML;
 
-        this.showLoadingState(itemsList, "Scanning page for actions...");
+        this.showLoadingState(itemsList, "Scanning ...");
         refreshButton.innerHTML =
-            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning...';
+            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Scanning ...';
         refreshButton.disabled = true;
 
         try {
@@ -197,7 +197,7 @@ class ActionDiscoveryPanel {
             }
 
             if (currentActions.length === 0 || forceRefresh) {
-                // Trigger action discovery which will automatically save to ActionsStore
+                // Discovery now auto-saves actions to ActionsStore
                 const response = await chrome.runtime.sendMessage({
                     type: "refreshSchema",
                 });
@@ -214,8 +214,12 @@ class ActionDiscoveryPanel {
                     return;
                 }
 
-                // Render the newly discovered actions
+                // Actions are now automatically saved
                 this.renderSchemaResults(response.schema);
+                
+                if (response.schema && response.schema.length > 0) {
+                    console.log(`Discovered and saved ${response.schema.length} actions`);
+                }
             } else {
                 // Convert ActionsStore format to legacy schema format for display
                 const legacySchema = currentActions.map(action => ({
@@ -433,7 +437,7 @@ class ActionDiscoveryPanel {
         const originalContent = saveButton.innerHTML;
 
         saveButton.innerHTML =
-            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...';
+            '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Creating & Saving...';
         saveButton.disabled = true;
 
         try {
@@ -461,6 +465,7 @@ class ActionDiscoveryPanel {
             });
             const existingActionNames: string[] = allActions.map(action => action.name);
 
+            // Create and auto-save action in one step
             const response = await chrome.runtime.sendMessage({
                 type: "getIntentFromRecording",
                 html: html.map((str: string) => ({ content: str, frameId: 0 })),
@@ -475,36 +480,21 @@ class ActionDiscoveryPanel {
                 throw new Error(chrome.runtime.lastError.message);
             }
 
-            const processedActionName = response.intentJson.actionName;
-
-            // Save action to ActionsStore via agent
-            const saveResponse = await chrome.runtime.sendMessage({
-                type: "manualSaveAuthoredAction",
-                url: launchUrl!,
-                actionData: {
-                    name: processedActionName,
-                    description: stepsDescription,
-                    steps,
-                    screenshot,
-                    html,
-                    intentSchema: response.intent,
-                    actionsJson: response.actions,
-                    intentJson: response.intentJson
-                }
-            });
-
-            if (saveResponse?.success) {
-                this.showNotification("Action saved successfully!", "success");
+            // Action is automatically saved during processing
+            if (response.actionId) {
+                this.showNotification("Action created and saved successfully!", "success");
+                console.log(`Created and saved action: ${response.intentJson.actionName} (ID: ${response.actionId})`);
             } else {
-                throw new Error(saveResponse?.error || "Failed to save action");
+                this.showNotification("Action created but save status unknown", "info");
+                console.warn("Action creation completed but no actionId returned");
             }
 
             this.toggleActionForm();
             await this.updateUserActionsUI();
             await this.registerTempSchema();
         } catch (error) {
-            console.error("Error saving action:", error);
-            this.showNotification("Failed to save action", "error");
+            console.error("Error creating action:", error);
+            this.showNotification("Failed to create action", "error");
         } finally {
             saveButton.innerHTML = originalContent;
             saveButton.disabled = false;
@@ -521,26 +511,28 @@ class ActionDiscoveryPanel {
         }
 
         try {
-            await chrome.runtime.sendMessage({ type: "clearRecordedActions" });
-            
-            // Get all user actions and delete them individually
+            // Get all user actions and delete them individually from ActionsStore
             const userActions = await getActionsForUrl(launchUrl!, {
                 includeGlobal: false,
                 author: "user"
             });
             
             // Delete each user action
+            let deletedCount = 0;
             for (const action of userActions) {
-                await chrome.runtime.sendMessage({
+                const result = await chrome.runtime.sendMessage({
                     type: "deleteAction",
                     actionId: action.id
                 });
+                if (result?.success) {
+                    deletedCount++;
+                }
             }
 
             await this.updateUserActionsUI();
             await this.registerTempSchema();
 
-            this.showNotification("All custom actions cleared", "success");
+            this.showNotification(`Cleared ${deletedCount} custom actions`, "success");
         } catch (error) {
             console.error("Error clearing actions:", error);
             this.showNotification("Failed to clear actions", "error");

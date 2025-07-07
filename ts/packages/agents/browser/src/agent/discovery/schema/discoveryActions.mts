@@ -64,32 +64,6 @@ export type GetActionsForUrl = {
     };
 };
 
-export type SaveDiscoveredActions = {
-    actionName: "saveDiscoveredActions";
-    parameters: {
-        url: string;
-        actions: any[];
-        actionDefinitions?: Record<string, any>;
-    };
-};
-
-export type SaveAuthoredAction = {
-    actionName: "saveAuthoredAction";
-    parameters: {
-        url: string;
-        actionData: {
-            name: string;
-            description: string;
-            steps?: any[];
-            screenshot?: string[];
-            html?: string[];
-            intentSchema?: string;
-            actionsJson?: any;
-            intentJson?: any;
-        };
-    };
-};
-
 export type DeleteAction = {
     actionName: "deleteAction";
     parameters: {
@@ -107,6 +81,4 @@ export type SchemaDiscoveryActions =
     | StartAuthoringSession
     | GetIntentFromRecording
     | GetActionsForUrl
-    | SaveDiscoveredActions
-    | SaveAuthoredAction
     | DeleteAction;
