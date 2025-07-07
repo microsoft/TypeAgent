@@ -5,6 +5,7 @@ import {
     CommandHandler,
     CommandMetadata,
     CommandResult,
+    ConsoleWriter,
     InteractiveIo,
     parseNamedArguments,
 } from "interactive-app";
@@ -85,31 +86,36 @@ export function createURLResolverCommands(
 
             // resolved site matches expected site accounting for varying / at the end
             // TODO: handle redirects + default parameters, etc.
-            if (
-                resolved === site ||
-                (site.endsWith("/") && site === `${resolved}/`) ||
-                (resolved?.endsWith("/") && `${site}/` === resolved)
-            ) {
+            if (resolved === null) {
+                // resolved site was blocked by content filtering
+                passFail = "CONTENT_FILTERING";
+                contentFilteringCount++;
+            } else if (resolved === undefined) {
+                // unable to resolve
+                passFail = "FAIL";
+                failCount++;
+            } else if (sitesMatch(resolved, site, io.writer)) {
                 passFail = "PASS";
                 passCount++;
             } else if (resolved?.startsWith(site)) {
+                // resolved site starts with expected site, indicating a redirect
                 passFail = "REDIRECT";
                 redirectCount++;
-            } else if (resolved === null) {
-                passFail = "CONTENT_FILTERING";
-                contentFilteringCount++;
             } else {
+                // sites don't match
                 passFail = "FAIL";
                 failCount++;
             }
 
+            const rr = resolved === null ? "<CONTENT_FILTERING>" : resolved === undefined ? "<ERROR>" : resolved;
+
             io.writer.writeLine(
-                `${passFail}: Resolved '${utterance}' to '${resolved}' (expected: ${site})`,
+                `${passFail}: Resolved '${utterance}' to '${rr}' (expected: ${site})`,
             );
 
             fs.appendFileSync(
                 outputFile,
-                `${passFail}\t${utterance}\t${site}\t${resolved}\n`,
+                `${passFail}\t${utterance}\t${site}\t${rr}\n`,
             );
         }
 
@@ -126,6 +132,62 @@ export function createURLResolverCommands(
     handler.metadata = argDef;
 
     return handler;
+}
+
+function sitesMatch(resolved: string | undefined | null, site: string, io: ConsoleWriter): boolean {
+    // Check if resolved site matches expected site accounting for varying / at the end
+    if (resolved === site ||
+        (site.endsWith("/") && site === `${resolved}/`) ||
+        (resolved?.endsWith("/") && `${site}/` === resolved)) {
+            return true;
+    }
+
+    try {
+        // now, is the resolved site just a subdomain of the expected site?
+        const resolvedUrl = new URL(resolved!);
+        const siteUrl = new URL(site);
+
+        // Check if resolved is a subdomain of site by reversing the hostname parts and comparing them
+        const resolvedParts = resolvedUrl.hostname.split('.').reverse();
+        const siteParts = siteUrl.hostname.split('.').reverse();
+
+        // we only match subdomains that have one extra part
+        if (siteParts.length - resolvedParts.length > 1) {
+            return false;
+        }
+
+        let bigParts;
+        let smallParts;
+
+        if (siteParts.length > resolvedParts.length) {
+            bigParts = siteParts;
+            smallParts = resolvedParts;
+        } else {
+            bigParts = resolvedParts;
+            smallParts = siteParts;
+        }
+
+        for (let i = 0; i < smallParts.length; i++) {
+
+            // special case for culture redirects
+            if (i == smallParts.length - 1) {
+                if ((smallParts[i] === "en" || bigParts[i] === "en")
+                    && (smallParts[i] === "www" || bigParts[i] === "www")) {
+                    return true;
+                }
+            }
+
+            if (smallParts[i] !== bigParts[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    } catch (e) {
+        io.writeLine(`Error parsing URL ('${resolved}', '${site}'): ${e}`);
+        // If we can't parse the URL, we assume it
+        return false;
+    }
 }
 
 export function createURLValidateCommands(

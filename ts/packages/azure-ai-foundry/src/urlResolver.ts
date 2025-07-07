@@ -88,7 +88,7 @@ export async function resolveURLWithSearch(
             agent.id,
             {
                 pollingOptions: {
-                    intervalInMs: 500,
+                    intervalInMs: 250,
                 },
                 onResponse: (response): void => {
                     debug(`Received response with status: ${response.status}`);
@@ -259,9 +259,10 @@ export async function validateURL(
         );
 
         let retryCount = 0;
-        const maxRetries = 10;
+        const maxRetries = 5;
         let success = false;
         let lastResponse;
+        const TIMEOUT = 30_000; // 30 seconds
 
         while (retryCount < maxRetries && !success) {
             try {
@@ -293,7 +294,7 @@ export async function validateURL(
                             // Cancel the run if it has been running for more than 30 seconds
                             if (
                                 Date.now() - new Date(runStarted).getTime() >
-                                    30000 &&
+                                    TIMEOUT &&
                                 (response.parsedBody as any).status !=
                                     "cancelling" &&
                                 (response.parsedBody as any).status !=
