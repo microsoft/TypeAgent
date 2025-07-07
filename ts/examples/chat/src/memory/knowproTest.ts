@@ -448,14 +448,24 @@ export async function createKnowproTestCommands(
             );
             context.printer.writeInColor(chalk.red, `Error: ${error}`);
             if (verbose) {
+                context.printer.writeLine("===========");
+                context.printer.writeJsonInColor(
+                    chalk.red,
+                    result.actual.searchQueryExpr,
+                );
                 context.printer.writeJsonInColor(
                     chalk.red,
                     result.actual.results,
                 );
                 context.printer.writeJsonInColor(
                     chalk.green,
+                    result.expected.searchQueryExpr,
+                );
+                context.printer.writeJsonInColor(
+                    chalk.green,
                     result.expected.results,
                 );
+                context.printer.writeLine("===========");
             }
             return false;
         } else {
